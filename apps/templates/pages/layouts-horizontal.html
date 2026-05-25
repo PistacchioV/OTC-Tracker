@@ -1,0 +1,32 @@
+{% extends 'layouts/horizontal.html' %}
+
+{% block html_attribute %}data-layout="topnav" data-topbar-color="dark" data-menu-color="light"{% endblock html_attribute %}
+
+{% block title %}Horizontal Menu{% endblock title %}
+
+{% block extra_css %}
+
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    {% set title='Horizontal' %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h4 class="m-0">Your custom content here</h4>
+                </div> <!-- end card-body-->
+            </div> <!-- end card-->
+        </div> <!-- end col-->
+    </div>
+    <!-- end row-->
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+
+{% endblock extra_javascript %}

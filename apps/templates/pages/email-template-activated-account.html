@@ -1,0 +1,411 @@
+{# ============================================================================
+    TEMPLATE:       activated-account.html
+    DESCRIÇÃO:    Template de e-mail para notificar o usuário que sua conta foi ativada com sucesso
+    
+    USO:    Este template é enviado por e-mail após o usuário confirmar seu cadastro
+           ou após a ativação manual da conta por um administrador
+    
+    VARIÁVEIS ESPERADAS DO BACKEND:
+      - config.ASSETS_ROOT: Caminho base para os assets (imagens, etc.)
+      - user_name (opcional): Nome do usuário para personalização
+      - dashboard_url (opcional): URL do dashboard para o botão
+    
+    ESTRUTURA DO E-MAIL:
+      1. Header:  Logo centralizado + mensagem de boas-vindas abaixo (fundo escuro)
+      2. Body: Texto de confirmação + botão de acesso
+      3. Footer: Link de suporte
+    ============================================================================ #}
+ <! DOCTYPE html>
+ <html xmlns="http://www.w3.org/1999/xhtml">
+ 
+ <head>
+     {# =========================================================================
+        META TAGS
+        - charset: Define codificação UTF-8 para suporte a caracteres especiais
+        - viewport: Garante responsividade em dispositivos móveis
+        ========================================================================= #}
+     <meta charset="UTF-8"/>
+     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+     
+     {# =========================================================================
+        TÍTULO DO E-MAIL
+        Aparece na aba do navegador se o e-mail for aberto em webmail
+        ========================================================================= #}
+     <title>Account Activated</title>
+     
+     {# =========================================================================
+        FAVICON
+        Ícone exibido na aba do navegador
+        ORIGEM:  Pasta de assets definida em config. ASSETS_ROOT
+        ========================================================================= #}
+     <link rel="shortcut icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+     
+     {# =========================================================================
+        FONTE EXTERNA - Google Fonts
+        Roboto:  Fonte moderna e legível para e-mails
+        ========================================================================= #}
+     <link href="https://fonts.googleapis.com/css2?family=Roboto: wght@400;700&display=swap" rel="stylesheet"/>
+     
+     {# =========================================================================
+        ESTILOS CSS INLINE
+        NOTA: E-mails requerem CSS inline ou em <style> no <head>
+              Muitos clientes de e-mail não suportam CSS externo
+        ========================================================================= #}
+     <style>
+         /* ==================================================================
+            RESET E ESTILOS BASE
+            Remove margens padrão e define fonte base
+            ================================================================== */
+         body {
+             margin: 0;
+             padding: 0;
+             font-family:  'Roboto', Arial, sans-serif;
+             background-color: #f4f6f9;
+             color: #333;
+             line-height:  1.6;
+         }
+ 
+         /* ==================================================================
+            WRAPPER DO E-MAIL
+            Container externo com fundo cinza claro
+            Adiciona padding para não colar nas bordas
+            ================================================================== */
+         .email-wrapper {
+             width: 100%;
+             padding: 40px 0;
+             background-color: #f4f6f9;
+         }
+ 
+         /* ==================================================================
+            CONTEÚDO PRINCIPAL DO E-MAIL
+            Card branco centralizado com sombra suave
+            max-width:  Limita largura para melhor leitura
+            border-radius: Cantos arredondados
+            box-shadow: Sombra sutil para profundidade
+            ================================================================== */
+         .email-content {
+             max-width:  500px;
+             margin: 0 auto;
+             background-color: #ffffff;
+             border-radius: 8px;
+             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+             overflow: hidden;
+         }
+ 
+         /* ==================================================================
+            HEADER DO E-MAIL
+            Fundo escuro (#38414a) com logo e mensagem de boas-vindas
+            LAYOUT:  Flexbox para centralizar verticalmente e horizontalmente
+            ================================================================== */
+         .email-header {
+             background-color: #444f5a;
+             padding: 40px 24px;
+             text-align: center;
+         }
+ 
+         /* ==================================================================
+            CONTAINER DO LOGO
+            Centraliza o logo horizontalmente
+            margin-bottom:  Espaço entre logo e texto
+            ================================================================== */
+         .logo-container {
+             text-align: center;
+             margin-bottom: 20px;
+         }
+ 
+         /* ==================================================================
+            LOGO NO HEADER
+            Imagem do logo centralizada
+            height: 108px conforme solicitado
+            display: block + margin auto para centralizar
+            ================================================================== */
+         .email-header img {
+             height:  108px;
+             display:  block;
+             margin: 0 auto;
+         }
+ 
+         /* ==================================================================
+            TEXTO DE BOAS-VINDAS NO HEADER
+            Mensagem "Welcome! Your account has been successfully activated."
+            Cor branca (#ffffff) para contraste com fundo escuro
+            Posicionado ABAIXO do logo e CENTRALIZADO
+            ================================================================== */
+         .welcome-text {
+             display: block;
+             color: #ffffff;
+             font-size: 15px;
+             margin-top: 20px;
+             text-align: center;
+             line-height: 1.5;
+         }
+ 
+         /* ==================================================================
+            CORPO DO E-MAIL
+            Área principal com o conteúdo textual
+            Padding generoso para respiro visual
+            ================================================================== */
+         .email-body {
+             padding: 30px 35px;
+         }
+ 
+         /* ==================================================================
+            SAUDAÇÃO INICIAL
+            "Hi there," - texto de abertura
+            Cor mais suave para hierarquia visual
+            ================================================================== */
+         .email-body .greeting {
+             font-size: 15px;
+             color: #555;
+             margin-bottom: 20px;
+         }
+ 
+         /* ==================================================================
+            PARÁGRAFOS DO CORPO
+            Texto principal do e-mail
+            line-height:  Espaçamento entre linhas para legibilidade
+            ================================================================== */
+         .email-body p {
+             font-size: 14px;
+             line-height: 1.7;
+             margin-bottom: 18px;
+             color: #444;
+         }
+ 
+         /* ==================================================================
+            TEXTO EM NEGRITO
+            Usado para destacar "OTC Tracker account"
+            ================================================================== */
+         .email-body strong {
+             color: #333;
+             font-weight: 700;
+         }
+ 
+         /* ==================================================================
+            CONTAINER DO BOTÃO
+            Centraliza o botão horizontalmente
+            margin:  Espaçamento vertical generoso
+            ================================================================== */
+         .btn-container {
+             text-align: center;
+             margin:  25px 0;
+         }
+ 
+         /* ==================================================================
+            BOTÃO "GO TO DASHBOARD"
+            Estilo do botão principal de call-to-action
+            background-color:  Cor ciano/turquesa (#02c0ce)
+            border-radius: Cantos arredondados
+            padding: Tamanho confortável para clique
+            ================================================================== */
+         .btn {
+             display: inline-block;
+             padding: 12px 28px;
+             background-color:  #02c0ce;
+             color: #ffffff ! important;
+             font-weight: 600;
+             font-size: 14px;
+             text-decoration:  none;
+             border-radius:  5px;
+             transition: background-color 0.3s ease;
+         }
+ 
+         /* ==================================================================
+            HOVER DO BOTÃO
+            Escurece levemente ao passar o mouse
+            ================================================================== */
+         .btn:hover {
+             background-color:  #01a8b5;
+         }
+ 
+         /* ==================================================================
+            TEXTO DE AJUDA
+            "If you need any help..." com link sublinhado
+            ================================================================== */
+         .email-body .help-text {
+             font-size: 14px;
+             color: #555;
+             margin-bottom: 20px;
+         }
+ 
+         /* ==================================================================
+            LINK "HELP" NO TEXTO
+            Link sublinhado dentro do parágrafo
+            ================================================================== */
+         .email-body . help-text a {
+             color: #333;
+             text-decoration: underline;
+         }
+ 
+         /* ==================================================================
+            ASSINATURA
+            "Cheers, OTC Tracker Team"
+            margin-top:  Espaço antes da assinatura
+            ================================================================== */
+         .email-body . signature {
+             font-size:  14px;
+             color: #444;
+             margin-top: 25px;
+         }
+ 
+         . email-body .signature strong {
+             display: block;
+             margin-top: 5px;
+             color: #333;
+         }
+ 
+         /* ==================================================================
+            FOOTER DO E-MAIL
+            Área inferior com link de suporte
+            Fundo cinza claro (#f8f8f8)
+            Borda superior para separação visual
+            ================================================================== */
+         .email-footer {
+             text-align: center;
+             font-size: 12px;
+             color: #888;
+             padding: 20px;
+             background-color: #f8f8f8;
+             border-top: 1px solid #e8e8e8;
+         }
+ 
+         /* ==================================================================
+            LINK NO FOOTER
+            "Contact Support" - link para suporte
+            Cor azul para indicar que é clicável
+            ================================================================== */
+         .email-footer a {
+             color: #0066cc;
+             text-decoration: underline;
+         }
+ 
+         . email-footer a:hover {
+             color: #004499;
+         }
+     </style>
+ </head>
+ 
+ <body>
+     {# =========================================================================
+        WRAPPER PRINCIPAL
+        Container externo que define o fundo cinza do e-mail
+        ========================================================================= #}
+     <div class="email-wrapper">
+     
+         {# =====================================================================
+            CARD DE CONTEÚDO
+            Container branco centralizado que contém todo o e-mail
+            ===================================================================== #}
+         <div class="email-content">
+         
+             {# =================================================================
+                HEADER DO E-MAIL
+                Fundo escuro com logo CENTRALIZADO e mensagem ABAIXO do logo
+                
+                LAYOUT: 
+                  1. Logo: Centralizado horizontalmente (display: block + margin:  auto)
+                  2. Texto:  Abaixo do logo, também centralizado
+                
+                ORIGEM DO LOGO:
+                  - config.ASSETS_ROOT: Variável Flask com caminho dos assets
+                  - Caminho completo: {ASSETS_ROOT}/images/logo. png
+                ================================================================= #}
+             <div class="email-header" style="text-align: center;">
+             
+                 {# Container do logo - garante centralização #}
+                 <div class="logo-container" style="text-align: center;">
+                     {# Logo da aplicação - centralizado
+                        TAMANHO: height="108" conforme solicitado
+                        CENTRALIZAÇÃO: display: block + margin:0 auto #}
+                     <a href="#" style="display: inline-block;">
+                         <img src="{{ config.ASSETS_ROOT }}/images/logo.png" 
+                              alt="OTC Tracker"
+                              height="108"
+                              style="display: block; margin: 0 auto;" />
+                     </a>
+                 </div>
+                 
+                 {# Mensagem de boas-vindas - ABAIXO do logo e CENTRALIZADA
+                    COR:  Branca (#ffffff)
+                    POSIÇÃO: Abaixo do logo com margin-top para espaçamento #}
+                 <span class="welcome-text" style="display: block; color: #ffffff; text-align: center; margin-top: 20px; font-size: 15px; line-height: 1.5;">
+                     Welcome! Your account has been<br>successfully activated.
+                 </span>
+                 
+             </div>
+             {# FIM DO HEADER #}
+             
+             {# =================================================================
+                CORPO DO E-MAIL
+                Contém a mensagem principal, botão e assinatura
+                
+                ESTRUTURA:
+                  1. Saudação:  "Hi there,"
+                  2. Parágrafo 1: Mensagem de boas-vindas
+                  3. Parágrafo 2: Instrução para acessar dashboard
+                  4. Botão: "Go to App"
+                  5. Parágrafo 3: Oferta de ajuda
+                  6. Assinatura: "Cheers, OTC Tracker Team"
+                ================================================================= #}
+             <div class="email-body">
+             
+                 {# Saudação inicial #}
+                 <p class="greeting">Hi there,</p>
+                 
+                 {# Mensagem de boas-vindas confirmando ativação da conta #}
+                 <p>
+                     We're excited to have you on board.  Your <strong>OTC Tracker account</strong> is now active and ready to use. 
+                 </p>
+                 
+                 {# Instrução para o usuário acessar o dashboard #}
+                 <p>
+                     Click the button below to access the app and start exploring the features.
+                 </p>
+                 
+                 {# =============================================================
+                    BOTÃO DE CALL-TO-ACTION
+                    Direciona o usuário para o dashboard da aplicação
+                    
+                    HREF: 
+                      - Atualmente "#" (placeholder)
+                      - Em produção: {{ dashboard_url }} ou URL fixa do dashboard
+                    ============================================================= #}
+                 <div class="btn-container">
+                     <a href="#" class="btn">Go to Application</a>
+                 </div>
+                 
+                 {# Mensagem de suporte - oferece ajuda se necessário #}
+                 <p class="help-text">
+                     If you need any <a href="#">help</a>, feel free to reach out to our support team anytime.
+                 </p>
+                 
+                 {# Assinatura da equipe #}
+                 <div class="signature">
+                     Cheers,<br>
+                     <strong>OTC Tracker Team</strong>
+                 </div>
+                 
+             </div>
+             {# FIM DO CORPO #}
+             
+             {# =================================================================
+                FOOTER DO E-MAIL
+                Link para contato com suporte
+                
+                ELEMENTOS:
+                  - Link "Contact Support":  Redireciona para página de suporte
+                  - Texto:  "for assistance."
+                ================================================================= #}
+             <div class="email-footer">
+                 <a href="#">Contact Support</a> for assistance.
+             </div>
+             {# FIM DO FOOTER #}
+             
+         </div>
+         {# FIM DO CARD DE CONTEÚDO #}
+         
+     </div>
+     {# FIM DO WRAPPER #}
+ </body>
+ 
+ </html>

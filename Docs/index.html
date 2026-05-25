@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>OTC Tracker - Web App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Perfect for building CRM, CMS, project management tools, and custom web apps with clean UI, responsive design, and powerful features.">
+    <meta name="author" content="JPMorgan Chase">
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="assets/images/favicon.ico">
+    <!-- Theme Config Js -->
+    <script src="assets/js/config.js"></script>
+    <!-- Vendor css -->
+    <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css">
+    <!-- App css -->
+    <link href="assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style">
+    <!-- Icons css -->
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" type="text/css">
+</head>
+
+<body>
+    <!-- Begin page -->
+    <div class="wrapper">
+        <!-- Sidenav Menu Start -->
+        <div class="sidenav-menu">
+            <div class="scrollbar" data-simplebar>
+                <!--- Sidenav Menu -->
+                <ul class="side-nav">
+                    <li class="side-nav-title">Menu</li>
+                    <!-- Introduction -->
+                    <li class="side-nav-item">
+                        <a href="index.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-shield-check"></i></span>
+                            <span class="menu-text">Introduction</span>
+                        </a>
+                    </li>
+                    <!-- Folder Structure -->
+                    <li class="side-nav-item">
+                        <a href="folder-structure.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-folders"></i></span>
+                            <span class="menu-text">Folder Structure</span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="getting-started.html" class="side-nav-link active">
+                            <span class="menu-icon"><i class="ti ti-rocket"></i></span>
+                            <span class="menu-text">Getting Started</span>
+                        </a>
+                    </li>
+                    <li class="side-nav-title mt-2">
+                        Layouts
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="layouts.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout"></i></span>
+                            <span class="menu-text" data-translator-key="layouts">
+                                Layouts Option
+                            </span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="sidebar.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout-sidebar"></i></span>
+                            <span class="menu-text" data-translator-key="sidebars">
+                                Sidebars Option
+                            </span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="topbar.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout-bottombar"></i></span>
+                            <span class="menu-text" data-translator-key="sidebars"> Topbar Option</span>
+                        </a>
+                    </li>
+                    <!-- Theme Setup -->
+                    <li class="side-nav-item">
+                        <a href="theme-skin-setup.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-diamond"></i></span>
+                            <span class="menu-text">Theme Skin Setup</span>
+                        </a>
+                    </li>
+                    <!-- Dark Mode -->
+                    <li class="side-nav-item">
+                        <a href="dark-mode.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-moon"></i></span>
+                            <span class="menu-text">Dark Mode</span>
+                        </a>
+                    </li>
+                    <!-- Sources & Credits -->
+                    <li class="side-nav-item">
+                        <a href="sources.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-alert-circle"></i></span>
+                            <span class="menu-text">Sources & Credits</span>
+                        </a>
+                    </li>
+                    <!-- Changelog -->
+                    <li class="side-nav-item">
+                        <a href="changelog.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-book"></i></span>
+                            <span class="menu-text">Changelog</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <!-- Sidenav Menu End -->
+        <!-- Topbar Start -->
+        <header class="app-topbar">
+            <div class="container-fluid topbar-menu">
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Topbar Brand Logo -->
+                    <div class="logo-topbar">
+                        <!-- Logo light -->
+                        <a href="index.html" class="logo-light">
+                            <span class="logo-lg">
+                                <img src="assets/images/logo.png" alt="logo">
+                            </span>
+                            <span class="logo-sm">
+                                <img src="assets/images/logo-sm.png" alt="small logo">
+                            </span>
+                        </a>
+                        <!-- Logo Dark -->
+                        <a href="index.html" class="logo-dark">
+                            <span class="logo-lg">
+                                <img src="assets/images/logo-black.png" alt="dark logo">
+                            </span>
+                            <span class="logo-sm">
+                                <img src="assets/images/logo-sm.png" alt="small logo">
+                            </span>
+                        </a>
+                    </div>
+                    <!-- Sidebar Menu Toggle Button -->
+                    <button class="sidenav-toggle-button btn btn-primary btn-icon d-md-none d-flex">
+                        <i class="ti ti-menu-2 fs-22"></i>
+                    </button>
+                </div> <!-- .d-flex-->
+            </div>
+        </header>
+        <!-- Topbar End -->
+
+        <!-- ============================================================== -->
+        <!-- Start Page Content here -->
+        <!-- ============================================================== -->
+
+        <div class="content-page">
+            <div class="container mt-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="font-weight-semibold mb-0">Introduction</h4>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="text-dark fs-14 mb-3">
+                            Thank you for choosing <span class="fw-semibold">OTC Tracker</span> – your complete design and development toolkit.
+                        </h5>
+                        <p class="text-muted fs-14">
+                            <span class="fw-semibold text-dark">OTC Tracker</span> is a modern, versatile admin & dashboard template designed to streamline your web application development. Whether you're building analytics tools, SaaS platforms, internal dashboards, or CRM systems, OTC Tracker is built to adapt and scale with your project needs.
+                        </p>
+                        <p class="text-muted fs-14">
+                            Crafted with attention to performance, accessibility, and design clarity, OTC Tracker is built on the latest technologies, including <span class="fw-semibold text-dark">Bootstrap v5.3.7</span> and <span class="fw-semibold text-dark">Flask v3</span>. This powerful combination ensures blazing-fast load times, modular architecture, and seamless responsiveness across all devices.
+                        </p>
+                        <p class="text-muted fs-14">
+                            OTC Tracker offers a robust UI system with support for multiple themes, skins, layouts, topbars, sidebars, dark mode, RTL, and more. It’s developer-friendly, easy to customize, and comes bundled with production-ready components to help you move faster.
+                        </p>
+                        <p class="text-muted fs-14">
+                            Whether you're a solo developer or working in a team, OTC Tracker empowers you to deliver high-quality applications with minimal effort and maximum impact.
+                        </p>
+                        <p class="text-muted fs-15 mb-0">
+                            We sincerely appreciate your trust in <span class="fw-semibold">OTC Tracker</span>. If you have feedback, questions, or feature requests, we’d love to hear from you. Wishing you success in all your development efforts!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="fw-semibold mb-3">Dear Buyers,</h4>
+
+                        <h5 class="text-dark fs-14 mb-2">
+                            Thank you for choosing OTC Tracker – we’re truly grateful for your continued support.
+                            Your trusted all-in-one Admin &amp; Dashboard Template.
+                        </h5>
+
+                        <p class="text-dark fs-14">
+                            We’re excited to announce that we’ve just launched
+                            <a href="https://coderthemes.com/OTC Tracker/" target="_blank" class="text-decoration-underline">multiple framework seed and full versions</a>
+                            in this update. We hope these additions help accelerate your current and upcoming projects.
+                        </p>
+
+                        <p class="text-dark fs-14">
+                            We are fully committed to enhancing <span>OTC Tracker</span> and will continue to improve performance while expanding support across more frameworks and full-featured versions in the future.
+                        </p>
+
+                        <h5 class="fs-16 mb-2">License Terms:</h5>
+                        <ul class="mb-4">
+                            <li class="mb-2 fs-14">
+                                <span class="fw-semibold">Single License:</span> Valid for only <span class="fw-semibold">one project</span> using any <span>one framework</span>.
+                            </li>
+                            <li class="mb-2 fs-14">
+                                <span class="fw-semibold">Extended License:</span> Required for <span class="fw-semibold">SaaS products</span> or applications with <span>paying users</span>.
+                            </li>
+                        </ul>
+
+                        <p class="fw-medium">
+                            We kindly ask all buyers to adhere to the license terms mentioned above.
+                        </p>
+
+                        <p class="text-dark fs-14">
+                            If you have any suggestions, feature requests, or encounter any issues, please don’t hesitate to
+                            <a href="https://1.envato.market/OTC Tracker-support" target="_blank"><ins>contact us via support</ins></a>.
+                        </p>
+
+                        <p class="text-dark fs-15">
+                            Thank you once again for choosing <span>OTC Tracker</span>.
+                            We hope it accelerates your development and helps you deliver outstanding results.
+                        </p>
+
+                        <span>— The OTC Tracker Team</span>
+                    </div>
+                </div>
+            </div>
+            <!-- container -->
+
+            <!-- Footer Start -->
+            <footer class="footer">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-6 text-center text-md-start">
+                            ©
+                            2015 - <script> document.write(new Date().getFullYear())</script> OTC Tracker By <span class="fw-semibold">JPMorgan Chase</span>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+            <!-- end Footer -->
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- End Page content -->
+        <!-- ============================================================== -->
+
+    </div>
+    <!-- END wrapper -->
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+
+</html>

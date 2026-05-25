@@ -1,0 +1,620 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}B3 Index Results{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
+<style>
+    /* ── Toolbar buttons ───────────────────────────────────────────────── */
+    .btn-toolbar-all {
+        font-size: 0.75rem !important;
+        padding: 0.25rem 0.6rem !important;
+        white-space: nowrap !important;
+    }
+
+    /* ── Column search inputs ──────────────────────────────────────────── */
+    .col-search-row th { padding: 4px 6px; }
+    .col-search-row input {
+        font-size: 11px;
+        height: 26px;
+        padding: 2px 6px;
+    }
+
+    /* ── Table ─────────────────────────────────────────────────────────── */
+    .table-responsive { overflow-x: auto; }
+    #tblSubjacente th, #tblVCP th, #tblDominio th {
+        white-space: nowrap;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        padding: 8px 10px;
+    }
+    #tblSubjacente td, #tblVCP td, #tblDominio td {
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+
+    /* ── No-data banner ────────────────────────────────────────────────── */
+    #noDataBanner { display: none; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    <!-- ── Breadcrumb / title ─────────────────────────────────────────── -->
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-3">
+            <a href="/index-b3" class="btn btn-sm btn-light">
+                <i class="ti ti-arrow-left me-1"></i><span data-lang="b3-new-search">New Search</span>
+            </a>
+            <h4 class="fs-xl fw-bold m-0" data-lang="b3-results-title">B3 Index — Results</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="/index-b3">Index B3</a></li>
+                <li class="breadcrumb-item active"><span data-lang="b3-results-breadcrumb">Results</span></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ── Active filter summary ──────────────────────────────────────── -->
+    <div class="alert alert-soft-primary d-flex align-items-center gap-2 py-2 mb-3" id="filterSummary" style="display:none!important;">
+        <i class="ti ti-filter fs-lg"></i>
+        <span id="filterSummaryText" class="fs-sm"></span>
+        <a href="/index-b3" class="ms-auto btn btn-xs btn-outline-primary btn-sm">
+            <i class="ti ti-edit me-1"></i><span data-lang="b3-edit-filters">Edit filters</span>
+        </a>
+    </div>
+
+    <!-- ── No data banner ─────────────────────────────────────────────── -->
+    <div class="alert alert-warning text-center" id="noDataBanner">
+        <i class="ti ti-search-off fs-3 d-block mb-2"></i>
+        <strong data-lang="b3-no-results">No results found.</strong> <span data-lang="b3-no-results-hint">Go back and refine your search filters.</span>
+        <div class="mt-2">
+            <a href="/index-b3" class="btn btn-warning btn-sm">
+                <i class="ti ti-arrow-left me-1"></i><span data-lang="b3-back-to-search">Back to Search</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Results card ───────────────────────────────────────────────── -->
+    <div class="row" id="resultsWrapper">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs nav-bordered mb-3" id="resultTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab"
+                                    data-bs-target="#tabSubjacente" type="button" role="tab">
+                                <i class="ti ti-chart-dots-3 me-1"></i>
+                                <span data-lang="b3-tab-underlying">Underlying Assets</span>
+                                <span class="badge bg-primary ms-1 fs-xxs" id="cntSubj">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab"
+                                    data-bs-target="#tabVCP" type="button" role="tab">
+                                <i class="ti ti-exchange me-1"></i>
+                                <span data-lang="b3-tab-vcp">VCP</span>
+                                <span class="badge bg-success ms-1 fs-xxs" id="cntVCP">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab"
+                                    data-bs-target="#tabDominio" type="button" role="tab">
+                                <i class="ti ti-book me-1"></i>
+                                <span data-lang="b3-tab-domain">Domain</span>
+                                <span class="badge bg-warning ms-1 fs-xxs" id="cntDom">0</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="resultTabContent">
+
+                        <!-- ══════════════ TAB: UNDERLYING ASSETS ══════════════ -->
+                        <div class="tab-pane fade show active" id="tabSubjacente" role="tabpanel">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <select class="form-select form-select-sm" style="width:75px;" id="pageLenSubj">
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                            </div>
+                            <div class="table-responsive">
+                                <table id="tblSubjacente"
+                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                    <thead>
+                                        <tr class="text-uppercase fs-xxs">
+                                            <th data-lang="b3-class">Class</th>
+                                            <th data-lang="b3-underlying-asset-code">Underlying Asset Code</th>
+                                            <th data-lang="b3-exchange">Exchange</th>
+                                            <th data-lang="b3-appreciation-index">Appreciation Index</th>
+                                            <th data-lang="b3-instrument-type">Instr. Type (IF)</th>
+                                            <th data-lang="b3-currency">Currency</th>
+                                            <th data-lang="b3-expiry-month">Expiry Month</th>
+                                            <th data-lang="b3-expiry-year">Expiry Year</th>
+                                            <th data-lang="b3-ticker">Ticker</th>
+                                            <th data-lang="b3-calculated">Calculated</th>
+                                            <th data-lang="b3-quotation-type">Quotation Type</th>
+                                            <th data-lang="b3-conversion-factor">Conversion Factor</th>
+                                            <th data-lang="b3-unit-of-negotiation">Unit of Negotiation</th>
+                                            <th data-lang="b3-commodity">Commodity</th>
+                                        </tr>
+                                        <tr class="col-search-row" id="srSubj">
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Class"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asset Code"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Exchange"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Index"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="IF Type"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Month"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Year"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Ticker"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Calc."></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quot. Type"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Conv. Factor"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- ══════════════ TAB: VCP ══════════════ -->
+                        <div class="tab-pane fade" id="tabVCP" role="tabpanel">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <select class="form-select form-select-sm" style="width:75px;" id="pageLenVCP">
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                            </div>
+                            <div class="table-responsive">
+                                <table id="tblVCP"
+                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                    <thead>
+                                        <tr class="text-uppercase fs-xxs">
+                                            <th data-lang="b3-qual-id">Qualification ID</th>
+                                            <th data-lang="b3-description">Description</th>
+                                            <th data-lang="b3-add-description">Additional Description</th>
+                                            <th data-lang="b3-level1-class">Level 1 Classification</th>
+                                            <th data-lang="b3-status">Status</th>
+                                            <th data-lang="b3-product">Product</th>
+                                        </tr>
+                                        <tr class="col-search-row" id="srVCP">
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ID"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Description"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Add. Description"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Classification"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Product"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- ══════════════ TAB: DOMAIN ══════════════ -->
+                        <div class="tab-pane fade" id="tabDominio" role="tabpanel">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <select class="form-select form-select-sm" style="width:75px;" id="pageLenDom">
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                            </div>
+                            <div class="table-responsive">
+                                <table id="tblDominio"
+                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                    <thead>
+                                        <tr class="text-uppercase fs-xxs">
+                                            <th data-lang="b3-group">Group</th>
+                                            <th data-lang="b3-subgroup">Subgroup</th>
+                                            <th data-lang="b3-if-type-code">IF Type Code</th>
+                                            <th data-lang="b3-qual-id">Qualification ID</th>
+                                            <th data-lang="b3-qual-description">Qualification Description</th>
+                                            <th data-lang="b3-classification">Classification</th>
+                                        </tr>
+                                        <tr class="col-search-row" id="srDom">
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Group"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Subgroup"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="IF Code"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ID"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Description"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Classification"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div><!-- /tab-content -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+
+<script>
+$(document).ready(function () {
+    'use strict';
+
+    /* ── Load session data ──────────────────────────────────────────────── */
+    var raw = sessionStorage.getItem('b3_search_results');
+    if (!raw) {
+        document.getElementById('noDataBanner').style.display = '';
+        document.getElementById('resultsWrapper').style.display = 'none';
+        return;
+    }
+
+    var payload;
+    try { payload = JSON.parse(raw); }
+    catch (e) {
+        document.getElementById('noDataBanner').style.display = '';
+        document.getElementById('resultsWrapper').style.display = 'none';
+        return;
+    }
+
+    var subjData    = payload.subj    || [];
+    var vcpData     = payload.vcp     || [];
+    var dominioData = payload.dominio || [];
+    var filters     = payload.filters || {};
+
+    /* ── Filter summary banner ──────────────────────────────────────────── */
+    var active = Object.entries(filters)
+        .filter(function(p) { return p[1]; })
+        .map(function(p) { return '<strong>' + p[0] + '</strong>: ' + p[1]; });
+
+    if (active.length) {
+        document.getElementById('filterSummary').style.removeProperty('display');
+        document.getElementById('filterSummaryText').innerHTML =
+            'Active filters — ' + active.join(' &nbsp;|&nbsp; ');
+    }
+
+    /* ── Counters ───────────────────────────────────────────────────────── */
+    document.getElementById('cntSubj').textContent = subjData.length;
+    document.getElementById('cntVCP').textContent  = vcpData.length;
+    document.getElementById('cntDom').textContent  = dominioData.length;
+
+    if (subjData.length === 0 && vcpData.length === 0 && dominioData.length === 0) {
+        document.getElementById('noDataBanner').style.display = '';
+        document.getElementById('resultsWrapper').style.display = 'none';
+        return;
+    }
+
+    /* ── Shared DataTable options ───────────────────────────────────────── */
+    function safe(v) {
+        if (v == null || v === '' || String(v) === 'NaN') return '';
+        return String(v);
+    }
+
+    var dtLang = {
+        paginate: {
+            first:    '<i class="ti ti-chevrons-left"></i>',
+            previous: '<i class="ti ti-chevron-left"></i>',
+            next:     '<i class="ti ti-chevron-right"></i>',
+            last:     '<i class="ti ti-chevrons-right"></i>'
+        },
+        search: 'Search all columns:',
+        info: 'Showing _START_ to _END_ of _TOTAL_ entries',
+        infoFiltered: '(filtered from _MAX_ total)',
+        zeroRecords: 'No matching records found',
+        emptyTable: 'No data available'
+    };
+
+    var exportCols = { modifier: { page: 'all' } };
+
+    function makeExportButtons(prefix) {
+        return [
+            {
+                extend: 'collection',
+                text: '<i class="ti ti-download me-1"></i> Export',
+                className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+                autoClose: true,
+                buttons: [
+                    { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',         className: 'dropdown-item', exportOptions: exportCols },
+                    { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',  className: 'dropdown-item', exportOptions: exportCols },
+                    { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: exportCols },
+                    { extend: 'pdf',   text: '<i class="ti ti-file-text me-1"></i> PDF',      className: 'dropdown-item', exportOptions: exportCols },
+                    { extend: 'print', text: '<i class="ti ti-printer me-1"></i> Print',      className: 'dropdown-item', exportOptions: exportCols }
+                ]
+            }
+        ];
+    }
+
+    function makeDom() {
+        return "<'d-md-flex justify-content-between align-items-center my-2'" +
+               "<'columnToggleWrapper me-2'>" +
+               "B" +
+               "<'ms-auto'>" +
+               ">" +
+               "<'row'<'col-sm-12'tr>>" +
+               "<'d-md-flex justify-content-between align-items-center mt-2'ip>";
+    }
+
+    /* ── Helper: fix i18n + scrollX duplicate-header bug ───────────────────
+       DataTables (scrollX mode) clones <thead> into a fixed scroll-head div,
+       copying every attribute – including data-lang.  When applyTranslations()
+       later replaces innerHTML on ALL [data-lang] elements it also hits the
+       hidden body-thead <th> cells that DataTables zeroes out for sizing,
+       breaking their height:0 constraint and making a ghost header appear.
+
+       Fix:
+         1. In the scrollHead clone  → replace data-lang on <th> with a
+            <span data-lang> wrapper so sort-arrow spans survive translation.
+         2. In the scrollBody original → strip data-lang so applyTranslations
+            never touches those hidden sizing cells.
+    ─────────────────────────────────────────────────────────────────────── */
+    function setupI18nHeaders(api, colKeys) {
+        var container = api.table().container();
+        var tblNode   = api.table().node();
+
+        /* scrollHead: inject <span data-lang> to hold the text; keep sort arrows */
+        $(container).find('.dataTables_scrollHead thead th').each(function(i) {
+            var th  = this;
+            var key = colKeys[i];
+            if (!key) return;
+
+            /* collect element children (sort-arrow spans) and text */
+            var elKids = [];
+            var text   = '';
+            Array.from(th.childNodes).forEach(function(node) {
+                if (node.nodeType === 3) { text += node.textContent; }
+                else if (node.nodeType === 1) { elKids.push(node.cloneNode(true)); }
+            });
+            text = text.trim() || th.textContent.trim();
+
+            th.removeAttribute('data-lang');
+            th.innerHTML = '';
+            var span = document.createElement('span');
+            span.setAttribute('data-lang', key);
+            span.textContent = text;
+            th.appendChild(span);
+            elKids.forEach(function(el) { th.appendChild(el); });
+        });
+
+        /* scrollBody original thead row 0: remove data-lang so it is never touched */
+        tblNode.querySelectorAll('thead tr:first-child th[data-lang]').forEach(function(th) {
+            th.removeAttribute('data-lang');
+        });
+    }
+
+    /* ── Helper: wire column-search inputs ─────────────────────────────── */
+    function wireColSearch(srId, dtInstance) {
+        document.querySelectorAll('#' + srId + ' th').forEach(function(th) {
+            th.addEventListener('click', function(e) { e.stopPropagation(); });
+        });
+        document.querySelectorAll('#' + srId + ' th input').forEach(function(input) {
+            input.addEventListener('click', function(e) { e.stopPropagation(); });
+            input.addEventListener('keyup', function() {
+                var idx = input.closest('th').cellIndex;
+                if (dtInstance.column(idx).search() !== this.value) {
+                    dtInstance.column(idx).search(this.value).draw();
+                }
+            });
+        });
+    }
+
+    /* ── Helper: wire Show/Hide columns dropdown ────────────────────────── */
+    /* Each DataTable has its own .columnToggleWrapper inside its container.
+       Scope querySelector to that container so tables don't overwrite each other. */
+    function wireColToggle(labels, dtInstance) {
+        var container = dtInstance.table().container();   // scoped to THIS table
+        var wrapper   = container.querySelector('.columnToggleWrapper');
+        if (!wrapper) return;
+
+        var tblId = dtInstance.table().node().id || Math.random().toString(36).slice(2);
+
+        var items = labels.map(function(lbl, i) {
+            var uid = 'ct_' + tblId + '_' + i;
+            return '<li class="dropdown-item"><div class="form-check">' +
+                   '<input class="form-check-input toggle-vis" type="checkbox" ' +
+                   'data-column="' + i + '" id="' + uid + '" checked>' +
+                   '<label class="form-check-label fw-medium" for="' + uid + '">' + lbl + '</label>' +
+                   '</div></li>';
+        }).join('');
+
+        wrapper.innerHTML =
+            '<div class="dropdown">' +
+            '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
+            'type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">' +
+            '<i class="ti ti-columns me-1"></i>Columns</button>' +
+            '<ul class="dropdown-menu">' + items + '</ul></div>';
+
+        wrapper.querySelector('ul').addEventListener('change', function(e) {
+            if (e.target.classList.contains('toggle-vis')) {
+                dtInstance.column(+e.target.dataset.column).visible(e.target.checked);
+            }
+        });
+    }
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 1: UNDERLYING ASSETS (Subjacente)
+    ════════════════════════════════════════════════════════════════════ */
+    var subjRows = subjData.map(function(r) {
+        return [
+            safe(r['Classe']),
+            safe(r['Codigo do Ativo Subjacente']),
+            safe(r['Bolsa de Negociacao']),
+            safe(r['Indice Valorizacao']),
+            safe(r['Tipo IF']),
+            safe(r['Moeda']),
+            safe(r['Mes Vencimento']),
+            safe(r['Ano Vencimento']),
+            safe(r['Ticker'] || r['Codigo do Ativo Subjacente']),
+            safe(r['Calculado']),
+            safe(r['Tipo Cotacao']),
+            safe(r['Fator Conversao']),
+            safe(r['Unidade de Negociacao']),
+            safe(r['Commodity'])
+        ];
+    });
+
+    var dtSubj = $('#tblSubjacente').DataTable({
+        data: subjRows,
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        pageLength: 25,
+        dom: makeDom(),
+        buttons: makeExportButtons('subj'),
+        language: dtLang,
+        columnDefs: [{ targets: '_all', defaultContent: '' }],
+        initComplete: function() {
+            var api = this.api();
+            setupI18nHeaders(api, [
+                'b3-class','b3-underlying-asset-code','b3-exchange','b3-appreciation-index',
+                'b3-instrument-type','b3-currency','b3-expiry-month','b3-expiry-year',
+                'b3-ticker','b3-calculated','b3-quotation-type','b3-conversion-factor',
+                'b3-unit-of-negotiation','b3-commodity'
+            ]);
+            wireColSearch('srSubj', api);
+            wireColToggle([
+                'Class','Underlying Asset Code','Exchange','Appreciation Index',
+                'Instr. Type (IF)','Currency','Expiry Month','Expiry Year',
+                'Ticker','Calculated','Quotation Type','Conversion Factor','Unit of Negotiation','Commodity'
+            ], api);
+        }
+    });
+
+    $('#pageLenSubj').on('change', function() {
+        dtSubj.page.len(+this.value).draw();
+    });
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 2: VCP
+    ════════════════════════════════════════════════════════════════════ */
+    var vcpRows = vcpData.map(function(r) {
+        var status = safe(r['Situação da Qualificação']);
+        var badgeClass = status === 'Habilitado' ? 'bg-soft-success text-success' : 'bg-soft-danger text-danger';
+        return [
+            safe(r['ID da Qualificação']),
+            safe(r['Descrição da Qualificação']),
+            safe(r['Descrição Adicional da Qualificação']),
+            safe(r['Classificação Nível 1']),
+            '<span class="badge ' + badgeClass + '">' + status + '</span>',
+            safe(r['Produto'])
+        ];
+    });
+
+    var dtVCP = $('#tblVCP').DataTable({
+        data: vcpRows,
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        pageLength: 25,
+        dom: makeDom(),
+        buttons: makeExportButtons('vcp'),
+        language: dtLang,
+        columnDefs: [
+            { targets: '_all', defaultContent: '' },
+            { targets: [4], orderable: false }
+        ],
+        initComplete: function() {
+            var api = this.api();
+            setupI18nHeaders(api, [
+                'b3-qual-id','b3-description','b3-add-description',
+                'b3-level1-class','b3-status','b3-product'
+            ]);
+            wireColSearch('srVCP', api);
+            wireColToggle([
+                'Qualification ID','Description','Additional Description',
+                'Level 1 Classification','Status','Product'
+            ], api);
+        }
+    });
+
+    $('#pageLenVCP').on('change', function() {
+        dtVCP.page.len(+this.value).draw();
+    });
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 3: DOMAIN (Domínio)
+    ════════════════════════════════════════════════════════════════════ */
+    var domRows = dominioData.map(function(r) {
+        return [
+            safe(r['Nome do Grupo']),
+            safe(r['Nome do Subgrupo']),
+            safe(r['Codigo TipoIF']),
+            safe(r['Identificador Qualificacao']),
+            safe(r['Descricao Qualificacao']),
+            safe(r['Classificação'])
+        ];
+    });
+
+    var dtDom = $('#tblDominio').DataTable({
+        data: domRows,
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        pageLength: 25,
+        dom: makeDom(),
+        buttons: makeExportButtons('dom'),
+        language: dtLang,
+        columnDefs: [{ targets: '_all', defaultContent: '' }],
+        initComplete: function() {
+            var api = this.api();
+            setupI18nHeaders(api, [
+                'b3-group','b3-subgroup','b3-if-type-code',
+                'b3-qual-id','b3-qual-description','b3-classification'
+            ]);
+            wireColSearch('srDom', api);
+            wireColToggle([
+                'Group','Subgroup','IF Type Code',
+                'Qualification ID','Qualification Description','Classification'
+            ], api);
+        }
+    });
+
+    $('#pageLenDom').on('change', function() {
+        dtDom.page.len(+this.value).draw();
+    });
+
+    /* ── Tab switch: redraw active table so columns align ───────────────── */
+    document.querySelectorAll('#resultTabs button[data-bs-toggle="tab"]')
+        .forEach(function(btn) {
+            btn.addEventListener('shown.bs.tab', function() {
+                var target = btn.getAttribute('data-bs-target');
+                if (target === '#tabSubjacente') dtSubj.columns.adjust().draw(false);
+                if (target === '#tabVCP')        dtVCP.columns.adjust().draw(false);
+                if (target === '#tabDominio')    dtDom.columns.adjust().draw(false);
+            });
+        });
+
+}); // end document.ready
+</script>
+{% endblock extra_javascript %}

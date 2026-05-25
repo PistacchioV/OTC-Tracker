@@ -1,0 +1,2325 @@
+<!-- ============================================================================
+    PARTIAL: sidenav-menu.html
+    DESCRIÇÃO: Menu lateral (sidenav) da aplicação OTC Tracker
+    
+    ESTRUTURA:
+      1. Logo/Marca - Exibe logotipo no topo (centralizado verticalmente)
+      2. Botões de controle - Toggle e fechar
+      3. Área do usuário - Avatar e dropdown de configurações
+      4. Menu de navegação - Links e submenus
+    
+    DEPENDÊNCIAS:
+      - config. ASSETS_ROOT:  Caminho base para assets
+      - Lucide Icons: Biblioteca de ícones
+      - Bootstrap 5: Collapse, Dropdown
+      - SimpleBar: Scroll customizado
+    
+    NOTA SOBRE O LOGO:
+      O tema OTC Tracker controla a visibilidade dos logos através de CSS: 
+      - . logo-light / .logo-dark: Controlado pelo tema (data-menu-color)
+      - .logo-lg / .logo-sm: Controlado pelo tamanho da sidebar (data-sidenav-size)
+      NÃO usar display: flex nos spans internos pois quebra essa lógica! 
+    ============================================================================ -->
+    <style>
+        /* ============================================================================
+           ÍCONE CUSTOMIZADO PARA B3
+           
+           DESCRIÇÃO: Estilização do ícone customizado B3 com SVG inline
+           
+           FUNCIONALIDADE:
+           - Exibe logo da B3 como ícone no menu lateral usando SVG inline
+           - Usa fill="currentColor" para herdar a cor do texto
+           - Suporta 4 temas: light, dark, gray, gradient
+           - Cor controlada pela propriedade CSS 'color' (como demais ícones)
+           
+           VANTAGENS:
+           - Cores herdadas automaticamente dos estilos do tema
+           - Não necessita CSS específico por tema
+           - Comportamento idêntico aos ícones Lucide Icons
+           ============================================================================ */
+        
+        .icon-b3 {
+          display: inline-block;
+          width: 20px;
+          height: 20px;
+          vertical-align: middle;
+          /* Herda a cor do elemento pai (.menu-icon ou .side-nav-link) */
+          color: inherit;
+          /* Redimensiona proporcional ao container */
+          background-size: contain;
+          
+          /* Previne repetição da imagem */
+          background-repeat: no-repeat;
+          
+          /* Centraliza a imagem no container */
+          background-position: center;
+          
+          /* Alinha verticalmente com o texto ao lado */
+          vertical-align: middle;
+          /* Previne que o ícone se redimensione em containers flex */
+          flex-shrink: 0;
+        }
+        
+        .icon-b3 svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+          /* Garante que o fill do SVG use a cor herdada */
+          fill: currentColor;
+        }
+        .icon-intrag {
+          display: inline-block;
+          width: 20px;
+          height: 20px;
+          vertical-align: middle;
+          /* Herda a cor do elemento pai (.menu-icon ou .side-nav-link) */
+          color: inherit;
+          /* Redimensiona proporcional ao container */
+          background-size: contain;
+          
+          /* Previne repetição da imagem */
+          background-repeat: no-repeat;
+          
+          /* Centraliza a imagem no container */
+          background-position: center;
+          
+          /* Alinha verticalmente com o texto ao lado */
+          vertical-align: middle;
+          /* Previne que o ícone se redimensione em containers flex */
+          flex-shrink: 0;
+        }
+        
+        .icon-intrag svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+          /* Garante que o fill do SVG use a cor herdada */
+          fill: currentColor;
+        }
+        </style>
+        
+        <!-- Sidenav Menu Start -->
+        <div class="sidenav-menu">
+        
+            {# =========================================================================
+               LOGO / MARCA
+               Exibe o logotipo da aplicação no topo do menu lateral
+               
+               ESTRUTURA DE VISIBILIDADE (controlada pelo CSS do tema):
+                 - .logo-light:  Visível quando sidebar tem fundo escuro/gradiente
+                 - .logo-dark: Visível quando sidebar tem fundo claro
+                 - .logo-lg: Visível quando sidebar está expandida (default)
+                 - .logo-sm: Visível quando sidebar está minimizada (condensed)
+               
+               CENTRALIZAÇÃO VERTICAL:
+                 - Container usa height + padding para criar espaço
+                 - Imagens usam vertical-align: middle para centralizar
+                 
+               IMPORTANTE:  Não adicionar display: flex nos spans . logo-light/. logo-dark
+                           pois isso sobrescreve o controle de visibilidade do tema!
+               ========================================================================= #}
+            <a href="/" class="logo" style="height: 70px ! important; padding: 10px 0 !important; box-sizing: border-box !important;">
+                
+                {# =====================================================================
+                   LOGO PARA TEMA CLARO (sidebar com fundo escuro/gradiente)
+                   Visibilidade controlada pelo CSS do tema - NÃO modificar display! 
+                   ===================================================================== #}
+                <span class="logo logo-light">
+                    {# Logo grande - exibido quando sidebar está EXPANDIDA #}
+                    <span class="logo-lg">
+                        <img src="{{ config. ASSETS_ROOT }}/images/logo.png" 
+                             alt="OTC Tracker Logo"
+                             style="height: 60px !important; width: auto !important; max-height: 50px !important; object-fit:  contain; vertical-align: middle;">
+                    </span>
+                    {# Logo pequeno - exibido quando sidebar está MINIMIZADA (condensed) #}
+                    <span class="logo-sm">
+                        <img src="{{ config. ASSETS_ROOT }}/images/logo-sm.png" 
+                             alt="OTC Tracker Logo Small"
+                             style="height: 33px !important; width: auto ! important; object-fit: contain; vertical-align: middle;">
+                    </span>
+                </span>
+        
+                {# =====================================================================
+                   LOGO PARA TEMA ESCURO (sidebar com fundo claro)
+                   Visibilidade controlada pelo CSS do tema - NÃO modificar display!
+                   ===================================================================== #}
+                <span class="logo logo-dark">
+                    {# Logo grande - versão escura para fundo claro #}
+                    <span class="logo-lg">
+                        <img src="{{ config.ASSETS_ROOT }}/images/logo-black.png" 
+                             alt="OTC Tracker Logo Dark"
+                             style="height: 60px !important; width: auto !important; max-height: 50px !important; object-fit: contain; vertical-align: middle;">
+                    </span>
+                    {# Logo pequeno - versão para sidebar minimizada #}
+                    <span class="logo-sm">
+                        <img src="{{ config. ASSETS_ROOT }}/images/logo-sm. png" 
+                             alt="OTC Tracker Logo Small"
+                             style="height: 33px !important; width: auto ! important; object-fit: contain; vertical-align: middle;">
+                    </span>
+                </span>
+            </a>
+        
+            <!-- Sidebar Hover Menu Toggle Button -->
+            <button class="button-on-hover">
+                <i class="ti ti-menu-4 fs-22 align-middle"></i>
+            </button>
+        
+            <!-- Full Sidebar Menu Close Button -->
+            <button class="button-close-offcanvas">
+                <i class="ti ti-x align-middle"></i>
+            </button>
+        
+            <div class="scrollbar" data-simplebar>
+        
+                <!-- User -->
+                <div class="sidenav-user">
+        
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="/users-profile" class="link-reset">
+                                <img src="{{ config.ASSETS_ROOT }}/images/users/e930179.jpg" alt="user-image"
+                                     class="rounded-circle mb-2 avatar-md">
+                                <span class="sidenav-user-name fw-bold">Giulliano</span>
+                                <span class="fs-12 fw-semibold" data-lang="user-role">Associate</span>
+                            </a>
+                        </div>
+                        <div>
+                            <a class="dropdown-toggle drop-arrow-none link-reset sidenav-user-set-icon"
+                               data-bs-toggle="dropdown"
+                               data-bs-offset="0,12" href="#!" aria-haspopup="false" aria-expanded="false">
+                                <i class="ti ti-settings fs-24 align-middle ms-1"></i>
+                            </a>
+        
+                            <div class="dropdown-menu">
+                                <!-- Header -->
+                                <div class="dropdown-header noti-title">
+                                    <h6 class="text-overflow m-0">Welcome back!</h6>
+                                </div>
+        
+                                <!-- My Profile -->
+                                <a href="/profile" class="dropdown-item">
+                                    <i class="ti ti-user-circle me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Profile</span>
+                                </a>
+        
+                                <!-- Notifications -->
+                                <a href="javascript:void(0);" class="dropdown-item">
+                                    <i class="ti ti-bell-ringing me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Notifications</span>
+                                </a>
+        
+                                <!-- Settings -->
+                                <a href="javascript:void(0);" class="dropdown-item">
+                                    <i class="ti ti-settings-2 me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Account Settings</span>
+                                </a>
+        
+                                <!-- Support -->
+                                <a href="javascript:void(0);" class="dropdown-item">
+                                    <i class="ti ti-headset me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Support Center</span>
+                                </a>
+        
+                                <!-- Divider -->
+                                <div class="dropdown-divider"></div>
+        
+                                <!-- Lock -->
+                                <a href="/auth-lock-screen"
+                                   class="dropdown-item">
+                                    <i class="ti ti-lock me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Lock Screen</span>
+                                </a>
+        
+                                <!-- Logout -->
+                                <a href="javascript:void(0);" class="dropdown-item fw-semibold">
+                                    <i class="ti ti-logout-2 me-2 fs-17 align-middle"></i>
+                                    <span class="align-middle">Log Out</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        
+                <! --- Sidenav Menu -->
+                <ul class="side-nav">
+                    <li class="side-nav-title mt-2" data-lang="menu-title">Navigation</li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarDashboards" aria-expanded="false"
+                           aria-controls="sidebarDashboards"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="circle-gauge"></i></span>
+                            <span class="menu-text" data-lang="dashboards">Dashboards</span>
+                            <span class="badge bg-success">02</span>
+                        </a>
+                        <div class="collapse" id="sidebarDashboards">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/" class="side-nav-link">
+                                        <span class="menu-text" data-lang="dashboard-one">KPI</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/dashboard-2" class="side-nav-link">
+                                        <span class="menu-text" data-lang="dashboard-two">Manual Confirmations</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-title" data-lang="apps-title">Apps</li>
+        
+                    <li class="side-nav-item">
+                        <a href="/chat" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="message-square-dot"></i></span>
+                            <span class="menu-text" data-lang="chat"> Chat </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/holidays-calendar" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="calendar"></i></span>
+                            <span class="menu-text" data-lang="holidays-calendar"> Holidays Calendar </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/file-interpreter" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="folder-open-dot"></i></span>
+                            <span class="menu-text" data-lang="file-interpreter"> File Interpreter </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/electronic-inventory" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="package-check"></i></span>
+                            <span class="menu-text" data-lang="electronic-inventory"> Electronic Inventory </span>
+                        </a>
+                    </li>
+                     <!-- Estrutura de "Daily Settlement" com seus subitens -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#dailySettlement" aria-expanded="false" 
+                           aria-controls="dailySettlement" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="wallet-cards"></i></span>
+                            <span class="menu-text" data-lang="daily-settlement">Daily Settlement</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        
+                        <!-- Conteúdo do submenu "Daily Settlement" -->
+                        <div class="collapse" id="dailySettlement">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#ndfSection" aria-expanded="false" 
+                                       aria-controls="ndfSection" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="ndfSection">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="#ndfsummary" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-summary">Summary</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="#ndfcockpit" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-cockpit">Cockpit</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#otherProductsSection" aria-expanded="false" 
+                                       aria-controls="otherProductsSection" class="side-nav-link">
+                                        <span class="menu-text" data-lang="other-products">Other Products</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="otherProductsSection">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/other-products-summary" class="side-nav-link">
+                                                    <!-- <span class="menu-icon"><i data-lucide="dollar-sign"></i></span>-->
+                                                    <span class="menu-text" data-lang="nav-summary">Summary</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/other-products-otm" class="side-nav-link">
+                                                     <!--<span class="menu-icon"><i data-lucide="currency"></i></span> -->
+                                                    <span class="menu-text" data-lang="nav-otm">OTM</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/other-products-swap-latamdeskposition" class="side-nav-link">
+                                                     <!--<span class="menu-icon"><i data-lucide="building-2"></i></span> -->
+                                                    <span class="menu-text" data-lang="latam-desk-position">Latam Desk Position</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a data-bs-toggle="collapse" href="#otherProductsSwap" aria-expanded="false"
+                                                   aria-controls="otherProductsSwap" class="side-nav-link">
+                                                    <!-- <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>-->
+                                                    <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                                    <span class="menu-arrow"></span>
+                                                </a>
+                                                <div class="collapse" id="otherProductsSwap">
+                                                    <ul class="sub-menu">
+                                                        <li class="side-nav-item">
+                                                            <a href="#other-products-swap-settlement-advice" 
+                                                               class="side-nav-link">
+                                                                <span class="menu-icon"><i data-lucide="receipt"></i></span>
+                                                                <span class="menu-text" data-lang="settlement-advice">Settlement Advice</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="/other-products-swap-athena" 
+                                                               class="side-nav-link">
+                                                                <span class="menu-icon"><i data-lucide="landmark"></i></span>
+                                                                <span class="menu-text" data-lang="athena">Athena</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="/other-products-swap-vcp" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="nav-vcp">VCP</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="/other-products-swap-events" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="events">Events</span>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a data-bs-toggle="collapse" href="#otherProductsOPTION" aria-expanded="false" 
+                                                   aria-controls="otherProductsOPTION" class="side-nav-link">
+                                                    <span class="menu-icon"><i data-lucide="chart-candlestick"></i></span>
+                                                    <span class="menu-text" data-lang="nav-option">OPTION</span>
+                                                    <span class="menu-arrow"></span>
+                                                </a>
+                                                <div class="collapse" id="otherProductsOPTION">
+                                                    <ul class="sub-menu">
+                                                        <li class="side-nav-item">
+                                                            <a href="#other-products-option-settlement-advice" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="settlement-advice">Settlement Advice</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="#other-products-option-cognos" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="nav-cognos">Cognos</span>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#livePositionSection" aria-expanded="false" 
+                                       aria-controls="livePositionSection" 
+                                       class="side-nav-link">
+                                       <span class="menu-icon"><i data-lucide="cctv"></i></span>
+                                        <span class="menu-text" data-lang="live-position">Live Position</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="livePositionSection">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="#livepositionndf" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a data-bs-toggle="collapse" href="#livePositionSWAP" aria-expanded="false" 
+                                                   aria-controls="livePositionSWAP" class="side-nav-link">
+                                                    <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>
+                                                    <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                                    <span class="menu-arrow"></span>
+                                                </a>
+                                                <div class="collapse" id="livePositionSWAP">
+                                                    <ul class="sub-menu">
+                                                        <li class="side-nav-item">
+                                                            <a href="#livepositionswapflow" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="nav-flow">Flow</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="#livepositionswappremium" class="side-nav-link">
+                                                                <span class="menu-text" data-lang="nav-premium">Premium</span>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="#livepositionoption" class="side-nav-link">
+                                                    <span class="menu-icon"><i data-lucide="chart-candlestick"></i></span>
+                                                    <span class="menu-text" data-lang="nav-option">OPTION</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#operationsSection" aria-expanded="false" 
+                                       aria-controls="operationsSection" class="side-nav-link">
+                                        <!-- Operations Section -->
+                                        <span class="menu-text" data-lang="nav-operations">Operations</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="operationsSection">
+                                        <!-- Submenu of Operations -->
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="#operationsb3messages" class="side-nav-link">
+                                                    <!-- Links to B3 Messages section -->
+                                                    <span class="menu-text" data-lang="b3-messages">B3 Messages</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <li class="side-nav-item">
+                                    <a href="#spb" class="side-nav-link">
+                                        <!-- Links to SPB page -->
+                                        <span class="menu-text" data-lang="nav-spb">SPB</span>
+                                    </a>
+                                </li>
+        
+                                <li class="side-nav-item">
+                                    <a href="#sdconta" class="side-nav-link">
+                                        <!-- Links to SDConta page -->
+                                        <span class="menu-text" data-lang="nav-sdconta">SDConta</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                    <!-- Nova seção para Reconciliations -->
+                    <li class="side-nav-title mt-2" data-lang="reconciliations-title">Reconciliations</li>
+                    
+                    <li class="side-nav-item">
+                        <a href="/reconciliation-comitente" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="square-user"></i></span>
+                            <span class="menu-text" data-lang="nav-comitente">Comitente</span>
+                        </a>
+                    </li>
+                    <!-- Nova seção para OTC Docs e submenus -->
+                     <!-- Nova seção para Documentation -->
+                    <li class="side-nav-title" data-lang="Documentation">Documentation</li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#pendingConfirmation" aria-expanded="false" 
+                           aria-controls="pendingConfirmation" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="clock"></i></span>
+                            <span class="menu-text" data-lang="pending-confirmation">Pending Confirmation</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="pendingConfirmation">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/pending-confirmation" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-main">Main</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/metrics" class="side-nav-link">
+                                        <span class="menu-text">Metrics</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/manual-confirmation" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="check-circle"></i></span>
+                            <span class="menu-text" data-lang="manual-confirmation">Manual Confirmation</span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/cgd" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="building-2"></i></span>
+                            <span class="menu-text" data-lang="nav-cgd">CGD</span>
+                        </a>
+                    </li>
+        
+                    <!-- Nova seção para Regulatory -->
+                    <li class="side-nav-title" data-lang="regulatory-title">Regulatory</li>
+        
+                    <!-- E-financeira -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#regulatoryEfinanceira" aria-expanded="false" 
+                           aria-controls="regulatoryEfinanceira" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="file-text"></i></span>
+                            <span class="menu-text" data-lang="nav-e-financeira">E-financeira</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="regulatoryEfinanceira">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/kapital" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-kapital">KAPITAL</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/athena-ndf" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-athena-ndf">ATHENA-NDF</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/athena-fxo" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-athena-fxo">ATHENA-FXO</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/pyramid" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-pyramid">PYRAMID</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <!-- Accrual -->
+                    <li class="side-nav-item">
+                        <a href="/regulatory/accrual" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="calculator"></i></span>
+                            <span class="menu-text" data-lang="nav-accrual">Accrual</span>
+                        </a>
+                    </li>
+        
+                    <!-- MtM -->
+                    <li class="side-nav-item">
+                        <a href="/regulatory/mtm" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="trending-up"></i></span>
+                            <span class="menu-text" data-lang="nav-mtm">MtM</span>
+                        </a>
+                    </li>
+        
+                    <!-- WHT -->
+                    <li class="side-nav-item">
+                        <a href="/regulatory/wht" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="percent"></i></span>
+                            <span class="menu-text" data-lang="nav-wht">WHT</span>
+                        </a>
+                    </li>
+        
+                    <!-- Nova seção para Products -->
+                    <li class="side-nav-title" data-lang="products-title">Products</li>
+        
+                    <!-- New Deals -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#productsNewDeals" aria-expanded="false" 
+                           aria-controls="productsNewDeals" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="plus-circle"></i></span>
+                            <span class="menu-text" data-lang="new-deals">New Deals</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="productsNewDeals">
+                            <ul class="sub-menu">
+                                <!-- SWAP New Deals -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#newDealsSwap" aria-expanded="false" 
+                                       aria-controls="newDealsSwap" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>
+                                        <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="newDealsSwap">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="#swapbullet" class="side-nav-link">
+                                                    <span class="menu-icon"><i data-lucide="circle-small"></i></span>
+                                                    <span class="menu-text" data-lang="nav-bullet">Bullet</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="#swapcashflow" class="side-nav-link">
+                                                    <span class="menu-icon"><i data-lucide="workflow"></i></span>
+                                                    <span class="menu-text" data-lang="nav-cashflow">Cashflow</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <!-- NDF New Deals -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#newDealsNDF" aria-expanded="false" 
+                                       aria-controls="newDealsNDF" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="file-code"></i></span>
+                                        <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="newDealsNDF">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/new_deals-ndf-fwdstart" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-fwd-start">FWD Start</span>
+                                                </a>
+                                            </li>                                    
+                                            <li class="side-nav-item">
+                                                <a href="/new_deals-ndf-otherpublisher" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-other-publisher">Other Publisher</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="#ndfcommodities" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-commodities">Commodities</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                
+                                <!-- Options New Deals -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#newDealsOptions" aria-expanded="false" 
+                                       aria-controls="newDealsOptions" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="chart-candlestick"></i></span>                    
+                                        <span class="menu-text" data-lang="nav-options">Options</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="newDealsOptions">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="#fxo" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-fxo">FXO</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/new_deals-opt-commodities" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-commodities">Commodities</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="#edg" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-edg">EDG</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <!-- COE New Deals -->
+                                <li class="side-nav-item">
+                                    <a href="#coe" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="codepen"></i></span>
+                                        <span class="menu-text" data-lang="nav-coe">COE</span>
+                                    </a>
+                                </li>
+        
+                                <!-- DCE New Deals -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#newDealsDCE" aria-expanded="false" 
+                                       aria-controls="newDealsDCE" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="coins"></i></span>
+                                        <span class="menu-text" data-lang="nav-dce">DCE</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="newDealsDCE">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/new-deals/dce/deliverable-forward" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-deliverable-forward">Deliverable Forward</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/new-deals/dce/ndf" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/new-deals/dce/option" class="side-nav-link">
+                                                    <span class="menu-text">Option</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/new_deals-dce-swap" class="side-nav-link">
+                                                    <span class="menu-text">Swap</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <!-- Unwinds -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#productsUnwinds" aria-expanded="false" 
+                           aria-controls="productsUnwinds" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="rotate-ccw"></i></span>
+                            <span class="menu-text" data-lang="unwinds">Unwinds</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="productsUnwinds">
+                            <ul class="sub-menu">
+                                <!-- SWAP Unwinds -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#unwindsSwap" aria-expanded="false" 
+                                       aria-controls="unwindsSwap" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>
+                                        <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="unwindsSwap">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/swap/cem" class="side-nav-link">
+                                                    <span class="menu-text">CEM</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/swap/edg" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-edg">EDG</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <!-- NDF Unwinds -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#unwindsNdf" aria-expanded="false" 
+                                       aria-controls="unwindsNdf" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="trending-down"></i></span>
+                                        <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="unwindsNdf">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/ndf/fx" class="side-nav-link">
+                                                    <span class="menu-text">FX</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/ndf/commodities" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-commodities">Commodities</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <!-- Options Unwinds -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#unwindsOptions" aria-expanded="false" 
+                                       aria-controls="unwindsOptions" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="settings"></i></span>
+                                        <span class="menu-text" data-lang="nav-options">Options</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="unwindsOptions">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/options/fxo" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-fxo">FXO</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/options/commodities" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-commodities">Commodities</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/options/edg" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-edg">EDG</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+        
+                                <!-- COE Unwinds -->
+                                <li class="side-nav-item">
+                                    <a href="/unwinds/coe" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="undo-2"></i></span>
+                                        <span class="menu-text" data-lang="nav-coe">COE</span>
+                                    </a>
+                                </li>
+        
+                                <!-- DCE Unwinds -->
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#unwindsDCE" aria-expanded="false" 
+                                       aria-controls="unwindsDCE" class="side-nav-link">
+                                        <span class="menu-icon"><i data-lucide="coins"></i></span>
+                                        <span class="menu-text" data-lang="nav-dce">DCE</span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="unwindsDCE">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/dce/deliverable-forward" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-deliverable-forward">Deliverable Forward</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/dce/ndf" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/dce/option" class="side-nav-link">
+                                                    <span class="menu-text">Option</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/unwinds/dce/swap" class="side-nav-link">
+                                                    <span class="menu-text">Swap</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    
+        
+                    <!-- Nova seção para Data Base -->
+                    <li class="side-nav-title" data-lang="data-base-title">Data Base</li>
+                      <!-- Nova seção para Reference Data -->
+                    <li class="side-nav-item">
+                        <a href="/reference-data" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="database"></i></span>
+                            <span class="menu-text" data-lang="reference-data">Reference Data</span>
+                        </a>
+                    </li>
+        
+                     <!-- Nova seção para Indices B3 -->
+                    <li class="side-nav-item">
+                        <a href="/index-b3" class="side-nav-link">
+                            <span class="menu-icon">
+                                <span class="icon-b3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="193 158 517 452" fill="currentColor">
+                                        <path d="M 460.50 526.15 L 453.50 528.49 L 370.75 528.78 L 288.00 529.07 L 288.00 273.00 L 358.28 273.00 C431.12,273.00 440.30,273.41 451.39,277.17 C497.49,292.81 517.23,349.27 490.68,389.58 L 487.36 394.63 L 491.68 398.38 C498.80,404.58 507.33,418.58 511.11,430.28 C514.09,439.49 514.42,441.68 514.44,452.50 C514.46,466.61 512.72,474.54 506.96,486.50 C497.96,505.18 481.72,519.04 460.50,526.15 ZM 609.00 193.00 L 609.00 610.00 L 561.67 610.00 C535.63,610.00 514.03,609.70 513.67,609.33 C513.30,608.97 513.00,601.77 513.00,593.35 L 513.00 578.03 L 577.50 577.50 L 577.75 401.25 L 578.01 225.00 L 513.00 225.00 L 513.00 193.00 ZM 289.00 578.03 L 289.00 610.00 L 241.67 610.00 C215.63,610.00 194.03,609.70 193.67,609.33 C193.30,608.97 193.00,515.14 193.00,400.83 L 193.00 193.00 L 289.00 193.00 L 289.00 225.00 L 223.99 225.00 L 224.50 577.50 ZM 352.00 425.00 L 352.00 482.09 L 389.25 481.80 C425.71,481.51 426.61,481.45 431.50,479.20 C434.25,477.93 437.78,475.68 439.34,474.20 C454.90,459.41 449.28,433.04 429.10,426.16 C426.77,425.36 414.16,425.00 388.85,425.00 ZM 691.78 258.49 C677.13,261.94 662.38,258.42 651.51,248.87 C647.73,245.55 642.00,234.99 642.00,231.34 L 642.00 229.00 L 655.96 229.00 C669.03,229.00 670.00,229.13 671.03,231.05 C672.58,233.94 677.95,236.99 681.50,236.99 C687.96,236.99 693.76,230.89 692.42,225.53 C691.19,220.63 687.66,218.71 679.01,218.21 L 671.00 217.74 L 671.00 198.00 L 677.55 198.00 C684.41,198.00 689.30,196.27 690.38,193.46 C690.72,192.56 691.00,190.38 691.00,188.59 C691.00,179.41 676.08,177.42 671.23,185.95 L 669.50 188.99 L 656.25 188.99 C655.88,188.99 655.53,188.99 655.18,188.99 C647.31,189.00 644.02,189.00 643.16,187.56 C642.54,186.53 643.17,184.75 644.25,181.69 C644.32,181.51 644.39,181.31 644.46,181.11 C649.89,165.71 664.76,157.14 684.12,158.24 C694.54,158.84 702.35,162.02 708.83,168.30 C714.21,173.52 715.49,175.92 717.01,183.64 C718.59,191.69 716.54,199.49 711.58,204.20 L 708.22 207.40 L 712.38 211.45 C724.53,223.28 719.11,246.27 702.13,254.94 C699.89,256.08 695.24,257.67 691.78,258.49 ZM 352.00 321.00 L 352.00 378.12 L 386.25 377.81 C418.61,377.52 420.75,377.38 425.05,375.39 C443.29,366.95 448.55,345.00 435.81,330.52 C433.41,327.79 429.40,324.70 426.54,323.37 C421.56,321.05 421.10,321.02 386.75,321.01 Z"/>
+                                    </svg>
+                                </span>
+                            </span>
+                            <span class="menu-text" data-lang="index-b3">Index B3</span>
+                        </a>
+                    </li>
+        
+                    <!-- Nova seção para Intrag -->
+                    <li class="side-nav-item">
+                        <a href="#intrag" class="side-nav-link">
+                            <span class="menu-icon">
+                                <span class="icon-intrag">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="currentColor">
+                                        <path d="M218.676 10.574c-13.797.328-23.918.813-42.473 1.957-8.582.512-17.95 1.266-24.547 1.926-1.656.18-5.12.512-7.68.754-10.753 1.055-26.718 3.07-33.433 4.215-1.418.242-3.496.574-4.668.754-1.145.152-3.195.511-4.52.754-1.324.242-3.554.664-4.968.902-4.973.844-13.434 2.562-18.223 3.707-1.328.332-3.707.902-5.273 1.266-1.567.359-2.98.691-3.16.722-8.829 2.106-17.594 6.356-24.34 11.867C38.824 44.73 32.953 53.344 30 61.898c-.48 1.325-.965 2.68-1.113 3.012-.512 1.145-2.742 10.781-4.34 18.676-.238 1.324-.66 3.281-.902 4.367-.243 1.082-.57 2.98-.782 4.215-.183 1.234-.422 2.742-.574 3.312-.453 1.72-2.289 13.465-3.465 21.989-1.144 8.254-1.898 14.25-2.558 20.332-.332 2.98-.664 5.902-.723 6.476-.09.57-.363 3.493-.633 6.477-.242 2.98-.601 6.625-.785 8.133-.633 5.539-2.2 29.668-2.98 46.687-.602 12.617-.993 39.637-.782 54.367.211 18.372.66 34.79 1.082 40.512.153 2.317.453 7.2.633 10.844.18 3.644.422 8.312.574 10.39.692 10.422 1.235 17.258 1.504 19.426.153 1.328.512 4.852.754 7.801.242 2.953.602 6.477.754 7.832.18 1.356.512 4.277.75 6.508.754 7.137 1.328 11.805 1.809 14.91.242 1.656.664 4.488.902 6.324.875 6.625 1.898 13.07 3.012 18.977.242 1.324.633 3.555.906 4.969.512 3.011 1.687 9.007 2.531 12.8 2.89 13.286 4.156 17.258 7.559 23.797.933 1.805 2.137 3.914 2.68 4.668.511.754 1.265 1.836 1.656 2.41 1.718 2.559 6.629 7.559 9.34 9.489.449.328 1.324.96 1.894 1.414.606.48 1.176.843 1.328.843.121 0 .422.211.66.454 1.176 1.144 9.461 5.09 13.012 6.144.664.211 1.477.48 1.809.633.785.36 5.21 1.473 10.543 2.68 2.32.543 4.699 1.113 5.27 1.265 1.386.36 10.12 2.106 16.718 3.313 3.793.691 11.176 1.867 15.812 2.531 1.747.238 3.977.57 4.97.75 3.644.633 18.706 2.383 28.163 3.285 3.403.332 7.59.723 9.336.902 2.832.301 5.723.543 19.578 1.536 2.078.152 6.809.422 10.543.605 3.735.18 8.946.45 11.598.602 21.445 1.234 82.77 1.234 103.914 0 2.652-.18 7.863-.422 11.598-.602 6.414-.3 8.765-.453 18.824-1.207 12.89-.992 31.84-2.832 38.254-3.734 1.836-.27 5-.692 7.078-.965 7.68-.992 18.223-2.59 24.246-3.703 6.598-1.207 15.332-2.953 16.719-3.313.57-.152 2.949-.722 5.27-1.265 5.21-1.176 9.73-2.32 10.542-2.68a174.8 174.8 0 0 1 3.012-1.055c2.469-.812 10.664-4.699 11.355-5.363.211-.211.813-.66 1.325-.965 2.351-1.473 3.433-2.316 5.574-4.246 2.41-2.2 5.754-5.812 6.566-7.047.27-.422.993-1.445 1.594-2.258.633-.843 1.145-1.597 1.145-1.718 0-.122.484-.965 1.054-1.868.575-.902 1.266-2.23 1.54-2.953.3-.691.6-1.445.722-1.593.57-.754 2.68-6.75 3.582-10.153 1.418-5.27 4.066-17.71 5.031-23.586.242-1.504.512-2.918.602-3.16.273-.664 1.93-10.996 3.433-21.535.332-2.32.664-4.64.754-5.121.243-1.387 1.325-10.633 1.809-15.512.238-2.41.57-5.183.75-6.176.184-.996.512-4.246.754-7.23.242-2.98.574-6.656.723-8.133.18-1.504.453-4.937.632-7.68.18-2.742.453-6.113.602-7.53.183-1.415.512-6.626.754-11.595.273-4.972.574-11.086.754-13.554 1.355-21.899 1.355-79.368 0-101.957-.153-2.563-.422-7.59-.602-11.145-.183-3.555-.453-8.254-.605-10.394-.18-2.168-.57-7.5-.903-11.895-.332-4.398-.664-8.527-.754-9.187-.09-.665-.359-3.586-.601-6.477-.242-2.89-.512-5.602-.602-6.023-.09-.422-.422-3.196-.754-6.176-.78-7.2-1.746-15.149-1.957-16.082-.09-.422-.422-2.832-.754-5.305-1.476-11.262-4.214-26.957-6.566-37.648-.332-1.508-.871-3.946-1.203-5.422-.844-3.856-1.84-7.742-2.168-8.434-.152-.332-.422-1.144-.633-1.808-.664-2.227-4.008-9.668-4.851-10.844-.122-.18-1.082-1.594-2.11-3.16-2.137-3.223-7.617-8.946-10.902-11.356-6.504-4.789-13.735-8.043-23.07-10.332a440.932 440.932 0 0 1-4.82-1.207c-1.114-.328-3.345-.812-8.134-1.805a396.317 396.317 0 0 1-4.066-.875c-5.813-1.414-24.73-4.488-37.047-6.054-2.473-.301-4.91-.633-5.422-.75-.906-.184-5.273-.633-14.156-1.508-2.473-.242-5.875-.602-7.531-.754-1.656-.18-4.64-.45-6.625-.633-1.989-.148-5.242-.422-7.23-.57-6.747-.574-25.481-1.656-35.844-2.11-20.032-.874-57.02-1.144-79.97-.57ZM85.965 214.098c.18.148 1.055.422 1.926.632 1.629.391 3.918 1.446 5.632 2.59 1.356.903 4.551 4.336 5.18 5.543.305.602.633 1.145.723 1.235.094.09.363.691.605 1.355.211.66.48 1.356.633 1.504.39.574.844 4.156.844 6.809 0 2.59-.395 5.632-.906 6.746-1.625 3.734-2.41 4.968-4.457 7.14-1.899 1.957-2.68 2.559-5.27 3.825-2.11 1.054-3.617 1.597-4.82 1.714-.965.121-1.809.332-1.899.454-.21.363-6.746.363-6.746 0 0-.122-.754-.333-1.719-.454-.933-.117-2.105-.39-2.617-.601a30.998 30.998 0 0 0-1.988-.813c-.574-.21-1.117-.453-1.207-.543-.09-.12-.543-.39-1.055-.632-1.746-.872-5.36-4.88-6.414-7.079-.574-1.175-1.113-2.32-1.265-2.558-1.024-2.05-1.204-11.387-.243-13.555.274-.574.664-1.535.875-2.11.211-.57.453-1.113.543-1.202.09-.09.45-.696.782-1.356.574-1.117 4.156-4.972 4.668-4.972.12 0 .394-.211.605-.48.57-.634 3.492-2.048 5.27-2.5.843-.212 1.777-.513 2.109-.665.332-.148 1.144-.3 1.805-.39 1.777-.18 8.015.09 8.406.363Zm328.191 20.992v15.21h-58.433v-20.359l3.254-.515c7.199-1.113 11.687-1.867 11.957-2.047.18-.121 1.656-.36 3.312-.57 1.656-.211 3.164-.485 3.313-.606.183-.117 1.597-.39 3.164-.601 1.566-.18 3.613-.543 4.52-.782.902-.21 2.8-.543 4.214-.722 1.418-.184 2.832-.453 3.164-.575.332-.148 1.836-.421 3.313-.632 1.507-.18 3.191-.45 3.765-.633.57-.149 2.742-.57 4.82-.903 2.079-.332 4.79-.78 6.024-.992 1.234-.242 2.559-.422 2.95-.453l.663-.031Zm-249.398 13.433v18.043h30.12v26.809H164.73l.118 27.922c.093 30.09.03 28.613 1.66 32.316 1.234 2.864 4.726 5.785 7.738 6.508.512.121 1.086.36 1.328.543.57.45 12.77.45 13.313-.031.238-.18 1.324-.422 2.468-.543l2.02-.211v26.418l-.816.36c-.75.331-4.215.874-8.973 1.445-6.777.785-19.129.875-19.852.12-.18-.148-.66-.269-1.113-.269-1.176 0-6.055-.906-6.418-1.176-.18-.12-.992-.422-1.836-.601-.812-.211-1.625-.485-1.808-.602-.149-.152-.84-.422-1.504-.633-.664-.21-1.266-.484-1.356-.574-.09-.09-.633-.422-1.207-.754-2.5-1.324-3.25-1.804-4.578-2.922-.781-.632-1.504-1.171-1.656-1.171-.301-.032-2.59-2.532-4.395-4.82-1.386-1.778-3.437-5.18-4.129-6.93-.242-.57-.511-1.114-.601-1.204-.121-.09-.422-1.023-.723-2.109-.273-1.082-.633-2.227-.785-2.559-.148-.332-.512-1.687-.75-3.011a144.286 144.286 0 0 0-.816-3.766c-.211-.902-.36-11.508-.45-31.566l-.12-30.18h-17.442v-26.809h17.473v-30.363l2.046-.21c1.114-.118 2.168-.329 2.32-.45.18-.121 1.657-.39 3.313-.602 1.656-.21 3.164-.515 3.313-.632.18-.121 2.078-.454 4.218-.723 2.168-.305 4.067-.633 4.215-.754.18-.121 1.176-.332 2.258-.422a49.719 49.719 0 0 0 4.219-.691c3.223-.664 8.855-1.54 9.125-1.387.121.059.21 8.254.21 18.191Zm99.851 15.18c4.215.242 8.977.785 9.336 1.055.18.12.903.332 1.657.422 1.718.273 5.906 1.507 8.433 2.53 2.11.845 6.809 3.192 7.531 3.798.243.18.782.539 1.204.722.421.211 1.75 1.262 2.921 2.29 1.176 1.054 2.262 1.957 2.41 2.015.454.211 5.813 6.719 5.813 7.078 0 .09.274.575.606 1.024.632.906 3.312 6.117 3.312 6.449 0 .117.242.781.57 1.473.301.695.664 1.75.786 2.32.12.574.332 1.176.449 1.355.12.153.394 1.114.605 2.11.18.992.422 2.02.512 2.258.121.242.39 1.535.633 2.863.36 1.988.449 9.488.57 42.68l.121 40.3h-32.86l-.03-3.554c-.032-1.926-.122-4.727-.243-6.204l-.18-2.71-.874 1.203c-1.383 1.84-5.934 6.175-7.739 7.379-3.949 2.593-5 3.222-6.086 3.586-.664.18-1.535.543-1.957.78-.453.212-1.566.575-2.472.755-.903.21-1.805.484-1.957.601-1.535 1.145-20.512 1.117-21.989-.027-.148-.121-1.234-.39-2.41-.602-1.144-.21-2.5-.543-3.011-.785-.48-.21-1.778-.754-2.829-1.176a42.42 42.42 0 0 1-3.554-1.746 49.866 49.866 0 0 0-2.442-1.414c-1.265-.695-1.687-1.086-5.12-4.52-3.524-3.523-3.977-4.003-3.977-4.335 0-.121-.391-.785-.84-1.477-.485-.691-1.176-1.957-1.54-2.773-.359-.84-.843-1.836-1.054-2.258-.238-.422-.57-1.504-.781-2.41-.211-.903-.48-1.805-.602-1.957-.332-.422-.906-4.7-.906-6.567 0-.87-.148-1.746-.328-1.925-.363-.364-.274-1.567.66-8.829.18-1.414.453-2.71.574-2.859.121-.18.39-.965.57-1.777.391-1.567 1.208-3.614 2.051-5.153.27-.511.63-1.203.813-1.566.18-.39.422-.691.57-.691.121 0 .211-.18.211-.391 0-.332 3.313-4.64 3.887-5.031.12-.09.332-.39.422-.692.12-.332.48-.632.812-.722.332-.09.602-.274.602-.395 0-.3 5.062-4.277 6.777-5.27 1.234-.753 4.008-2.167 8.043-4.097.574-.3 6.203-2.106 8.676-2.8.902-.27 2.68-.634 3.914-.813 1.234-.211 2.41-.453 2.562-.57.18-.122 1.985-.395 4.067-.575 2.078-.18 4.637-.48 5.722-.633 4.278-.632 19.305-.511 20.903.153.543.238.57.12.36-2.442-.118-1.476-.329-2.742-.45-2.832-.152-.09-.332-.66-.453-1.265-.211-1.114-1.356-3.551-2.438-5.211-.695-1.051-3.617-4.067-3.949-4.067-.117 0-.629-.3-1.144-.691-1.325-.965-3.461-1.926-4.758-2.168-.633-.121-1.145-.332-1.145-.453 0-1.324-19.457-1.535-25.3-.239-.754.149-2.5.48-3.915.723-1.418.238-2.832.57-3.164.723-.332.148-1.414.422-2.41.601-.992.18-2.078.453-2.41.602-.332.152-1.535.484-2.68.754-1.144.27-2.23.57-2.41.722-.18.122-.992.422-1.836.633-.812.211-1.656.512-1.808.633-.18.121-.993.39-1.809.602-.84.18-2.016.601-2.617.902-.633.332-1.207.574-1.297.574-.09 0-.152-6.297-.152-13.976 0-10.875.093-14.036.394-14.278.211-.18 1.055-.48 1.867-.691.844-.18 1.657-.453 1.805-.574.184-.121 1.176-.48 2.262-.754 1.082-.301 2.105-.63 2.258-.75.18-.153 1.113-.395 2.078-.602.996-.21 2.02-.484 2.258-.633.273-.12 1.507-.453 2.742-.722a58.95 58.95 0 0 0 2.863-.633c.328-.094 2.016-.363 3.762-.606 1.75-.238 3.586-.57 4.066-.722 1.75-.54 17.531-1.535 21.086-1.324.992.058 3.164.18 4.82.27ZM98.492 326.508v59.937H63.254V266.566h35.238Zm266.266-22.594c0 35.664.152 42.563.875 43.527.148.149.332.75.453 1.325.422 2.257 2.379 5.543 4.605 7.77 1.176 1.206 2.5 2.26 2.922 2.378.453.094.785.274.785.395 0 .117 1.055.539 2.348.96 1.93.606 2.953.723 5.965.723 2.11 0 3.945-.148 4.367-.328.39-.21 1.324-.512 2.078-.723.754-.21 2.11-.843 3.012-1.449 1.687-1.082 4.82-3.972 4.82-4.457 0-.148.422-.812.903-1.445.511-.664.906-1.324.906-1.504 0-.184.27-.816.57-1.418.332-.602.692-1.625.813-2.258.09-.664.3-1.324.453-1.476.754-.965.875-7.047.875-42.38v-36.988h35.238v119.88H420.06c-13.04 0-16.778-.09-16.957-.391-.122-.18-.27-3.043-.332-6.325-.06-3.253-.211-5.933-.329-5.933-.12 0-.484.36-.843.812-1.688 2.29-4.34 4.88-8.496 8.313-.602.48-1.836 1.144-4.547 2.469-1.235.601-2.59 1.296-3.012 1.507-.422.211-1.566.543-2.563.754-.992.211-1.867.48-1.957.602-.3.45-5.632.902-10.902.902-5.18 0-9.398-.36-10.633-.875-.332-.148-1.476-.511-2.562-.781-1.082-.27-2.078-.633-2.258-.754-.148-.121-.871-.422-1.566-.633-.723-.18-1.293-.449-1.293-.57 0-.121-.543-.39-1.207-.602-.66-.21-1.204-.484-1.204-.605 0-.117-.332-.36-.722-.54-2.59-1.175-8.465-6.687-10.934-10.241-1.508-2.168-3.828-6.508-4.308-8.102-.18-.633-.543-1.566-.754-2.05-.211-.512-.57-1.594-.754-2.41-.18-.84-.45-1.716-.602-2.016-.148-.274-.422-1.688-.601-3.164-.18-1.446-.512-2.922-.692-3.254-.273-.45-.394-11.204-.453-43.313l-.09-42.68h35.27Zm0 0"/>
+                                        <path d="M260.691 333.164c-1.472.149-2.98.39-3.312.54-.332.183-1.414.452-2.41.663-.961.18-2.258.543-2.86.813-4.52 1.957-6.718 3.254-8.222 4.82-1.446 1.508-2.895 4.309-3.133 6.055-.063.601-.274 1.386-.453 1.715-.332.695-.211 2.832.332 5.632.601 3.043 3.012 6.75 5.148 7.864 3.797 1.957 4.52 2.257 6.63 2.59 3.792.57 11.023.242 12.589-.602.27-.152 1.387-.664 2.469-1.145 1.086-.511 2.5-1.328 3.164-1.84.664-.511 1.414-1.113 1.687-1.324 1.715-1.293 4.88-6.535 5.301-8.703.09-.543.332-1.176.512-1.418.21-.27.36-3.043.422-8.012l.12-7.59-1.628-.179c-2.2-.273-13.04-.18-16.356.121Zm0 0"/>
+                                    </svg>
+                                </span>                                
+                            </span>
+                            <span class="menu-text" data-lang="intrag">Intrag</span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarEmail" aria-expanded="false" aria-controls="sidebarEmail"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="inbox"></i></span>
+                            <span class="menu-text" data-lang="email">Email</span>
+                            <span class="badge text-bg-danger">New</span>
+                        </a>
+                        <div class="collapse" id="sidebarEmail">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/email" class="side-nav-link">
+                                        <span class="menu-text" data-lang="email-inbox">Inbox</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/email-details"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="email-details">Details</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/email-compose"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="email-compose">Compose</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/email-templates"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="email-templates">Email Templates</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarCRM" aria-expanded="false" aria-controls="sidebarCRM"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="handshake"></i></span>
+                            <span class="menu-text" data-lang="crm"> CRM </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarCRM">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/crm-contacts"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-contacts">Contacts</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-opportunities"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-opportunities">Opportunities</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-deals" class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-deals">deals</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-leads" class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-leads">Leads</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-pipeline"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-pipeline">Pipeline</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-campaign"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-campaign">Campaign</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-proposals"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-proposals">Proposals</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-estimations"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-estimations">Estimations</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-customers"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-customers">Customers</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/crm-activities"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="crm-activities">Activities</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarUsers" aria-expanded="false" aria-controls="sidebarUsers"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="users"></i></span>
+                            <span class="menu-text" data-lang="users"> Users </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarUsers">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/users-contacts"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="contacts">Contacts</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/users-profile"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="profile">Profile</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/users-roles" class="side-nav-link">
+                                        <span class="menu-text" data-lang="roles">Roles</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/users-role-details"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="role-details">Role Details</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/users-permissions"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="permissions">Permissions</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarInvoice" aria-expanded="false" aria-controls="sidebarInvoice"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="receipt-text"></i></span>
+                            <span class="menu-text" data-lang="invoice"> Invoice</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarInvoice">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/invoices" class="side-nav-link">
+                                        <span class="menu-text" data-lang="invoices">Invoices</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/invoice-details"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="invoice-details">Single Invoice</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/invoice-create"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="invoice-create">New Invoice</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/social-feed" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="rss"></i></span>
+                            <span class="menu-text" data-lang="social"> Social Feed </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarTickets" aria-expanded="false" aria-controls="sidebarTickets"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="life-buoy"></i></span>
+                            <span class="menu-text" data-lang="support"> Support Center</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarTickets">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/tickets-list"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="tickets">Tickets List</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ticket-details"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ticket-details">Ticket Details</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ticket-create"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ticket-create">New Ticket</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/api-keys" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="key"></i></span>
+                            <span class="menu-text" data-lang="api-keys"> API Keys </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-title mt-2" data-lang="pages-title">Custom Pages</li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarPages" aria-expanded="false" aria-controls="sidebarPages"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="notebook-text"></i></span>
+                            <span class="menu-text" data-lang="pages"> Pages </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarPages">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/pages-faq" class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-faq">FAQ</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-pricing"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-pricing">Pricing</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-empty" class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-empty">Empty Page</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-timeline"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-timeline">Timeline</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-sitemap"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-sitemap">Sitemap</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-search-results"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-search-results">Search Results</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-coming-soon"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-coming-soon">Coming Soon</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/pages-terms-conditions"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="pages-terms-conditions">Terms & Conditions</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarPagesAuth" aria-expanded="false"
+                           aria-controls="sidebarPagesAuth"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="fingerprint"></i></span>
+                            <span class="menu-text" data-lang="authentication"> Authentication </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarPagesAuth">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarOneAuth" aria-expanded="false"
+                                       aria-controls="sidebarOneAuth"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="basic-auth"> Basic </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarOneAuth">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/auth-sign-in"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-sign-in">Sign In</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-sign-up"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-sign-up">Sign Up</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-reset-pass"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-reset-pass">Reset Password</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-new-pass"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-new-pass">New Password</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-two-factor"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-two-factor">Two Factor</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-lock-screen"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-lock-screen">Lock Screen</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-success-mail"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-success-mail">Success Mail</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-login-pin"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-login-pin">Login with PIN</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-delete-account"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text"
+                                                          data-lang="auth-delete-account">Delete Account</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarTwoAuth" aria-expanded="false"
+                                       aria-controls="sidebarTwoAuth"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="cover-auth"> Cover </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarTwoAuth">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-sign-in"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-sign-in">Sign In</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-sign-up"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-sign-up">Sign Up</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-reset-pass"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-reset-pass">Reset Password</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-new-pass"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-new-pass">New Password</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-two-factor"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-two-factor">Two Factor</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-lock-screen"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-lock-screen">Lock Screen</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-success-mail"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-success-mail">Success Mail</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-login-pin"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="auth-2-login-pin">Login with PIN</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/auth-2-delete-account"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text"
+                                                          data-lang="auth-2-delete-account">Delete Account</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarPagesError" aria-expanded="false"
+                           aria-controls="sidebarPagesError"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="shield-alert"></i></span>
+                            <span class="menu-text" data-lang="error-pages"> Error Pages </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarPagesError">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/error-400" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-400">400 Bad Request</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/error-401" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-401">401 Unauthorized</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/error-403" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-403">403 Forbidden</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/error-404" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-404">404 Not Found</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/error-408" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-408">408 Request Timeout</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/error-500" class="side-nav-link">
+                                        <span class="menu-text" data-lang="error-500">500 Internal Server</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/maintenance" class="side-nav-link">
+                                        <span class="menu-text" data-lang="maintenance">Maintenance</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-title mt-2" data-lang="layouts-title">Layouts</li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarLayouts" aria-expanded="false" aria-controls="sidebarLayouts"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="proportions"></i></span>
+                            <span class="menu-text" data-lang="layout-options"> Layout Options </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarLayouts">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/layouts-scrollable" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="layouts-scrollable">Scrollable</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/layouts-compact" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="layouts-compact">Compact</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/layouts-boxed" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="layouts-boxed">Boxed</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/layouts-horizontal" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="layouts-horizontal">Horizontal</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/layouts-preloader" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="layouts-preloader">Preloader</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarSidebars" aria-expanded="false"
+                           aria-controls="sidebarSidebars"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="panel-right-close"></i></span>
+                            <span class="menu-text" data-lang="sidebars"> Sidebars </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarSidebars">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-dark" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-dark">Dark Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-gradient" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-gradient">Gradient Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-gray" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-gray">Gray Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-image" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-image">Image Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-compact" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-compact">Compact Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-icon-view" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-icon-view">Icon View Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-on-hover" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-on-hover">On Hover Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-on-hover-active"
+                                       target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-on-hover-active">On Hover Active</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-offcanvas" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-offcanvas">Offcanvas Menu</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-no-icons" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-no-icons">No Icons with Lines</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/sidebar-with-lines" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="sidebar-with-lines">Sidebar with Lines</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarTopbars" aria-expanded="false" aria-controls="sidebarTopbars"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="panel-top"></i></span>
+                            <span class="menu-text" data-lang="topbar"> Topbar </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarTopbars">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/topbar-light" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="topbar-light">Light Topbar</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/topbar-gray" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="topbar-gray">Gray Topbar</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/topbar-gradient" target="_blank"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="topbar-gradient">Gradient Topbar</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li class="side-nav-title mt-2" data-lang="components-title">Components</li>
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarBaseUI" aria-expanded="false" aria-controls="sidebarBaseUI"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="pencil-ruler"></i></span>
+                            <span class="menu-text" data-lang="base-ui"> Base UI </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarBaseUI">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/ui-buttons" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-buttons">Buttons</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-images" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-images">Images</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-accordions"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-accordions">Accordions</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-alerts" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-alerts">Alerts</span>
+                                    </a>
+                                </li>
+        
+                                <li class="side-nav-item">
+                                    <a href="/ui-badges" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-badges">Badges</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-breadcrumb"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-breadcrumb">Breadcrumb</span>
+                                    </a>
+                                </li>
+        
+                                <li class="side-nav-item">
+                                    <a href="/ui-cards" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-cards">Cards</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-carousel" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-carousel">Carousel</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-collapse" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-collapse">Collapse</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-colors" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-colors">Colors</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-dropdowns"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-dropdowns">Dropdowns</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-videos" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-videos">Videos</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-grid" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-grid">Grid Options</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-links" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-links">Links</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-list-group"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-list-group">List Group</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-modals" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-modals">Modals</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-notifications"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-notifications">Notifications</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-offcanvas"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-offcanvas">Offcanvas</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-placeholders"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-placeholders">Placeholders</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-pagination"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-pagination">Pagination</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-popovers" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-popovers">Popovers</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-progress" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-progress">Progress</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-scrollspy"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-scrollspy">Scrollspy</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-spinners" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-spinners">Spinners</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-tabs" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-tabs">Tabs</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-tooltips" class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-tooltips">Tooltips</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-typography"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-typography">Typography</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/ui-utilities"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="ui-utilities">Utilities</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarMiscellaneous" aria-expanded="false"
+                           aria-controls="sidebarMiscellaneous" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="house-plug"></i></span>
+                            <span class="menu-text" data-lang="miscellaneous"> Miscellaneous </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarMiscellaneous">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/misc-sortable"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-sortable">Sortable List</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-pdf-viewer"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-pdf-viewer">PDF Viewer</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-i18" class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-i18">i18 Support</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-sweet-alerts"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-sweet-alerts">Sweet Alerts</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-pass-meter"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-pass-meter">Password Meter</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-clipboard"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-clipboard">Clipboard</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-tree-view"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-tree-view">Tree View</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/misc-tour" class="side-nav-link">
+                                        <span class="menu-text" data-lang="misc-tour">Tour</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="/widgets" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="dessert"></i></span>
+                            <span class="menu-text" data-lang="widgets"> Widgets </span>
+                        </a>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarCharts" aria-expanded="false" aria-controls="sidebarCharts"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="chart-no-axes-combined"></i></span>
+                            <span class="menu-text" data-lang="charts"> Charts </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarCharts">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarApexCharts" aria-expanded="false"
+                                       aria-controls="sidebarApexCharts" class="side-nav-link">
+                                        <span class="menu-text" data-lang="apex-charts"> Apex Charts </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarApexCharts">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-area"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-area">Area</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-bar"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-bar">Bar</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-bubble"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-bubble">Bubble</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-candlestick"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text"
+                                                          data-lang="charts-apex-candlestick">Candlestick</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-column"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-column">Column</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-heatmap"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-heatmap">Heatmap</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-line"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-line">Line</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-mixed"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-mixed">Mixed</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-timeline"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-timeline">Timeline</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-boxplot"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-boxplot">Boxplot</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-treemap"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-treemap">Treemap</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-pie"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-pie">Pie</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-radar"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-radar">Radar</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-radialbar"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-radialbar">RadialBar</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-scatter"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-scatter">Scatter</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-polar-area"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-polar-area">Polar Area</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-sparklines"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-sparklines">Sparklines</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-range"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-range">Range</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-funnel"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-funnel">Funnel</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/charts-apex-slope"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="charts-apex-slope">Slope</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarChartJs" aria-expanded="false"
+                                       aria-controls="sidebarChartJs"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="chartjs"> Chart Js </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarChartJs">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/chartjs-area"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="chartjs-area">Area</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/chartjs-bar"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="chartjs-bar">Bar</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/chartjs-line"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="chartjs-line">Line</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/chartjs-other"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="chartjs-other">Other</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/charts-apextree"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="charts-apextree">Apex Tree</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/charts-apexsankey"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="charts-apexsankey">Apex Sankey</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarForms" aria-expanded="false" aria-controls="sidebarForms"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="file-input"></i></span>
+                            <span class="menu-text" data-lang="forms">Forms</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarForms">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/form-elements"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-elements">Basic Elements</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-pickers"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-pickers">Pickers</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-select" class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-select">Select</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-validation"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-validation">Validation</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-wizard" class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-wizard">Wizard</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-fileuploads"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-fileuploads">File Uploads</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-text-editors"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-text-editors">Text Editors</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-range-slider"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-range-slider">Range Slider</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-layouts"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-layouts">Layouts</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/form-other-plugins"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="form-other-plugins">Other Plugins</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarTables" aria-expanded="false" aria-controls="sidebarTables"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="table"></i></span>
+                            <span class="menu-text" data-lang="tables">Tables</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarTables">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/tables-static"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="tables-static">Static Tables</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tables-custom"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="tables-custom">Custom Tables</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarDataTables" aria-expanded="false"
+                                       aria-controls="sidebarDataTables" class="side-nav-link">
+                                        <span class="menu-text" data-lang="datatables">DataTables</span>
+                                        <span class="badge bg-success">13</span>
+                                    </a>
+                                    <div class="collapse" id="sidebarDataTables">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-basic"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-basic">Basic</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-export-data"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-export-data">Export Data</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-select"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-select">Select</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-ajax"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-ajax">Ajax</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-javascript"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-javascript">Javascript Source</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-rendering"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-rendering">Data Rendering</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-scroll"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-scroll">Scroll</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-fixed-columns"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-fixed-columns">Fixed Columns</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-columns"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-columns">Show & Hide Column</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-child-rows"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text"
+                                                          data-lang="tables-datatables-child-rows">Child Rows</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-column-searching"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-column-searching">Column Searching</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-range-search"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-range-search">Range Search</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-fixed-header"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-fixed-header">Fixed Header</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-add-rows"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text"
+                                                          data-lang="tables-datatables-add-rows">Add Rows</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/tables-datatables-checkbox-select"
+                                                   class="side-nav-link">
+                                                    <span class="menu-text" data-lang="tables-datatables-checkbox-select">Checkbox Select</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarIcons" aria-expanded="false" aria-controls="sidebarIcons"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="sparkles"></i></span>
+                            <span class="menu-text" data-lang="icons">Icons</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarIcons">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/icons-tabler"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="icons-tabler">Tabler</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/icons-lucide"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="icons-lucide">Lucide</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/icons-flags" class="side-nav-link">
+                                        <span class="menu-text" data-lang="icons-flags">Flags</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarMaps" aria-expanded="false" aria-controls="sidebarMaps"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="map-pinned"></i></span>
+                            <span class="menu-text" data-lang="maps">Maps</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarMaps">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/maps-vector" class="side-nav-link">
+                                        <span class="menu-text" data-lang="maps-vector">Vector Maps</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/maps-leaflet"
+                                       class="side-nav-link">
+                                        <span class="menu-text" data-lang="maps-leaflet">Leaflet Maps</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-title mt-2" data-lang="items-title">Menu Items</li>
+        
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#sidebarMenuLevels" aria-expanded="false"
+                           aria-controls="sidebarMenuLevels"
+                           class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="list-tree"></i></span>
+                            <span class="menu-text" data-lang="menu-levels"> Menu Levels </span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="sidebarMenuLevels">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarSecondLevel" aria-expanded="false"
+                                       aria-controls="sidebarSecondLevel" class="side-nav-link">
+                                        <span class="menu-text" data-lang="second-level"> Second Level </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarSecondLevel">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="javascript:  void(0);" class="side-nav-link">
+                                                    <span class="menu-text">Item 2.1</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="javascript: void(0);" class="side-nav-link">
+                                                    <span class="menu-text">Item 2.2</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#sidebarThirdLevel" aria-expanded="false"
+                                       aria-controls="sidebarThirdLevel" class="side-nav-link">
+                                        <span class="menu-text" data-lang="third-level"> Third Level </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse" id="sidebarThirdLevel">
+                                        <ul class="sub-menu">
+                                            <li class="side-nav-item">
+                                                <a href="javascript: void(0);" class="side-nav-link">Item 1</a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a data-bs-toggle="collapse" href="#sidebarFourthLevel" aria-expanded="false"
+                                                   aria-controls="sidebarFourthLevel" class="side-nav-link">
+                                                    <span class="menu-text"> Item 2 </span>
+                                                    <span class="menu-arrow"></span>
+                                                </a>
+                                                <div class="collapse" id="sidebarFourthLevel">
+                                                    <ul class="sub-menu">
+                                                        <li class="side-nav-item">
+                                                            <a href="javascript: void(0);" class="side-nav-link">
+                                                                <span class="menu-text">Item 3. 1</span>
+                                                            </a>
+                                                        </li>
+                                                        <li class="side-nav-item">
+                                                            <a href="javascript: void(0);" class="side-nav-link">
+                                                                <span class="menu-text">Item 3.2</span>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <li class="side-nav-item">
+                        <a href="#!" class="side-nav-link disabled">
+                            <span class="menu-icon"><i data-lucide="eye-off"></i></span>
+                            <span class="menu-text" data-lang="disabled-menu"> Disabled Menu </span>
+                        </a>
+                    </li>
+        
+                </ul>
+            </div>
+        </div>
+        <!-- Sidenav Menu End -->

@@ -1,0 +1,166 @@
+{# ============================================================================
+      TEMPLATE:       base.html
+      DESCRIÇÃO:    Layout base que serve como estrutura para todas as páginas
+      
+      FUNÇÃO:   Este é o template "pai" que define a estrutura HTML comum: 
+                - Doctype e tag HTML
+                - Meta tags (charset, viewport, SEO)
+                - Favicon
+                - CSS globais
+                - Scripts JavaScript globais
+                - Blocks para conteúdo específico de cada página
+      
+      BLOCKS DISPONÍVEIS:
+                - html_attribute: Atributos extras na tag <html>
+                - title: Título da página (aparece na aba)
+                - extra_css: CSS adicional específico da página
+                - body_attribute: Atributos extras na tag <body>
+                - preloader: Loader/spinner de carregamento
+                - content:  Conteúdo principal da página
+                - extra_javascript: JS adicional específico da página
+      
+      ARQUIVOS INCLUÍDOS:
+                - partials/head-css.html: Links CSS globais
+                - partials/footer-scripts.html: Scripts JS globais
+      ============================================================================ #}
+   <! DOCTYPE html>
+   <html lang="en" {% block html_attribute %}{% endblock html_attribute %}>
+   
+   <head>
+       {# =========================================================================
+          META TAGS BÁSICAS
+          - charset: Define codificação UTF-8 para suporte a caracteres especiais
+          - viewport: Garante responsividade em dispositivos móveis
+          ========================================================================= #}
+       <meta charset="utf-8" />
+       
+       {# =========================================================================
+          TÍTULO DA PÁGINA
+          ESTRUTURA:  [Título da Página] | OTC Tracker - Sistema de Gestão OTC
+          EXEMPLO:  "Create New Account | OTC Tracker - Sistema de Gestão OTC"
+          
+          O block 'title' é preenchido por cada página filha
+          ========================================================================= #}
+       <title>{% block title %}{% endblock title %} | OTC Tracker - Sistema de Gestão OTC</title>
+       
+       {# =========================================================================
+          VIEWPORT
+          Configuração para responsividade em dispositivos móveis
+          width=device-width:  Largura igual à do dispositivo
+          initial-scale=1: Zoom inicial de 100%
+          ========================================================================= #}
+       <meta name="viewport" content="width=device-width, initial-scale=1">
+       
+       {# =========================================================================
+          META TAGS SEO
+          Informações para mecanismos de busca e compartilhamento
+          - description: Descrição do sistema para resultados de busca
+          - keywords: Palavras-chave relevantes
+          - author: Autor/empresa responsável
+          ========================================================================= #}
+       <meta name="description"
+             content="OTC Tracker é um sistema moderno de gestão para operações OTC, desenvolvido para proporcionar uma experiência eficiente na gestão e acompanhamento de operações.">
+       <meta name="keywords"
+             content="OTC Tracker, gestão OTC, JPMorgan Chase, sistema financeiro, operações OTC, gestão de riscos, dashboard financeiro">
+       <meta name="author" content="JPMorgan Chase">
+       
+       {# =========================================================================
+          FAVICON
+          Ícone exibido na aba do navegador e nos favoritos
+          
+          ORIGEM: 
+            - config.ASSETS_ROOT:  Variável Flask com caminho base dos assets
+            - Caminho completo: {ASSETS_ROOT}/images/favicon. ico
+          
+          FORMATOS INCLUÍDOS:
+            - shortcut icon: Compatibilidade com navegadores antigos (IE)
+            - icon (x-icon): Formato padrão ICO
+            - icon (png) 32x32: Para navegadores modernos
+            - icon (png) 16x16: Para abas de navegador
+            - apple-touch-icon: Para dispositivos Apple (iOS)
+          
+          NOTA: O arquivo favicon.ico deve conter múltiplos tamanhos
+                (16x16, 32x32, 48x48, 64x64, 128x128, 256x256)
+          ========================================================================= #}
+       <link rel="shortcut icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+       <link rel="icon" type="image/x-icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+       <link rel="icon" type="image/png" sizes="32x32" href="{{ config. ASSETS_ROOT }}/images/favicon. ico">
+       <link rel="icon" type="image/png" sizes="16x16" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+       <link rel="apple-touch-icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+   
+       {# =========================================================================
+          BLOCO CSS
+          Contém todos os estilos da aplicação
+          
+          ESTRUTURA:
+            1. extra_css: CSS específico da página (definido pelo template filho)
+            2. head-css.html: CSS globais do tema (Bootstrap, estilos base, etc.)
+          
+          ORDEM IMPORTANTE:  
+            - extra_css vem ANTES do head-css para permitir sobrescrita
+            - Ou pode vir DEPOIS se quiser que sobrescreva os estilos base
+          ========================================================================= #}
+       {% block css %}
+   
+           {# CSS adicional específico de cada página #}
+           {% block extra_css %}{% endblock extra_css %}
+   
+           {# CSS globais do tema (Bootstrap, estilos base, componentes) #}
+           {% include 'partials/head-css.html' %}
+   
+       {% endblock css %}
+   
+   </head>
+   
+   {# =============================================================================
+      BODY
+      Corpo do documento HTML
+      
+      O block 'body_attribute' permite adicionar atributos extras como:
+        - data-*: Atributos de dados
+        - class: Classes CSS específicas
+        - id: Identificador único
+      ============================================================================= #}
+   <body {% block body_attribute %}{% endblock body_attribute %}>
+   
+       {# =========================================================================
+          PRELOADER
+          Animação de carregamento exibida enquanto a página carrega
+          
+          Cada página pode definir seu próprio preloader ou deixar vazio
+          ========================================================================= #}
+       {% block preloader %}{% endblock preloader %}
+   
+       {# =========================================================================
+          CONTEÚDO PRINCIPAL
+          Área onde o conteúdo específico de cada página é injetado
+          
+          Este é o block mais importante - cada página filha define seu conteúdo aqui
+          ========================================================================= #}
+       {% block content %}{% endblock content %}
+   
+       {# =========================================================================
+          BLOCO JAVASCRIPT
+          Contém todos os scripts da aplicação
+          
+          ESTRUTURA: 
+            1. footer-scripts.html: Scripts globais (jQuery, Bootstrap, etc.)
+            2. extra_javascript: Scripts específicos da página
+          
+          ORDEM IMPORTANTE:
+            - Scripts globais carregam PRIMEIRO
+            - Scripts específicos carregam DEPOIS (podem usar libs globais)
+          ========================================================================= #}
+       {% block javascript %}
+   
+           {# Scripts globais do tema (jQuery, Bootstrap, plugins, etc.) #}
+           {% include 'partials/footer-scripts.html' %}
+   
+           {# Scripts adicionais específicos de cada página #}
+           {% block extra_javascript %}{% endblock extra_javascript %}
+   
+       {% endblock javascript %}
+   
+   </body>
+   
+   </html>

@@ -1,0 +1,62 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Email Templates{% endblock title %}
+
+{% block extra_css %}
+
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    {% set subtitle='Email' %}
+    {% set title='Email Templates' %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Basic Action</h4>
+                            <img alt="" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/emails/confirm.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Activated Account</h4>
+                            <img alt="" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/emails/activated.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Marketing</h4>
+                            <img alt="" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/emails/marketing.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Invoice</h4>
+                            <img alt="" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/emails/invoice.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Reports</h4>
+                            <img alt="" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/emails/reports.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Reset Password</h4>
+                            <img alt="" class="img-fluid"
+                                 src="{{ config.ASSETS_ROOT }}/images/emails/reset-password.png"/>
+                        </div>
+                        <div class="col-md-4 col-sm-6">
+                            <h4 class="header-title mb-3">Warning</h4>
+                            <img alt="" class="img-fluid"
+                                 src="{{ config.ASSETS_ROOT }}/images/emails/warning-mail.png"/>
+                        </div>
+                    </div> <!-- end row-->
+                </div>
+            </div> <!-- end card -->
+        </div> <!-- end col-->
+    </div>
+    <!-- end row-->
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+
+{% endblock extra_javascript %}

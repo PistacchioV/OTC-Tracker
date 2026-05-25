@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>UBold - Responsive Bootstrap 5 Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Perfect for building CRM, CMS, project management tools, and custom web apps with clean UI, responsive design, and powerful features." />
+    <meta name="keywords" content="UBold, admin dashboard, HTML template, Bootstrap admin, CRM template, CMS template, responsive admin, web app UI, admin theme, best admin template" />
+    <meta name="author" content="Coderthemes" />
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="assets/images/favicon.ico" />
+    <!-- Theme Config Js -->
+    <script src="assets/js/config.js"></script>
+    <!-- Vendor css -->
+    <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css" />
+    <!-- App css -->
+    <link href="assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
+    <!-- Icons css -->
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body>
+    <!-- Begin page -->
+    <div class="wrapper">
+        <!-- Sidenav Menu Start -->
+        <div class="sidenav-menu">
+            <div class="scrollbar" data-simplebar>
+                <!--- Sidenav Menu -->
+                <ul class="side-nav">
+                    <li class="side-nav-title">Menu</li>
+                    <!-- Introduction -->
+                    <li class="side-nav-item">
+                        <a href="index.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-shield-check"></i></span>
+                            <span class="menu-text">Introduction</span>
+                        </a>
+                    </li>
+                    <!-- Folder Structure -->
+                    <li class="side-nav-item">
+                        <a href="folder-structure.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-folders"></i></span>
+                            <span class="menu-text">Folder Structure</span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="getting-started.html" class="side-nav-link active">
+                            <span class="menu-icon"><i class="ti ti-rocket"></i></span>
+                            <span class="menu-text">Getting Started</span>
+                        </a>
+                    </li>
+                    <li class="side-nav-title mt-2">Layouts</li>
+                    <li class="side-nav-item">
+                        <a href="layouts.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout"></i></span>
+                            <span class="menu-text" data-translator-key="layouts">
+                                Layouts Option
+                            </span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="sidebar.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout-sidebar"></i></span>
+                            <span class="menu-text" data-translator-key="sidebars">
+                                Sidebars Option
+                            </span>
+                        </a>
+                    </li>
+                    <li class="side-nav-item">
+                        <a href="topbar.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-layout-bottombar"></i></span>
+                            <span class="menu-text" data-translator-key="sidebars">
+                                Topbar Option</span>
+                        </a>
+                    </li>
+                    <!-- Theme Setup -->
+                    <li class="side-nav-item">
+                        <a href="theme-skin-setup.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-diamond"></i></span>
+                            <span class="menu-text">Theme Skin Setup</span>
+                        </a>
+                    </li>
+                    <!-- Dark Mode -->
+                    <li class="side-nav-item">
+                        <a href="dark-mode.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-moon"></i></span>
+                            <span class="menu-text">Dark Mode</span>
+                        </a>
+                    </li>
+                    <!-- Sources & Credits -->
+                    <li class="side-nav-item">
+                        <a href="sources.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-alert-circle"></i></span>
+                            <span class="menu-text">Sources & Credits</span>
+                        </a>
+                    </li>
+                    <!-- Changelog -->
+                    <li class="side-nav-item">
+                        <a href="changelog.html" class="side-nav-link">
+                            <span class="menu-icon"><i class="ti ti-book"></i></span>
+                            <span class="menu-text">Changelog</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <!-- Sidenav Menu End -->
+        <!-- Topbar Start -->
+        <header class="app-topbar">
+            <div class="container-fluid topbar-menu">
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Topbar Brand Logo -->
+                    <div class="logo-topbar">
+                        <!-- Logo light -->
+                        <a href="index.html" class="logo-light">
+                            <span class="logo-lg">
+                                <img src="assets/images/logo.png" alt="logo" />
+                            </span>
+                            <span class="logo-sm">
+                                <img src="assets/images/logo-sm.png" alt="small logo" />
+                            </span>
+                        </a>
+                        <!-- Logo Dark -->
+                        <a href="index.html" class="logo-dark">
+                            <span class="logo-lg">
+                                <img src="assets/images/logo-black.png" alt="dark logo" />
+                            </span>
+                            <span class="logo-sm">
+                                <img src="assets/images/logo-sm.png" alt="small logo" />
+                            </span>
+                        </a>
+                    </div>
+                    <!-- Sidebar Menu Toggle Button -->
+                    <button class="sidenav-toggle-button btn btn-primary btn-icon d-md-none d-flex">
+                        <i class="ti ti-menu-2 fs-22"></i>
+                    </button>
+                </div>
+                <!-- .d-flex-->
+            </div>
+        </header>
+        <!-- Topbar End -->
+        <!-- ============================================================== -->
+        <!-- Start Page Content here -->
+        <!-- ============================================================== -->
+        <div class="content-page">
+            <div class="container mt-3">
+                <div class="row row-cols-lg-2">
+                    <!-- @simonwep/pickr -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">@simonwep/pickr</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Color picker.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/Simonwep/pickr" target="_blank">Pickr on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @sjmc11/tourguidejs -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">@sjmc11/tourguidejs</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Guided product tours.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/sjmc11/tourguide-js" target="_blank">TourGuideJS on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @svgdotjs/svg.js -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">@svgdotjs/svg.js</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Modern SVG manipulation.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/svgdotjs/svg.js" target="_blank">SVG.js on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @tabler/icons-webfont -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">@tabler/icons-webfont</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Tabler Icons webfont.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/tabler/tabler-icons" target="_blank">Tabler Icons on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- apexcharts -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">apexcharts</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Charts library.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/apexcharts/apexcharts.js" target="_blank">ApexCharts on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- apextree -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">apextree</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Organizational / tree charts.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/apexcharts/apextree" target="_blank">ApexTree on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Bootstrap -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title text-capitalize">Bootstrap</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Bootstrap</strong>.</p>
+                                <a class="fw-semibold text-capitalize" href="https://github.com/twbs/bootstrap" target="_blank">
+                                    Bootstrap on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- chart.js -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">chart.js</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Canvas charts.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/chartjs/Chart.js" target="_blank">Chart.js on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- choices.js -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">choices.js</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>choices.js</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/Choices-js/Choices" target="_blank">
+                                    choices.js on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- clipboard -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">clipboard</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>clipboard.js</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/zenorocha/clipboard.js" target="_blank">
+                                    clipboard.js on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- datatables.net -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">datatables.net</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>DataTables</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/DataTables/DataTables" target="_blank">
+                                    DataTables on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- daterangepicker -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">daterangepicker</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Date range picker.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/dangrossman/daterangepicker" target="_blank">DateRangePicker on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- dropzone -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">dropzone</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Drag & drop uploader.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/dropzone/dropzone" target="_blank">Dropzone on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- filepond (and plugins) -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">filepond</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">File upload framework.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/pqina/filepond" target="_blank">FilePond on GitHub<i class="ti ti-chevron-right ms-1"></i></a><br>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- flatpickr -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">flatpickr</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Lightweight datetime picker.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/flatpickr/flatpickr" target="_blank">flatpickr on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- fullcalendar -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">fullcalendar</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>FullCalendar</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/fullcalendar/fullcalendar" target="_blank">
+                                    FullCalendar on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- glightbox -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">glightbox</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>GLightbox</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/biati-digital/glightbox" target="_blank">
+                                    GLightbox on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- handlebars -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">handlebars</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Templating engine.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/handlebars-lang/handlebars.js" target="_blank">Handlebars on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- inputmask -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">inputmask</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Input masking.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/RobinHerbots/Inputmask" target="_blank">Inputmask on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- jquery -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">jquery</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>jQuery</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/jquery/jquery" target="_blank">
+                                    jQuery on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- jstree -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">jstree</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">jQuery tree plugin.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/vakata/jstree" target="_blank">jsTree on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- jsvectormap -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">jsvectormap</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>jsVectorMap</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/themustafaomar/jsvectormap" target="_blank">
+                                    jsVectorMap on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- jszip -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">jszip</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>JSZip</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/Stuk/jszip" target="_blank">
+                                    JSZip on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- leaflet -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">leaflet</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Leaflet</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/Leaflet/Leaflet" target="_blank">
+                                    Leaflet on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- lucide -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">lucide</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Lucide Icons</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/lucide-icons/lucide" target="_blank">
+                                    Lucide on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- masonry -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">masonry-layout</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Masonry</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/desandro/masonry" target="_blank">
+                                    Masonry on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- moment -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">moment</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Moment.js</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/moment/moment" target="_blank">
+                                    Moment.js on GitHub <i class="ti ti-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- nouislider -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">nouislider</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Range slider.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/leongersen/noUiSlider" target="_blank">noUiSlider on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- pdfjs-dist -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">pdfjs-dist</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Mozilla PDF.js build.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/mozilla/pdf.js" target="_blank">PDF.js on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- pdfmake -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">pdfmake</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>pdfmake</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/bpampuch/pdfmake" target="_blank">pdfmake on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- quill -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">quill</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Quill Editor</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/quilljs/quill" target="_blank">Quill on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- select2 -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">select2</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">jQuery select replacement.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/select2/select2" target="_blank">Select2 on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- simplebar -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">simplebar</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>SimpleBar</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/Grsmto/simplebar" target="_blank">SimpleBar on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- sortablejs -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">sortablejs</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>SortableJS</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/SortableJS/Sortable" target="_blank">SortableJS on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- summernote -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">summernote</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">WYSIWYG editor.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/summernote/summernote" target="_blank">Summernote on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- sweetalert2 -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">sweetalert2</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>SweetAlert2</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/sweetalert2/sweetalert2" target="_blank">SweetAlert2 on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- typeahead.js -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">typeahead.js</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>Typeahead.js</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/twitter/typeahead.js" target="_blank">Typeahead.js on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- wnumb -->
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title">wnumb</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-2">Learn more about <strong>wNumb</strong>.</p>
+                                <a class="btn btn-light btn-sm fw-semibold" href="https://github.com/leongersen/wnumb" target="_blank">wNumb on GitHub<i class="ti ti-chevron-right ms-1"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+
+            </div>
+            <!-- container -->
+
+
+            <!-- Footer Start -->
+            <footer class="footer">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-6 text-center text-md-start">
+                            ©
+                            2015 -
+                            <script>
+                                document.write(new Date().getFullYear());
+                            </script>
+                            UBold By <span class="fw-semibold">Coderthemes</span>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-md-end d-none d-md-block">
+                                10GB of <span class="fw-bold">250GB</span> Free.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+            <!-- end Footer -->
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- End Page content -->
+        <!-- ============================================================== -->
+    </div>
+    <!-- END wrapper -->
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
+    <script src="assets/js/app.js"></script>
+
+</body>
+
+</html>

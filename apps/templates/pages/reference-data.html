@@ -1,0 +1,373 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Reference Data{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+    /* ── Toolbar buttons ──────────────────────────────────────────────────── */
+    .btn-toolbar-all {
+        font-size: 0.75rem !important;
+        padding: 0.25rem 0.6rem !important;
+        white-space: nowrap !important;
+    }
+
+    /* ── Action column buttons ────────────────────────────────────────────── */
+    #ref-data-table .btn-sm.rounded-circle {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    #ref-data-table .btn-sm.rounded-circle i {
+        font-size: 13px;
+    }
+
+    /* ── Column search row ────────────────────────────────────────────────── */
+    .col-search-row th { padding: 4px 6px; }
+    .col-search-row input {
+        font-size: 11px;
+        height: 26px;
+        padding: 2px 6px;
+    }
+
+    /* ── Table cell font sizes (match B3 Results) ────────────────────────── */
+    #ref-data-table th {
+        white-space: nowrap;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        padding: 8px 10px;
+    }
+    #ref-data-table td {
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+
+    /* ── Disable cell selection highlight on checkbox + actions cols ──────── */
+    #ref-data-table tbody td:nth-child(1),
+    #ref-data-table tbody td:nth-child(2) {
+        user-select: none;
+    }
+
+    /* ── Status badge size ────────────────────────────────────────────────── */
+    #ref-data-table h4 { margin: 0; }
+    #ref-data-table .pillbadge { font-size: 0.7rem; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    <!-- ── Page title ────────────────────────────────────────────────────── -->
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0" data-lang="reference-data">Reference Data</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="data-base-title">Data Base</a></li>
+                <li class="breadcrumb-item active" data-lang="reference-data">Reference Data</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ── Table card ────────────────────────────────────────────────────── -->
+    <div class="row mt-2">
+        <div class="col-12">
+            <div class="card">
+
+                <!-- Card header: Show/entries -->
+                <div class="card-header">
+                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label mb-0">Show</label>
+                            <select class="form-select form-select-sm" style="width:80px;" id="pageLenRefData">
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                            <label class="form-label mb-0">entries</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card body: DataTable -->
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0"
+                               id="ref-data-table">
+                            <thead class="text-uppercase fs-xxs">
+                                <!-- Header row -->
+                                <tr class="text-uppercase fs-xxs">
+                                    <th class="ps-3" style="width:44px;">
+                                        <input class="form-check-input form-check-input-light fs-14 mt-0"
+                                               id="selectAll" type="checkbox" />
+                                    </th>
+                                    <th style="width:100px;">Actions</th>
+                                    <th>Status</th>
+                                    <th>Counterparty</th>
+                                    <th>Economic Group</th>
+                                    <th>Banker</th>
+                                    <th>Signature Type</th>
+                                    <th>Tax ID</th>
+                                    <th>ECI</th>
+                                    <th>SPN</th>
+                                    <th>CASID</th>
+                                    <th>UCN</th>
+                                    <th>Commodities Acronym</th>
+                                    <th>FX Cash Acronym</th>
+                                </tr>
+                                <!-- Column search row -->
+                                <tr class="col-search-row" id="refdata-search-row">
+                                    <th></th>
+                                    <th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Economic Group"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Banker"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Signature Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ECI"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SPN"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CASID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="UCN"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Comm. Acronym"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FX Acronym"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+
+<script>
+$(document).ready(function () {
+    'use strict';
+
+    /* ── Column labels (for Show/Hide toggle) ───────────────────────────── */
+    var COL_LABELS = [
+        'Status','Counterparty','Economic Group','Banker','Signature Type',
+        'Tax ID','ECI','SPN','CASID','UCN','Commodities Acronym','FX Cash Acronym'
+    ];
+
+    /* ── Export cols: skip checkbox (0) and actions (1) ─────────────────── */
+    var EXPORT_COLS = [2,3,4,5,6,7,8,9,10,11,12,13];
+
+    /* ── Status badge builder ────────────────────────────────────────────── */
+    function statusBadge(val) {
+        var st = (val || 'PENDING').toUpperCase();
+        var cls   = st === 'ACTIVE' ? 'text-bg-success' : 'text-bg-warning';
+        var label = st === 'ACTIVE' ? 'Active' : 'Pending';
+        return '<h4><span class="badge badge-label ' + cls + ' rounded-pill">' + label + '</span></h4>';
+    }
+
+    /* ── Action buttons ──────────────────────────────────────────────────── */
+    var ACTIONS =
+        '<div class="d-flex gap-1">' +
+        '<a class="btn btn-success btn-sm rounded-circle" href="#" title="Confirm" onclick="return false;"><i class="ti ti-check"></i></a>' +
+        '<a class="btn btn-info btn-sm rounded-circle" href="#" title="Edit" onclick="return false;"><i class="ti ti-edit"></i></a>' +
+        '<a class="btn btn-danger btn-sm rounded-circle" href="#" title="Delete" onclick="return false;"><i class="ti ti-trash"></i></a>' +
+        '</div>';
+
+    /* ── Row builder ─────────────────────────────────────────────────────── */
+    function buildRows(data) {
+        return data.map(function (r) {
+            function s(v) { return v == null ? '' : String(v); }
+            return [
+                '<div class="ps-1"><input class="form-check-input row-check" type="checkbox"></div>',
+                ACTIONS,
+                statusBadge(r['Status']),
+                s(r['COUNTERPARTY']),
+                s(r['ECONOMIC GROUP']),
+                s(r['BANKER']),
+                s(r['SIGNATURE TYPE']),
+                s(r['TAX ID']),
+                s(r['ECI']),
+                s(r['SPN']),
+                s(r['CASID']),
+                s(r['UCN']),
+                s(r['COMMODITIES ACCRONYM']),
+                s(r['FX CASH ACCRONYM'])
+            ];
+        });
+    }
+
+    /* ── DataTable init ──────────────────────────────────────────────────── */
+    var dt = $('#ref-data-table').DataTable({
+        data: [],
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        pageLength: 25,
+        columnDefs: [
+            { targets: [0, 1], orderable: false, searchable: false },
+            { targets: '_all', defaultContent: '' }
+        ],
+        dom:
+            "<'d-md-flex justify-content-between align-items-center my-2'" +
+                "<'btn-toolbar d-flex flex-wrap align-items-center'" +
+                    "<'columnToggleWrapper me-2'>" +
+                    "<'loadBtnWrapper me-2'>" +
+                    "B" +
+                ">" +
+                "<'ms-auto'>" +
+            ">" +
+            "<'row'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [
+            {
+                extend: 'collection',
+                text: '<i class="ti ti-download me-1"></i> Export',
+                className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+                autoClose: true,
+                buttons: [
+                    { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',               className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
+                    { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',        className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
+                    { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel',   className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
+                    { extend: 'pdf',   text: '<i class="ti ti-file-text me-1"></i> PDF',            className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
+                    { extend: 'print', text: '<i class="ti ti-printer me-1"></i> Print',            className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } }
+                ]
+            }
+        ],
+        language: {
+            paginate: {
+                first:    '<i class="ti ti-chevrons-left"></i>',
+                previous: '<i class="ti ti-chevron-left"></i>',
+                next:     '<i class="ti ti-chevron-right"></i>',
+                last:     '<i class="ti ti-chevrons-right"></i>'
+            },
+            emptyTable: 'Click <strong>Load</strong> to fetch data.',
+            zeroRecords: 'No matching records found.'
+        },
+        initComplete: function () {
+            var api      = this.api();
+            var container = api.table().container();
+
+            /* ── i18n: remove data-lang from hidden body thead sizing row ── */
+            api.table().node().querySelectorAll('thead tr:first-child th[data-lang]').forEach(function (th) {
+                th.removeAttribute('data-lang');
+            });
+
+            /* ── Column search inputs ─────────────────────────────────────── */
+            document.querySelectorAll('#refdata-search-row th').forEach(function (th) {
+                th.addEventListener('click', function (e) { e.stopPropagation(); });
+            });
+            document.querySelectorAll('#refdata-search-row th input').forEach(function (input) {
+                input.addEventListener('click', function (e) { e.stopPropagation(); });
+                input.addEventListener('keyup', function () {
+                    var idx = input.closest('th').cellIndex;
+                    if (api.column(idx).search() !== this.value) {
+                        api.column(idx).search(this.value).draw();
+                    }
+                });
+            });
+
+            /* ── Load button ─────────────────────────────────────────────── */
+            var loadWrapper = container.querySelector('.loadBtnWrapper');
+            if (loadWrapper) {
+                var loadBtn = document.createElement('button');
+                loadBtn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all';
+                loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Load';
+                loadWrapper.appendChild(loadBtn);
+
+                loadBtn.addEventListener('click', function () {
+                    loadBtn.disabled = true;
+                    loadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
+
+                    fetch('{{ config.ASSETS_ROOT }}/data/RefData.json')
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            api.clear().rows.add(buildRows(data)).draw();
+                            loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Reload';
+                            loadBtn.disabled = false;
+                        })
+                        .catch(function (err) {
+                            console.error('RefData load error:', err);
+                            alert('Failed to load data. Check the console.');
+                            loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Load';
+                            loadBtn.disabled = false;
+                        });
+                });
+            }
+
+            /* ── Show/Hide columns toggle ─────────────────────────────────── */
+            var toggleWrapper = container.querySelector('.columnToggleWrapper');
+            if (toggleWrapper) {
+                var items = COL_LABELS.map(function (lbl, i) {
+                    var colIdx = i + 2; /* data cols start at 2 */
+                    var uid = 'rd_col_' + i;
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input rd-toggle-vis" type="checkbox" ' +
+                        'data-column="' + colIdx + '" id="' + uid + '" checked>' +
+                        '<label class="form-check-label fw-medium" for="' + uid + '">' + lbl + '</label>' +
+                        '</div></li>';
+                }).join('');
+
+                toggleWrapper.innerHTML =
+                    '<div class="dropdown">' +
+                    '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
+                    'type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">' +
+                    '<i class="ti ti-columns me-1"></i>Columns</button>' +
+                    '<ul class="dropdown-menu">' + items + '</ul></div>';
+
+                toggleWrapper.querySelector('ul').addEventListener('change', function (e) {
+                    if (e.target.classList.contains('rd-toggle-vis')) {
+                        api.column(+e.target.dataset.column).visible(e.target.checked);
+                    }
+                });
+            }
+        }
+    });
+
+    /* ── Page-length selector ────────────────────────────────────────────── */
+    $('#pageLenRefData').on('change', function () {
+        dt.page.len(+this.value).draw();
+    });
+
+    /* ── Select-all checkbox ─────────────────────────────────────────────── */
+    document.getElementById('selectAll').addEventListener('change', function () {
+        var checked = this.checked;
+        document.querySelectorAll('#ref-data-table .row-check').forEach(function (cb) {
+            cb.checked = checked;
+        });
+    });
+
+    /* keep select-all in sync when individual checkboxes change */
+    document.getElementById('ref-data-table').addEventListener('change', function (e) {
+        if (e.target.classList.contains('row-check')) {
+            var all  = document.querySelectorAll('#ref-data-table .row-check');
+            var chkd = document.querySelectorAll('#ref-data-table .row-check:checked');
+            document.getElementById('selectAll').checked = all.length === chkd.length;
+        }
+    });
+
+});
+</script>
+{% endblock extra_javascript %}

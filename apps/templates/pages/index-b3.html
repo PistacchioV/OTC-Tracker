@@ -1,0 +1,379 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Index B3{% endblock title %}
+
+{% block extra_css %}
+<style>
+    .filter-card .form-label { font-weight: 500; font-size: 0.85rem; margin-bottom: 4px; }
+    .filter-card select:disabled { opacity: 0.45; cursor: not-allowed; }
+    .spinner-border-sm { width: 1rem; height: 1rem; border-width: 0.15em; }
+    .status-loading { color: #6c757d; font-size: 0.85rem; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0" data-lang="index-b3">Index B3</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="data-base-title">Data Base</a></li>
+                <li class="breadcrumb-item active" data-lang="index-b3">Index B3</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card filter-card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">
+                        <i class="ti ti-filter me-1 text-primary"></i>
+                        <span data-lang="b3-search-filters">Search Filters</span>
+                    </h5>
+                    <span id="statusLoading" class="status-loading d-none">
+                        <span class="spinner-border spinner-border-sm me-1 text-primary"></span>
+                        <span data-lang="b3-loading">Loading data...</span>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <form id="filterForm" autocomplete="off">
+                        <div class="row g-3">
+
+                            <!-- 1. Class -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selClasse" data-lang="b3-class">Class</label>
+                                <select class="form-select" id="selClasse">
+                                    <option value="" data-lang="b3-select-class">-- Select Class --</option>
+                                </select>
+                            </div>
+
+                            <!-- 2. Underlying Asset Code -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selCodigo" data-lang="b3-underlying-asset-code">Underlying Asset Code</label>
+                                <select class="form-select" id="selCodigo">
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 3. Exchange -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selBolsa" data-lang="b3-exchange">Exchange</label>
+                                <select class="form-select" id="selBolsa" disabled>
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 4. Appreciation Index -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selIndice" data-lang="b3-appreciation-index">Appreciation Index</label>
+                                <select class="form-select" id="selIndice" disabled>
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 5. Commodity (cascades from COMMODITIES class) -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selCommodity" data-lang="b3-commodity">Commodity</label>
+                                <select class="form-select" id="selCommodity" disabled>
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 6. Instrument Type (IF) -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="selTipoIF" data-lang="b3-instrument-type">Instrument Type (IF)</label>
+                                <select class="form-select" id="selTipoIF">
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 7. Currency -->
+                            <div class="col-xl-3 col-md-4 col-sm-6">
+                                <label class="form-label" for="selMoeda" data-lang="b3-currency">Currency</label>
+                                <select class="form-select" id="selMoeda" disabled>
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 8. Quotation Type -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="selTipoCot" data-lang="b3-quotation-type">Quotation Type</label>
+                                <select class="form-select" id="selTipoCot" disabled>
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                </select>
+                            </div>
+
+                            <!-- 9. Expiry Month -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="selMes" data-lang="b3-expiry-month">Expiry Month</label>
+                                <select class="form-select" id="selMes">
+                                    <option value="" data-lang="b3-all">-- All --</option>
+                                    <option value="1"  data-lang="month-jan">January</option>
+                                    <option value="2"  data-lang="month-feb">February</option>
+                                    <option value="3"  data-lang="month-mar">March</option>
+                                    <option value="4"  data-lang="month-apr">April</option>
+                                    <option value="5"  data-lang="month-may">May</option>
+                                    <option value="6"  data-lang="month-jun">June</option>
+                                    <option value="7"  data-lang="month-jul">July</option>
+                                    <option value="8"  data-lang="month-aug">August</option>
+                                    <option value="9"  data-lang="month-sep">September</option>
+                                    <option value="10" data-lang="month-oct">October</option>
+                                    <option value="11" data-lang="month-nov">November</option>
+                                    <option value="12" data-lang="month-dec">December</option>
+                                </select>
+                            </div>
+
+                            <!-- 10. Expiry Year -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="inputAno" data-lang="b3-expiry-year">Expiry Year</label>
+                                <input type="number" class="form-control" id="inputAno"
+                                       placeholder="e.g. 2025" min="2000" max="2099">
+                            </div>
+
+                            <!-- 11. Ticker -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="inputTicker" data-lang="b3-ticker">Ticker</label>
+                                <input type="text" class="form-control" id="inputTicker"
+                                       placeholder="e.g. IBOV" style="text-transform:uppercase;">
+                            </div>
+
+                            <!-- 12. Calculated -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="selCalculado" data-lang="b3-calculated">Calculated</label>
+                                <select class="form-select" id="selCalculado">
+                                    <option value=""      data-lang="b3-all">-- All --</option>
+                                    <option value="SIM"   data-lang="b3-yes">Yes</option>
+                                    <option value="NÃO"   data-lang="b3-no">No</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div class="border-top border-dashed mt-3 pt-3 d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-primary" id="btnPesquisar" disabled>
+                                <i class="ti ti-search me-1"></i><span data-lang="b3-btn-search">Search</span>
+                            </button>
+                            <button type="button" class="btn btn-light" id="btnLimpar">
+                                <i class="ti ti-refresh me-1"></i><span data-lang="b3-btn-clear">Clear Fields</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script>
+(function () {
+    'use strict';
+
+    const DATA = { subj: [], vcp: [], dominio: [] };
+
+    /* ------------------------------------------------------------------ */
+    function unique(arr, key) {
+        const vals = arr.map(r => r[key]).filter(v => v != null && v !== '');
+        return [...new Set(vals)].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+    }
+
+    function fillSelect(id, values, placeholder) {
+        const sel = document.getElementById(id);
+        const prev = sel.value;
+        sel.innerHTML = `<option value="">${placeholder || '-- All --'}</option>`;
+        values.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            if (String(v) === prev) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        sel.disabled = values.length === 0;
+    }
+
+    function val(id) { return document.getElementById(id).value.trim(); }
+
+    function filterSubj(classe, codigo, bolsa) {
+        return DATA.subj.filter(r => {
+            if (classe && r['Classe'] !== classe) return false;
+            if (codigo && r['Codigo do Ativo Subjacente'] !== codigo) return false;
+            if (bolsa  && r['Bolsa de Negociacao'] !== bolsa) return false;
+            return true;
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
+    function onClasseChange() {
+        const classe = val('selClasse');
+        const subset = filterSubj(classe, '', '');
+
+        // Refill selCodigo with class-specific codes, or all codes when no class selected
+        fillSelect('selCodigo', unique(classe ? subset : DATA.subj, 'Codigo do Ativo Subjacente'));
+        fillSelect('selBolsa',   unique(subset, 'Bolsa de Negociacao'));
+        fillSelect('selIndice',  unique(subset, 'Indice Valorizacao'));
+        fillSelect('selMoeda',   unique(subset, 'Moeda'));
+        fillSelect('selTipoCot', unique(subset, 'Tipo Cotacao'));
+
+        // selCodigo is always enabled; other cascading dropdowns require a class
+        const deps = ['selBolsa','selIndice','selMoeda','selTipoCot'];
+        deps.forEach(id => { document.getElementById(id).disabled = !classe; });
+
+        // Commodity: only relevant for COMMODITIES class
+        const isCommodities = classe.toUpperCase() === 'COMMODITIES';
+        const selComm = document.getElementById('selCommodity');
+        if (isCommodities) {
+            fillSelect('selCommodity', unique(subset, 'Commodity'));
+            selComm.disabled = false;
+        } else {
+            selComm.innerHTML = '<option value="">-- All --</option>';
+            selComm.disabled = true;
+        }
+    }
+
+    function onCodigoChange() {
+        const subset = filterSubj(val('selClasse'), val('selCodigo'), '');
+        fillSelect('selBolsa',   unique(subset, 'Bolsa de Negociacao'));
+        fillSelect('selIndice',  unique(subset, 'Indice Valorizacao'));
+        fillSelect('selMoeda',   unique(subset, 'Moeda'));
+        fillSelect('selTipoCot', unique(subset, 'Tipo Cotacao'));
+    }
+
+    function onBolsaChange() {
+        const subset = filterSubj(val('selClasse'), val('selCodigo'), val('selBolsa'));
+        fillSelect('selIndice',  unique(subset, 'Indice Valorizacao'));
+        fillSelect('selMoeda',   unique(subset, 'Moeda'));
+        fillSelect('selTipoCot', unique(subset, 'Tipo Cotacao'));
+    }
+
+    /* ------------------------------------------------------------------ */
+    function pesquisar() {
+        const classe     = val('selClasse');
+        const codigo     = val('selCodigo');
+        const bolsa      = val('selBolsa');
+        const indice     = val('selIndice');
+        const tipoIF     = val('selTipoIF');
+        const moeda      = val('selMoeda');
+        const tipoCot    = val('selTipoCot');
+        const commodity  = val('selCommodity');
+        const mes        = val('selMes');
+        const ano        = val('inputAno');
+        const ticker     = val('inputTicker').toUpperCase();
+        const calc       = val('selCalculado');
+
+        const subjResult = DATA.subj.filter(r => {
+            if (classe  && r['Classe']                    !== classe)  return false;
+            if (codigo  && r['Codigo do Ativo Subjacente'] !== codigo)  return false;
+            if (bolsa   && r['Bolsa de Negociacao']        !== bolsa)   return false;
+            if (indice  && r['Indice Valorizacao']         !== indice)  return false;
+            if (tipoIF  && r['Tipo IF']                   !== tipoIF)  return false;
+            if (moeda   && r['Moeda']                     !== moeda)   return false;
+            if (tipoCot && r['Tipo Cotacao']              !== tipoCot) return false;
+            if (mes     && String(r['Mes Vencimento'])    !== mes)     return false;
+            if (ano     && String(r['Ano Vencimento'])    !== ano)     return false;
+            if (calc      && r['Calculado']                 !== calc)      return false;
+            if (commodity && r['Commodity']                 !== commodity) return false;
+            if (ticker  && !String(r['Ticker'] || '').toUpperCase().includes(ticker)) return false;
+            return true;
+        });
+
+        const vcpResult = DATA.vcp.filter(r => {
+            if (classe) {
+                const n1 = String(r['Classificação Nível 1'] || '').toUpperCase();
+                const cl = classe.toUpperCase();
+                if (!n1.includes(cl) && !cl.includes(n1)) return false;
+            }
+            if (tipoIF && ['SWAP','OPC'].includes(tipoIF)) {
+                if (String(r['Produto'] || '').toUpperCase() !== tipoIF) return false;
+            }
+            if (ticker) {
+                if (!String(r['Descrição da Qualificação'] || '').toUpperCase().includes(ticker)) return false;
+            }
+            return true;
+        });
+
+        const domResult = DATA.dominio.filter(r => {
+            if (tipoIF && r['Codigo TipoIF'] !== tipoIF) return false;
+            return true;
+        });
+
+        const payload = {
+            filters: { classe, codigo, bolsa, indice, tipoIF, moeda, tipoCot, commodity, mes, ano, ticker, calc },
+            subj: subjResult,
+            vcp: vcpResult,
+            dominio: domResult
+        };
+
+        try {
+            sessionStorage.setItem('b3_search_results', JSON.stringify(payload));
+            window.location.href = '/index-b3-results';
+        } catch (e) {
+            alert('The result set is too large for session storage. Please narrow your filters.');
+            console.error(e);
+        }
+    }
+
+    function limparCampos() {
+        document.getElementById('filterForm').reset();
+        ['selCodigo','selBolsa','selIndice','selMoeda','selTipoCot','selCommodity'].forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = '<option value="">-- All --</option>';
+            el.disabled = true;
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
+    async function loadData() {
+        const loadingEl = document.getElementById('statusLoading');
+        const btnPes    = document.getElementById('btnPesquisar');
+        loadingEl.classList.remove('d-none');
+        btnPes.disabled = true;
+
+        try {
+            const [subj, vcp, dom] = await Promise.all([
+                fetch('{{ config.ASSETS_ROOT }}/data/Subjacente.json').then(r => r.json()),
+                fetch('{{ config.ASSETS_ROOT }}/data/VCP.json').then(r => r.json()),
+                fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json())
+            ]);
+
+            DATA.subj    = subj;
+            DATA.vcp     = vcp;
+            DATA.dominio = dom;
+
+            fillSelect('selClasse', unique(DATA.subj, 'Classe'), '-- Select Class --');
+            fillSelect('selCodigo', unique(DATA.subj, 'Codigo do Ativo Subjacente'));
+            fillSelect('selTipoIF', unique(DATA.subj, 'Tipo IF'), '-- All --');
+
+            btnPes.disabled = false;
+        } catch (err) {
+            console.error('Error loading data:', err);
+            alert('Failed to load reference data. Check the console for details.');
+        } finally {
+            loadingEl.classList.add('d-none');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadData();
+
+        document.getElementById('selClasse').addEventListener('change', onClasseChange);
+        document.getElementById('selCodigo').addEventListener('change', onCodigoChange);
+        document.getElementById('selBolsa').addEventListener('change', onBolsaChange);
+        document.getElementById('btnPesquisar').addEventListener('click', pesquisar);
+        document.getElementById('btnLimpar').addEventListener('click', limparCampos);
+
+        ['inputAno','inputTicker'].forEach(id => {
+            document.getElementById(id).addEventListener('keydown', e => {
+                if (e.key === 'Enter') pesquisar();
+            });
+        });
+    });
+}());
+</script>
+{% endblock extra_javascript %}
