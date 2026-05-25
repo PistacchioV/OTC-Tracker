@@ -1,4 +1,4 @@
-# UBold Flask - Guia de Instalação e Estrutura
+# OTC Tracker Flask - Guia de Instalação e Estrutura
 
 ## Índice
 1. [Pré-requisitos](#pré-requisitos)
