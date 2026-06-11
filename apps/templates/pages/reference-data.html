@@ -3,66 +3,37 @@
 {% block title %}Reference Data{% endblock title %}
 
 {% block extra_css %}
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <style>
-    /* ── Toolbar buttons ──────────────────────────────────────────────────── */
-    .btn-toolbar-all {
-        font-size: 0.75rem !important;
-        padding: 0.25rem 0.6rem !important;
-        white-space: nowrap !important;
+    .btn-toolbar-all { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
+    .col-search-row th { padding:4px 6px; }
+    .col-search-row input { font-size:11px; height:26px; padding:2px 6px; }
+    #ref-data-table th { white-space:nowrap; font-size:0.7rem; text-transform:uppercase; padding:8px 10px; }
+    #ref-data-table td { white-space:nowrap; font-size:0.8rem; }
+    td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
+    td.editing .select2-container { width:100%!important; }
+    .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+    .edit-actions-wrap { display:flex; gap:4px; }
+    .pill-badge { font-size:0.68rem; }
+    .select2-dropdown { font-size:0.78rem; }
+    .new-row-edit td { background-color: rgba(0,102,204,0.06)!important; }
+    #ref-data-table .row-rd-check { cursor:pointer; }
+    .dt-scroll-head thead th,
+    .dt-scroll-headInner thead th,
+    .dataTables_scrollHeadInner thead th {
+        text-align: center !important;
+        vertical-align: middle !important;
     }
-
-    /* ── Action column buttons ────────────────────────────────────────────── */
-    #ref-data-table .btn-sm.rounded-circle {
-        width: 28px;
-        height: 28px;
-        padding: 0;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-    #ref-data-table .btn-sm.rounded-circle i {
-        font-size: 13px;
-    }
-
-    /* ── Column search row ────────────────────────────────────────────────── */
-    .col-search-row th { padding: 4px 6px; }
-    .col-search-row input {
-        font-size: 11px;
-        height: 26px;
-        padding: 2px 6px;
-    }
-
-    /* ── Table cell font sizes (match B3 Results) ────────────────────────── */
-    #ref-data-table th {
-        white-space: nowrap;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        padding: 8px 10px;
-    }
-    #ref-data-table td {
-        white-space: nowrap;
-        font-size: 0.8rem;
-    }
-
-    /* ── Disable cell selection highlight on checkbox + actions cols ──────── */
-    #ref-data-table tbody td:nth-child(1),
-    #ref-data-table tbody td:nth-child(2) {
-        user-select: none;
-    }
-
-    /* ── Status badge size ────────────────────────────────────────────────── */
-    #ref-data-table h4 { margin: 0; }
-    #ref-data-table .pillbadge { font-size: 0.7rem; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
 <div class="container-fluid" data-content="">
 
-    <!-- ── Page title ────────────────────────────────────────────────────── -->
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0" data-lang="reference-data">Reference Data</h4>
@@ -76,54 +47,45 @@
         </div>
     </div>
 
-    <!-- ── Table card ────────────────────────────────────────────────────── -->
     <div class="row mt-2">
         <div class="col-12">
             <div class="card">
-
-                <!-- Card header: Show/entries -->
                 <div class="card-header">
-                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
-                        <div class="d-flex align-items-center gap-2">
-                            <label class="form-label mb-0">Show</label>
-                            <select class="form-select form-select-sm" style="width:80px;" id="pageLenRefData">
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
-                                <option value="200">200</option>
-                            </select>
-                            <label class="form-label mb-0">entries</label>
-                        </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <label class="form-label mb-0">Show</label>
+                        <select class="form-select form-select-sm" style="width:80px;" id="pageLenRefData">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                        </select>
+                        <label class="form-label mb-0">entries</label>
                     </div>
                 </div>
-
-                <!-- Card body: DataTable -->
                 <div class="card-body" style="padding-top:10px;">
                     <div class="table-responsive">
-                        <table class="table table-striped dt-responsive align-middle mb-0"
+                        <table class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100"
                                id="ref-data-table">
-                            <thead class="text-uppercase fs-xxs">
-                                <!-- Header row -->
+                            <thead>
                                 <tr class="text-uppercase fs-xxs">
-                                    <th class="ps-3" style="width:44px;">
-                                        <input class="form-check-input form-check-input-light fs-14 mt-0"
-                                               id="selectAll" type="checkbox" />
+                                    <th class="ps-2" style="width:36px;">
+                                        <input class="form-check-input" type="checkbox" id="rd-select-all" title="Select all visible rows">
                                     </th>
-                                    <th style="width:100px;">Actions</th>
-                                    <th>Status</th>
-                                    <th>Counterparty</th>
-                                    <th>Economic Group</th>
-                                    <th>Banker</th>
-                                    <th>Signature Type</th>
-                                    <th>Tax ID</th>
-                                    <th>ECI</th>
-                                    <th>SPN</th>
-                                    <th>CASID</th>
-                                    <th>UCN</th>
-                                    <th>Commodities Acronym</th>
-                                    <th>FX Cash Acronym</th>
+                                    <th style="width:90px;">Actions</th>
+                                    <th data-lang="rd-col-status">Status</th>
+                                    <th data-lang="rd-col-counterparty">Counterparty</th>
+                                    <th data-lang="rd-col-economic-group">Economic Group</th>
+                                    <th data-lang="rd-col-banker">Banker</th>
+                                    <th data-lang="rd-col-signature-type">Signature Type</th>
+                                    <th data-lang="rd-col-tax-id">Tax ID</th>
+                                    <th data-lang="rd-col-eci">ECI</th>
+                                    <th data-lang="rd-col-spn">SPN</th>
+                                    <th data-lang="rd-col-casid">CASID</th>
+                                    <th data-lang="rd-col-ucn">UCN</th>
+                                    <th data-lang="rd-col-b3-account">B3 Account</th>
+                                    <th data-lang="rd-col-comm-acr">Commodities Acronym</th>
+                                    <th data-lang="rd-col-fx-acr">FX Cash Acronym</th>
                                 </tr>
-                                <!-- Column search row -->
                                 <tr class="col-search-row" id="refdata-search-row">
                                     <th></th>
                                     <th></th>
@@ -137,6 +99,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SPN"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CASID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="UCN"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 Account"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Comm. Acronym"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FX Acronym"></th>
                                 </tr>
@@ -145,12 +108,86 @@
                         </table>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
 
 </div>
+
+<!-- =====================================================================
+     REFERENCE DATA — Add / Edit Modal
+     ===================================================================== -->
+<div class="modal fade" id="rdModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="rdModalTitle"><i class="ti ti-plus me-1"></i>Add New Record</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label form-label-sm mb-1">Counterparty</label>
+            <input type="text" class="form-control form-control-sm" id="rd-counterparty" placeholder="PARTY CENTRAL name">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm mb-1">Economic Group</label>
+            <input type="text" class="form-control form-control-sm" id="rd-econgroup" placeholder="Economic group">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">Banker</label>
+            <input type="text" class="form-control form-control-sm" id="rd-banker">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">Signature Type</label>
+            <select class="form-select form-select-sm" id="rd-sigtype">
+              <option value="">— Select —</option>
+              <option value="DIGITAL">DIGITAL</option>
+              <option value="MANUAL">MANUAL</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">Tax ID</label>
+            <input type="text" class="form-control form-control-sm" id="rd-taxid" placeholder="00.000.000/0000-00" maxlength="18">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">ECI</label>
+            <input type="text" class="form-control form-control-sm" id="rd-eci">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">SPN</label>
+            <input type="text" class="form-control form-control-sm" id="rd-spn">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">CASID</label>
+            <input type="text" class="form-control form-control-sm" id="rd-casid">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">UCN</label>
+            <input type="text" class="form-control form-control-sm" id="rd-ucn">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">B3 Account</label>
+            <input type="text" class="form-control form-control-sm" id="rd-b3account" value="73760.10-2">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">Commodities Acronym</label>
+            <input type="text" class="form-control form-control-sm" id="rd-commacr">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">FX Cash Acronym</label>
+            <input type="text" class="form-control form-control-sm" id="rd-fxacr">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="rd-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock page_content %}
 
 {% block extra_javascript %}
@@ -166,60 +203,170 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 
 <script>
 $(document).ready(function () {
     'use strict';
 
-    /* ── Column labels (for Show/Hide toggle) ───────────────────────────── */
-    var COL_LABELS = [
-        'Status','Counterparty','Economic Group','Banker','Signature Type',
-        'Tax ID','ECI','SPN','CASID','UCN','Commodities Acronym','FX Cash Acronym'
-    ];
+    var CURRENT_USER = '{{ session.get("user_sid", "") }}';
 
-    /* ── Export cols: skip checkbox (0) and actions (1) ─────────────────── */
-    var EXPORT_COLS = [2,3,4,5,6,7,8,9,10,11,12,13];
-
-    /* ── Status badge builder ────────────────────────────────────────────── */
-    function statusBadge(val) {
-        var st = (val || 'PENDING').toUpperCase();
-        var cls   = st === 'ACTIVE' ? 'text-bg-success' : 'text-bg-warning';
-        var label = st === 'ACTIVE' ? 'Active' : 'Pending';
-        return '<h4><span class="badge badge-label ' + cls + ' rounded-pill">' + label + '</span></h4>';
+    /* ── Translation cache ───────────────────────────────────────────── */
+    var _TRANS_CACHE = {};
+    ;(function () {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        fetch('/static/data/translations/' + lang + '.json')
+            .then(function(r){ return r.json(); })
+            .then(function(d){ _TRANS_CACHE = d; })
+            .catch(function(){});
+        document.querySelectorAll('[data-translator-lang]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var l = this.getAttribute('data-translator-lang');
+                if (l) fetch('/static/data/translations/' + l + '.json')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){ _TRANS_CACHE = d; })
+                    .catch(function(){});
+            });
+        });
+    })();
+    function t(key, fallback) {
+        return (_TRANS_CACHE && _TRANS_CACHE[key]) ? _TRANS_CACHE[key] : (fallback || key);
     }
 
-    /* ── Action buttons ──────────────────────────────────────────────────── */
-    var ACTIONS =
-        '<div class="d-flex gap-1">' +
-        '<a class="btn btn-success btn-sm rounded-circle" href="#" title="Confirm" onclick="return false;"><i class="ti ti-check"></i></a>' +
-        '<a class="btn btn-info btn-sm rounded-circle" href="#" title="Edit" onclick="return false;"><i class="ti ti-edit"></i></a>' +
-        '<a class="btn btn-danger btn-sm rounded-circle" href="#" title="Delete" onclick="return false;"><i class="ti ti-trash"></i></a>' +
-        '</div>';
+    /* ── Column keys for header translation (index matches DT column) ── */
+    var RD_COL_KEYS = [null, null,
+        'rd-col-status', 'rd-col-counterparty', 'rd-col-economic-group',
+        'rd-col-banker', 'rd-col-signature-type', 'rd-col-tax-id',
+        'rd-col-eci', 'rd-col-spn', 'rd-col-casid', 'rd-col-ucn',
+        'rd-col-b3-account', 'rd-col-comm-acr', 'rd-col-fx-acr'
+    ];
 
-    /* ── Row builder ─────────────────────────────────────────────────────── */
+    /* ── Helpers ─────────────────────────────────────────────────────── */
+    function safe(v) {
+        if (v == null || String(v) === 'NaN') return '';
+        return String(v);
+    }
+
+    function maskCNPJ(v) {
+        v = v.replace(/\D/g, '').slice(0, 14);
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d)/, '$1-$2');
+        return v;
+    }
+
+    function statusBadge(val) {
+        var st  = (val || 'PENDING').toUpperCase();
+        var cls, lbl;
+        if      (st === 'ACTIVE')           { cls = 'text-bg-success';   lbl = 'Active'; }
+        else if (st === 'INACTIVE')         { cls = 'text-bg-secondary'; lbl = 'Inactive'; }
+        else if (st === 'PENDING INACTIVE') { cls = 'text-bg-danger';    lbl = 'Pend. Inactive'; }
+        else                                { cls = 'text-bg-warning';   lbl = 'Pending'; }
+        return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
+    }
+
+    function checkboxCell() {
+        return '<input class="form-check-input row-rd-check" type="checkbox">';
+    }
+
+    function actionBtns(idx, maker) {
+        return '<div class="edit-actions-wrap">' +
+            '<button class="btn btn-info btn-sm btn-act btn-rd-edit" data-idx="' + idx + '" title="Edit"><i class="ti ti-edit fs-13"></i></button>' +
+            '<button class="btn btn-success btn-sm btn-act btn-rd-confirm" data-idx="' + idx + '" data-maker="' + (maker||'') + '" title="Confirm / Approve"><i class="ti ti-check fs-13"></i></button>' +
+            '<button class="btn btn-danger btn-sm btn-act btn-rd-delete" data-idx="' + idx + '" title="Deactivate"><i class="ti ti-trash fs-13"></i></button>' +
+            '</div>';
+    }
+
+    var TT = 'title="INSERIR IGUAL AOS DADOS DO PARTY CENTRAL" data-bs-toggle="tooltip" data-bs-placement="top"';
+
+    function makeInputTT(val) {
+        return '<input type="text" class="form-control form-control-sm" value="' +
+            safe(val).replace(/"/g, '&quot;') + '" ' + TT + '>';
+    }
+
+    function makeSelectTT(opts, val, cls) {
+        var s = '<select class="form-select form-select-sm ' + (cls||'') + '" ' + TT + '>';
+        if (!safe(val)) s += '<option value=""></option>';
+        opts.forEach(function(o) {
+            s += '<option value="' + o + '"' + (safe(val).toUpperCase() === o.toUpperCase() ? ' selected' : '') + '>' + o + '</option>';
+        });
+        s += '</select>';
+        return s;
+    }
+
+    function makeTaxIdInput(val) {
+        return '<input type="text" class="form-control form-control-sm taxid-rd-field" value="' +
+            safe(val).replace(/"/g, '&quot;') + '" placeholder="00.000.000/0000-00" maxlength="18" ' + TT + '>';
+    }
+
+    function applySelect2(selectEl) {
+        var $sel = $(selectEl);
+        if ($sel.data('select2')) return;
+        var $td = $sel.closest('td');
+        var w   = ($td.length && $td.outerWidth() > 30) ? $td.outerWidth() + 'px' : '150px';
+        $sel.select2({
+            width: w,
+            dropdownAutoWidth: false,
+            dropdownParent: $('body'),
+            minimumResultsForSearch: 5
+        });
+    }
+
+    function apiCall(url, body, cb) {
+        fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        }).then(function(r){ return r.json(); }).then(cb).catch(function(e){
+            Swal.fire(t('rd-swal-error','Error'), 'Network error: ' + e.message, 'error');
+        });
+    }
+
+    /* ── Prepend new-row form to tbody (first row, bypasses pagination) ── */
+    function appendNewRow(tbody, cells) {
+        var tr = $('<tr class="new-row-edit"></tr>').html(cells.join(''));
+        tbody.prepend(tr);
+        setTimeout(function() {
+            tr.find('select').each(function(){ applySelect2(this); });
+            tr.find('[data-bs-toggle="tooltip"]').each(function() {
+                new bootstrap.Tooltip(this, {trigger: 'hover focus'});
+            });
+        }, 30);
+        $('html, body').animate({scrollTop: tr.offset().top - 100}, 250);
+        return tr;
+    }
+
+    /* ── Column layout ───────────────────────────────────────────────── */
+    /* 0=checkbox  1=actions  2=status  3-11=data  12=B3ACCOUNT  13=comm acr  14=fx acr */
     function buildRows(data) {
-        return data.map(function (r) {
-            function s(v) { return v == null ? '' : String(v); }
+        return data.map(function(r) {
+            var idx   = (r._idx !== undefined) ? r._idx : -1;
+            var maker = safe(r['MAKER']);
             return [
-                '<div class="ps-1"><input class="form-check-input row-check" type="checkbox"></div>',
-                ACTIONS,
-                statusBadge(r['Status']),
-                s(r['COUNTERPARTY']),
-                s(r['ECONOMIC GROUP']),
-                s(r['BANKER']),
-                s(r['SIGNATURE TYPE']),
-                s(r['TAX ID']),
-                s(r['ECI']),
-                s(r['SPN']),
-                s(r['CASID']),
-                s(r['UCN']),
-                s(r['COMMODITIES ACCRONYM']),
-                s(r['FX CASH ACCRONYM'])
+                checkboxCell(),
+                actionBtns(idx, maker),
+                statusBadge(r['STATUS']),
+                safe(r['COUNTERPARTY']),
+                safe(r['ECONOMIC GROUP']),
+                safe(r['BANKER']),
+                safe(r['SIGNATURE TYPE']),
+                safe(r['TAX ID']),
+                safe(r['ECI']),
+                safe(r['SPN']),
+                safe(r['CASID']),
+                safe(r['UCN']),
+                safe(r['B3 ACCOUNT']),
+                safe(r['COMMODITIES ACCRONYM']),
+                safe(r['FX CASH ACCRONYM'])
             ];
         });
     }
 
-    /* ── DataTable init ──────────────────────────────────────────────────── */
+    /* ── DataTable init ───────────────────────────────────────────────── */
+    var EXPORT_COLS = {columns: [2,3,4,5,6,7,8,9,10,11,12,13,14], modifier: {page:'all'}};
+
     var dt = $('#ref-data-table').DataTable({
         data: [],
         responsive: false,
@@ -227,35 +374,28 @@ $(document).ready(function () {
         autoWidth: false,
         pageLength: 25,
         columnDefs: [
-            { targets: [0, 1], orderable: false, searchable: false },
-            { targets: '_all', defaultContent: '' }
+            {targets: [0,1], orderable: false, searchable: false},
+            {targets: '_all', defaultContent: ''}
         ],
         dom:
             "<'d-md-flex justify-content-between align-items-center my-2'" +
-                "<'btn-toolbar d-flex flex-wrap align-items-center'" +
-                    "<'columnToggleWrapper me-2'>" +
-                    "<'loadBtnWrapper me-2'>" +
-                    "B" +
-                ">" +
-                "<'ms-auto'>" +
+                "<'columnToggleWrapper me-2'><'addRowWrapper me-2'><'bulkApproveWrapper me-2'>B<'ms-auto'>" +
             ">" +
             "<'row'<'col-sm-12'tr>>" +
             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
-        buttons: [
-            {
-                extend: 'collection',
-                text: '<i class="ti ti-download me-1"></i> Export',
-                className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
-                autoClose: true,
-                buttons: [
-                    { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',               className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
-                    { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',        className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
-                    { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel',   className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
-                    { extend: 'pdf',   text: '<i class="ti ti-file-text me-1"></i> PDF',            className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } },
-                    { extend: 'print', text: '<i class="ti ti-printer me-1"></i> Print',            className: 'dropdown-item', exportOptions: { columns: EXPORT_COLS, modifier: { page: 'all' } } }
-                ]
-            }
-        ],
+        buttons: [{
+            extend: 'collection',
+            text: '<i class="ti ti-download me-1"></i> Export',
+            className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+            autoClose: true,
+            buttons: [
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',               className:'dropdown-item', exportOptions: EXPORT_COLS},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',        className:'dropdown-item', exportOptions: EXPORT_COLS},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel',   className:'dropdown-item', exportOptions: EXPORT_COLS},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',            className:'dropdown-item', exportOptions: EXPORT_COLS},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print',            className:'dropdown-item', exportOptions: EXPORT_COLS}
+            ]
+        }],
         language: {
             paginate: {
                 first:    '<i class="ti ti-chevrons-left"></i>',
@@ -263,111 +403,403 @@ $(document).ready(function () {
                 next:     '<i class="ti ti-chevron-right"></i>',
                 last:     '<i class="ti ti-chevrons-right"></i>'
             },
-            emptyTable: 'Click <strong>Load</strong> to fetch data.',
-            zeroRecords: 'No matching records found.'
+            search: 'Search:', info: 'Showing _START_ to _END_ of _TOTAL_ entries',
+            zeroRecords: 'No matching records found', emptyTable: 'Loading…'
         },
-        initComplete: function () {
-            var api      = this.api();
+        initComplete: function() {
+            var api       = this.api();
             var container = api.table().container();
 
-            /* ── i18n: remove data-lang from hidden body thead sizing row ── */
-            api.table().node().querySelectorAll('thead tr:first-child th[data-lang]').forEach(function (th) {
-                th.removeAttribute('data-lang');
+            /* Wrap header text in data-lang spans (DT2.x and DT1.x) */
+            $(container).find('.dt-scroll-head thead th, .dataTables_scrollHead thead th').each(function(i) {
+                var key = RD_COL_KEYS[i]; if (!key) return;
+                var th = this;
+                var titleEl = th.querySelector('.dt-column-title');
+                if (titleEl) {
+                    var text = titleEl.textContent.trim();
+                    titleEl.innerHTML = '';
+                    var span = document.createElement('span');
+                    span.setAttribute('data-lang', key); span.textContent = text;
+                    titleEl.appendChild(span);
+                    th.removeAttribute('data-lang');
+                } else {
+                    var text = th.textContent.trim();
+                    th.removeAttribute('data-lang'); th.innerHTML = '';
+                    var span = document.createElement('span');
+                    span.setAttribute('data-lang', key); span.textContent = text;
+                    th.appendChild(span);
+                }
             });
+            api.table().node().querySelectorAll('thead tr:first-child th[data-lang]').forEach(function(th){ th.removeAttribute('data-lang'); });
 
-            /* ── Column search inputs ─────────────────────────────────────── */
-            document.querySelectorAll('#refdata-search-row th').forEach(function (th) {
-                th.addEventListener('click', function (e) { e.stopPropagation(); });
+            /* Column search */
+            document.querySelectorAll('#refdata-search-row th').forEach(function(th) {
+                th.addEventListener('click', function(e){ e.stopPropagation(); });
             });
-            document.querySelectorAll('#refdata-search-row th input').forEach(function (input) {
-                input.addEventListener('click', function (e) { e.stopPropagation(); });
-                input.addEventListener('keyup', function () {
-                    var idx = input.closest('th').cellIndex;
-                    if (api.column(idx).search() !== this.value) {
-                        api.column(idx).search(this.value).draw();
-                    }
+            document.querySelectorAll('#refdata-search-row th input').forEach(function(inp) {
+                inp.addEventListener('click', function(e){ e.stopPropagation(); });
+                inp.addEventListener('keyup', function() {
+                    var idx = inp.closest('th').cellIndex;
+                    if (api.column(idx).search() !== this.value) api.column(idx).search(this.value).draw();
                 });
             });
 
-            /* ── Load button ─────────────────────────────────────────────── */
-            var loadWrapper = container.querySelector('.loadBtnWrapper');
-            if (loadWrapper) {
-                var loadBtn = document.createElement('button');
-                loadBtn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all';
-                loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Load';
-                loadWrapper.appendChild(loadBtn);
-
-                loadBtn.addEventListener('click', function () {
-                    loadBtn.disabled = true;
-                    loadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
-
-                    fetch('{{ config.ASSETS_ROOT }}/data/RefData.json')
-                        .then(function (r) { return r.json(); })
-                        .then(function (data) {
-                            api.clear().rows.add(buildRows(data)).draw();
-                            loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Reload';
-                            loadBtn.disabled = false;
-                        })
-                        .catch(function (err) {
-                            console.error('RefData load error:', err);
-                            alert('Failed to load data. Check the console.');
-                            loadBtn.innerHTML = '<i class="ti ti-cloud-download me-1"></i>Load';
-                            loadBtn.disabled = false;
-                        });
-                });
-            }
-
-            /* ── Show/Hide columns toggle ─────────────────────────────────── */
-            var toggleWrapper = container.querySelector('.columnToggleWrapper');
-            if (toggleWrapper) {
-                var items = COL_LABELS.map(function (lbl, i) {
-                    var colIdx = i + 2; /* data cols start at 2 */
+            /* Column toggle (starts at col 2 = Status) */
+            var colDefs = [
+                {lbl:'Status',         key:'rd-col-status'},
+                {lbl:'Counterparty',   key:'rd-col-counterparty'},
+                {lbl:'Economic Group', key:'rd-col-economic-group'},
+                {lbl:'Banker',         key:'rd-col-banker'},
+                {lbl:'Sig. Type',      key:'rd-col-signature-type'},
+                {lbl:'Tax ID',         key:'rd-col-tax-id'},
+                {lbl:'ECI',            key:'rd-col-eci'},
+                {lbl:'SPN',            key:'rd-col-spn'},
+                {lbl:'CASID',          key:'rd-col-casid'},
+                {lbl:'UCN',            key:'rd-col-ucn'},
+                {lbl:'B3 Account',     key:'rd-col-b3-account'},
+                {lbl:'Comm. Acronym',  key:'rd-col-comm-acr'},
+                {lbl:'FX Acronym',     key:'rd-col-fx-acr'}
+            ];
+            var toggleWrap = container.querySelector('.columnToggleWrapper');
+            if (toggleWrap) {
+                var items = colDefs.map(function(c, i) {
+                    var ci  = i + 2;
                     var uid = 'rd_col_' + i;
                     return '<li class="dropdown-item"><div class="form-check">' +
-                        '<input class="form-check-input rd-toggle-vis" type="checkbox" ' +
-                        'data-column="' + colIdx + '" id="' + uid + '" checked>' +
-                        '<label class="form-check-label fw-medium" for="' + uid + '">' + lbl + '</label>' +
+                        '<input class="form-check-input rd-toggle-vis" type="checkbox" data-column="' + ci + '" id="' + uid + '" checked>' +
+                        '<label class="form-check-label fw-medium" for="' + uid + '" data-lang="' + c.key + '">' + c.lbl + '</label>' +
                         '</div></li>';
                 }).join('');
-
-                toggleWrapper.innerHTML =
-                    '<div class="dropdown">' +
-                    '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
+                toggleWrap.innerHTML =
+                    '<div class="dropdown"><button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
                     'type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">' +
                     '<i class="ti ti-columns me-1"></i>Columns</button>' +
                     '<ul class="dropdown-menu">' + items + '</ul></div>';
-
-                toggleWrapper.querySelector('ul').addEventListener('change', function (e) {
-                    if (e.target.classList.contains('rd-toggle-vis')) {
+                toggleWrap.querySelector('ul').addEventListener('change', function(e) {
+                    if (e.target.classList.contains('rd-toggle-vis'))
                         api.column(+e.target.dataset.column).visible(e.target.checked);
-                    }
                 });
+            }
+
+            /* Add Row button */
+            var addWrap = container.querySelector('.addRowWrapper');
+            if (addWrap) {
+                var addBtn = document.createElement('button');
+                addBtn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all';
+                addBtn.textContent = 'Add Row +';
+                addBtn.addEventListener('click', function() { addRow(); });
+                addWrap.appendChild(addBtn);
+            }
+
+            /* Bulk Approve button */
+            var bulkWrap = container.querySelector('.bulkApproveWrapper');
+            if (bulkWrap) {
+                var bulkBtn = document.createElement('button');
+                bulkBtn.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all';
+                bulkBtn.innerHTML = '<i class="ti ti-checks me-1"></i>Approve Selected';
+                bulkBtn.addEventListener('click', function() { bulkApprove(); });
+                bulkWrap.appendChild(bulkBtn);
             }
         }
     });
 
-    /* ── Page-length selector ────────────────────────────────────────────── */
-    $('#pageLenRefData').on('change', function () {
-        dt.page.len(+this.value).draw();
+    /* ── Auto-load RefData.json ───────────────────────────────────────── */
+    fetch('{{ config.ASSETS_ROOT }}/data/RefData.json')
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+            data.forEach(function(r,i){ r._idx = i; });
+            dt.clear().rows.add(buildRows(data)).draw();
+        })
+        .catch(function(e){ console.error('RefData load error:', e); });
+
+    /* ── Page length ─────────────────────────────────────────────────── */
+    $('#pageLenRefData').on('change', function() { dt.page.len(+this.value).draw(); });
+
+    /* ── CNPJ mask (live) ────────────────────────────────────────────── */
+    $(document).on('input', '.taxid-rd-field', function() {
+        this.value = maskCNPJ(this.value);
+    });
+    $(document).on('input', '#rd-taxid', function() { this.value = maskCNPJ(this.value); });
+
+    /* ── Select-all checkbox ─────────────────────────────────────────── */
+    $(document).on('change', '#rd-select-all', function() {
+        var chk = this.checked;
+        $(dt.rows({search:'applied', page:'current'}).nodes())
+            .find('.row-rd-check').prop('checked', chk);
     });
 
-    /* ── Select-all checkbox ─────────────────────────────────────────────── */
-    document.getElementById('selectAll').addEventListener('change', function () {
-        var checked = this.checked;
-        document.querySelectorAll('#ref-data-table .row-check').forEach(function (cb) {
-            cb.checked = checked;
+    /* Keep select-all in sync when individual checkboxes change */
+    $(document).on('change', '#ref-data-table .row-rd-check', function() {
+        var nodes   = $(dt.rows({search:'applied', page:'current'}).nodes());
+        var total   = nodes.find('.row-rd-check').length;
+        var checked = nodes.find('.row-rd-check:checked').length;
+        $('#rd-select-all').prop('checked', total > 0 && total === checked);
+    });
+
+    /* Reset select-all on page change / search */
+    dt.on('draw', function() {
+        $('#rd-select-all').prop('checked', false);
+    });
+
+    /* ── Enter edit mode ─────────────────────────────────────────────── */
+    function enterEdit(row) {
+        var cells = row.data();
+        var tr    = row.node();
+        var idx   = parseInt($(tr).find('.btn-rd-edit').data('idx'));
+        var rdModalEl = document.getElementById('rdModal');
+        if (!rdModalEl) return;
+        $(rdModalEl).data('editIdx', idx).data('editRow', row);
+        document.getElementById('rdModalTitle').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Record';
+        $('#rd-counterparty').val(cells[3] || '');
+        $('#rd-econgroup').val(cells[4] || '');
+        $('#rd-banker').val(cells[5] || '');
+        $('#rd-sigtype').val(cells[6] || '');
+        $('#rd-taxid').val(cells[7] || '');
+        $('#rd-eci').val(cells[8] || '');
+        $('#rd-spn').val(cells[9] || '');
+        $('#rd-casid').val(cells[10] || '');
+        $('#rd-ucn').val(cells[11] || '');
+        $('#rd-b3account').val(cells[12] || '73760.10-2');
+        $('#rd-commacr').val(cells[13] || '');
+        $('#rd-fxacr').val(cells[14] || '');
+        bootstrap.Modal.getOrCreateInstance(rdModalEl).show();
+    }
+
+    /* ── Approve / Confirm ───────────────────────────────────────────── */
+    function handleApprove(btn) {
+        var idx   = parseInt(btn.dataset.idx);
+        var maker = btn.dataset.maker || '';
+        if (maker && maker === CURRENT_USER) {
+            Swal.fire({
+                title: t('rd-swal-own-changes','Cannot approve your own changes'),
+                text:  t('rd-swal-own-changes-text','Another user must approve records you modified.'),
+                icon: 'warning'
+            });
+            return;
+        }
+        Swal.fire({
+            title:             t('rd-swal-approve-title','Approve this record?'),
+            text:              t('rd-swal-approve-text','Your SID will be recorded as Checker.'),
+            icon:              'question',
+            showCancelButton:  true,
+            confirmButtonText: t('rd-swal-approve-btn','Approve'),
+            cancelButtonText:  t('rd-swal-cancel','Cancel'),
+            confirmButtonColor:'#0acf97'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+            apiCall('/api/b3/update', {table:'refdata', idx:idx, action:'approve'}, function(res) {
+                if (res.ok) {
+                    var row   = dt.row($(btn).closest('tr'));
+                    var cells = row.data();
+                    cells[2] = statusBadge(res.new_status || 'ACTIVE');
+                    cells[1] = actionBtns(idx, '');
+                    row.data(cells).draw(false);
+                    Swal.fire({title: t('rd-swal-approved','Approved!'), icon:'success', timer:1200, showConfirmButton:false});
+                } else if (res.error === 'same_user') {
+                    Swal.fire(t('rd-swal-not-allowed','Not allowed'), t('rd-swal-not-allowed-text','Cannot approve your own changes.'), 'warning');
+                } else {
+                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to approve.', 'error');
+                }
+            });
         });
-    });
+    }
 
-    /* keep select-all in sync when individual checkboxes change */
-    document.getElementById('ref-data-table').addEventListener('change', function (e) {
-        if (e.target.classList.contains('row-check')) {
-            var all  = document.querySelectorAll('#ref-data-table .row-check');
-            var chkd = document.querySelectorAll('#ref-data-table .row-check:checked');
-            document.getElementById('selectAll').checked = all.length === chkd.length;
+    /* ── Deactivate (delete → PENDING INACTIVE, awaits approval) ────── */
+    function handleDeactivate(btn) {
+        var idx = parseInt(btn.dataset.idx);
+        Swal.fire({
+            title:             t('rd-swal-deactivate-title','Deactivate this record?'),
+            text:              t('rd-swal-deactivate-text','Status will be set to Pending Inactive and requires approval.'),
+            icon:              'warning',
+            showCancelButton:  true,
+            confirmButtonText: t('rd-swal-deactivate-btn','Yes, deactivate'),
+            cancelButtonText:  t('rd-swal-cancel','Cancel'),
+            confirmButtonColor:'#6c757d'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+            apiCall('/api/b3/update', {table:'refdata', idx:idx, action:'deactivate'}, function(res) {
+                if (res.ok) {
+                    var row   = dt.row($(btn).closest('tr'));
+                    var cells = row.data();
+                    cells[2] = statusBadge('PENDING INACTIVE');
+                    cells[1] = actionBtns(idx, CURRENT_USER);
+                    row.data(cells).draw(false);
+                    Swal.fire({title: t('rd-swal-deactivated','Deactivated!'), text: t('rd-swal-deactivated-text','Pending approval for final deactivation.'), icon:'success', timer:1800, showConfirmButton:false});
+                } else {
+                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to deactivate.', 'error');
+                }
+            });
+        });
+    }
+
+    /* ── Bulk Approve ────────────────────────────────────────────────── */
+    function bulkApprove() {
+        var candidates = [];
+        $(dt.rows({search:'applied', page:'current'}).nodes()).each(function() {
+            var tr  = $(this);
+            var chk = tr.find('.row-rd-check');
+            if (!chk.prop('checked')) return;
+            var badgeText = tr.find('td:eq(2) .badge').text().trim().toUpperCase();
+            if (badgeText === 'ACTIVE' || badgeText === 'INACTIVE') return;
+            var confirmBtn = tr.find('.btn-rd-confirm');
+            candidates.push({
+                tr:    tr,
+                idx:   parseInt(confirmBtn.data('idx')),
+                maker: confirmBtn.data('maker') || ''
+            });
+        });
+
+        if (!candidates.length) {
+            Swal.fire(t('rd-swal-nothing-approve','Nothing to approve'), t('rd-swal-nothing-approve-text','Select rows with Pending or Pending Inactive status.'), 'info');
+            return;
+        }
+
+        var blocked   = candidates.filter(function(r){ return r.maker && r.maker === CURRENT_USER; });
+        var toApprove = candidates.filter(function(r){ return !r.maker || r.maker !== CURRENT_USER; });
+        var skipNote  = blocked.length ? blocked.length + ' record(s) were modified by you and will be skipped. ' : '';
+
+        var bulkTitle = t('rd-swal-bulk-approve-title','Approve {count} record(s)?').replace('{count}', toApprove.length);
+        Swal.fire({
+            title:             bulkTitle,
+            text:              skipNote + 'This action cannot be undone.',
+            icon:              'question',
+            showCancelButton:  true,
+            confirmButtonText: t('rd-swal-bulk-approve-btn','Approve All'),
+            cancelButtonText:  t('rd-swal-cancel','Cancel'),
+            confirmButtonColor:'#0acf97'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+
+            if (!toApprove.length) {
+                Swal.fire(t('rd-swal-skipped','Skipped'), t('rd-swal-skipped-text','All selected records were modified by you and cannot be self-approved.'), 'warning');
+                return;
+            }
+
+            var done = 0, failed = 0;
+
+            function approveNext(list) {
+                if (!list.length) {
+                    $('#ref-data-table .row-rd-check').prop('checked', false);
+                    $('#rd-select-all').prop('checked', false);
+                    var msg = done + ' approved' +
+                        (blocked.length ? ', ' + blocked.length + ' skipped (own records)' : '') +
+                        (failed ? ', ' + failed + ' failed' : '') + '.';
+                    Swal.fire({
+                        title: t('rd-swal-done','Done'),
+                        text: msg,
+                        icon: done > 0 ? 'success' : 'warning',
+                        timer: 2500,
+                        showConfirmButton: false
+                    });
+                    return;
+                }
+                var rec  = list[0];
+                var rest = list.slice(1);
+                apiCall('/api/b3/update', {table:'refdata', idx: rec.idx, action:'approve'}, function(res) {
+                    if (res.ok) {
+                        var row   = dt.row(rec.tr);
+                        var cells = row.data();
+                        cells[2] = statusBadge(res.new_status || 'ACTIVE');
+                        cells[1] = actionBtns(rec.idx, '');
+                        row.data(cells).draw(false);
+                        done++;
+                    } else {
+                        failed++;
+                    }
+                    approveNext(rest);
+                });
+            }
+            approveNext(toApprove);
+        });
+    }
+
+    /* ── Add Row ─────────────────────────────────────────────────────── */
+    function addRow() {
+        var rdModalEl = document.getElementById('rdModal');
+        if (!rdModalEl) return;
+        $(rdModalEl).removeData('editIdx');
+        document.getElementById('rdModalTitle').innerHTML = '<i class="ti ti-plus me-1"></i>Add New Record';
+        $('#rd-counterparty,#rd-econgroup,#rd-banker,#rd-taxid,#rd-eci,#rd-spn,#rd-casid,#rd-ucn,#rd-commacr,#rd-fxacr').val('');
+        $('#rd-b3account').val('73760.10-2');
+        $('#rd-sigtype').val('');
+        bootstrap.Modal.getOrCreateInstance(rdModalEl).show();
+    }
+
+    /* ── Reference Data modal save ──────────────────────────────────── */
+    $(document).on('click', '#rd-save-btn', function() {
+        var rdModalEl = document.getElementById('rdModal');
+        var editIdx   = $(rdModalEl).data('editIdx');
+        var editRow   = $(rdModalEl).data('editRow');
+
+        var fields = {
+            'COUNTERPARTY':         $('#rd-counterparty').val().toUpperCase(),
+            'ECONOMIC GROUP':       $('#rd-econgroup').val().toUpperCase(),
+            'BANKER':               $('#rd-banker').val(),
+            'SIGNATURE TYPE':       ($('#rd-sigtype').val() || '').toUpperCase(),
+            'TAX ID':               $('#rd-taxid').val(),
+            'ECI':                  $('#rd-eci').val().toUpperCase(),
+            'SPN':                  $('#rd-spn').val().toUpperCase(),
+            'CASID':                $('#rd-casid').val().toUpperCase(),
+            'UCN':                  $('#rd-ucn').val().toUpperCase(),
+            'B3 ACCOUNT':           $('#rd-b3account').val().toUpperCase(),
+            'COMMODITIES ACCRONYM': $('#rd-commacr').val().toUpperCase(),
+            'FX CASH ACCRONYM':     $('#rd-fxacr').val().toUpperCase()
+        };
+
+        if (editIdx !== undefined && editIdx !== null && !isNaN(editIdx)) {
+            // Edit
+            apiCall('/api/b3/update', {table:'refdata', idx: editIdx, fields: fields, action:'edit'}, function(res) {
+                if (res.ok) {
+                    if (editRow) {
+                        editRow.data([
+                            checkboxCell(), actionBtns(editIdx, CURRENT_USER), statusBadge('PENDING'),
+                            fields['COUNTERPARTY'], fields['ECONOMIC GROUP'], fields['BANKER'],
+                            fields['SIGNATURE TYPE'], fields['TAX ID'], fields['ECI'], fields['SPN'],
+                            fields['CASID'], fields['UCN'], fields['B3 ACCOUNT'],
+                            fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
+                        ]).draw(false);
+                    }
+                    bootstrap.Modal.getInstance(rdModalEl).hide();
+                    Swal.fire({title: t('rd-swal-saved','Saved!'), text: t('rd-swal-saved-text','Status set to Pending.'), icon:'success', timer:1500, showConfirmButton:false});
+                } else {
+                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to save.', 'error');
+                }
+            });
+        } else {
+            // Add
+            apiCall('/api/b3/add', {table:'refdata', fields: fields}, function(res) {
+                if (res.ok) {
+                    dt.row.add([
+                        checkboxCell(), actionBtns(res.idx, CURRENT_USER), statusBadge('PENDING'),
+                        fields['COUNTERPARTY'], fields['ECONOMIC GROUP'], fields['BANKER'],
+                        fields['SIGNATURE TYPE'], fields['TAX ID'], fields['ECI'], fields['SPN'],
+                        fields['CASID'], fields['UCN'], fields['B3 ACCOUNT'],
+                        fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
+                    ]).draw(false);
+                    bootstrap.Modal.getInstance(rdModalEl).hide();
+                    Swal.fire({title: t('rd-swal-saved','Added!'), icon:'success', timer:1200, showConfirmButton:false});
+                } else {
+                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to add.', 'error');
+                }
+            });
         }
     });
 
-});
+    /* ── Event delegation ────────────────────────────────────────────── */
+    $(document).on('click', '.btn-rd-edit', function() {
+        var row = dt.row($(this).closest('tr'));
+        if (!row.node()) return;
+        enterEdit(row);
+    });
+
+    $(document).on('click', '.btn-rd-confirm', function() {
+        handleApprove(this);
+    });
+
+    $(document).on('click', '.btn-rd-delete', function() {
+        handleDeactivate(this);
+    });
+
+}); // end ready
 </script>
 {% endblock extra_javascript %}

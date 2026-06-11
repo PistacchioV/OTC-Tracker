@@ -1,6 +1,6 @@
 /**
- * Template Name: UBold - Admin & Dashboard Template
- * By (Author): Coderthemes
+ * Template Name: OTC Tracker - Admin & Dashboard Template
+ * By (Author): JPM
  * Module/App (File Name): Apps Kanban
  */
 document.addEventListener("DOMContentLoaded", () => {

@@ -3,12 +3,19 @@
 //
 
 .dropzone {
-    border: 2px dashed var(--#{$prefix}border-color);
+    border: 1.5px dashed rgba(0, 102, 204, 0.35); // Apple Action Blue dashed border
     background: $input-bg;
-    border-radius: 8px;
+    border-radius: 1.125rem; // Apple rounded.lg
     cursor: pointer;
     min-height: 150px;
     padding: 20px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+
+    &:hover,
+    &.dz-drag-hover {
+        background: rgba(0, 102, 204, 0.03);
+        border-color: rgba(0, 102, 204, 0.6);
+    }
 
     .dz-message {
         text-align: center;

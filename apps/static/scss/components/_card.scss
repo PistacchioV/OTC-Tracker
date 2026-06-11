@@ -2,8 +2,11 @@
 // _card.scss
 //
 
+// Apple store-utility-card: white bg, hairline border, 18px radius, no shadow
 .card {
-    box-shadow: $card-box-shadow;
+    box-shadow: none;
+    border: 1px solid rgba(0, 0, 0, 0.06) !important; // Apple hairline
+    border-radius: 1.125rem !important;               // Apple rounded.lg = 18px
     margin-bottom: $spacer;
 
     .card-body {
@@ -37,6 +40,8 @@
 
     .card-title {
         font-size: 15px;
+        font-weight: 600;           // Apple body-strong weight
+        letter-spacing: -0.224px;   // Apple caption tracking
         text-transform: none;
     }
 

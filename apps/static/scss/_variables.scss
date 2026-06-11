@@ -14,6 +14,9 @@ $theme-minimal:          true;
 $theme-flat:             true;
 $theme-material:         true;
 $theme-galaxy:           true;
+$theme-retro:            true;
+$theme-neon:             true;
+$theme-pixel:            true;
 
 // Color system
 
@@ -48,14 +51,14 @@ $grays: (
 // fusv-enable
 
 // scss-docs-start color-variables
-$blue:       #4a81d4;
+$blue:       #0066cc;   // Apple Action Blue — single interactive accent
 $indigo:     #6b5eae;
 $purple:     #6658dd;
 $pink:       #f672a7;
-$red:        #f1556c;
+$red:        #d93025;   // Apple-aligned danger
 $orange:     #fd7e14;
 $yellow:     #f7b84b;
-$green:      #0acf97;
+$green:      #1a8a4a;   // Apple-aligned success
 $teal:       #1abc9c;
 $cyan:       #43bfe5;
 // scss-docs-end color-variables
@@ -309,14 +312,14 @@ $cyans: (
 // fusv-enable
 
 // scss-docs-start theme-color-variables
-$primary:       $purple;
-$secondary:     $blue;
-$success:       $teal;
+$primary:       $blue;      // Apple Action Blue #0066cc
+$secondary:     #5e5ce6;    // Apple indigo for secondary elements
+$success:       $green;     // Apple-aligned green
 $info:          $cyan;
 $warning:       $yellow;
-$danger:        $red;
-$light:         $gray-200;
-$dark:          $gray-900;
+$danger:        $red;       // Apple-aligned danger red
+$light:         #f5f5f7;    // Apple canvas-parchment
+$dark:          #1d1d1f;    // Apple near-black ink
 // scss-docs-end theme-color-variables
 
 // scss-docs-start theme-colors-map
@@ -493,10 +496,10 @@ $position-values: (
 // Settings for the `<body>` element.
 
 $body-text-align:           null;
-$body-color:                #4c4c5c;
-$body-bg:                   #f5f6f8;
+$body-color:                #1d1d1f;   // Apple near-black ink
+$body-bg:                   #f5f5f7;   // Apple canvas-parchment
 
-$body-secondary-color:      #9ba6b7; //#8e92ad
+$body-secondary-color:      #7a7a7a;   // Apple ink-muted-48
 $body-secondary-bg:         $white;
 
 $body-tertiary-color:       rgba($body-color, .5);
@@ -596,27 +599,28 @@ $border-widths: (
   5: 5px
 );
 $border-style:                solid;
-$border-color:                $gray-300;
-$border-color-translucent:    $gray-200;
+$border-color:                #e0e0e0;   // Apple hairline
+$border-color-translucent:    rgba(0, 0, 0, 0.08); // Apple divider-soft
 // scss-docs-end border-variables
 
 // scss-docs-start border-radius-variables
-$border-radius:               .3rem;
-$border-radius-sm:            .25rem;
-$border-radius-lg:            .4rem;
-$border-radius-xl:             1rem;
+$border-radius:               0.6875rem;  // 11px — Apple rounded.md (Pearl Button)
+$border-radius-sm:            0.5rem;     //  8px — Apple rounded.sm (utility buttons)
+$border-radius-lg:            1.125rem;   // 18px — Apple rounded.lg (utility cards)
+$border-radius-xl:            1.5rem;
 $border-radius-xxl:           2rem;
-$border-radius-pill:          50rem;
+$border-radius-pill:          50rem;      // Apple pill — signature CTA shape
 // scss-docs-end border-radius-variables
 // fusv-disable
 $border-radius-2xl:           $border-radius-xxl; // Deprecated in v5.3.0
 // fusv-enable
 
 // scss-docs-start box-shadow-variables
-$box-shadow:                  0px 1px 4px 0px rgba(130, 143, 163, 0.15);
-$box-shadow-sm:               0 0.75rem 6rem rgba(56, 65, 74, 0.03);
-$box-shadow-lg:               0 0.25rem 1rem rgba(var(--#{$prefix}body-color-rgb), .2);
-$box-shadow-inset:            inset 0 1px 2px rgba(var(--#{$prefix}body-color-rgb), .075);
+// Apple: elevation = hairline border, not shadows. UI chrome has zero shadow.
+$box-shadow:                  0 2px 8px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
+$box-shadow-sm:               0 0 0 1px rgba(0, 0, 0, 0.06);  // hairline only
+$box-shadow-lg:               0 4px 20px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
+$box-shadow-inset:            inset 0 1px 2px rgba(0, 0, 0, 0.04);
 // scss-docs-end box-shadow-variables
 
 $component-active-color:      $white;
@@ -660,7 +664,8 @@ $aspect-ratios: (
 
 // scss-docs-start font-variables
 // stylelint-disable value-keyword-case
-$font-family-sans-serif:      "Nunito", sans-serif;
+// Apple font stack: SF Pro on Apple devices, Inter/system-ui elsewhere
+$font-family-sans-serif:      system-ui, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 $font-family-monospace:       SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 // stylelint-enable value-keyword-case
 $font-family-base:            var(--#{$prefix}font-sans-serif);
@@ -683,7 +688,7 @@ $font-weight-bolder:          bolder;
 
 $font-weight-base:            $font-weight-normal;
 
-$line-height-base:            1.5;
+$line-height-base:            1.47; // Apple body line-height
 $line-height-sm:              1.25;
 $line-height-lg:              2;
 

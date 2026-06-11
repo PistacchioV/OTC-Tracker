@@ -95,49 +95,45 @@
                 <div class="card-body min-vh-100 d-flex flex-column justify-content-center">
                     <div class="auth-brand mb-0 text-center">
                         <a class="logo-dark" href="/">
-                            <img alt="dark logo" height="28" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" />
+                            <img alt="dark logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" />
                         </a>
                         <a class="logo-light" href="/">
-                            <img alt="logo" height="28" src="{{ config.ASSETS_ROOT }}/images/logo.png" />
+                            <img alt="logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo.png" />
                         </a>
                     </div>
                     <div class="mt-auto">
-                        <p class="text-muted text-center auth-sub-text mx-auto">We've emailed you a 6-digit verification
-                            code we
-                            sent to</p>
+                        <p class="text-muted text-center auth-sub-text mx-auto" data-lang="auth-2fa-sub">We’ve emailed you a 6-digit verification code sent to</p>
                         <div class="text-center mb-4">
                             <div class="fw-bold fs-3">******6789</div>
                         </div>
                         <form class="mt-4">
                             <div class="mb-3">
-                                <label class="form-label d-flex">Enter your 6-digit code <span
-                                        class="text-danger">*</span></label>
+                                <label class="form-label d-flex"><span data-lang="auth-2fa-code-label">Enter your 6-digit code</span> <span
+                                        class="text-danger ms-1">*</span></label>
                                 <div class="d-flex gap-2 two-factor">
-                                    <input class="form-control text-center" required="" type="text" />
-                                    <input class="form-control text-center" required="" type="text" />
-                                    <input class="form-control text-center" required="" type="text" />
-                                    <input class="form-control text-center" required="" type="text" />
-                                    <input class="form-control text-center" required="" type="text" />
-                                    <input class="form-control text-center" required="" type="text" />
+                                    <input class="form-control" required="" type="text" maxlength="1" autofocus />
+                                    <input class="form-control" required="" type="text" maxlength="1" />
+                                    <input class="form-control" required="" type="text" maxlength="1" />
+                                    <input class="form-control" required="" type="text" maxlength="1" />
+                                    <input class="form-control" required="" type="text" maxlength="1" />
+                                    <input class="form-control" required="" type="text" maxlength="1" />
                                 </div>
                             </div>
                             <div class="d-grid">
-                                <button class="btn btn-primary fw-semibold py-2" type="submit">Confirm</button>
+                                <button class="btn btn-primary fw-semibold py-2" type="submit" data-lang="auth-confirm-btn">Confirm</button>
                             </div>
                         </form>
                     </div>
                     <p class="text-muted text-center mt-4 mb-0">
-                        Don’t have a code? <a class="text-decoration-underline link-offset-2 fw-semibold"
-                            href="#">Resend</a>
-                        or <a class="text-decoration-underline link-offset-2 fw-semibold" href="#">Call Us</a>
+                        <span data-lang="auth-no-code">Don’t have a code?</span> <a class="text-decoration-underline link-offset-2 fw-semibold"
+                            href="#" data-lang="auth-resend">Resend</a>
                     </p>
                     <p class="text-muted text-center mt-4 mb-0">
-                        Return to <a class="text-decoration-underline link-offset-3 fw-semibold"
-                            href="/auth-2-sign-in">Sign in</a>
+                        <span data-lang="auth-return">Return to</span> <a class="text-decoration-underline link-offset-3 fw-semibold"
+                            href="/auth-2-sign-in" data-lang="auth-return-signin">Sign in</a>
                     </p>
                     <p class="text-center text-muted mt-auto mb-0">
-                        ©
-                        UBold — by <span class="fw-semibold">Coderthemes</span>
+                        © <span data-lang="auth-footer">OTC Tracker — by</span> <span class="fw-semibold">JPMorgan Chase</span>
                     </p>
                 </div>
             </div>

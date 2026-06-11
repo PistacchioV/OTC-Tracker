@@ -1,0 +1,263 @@
+//
+// Pixel Theme Mode
+//
+
+$theme-pixel-colors: (
+    'primary': #5c6bc0,
+    'secondary': #2281bc,
+    'success': #36c398,
+    'info': #26c6da,
+    'warning': #ffb810,
+    'danger': #f65161
+);
+
+@if $theme-pixel ==true {
+
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap');
+
+    html[data-skin='pixel'] {
+        --#{$prefix}font-sans-serif: "Google Sans", sans-serif;
+        --#{$prefix}font-family-secondary: "Google Sans", sans-serif;
+
+        --#{$prefix}body-font-size: 13px;
+        --#{$prefix}body-bg: #eff4f7;
+        --#{$prefix}secondary-bg: #ffffff;
+
+        --#{$prefix}theme-card-border-width: 0;
+        --#{$prefix}theme-card-border-color: #edf2f9;
+        --#{$prefix}theme-card-box-shadow: 0 2px 4px rgba(34, 7, 31, 0.05);
+        --#{$prefix}box-shadow: 0 3px 6px rgba(34, 7, 31, 0.05);
+        --#{$prefix}border-radius: 3px;
+
+        --#{$prefix}font-weight-medium: 500;
+        --#{$prefix}font-weight-semibold: 600;
+        --#{$prefix}font-weight-bold: 700;
+
+        --#{$prefix}font-size-xxs: 11px;
+        --#{$prefix}font-size-xs: 12px;
+        --#{$prefix}font-size-base: 13px;
+        --#{$prefix}font-size-md: 14px;
+        --#{$prefix}font-size-lg: 16px;
+        --#{$prefix}font-size-xl: 18px;
+        --#{$prefix}font-size-xxl: 20px;
+
+        // Menu items
+        --#{$prefix}sidenav-item-icon-size: 1rem;
+        --#{$prefix}sidenav-item-gap: 12px;
+        --#{$prefix}sidenav-item-padding-x: 12px;
+        --#{$prefix}sidenav-item-padding-y: 8px;
+        --#{$prefix}sidenav-item-font-size: 0.875rem;
+        --#{$prefix}sidenav-item-font-weight: 400;
+
+        // Sub Menu Items
+        --#{$prefix}sidenav-sub-item-font-size: 0.875rem;
+        --#{$prefix}sidenav-sub-item-font-weight: 400;
+        --#{$prefix}sidenav-sub-item-gap: 4px;
+        --#{$prefix}sidenav-sub-item-padding-x: 10px;
+        --#{$prefix}sidenav-sub-item-padding-y: 7px;
+
+        // Light left-sidebar
+        &[data-menu-color='light'] {
+            --#{$prefix}sidenav-bg: #{$white};
+            --#{$prefix}sidenav-border-color: #edf2f9;
+            --#{$prefix}sidenav-item-color: #{$gray-700};
+            --#{$prefix}sidenav-item-hover-color: #2281bc;
+            --#{$prefix}sidenav-item-hover-bg: #eff4f7;
+            --#{$prefix}sidenav-item-active-color: #2281bc;
+            --#{$prefix}sidenav-item-active-bg: #eff4f7;
+        }
+
+        // Gray left-sidebar
+        &[data-menu-color='gray'] {
+            --#{$prefix}sidenav-bg: #e3e8eb;
+            --#{$prefix}sidenav-border-color: #e3e8eb;
+            --#{$prefix}sidenav-item-color: #{$gray-700};
+            --#{$prefix}sidenav-item-hover-color: #2281bc;
+            --#{$prefix}sidenav-item-hover-bg: #dde2e5;
+            --#{$prefix}sidenav-item-active-color: #212b29;
+            --#{$prefix}sidenav-item-active-bg: #dde2e5;
+        }
+
+        // Dark Left Sidebar
+        &[data-menu-color='dark'] {
+            --#{$prefix}sidenav-bg: #263238;
+            --#{$prefix}sidenav-border-color: #263238;
+            --#{$prefix}sidenav-item-color: #7f95a1;
+            --#{$prefix}sidenav-item-hover-color: #c4e0ef;
+            --#{$prefix}sidenav-item-hover-bg: #323e44;
+            --#{$prefix}sidenav-item-active-color: #c4e0ef;
+            --#{$prefix}sidenav-item-active-bg: #323e44;
+        }
+
+        // Gradient Menu
+        &[data-menu-color='gradient'] {
+            --#{$prefix}sidenav-bg: #{linear-gradient(to right, #4f546c, #2a2a3e)};
+            --#{$prefix}sidenav-border-color: null;
+            --#{$prefix}sidenav-item-color: #979db9;
+            --#{$prefix}sidenav-item-hover-color: #d7defd;
+            --#{$prefix}sidenav-item-hover-bg: rgba(219, 236, 255, 0.05);
+            --#{$prefix}sidenav-item-active-color: #d7defd;
+            --#{$prefix}sidenav-item-active-bg: rgba(219, 236, 255, 0.05);
+        }
+
+        // Image Menu
+        &[data-menu-color='image'] {
+            --#{$prefix}sidenav-bg: #{linear-gradient(to bottom right, rgba(16, 16, 30, 0.85), #1f2650), url('/static/images/sidenav-bg.jpg') center/cover no-repeat};
+            --#{$prefix}sidenav-border-color: null;
+            --#{$prefix}sidenav-item-color: #799cb7;
+            --#{$prefix}sidenav-item-hover-color: #bccee4;
+            --#{$prefix}sidenav-item-hover-bg: #2f3742;
+            --#{$prefix}sidenav-item-active-color: #cfdff1;
+            --#{$prefix}sidenav-item-active-bg: rgba(219, 236, 255, 0.05);
+        }
+
+        // Dark Mode
+        &[data-bs-theme='dark'][data-menu-color='dark'],
+        &[data-bs-theme='dark'][data-menu-color='gray'],
+        &[data-bs-theme='dark'][data-menu-color='light'] {
+            --#{$prefix}sidenav-bg: #1e1f27;
+            --#{$prefix}sidenav-border-color: #2c2d38;
+            --#{$prefix}sidenav-item-color: #8495ab;
+            --#{$prefix}sidenav-item-hover-color: #bccee4;
+            --#{$prefix}sidenav-item-hover-bg: #2f3742;
+            --#{$prefix}sidenav-item-active-color: #ced6df;
+            --#{$prefix}sidenav-item-active-bg: #22232c;
+        }
+
+        // Light Topbar
+        &[data-topbar-color='light'] {
+            --#{$prefix}topbar-bg: #ffffff;
+            --#{$prefix}topbar-item-color: #{$gray-700};
+            --#{$prefix}topbar-item-hover-color: #2281bc;
+            --#{$prefix}topbar-search-bg: #f3f8fb;
+            --#{$prefix}topbar-search-border: #f3f8fb;
+        }
+
+        // Gray Topbar
+        &[data-topbar-color='gray'] {
+            --#{$prefix}topbar-bg: #eff4f7;
+            --#{$prefix}topbar-item-color: #{$gray-700};
+            --#{$prefix}topbar-item-hover-color: #2281bc;
+            --#{$prefix}topbar-search-bg: #e0e8ed;
+            --#{$prefix}topbar-search-border: #e0e8ed;
+        }
+
+        // Dark Topbar
+        &[data-topbar-color='dark'] {
+            --#{$prefix}topbar-bg: #37474f;
+            --#{$prefix}topbar-item-color: #95b3c3;
+            --#{$prefix}topbar-item-hover-color: #c4e0ef;
+            --#{$prefix}topbar-search-bg: #485962;
+            --#{$prefix}topbar-search-border: #485962;
+        }
+
+        // Gradient Topbar
+        &[data-topbar-color='gradient'] {
+            --#{$prefix}topbar-bg: #{linear-gradient(to bottom, #535976, #2a2a3e)};
+            --#{$prefix}topbar-item-color: rgba(255, 255, 255, 0.7);
+            --#{$prefix}topbar-item-hover-color: #ffffff;
+            --#{$prefix}topbar-search-bg: rgba(255, 255, 255, 0.1);
+            --#{$prefix}topbar-search-border: rgba(255, 255, 255, 0.1);
+        }
+
+        // Topbar (Dark Mode)
+        &[data-bs-theme='dark'][data-topbar-color='dark'],
+        &[data-bs-theme='dark'][data-topbar-color='light'],
+        &[data-bs-theme='dark'][data-topbar-color='gray'] {
+            --#{$prefix}topbar-bg: #252630;
+            --#{$prefix}topbar-item-color: #adb5bf;
+            --#{$prefix}topbar-item-hover-color: #e0eeff;
+            --#{$prefix}topbar-search-bg: #2d2e3c;
+            --#{$prefix}topbar-search-border: #2d2e3c;
+        }
+
+        @each $name, $value in $theme-pixel-colors {
+            --#{$prefix}#{$name}: #{$value};
+        }
+
+        @each $name, $value in $theme-pixel-colors {
+            --#{$prefix}#{$name}-rgb: #{to-rgb($value)};
+        }
+
+        @each $name, $value in $theme-pixel-colors {
+            --#{$prefix}#{$name}-bg-subtle: #{rgba($value, 0.15)};
+        }
+
+        @each $name, $value in $theme-pixel-colors {
+            --#{$prefix}#{$name}-border-subtle: #{rgba($value, 0.3)};
+        }
+
+        @each $name, $value in $theme-pixel-colors {
+            --#{$prefix}#{$name}-text-emphasis: #{shade-color($value, 25%)};
+        }
+
+        // Chart Colors
+        --#{$prefix}chart-primary: #26c6da; // Main Color
+        --#{$prefix}chart-primary-rgb: #{to-rgb(#26c6da)};
+        --#{$prefix}chart-secondary: #5c6bc0; // Secondary Color
+        --#{$prefix}chart-secondary-rgb: #{to-rgb(#5c6bc0)};
+        --#{$prefix}chart-alpha: #ffb810; // Success Color
+        --#{$prefix}chart-alpha-rgb: #{to-rgb(#ffb810)};
+        --#{$prefix}chart-beta: #f65161; // Danger Color
+        --#{$prefix}chart-beta-rgb: #{to-rgb(#f65161)};
+        --#{$prefix}chart-gamma: #36c398; // Warning Color
+        --#{$prefix}chart-gamma-rgb: #{to-rgb(#36c398)};
+        --#{$prefix}chart-delta: #26c6da; // Info Color
+        --#{$prefix}chart-delta-rgb: #{to-rgb(#26c6da)};
+        --#{$prefix}chart-zeta: #2281bc; // Purple or custom Color
+        --#{$prefix}chart-zeta-rgb: #{to-rgb(#2281bc)};
+        --#{$prefix}chart-gray: #edeff3; // Gray Color
+        --#{$prefix}chart-gray-rgb: #{to-rgb(#edeff3)};
+        --#{$prefix}chart-dark: #396699; // Primary Dark Color
+        --#{$prefix}chart-dark-rgb: #{to-rgb(#396699)};
+        --#{$prefix}chart-border-color: #ecf4fc; // Border Color
+        --#{$prefix}chart-title-color: #bbcae1; // Title Color
+    }
+
+    @if $enable-dark-mode {
+        @include color-mode(dark, true) {
+            &[data-skin='pixel'] {
+                --#{$prefix}body-bg: #{#17181e};
+                --#{$prefix}body-bg-rgb: #{to-rgb(#17181e)};
+
+                --#{$prefix}secondary-bg: #{#1b1c22};
+                --#{$prefix}secondary-bg-rgb: #{to-rgb(#1b1c22)};
+
+                --#{$prefix}box-shadow: #{0px 0px 30px rgba(0, 0, 0, 0.3)};
+
+                --#{$prefix}theme-card-border-color: #293036;
+
+                --#{$prefix}tertiary-bg: #252630;
+
+                --#{$prefix}chart-gray: #40424f;
+                --#{$prefix}chart-gray-rgb: #{to-rgb(#40424f)};
+
+                --#{$prefix}chart-border-color: #242c31;
+                --#{$prefix}chart-gray: #40424f;
+                --#{$prefix}chart-gray-rgb: #{to-rgb(#40424f)};
+
+                // Extra CSS
+                .card,
+                .dropdown-menu {
+                    border-width: 1px !important;
+                }
+            }
+        }
+    }
+}
+
+//
+//  Pixel Theme
+//
+html[data-skin='pixel'] {
+
+    .pro-username {
+        font-size: 13px;
+    }
+
+    .card {
+        .card-title {
+            font-weight: 600;
+        }
+    }
+}

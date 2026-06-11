@@ -2,6 +2,39 @@
 // tables.scss
 //
 
+// Apple: clean, data-dense table header — semibold, tight tracking, hairline divider
+.table {
+    > thead > tr > th {
+        font-weight: 600;
+        letter-spacing: -0.224px;
+        font-size: 0.8125rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+        color: var(--#{$prefix}body-color);
+    }
+
+    > tbody > tr > td,
+    > tbody > tr > th {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        vertical-align: middle;
+    }
+
+    > tbody > tr:last-child > td,
+    > tbody > tr:last-child > th {
+        border-bottom: none;
+    }
+
+    // Apple hover — barely-there Action Blue tint
+    &.table-hover > tbody > tr:hover > * {
+        background-color: rgba(0, 102, 204, 0.04) !important;
+        color: inherit;
+    }
+}
+
+// Apple: striped rows — minimal alternating surface
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
 // Custom table Small head
 .thead-sm {
     > * > * {

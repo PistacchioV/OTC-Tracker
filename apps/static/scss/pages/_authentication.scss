@@ -13,6 +13,22 @@
     }
 }
 
+// Apple: auth form card surface
+.auth-box-form {
+    border-radius: 0 !important; // full-bleed in split layout
+    overflow: hidden;
+
+    // Remap decorative SVG colors → Action Blue monochrome
+    .position-absolute svg {
+        path[fill="#089df1"] { fill: rgba(0, 102, 204, 0.9); }
+        path[fill="#7b70ef"] { fill: rgba(0, 102, 204, 0.7); }
+        path[fill="#f9bf59"] { fill: rgba(0, 102, 204, 0.5); }
+        path[fill="#f7577e"] { fill: rgba(0, 102, 204, 0.6); }
+        path[fill="#FF4C3E"] { fill: rgba(0, 102, 204, 0.8); }
+        path[stroke="#089df1"] { stroke: rgba(0, 102, 204, 0.6); }
+    }
+}
+
 // Auth Brand Logo (Light & Dark Mode)
 .auth-brand {
     margin-bottom: 2rem;
@@ -34,8 +50,22 @@
     background-size: cover;
 }
 
+// Apple: Action Blue overlay (replaces dark gray)
 .auth-overlay {
-    background: linear-gradient(to top, #313a46, rgba(49,58,70, 0.8), rgba(49,58,70, 0.5));
+    background: linear-gradient(to top, rgba(0, 26, 77, 0.92), rgba(0, 70, 153, 0.6), rgba(0, 102, 204, 0.12));
+}
+
+// Apple: 2FA digit inputs — large, centered, rounded.md
+.two-factor {
+    .form-control {
+        height: 3.25rem;
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: 0;
+        padding: 0;
+        text-align: center;
+        border-radius: 0.6875rem !important;
+    }
 }
 
 // Dark mode

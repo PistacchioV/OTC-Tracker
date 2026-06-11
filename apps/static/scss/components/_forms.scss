@@ -2,12 +2,35 @@
 // _forms.scss
 //
 
-// Form Control
+// Apple: rounded.md inputs, Action Blue focus ring, no shadow
 .form-control,
 .form-select {
+    border-radius: 0.6875rem !important; // Apple rounded.md
+    box-shadow: none !important;
+
     &:hover {
         border-color: $input-focus-border-color;
     }
+
+    &:focus {
+        border-color: #0066cc !important;
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15) !important; // Apple focus ring
+        outline: none;
+    }
+}
+
+// Apple: form label — semibold, compact, tight tracking
+.form-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: -0.224px;
+    margin-bottom: 0.375rem;
+}
+
+// Apple: search input pill shape
+.app-search .form-control {
+    border-radius: 50rem !important; // pill for search
+    padding-left: 2.25rem;
 }
 
 // Form Control Small

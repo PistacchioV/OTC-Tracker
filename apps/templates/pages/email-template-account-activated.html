@@ -1,124 +1,98 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-
 <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width"/>
-    <title>Account Activated</title>
-    <!--<link rel="shortcut icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">-->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet"/>
-    <style>
-        body {
-          margin: 0;
-          font-family: 'Roboto', Arial, sans-serif;
-          background-color: #f4f6f9;
-          color: #333;
-        }
-
-        .email-wrapper {
-          width: 100%;
-          padding: 40px 0;
-          background-color: #f4f6f9;
-        }
-
-        .email-content {
-          max-width: 600px;
-          margin: auto;
-          background-color: #fff;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-          overflow: hidden;
-        }
-
-        .email-header {
-          background-color: #38414a;
-          padding: 24px;
-          text-align: center;
-        }
-
-        .email-header img {
-          height: 28px;
-          margin-bottom: 10px;
-        }
-
-        .email-header span {
-          display: block;
-          color: #fff;
-          font-size: 15px;
-        }
-
-        .email-body {
-          padding: 30px;
-        }
-
-        .email-body h2 {
-          font-size: 20px;
-          margin-top: 0;
-          margin-bottom: 16px;
-          color: #222;
-        }
-
-        .email-body p {
-          font-size: 15px;
-          line-height: 1.6;
-          margin-bottom: 20px;
-        }
-
-        .btn {
-          display: inline-block;
-          padding: 12px 24px;
-          background-color: #02c0ce;
-          color: #fff;
-          font-weight: bold;
-          text-decoration: none;
-          border-radius: 6px;
-          transition: background 0.3s ease;
-        }
-
-        .btn:hover {
-          background-color: #01acb9;
-        }
-
-        .email-footer {
-          text-align: center;
-          font-size: 12px;
-          color: #888;
-          padding: 20px;
-          background-color: #f0f0f0;
-          border-top: 1px solid #e0e0e0;
-        }
-
-        .email-footer a {
-          color: #888;
-          text-decoration: underline;
-        }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker - Account Activated</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td {font-family: Arial, sans-serif !important;}
     </style>
+    <![endif]-->
 </head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; color: #333333;">
 
-<body>
-<div class="email-wrapper">
-    <div class="email-content">
-        <div class="email-header">
-            <!-- [PLACEHOLDER] Substituir com o logo oficial da JPMorgan Chase -->
-            <!--<a href="#"><img src="{{ config.ASSETS_ROOT }}/images/logo.png" alt="JPMorgan Chase"/></a>-->
-            <span>Welcome! Your account has been successfully activated.</span>
-        </div>
-        <div class="email-body">
-            <p>Hi there,</p>
-            <p>We're excited to have you on board. Your <strong>OTC Tracker account</strong> is now active and ready to use.
-            </p>
-            <p>Click the button below to access your dashboard and start exploring the features.</p>
-            <p style="text-align: center;">
-                <a href="#" class="btn">Go to Dashboard</a>
-            </p>
-            <p>If you need any help, feel free to reach out to our support team anytime.</p>
-            <p>Cheers,<br><b>JPMorgan Chase Team</b></p>
-        </div>
-        <div class="email-footer">
-            <a href="#">Contact Support</a> for assistance.
-        </div>
-    </div>
-</div>
+    <!-- Wrapper Table -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f6f9; padding: 40px 0;">
+        <tr>
+            <td align="center">
+
+                <!-- Email Container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); overflow: hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #6658dd; padding: 28px; text-align: center;">
+                            <a href="#">
+                                <img alt="OTC Tracker"
+                                     height="80"
+                                     src="cid:otc_logo"
+                                     style="height: 80px; width: auto; display: inline-block; border: 0;" />
+                            </a>
+                        </td>
+                    </tr>
+
+                    <!-- Banner -->
+                    <tr>
+                        <td style="background-color: #38414a; padding: 14px 28px; text-align: center;">
+                            <p style="color: #ffffff; font-size: 14px; margin: 0; font-weight: 500;">
+                                Welcome! Your account has been successfully activated.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="color: #333333; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+                                Hi <strong>{{ first_name }}</strong>,
+                            </p>
+                            <p style="color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+                                We're excited to have you on board. Your <strong>OTC Tracker account</strong> is now active and ready to use.
+                            </p>
+                            <p style="color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 28px 0;">
+                                Click the button below to sign in and start exploring the platform.
+                            </p>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 28px 0;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{ sign_in_url }}"
+                                           style="display: inline-block; padding: 12px 32px; background-color: #02c0ce; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 6px;">
+                                            Go to the Web Site
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+                                If you need any help, feel free to reach out to our support team anytime.
+                            </p>
+                            <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0;">
+                                Cheers,<br/>
+                                <strong>OTC Tracker Team</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8f9fa; padding: 20px 40px; text-align: center; border-top: 1px solid #e9ecef;">
+                            <p style="color: #999999; font-size: 11px; margin: 0;">
+                                &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.
+                            </p>
+                            <p style="color: #bbbbbb; font-size: 10px; margin: 6px 0 0 0;">
+                                This is an automated message. Please do not reply.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+
+            </td>
+        </tr>
+    </table>
+
 </body>
-
 </html>

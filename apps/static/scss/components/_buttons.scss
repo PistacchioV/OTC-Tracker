@@ -142,6 +142,46 @@
     --#{$prefix}btn-focus-shadow-rgb: 0 0 0 #{$btn-focus-width} rgba(var(--#{$prefix}dark-rgb), 0.5);
 }
 
+// ─── Apple button grammar ───────────────────────────────────────────────────
+// btn-primary inherits Action Blue from $primary; pill radius from $btn-border-radius
+// Primary pill CTA: Action Blue #0066cc + full pill
+.btn-primary {
+    border-radius: 50rem !important; // Apple rounded.pill — signature CTA
+    padding: 0.6875rem 1.375rem;     // Apple 11px × 22px
+    font-size: 0.875rem;
+    font-weight: 400;
+    letter-spacing: -0.224px;        // Apple caption tracking
+    box-shadow: none !important;
+
+    &:active { transform: scale(0.97); } // Apple press micro-interaction
+}
+
+// Secondary ghost pill
+.btn-outline-primary {
+    border-radius: 50rem !important;
+    padding: 0.6875rem 1.375rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    letter-spacing: -0.224px;
+    box-shadow: none !important;
+
+    &:active { transform: scale(0.97); }
+}
+
+// Utility button: compact, 8px radius (Apple button-dark-utility)
+.btn-secondary,
+.btn-outline-secondary,
+.btn-soft-secondary {
+    border-radius: 0.5rem !important; // Apple rounded.sm
+    box-shadow: none !important;
+}
+
+// Remove box-shadow from all btn variants
+.btn {
+    box-shadow: none !important;
+    &:focus, &:active { box-shadow: none !important; }
+}
+
 .btn-soft-dark {
     --#{$prefix}btn-hover-color: var(--#{$prefix}light);
     --#{$prefix}btn-active-color: var(--#{$prefix}light);

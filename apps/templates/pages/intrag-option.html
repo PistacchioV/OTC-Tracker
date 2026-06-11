@@ -1,0 +1,554 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Intrag — Option{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  .card-body { padding: 5px; }
+  .table-responsive { overflow-x: auto; }
+  #intrag-opt-table th {
+      white-space: nowrap !important; min-width: 130px; padding: 8px 12px;
+      overflow: hidden; text-overflow: ellipsis; max-width: 280px;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  .dt-scroll-head thead th,
+  .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th,
+  .dataTables_scrollHeadInner thead th {
+      white-space: nowrap !important;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  #intrag-opt-table td {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 0.8rem; text-align: center; vertical-align: middle;
+  }
+  #column-search-inputs th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
+  #column-search-inputs input { font-size: 12px; height: 28px; }
+  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text { background: #6c757d; }
+  #intrag-opt-table .btn-sm.rounded-circle { width: 28px; height: 28px; padding: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; }
+  /* Dark mode overrides */
+  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
+  [data-bs-theme=dark] #column-search-inputs th { border-top-color: rgba(255,255,255,0.08) !important; }
+  [data-bs-theme=dark] #column-search-inputs input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0">Intrag — Option</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item">Intrag</li>
+                <li class="breadcrumb-item active" data-lang="nav-option">Option</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+
+                <!-- ── Smart filter bar: thin (input + search only) ─────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── Action bar / card-header ─────────────────────────────── -->
+                <div class="card-header">
+                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div id="optColToggleWrap"></div>
+                            <div id="optExportWrap"></div>
+                            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddOpt">Add Row +</button>
+                            <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelOpt" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                            <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
+                                <option value="15">15</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="intrag-opt-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs">
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="intrag-opt-col-0">Portfolio</th>
+                                    <th data-lang="intrag-opt-col-1">System ID</th>
+                                    <th data-lang="intrag-opt-col-2">Line Type ID</th>
+                                    <th data-lang="intrag-opt-col-3">Registration Date</th>
+                                    <th data-lang="intrag-opt-col-4">Holder Account</th>
+                                    <th data-lang="intrag-opt-col-5">Holder Name</th>
+                                    <th data-lang="intrag-opt-col-6">Contract</th>
+                                    <th data-lang="intrag-opt-col-7">CETIP Contract</th>
+                                    <th data-lang="intrag-opt-col-8">My Number</th>
+                                    <th data-lang="intrag-opt-col-9">Trade Type</th>
+                                    <th data-lang="intrag-opt-col-10">Writer Account</th>
+                                    <th data-lang="intrag-opt-col-11">Writer Name</th>
+                                    <th data-lang="intrag-opt-col-12">Start Date</th>
+                                    <th data-lang="intrag-opt-col-13">Maturity Date</th>
+                                    <th data-lang="intrag-opt-col-14">CETIP Number</th>
+                                    <th data-lang="intrag-opt-col-15">SISBACEN Currency Code</th>
+                                    <th data-lang="intrag-opt-col-16">Currency Symbol</th>
+                                    <th data-lang="intrag-opt-col-17">Investment Amount</th>
+                                    <th data-lang="intrag-opt-col-18">FX Base Value</th>
+                                    <th data-lang="intrag-opt-col-19">Prepaid Value</th>
+                                    <th data-lang="intrag-opt-col-20">Prepayment Unit Price</th>
+                                    <th data-lang="intrag-opt-col-21">Redemption Value</th>
+                                    <th data-lang="intrag-opt-col-22">Call Strike Price</th>
+                                    <th data-lang="intrag-opt-col-23">Put Strike Price</th>
+                                    <th data-lang="intrag-opt-col-24">Call Unit Premium</th>
+                                    <th data-lang="intrag-opt-col-25">Put Unit Premium</th>
+                                    <th data-lang="intrag-opt-col-26">Barrier Rate</th>
+                                    <th data-lang="intrag-opt-col-27">Exercise Type</th>
+                                    <th data-lang="intrag-opt-col-28">Information Source</th>
+                                    <th data-lang="intrag-opt-col-29">Bulletin</th>
+                                    <th data-lang="intrag-opt-col-30">Bulletin Time</th>
+                                    <th data-lang="intrag-opt-col-31">Maturity Rate</th>
+                                    <th data-lang="intrag-opt-col-32">Maturity Rate Description</th>
+                                    <th data-lang="intrag-opt-col-33">Query Source</th>
+                                    <th data-lang="intrag-opt-col-34">Ticker</th>
+                                    <th data-lang="intrag-opt-col-35">Quantity</th>
+                                    <th data-lang="intrag-opt-col-36">Premium Payment Date</th>
+                                    <th data-lang="intrag-opt-col-37">Asian Option Average</th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                                <tr id="column-search-inputs">
+                                    <th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="System ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Line Type ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Registration Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Holder Account"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Holder Name"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contract"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CETIP Contract"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="My Number"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Writer Account"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Writer Name"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Start Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CETIP Number"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SISBACEN Currency Code"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency Symbol"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Investment Amount"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FX Base Value"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Prepaid Value"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Prepayment Unit Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Redemption Value"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Call Strike Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Put Strike Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Call Unit Premium"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Put Unit Premium"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Barrier Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Exercise Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Information Source"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Bulletin"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Bulletin Time"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate Description"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Query Source"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Ticker"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium Payment Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Option Average"></th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+(function() {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (typeof $ !== 'undefined' && $.fn.dataTable &&
+        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+
+<script>
+// col index 2-39 = data, col 40 = hidden row ID
+var OPT_COLS = [
+    'Portfolio','System ID','Line Type ID','Registration Date','Holder Account',
+    'Holder Name','Contract','CETIP Contract','My Number','Trade Type',
+    'Writer Account','Writer Name','Start Date','Maturity Date','CETIP Number',
+    'SISBACEN Currency Code','Currency Symbol','Investment Amount','FX Base Value',
+    'Prepaid Value','Prepayment Unit Price','Redemption Value','Call Strike Price',
+    'Put Strike Price','Call Unit Premium','Put Unit Premium','Barrier Rate',
+    'Exercise Type','Information Source','Bulletin','Bulletin Time','Maturity Rate',
+    'Maturity Rate Description','Query Source','Ticker','Quantity',
+    'Premium Payment Date','Asian Option Average'
+];
+
+var selectedRowIds = new Set();
+
+function _optId() { return 'o' + Date.now() + Math.random().toString(36).substr(2,4); }
+
+$(document).ready(function() {
+    if (typeof JSZip !== 'undefined') window.JSZip = JSZip;
+
+    function exportCols() { var a=[]; for(var i=2;i<=39;i++) a.push(i); return a; }
+    function fmtExport(data,row,col,node) {
+        var inp=$(node).find('input[type!="checkbox"]');
+        return inp.length ? (inp.val()||'') : $(node).text().trim();
+    }
+
+    var table = window.intragOptTable = $('#intrag-opt-table').DataTable({
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true,
+        select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: [
+            { orderable: false, targets: [0,1] },
+            { visible: false, targets: [40] }
+        ],
+        dom: "<'row'<'col-sm-12'tr>>" +
+             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+            autoClose:true,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+            ]
+        }],
+        language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },
+        drawCallback: function() {
+            var api = this.api();
+            api.rows().every(function() {
+                var d=this.data(), id=d?d[40]:null, node=this.node();
+                if(node) $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
+            });
+            var total=api.rows().count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            if($sa.length) {
+                if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
+                else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
+                else{$sa.prop('checked',false).prop('indeterminate',true);}
+            }
+            toggleDelBtn(sel>=2);
+            console.log('[OPT-INTRAG drawCallback] total rows:', total, '| selected:', sel);
+        },
+        initComplete: function() {
+            var api = this.api();
+
+            document.querySelectorAll('#column-search-inputs th').forEach(function(th){ th.addEventListener('click',function(e){e.stopPropagation();}); });
+            document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
+                inp.addEventListener('click',function(e){e.stopPropagation();});
+                inp.addEventListener('keyup',function() {
+                    var ci=inp.closest('th').cellIndex;
+                    if(api.column(ci).search()!==this.value) api.column(ci).search(this.value).draw();
+                });
+            });
+
+            var ctw=document.getElementById('optColToggleWrap');
+            if(ctw) {
+                var dd=document.createElement('div'); dd.className='dropdown';
+                var items=OPT_COLS.map(function(lbl,i){
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
+                        ' data-column="'+(i+2)+'" id="optC'+i+'" checked>' +
+                        '<label class="form-check-label fw-medium" for="optC'+i+'">'+lbl+'</label>' +
+                        '</div></li>';
+                }).join('');
+                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button"' +
+                    ' data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="optColMenu">'+items+'</ul>';
+                ctw.appendChild(dd);
+                document.getElementById('optColMenu').addEventListener('change',function(e){
+                    if(e.target.classList.contains('toggle-vis')) table.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                });
+            }
+        }
+    });
+
+    // Move Export button into filter bar static container
+    table.buttons().container().appendTo('#optExportWrap');
+
+    // Fix double-header on first load: scrollX clones <thead> before height
+    // calculations run; columns.adjust() forces a re-sync after the DOM settles.
+    setTimeout(function() {
+        table.columns.adjust();
+        var shRows = document.querySelectorAll('.dataTables_scrollHead thead tr').length;
+        var sbRows = document.querySelectorAll('.dataTables_scrollBody thead tr').length;
+        var sbHead = document.querySelector('.dataTables_scrollBody thead');
+        console.log('[OPT-INTRAG header debug] scrollHead thead rows:', shRows);
+        console.log('[OPT-INTRAG header debug] scrollBody thead rows:', sbRows);
+        if (sbHead) {
+            console.log('[OPT-INTRAG header debug] scrollBody thead offsetHeight:', sbHead.offsetHeight);
+            console.log('[OPT-INTRAG header debug] scrollBody thead visibility:', getComputedStyle(sbHead).visibility);
+        }
+    }, 100);
+
+    // Add Row button (static in filter bar)
+    document.getElementById('btnAddOpt').addEventListener('click',function(){
+        var m=document.getElementById('optModal');
+        $(m).removeData('editTr');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-plus me-1"></i>Add Row — Intrag Option';
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    function toggleDelBtn(show) { var b=document.getElementById('btnDelOpt'); if(b) b.classList.toggle('d-none',!show); }
+
+    $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
+    $('[data-table-rows]').val(String(table.page.len()));
+
+    $('#selectAll').on('click',function() {
+        selectedRowIds.clear();
+        if(this.checked) { table.rows().every(function(){ var d=this.data(),id=d?d[40]:null; if(id) selectedRowIds.add(id); }); }
+        $('input[type="checkbox"]',table.rows().nodes()).prop('checked',this.checked);
+        toggleDelBtn(this.checked&&selectedRowIds.size>=2);
+        console.log('[OPT-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
+    });
+
+    $('#intrag-opt-table tbody').on('change','input[type="checkbox"]',function() {
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[40]:null;
+        if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
+        var total=table.rows().count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
+        if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
+        toggleDelBtn(sel>=2);
+    });
+
+    $(document).on('click','[data-del-selected]',function(e) {
+        e.preventDefault(); if(selectedRowIds.size===0) return;
+        var toDelete=[];
+        table.rows().every(function(){
+            var d=this.data(), id=d?d[40]:null;
+            if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
+        });
+        console.log('[OPT-INTRAG DELETE] selectedRowIds:', Array.from(selectedRowIds));
+        console.log('[OPT-INTRAG DELETE] toDelete count:', toDelete.length, toDelete.map(function(r){return r.rowIdx+':'+r.id;}));
+        if(!toDelete.length) return;
+        Swal.fire({ title:'Delete '+toDelete.length+' row(s)?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            // Sort descending so each splice doesn't shift indices of remaining rows
+            toDelete.sort(function(a,b){ return b.rowIdx - a.rowIdx; });
+            toDelete.forEach(function(r){
+                console.log('[OPT-INTRAG DELETE] removing rowIdx:', r.rowIdx, 'id:', r.id);
+                table.row(r.rowIdx).remove();
+            });
+            selectedRowIds.clear(); toggleDelBtn(false); table.draw(false);
+        });
+    });
+
+    $(document).on('click','#intrag-opt-table tbody .btn-row-delete',function(e) {
+        e.preventDefault(); var tr=$(this).closest('tr');
+        Swal.fire({ title:'Delete this row?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){ if(r.isConfirmed) table.row(tr[0]).remove().draw(false); });
+    });
+
+    $(document).on('click','#intrag-opt-table tbody .btn-row-edit',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
+        var m=document.getElementById('optModal');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag Option';
+        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+2]||''; });
+        $(m).data('editTr',tr);
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    document.getElementById('optSaveBtn').addEventListener('click',function() {
+        var m=document.getElementById('optModal'), editTr=$(m).data('editTr')||null;
+        var row=[
+            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+            '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>'
+        ];
+        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); row.push(inp?inp.value.trim():''); });
+        var id = editTr ? (table.row(editTr).data()[40]||_optId()) : _optId();
+        row.push(id);
+        if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
+        bootstrap.Modal.getInstance(m).hide();
+    });
+
+    $(document.getElementById('optModal')).on('hidden.bs.modal',function() {
+        $(this).removeData('editTr');
+        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=''; });
+    });
+
+    // Smart Filter
+    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
+        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
+        sfActive=[], sfKbdIdx=-1;
+    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2};});
+    function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML=''; sfKbdIdx=-1;
+        if(!val){sfDropdown.style.display='none';return;}
+        var q=val.toLowerCase(), matches=SF_COLS.filter(function(c){return c.label.toLowerCase().indexOf(q)!==-1;});
+        if(!matches.length){sfDropdown.style.display='none';return;}
+        matches.forEach(function(col) {
+            var li=document.createElement('li');
+            li.innerHTML='<span class="sf-type-badge sf-type-text">text</span><span>'+sfEsc(col.label)+'</span>';
+            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(col,sfInput.value.trim());});
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display='block';
+    }
+    function sfAddFilter(col,value) {
+        if(!value) return;
+        sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});
+        sfActive.push({col:col,value:value}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfRenderChips() {
+        sfChips.innerHTML='';
+        sfActive.forEach(function(f) {
+            var chip=document.createElement('span'); chip.className='smart-filter-chip';
+            chip.innerHTML='<strong>'+sfEsc(f.col.label.toUpperCase())+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.col.dtCol!==f.col.dtCol;});sfRenderChips();});
+            sfChips.appendChild(chip);
+        });
+    }
+    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
+    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfWrapper.addEventListener('click',function(){sfInput.focus();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){sfActive.forEach(function(f){table.column(f.col.dtCol).search(f.value);});table.draw();});
+    sfInput.addEventListener('keydown',function(e) {
+        if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
+        var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
+        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
+        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
+        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+});
+</script>
+
+<!-- Modal -->
+<div class="modal fade" id="optModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add Row — Intrag Option</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-0">Portfolio</label><input type="text" class="form-control form-control-sm" id="opt-f-0"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-1">System ID</label><input type="text" class="form-control form-control-sm" id="opt-f-1"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-2">Line Type ID</label><input type="text" class="form-control form-control-sm" id="opt-f-2"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-3">Registration Date</label><input type="date" class="form-control form-control-sm" id="opt-f-3"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-4">Holder Account</label><input type="text" class="form-control form-control-sm" id="opt-f-4"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-5">Holder Name</label><input type="text" class="form-control form-control-sm" id="opt-f-5"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-6">Contract</label><input type="text" class="form-control form-control-sm" id="opt-f-6"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-7">CETIP Contract</label><input type="text" class="form-control form-control-sm" id="opt-f-7"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-8">My Number</label><input type="text" class="form-control form-control-sm" id="opt-f-8"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-9">Trade Type</label><input type="text" class="form-control form-control-sm" id="opt-f-9"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-10">Writer Account</label><input type="text" class="form-control form-control-sm" id="opt-f-10"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-11">Writer Name</label><input type="text" class="form-control form-control-sm" id="opt-f-11"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-12">Start Date</label><input type="date" class="form-control form-control-sm" id="opt-f-12"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-13">Maturity Date</label><input type="date" class="form-control form-control-sm" id="opt-f-13"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-14">CETIP Number</label><input type="text" class="form-control form-control-sm" id="opt-f-14"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-15">SISBACEN Currency Code</label><input type="text" class="form-control form-control-sm" id="opt-f-15"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-16">Currency Symbol</label><input type="text" class="form-control form-control-sm" id="opt-f-16"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-17">Investment Amount</label><input type="text" class="form-control form-control-sm" id="opt-f-17"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-18">FX Base Value</label><input type="text" class="form-control form-control-sm" id="opt-f-18"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-19">Prepaid Value</label><input type="text" class="form-control form-control-sm" id="opt-f-19"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-20">Prepayment Unit Price</label><input type="text" class="form-control form-control-sm" id="opt-f-20"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-21">Redemption Value</label><input type="text" class="form-control form-control-sm" id="opt-f-21"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-22">Call Strike Price</label><input type="text" class="form-control form-control-sm" id="opt-f-22"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-23">Put Strike Price</label><input type="text" class="form-control form-control-sm" id="opt-f-23"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-24">Call Unit Premium</label><input type="text" class="form-control form-control-sm" id="opt-f-24"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-25">Put Unit Premium</label><input type="text" class="form-control form-control-sm" id="opt-f-25"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-26">Barrier Rate</label><input type="text" class="form-control form-control-sm" id="opt-f-26"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-27">Exercise Type</label><input type="text" class="form-control form-control-sm" id="opt-f-27"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-28">Information Source</label><input type="text" class="form-control form-control-sm" id="opt-f-28"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-29">Bulletin</label><input type="text" class="form-control form-control-sm" id="opt-f-29"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-30">Bulletin Time</label><input type="text" class="form-control form-control-sm" id="opt-f-30"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-31">Maturity Rate</label><input type="text" class="form-control form-control-sm" id="opt-f-31"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-32">Maturity Rate Description</label><input type="text" class="form-control form-control-sm" id="opt-f-32"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-33">Query Source</label><input type="text" class="form-control form-control-sm" id="opt-f-33"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-34">Ticker</label><input type="text" class="form-control form-control-sm" id="opt-f-34"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-35">Quantity</label><input type="text" class="form-control form-control-sm" id="opt-f-35"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-36">Premium Payment Date</label><input type="date" class="form-control form-control-sm" id="opt-f-36"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-37">Asian Option Average</label><input type="text" class="form-control form-control-sm" id="opt-f-37"></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="optSaveBtn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock extra_javascript %}

@@ -5,15 +5,15 @@
 
 @if $theme-default ==true {
 
-    // Background Light left-sidebar
+    // Background Light left-sidebar — Apple: white sidebar, Action Blue for active
     html[data-menu-color="light"] {
         --#{$prefix}sidenav-bg:                       #{$white};
-        --#{$prefix}sidenav-border-color:             #{$gray-300};
-        --#{$prefix}sidenav-item-color:               #{$gray-700};
-        --#{$prefix}sidenav-item-hover-color:         #{$primary};
-        --#{$prefix}sidenav-item-hover-bg:          null;
-        --#{$prefix}sidenav-item-active-color:        #{$primary};
-        --#{$prefix}sidenav-item-active-bg:         null;
+        --#{$prefix}sidenav-border-color:             #e0e0e0;    // Apple hairline
+        --#{$prefix}sidenav-item-color:               #1d1d1f;    // Apple near-black ink
+        --#{$prefix}sidenav-item-hover-color:         #0066cc;    // Apple Action Blue
+        --#{$prefix}sidenav-item-hover-bg:            rgba(0, 102, 204, 0.06);
+        --#{$prefix}sidenav-item-active-color:        #0066cc;    // Apple Action Blue
+        --#{$prefix}sidenav-item-active-bg:           rgba(0, 102, 204, 0.08);
     }
 
     // Dark Left Sidebar
@@ -60,10 +60,26 @@
         --#{$prefix}sidenav-item-active-bg:         #253542;
     }
 
-    // Dark Mode
-    html[data-bs-theme="dark"][data-menu-color="dark"],
-    html[data-bs-theme="dark"][data-menu-color="gray"],
+    // Dark Mode sidenav — distinct variants so "Sidenav Color" actually changes something
     html[data-bs-theme="dark"][data-menu-color="light"] {
+        --#{$prefix}sidenav-bg:                     #252636;
+        --#{$prefix}sidenav-border-color:           #33344a;
+        --#{$prefix}sidenav-item-color:             #a0aec0;
+        --#{$prefix}sidenav-item-hover-color:       #c8d8f0;
+        --#{$prefix}sidenav-item-hover-bg:          #2e304a;
+        --#{$prefix}sidenav-item-active-color:      #e2eaf6;
+        --#{$prefix}sidenav-item-active-bg:         #2e3050;
+    }
+    html[data-bs-theme="dark"][data-menu-color="dark"] {
+        --#{$prefix}sidenav-bg:                     #13141e;
+        --#{$prefix}sidenav-border-color:           #1e1f2c;
+        --#{$prefix}sidenav-item-color:             #8495ab;
+        --#{$prefix}sidenav-item-hover-color:       #bccee4;
+        --#{$prefix}sidenav-item-hover-bg:          #1e2030;
+        --#{$prefix}sidenav-item-active-color:      #ced6df;
+        --#{$prefix}sidenav-item-active-bg:         #1a1c2e;
+    }
+    html[data-bs-theme="dark"][data-menu-color="gray"] {
         --#{$prefix}sidenav-bg:                     #1e1f27;
         --#{$prefix}sidenav-border-color:           #2c2d38;
         --#{$prefix}sidenav-item-color:             #8495ab;
@@ -73,13 +89,13 @@
         --#{$prefix}sidenav-item-active-bg:         #22232c;
     }
 
-    // Light Topbar
+    // Light Topbar — Apple: parchment frosted nav
     html[data-topbar-color="light"] {
-        --#{$prefix}topbar-bg:                      #ffffff;
-        --#{$prefix}topbar-item-color:                #{$gray-700};
-        --#{$prefix}topbar-item-hover-color:          #{$primary};
-        --#{$prefix}topbar-search-bg:                 transparent;
-        --#{$prefix}topbar-search-border:           #e7e9eb;
+        --#{$prefix}topbar-bg:                      #f5f5f7;    // Apple canvas-parchment
+        --#{$prefix}topbar-item-color:              #1d1d1f;    // Apple near-black ink
+        --#{$prefix}topbar-item-hover-color:        #0066cc;    // Apple Action Blue
+        --#{$prefix}topbar-search-bg:               rgba(255, 255, 255, 0.7);
+        --#{$prefix}topbar-search-border:           #e0e0e0;    // Apple hairline
     }
 
     // Gray Topbar
@@ -109,9 +125,21 @@
         --#{$prefix}topbar-search-border:           rgba(255, 255, 255, 0.1);
     }
 
-    // Topbar (Dark Mode)
-    html[data-bs-theme="dark"][data-topbar-color="light"],
-    html[data-bs-theme="dark"][data-topbar-color="dark"],
+    // Topbar (Dark Mode) — distinct variants so "Topbar Color" actually changes something
+    html[data-bs-theme="dark"][data-topbar-color="light"] {
+        --#{$prefix}topbar-bg:                      #2c2d3e;
+        --#{$prefix}topbar-item-color:              #a0aec0;
+        --#{$prefix}topbar-item-hover-color:        #d0e4ff;
+        --#{$prefix}topbar-search-bg:               #353647;
+        --#{$prefix}topbar-search-border:           #42435a;
+    }
+    html[data-bs-theme="dark"][data-topbar-color="dark"] {
+        --#{$prefix}topbar-bg:                      #17181f;
+        --#{$prefix}topbar-item-color:              #8495ab;
+        --#{$prefix}topbar-item-hover-color:        #bccee4;
+        --#{$prefix}topbar-search-bg:               #1e1f28;
+        --#{$prefix}topbar-search-border:           #2a2b36;
+    }
     html[data-bs-theme="dark"][data-topbar-color="gray"] {
         --#{$prefix}topbar-bg:                      #252630;
         --#{$prefix}topbar-item-color:              #adb5bf;

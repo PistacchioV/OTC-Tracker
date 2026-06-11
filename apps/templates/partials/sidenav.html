@@ -118,7 +118,7 @@
                IMPORTANTE:  Não adicionar display: flex nos spans . logo-light/. logo-dark
                            pois isso sobrescreve o controle de visibilidade do tema!
                ========================================================================= #}
-            <a href="/" class="logo" style="height: 70px ! important; padding: 10px 0 !important; box-sizing: border-box !important;">
+            <a href="/dashboard" class="logo" style="height: 64px !important; padding: 7px 0 !important; box-sizing: border-box !important;">
                 
                 {# =====================================================================
                    LOGO PARA TEMA CLARO (sidebar com fundo escuro/gradiente)
@@ -127,15 +127,15 @@
                 <span class="logo logo-light">
                     {# Logo grande - exibido quando sidebar está EXPANDIDA #}
                     <span class="logo-lg">
-                        <img src="{{ config. ASSETS_ROOT }}/images/logo.png" 
+                        <img src="{{ config.ASSETS_ROOT }}/images/logo.png"
                              alt="OTC Tracker Logo"
-                             style="height: 60px !important; width: auto !important; max-height: 50px !important; object-fit:  contain; vertical-align: middle;">
+                             style="height: 50px !important; width: auto !important; object-fit: contain; vertical-align: middle;">
                     </span>
                     {# Logo pequeno - exibido quando sidebar está MINIMIZADA (condensed) #}
                     <span class="logo-sm">
-                        <img src="{{ config. ASSETS_ROOT }}/images/logo-sm.png" 
+                        <img src="{{ config.ASSETS_ROOT }}/images/logo-sm.png"
                              alt="OTC Tracker Logo Small"
-                             style="height: 33px !important; width: auto ! important; object-fit: contain; vertical-align: middle;">
+                             style="height: 28px !important; width: auto !important; max-width: 60px !important; object-fit: contain; vertical-align: middle;">
                     </span>
                 </span>
         
@@ -148,13 +148,13 @@
                     <span class="logo-lg">
                         <img src="{{ config.ASSETS_ROOT }}/images/logo-black.png" 
                              alt="OTC Tracker Logo Dark"
-                             style="height: 60px !important; width: auto !important; max-height: 50px !important; object-fit: contain; vertical-align: middle;">
+                             style="height: 50px !important; width: auto !important; object-fit: contain; vertical-align: middle;">
                     </span>
                     {# Logo pequeno - versão para sidebar minimizada #}
                     <span class="logo-sm">
-                        <img src="{{ config. ASSETS_ROOT }}/images/logo-sm. png" 
+                        <img src="{{ config.ASSETS_ROOT }}/images/logo-sm.png"
                              alt="OTC Tracker Logo Small"
-                             style="height: 33px !important; width: auto ! important; object-fit: contain; vertical-align: middle;">
+                             style="height: 28px !important; width: auto !important; max-width: 60px !important; object-fit: contain; vertical-align: middle;">
                     </span>
                 </span>
             </a>
@@ -173,14 +173,21 @@
         
                 <!-- User -->
                 <div class="sidenav-user">
-        
+                    {% set _sid  = session.get('user_sid',  '') %}
+                    {% set _name = session.get('user_name', '') %}
+                    {% set _role = session.get('user_role', '') %}
+                    {% set _initials = (_name.split()[0][0] + _name.split()[-1][0]) | upper if _name and _name.split()|length > 1 else (_name[0] | upper if _name else '?') %}
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <a href="/users-profile" class="link-reset">
-                                <img src="{{ config.ASSETS_ROOT }}/images/users/e930179.jpg" alt="user-image"
-                                     class="rounded-circle mb-2 avatar-md">
-                                <span class="sidenav-user-name fw-bold">Giulliano</span>
-                                <span class="fs-12 fw-semibold" data-lang="user-role">Associate</span>
+                                <div class="avatar avatar-md mb-2">
+                                    <img src="{{ config.ASSETS_ROOT }}/images/users/{{ _sid | lower }}.jpg" alt="{{ _name }}"
+                                         class="rounded-circle avatar-md"
+                                         onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';" />
+                                    <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold" style="display:none;">{{ _initials }}</span>
+                                </div>
+                                <span class="sidenav-user-name fw-bold">{{ _name.split()[0] if _name else 'User' }}</span>
+                                <span class="fs-12 fw-semibold" data-lang="user-role">{{ _role or 'N/A' }}</span>
                             </a>
                         </div>
                         <div>
@@ -189,49 +196,33 @@
                                data-bs-offset="0,12" href="#!" aria-haspopup="false" aria-expanded="false">
                                 <i class="ti ti-settings fs-24 align-middle ms-1"></i>
                             </a>
-        
+
                             <div class="dropdown-menu">
-                                <!-- Header -->
                                 <div class="dropdown-header noti-title">
-                                    <h6 class="text-overflow m-0">Welcome back!</h6>
+                                    <h6 class="text-overflow m-0">Welcome back, {{ _name.split()[0] if _name else 'User' }}!</h6>
                                 </div>
-        
-                                <!-- My Profile -->
-                                <a href="/profile" class="dropdown-item">
+                                <a href="/users-profile" class="dropdown-item">
                                     <i class="ti ti-user-circle me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Profile</span>
                                 </a>
-        
-                                <!-- Notifications -->
                                 <a href="javascript:void(0);" class="dropdown-item">
                                     <i class="ti ti-bell-ringing me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Notifications</span>
                                 </a>
-        
-                                <!-- Settings -->
                                 <a href="javascript:void(0);" class="dropdown-item">
                                     <i class="ti ti-settings-2 me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Account Settings</span>
                                 </a>
-        
-                                <!-- Support -->
                                 <a href="javascript:void(0);" class="dropdown-item">
                                     <i class="ti ti-headset me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Support Center</span>
                                 </a>
-        
-                                <!-- Divider -->
                                 <div class="dropdown-divider"></div>
-        
-                                <!-- Lock -->
-                                <a href="/auth-lock-screen"
-                                   class="dropdown-item">
+                                <a href="/auth-lock-screen" class="dropdown-item">
                                     <i class="ti ti-lock me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Lock Screen</span>
                                 </a>
-        
-                                <!-- Logout -->
-                                <a href="javascript:void(0);" class="dropdown-item fw-semibold">
+                                <a href="/logout" class="dropdown-item fw-semibold text-danger">
                                     <i class="ti ti-logout-2 me-2 fs-17 align-middle"></i>
                                     <span class="align-middle">Log Out</span>
                                 </a>
@@ -255,7 +246,7 @@
                         <div class="collapse" id="sidebarDashboards">
                             <ul class="sub-menu">
                                 <li class="side-nav-item">
-                                    <a href="/" class="side-nav-link">
+                                    <a href="/dashboard" class="side-nav-link">
                                         <span class="menu-text" data-lang="dashboard-one">KPI</span>
                                     </a>
                                 </li>
@@ -269,13 +260,6 @@
                     </li>
         
                     <li class="side-nav-title" data-lang="apps-title">Apps</li>
-        
-                    <li class="side-nav-item">
-                        <a href="/chat" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="message-square-dot"></i></span>
-                            <span class="menu-text" data-lang="chat"> Chat </span>
-                        </a>
-                    </li>
         
                     <li class="side-nav-item">
                         <a href="/holidays-calendar" class="side-nav-link">
@@ -671,7 +655,7 @@
                                                 </a>
                                             </li>
                                             <li class="side-nav-item">
-                                                <a href="#ndfcommodities" class="side-nav-link">
+                                                <a href="/new_deals-ndf-commodities" class="side-nav-link">
                                                     <span class="menu-text" data-lang="nav-commodities">Commodities</span>
                                                 </a>
                                             </li>
@@ -913,7 +897,8 @@
         
                     <!-- Nova seção para Intrag -->
                     <li class="side-nav-item">
-                        <a href="#intrag" class="side-nav-link">
+                        <a data-bs-toggle="collapse" href="#sidebarIntrag" aria-expanded="false"
+                           aria-controls="sidebarIntrag" class="side-nav-link">
                             <span class="menu-icon">
                                 <span class="icon-intrag">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="currentColor">
@@ -923,7 +908,22 @@
                                 </span>                                
                             </span>
                             <span class="menu-text" data-lang="intrag">Intrag</span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="sidebarIntrag">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/intrag-ndf" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-ndf">NDF</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/intrag-option" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-option">Option</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
                     <li class="side-nav-item">
                         <a data-bs-toggle="collapse" href="#sidebarEmail" aria-expanded="false" aria-controls="sidebarEmail"
@@ -961,152 +961,15 @@
                         </div>
                     </li>
                     <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarCRM" aria-expanded="false" aria-controls="sidebarCRM"
-                           class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="handshake"></i></span>
-                            <span class="menu-text" data-lang="crm"> CRM </span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="sidebarCRM">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/crm-contacts"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-contacts">Contacts</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-opportunities"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-opportunities">Opportunities</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-deals" class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-deals">deals</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-leads" class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-leads">Leads</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-pipeline"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-pipeline">Pipeline</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-campaign"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-campaign">Campaign</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-proposals"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-proposals">Proposals</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-estimations"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-estimations">Estimations</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-customers"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-customers">Customers</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/crm-activities"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="crm-activities">Activities</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-        
-                    <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarUsers" aria-expanded="false" aria-controls="sidebarUsers"
-                           class="side-nav-link">
+                        <a href="/users-roles" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="users"></i></span>
-                            <span class="menu-text" data-lang="users"> Users </span>
-                            <span class="menu-arrow"></span>
+                            <span class="menu-text" data-lang="users">Users</span>
                         </a>
-                        <div class="collapse" id="sidebarUsers">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/users-contacts"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="contacts">Contacts</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/users-profile"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="profile">Profile</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/users-roles" class="side-nav-link">
-                                        <span class="menu-text" data-lang="roles">Roles</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/users-role-details"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="role-details">Role Details</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/users-permissions"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="permissions">Permissions</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
                     </li>
-        
                     <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarInvoice" aria-expanded="false" aria-controls="sidebarInvoice"
-                           class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="receipt-text"></i></span>
-                            <span class="menu-text" data-lang="invoice"> Invoice</span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="sidebarInvoice">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/invoices" class="side-nav-link">
-                                        <span class="menu-text" data-lang="invoices">Invoices</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/invoice-details"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="invoice-details">Single Invoice</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/invoice-create"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="invoice-create">New Invoice</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-        
-                    <li class="side-nav-item">
-                        <a href="/social-feed" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="rss"></i></span>
-                            <span class="menu-text" data-lang="social"> Social Feed </span>
+                        <a href="/about" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="info"></i></span>
+                            <span class="menu-text" data-lang="about">About</span>
                         </a>
                     </li>
         
@@ -1139,13 +1002,6 @@
                                 </li>
                             </ul>
                         </div>
-                    </li>
-        
-                    <li class="side-nav-item">
-                        <a href="/api-keys" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="key"></i></span>
-                            <span class="menu-text" data-lang="api-keys"> API Keys </span>
-                        </a>
                     </li>
         
                     <li class="side-nav-title mt-2" data-lang="pages-title">Custom Pages</li>
@@ -1203,203 +1059,6 @@
                                     <a href="/pages-terms-conditions"
                                        class="side-nav-link">
                                         <span class="menu-text" data-lang="pages-terms-conditions">Terms & Conditions</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-        
-                    <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarPagesAuth" aria-expanded="false"
-                           aria-controls="sidebarPagesAuth"
-                           class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="fingerprint"></i></span>
-                            <span class="menu-text" data-lang="authentication"> Authentication </span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="sidebarPagesAuth">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a data-bs-toggle="collapse" href="#sidebarOneAuth" aria-expanded="false"
-                                       aria-controls="sidebarOneAuth"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="basic-auth"> Basic </span>
-                                        <span class="menu-arrow"></span>
-                                    </a>
-                                    <div class="collapse" id="sidebarOneAuth">
-                                        <ul class="sub-menu">
-                                            <li class="side-nav-item">
-                                                <a href="/auth-sign-in"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-sign-in">Sign In</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-sign-up"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-sign-up">Sign Up</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-reset-pass"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-reset-pass">Reset Password</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-new-pass"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-new-pass">New Password</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-two-factor"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-two-factor">Two Factor</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-lock-screen"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-lock-screen">Lock Screen</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-success-mail"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-success-mail">Success Mail</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-login-pin"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-login-pin">Login with PIN</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-delete-account"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text"
-                                                          data-lang="auth-delete-account">Delete Account</span>
-                                                </a>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a data-bs-toggle="collapse" href="#sidebarTwoAuth" aria-expanded="false"
-                                       aria-controls="sidebarTwoAuth"
-                                       class="side-nav-link">
-                                        <span class="menu-text" data-lang="cover-auth"> Cover </span>
-                                        <span class="menu-arrow"></span>
-                                    </a>
-                                    <div class="collapse" id="sidebarTwoAuth">
-                                        <ul class="sub-menu">
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-sign-in"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-sign-in">Sign In</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-sign-up"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-sign-up">Sign Up</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-reset-pass"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-reset-pass">Reset Password</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-new-pass"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-new-pass">New Password</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-two-factor"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-two-factor">Two Factor</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-lock-screen"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-lock-screen">Lock Screen</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-success-mail"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-success-mail">Success Mail</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-login-pin"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text" data-lang="auth-2-login-pin">Login with PIN</span>
-                                                </a>
-                                            </li>
-                                            <li class="side-nav-item">
-                                                <a href="/auth-2-delete-account"
-                                                   class="side-nav-link">
-                                                    <span class="menu-text"
-                                                          data-lang="auth-2-delete-account">Delete Account</span>
-                                                </a>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-        
-                    <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarPagesError" aria-expanded="false"
-                           aria-controls="sidebarPagesError"
-                           class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="shield-alert"></i></span>
-                            <span class="menu-text" data-lang="error-pages"> Error Pages </span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="sidebarPagesError">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/error-400" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-400">400 Bad Request</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/error-401" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-401">401 Unauthorized</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/error-403" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-403">403 Forbidden</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/error-404" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-404">404 Not Found</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/error-408" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-408">408 Request Timeout</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/error-500" class="side-nav-link">
-                                        <span class="menu-text" data-lang="error-500">500 Internal Server</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/maintenance" class="side-nav-link">
-                                        <span class="menu-text" data-lang="maintenance">Maintenance</span>
                                     </a>
                                 </li>
                             </ul>

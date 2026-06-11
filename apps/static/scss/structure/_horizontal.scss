@@ -8,7 +8,7 @@ html[data-layout="topnav"] {
         margin: 0;
         z-index: 1005;
         box-shadow: none;
-        border-bottom: 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 
         .logo-topbar {
             display: block;
@@ -38,7 +38,8 @@ html[data-layout="topnav"] {
         background: $sidenav-bg;
         padding-left: $grid-gutter-width * 0.5;
         padding-right: $grid-gutter-width * 0.5;
-        box-shadow: var(--#{$prefix}box-shadow);
+        box-shadow: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 
         .navbar {
             margin: 0;

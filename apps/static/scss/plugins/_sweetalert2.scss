@@ -13,9 +13,10 @@
 .swal2-popup {
     width: 28em;
     padding: 2rem;
-    border-radius: $modal-content-border-radius;
+    border-radius: 1.125rem !important; // Apple rounded.lg
     background-color: var(--#{$prefix}secondary-bg);
     color: var(--#{$prefix}body-color);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
 
     .swal2-html-container {
         font-size: 16px !important;
@@ -126,7 +127,7 @@ div:where(.swal2-icon) {
     line-height: $input-line-height;
     color: $input-color;
     box-shadow: none !important;
-    border-radius: 5px !important;
+    border-radius: 0.6875rem !important; // Apple rounded.md
     background-color: $input-bg;
     background-clip: padding-box;
     border: $input-border-width solid $input-border-color !important;
@@ -172,6 +173,6 @@ div:where(.swal2-icon).swal2-success [class^=swal2-success-line][class$=tip] {
 }
 
 .swal2-backdrop-show {
-    backdrop-filter: blur(2px);
-    background: var(--#{$prefix}emphasis-color);
+    backdrop-filter: blur(20px); // Apple standard backdrop blur
+    background: rgba(0, 0, 0, 0.4) !important;
 }

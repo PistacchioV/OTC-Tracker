@@ -7,7 +7,8 @@
     top: 0;
     z-index: 1001;
     background: $topbar-bg;
-    box-shadow: $card-box-shadow;
+    box-shadow: none;   // Apple: topbar has no shadow, only hairline border
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08); // Apple divider-soft
     height: $topbar-height;
     margin-left: $sidenav-width;
     transition: margin-left .25s ease-in-out;
@@ -16,7 +17,7 @@
         display: flex;
         justify-content: space-between;
         position: relative;
-        border-bottom: $card-border-width solid $card-border-color;
+        border-bottom: none;
         padding-left: $grid-gutter-width;
         padding-right: $grid-gutter-width;
 

@@ -1,0 +1,564 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Intrag — NDF{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  .card-body { padding: 5px; }
+  .table-responsive { overflow-x: auto; }  
+  /* ── Scroll-header clone (DataTables injeta .dataTables_scrollHead) ── */
+    .dt-scroll-head thead th,
+    .dt-scroll-headInner thead th,
+    .dataTables_scrollHead thead th,
+    .dataTables_scrollHeadInner thead th {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+        font-size: 0.7rem;
+    }
+
+    /* ── Cabeçalhos da tabela original ── */
+    #intrag-ndf-table th {
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 130px;
+        max-width: 280px;
+        padding: 8px 12px;
+        text-align: center !important;
+        vertical-align: middle !important;
+        font-size: 0.7rem;
+    }
+
+    /* ── Células de dados ── */
+    #intrag-ndf-table td {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 280px;                        /* consistente com th */
+        font-size: 0.8rem;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    /* ── Segunda linha do thead: inputs de filtro por coluna ── */
+    #column-search-inputs th {
+        white-space: nowrap;
+        overflow: hidden;
+        padding: 4px 8px;
+        border-top: 1px solid rgba(0,0,0,0.08);
+        text-align: center;
+        vertical-align: middle;
+    }
+    #column-search-inputs input {
+        font-size: 12px;
+        height: 28px;
+        white-space: nowrap;
+    }
+  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text { background: #6c757d; }
+  #intrag-ndf-table .btn-sm.rounded-circle { width: 28px; height: 28px; padding: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; }
+  /* Dark mode overrides */
+  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
+  [data-bs-theme=dark] #column-search-inputs th { border-top-color: rgba(255,255,255,0.08) !important; }
+  [data-bs-theme=dark] #column-search-inputs input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0">Intrag — NDF</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item">Intrag</li>
+                <li class="breadcrumb-item active" data-lang="nav-ndf">NDF</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+
+                <!-- ── Smart filter bar: thin (input + search only) ─────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── Action bar / card-header ─────────────────────────────── -->
+                <div class="card-header">
+                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div id="ndfColToggleWrap"></div>
+                            <div id="ndfExportWrap"></div>
+                            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddNdf">Add Row +</button>
+                            <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelNdf" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                            <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
+                                <option value="15">15</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="intrag-ndf-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs">
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="intrag-ndf-col-0">Contract Type</th>
+                                    <th data-lang="intrag-ndf-col-1">B3 ID</th>
+                                    <th data-lang="intrag-ndf-col-2">Portfolio Code</th>
+                                    <th data-lang="intrag-ndf-col-3">Participant Position</th>
+                                    <th data-lang="intrag-ndf-col-4">Client Tax ID (Party)</th>
+                                    <th data-lang="intrag-ndf-col-5">Counterparty</th>
+                                    <th data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</th>
+                                    <th data-lang="intrag-ndf-col-7">Cpty Collateral Basket</th>
+                                    <th data-lang="intrag-ndf-col-8">Party Collateral Basket</th>
+                                    <th data-lang="intrag-ndf-col-9">Notional Value</th>
+                                    <th data-lang="intrag-ndf-col-10">Trade Date</th>
+                                    <th data-lang="intrag-ndf-col-11">Registration Date</th>
+                                    <th data-lang="intrag-ndf-col-12">Maturity Date</th>
+                                    <th data-lang="intrag-ndf-col-13">Currency</th>
+                                    <th data-lang="intrag-ndf-col-14">Reference Exchange</th>
+                                    <th data-lang="intrag-ndf-col-15">Commodity</th>
+                                    <th data-lang="intrag-ndf-col-16">Type (Form)</th>
+                                    <th data-lang="intrag-ndf-col-17">Quantity</th>
+                                    <th data-lang="intrag-ndf-col-18">Trading Unit</th>
+                                    <th data-lang="intrag-ndf-col-19">Trade Price</th>
+                                    <th data-lang="intrag-ndf-col-20">Settlement Parity</th>
+                                    <th data-lang="intrag-ndf-col-21">Maturity Month/Year</th>
+                                    <th data-lang="intrag-ndf-col-22">Spot / Adj. Rate</th>
+                                    <th data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</th>
+                                    <th data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</th>
+                                    <th data-lang="intrag-ndf-col-25">Information Source</th>
+                                    <th data-lang="intrag-ndf-col-26">Maturity Rate</th>
+                                    <th data-lang="intrag-ndf-col-27">Adjustment Type</th>
+                                    <th data-lang="intrag-ndf-col-28">Observation</th>
+                                    <th data-lang="intrag-ndf-col-29">Discount Factor</th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                                <tr id="column-search-inputs">
+                                    <th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contract Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Participant Position"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client Tax ID (Party)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client Tax ID (Cpty)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Collateral Basket"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Collateral Basket"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Notional Value"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Registration Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Reference Exchange"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Type (Form)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trading Unit"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Parity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Month/Year"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot / Adj. Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Forward Rate (R$/CCY)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Fwd Avg Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Information Source"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Adjustment Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Observation"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Discount Factor"></th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+(function() {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (typeof $ !== 'undefined' && $.fn.dataTable &&
+        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+
+<script>
+// col index 2-31 = data, col 32 = hidden row ID
+var NDF_COLS = [
+    'Contract Type','B3 ID','Portfolio Code','Participant Position',
+    'Client Tax ID (Party)','Counterparty','Client Tax ID (Cpty)',
+    'Cpty Collateral Basket','Party Collateral Basket','Notional Value',
+    'Trade Date','Registration Date','Maturity Date','Currency',
+    'Reference Exchange','Commodity','Type (Form)','Quantity','Trading Unit',
+    'Trade Price','Settlement Parity','Maturity Month/Year','Spot / Adj. Rate',
+    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source',
+    'Maturity Rate','Adjustment Type','Observation','Discount Factor'
+];
+
+var selectedRowIds = new Set();
+
+function _ndfId() { return 'n' + Date.now() + Math.random().toString(36).substr(2,4); }
+
+$(document).ready(function() {
+    if (typeof JSZip !== 'undefined') window.JSZip = JSZip;
+
+    function exportCols() { var a=[]; for(var i=2;i<=31;i++) a.push(i); return a; }
+    function fmtExport(data,row,col,node) {
+        var inp=$(node).find('input[type!="checkbox"]');
+        return inp.length ? (inp.val()||'') : $(node).text().trim();
+    }
+
+    var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true,
+        select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: [
+            { orderable: false, targets: [0,1] },
+            { visible: false, targets: [32] }
+        ],
+        dom: "<'row'<'col-sm-12'tr>>" +
+             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+            autoClose:true,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+            ]
+        }],
+        language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },
+        drawCallback: function() {
+            var api = this.api();
+            api.rows().every(function() {
+                var d=this.data(), id=d?d[32]:null, node=this.node();
+                if(node) $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
+            });
+            var total=api.rows().count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            if($sa.length) {
+                if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
+                else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
+                else{$sa.prop('checked',false).prop('indeterminate',true);}
+            }
+            toggleDelBtn(sel>=2);
+            console.log('[NDF-INTRAG drawCallback] total rows:', total, '| selected:', sel);
+        },
+        initComplete: function() {
+            var api = this.api();
+
+            // Column search
+            document.querySelectorAll('#column-search-inputs th').forEach(function(th){ th.addEventListener('click',function(e){e.stopPropagation();}); });
+            document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
+                inp.addEventListener('click',function(e){e.stopPropagation();});
+                inp.addEventListener('keyup',function() {
+                    var ci=inp.closest('th').cellIndex;
+                    if(api.column(ci).search()!==this.value) api.column(ci).search(this.value).draw();
+                });
+            });
+
+            // Show/Hide columns — inject into static container in the filter bar
+            var ctw=document.getElementById('ndfColToggleWrap');
+            if(ctw) {
+                var dd=document.createElement('div'); dd.className='dropdown';
+                var items=NDF_COLS.map(function(lbl,i){
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
+                        ' data-column="'+(i+2)+'" id="ndfC'+i+'" checked>' +
+                        '<label class="form-check-label fw-medium" for="ndfC'+i+'">'+lbl+'</label>' +
+                        '</div></li>';
+                }).join('');
+                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button"' +
+                    ' data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="ndfColMenu">'+items+'</ul>';
+                ctw.appendChild(dd);
+                document.getElementById('ndfColMenu').addEventListener('change',function(e){
+                    if(e.target.classList.contains('toggle-vis')) table.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                });
+            }
+        }
+    });
+
+    // Move Export button into filter bar static container
+    table.buttons().container().appendTo('#ndfExportWrap');
+
+    // Fix double-header on first load: scrollX clones <thead> before height
+    // calculations run; columns.adjust() forces a re-sync after the DOM settles.
+    setTimeout(function() {
+        table.columns.adjust();
+        var shRows = document.querySelectorAll('.dataTables_scrollHead thead tr').length;
+        var sbRows = document.querySelectorAll('.dataTables_scrollBody thead tr').length;
+        var sbHead = document.querySelector('.dataTables_scrollBody thead');
+        console.log('[NDF-INTRAG header debug] scrollHead thead rows:', shRows);
+        console.log('[NDF-INTRAG header debug] scrollBody thead rows:', sbRows);
+        if (sbHead) {
+            console.log('[NDF-INTRAG header debug] scrollBody thead offsetHeight:', sbHead.offsetHeight);
+            console.log('[NDF-INTRAG header debug] scrollBody thead visibility:', getComputedStyle(sbHead).visibility);
+        }
+    }, 100);
+
+    // Add Row button (static in filter bar)
+    document.getElementById('btnAddNdf').addEventListener('click',function(){
+        var m=document.getElementById('ndfModal');
+        $(m).removeData('editTr');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-plus me-1"></i>Add Row — Intrag NDF';
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    function toggleDelBtn(show) { var b=document.getElementById('btnDelNdf'); if(b) b.classList.toggle('d-none',!show); }
+
+    $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
+    $('[data-table-rows]').val(String(table.page.len()));
+
+    $('#selectAll').on('click',function() {
+        selectedRowIds.clear();
+        if(this.checked) { table.rows().every(function(){ var d=this.data(),id=d?d[32]:null; if(id) selectedRowIds.add(id); }); }
+        $('input[type="checkbox"]',table.rows().nodes()).prop('checked',this.checked);
+        toggleDelBtn(this.checked&&selectedRowIds.size>=2);
+        console.log('[NDF-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
+    });
+
+    $('#intrag-ndf-table tbody').on('change','input[type="checkbox"]',function() {
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[32]:null;
+        if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
+        var total=table.rows().count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
+        if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
+        toggleDelBtn(sel>=2);
+    });
+
+    $(document).on('click','[data-del-selected]',function(e) {
+        e.preventDefault(); if(selectedRowIds.size===0) return;
+        var toDelete=[];
+        table.rows().every(function(){
+            var d=this.data(), id=d?d[32]:null;
+            if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
+        });
+        console.log('[NDF-INTRAG DELETE] selectedRowIds:', Array.from(selectedRowIds));
+        console.log('[NDF-INTRAG DELETE] toDelete count:', toDelete.length, toDelete.map(function(r){return r.rowIdx+':'+r.id;}));
+        if(!toDelete.length) return;
+        Swal.fire({ title:'Delete '+toDelete.length+' row(s)?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            // Sort descending so each splice doesn't shift indices of remaining rows
+            toDelete.sort(function(a,b){ return b.rowIdx - a.rowIdx; });
+            toDelete.forEach(function(r){
+                console.log('[NDF-INTRAG DELETE] removing rowIdx:', r.rowIdx, 'id:', r.id);
+                table.row(r.rowIdx).remove();
+            });
+            selectedRowIds.clear(); toggleDelBtn(false); table.draw(false);
+        });
+    });
+
+    $(document).on('click','#intrag-ndf-table tbody .btn-row-delete',function(e) {
+        e.preventDefault(); var tr=$(this).closest('tr');
+        Swal.fire({ title:'Delete this row?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){ if(r.isConfirmed) table.row(tr[0]).remove().draw(false); });
+    });
+
+    $(document).on('click','#intrag-ndf-table tbody .btn-row-edit',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
+        var m=document.getElementById('ndfModal');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag NDF';
+        NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=d[i+2]||''; });
+        $(m).data('editTr',tr);
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    document.getElementById('ndfSaveBtn').addEventListener('click',function() {
+        var m=document.getElementById('ndfModal'), editTr=$(m).data('editTr')||null;
+        var row=[
+            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+            '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>'
+        ];
+        NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); row.push(inp?inp.value.trim():''); });
+        var id = editTr ? (table.row(editTr).data()[32]||_ndfId()) : _ndfId();
+        row.push(id);
+        if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
+        bootstrap.Modal.getInstance(m).hide();
+    });
+
+    $(document.getElementById('ndfModal')).on('hidden.bs.modal',function() {
+        $(this).removeData('editTr');
+        NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=''; });
+    });
+
+    // Smart Filter
+    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
+        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
+        sfActive=[], sfKbdIdx=-1;
+    var SF_COLS=NDF_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2};});
+    function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML=''; sfKbdIdx=-1;
+        if(!val){sfDropdown.style.display='none';return;}
+        var q=val.toLowerCase(), matches=SF_COLS.filter(function(c){return c.label.toLowerCase().indexOf(q)!==-1;});
+        if(!matches.length){sfDropdown.style.display='none';return;}
+        matches.forEach(function(col) {
+            var li=document.createElement('li');
+            li.innerHTML='<span class="sf-type-badge sf-type-text">text</span><span>'+sfEsc(col.label)+'</span>';
+            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(col,sfInput.value.trim());});
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display='block';
+    }
+    function sfAddFilter(col,value) {
+        if(!value) return;
+        sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});
+        sfActive.push({col:col,value:value}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfRenderChips() {
+        sfChips.innerHTML='';
+        sfActive.forEach(function(f) {
+            var chip=document.createElement('span'); chip.className='smart-filter-chip';
+            chip.innerHTML='<strong>'+sfEsc(f.col.label.toUpperCase())+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.col.dtCol!==f.col.dtCol;});sfRenderChips();});
+            sfChips.appendChild(chip);
+        });
+    }
+    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
+    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfWrapper.addEventListener('click',function(){sfInput.focus();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){sfActive.forEach(function(f){table.column(f.col.dtCol).search(f.value);});table.draw();});
+    sfInput.addEventListener('keydown',function(e) {
+        if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
+        var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
+        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
+        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
+        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+});
+</script>
+
+<!-- Modal -->
+<div class="modal fade" id="ndfModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add Row — Intrag NDF</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-0">Contract Type</label><input type="text" class="form-control form-control-sm" id="ndf-f-0"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-1">B3 ID</label><input type="text" class="form-control form-control-sm" id="ndf-f-1"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-2">Portfolio Code</label><input type="text" class="form-control form-control-sm" id="ndf-f-2"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-3">Participant Position</label><input type="text" class="form-control form-control-sm" id="ndf-f-3"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-4">Client Tax ID (Party)</label><input type="text" class="form-control form-control-sm" id="ndf-f-4"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-5">Counterparty</label><input type="text" class="form-control form-control-sm" id="ndf-f-5"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</label><input type="text" class="form-control form-control-sm" id="ndf-f-6"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-7">Cpty Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-7"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-8">Party Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-8"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-9">Notional Value</label><input type="text" class="form-control form-control-sm" id="ndf-f-9"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-10">Trade Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-10"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-11">Registration Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-11"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-12">Maturity Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-12"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-13">Currency</label><input type="text" class="form-control form-control-sm" id="ndf-f-13"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-14">Reference Exchange</label><input type="text" class="form-control form-control-sm" id="ndf-f-14"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-15">Commodity</label><input type="text" class="form-control form-control-sm" id="ndf-f-15"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-16">Type (Form)</label><input type="text" class="form-control form-control-sm" id="ndf-f-16"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-17">Quantity</label><input type="text" class="form-control form-control-sm" id="ndf-f-17"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-18">Trading Unit</label><input type="text" class="form-control form-control-sm" id="ndf-f-18"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-19">Trade Price</label><input type="text" class="form-control form-control-sm" id="ndf-f-19"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-20">Settlement Parity</label><input type="text" class="form-control form-control-sm" id="ndf-f-20"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-21">Maturity Month/Year</label><input type="text" class="form-control form-control-sm" id="ndf-f-21"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-22">Spot / Adj. Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-22"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</label><input type="text" class="form-control form-control-sm" id="ndf-f-23"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-24"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-25">Information Source</label><input type="text" class="form-control form-control-sm" id="ndf-f-25"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-26">Maturity Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-26"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-27">Adjustment Type</label><input type="text" class="form-control form-control-sm" id="ndf-f-27"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-28">Observation</label><input type="text" class="form-control form-control-sm" id="ndf-f-28"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-29">Discount Factor</label><input type="text" class="form-control form-control-sm" id="ndf-f-29"></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="ndfSaveBtn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock extra_javascript %}

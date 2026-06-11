@@ -2,8 +2,15 @@
 // _badges.scss
 //
 
+// Apple: badges — pill by default, 11px, semibold, no shadow
 .badge {
     vertical-align: middle;
+    border-radius: 50rem;
+    font-size: 0.6875rem; // 11px
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: none !important;
+    padding: 0.25em 0.625em;
 }
 
 // Soft Badges

@@ -1,13 +1,13 @@
 /**
- * Template Name: UBold - Admin & Dashboard Template
- * By (Author): Coderthemes
+ * Template Name: OTC Tracker - Admin & Dashboard Template
+ * By (Author): 
  * Module/App (File Name): Config
  */
 
 (function () {
     const html = document.documentElement;
-    const storageKey = "__UBOLD_CONFIG__";
-    const savedConfig = sessionStorage.getItem(storageKey);
+    const storageKey = "__OTCTRACKER_CONFIG__";
+    const savedConfig = localStorage.getItem(storageKey);
 
     // Default config
     const defaultConfig = {
@@ -16,9 +16,10 @@
         theme: "light",                 // App theme: light or dark
         layout: {
             position: "fixed",          // Layout position: fixed or scrollable
+            dir: "ltr",                 // Layout direction: ltr or rtl
         },
         topbar: {
-            color: "dark",              // Topbar color: light, dark, or gray
+            color: "light",             // Apple: parchment topbar
         },
         menu: {
             color: "light",             // Menu color: light, dark, or gray
@@ -42,6 +43,7 @@
             : html.getAttribute("data-bs-theme") || (defaultConfig.theme === 'system' ? getSystemTheme() : defaultConfig.theme),
         layout: {
             position: html.getAttribute("data-layout-position") || defaultConfig.layout.position,
+            dir: html.getAttribute("dir") || defaultConfig.layout.dir,
         },
         topbar: {
             color: html.getAttribute("data-topbar-color") || defaultConfig.topbar.color,
@@ -58,16 +60,31 @@
     // Save merged config as defaults globally
     window.defaultConfig = structuredClone(htmlConfig);
 
-    // Load from session if exists
-    let config = savedConfig ? JSON.parse(savedConfig) : htmlConfig;
+    const validSkins = ['default', 'galaxy'];
+
+    function isInvalidConfig(c) {
+        if (!c || !c.topbar || !c.menu || !c.layout || !c.sidenav) return true;
+        if (!validSkins.includes(c.skin)) return true;
+        return false;
+    }
+
+    // Load from session if exists, reset only when structurally invalid
+    let parsed = savedConfig ? JSON.parse(savedConfig) : null;
+    if (isInvalidConfig(parsed)) {
+        localStorage.removeItem(storageKey);
+        parsed = null;
+    }
+    let config = parsed || htmlConfig;
     window.config = config;
 
     // Apply layout attributes immediately
     html.setAttribute("data-skin", config.skin);
-    html.setAttribute("data-bs-theme", config.theme === 'system' ? getSystemTheme() : config.theme);
+    // 'system' = body light + topbar/sidenav dark (not OS-based)
+    html.setAttribute("data-bs-theme", config.theme === 'system' ? 'light' : config.theme);
     html.setAttribute("data-menu-color", config.menu.color);
     html.setAttribute("data-topbar-color", config.topbar.color);
     html.setAttribute("data-layout-position", config.layout.position);
+    html.setAttribute("dir", config.layout.dir || "ltr");
     html.classList.toggle("monochrome", config.monochrome);
 
     if (config.sidenav.size) {

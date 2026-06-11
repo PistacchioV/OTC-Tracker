@@ -3,47 +3,39 @@
 {% block title %}B3 Index Results{% endblock title %}
 
 {% block extra_css %}
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
-<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <style>
-    /* ── Toolbar buttons ───────────────────────────────────────────────── */
-    .btn-toolbar-all {
-        font-size: 0.75rem !important;
-        padding: 0.25rem 0.6rem !important;
-        white-space: nowrap !important;
-    }
-
-    /* ── Column search inputs ──────────────────────────────────────────── */
-    .col-search-row th { padding: 4px 6px; }
-    .col-search-row input {
-        font-size: 11px;
-        height: 26px;
-        padding: 2px 6px;
-    }
-
-    /* ── Table ─────────────────────────────────────────────────────────── */
-    .table-responsive { overflow-x: auto; }
+    .btn-toolbar-all { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
+    .col-search-row th { padding:4px 6px; }
+    .col-search-row input { font-size:11px; height:26px; padding:2px 6px; }
+    .table-responsive { overflow-x:auto; }
     #tblSubjacente th, #tblVCP th, #tblDominio th {
-        white-space: nowrap;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        padding: 8px 10px;
+        white-space:nowrap; font-size:0.7rem; text-transform:uppercase; padding:8px 10px;
     }
-    #tblSubjacente td, #tblVCP td, #tblDominio td {
-        white-space: nowrap;
-        font-size: 0.8rem;
-    }
-
-    /* ── No-data banner ────────────────────────────────────────────────── */
-    #noDataBanner { display: none; }
+    #tblSubjacente td, #tblVCP td, #tblDominio td { white-space:nowrap; font-size:0.8rem; }
+    #noDataBanner { display:none; }
+    /* inline edit cells */
+    td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
+    td.editing .select2-container { width:100%!important; }
+    .edit-actions-wrap { display:flex; gap:4px; }
+    .pill-badge { font-size:0.68rem; }
+    /* action buttons */
+    .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+    /* Add Row button (matches new_deals style) */
+    .btn-toolbar-addrow { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
+    /* Select2 dropdown — never wider than viewport, opens below */
+    .select2-dropdown { font-size:0.78rem; }
+    .new-row-edit td { background-color: rgba(0,102,204,0.06)!important; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
 <div class="container-fluid" data-content="">
 
-    <!-- ── Breadcrumb / title ─────────────────────────────────────────── -->
     <div class="page-title-head d-flex align-items-center mb-3">
         <div class="flex-grow-1 d-flex align-items-center gap-3">
             <a href="/index-b3" class="btn btn-sm btn-light">
@@ -60,7 +52,6 @@
         </div>
     </div>
 
-    <!-- ── Active filter summary ──────────────────────────────────────── -->
     <div class="alert alert-soft-primary d-flex align-items-center gap-2 py-2 mb-3" id="filterSummary" style="display:none!important;">
         <i class="ti ti-filter fs-lg"></i>
         <span id="filterSummaryText" class="fs-sm"></span>
@@ -69,44 +60,37 @@
         </a>
     </div>
 
-    <!-- ── No data banner ─────────────────────────────────────────────── -->
     <div class="alert alert-warning text-center" id="noDataBanner">
         <i class="ti ti-search-off fs-3 d-block mb-2"></i>
-        <strong data-lang="b3-no-results">No results found.</strong> <span data-lang="b3-no-results-hint">Go back and refine your search filters.</span>
+        <strong data-lang="b3-no-results">No results found.</strong>
+        <span data-lang="b3-no-results-hint">Go back and refine your search filters.</span>
         <div class="mt-2">
-            <a href="/index-b3" class="btn btn-warning btn-sm">
-                <i class="ti ti-arrow-left me-1"></i><span data-lang="b3-back-to-search">Back to Search</span>
-            </a>
+            <a href="/index-b3" class="btn btn-warning btn-sm"><i class="ti ti-arrow-left me-1"></i>Back to Search</a>
         </div>
     </div>
 
-    <!-- ── Results card ───────────────────────────────────────────────── -->
     <div class="row" id="resultsWrapper">
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
 
-                    <!-- Tabs -->
                     <ul class="nav nav-tabs nav-bordered mb-3" id="resultTabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active" data-bs-toggle="tab"
-                                    data-bs-target="#tabSubjacente" type="button" role="tab">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabSubjacente" type="button" role="tab">
                                 <i class="ti ti-chart-dots-3 me-1"></i>
                                 <span data-lang="b3-tab-underlying">Underlying Assets</span>
                                 <span class="badge bg-primary ms-1 fs-xxs" id="cntSubj">0</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab"
-                                    data-bs-target="#tabVCP" type="button" role="tab">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabVCP" type="button" role="tab">
                                 <i class="ti ti-exchange me-1"></i>
                                 <span data-lang="b3-tab-vcp">VCP</span>
                                 <span class="badge bg-success ms-1 fs-xxs" id="cntVCP">0</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab"
-                                    data-bs-target="#tabDominio" type="button" role="tab">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDominio" type="button" role="tab">
                                 <i class="ti ti-book me-1"></i>
                                 <span data-lang="b3-tab-domain">Domain</span>
                                 <span class="badge bg-warning ms-1 fs-xxs" id="cntDom">0</span>
@@ -116,41 +100,41 @@
 
                     <div class="tab-content" id="resultTabContent">
 
-                        <!-- ══════════════ TAB: UNDERLYING ASSETS ══════════════ -->
+                        <!-- ══ TAB: UNDERLYING ASSETS ══ -->
                         <div class="tab-pane fade show active" id="tabSubjacente" role="tabpanel">
                             <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <label class="form-label mb-0 fs-sm">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenSubj">
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
+                                    <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                                <label class="form-label mb-0 fs-sm">entries</label>
                             </div>
                             <div class="table-responsive">
-                                <table id="tblSubjacente"
-                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                <table id="tblSubjacente" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
+                                            <th>Actions</th>
+                                            <th>Status</th>
                                             <th data-lang="b3-class">Class</th>
-                                            <th data-lang="b3-underlying-asset-code">Underlying Asset Code</th>
+                                            <th data-lang="b3-underlying-asset-code">Asset Code</th>
                                             <th data-lang="b3-exchange">Exchange</th>
-                                            <th data-lang="b3-appreciation-index">Appreciation Index</th>
-                                            <th data-lang="b3-instrument-type">Instr. Type (IF)</th>
+                                            <th data-lang="b3-appreciation-index">Apprec. Index</th>
+                                            <th data-lang="b3-instrument-type">IF Type</th>
                                             <th data-lang="b3-currency">Currency</th>
-                                            <th data-lang="b3-expiry-month">Expiry Month</th>
-                                            <th data-lang="b3-expiry-year">Expiry Year</th>
+                                            <th data-lang="b3-expiry-month">Exp. Month</th>
+                                            <th data-lang="b3-expiry-year">Exp. Year</th>
                                             <th data-lang="b3-ticker">Ticker</th>
-                                            <th data-lang="b3-calculated">Calculated</th>
-                                            <th data-lang="b3-quotation-type">Quotation Type</th>
-                                            <th data-lang="b3-conversion-factor">Conversion Factor</th>
-                                            <th data-lang="b3-unit-of-negotiation">Unit of Negotiation</th>
+                                            <th data-lang="b3-calculated">Calc.</th>
+                                            <th data-lang="b3-quotation-type">Quot. Type</th>
+                                            <th data-lang="b3-conversion-factor">Conv. Factor</th>
+                                            <th data-lang="b3-unit-of-negotiation">Unit Neg.</th>
                                             <th data-lang="b3-commodity">Commodity</th>
                                         </tr>
                                         <tr class="col-search-row" id="srSubj">
+                                            <th></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Class"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asset Code"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Code"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Exchange"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Index"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="IF Type"></th>
@@ -159,8 +143,8 @@
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Year"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Ticker"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Calc."></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quot. Type"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Conv. Factor"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quot.Type"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Factor"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
                                         </tr>
@@ -170,36 +154,34 @@
                             </div>
                         </div>
 
-                        <!-- ══════════════ TAB: VCP ══════════════ -->
+                        <!-- ══ TAB: VCP ══ -->
                         <div class="tab-pane fade" id="tabVCP" role="tabpanel">
                             <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <label class="form-label mb-0 fs-sm">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenVCP">
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
+                                    <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                                <label class="form-label mb-0 fs-sm">entries</label>
                             </div>
                             <div class="table-responsive">
-                                <table id="tblVCP"
-                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                <table id="tblVCP" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
-                                            <th data-lang="b3-qual-id">Qualification ID</th>
+                                            <th>Actions</th>
+                                            <th>Status</th>
+                                            <th data-lang="b3-qual-id">Qual. ID</th>
                                             <th data-lang="b3-description">Description</th>
-                                            <th data-lang="b3-add-description">Additional Description</th>
-                                            <th data-lang="b3-level1-class">Level 1 Classification</th>
-                                            <th data-lang="b3-status">Status</th>
+                                            <th data-lang="b3-add-description">Add. Description</th>
+                                            <th data-lang="b3-level1-class">Level 1 Class.</th>
                                             <th data-lang="b3-product">Product</th>
                                         </tr>
                                         <tr class="col-search-row" id="srVCP">
+                                            <th></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ID"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Description"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Add. Description"></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Add. Desc."></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Classification"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Product"></th>
                                         </tr>
                                     </thead>
@@ -208,31 +190,31 @@
                             </div>
                         </div>
 
-                        <!-- ══════════════ TAB: DOMAIN ══════════════ -->
+                        <!-- ══ TAB: DOMAIN ══ -->
                         <div class="tab-pane fade" id="tabDominio" role="tabpanel">
                             <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
+                                <label class="form-label mb-0 fs-sm">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenDom">
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
+                                    <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
+                                <label class="form-label mb-0 fs-sm">entries</label>
                             </div>
                             <div class="table-responsive">
-                                <table id="tblDominio"
-                                       class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
+                                <table id="tblDominio" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
+                                            <th>Actions</th>
+                                            <th>Status</th>
                                             <th data-lang="b3-group">Group</th>
                                             <th data-lang="b3-subgroup">Subgroup</th>
                                             <th data-lang="b3-if-type-code">IF Type Code</th>
-                                            <th data-lang="b3-qual-id">Qualification ID</th>
-                                            <th data-lang="b3-qual-description">Qualification Description</th>
+                                            <th data-lang="b3-qual-id">Qual. ID</th>
+                                            <th data-lang="b3-qual-description">Description</th>
                                             <th data-lang="b3-classification">Classification</th>
                                         </tr>
                                         <tr class="col-search-row" id="srDom">
+                                            <th></th>
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Group"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Subgroup"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="IF Code"></th>
@@ -246,13 +228,121 @@
                             </div>
                         </div>
 
-                    </div><!-- /tab-content -->
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
 </div>
+
+<div class="modal fade" id="subjModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="subjModalTitle"><i class="ti ti-plus me-1"></i>Add Underlying Asset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Class</label>
+            <select class="form-select form-select-sm" id="sm-classe"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Asset Code</label>
+            <input type="text" class="form-control form-control-sm" id="sm-code" style="text-transform:uppercase"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Exchange</label>
+            <select class="form-select form-select-sm" id="sm-exchange"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Apprec. Index <small class="text-muted">(auto)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="sm-appidx" disabled></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">IF Type</label>
+            <select class="form-select form-select-sm" id="sm-iftype"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Currency</label>
+            <select class="form-select form-select-sm" id="sm-currency"></select></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Exp. Month</label>
+            <select class="form-select form-select-sm" id="sm-month"></select></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Exp. Year</label>
+            <input type="number" class="form-control form-control-sm" id="sm-year" min="2000" max="2099" placeholder="e.g. 2026"></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Ticker</label>
+            <input type="text" class="form-control form-control-sm" id="sm-ticker" style="text-transform:uppercase"></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Calculated</label>
+            <select class="form-select form-select-sm" id="sm-calc"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Quotation Type</label>
+            <select class="form-select form-select-sm" id="sm-quottype"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Conv. Factor</label>
+            <select class="form-select form-select-sm" id="sm-convfactor"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Unit Neg.</label>
+            <select class="form-select form-select-sm" id="sm-unitneg"></select></div>
+          <div class="col-md-12"><label class="form-label form-label-sm mb-1">Commodity</label>
+            <select class="form-select form-select-sm" id="sm-commodity"></select></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="sm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="vcpModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="vcpModalTitle"><i class="ti ti-plus me-1"></i>Add VCP</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Qual. ID</label>
+            <input type="text" class="form-control form-control-sm" id="vm-qualid"></div>
+          <div class="col-md-8"><label class="form-label form-label-sm mb-1">Description</label>
+            <input type="text" class="form-control form-control-sm" id="vm-desc"></div>
+          <div class="col-md-6"><label class="form-label form-label-sm mb-1">Additional Description</label>
+            <input type="text" class="form-control form-control-sm" id="vm-adddesc"></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Level 1 Class.</label>
+            <select class="form-select form-select-sm" id="vm-level1"></select></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1">Product</label>
+            <select class="form-select form-select-sm" id="vm-product"></select></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="vm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="domModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="domModalTitle"><i class="ti ti-plus me-1"></i>Add Domain</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Group</label>
+            <select class="form-select form-select-sm" id="dm-group"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Subgroup</label>
+            <select class="form-select form-select-sm" id="dm-subgroup"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">IF Type Code</label>
+            <select class="form-select form-select-sm" id="dm-iftype"></select></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1">Qual. ID</label>
+            <input type="text" class="form-control form-control-sm" id="dm-qualid"></div>
+          <div class="col-md-8"><label class="form-label form-label-sm mb-1">Description</label>
+            <input type="text" class="form-control form-control-sm" id="dm-desc"></div>
+          <div class="col-md-12"><label class="form-label form-label-sm mb-1">Classification</label>
+            <select class="form-select form-select-sm" id="dm-class"></select></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="dm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock page_content %}
 
 {% block extra_javascript %}
@@ -268,353 +358,760 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 
 <script>
 $(document).ready(function () {
     'use strict';
 
-    /* ── Load session data ──────────────────────────────────────────────── */
+    var CURRENT_USER = '{{ session.get("user_sid", "") }}';
+
+    /* ── Dropdown option lists ─────────────────────────────────────────── */
+    var OPT = {
+        classe:     ['AÇÕES','AÇÕES INTERNACIONAIS','CESTA','COMMODITIES','INDICES','INDICES INTERNACIONAIS','JUROS','JUROS INTERNACIONAIS','TAXAS DE CAMBIO','TÍTULOS PRIVADOS','TÍTULOS PÚBLICOS'],
+        exchange:   ['ANP','B3','BACEN','BLOOMBERG','BMF','CBOT','CEPEA','CETIP','CME','CMX','DCE','DOW JONES/UBS','IBGE','ICE (FEC)','ICE (NYBOT)','IFE-ICE','INEXISTENTE','ISF - ICE','JOHNSON MATTHEY','LBMA','LIFFE','LME','LPPM','MDE-BURSA MALAYSIA','NASDAQ GM','NASDAQ GS','NYMEX','NYSE','NYSE ARCA','OUTROS','PETROBRAS','REUTERS','SELIC','SGX'],
+        ifType:     ['COE','OPC','SWAP','TER'],
+        currency:   ['COROA DINAM/DINAM','COROA NORUE/NORUE','DOLAR CANADENSE','DOLAR DOS EUA','DOLAR/HONG-KONG','EURO/COM.EUROPEIA','FRANCO SUICO','IENE','IUAN RENMIMBI/CHI','LIBRA ESTERLINA','NOVO DOLAR/TAIWAN','RANDE/AFRICA SUL','REAL','TAXA JUROS MERCADO INTERNACIONAL','WON/COREIA SUL'],
+        expMonth:   ['1','2','3','4','5','6','7','8','9','10','11','12'],
+        calculated: ['SIM','NÃO'],
+        quotType:   ['AJUSTE','FECHAMENTO','MAXIMO','MINIMO'],
+        convFactor: ['0.01','1.0'],
+        unitNeg:    ['-','ARROBA LIQUIDA','BARRIL','BUSHELS','GALAO','HUNDREDWEIGHT (CWT)','LITRO','METRO CUBICO','MMBTU','MWH','NOTA','ONCA TROY','POUND','SACA(60KG)','SHORT TONELADA','TONELADA','TONELADA METRICA','USD POR BTC','USD POR ETH'],
+        commodity:  ['ACO','ACUCAR','ALGODAO','ALUMINIO','ARROZ','BENZENO','BOBINA DE ACO LAMINADO','BOI','BUTANO','CACAU','CAFE','CARGA','CARVAO','CHUMBO','COBALTO','COBRE','CRIPTOATIVO','DIESEL','ESTANHO','ETANOL','ETILENO','FOSFATO','FRETE DE ROTA','FUTURO DO TESOURO AMERICANO','FUTUROS','GAS NATURAL','GAS NATURAL EM USD','GASOLEO','GASOLINA','HIDROXIDO DE LITIO','MILHO','MINERIO DE FERRO','NIQUEL','OLEO','OLEO COMBUSTIVEL','OLEO DE PALMA EM USD','OURO','PALADIO','PETROLEO','PLATINA','PLATTS','POLIPROPILENO','PRATA','PROPANO','PROPILENO','RODIO','SOJA','SUCO DE LARANJA','SUINOS','TRIGO','UREIA','ZINCO'],
+        vcpProduct: ['OPC','SWAP'],
+        vcpLevel1:  ['ACOES INTERNACIONAIS','ACOES NACIONAIS','ATIVOS','CESTA SPREAD','CESTA STANDARD','COMMODITIES','COTAS DE FUNDOS DE INVESTIMENTOS','COTAS DE FUNDOS DE INVESTIMENTOS INTERNACIONAIS','ESTRATEGIA','INDICES','INDICES DE PRECOS','INDICES INTERNACIONAIS','INDICES NACIONAIS','JUROS','JUROS INTERNACIONAIS','MOEDAS','PARIDADE DE MOEDAS','TITULOS PUBLICOS NACIONAIS'],
+        domGroup:   ['CARTEIRA DE INVESTIMENTO','CURVAS','DOMINIOS'],
+        domSub:     ['Amortização a Cada','Classe/Tipo/PH','Condio Especfica de Resgate','Espécie do Instrumento Financeiro','Finalidade','Forma de Pagamento','Garantia Especial','Juros a Cada','Origem de Crédito','Periodicidade de Amortização','Periodicidade de Juros','Safra','Taxa Referencial ou Indexador','Tipo Classe','Tipo do Indicador do Índice (VCP)'],
+        domIfType:  ['ACI','CCB','CCE','CCI','CDA','CDB','CDCA','CMER','COE','CPR','CRA','CRH','CRI','CRP','CRPH','DEB','DI','IECE','IECI','IECP','LCA','LCI','LF','LFSC','LFSN','LFSP','LIG','NC','NCE','NCR','OPC','SWAP'],
+        domClass:   ['ACOES INTERNACIONAIS','ACOES NACIONAIS','ATIVOS','CESTA SPREAD','CESTA STANDARD','COMMODITIES','COTAS DE FUNDOS DE INVESTIMENTOS','COTAS DE FUNDOS DE INVESTIMENTOS INTERNACIONAIS','ESTRATEGIA','INDICES','INDICES DE PRECOS','INDICES INTERNACIONAIS','INDICES NACIONAIS','JUROS','JUROS INTERNACIONAIS','MOEDAS','PARIDADE DE MOEDAS','TITULOS PUBLICOS NACIONAIS']
+    };
+
+    /* ── Modal select helper ─────────────────────────────────────────────── */
+    function fillModalSelect(id, opts, currentVal) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— Select —</option>';
+        opts.forEach(function(o) {
+            var opt = document.createElement('option');
+            opt.value = o; opt.textContent = o;
+            if (String(o) === String(currentVal)) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    function smUpdateAppIdx() {
+        var code = ($('#sm-code').val() || '').trim().toUpperCase();
+        var quot = ($('#sm-quottype').val() || '').trim().toUpperCase();
+        $('#sm-appidx').val((code + (quot ? ' ' + quot : '')).trim());
+    }
+    $(document).on('input', '#sm-code', smUpdateAppIdx);
+    $(document).on('change', '#sm-quottype', smUpdateAppIdx);
+
+    function initModalSelects() {
+        fillModalSelect('sm-classe', OPT.classe);
+        fillModalSelect('sm-exchange', OPT.exchange);
+        fillModalSelect('sm-iftype', OPT.ifType);
+        fillModalSelect('sm-currency', OPT.currency);
+        fillModalSelect('sm-month', OPT.expMonth);
+        fillModalSelect('sm-calc', OPT.calculated);
+        fillModalSelect('sm-quottype', OPT.quotType);
+        fillModalSelect('sm-convfactor', OPT.convFactor);
+        fillModalSelect('sm-unitneg', OPT.unitNeg);
+        fillModalSelect('sm-commodity', OPT.commodity);
+        fillModalSelect('vm-level1', OPT.vcpLevel1);
+        fillModalSelect('vm-product', OPT.vcpProduct);
+        fillModalSelect('dm-group', OPT.domGroup);
+        fillModalSelect('dm-subgroup', OPT.domSub);
+        fillModalSelect('dm-iftype', OPT.domIfType);
+        fillModalSelect('dm-class', OPT.domClass);
+    }
+    initModalSelects();
+
+    /* ── Row data store (keyed by DT row node) ──────────────────────────── */
+    var rowMeta = new WeakMap();  /* node → {idx, maker, checker, status, tableKey} */
+
+    /* ── Shared helpers ─────────────────────────────────────────────────── */
+    function safe(v) {
+        if (v == null || v === '' || String(v) === 'NaN') return '';
+        return String(v);
+    }
+
+    function statusBadge(val) {
+        var st  = (val || 'ACTIVE').toUpperCase();
+        var cls = st === 'ACTIVE' ? 'text-bg-success' : 'text-bg-warning';
+        var lbl = st === 'ACTIVE' ? 'Active' : 'Pending';
+        return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
+    }
+
+    function actionBtns(tableKey, idx, maker) {
+        return '<div class="edit-actions-wrap">' +
+            '<button class="btn btn-info btn-sm btn-act btn-edit" title="Edit" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-edit fs-13"></i></button>' +
+            '<button class="btn btn-success btn-sm btn-act btn-confirm" title="Confirm/Approve" data-table="' + tableKey + '" data-idx="' + idx + '" data-maker="' + (maker||'') + '"><i class="ti ti-check fs-13"></i></button>' +
+            '<button class="btn btn-danger btn-sm btn-act btn-delete" title="Delete" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-trash fs-13"></i></button>' +
+            '</div>';
+    }
+
+    function makeSelect(opts, val, cls) {
+        var s = '<select class="form-select form-select-sm ' + (cls||'') + '">';
+        if (!safe(val)) s += '<option value=""></option>';
+        opts.forEach(function(o) {
+            s += '<option value="' + o + '"' + (safe(val) === o ? ' selected' : '') + '>' + o + '</option>';
+        });
+        s += '</select>';
+        return s;
+    }
+
+    function makeInput(val) {
+        return '<input type="text" class="form-control form-control-sm" value="' + safe(val).replace(/"/g,'&quot;') + '">';
+    }
+
+    /* selectEl = the <select> DOM element */
+    function applySelect2(selectEl) {
+        var $sel = $(selectEl);
+        if ($sel.data('select2')) return; /* already inited */
+        var $td = $sel.closest('td');
+        /* Use the cell's rendered width so the dropdown matches the column */
+        var w = ($td.length && $td.outerWidth() > 30) ? $td.outerWidth() + 'px' : '150px';
+        $sel.select2({
+            width: w,
+            dropdownAutoWidth: false,
+            dropdownParent: $('body'),
+            minimumResultsForSearch: 5
+        });
+    }
+
+    function dtLang() {
+        return {
+            paginate: {
+                first:    '<i class="ti ti-chevrons-left"></i>',
+                previous: '<i class="ti ti-chevron-left"></i>',
+                next:     '<i class="ti ti-chevron-right"></i>',
+                last:     '<i class="ti ti-chevrons-right"></i>'
+            },
+            search: 'Search:', info: 'Showing _START_ to _END_ of _TOTAL_ entries',
+            zeroRecords: 'No matching records found', emptyTable: 'No data available'
+        };
+    }
+
+    function makeDom() {
+        return "<'d-md-flex justify-content-between align-items-center my-2'" +
+               "<'columnToggleWrapper me-2'><'addRowWrapper me-2'>B<'ms-auto'>" +
+               ">" +
+               "<'row'<'col-sm-12'tr>>" +
+               "<'d-md-flex justify-content-between align-items-center mt-2'ip>";
+    }
+
+    function makeExportButtons(exportCols) {
+        var ec = { columns: exportCols, modifier:{page:'all'} };
+        return [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+            autoClose:true,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',    className:'dropdown-item', exportOptions:ec},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',  className:'dropdown-item', exportOptions:ec},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:ec},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF', className:'dropdown-item', exportOptions:ec},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:ec}
+            ]
+        }];
+    }
+
+    function wireColSearch(srId, dtInstance) {
+        $('#' + srId + ' th').on('click', function(e){ e.stopPropagation(); });
+        $('#' + srId + ' th input').on('click', function(e){ e.stopPropagation(); }).on('keyup', function() {
+            var idx = $(this).closest('th')[0].cellIndex;
+            if (dtInstance.column(idx).search() !== this.value) dtInstance.column(idx).search(this.value).draw();
+        });
+    }
+
+    function wireColToggle(labels, dtInstance, startCol) {
+        var sc = startCol || 0;
+        var container = dtInstance.table().container();
+        var wrapper   = container.querySelector('.columnToggleWrapper');
+        if (!wrapper) return;
+        var tblId = dtInstance.table().node().id;
+        var items = labels.map(function(lbl, i) {
+            var uid = 'ct_' + tblId + '_' + i;
+            var ci  = i + sc;
+            return '<li class="dropdown-item"><div class="form-check">' +
+                '<input class="form-check-input toggle-vis" type="checkbox" data-column="' + ci + '" id="' + uid + '" checked>' +
+                '<label class="form-check-label fw-medium" for="' + uid + '">' + lbl + '</label>' +
+                '</div></li>';
+        }).join('');
+        wrapper.innerHTML =
+            '<div class="dropdown"><button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
+            'type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">' +
+            '<i class="ti ti-columns me-1"></i>Columns</button><ul class="dropdown-menu">' + items + '</ul></div>';
+        $(wrapper).find('ul').on('change', function(e) {
+            if ($(e.target).hasClass('toggle-vis')) dtInstance.column(+e.target.dataset.column).visible(e.target.checked);
+        });
+    }
+
+    function wireAddRow(dtInstance, tableKey, addFn) {
+        var container = dtInstance.table().container();
+        var wrapper   = container.querySelector('.addRowWrapper');
+        if (!wrapper) return;
+        var btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all btn-toolbar-addrow';
+        btn.setAttribute('data-bs-toggle', 'tooltip');
+        btn.setAttribute('data-bs-placement', 'bottom');
+        btn.setAttribute('title', 'Add a new row');
+        btn.textContent = 'Add Row +';
+        btn.addEventListener('click', function() { addFn(dtInstance, tableKey); });
+        wrapper.appendChild(btn);
+    }
+
+    /* ── API helpers ─────────────────────────────────────────────────────── */
+    function apiCall(url, body, cb) {
+        fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        }).then(function(r){ return r.json(); }).then(cb).catch(function(e){
+            Swal.fire('Error', 'Network error: ' + e.message, 'error');
+        });
+    }
+
+    /* ── Delete handler ─────────────────────────────────────────────────── */
+    function handleDelete(btn, dtInstance) {
+        var tableKey = btn.dataset.table;
+        var idx      = parseInt(btn.dataset.idx);
+        var row      = dtInstance.row($(btn).closest('tr'));
+        Swal.fire({
+            title: 'Delete this record?',
+            text: 'This action cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, delete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#dc3545'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+            apiCall('/api/b3/delete', {table: tableKey, idx: idx}, function(res) {
+                if (res.ok) {
+                    row.remove().draw(false);
+                    Swal.fire({title:'Deleted!', icon:'success', timer:1200, showConfirmButton:false});
+                } else {
+                    Swal.fire('Error', res.error || 'Failed to delete.', 'error');
+                }
+            });
+        });
+    }
+
+    /* ── Confirm/Approve handler (standalone confirm button) ─────────────── */
+    function handleApprove(btn, dtInstance, rebuildRowFn) {
+        var tableKey = btn.dataset.table;
+        var idx      = parseInt(btn.dataset.idx);
+        var maker    = btn.dataset.maker || '';
+        if (maker && maker === CURRENT_USER) {
+            Swal.fire({
+                title: 'Cannot approve your own changes',
+                text: 'Another user must approve records you modified.',
+                icon: 'warning'
+            });
+            return;
+        }
+        Swal.fire({
+            title: 'Approve this record?',
+            text: 'Your SID will be recorded as Checker.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Approve',
+            confirmButtonColor: '#0acf97'
+        }).then(function(result) {
+            if (!result.isConfirmed) return;
+            apiCall('/api/b3/update', {table: tableKey, idx: idx, action: 'approve'}, function(res) {
+                if (res.ok) {
+                    var row = dtInstance.row($(btn).closest('tr'));
+                    var cells = row.data();
+                    cells[1] = statusBadge(res.new_status || 'ACTIVE');
+                    cells[0] = actionBtns(tableKey, idx, '');
+                    row.data(cells).draw(false);
+                    Swal.fire({title:'Approved!', icon:'success', timer:1200, showConfirmButton:false});
+                } else if (res.error === 'same_user') {
+                    Swal.fire('Not allowed', 'Cannot approve your own changes.', 'warning');
+                } else {
+                    Swal.fire('Error', res.error || 'Failed to approve.', 'error');
+                }
+            });
+        });
+    }
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 1: UNDERLYING ASSETS
+    ════════════════════════════════════════════════════════════════════ */
+    var subjData = [];
+
+    function buildSubjRows(data) {
+        return data.map(function(r) {
+            var idx   = (r._idx !== undefined) ? r._idx : -1;
+            var maker = safe(r['MAKER']);
+            var appIdx = (safe(r['Codigo do Ativo Subjacente']) + ' ' + safe(r['Tipo Cotacao'])).trim();
+            if (r['Indice Valorizacao']) appIdx = safe(r['Indice Valorizacao']);
+            return [
+                actionBtns('subj', idx, maker),
+                statusBadge(r['STATUS']),
+                safe(r['Classe']),
+                safe(r['Codigo do Ativo Subjacente']),
+                safe(r['Bolsa de Negociacao']),
+                appIdx,
+                safe(r['Tipo IF']),
+                safe(r['Moeda']),
+                safe(r['Mes Vencimento']),
+                safe(r['Ano Vencimento']),
+                safe(r['Ticker'] || r['Codigo do Ativo Subjacente']),
+                safe(r['Calculado']),
+                safe(r['Tipo Cotacao']),
+                safe(r['Fator Conversao']),
+                safe(r['Unidade de Negociacao']),
+                safe(r['Commodity'])
+            ];
+        });
+    }
+
+    /* Enter edit mode for Subjacente row — modal-based */
+    function subjEnterEdit(row, dtSubj) {
+        var cells = row.data();
+        var tr    = row.node();
+        var idx   = parseInt($(tr).find('.btn-edit').data('idx'));
+        var subjModalEl = document.getElementById('subjModal');
+        if (!subjModalEl) return;
+        $(subjModalEl).data('editIdx', idx).data('editRow', row).data('dtInst', dtSubj);
+        document.getElementById('subjModalTitle').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Underlying Asset';
+        fillModalSelect('sm-classe', OPT.classe, cells[2]);
+        $('#sm-code').val(cells[3] || '');
+        fillModalSelect('sm-exchange', OPT.exchange, cells[4]);
+        $('#sm-appidx').val(cells[5] || '');
+        fillModalSelect('sm-iftype', OPT.ifType, cells[6]);
+        fillModalSelect('sm-currency', OPT.currency, cells[7]);
+        fillModalSelect('sm-month', OPT.expMonth, cells[8]);
+        $('#sm-year').val(cells[9] || '');
+        $('#sm-ticker').val(cells[10] || '');
+        fillModalSelect('sm-calc', OPT.calculated, cells[11]);
+        fillModalSelect('sm-quottype', OPT.quotType, cells[12]);
+        fillModalSelect('sm-convfactor', OPT.convFactor, cells[13]);
+        fillModalSelect('sm-unitneg', OPT.unitNeg, cells[14]);
+        fillModalSelect('sm-commodity', OPT.commodity, cells[15]);
+        smUpdateAppIdx();
+        bootstrap.Modal.getOrCreateInstance(subjModalEl).show();
+    }
+
+    /* ── Generic helper: append a new-row form directly to a DT tbody ─────
+       Avoids the row.node()===null pagination bug: the <tr> is appended to
+       the visible tbody so it's always in the DOM regardless of page length. */
+    function appendNewRow(tbody, cells) {
+        var tr = $('<tr class="new-row-edit"></tr>').html(cells.join(''));
+        tbody.prepend(tr);
+        /* Init Select2 after a paint so column widths are settled */
+        setTimeout(function() {
+            tr.find('select').each(function(){ applySelect2(this); });
+        }, 30);
+        $('html, body').animate({scrollTop: tr.offset().top - 100}, 250);
+        return tr;
+    }
+
+    /* Add blank row for Subjacente — modal-based */
+    function subjAddRow(dtSubj) {
+        var subjModalEl = document.getElementById('subjModal');
+        if (!subjModalEl) return;
+        $(subjModalEl).removeData('editIdx').removeData('editRow').removeData('dtInst');
+        $(subjModalEl).data('dtInst', dtSubj);
+        document.getElementById('subjModalTitle').innerHTML = '<i class="ti ti-plus me-1"></i>Add Underlying Asset';
+        $('#sm-code,#sm-year,#sm-ticker').val('');
+        $('#sm-appidx').val('');
+        fillModalSelect('sm-classe', OPT.classe);
+        fillModalSelect('sm-exchange', OPT.exchange);
+        fillModalSelect('sm-iftype', OPT.ifType);
+        fillModalSelect('sm-currency', OPT.currency);
+        fillModalSelect('sm-month', OPT.expMonth);
+        fillModalSelect('sm-calc', OPT.calculated);
+        fillModalSelect('sm-quottype', OPT.quotType);
+        fillModalSelect('sm-convfactor', OPT.convFactor);
+        fillModalSelect('sm-unitneg', OPT.unitNeg);
+        fillModalSelect('sm-commodity', OPT.commodity);
+        bootstrap.Modal.getOrCreateInstance(subjModalEl).show();
+    }
+
+    /* Subjacente modal save handler */
+    $(document).on('click', '#sm-save-btn', function() {
+        var subjModalEl = document.getElementById('subjModal');
+        var editIdx  = $(subjModalEl).data('editIdx');
+        var editRow  = $(subjModalEl).data('editRow');
+        var dtSubj   = $(subjModalEl).data('dtInst');
+        var code  = ($('#sm-code').val() || '').trim().toUpperCase();
+        var quot  = ($('#sm-quottype').val() || '').trim().toUpperCase();
+        var appI  = (code + (quot ? ' ' + quot : '')).trim();
+        var fields = {
+            'Classe':                     $('#sm-classe').val().toUpperCase(),
+            'Codigo do Ativo Subjacente':  code,
+            'Bolsa de Negociacao':         $('#sm-exchange').val().toUpperCase(),
+            'Indice Valorizacao':          appI,
+            'Tipo IF':                     $('#sm-iftype').val().toUpperCase(),
+            'Moeda':                       $('#sm-currency').val().toUpperCase(),
+            'Mes Vencimento':              $('#sm-month').val(),
+            'Ano Vencimento':              $('#sm-year').val(),
+            'Ticker':                      $('#sm-ticker').val().toUpperCase() || code,
+            'Calculado':                   $('#sm-calc').val().toUpperCase(),
+            'Tipo Cotacao':                quot,
+            'Fator Conversao':             $('#sm-convfactor').val(),
+            'Unidade de Negociacao':       $('#sm-unitneg').val().toUpperCase(),
+            'Commodity':                   $('#sm-commodity').val().toUpperCase()
+        };
+        var isEdit = (editIdx !== undefined && editIdx !== null && !isNaN(parseInt(editIdx)));
+        var url = isEdit ? '/api/b3/update' : '/api/b3/add';
+        var body = isEdit
+            ? {table:'subj', idx: parseInt(editIdx), fields: fields, action:'edit'}
+            : {table:'subj', fields: fields};
+        apiCall(url, body, function(res) {
+            if (res.ok) {
+                var newRow = [
+                    actionBtns('subj', isEdit ? parseInt(editIdx) : res.idx, CURRENT_USER),
+                    statusBadge('PENDING'),
+                    fields['Classe'], code, fields['Bolsa de Negociacao'], appI,
+                    fields['Tipo IF'], fields['Moeda'], fields['Mes Vencimento'], fields['Ano Vencimento'],
+                    fields['Ticker'], fields['Calculado'], fields['Tipo Cotacao'],
+                    fields['Fator Conversao'], fields['Unidade de Negociacao'], fields['Commodity']
+                ];
+                if (isEdit && editRow) {
+                    editRow.data(newRow).draw(false);
+                } else if (dtSubj) {
+                    dtSubj.row.add(newRow).draw(false);
+                }
+                bootstrap.Modal.getInstance(subjModalEl).hide();
+                Swal.fire({title: isEdit ? 'Saved!' : 'Added!', icon:'success', timer:1500, showConfirmButton:false});
+            } else {
+                Swal.fire('Error', res.error || 'Failed to save.', 'error');
+            }
+        });
+    });
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 2: VCP
+    ════════════════════════════════════════════════════════════════════ */
+    function buildVCPRows(data) {
+        return data.map(function(r) {
+            var idx   = (r._idx !== undefined) ? r._idx : -1;
+            var maker = safe(r['MAKER']);
+            return [
+                actionBtns('vcp', idx, maker),
+                statusBadge(r['STATUS']),
+                safe(r['ID da Qualificação']),
+                safe(r['Descrição da Qualificação']),
+                safe(r['Descrição Adicional da Qualificação']),
+                safe(r['Classificação Nível 1']),
+                safe(r['Produto'])
+            ];
+        });
+    }
+
+    function vcpEnterEdit(row, dtVCP) {
+        var cells = row.data();
+        var tr    = row.node();
+        var idx   = parseInt($(tr).find('.btn-edit').data('idx'));
+        var vcpModalEl = document.getElementById('vcpModal');
+        if (!vcpModalEl) return;
+        $(vcpModalEl).data('editIdx', idx).data('editRow', row).data('dtInst', dtVCP);
+        document.getElementById('vcpModalTitle').innerHTML = '<i class="ti ti-edit me-1"></i>Edit VCP';
+        $('#vm-qualid').val(cells[2] || '');
+        $('#vm-desc').val(cells[3] || '');
+        $('#vm-adddesc').val(cells[4] || '');
+        fillModalSelect('vm-level1', OPT.vcpLevel1, cells[5]);
+        fillModalSelect('vm-product', OPT.vcpProduct, cells[6]);
+        bootstrap.Modal.getOrCreateInstance(vcpModalEl).show();
+    }
+
+    function vcpAddRow(dtVCP) {
+        var vcpModalEl = document.getElementById('vcpModal');
+        if (!vcpModalEl) return;
+        $(vcpModalEl).removeData('editIdx').removeData('editRow').removeData('dtInst');
+        $(vcpModalEl).data('dtInst', dtVCP);
+        document.getElementById('vcpModalTitle').innerHTML = '<i class="ti ti-plus me-1"></i>Add VCP';
+        $('#vm-qualid,#vm-desc,#vm-adddesc').val('');
+        fillModalSelect('vm-level1', OPT.vcpLevel1);
+        fillModalSelect('vm-product', OPT.vcpProduct);
+        bootstrap.Modal.getOrCreateInstance(vcpModalEl).show();
+    }
+
+    /* VCP modal save handler */
+    $(document).on('click', '#vm-save-btn', function() {
+        var vcpModalEl = document.getElementById('vcpModal');
+        var editIdx = $(vcpModalEl).data('editIdx');
+        var editRow = $(vcpModalEl).data('editRow');
+        var dtVCP   = $(vcpModalEl).data('dtInst');
+        var fields = {
+            'ID da Qualificação':                   $('#vm-qualid').val().toUpperCase(),
+            'Descrição da Qualificação':            $('#vm-desc').val().toUpperCase(),
+            'Descrição Adicional da Qualificação':  $('#vm-adddesc').val().toUpperCase(),
+            'Classificação Nível 1':                $('#vm-level1').val().toUpperCase(),
+            'Produto':                              $('#vm-product').val().toUpperCase()
+        };
+        var isEdit = (editIdx !== undefined && editIdx !== null && !isNaN(parseInt(editIdx)));
+        var url = isEdit ? '/api/b3/update' : '/api/b3/add';
+        var body = isEdit
+            ? {table:'vcp', idx: parseInt(editIdx), fields: fields, action:'edit'}
+            : {table:'vcp', fields: fields};
+        apiCall(url, body, function(res) {
+            if (res.ok) {
+                var newRow = [
+                    actionBtns('vcp', isEdit ? parseInt(editIdx) : res.idx, CURRENT_USER),
+                    statusBadge('PENDING'),
+                    fields['ID da Qualificação'], fields['Descrição da Qualificação'],
+                    fields['Descrição Adicional da Qualificação'],
+                    fields['Classificação Nível 1'], fields['Produto']
+                ];
+                if (isEdit && editRow) {
+                    editRow.data(newRow).draw(false);
+                } else if (dtVCP) {
+                    dtVCP.row.add(newRow).draw(false);
+                }
+                bootstrap.Modal.getInstance(vcpModalEl).hide();
+                Swal.fire({title: isEdit ? 'Saved!' : 'Added!', icon:'success', timer:1500, showConfirmButton:false});
+            } else {
+                Swal.fire('Error', res.error || 'Failed to save.', 'error');
+            }
+        });
+    });
+
+    /* ════════════════════════════════════════════════════════════════════
+       TABLE 3: DOMAIN
+    ════════════════════════════════════════════════════════════════════ */
+    function buildDomRows(data) {
+        return data.map(function(r) {
+            var idx   = (r._idx !== undefined) ? r._idx : -1;
+            var maker = safe(r['MAKER']);
+            return [
+                actionBtns('dominio', idx, maker),
+                statusBadge(r['STATUS']),
+                safe(r['Nome do Grupo']),
+                safe(r['Nome do Subgrupo']),
+                safe(r['Codigo TipoIF']),
+                safe(r['Identificador Qualificacao']),
+                safe(r['Descricao Qualificacao']),
+                safe(r['Classificação'])
+            ];
+        });
+    }
+
+    function domEnterEdit(row, dtDom) {
+        var cells = row.data();
+        var tr    = row.node();
+        var idx   = parseInt($(tr).find('.btn-edit').data('idx'));
+        var domModalEl = document.getElementById('domModal');
+        if (!domModalEl) return;
+        $(domModalEl).data('editIdx', idx).data('editRow', row).data('dtInst', dtDom);
+        document.getElementById('domModalTitle').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Domain';
+        fillModalSelect('dm-group', OPT.domGroup, cells[2]);
+        fillModalSelect('dm-subgroup', OPT.domSub, cells[3]);
+        fillModalSelect('dm-iftype', OPT.domIfType, cells[4]);
+        $('#dm-qualid').val(cells[5] || '');
+        $('#dm-desc').val(cells[6] || '');
+        fillModalSelect('dm-class', OPT.domClass, cells[7]);
+        bootstrap.Modal.getOrCreateInstance(domModalEl).show();
+    }
+
+    function domAddRow(dtDom) {
+        var domModalEl = document.getElementById('domModal');
+        if (!domModalEl) return;
+        $(domModalEl).removeData('editIdx').removeData('editRow').removeData('dtInst');
+        $(domModalEl).data('dtInst', dtDom);
+        document.getElementById('domModalTitle').innerHTML = '<i class="ti ti-plus me-1"></i>Add Domain';
+        $('#dm-qualid,#dm-desc').val('');
+        fillModalSelect('dm-group', OPT.domGroup);
+        fillModalSelect('dm-subgroup', OPT.domSub);
+        fillModalSelect('dm-iftype', OPT.domIfType);
+        fillModalSelect('dm-class', OPT.domClass);
+        bootstrap.Modal.getOrCreateInstance(domModalEl).show();
+    }
+
+    /* Domain modal save handler */
+    $(document).on('click', '#dm-save-btn', function() {
+        var domModalEl = document.getElementById('domModal');
+        var editIdx = $(domModalEl).data('editIdx');
+        var editRow = $(domModalEl).data('editRow');
+        var dtDom   = $(domModalEl).data('dtInst');
+        var fields = {
+            'Nome do Grupo':              $('#dm-group').val().toUpperCase(),
+            'Nome do Subgrupo':           $('#dm-subgroup').val().toUpperCase(),
+            'Codigo TipoIF':              $('#dm-iftype').val().toUpperCase(),
+            'Identificador Qualificacao': $('#dm-qualid').val().toUpperCase(),
+            'Descricao Qualificacao':     $('#dm-desc').val().toUpperCase(),
+            'Classificação':              $('#dm-class').val().toUpperCase()
+        };
+        var isEdit = (editIdx !== undefined && editIdx !== null && !isNaN(parseInt(editIdx)));
+        var url = isEdit ? '/api/b3/update' : '/api/b3/add';
+        var body = isEdit
+            ? {table:'dominio', idx: parseInt(editIdx), fields: fields, action:'edit'}
+            : {table:'dominio', fields: fields};
+        apiCall(url, body, function(res) {
+            if (res.ok) {
+                var newRow = [
+                    actionBtns('dominio', isEdit ? parseInt(editIdx) : res.idx, CURRENT_USER),
+                    statusBadge('PENDING'),
+                    fields['Nome do Grupo'], fields['Nome do Subgrupo'], fields['Codigo TipoIF'],
+                    fields['Identificador Qualificacao'], fields['Descricao Qualificacao'],
+                    fields['Classificação']
+                ];
+                if (isEdit && editRow) {
+                    editRow.data(newRow).draw(false);
+                } else if (dtDom) {
+                    dtDom.row.add(newRow).draw(false);
+                }
+                bootstrap.Modal.getInstance(domModalEl).hide();
+                Swal.fire({title: isEdit ? 'Saved!' : 'Added!', icon:'success', timer:1500, showConfirmButton:false});
+            } else {
+                Swal.fire('Error', res.error || 'Failed to save.', 'error');
+            }
+        });
+    });
+
+    /* ════════════════════════════════════════════════════════════════════
+       DATATABLE INIT
+    ════════════════════════════════════════════════════════════════════ */
     var raw = sessionStorage.getItem('b3_search_results');
     if (!raw) {
         document.getElementById('noDataBanner').style.display = '';
         document.getElementById('resultsWrapper').style.display = 'none';
         return;
     }
-
     var payload;
-    try { payload = JSON.parse(raw); }
-    catch (e) {
+    try { payload = JSON.parse(raw); } catch(e) {
         document.getElementById('noDataBanner').style.display = '';
         document.getElementById('resultsWrapper').style.display = 'none';
         return;
     }
 
-    var subjData    = payload.subj    || [];
-    var vcpData     = payload.vcp     || [];
-    var dominioData = payload.dominio || [];
-    var filters     = payload.filters || {};
+    var subjDataArr    = payload.subj    || [];
+    var vcpDataArr     = payload.vcp     || [];
+    var dominioDataArr = payload.dominio || [];
+    var filters        = payload.filters || {};
 
-    /* ── Filter summary banner ──────────────────────────────────────────── */
-    var active = Object.entries(filters)
-        .filter(function(p) { return p[1]; })
-        .map(function(p) { return '<strong>' + p[0] + '</strong>: ' + p[1]; });
+    document.getElementById('cntSubj').textContent = subjDataArr.length;
+    document.getElementById('cntVCP').textContent  = vcpDataArr.length;
+    document.getElementById('cntDom').textContent  = dominioDataArr.length;
 
+    if (!subjDataArr.length && !vcpDataArr.length && !dominioDataArr.length) {
+        document.getElementById('noDataBanner').style.display = '';
+        document.getElementById('resultsWrapper').style.display = 'none';
+        return;
+    }
+
+    var active = Object.entries(filters).filter(function(p){ return p[1]; })
+        .map(function(p){ return '<strong>' + p[0] + '</strong>: ' + p[1]; });
     if (active.length) {
         document.getElementById('filterSummary').style.removeProperty('display');
-        document.getElementById('filterSummaryText').innerHTML =
-            'Active filters — ' + active.join(' &nbsp;|&nbsp; ');
+        document.getElementById('filterSummaryText').innerHTML = 'Active filters — ' + active.join(' &nbsp;|&nbsp; ');
     }
 
-    /* ── Counters ───────────────────────────────────────────────────────── */
-    document.getElementById('cntSubj').textContent = subjData.length;
-    document.getElementById('cntVCP').textContent  = vcpData.length;
-    document.getElementById('cntDom').textContent  = dominioData.length;
-
-    if (subjData.length === 0 && vcpData.length === 0 && dominioData.length === 0) {
-        document.getElementById('noDataBanner').style.display = '';
-        document.getElementById('resultsWrapper').style.display = 'none';
-        return;
-    }
-
-    /* ── Shared DataTable options ───────────────────────────────────────── */
-    function safe(v) {
-        if (v == null || v === '' || String(v) === 'NaN') return '';
-        return String(v);
-    }
-
-    var dtLang = {
-        paginate: {
-            first:    '<i class="ti ti-chevrons-left"></i>',
-            previous: '<i class="ti ti-chevron-left"></i>',
-            next:     '<i class="ti ti-chevron-right"></i>',
-            last:     '<i class="ti ti-chevrons-right"></i>'
-        },
-        search: 'Search all columns:',
-        info: 'Showing _START_ to _END_ of _TOTAL_ entries',
-        infoFiltered: '(filtered from _MAX_ total)',
-        zeroRecords: 'No matching records found',
-        emptyTable: 'No data available'
-    };
-
-    var exportCols = { modifier: { page: 'all' } };
-
-    function makeExportButtons(prefix) {
-        return [
-            {
-                extend: 'collection',
-                text: '<i class="ti ti-download me-1"></i> Export',
-                className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
-                autoClose: true,
-                buttons: [
-                    { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',         className: 'dropdown-item', exportOptions: exportCols },
-                    { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',  className: 'dropdown-item', exportOptions: exportCols },
-                    { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: exportCols },
-                    { extend: 'pdf',   text: '<i class="ti ti-file-text me-1"></i> PDF',      className: 'dropdown-item', exportOptions: exportCols },
-                    { extend: 'print', text: '<i class="ti ti-printer me-1"></i> Print',      className: 'dropdown-item', exportOptions: exportCols }
-                ]
-            }
-        ];
-    }
-
-    function makeDom() {
-        return "<'d-md-flex justify-content-between align-items-center my-2'" +
-               "<'columnToggleWrapper me-2'>" +
-               "B" +
-               "<'ms-auto'>" +
-               ">" +
-               "<'row'<'col-sm-12'tr>>" +
-               "<'d-md-flex justify-content-between align-items-center mt-2'ip>";
-    }
-
-    /* ── Helper: fix i18n + scrollX duplicate-header bug ───────────────────
-       DataTables (scrollX mode) clones <thead> into a fixed scroll-head div,
-       copying every attribute – including data-lang.  When applyTranslations()
-       later replaces innerHTML on ALL [data-lang] elements it also hits the
-       hidden body-thead <th> cells that DataTables zeroes out for sizing,
-       breaking their height:0 constraint and making a ghost header appear.
-
-       Fix:
-         1. In the scrollHead clone  → replace data-lang on <th> with a
-            <span data-lang> wrapper so sort-arrow spans survive translation.
-         2. In the scrollBody original → strip data-lang so applyTranslations
-            never touches those hidden sizing cells.
-    ─────────────────────────────────────────────────────────────────────── */
-    function setupI18nHeaders(api, colKeys) {
-        var container = api.table().container();
-        var tblNode   = api.table().node();
-
-        /* scrollHead: inject <span data-lang> to hold the text; keep sort arrows */
-        $(container).find('.dataTables_scrollHead thead th').each(function(i) {
-            var th  = this;
-            var key = colKeys[i];
-            if (!key) return;
-
-            /* collect element children (sort-arrow spans) and text */
-            var elKids = [];
-            var text   = '';
-            Array.from(th.childNodes).forEach(function(node) {
-                if (node.nodeType === 3) { text += node.textContent; }
-                else if (node.nodeType === 1) { elKids.push(node.cloneNode(true)); }
-            });
-            text = text.trim() || th.textContent.trim();
-
-            th.removeAttribute('data-lang');
-            th.innerHTML = '';
-            var span = document.createElement('span');
-            span.setAttribute('data-lang', key);
-            span.textContent = text;
-            th.appendChild(span);
-            elKids.forEach(function(el) { th.appendChild(el); });
-        });
-
-        /* scrollBody original thead row 0: remove data-lang so it is never touched */
-        tblNode.querySelectorAll('thead tr:first-child th[data-lang]').forEach(function(th) {
-            th.removeAttribute('data-lang');
-        });
-    }
-
-    /* ── Helper: wire column-search inputs ─────────────────────────────── */
-    function wireColSearch(srId, dtInstance) {
-        document.querySelectorAll('#' + srId + ' th').forEach(function(th) {
-            th.addEventListener('click', function(e) { e.stopPropagation(); });
-        });
-        document.querySelectorAll('#' + srId + ' th input').forEach(function(input) {
-            input.addEventListener('click', function(e) { e.stopPropagation(); });
-            input.addEventListener('keyup', function() {
-                var idx = input.closest('th').cellIndex;
-                if (dtInstance.column(idx).search() !== this.value) {
-                    dtInstance.column(idx).search(this.value).draw();
-                }
-            });
-        });
-    }
-
-    /* ── Helper: wire Show/Hide columns dropdown ────────────────────────── */
-    /* Each DataTable has its own .columnToggleWrapper inside its container.
-       Scope querySelector to that container so tables don't overwrite each other. */
-    function wireColToggle(labels, dtInstance) {
-        var container = dtInstance.table().container();   // scoped to THIS table
-        var wrapper   = container.querySelector('.columnToggleWrapper');
-        if (!wrapper) return;
-
-        var tblId = dtInstance.table().node().id || Math.random().toString(36).slice(2);
-
-        var items = labels.map(function(lbl, i) {
-            var uid = 'ct_' + tblId + '_' + i;
-            return '<li class="dropdown-item"><div class="form-check">' +
-                   '<input class="form-check-input toggle-vis" type="checkbox" ' +
-                   'data-column="' + i + '" id="' + uid + '" checked>' +
-                   '<label class="form-check-label fw-medium" for="' + uid + '">' + lbl + '</label>' +
-                   '</div></li>';
-        }).join('');
-
-        wrapper.innerHTML =
-            '<div class="dropdown">' +
-            '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" ' +
-            'type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">' +
-            '<i class="ti ti-columns me-1"></i>Columns</button>' +
-            '<ul class="dropdown-menu">' + items + '</ul></div>';
-
-        wrapper.querySelector('ul').addEventListener('change', function(e) {
-            if (e.target.classList.contains('toggle-vis')) {
-                dtInstance.column(+e.target.dataset.column).visible(e.target.checked);
-            }
-        });
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       TABLE 1: UNDERLYING ASSETS (Subjacente)
-    ════════════════════════════════════════════════════════════════════ */
-    var subjRows = subjData.map(function(r) {
-        return [
-            safe(r['Classe']),
-            safe(r['Codigo do Ativo Subjacente']),
-            safe(r['Bolsa de Negociacao']),
-            safe(r['Indice Valorizacao']),
-            safe(r['Tipo IF']),
-            safe(r['Moeda']),
-            safe(r['Mes Vencimento']),
-            safe(r['Ano Vencimento']),
-            safe(r['Ticker'] || r['Codigo do Ativo Subjacente']),
-            safe(r['Calculado']),
-            safe(r['Tipo Cotacao']),
-            safe(r['Fator Conversao']),
-            safe(r['Unidade de Negociacao']),
-            safe(r['Commodity'])
-        ];
-    });
-
+    /* ── Init Subjacente ─────────────────────────────────────────────── */
     var dtSubj = $('#tblSubjacente').DataTable({
-        data: subjRows,
-        responsive: false,
-        scrollX: true,
-        autoWidth: false,
-        pageLength: 25,
-        dom: makeDom(),
-        buttons: makeExportButtons('subj'),
-        language: dtLang,
-        columnDefs: [{ targets: '_all', defaultContent: '' }],
-        initComplete: function() {
-            var api = this.api();
-            setupI18nHeaders(api, [
-                'b3-class','b3-underlying-asset-code','b3-exchange','b3-appreciation-index',
-                'b3-instrument-type','b3-currency','b3-expiry-month','b3-expiry-year',
-                'b3-ticker','b3-calculated','b3-quotation-type','b3-conversion-factor',
-                'b3-unit-of-negotiation','b3-commodity'
-            ]);
-            wireColSearch('srSubj', api);
-            wireColToggle([
-                'Class','Underlying Asset Code','Exchange','Appreciation Index',
-                'Instr. Type (IF)','Currency','Expiry Month','Expiry Year',
-                'Ticker','Calculated','Quotation Type','Conversion Factor','Unit of Negotiation','Commodity'
-            ], api);
-        }
-    });
-
-    $('#pageLenSubj').on('change', function() {
-        dtSubj.page.len(+this.value).draw();
-    });
-
-    /* ════════════════════════════════════════════════════════════════════
-       TABLE 2: VCP
-    ════════════════════════════════════════════════════════════════════ */
-    var vcpRows = vcpData.map(function(r) {
-        var status = safe(r['Situação da Qualificação']);
-        var badgeClass = status === 'Habilitado' ? 'bg-soft-success text-success' : 'bg-soft-danger text-danger';
-        return [
-            safe(r['ID da Qualificação']),
-            safe(r['Descrição da Qualificação']),
-            safe(r['Descrição Adicional da Qualificação']),
-            safe(r['Classificação Nível 1']),
-            '<span class="badge ' + badgeClass + '">' + status + '</span>',
-            safe(r['Produto'])
-        ];
-    });
-
-    var dtVCP = $('#tblVCP').DataTable({
-        data: vcpRows,
-        responsive: false,
-        scrollX: true,
-        autoWidth: false,
-        pageLength: 25,
-        dom: makeDom(),
-        buttons: makeExportButtons('vcp'),
-        language: dtLang,
+        data: buildSubjRows(subjDataArr),
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7,8,9,10,11,12,13,14,15]),
+        language: dtLang(),
         columnDefs: [
-            { targets: '_all', defaultContent: '' },
-            { targets: [4], orderable: false }
+            {targets:[0,1], orderable:false, searchable:false},
+            {targets:'_all', defaultContent:''}
         ],
         initComplete: function() {
             var api = this.api();
-            setupI18nHeaders(api, [
-                'b3-qual-id','b3-description','b3-add-description',
-                'b3-level1-class','b3-status','b3-product'
-            ]);
-            wireColSearch('srVCP', api);
-            wireColToggle([
-                'Qualification ID','Description','Additional Description',
-                'Level 1 Classification','Status','Product'
-            ], api);
+            wireColSearch('srSubj', api);
+            wireColToggle(['Status','Class','Asset Code','Exchange','Apprec.Index','IF Type','Currency','Exp.Month','Exp.Year','Ticker','Calc.','Quot.Type','Conv.Factor','Unit Neg.','Commodity'], api, 1);
+            wireAddRow(api, 'subj', function(dt){ subjAddRow(dt); });
         }
     });
+    $('#pageLenSubj').on('change', function(){ dtSubj.page.len(+this.value).draw(); });
+    /* Subjacente is the first visible tab — fire columns.adjust after all assets are loaded */
+    function _fixSubjHeader() { dtSubj.columns.adjust().draw(false); }
+    if (document.readyState === 'complete') {
+        setTimeout(_fixSubjHeader, 50);
+    } else {
+        window.addEventListener('load', function(){ setTimeout(_fixSubjHeader, 50); });
+    }
 
-    $('#pageLenVCP').on('change', function() {
-        dtVCP.page.len(+this.value).draw();
-    });
-
-    /* ════════════════════════════════════════════════════════════════════
-       TABLE 3: DOMAIN (Domínio)
-    ════════════════════════════════════════════════════════════════════ */
-    var domRows = dominioData.map(function(r) {
-        return [
-            safe(r['Nome do Grupo']),
-            safe(r['Nome do Subgrupo']),
-            safe(r['Codigo TipoIF']),
-            safe(r['Identificador Qualificacao']),
-            safe(r['Descricao Qualificacao']),
-            safe(r['Classificação'])
-        ];
-    });
-
-    var dtDom = $('#tblDominio').DataTable({
-        data: domRows,
-        responsive: false,
-        scrollX: true,
-        autoWidth: false,
-        pageLength: 25,
-        dom: makeDom(),
-        buttons: makeExportButtons('dom'),
-        language: dtLang,
-        columnDefs: [{ targets: '_all', defaultContent: '' }],
+    /* ── Init VCP ────────────────────────────────────────────────────── */
+    var dtVCP = $('#tblVCP').DataTable({
+        data: buildVCPRows(vcpDataArr),
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
+        language: dtLang(),
+        columnDefs: [
+            {targets:[0,1], orderable:false, searchable:false},
+            {targets:'_all', defaultContent:''}
+        ],
         initComplete: function() {
             var api = this.api();
-            setupI18nHeaders(api, [
-                'b3-group','b3-subgroup','b3-if-type-code',
-                'b3-qual-id','b3-qual-description','b3-classification'
-            ]);
-            wireColSearch('srDom', api);
-            wireColToggle([
-                'Group','Subgroup','IF Type Code',
-                'Qualification ID','Qualification Description','Classification'
-            ], api);
+            wireColSearch('srVCP', api);
+            wireColToggle(['Status','Qual.ID','Description','Add.Description','Level1 Class.','Product'], api, 1);
+            wireAddRow(api, 'vcp', function(dt){ vcpAddRow(dt); });
         }
     });
+    $('#pageLenVCP').on('change', function(){ dtVCP.page.len(+this.value).draw(); });
 
-    $('#pageLenDom').on('change', function() {
-        dtDom.page.len(+this.value).draw();
+    /* ── Init Dominio ────────────────────────────────────────────────── */
+    var dtDom = $('#tblDominio').DataTable({
+        data: buildDomRows(dominioDataArr),
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
+        language: dtLang(),
+        columnDefs: [
+            {targets:[0,1], orderable:false, searchable:false},
+            {targets:'_all', defaultContent:''}
+        ],
+        initComplete: function() {
+            var api = this.api();
+            wireColSearch('srDom', api);
+            wireColToggle(['Status','Group','Subgroup','IF Type Code','Qual.ID','Description','Classification'], api, 1);
+            wireAddRow(api, 'dominio', function(dt){ domAddRow(dt); });
+        }
+    });
+    $('#pageLenDom').on('change', function(){ dtDom.page.len(+this.value).draw(); });
+
+    /* ── Tab switch redraw ───────────────────────────────────────────── */
+    document.querySelectorAll('#resultTabs button[data-bs-toggle="tab"]').forEach(function(btn) {
+        btn.addEventListener('shown.bs.tab', function() {
+            var t = btn.getAttribute('data-bs-target');
+            if (t==='#tabSubjacente') dtSubj.columns.adjust().draw(false);
+            if (t==='#tabVCP')        dtVCP.columns.adjust().draw(false);
+            if (t==='#tabDominio')    dtDom.columns.adjust().draw(false);
+        });
     });
 
-    /* ── Tab switch: redraw active table so columns align ───────────────── */
-    document.querySelectorAll('#resultTabs button[data-bs-toggle="tab"]')
-        .forEach(function(btn) {
-            btn.addEventListener('shown.bs.tab', function() {
-                var target = btn.getAttribute('data-bs-target');
-                if (target === '#tabSubjacente') dtSubj.columns.adjust().draw(false);
-                if (target === '#tabVCP')        dtVCP.columns.adjust().draw(false);
-                if (target === '#tabDominio')    dtDom.columns.adjust().draw(false);
-            });
-        });
+    /* ── Global event delegation for action buttons ──────────────────── */
+    function getDtForTable(tableKey) {
+        if (tableKey==='subj')    return dtSubj;
+        if (tableKey==='vcp')     return dtVCP;
+        if (tableKey==='dominio') return dtDom;
+    }
 
-}); // end document.ready
+    $(document).on('click', '.btn-edit', function() {
+        var btn      = this;
+        var tableKey = btn.dataset.table;
+        var dt       = getDtForTable(tableKey);
+        if (!dt) return;
+        var row = dt.row($(btn).closest('tr'));
+        if (tableKey==='subj')    subjEnterEdit(row, dt);
+        if (tableKey==='vcp')     vcpEnterEdit(row, dt);
+        if (tableKey==='dominio') domEnterEdit(row, dt);
+    });
+
+    $(document).on('click', '.btn-confirm', function() {
+        var btn = this;
+        var tableKey = btn.dataset.table;
+        var dt = getDtForTable(tableKey);
+        if (!dt) return;
+        handleApprove(btn, dt);
+    });
+
+    $(document).on('click', '.btn-delete', function() {
+        var btn = this;
+        var tableKey = btn.dataset.table;
+        var dt = getDtForTable(tableKey);
+        if (!dt) return;
+        handleDelete(btn, dt);
+    });
+
+}); // end ready
 </script>
 {% endblock extra_javascript %}

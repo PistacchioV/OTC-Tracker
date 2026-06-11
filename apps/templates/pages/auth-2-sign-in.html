@@ -95,58 +95,42 @@
                 <div class="card-body min-vh-100 d-flex flex-column justify-content-center">
                     <div class="auth-brand mb-0 text-center">
                         <a class="logo-dark" href="/">
-                            <img alt="dark logo" height="108" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" />
+                            <img alt="dark logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo-black.png" />
                         </a>
                         <a class="logo-light" href="/">
-                            <img alt="logo" height="108" src="{{ config.ASSETS_ROOT }}/images/logo.png" />
+                            <img alt="logo" height="80" src="{{ config.ASSETS_ROOT }}/images/logo.png" />
                         </a>
                     </div>
                     <div class="mt-auto">
-                        <p class="text-muted text-center auth-sub-text mx-auto">Let’s get you signed in. Enter your
-                            SID and
-                            password to continue.</p>
+                        <p class="text-muted text-center auth-sub-text mx-auto" data-lang="auth-signin-sub">Let’s get you signed in. Enter your SID to continue.</p>
                         <form class="mt-4">
                             <div class="mb-3">
-                                <label class="form-label" for="userEmail">SID <span
+                                <label class="form-label" for="SID">SID <span
                                         class="text-danger">*</span></label>
                                 <div class="app-search">
                                     <input class="form-control" id="SID" placeholder="SID Number" required=""
-                                        type="email" />
+                                        type="text" autofocus />
                                     <i class="app-search-icon text-muted" data-lucide="circle-user"></i>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label" for="userPassword">Password <span
-                                        class="text-danger">*</span></label>
-                                <div class="app-search">
-                                    <input class="form-control" id="userPassword" placeholder="••••••••" required=""
-                                        type="password" />
-                                    <i class="app-search-icon text-muted" data-lucide="key-round"></i>
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="form-check">
                                     <input checked="" class="form-check-input form-check-input-light fs-14"
                                         id="rememberMe" type="checkbox" />
-                                    <label class="form-check-label" for="rememberMe">Keep me signed in</label>
+                                    <label class="form-check-label" for="rememberMe" data-lang="auth-keep-signed">Keep me signed in</label>
                                 </div>
-                                <a class="text-decoration-underline link-offset-3 text-muted"
-                                    href="/auth-2-reset-pass">Forgot
-                                    Password?</a>
                             </div>
                             <div class="d-grid">
-                                <button class="btn btn-primary fw-bold py-2" type="submit">Sign In</button>
+                                <button class="btn btn-primary fw-bold py-2" type="submit" data-lang="auth-signin-btn">Sign In</button>
                             </div>
                         </form>
                     </div>
                     <p class="text-muted text-center mt-4 mb-0">
-                        New here? <a class="text-decoration-underline link-offset-3 fw-semibold"
-                            href="/auth-2-sign-up">Create an
-                            account</a>
+                        <span data-lang="auth-new-here">New here?</span> <a class="text-decoration-underline link-offset-3 fw-semibold"
+                            href="/auth-2-sign-up" data-lang="auth-create-account">Create an account</a>
                     </p>
                     <p class="text-center text-muted mt-auto mb-0">
-                        ©
-                        OTC Tracker — by <span class="fw-semibold">JPMorgan Chase</span>
+                        © <span data-lang="auth-footer">OTC Tracker — by</span> <span class="fw-semibold">JPMorgan Chase</span>
                     </p>
                 </div>
             </div>

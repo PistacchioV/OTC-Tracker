@@ -9,8 +9,8 @@
     top: 0;
     width: $sidenav-width;
     background: $sidenav-bg;
-    box-shadow: var(--#{$prefix}box-shadow-sm);
-    border-right: $card-border-width solid $sidenav-border-color;
+    box-shadow: none;   // Apple: no shadow on chrome; separation via border
+    border-right: 1px solid var(--#{$prefix}sidenav-border-color);
     transition: width .25s ease-in-out;
 
     [data-simplebar] {
@@ -41,7 +41,7 @@
             font-size: $sidenav-item-font-size;
             font-weight: $sidenav-item-font-weight;
             padding: $sidenav-item-padding-y $sidenav-item-padding-x;
-            border-radius: 5px;
+            border-radius: 8px; // Apple rounded.sm
             font-family: $font-family-secondary;
 
             &:hover,

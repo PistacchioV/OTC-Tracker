@@ -1,6 +1,6 @@
 /**
- * Template Name: UBold - Admin & Dashboard Template
- * By (Author): Coderthemes
+ * Template Name: OTC Tracker - Admin & Dashboard Template
+ * By (Author): JPM
  * Module/App (File Name): Main App JS File
  */
 
@@ -12,23 +12,27 @@
 class App {
 
     init() {
-        this.initComponents();
-        this.initPreloader();
-        this.initPortletCard();
-        this.initMultiDropdown();
-        this.initFormValidation();
-        this.initCounter();
-        this.initCodePreview();
-        this.initToggle();
-        this.initDismissible();
-        this.initLeftSidebar(); // Menu Link Activation (Vertical Menu)
-        this.initTopbarMenu(); // Menu Link Activation (Horizontal Menu)
+        try {
+            this.initComponents();
+            this.initPreloader();
+            this.initPortletCard();
+            this.initMultiDropdown();
+            this.initFormValidation();
+            this.initCounter();
+            this.initCodePreview();
+            this.initToggle();
+            this.initDismissible();
+            this.initLeftSidebar(); // Menu Link Activation (Vertical Menu)
+            this.initTopbarMenu(); // Menu Link Activation (Horizontal Menu)
+        } catch (e) {
+            console.warn("Error initializing app:", e);
+        }
     }
 
     // Bootstrap Components
     initComponents() {
 
-        if (typeof lucide.createIcons === 'function') {
+        if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
             lucide.createIcons();
         }
 
@@ -482,12 +486,8 @@ class App {
 
 // demo only
 const skinPresets = {
-    default: { theme: 'light', topbar: 'dark', menu: 'light', sidenav: { user: false } },
-    modern: { theme: 'light', topbar: 'light', menu: 'gradient', sidenav: { user: false } },
-    material: { theme: 'light', topbar: 'light', menu: 'dark', sidenav: { user: true } },
-    saas: { theme: 'light', topbar: 'light', menu: 'light', sidenav: { user: true } },
-    minimal: { theme: 'light', topbar: 'light', menu: 'gray', sidenav: { user: false } },
-    flat: { theme: 'light', topbar: 'light', menu: 'dark', sidenav: { user: false } },
+    default:     { theme: 'light', topbar: 'dark',     menu: 'light',    sidenav: { user: false } },
+    galaxy:      { theme: 'dark',  topbar: 'dark',     menu: 'dark',     sidenav: { user: false } },
 };
 
 // Layout Customizer
@@ -505,23 +505,19 @@ class LayoutCustomizer {
         this.initWindowSize();
         this._adjustLayout();
         this.setSwitchFromConfig();
-        this.openCustomizer() // demo only
     }
 
     initConfig() {
         this.defaultConfig = JSON.parse(JSON.stringify(window.defaultConfig));
         this.config = JSON.parse(JSON.stringify(window.config));
-        this.setSwitchFromConfig();
-    }
 
-    // demo only
-    isFirstVisit() {
-        const visited = localStorage.getItem('__user_has_visited__');
-        if (!visited) {
-            localStorage.setItem('__user_has_visited__', 'true');
-            return true;
+        // Reset if config is stale/incompatible (e.g. old flat structure in localStorage)
+        if (!this.config.layout || !this.config.topbar || !this.config.menu || !this.config.sidenav) {
+            localStorage.removeItem('__OTCTRACKER_CONFIG__');
+            this.config = JSON.parse(JSON.stringify(this.defaultConfig));
         }
-        return false;
+
+        this.setSwitchFromConfig();
     }
 
     monochromeMode() {
@@ -575,14 +571,11 @@ class LayoutCustomizer {
 
 
 
-    // demo only
     openCustomizer() {
         const layoutCustomizer = document.getElementById('theme-settings-offcanvas');
-        if (layoutCustomizer && this.isFirstVisit()) {
-            const offcanvas = new bootstrap.Offcanvas(layoutCustomizer);
-            setTimeout(() => {
-                offcanvas.show()
-            }, 1000)
+        if (layoutCustomizer) {
+            const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(layoutCustomizer);
+            offcanvas.show();
         }
     }
 
@@ -624,7 +617,7 @@ class LayoutCustomizer {
     changeSkin(skin) {
         this.config.skin = skin;
         this.html.setAttribute('data-skin', skin);
-        this.applyPreset(skin); // demo only
+        this.applyPreset(skin);
         this.setSwitchFromConfig();
     }
 
@@ -654,15 +647,42 @@ class LayoutCustomizer {
     }
 
     changeTheme(color) {
-        const nColor = color === 'system' ? this.getSystemTheme() : color;
-        this.config.theme = color
-        this.html.setAttribute("data-bs-theme", color === 'system' ? this.getSystemTheme() : color);
+        this.config.theme = color;
+
+        if (color === 'dark') {
+            this.html.setAttribute("data-bs-theme", "dark");
+            this.config.topbar.color = "dark";
+            this.config.menu.color = "dark";
+            this.html.setAttribute("data-topbar-color", "dark");
+            this.html.setAttribute("data-menu-color", "dark");
+        } else if (color === 'system') {
+            // body stays light; topbar + sidenav go dark
+            this.html.setAttribute("data-bs-theme", "light");
+            this.config.topbar.color = "dark";
+            this.config.menu.color = "dark";
+            this.html.setAttribute("data-topbar-color", "dark");
+            this.html.setAttribute("data-menu-color", "dark");
+        } else {
+            // light: everything light
+            this.html.setAttribute("data-bs-theme", "light");
+            this.config.topbar.color = "light";
+            this.config.menu.color = "light";
+            this.html.setAttribute("data-topbar-color", "light");
+            this.html.setAttribute("data-menu-color", "light");
+        }
+
         this.setSwitchFromConfig();
     }
 
     changeTopbarColor(color) {
         this.config.topbar.color = color;
         this.html.setAttribute('data-topbar-color', color);
+        this.setSwitchFromConfig();
+    }
+
+    changeLayoutDirection(dir) {
+        this.config.layout.dir = dir;
+        this.html.setAttribute('dir', dir);
         this.setSwitchFromConfig();
     }
 
@@ -685,13 +705,14 @@ class LayoutCustomizer {
         this.changeLayoutPosition(this.config.layout.position);
         this.changeTopbarColor(this.config.topbar.color);
         this.changeSidebarUser(this.config.sidenav.user);
+        this.changeLayoutDirection(this.config.layout.dir || 'ltr');
         this._adjustLayout();
     }
 
     setSwitchFromConfig() {
         const config = this.config;
 
-        sessionStorage.setItem('__UBOLD_CONFIG__', JSON.stringify(config));
+        localStorage.setItem('__OTCTRACKER_CONFIG__', JSON.stringify(config));
 
         document.querySelectorAll('#theme-settings-offcanvas input[type=radio]').forEach(cb => cb.checked = false);
 
@@ -709,7 +730,8 @@ class LayoutCustomizer {
             ['data-layout-position', config.layout.position],
             ['data-topbar-color', config.topbar.color],
             ['data-menu-color', config.menu.color],
-            ['data-sidenav-size', config.sidenav.size]
+            ['data-sidenav-size', config.sidenav.size],
+            ['dir', config.layout.dir || 'ltr']
         ].forEach(([name, val]) => {
             const el = select(name, val);
             if (el) el.checked = true;
@@ -730,6 +752,7 @@ class LayoutCustomizer {
         bindChange('input[name="data-sidenav-size"]', input => this.changeLeftbarSize(input.value));
         bindChange('input[name="data-layout-position"]', input => this.changeLayoutPosition(input.value));
         bindChange('input[name="data-topbar-color"]', input => this.changeTopbarColor(input.value));
+        bindChange('input[name="dir"]', input => this.changeLayoutDirection(input.value));
         bindChange('input[name="sidebar-user"]', input => this.changeSidebarUser(input.checked));
 
         const themeToggle = document.getElementById('light-dark-mode');
@@ -743,6 +766,11 @@ class LayoutCustomizer {
         const resetBtn = document.querySelector('#reset-layout');
         if (resetBtn) {
             resetBtn.addEventListener('click', () => this.resetTheme());
+        }
+
+        const customizerEl = document.getElementById('theme-settings-offcanvas');
+        if (customizerEl) {
+            customizerEl.addEventListener('show.bs.offcanvas', () => this.setSwitchFromConfig());
         }
 
         const toggleBtn = document.querySelector('.sidenav-toggle-button');
@@ -829,13 +857,13 @@ const radios = document.querySelectorAll('.thememode-dropdown .dropdown-item inp
 const items = document.querySelectorAll('.thememode-dropdown .dropdown-item');
 
 // restore
-const saved = sessionStorage.getItem('theme');
+const saved = localStorage.getItem('theme');
 if (saved) radios.forEach(r => r.value === saved && (r.checked = true, r.closest('.thememode-dropdown .dropdown-item').classList.add('active')));
 
 // change
 radios.forEach(r => r.addEventListener('change', () => {
     items.forEach(i => i.classList.remove('active'));
-    r.checked && (r.closest('.thememode-dropdown .dropdown-item').classList.add('active'), sessionStorage.setItem('theme', r.value));
+    r.checked && (r.closest('.thememode-dropdown .dropdown-item').classList.add('active'), localStorage.setItem('theme', r.value));
 }));
 
 
@@ -846,7 +874,7 @@ radios.forEach(r => r.addEventListener('change', () => {
 // if (themeToggle) {
 //     const html = document.documentElement;
 //
-//     const storageKey = '__UBOLD_CONFIG__';
+//     const storageKey = '__OTCTRACKER_CONFIG__';
 //     const savedConfig = sessionStorage.getItem(storageKey);
 //     const config = savedConfig ? JSON.parse(savedConfig) : {
 //         theme: html.getAttribute('data-bs-theme') || 'light'
@@ -975,7 +1003,7 @@ class I18nManager {
         translationKeyAttribute = 'data-lang',
         languageSelector = '[data-translator-lang]'
     } = {}) {
-        this.selectedLanguage = sessionStorage.getItem('__UBOLD_LANG__') || defaultLang;
+        this.selectedLanguage = localStorage.getItem('__OTC_TRACKER_LANG__') || defaultLang;
         this.langPath = langPath;
         this.langImageSelector = langImageSelector;
         this.langCodeSelector = langCodeSelector;
@@ -1026,7 +1054,7 @@ class I18nManager {
 
     setLanguage(lang) {
         this.selectedLanguage = lang;
-        sessionStorage.setItem('__UBOLD_LANG__', lang);
+        localStorage.setItem('__OTC_TRACKER_LANG__', lang);
         this.applyTranslations();
         this.updateSelectedImage();
         this.updateSelectedCode();

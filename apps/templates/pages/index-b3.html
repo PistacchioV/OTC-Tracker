@@ -152,6 +152,16 @@
                                 </select>
                             </div>
 
+                            <!-- 13. Status -->
+                            <div class="col-xl-2 col-md-3 col-sm-6">
+                                <label class="form-label" for="selStatus" data-lang="b3-status">Status</label>
+                                <select class="form-select" id="selStatus">
+                                    <option value=""        data-lang="b3-all">-- All --</option>
+                                    <option value="ACTIVE"  data-lang="b3-status-active">Active</option>
+                                    <option value="PENDING" data-lang="b3-status-pending">Pending</option>
+                                </select>
+                            </div>
+
                         </div>
 
                         <div class="border-top border-dashed mt-3 pt-3 d-flex gap-2 flex-wrap">
@@ -266,6 +276,7 @@
         const ano        = val('inputAno');
         const ticker     = val('inputTicker').toUpperCase();
         const calc       = val('selCalculado');
+        const status     = val('selStatus');
 
         const subjResult = DATA.subj.filter(r => {
             if (classe  && r['Classe']                    !== classe)  return false;
@@ -280,6 +291,7 @@
             if (calc      && r['Calculado']                 !== calc)      return false;
             if (commodity && r['Commodity']                 !== commodity) return false;
             if (ticker  && !String(r['Ticker'] || '').toUpperCase().includes(ticker)) return false;
+            if (status  && (r['STATUS'] || 'ACTIVE').toUpperCase() !== status) return false;
             return true;
         });
 
@@ -295,16 +307,18 @@
             if (ticker) {
                 if (!String(r['Descrição da Qualificação'] || '').toUpperCase().includes(ticker)) return false;
             }
+            if (status && (r['STATUS'] || 'ACTIVE').toUpperCase() !== status) return false;
             return true;
         });
 
         const domResult = DATA.dominio.filter(r => {
             if (tipoIF && r['Codigo TipoIF'] !== tipoIF) return false;
+            if (status && (r['STATUS'] || 'ACTIVE').toUpperCase() !== status) return false;
             return true;
         });
 
         const payload = {
-            filters: { classe, codigo, bolsa, indice, tipoIF, moeda, tipoCot, commodity, mes, ano, ticker, calc },
+            filters: { classe, codigo, bolsa, indice, tipoIF, moeda, tipoCot, commodity, mes, ano, ticker, calc, status },
             subj: subjResult,
             vcp: vcpResult,
             dominio: domResult
@@ -342,6 +356,9 @@
                 fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json())
             ]);
 
+            subj.forEach(function(r,i){ r._idx = i; });
+            vcp.forEach(function(r,i){ r._idx = i; });
+            dom.forEach(function(r,i){ r._idx = i; });
             DATA.subj    = subj;
             DATA.vcp     = vcp;
             DATA.dominio = dom;

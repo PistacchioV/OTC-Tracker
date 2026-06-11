@@ -10,6 +10,14 @@ html {
 
 body {
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased; // Apple: crisp text rendering
+    -moz-osx-font-smoothing: grayscale;
+}
+
+// Apple: negative letter-spacing on headings for the "tight" headline cadence
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+    letter-spacing: -0.224px;
 }
 
 button,

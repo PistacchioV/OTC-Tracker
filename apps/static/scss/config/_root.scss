@@ -2,17 +2,16 @@
 // _root.scss
 //
 
-// Google fonts
-@import url('https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+// Inter — closest open-source equivalent to SF Pro Text
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
 
-    // Font Family Secondary
-
-    --#{$prefix}font-family-secondary:    "Public Sans", sans-serif;
+    // Font Family Secondary — system stack resolves to SF Pro on Apple, Inter elsewhere
+    --#{$prefix}font-family-secondary:    system-ui, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
     // Logo
-    --#{$prefix}logo-lg-height:                 150px;
-    --#{$prefix}logo-sm-height:                 120px;
+    --#{$prefix}logo-lg-height:                 40px;
+    --#{$prefix}logo-sm-height:                 28px;
 
     // Sidebar
     --#{$prefix}sidenav-width:                          240px;
@@ -20,7 +19,7 @@
     --#{$prefix}sidenav-width-sm:                       75px;
 
     // Topbar
-    --#{$prefix}topbar-height:                           100px;
+    --#{$prefix}topbar-height:                           64px; // Apple-style condensed nav
 
     // Menu items
     --#{$prefix}sidenav-item-icon-size:                  1rem;
@@ -54,16 +53,20 @@
     --#{$prefix}font-size-xl:                            18px;
     --#{$prefix}font-size-xxl:                           20px;
 
-    --#{$prefix}chart-primary:                           #6658dd;
-    --#{$prefix}chart-primary-rgb:                       #{to-rgb(#6658dd)};
-    --#{$prefix}chart-secondary:                         #4a81d4;
-    --#{$prefix}chart-secondary-rgb:                     #{to-rgb(#4a81d4)};
+    --#{$prefix}chart-primary:                           #0066cc;   // Apple Action Blue
+    --#{$prefix}chart-primary-rgb:                       #{to-rgb(#0066cc)};
+    --#{$prefix}chart-secondary:                         #2997ff;   // Apple Sky Link Blue
+    --#{$prefix}chart-secondary-rgb:                     #{to-rgb(#2997ff)};
     --#{$prefix}chart-gray:                              #edeff3;
     --#{$prefix}chart-gray-rgb:                          #{to-rgb(#edeff3)};
     --#{$prefix}chart-dark:                              #1abc9c;
     --#{$prefix}chart-dark-rgb:                          #{to-rgb(#1abc9c)};
     --#{$prefix}chart-border-color:                      #ecf4fc;
     --#{$prefix}chart-title-color:                      #bbcae1;
+
+    // Apple typography — negative letter-spacing at heading sizes
+    --#{$prefix}heading-letter-spacing:                  -0.224px;  // Apple caption-strong
+    --#{$prefix}display-letter-spacing:                  -0.374px;  // Apple body/display
 }
 
 [data-bs-theme="dark"]{

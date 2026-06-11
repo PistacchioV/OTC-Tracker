@@ -2,9 +2,28 @@
 // _modal.scss
 //
 
+// Apple: modal — rounded.lg surface, soft elevation, hairline borders
+.modal-content {
+    border-radius: 1.125rem !important; // Apple rounded.lg
+    border: 1px solid rgba(0, 0, 0, 0.06) !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    padding: 1.25rem 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
+    padding: 1rem 1.5rem;
+}
+
 // Title text within header
 .modal-title {
     color: inherit;
+    font-weight: 600;
+    letter-spacing: -0.224px;
 }
 
 // Modal full width
@@ -28,9 +47,11 @@
     align-content: center;
 }
 
-// Modal Backdrop
+// Apple: heavily blurred backdrop (20px, same as macOS sheet background)
 .modal-backdrop {
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(20px);
+    background: rgba(0, 0, 0, 0.4) !important;
+    opacity: 1 !important;
 }
 
 
