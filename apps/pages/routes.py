@@ -9,7 +9,7 @@ import threading
 import traceback
 import logging
 import duckdb
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -32,6 +32,31 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 log = logging.getLogger('otc_tracker')
+
+
+# ==============================================================================
+# SESSION EXPIRY — server-side check (independente do browser restaurar cookies)
+# ==============================================================================
+
+@blueprint.before_request
+def enforce_session_expiry():
+    if not session.get('authenticated'):
+        return
+    expires_at = session.get('session_expires_at')
+    if not expires_at:
+        session.clear()
+        return
+    try:
+        expiry = datetime.fromisoformat(expires_at)
+        now = datetime.now(tz=timezone.utc)
+        # Garante comparação timezone-aware
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if now > expiry:
+            session.clear()
+            log.info("[enforce_session_expiry] Session expired — cleared")
+    except (ValueError, TypeError):
+        session.clear()
 
 
 # ==============================================================================
@@ -706,8 +731,9 @@ def register():
 @blueprint.route('/login', methods=['POST'])
 def login():
     sid = request.form.get('sid', '').strip().upper()
+    remember_me = request.form.get('remember_me') == 'on'
     client_ip = get_client_ip()
-    log.info("[login] Attempt SID=%s IP=%s", sid, client_ip)
+    log.info("[login] Attempt SID=%s IP=%s remember=%s", sid, client_ip, remember_me)
 
     if not _validate_sid(sid):
         log.warning("[login] Invalid SID format: %r", sid)
@@ -720,18 +746,19 @@ def login():
         log.info("[login] SID=%s found in DB (Status=%s) — delegating to _handle_existing_user",
                  sid, existing_user.get("Status"))
         return _handle_existing_user(existing_user, sid, client_ip,
-                                     redirect_page='pages_blueprint.sign_in_page')
+                                     redirect_page='pages_blueprint.sign_in_page',
+                                     remember_me=remember_me)
     else:
         log.info("[login] SID=%s not in DB — delegating to _handle_new_user", sid)
         return _handle_new_user(sid, client_ip,
                                 redirect_page='pages_blueprint.sign_in_page')
 
 
-def _handle_existing_user(user, sid, client_ip, redirect_page):
+def _handle_existing_user(user, sid, client_ip, redirect_page, remember_me=False):
     status = user.get("Status", "Pending")
     stored_ip = user.get("IP_Address")
-    log.info("[_handle_existing_user] SID=%s Status=%s StoredIP=%s ClientIP=%s",
-             sid, status, stored_ip, client_ip)
+    log.info("[_handle_existing_user] SID=%s Status=%s StoredIP=%s ClientIP=%s remember=%s",
+             sid, status, stored_ip, client_ip, remember_me)
 
     if status == 'Inactive':
         log.warning("[_handle_existing_user] SID=%s is Inactive — blocking login", sid)
@@ -746,12 +773,13 @@ def _handle_existing_user(user, sid, client_ip, redirect_page):
     # Active
     if stored_ip == client_ip:
         log.info("[_handle_existing_user] SID=%s IP match — granting session directly", sid)
-        _set_session(user)
+        _set_session(user, remember_me=remember_me)
         return redirect(url_for('pages_blueprint.dashboard'))
     else:
         log.info("[_handle_existing_user] SID=%s IP mismatch (stored=%s vs current=%s) — triggering 2FA",
                  sid, stored_ip, client_ip)
         update_user_ip(sid, client_ip)
+        session['pending_remember_me'] = remember_me
         return _initiate_2fa(sid, user["Email"], user["Name"])
 
 
@@ -776,12 +804,16 @@ def _handle_new_user(sid, client_ip, redirect_page):
                            first_name=first_name)
 
 
-def _set_session(user):
+def _set_session(user, remember_me=False):
+    session.permanent = remember_me
     session['authenticated'] = True
     session['user_sid'] = user["SID"]
     session['user_name'] = user["Name"]
     session['user_email'] = user["Email"]
     session['user_role'] = user["Role"]
+    session['remember_me'] = remember_me
+    lifetime = timedelta(days=30) if remember_me else timedelta(hours=8)
+    session['session_expires_at'] = (datetime.now(tz=timezone.utc) + lifetime).isoformat()
 
 
 @blueprint.route('/verify-2fa', methods=['POST'])
@@ -816,11 +848,12 @@ def verify_2fa():
 
     if is_valid:
         user = get_user_by_sid(sid)
+        remember_me = session.pop('pending_remember_me', False)
         session.pop('pending_sid', None)
         session.pop('masked_email', None)
         session.pop('masked_phone', None)
-        _set_session(user)
-        log.info("[verify_2fa] 2FA SUCCESS for SID=%s — session set", sid)
+        _set_session(user, remember_me=remember_me)
+        log.info("[verify_2fa] 2FA SUCCESS for SID=%s remember=%s — session set", sid, remember_me)
 
         if request.is_json:
             return jsonify({"success": True, "redirect": url_for('pages_blueprint.dashboard')})

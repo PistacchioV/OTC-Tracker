@@ -234,6 +234,43 @@ gunicorn --config gunicorn-cfg.py run:app
 
 ---
 
+## 10. Sessão 2026-06-11 (continuação) — Auth, Sidenav, Pending Confirmation
+
+### O que foi feito
+
+#### Auth — `apps/templates/pages/auth-2-sign-in.html` + `apps/pages/routes.py`
+- **Form corrigido:** adicionados `action="/login" method="POST"` e `name="sid"` no input — antes o form submetia GET para `/?` e o SID nunca chegava ao backend
+- **Flash messages:** adicionado bloco `{% with get_flashed_messages %}` no template para mostrar erros (SID inválido, conta Pending/Inactive)
+- **Bug de aspas curvas (Jinja2):** expressão `{% if category == 'error' %}` tinha aspas tipográficas `'` geradas pelo editor, causando `unexpected char` — corrigido para aspas ASCII
+
+#### "Keep me signed in" — implementação completa
+- **Checkbox:** adicionado `name="remember_me"`, removido `checked=""` padrão (antes sempre enviava como marcado)
+- **`login()`:** lê `remember_me = request.form.get('remember_me') == 'on'` e passa para `_handle_existing_user`
+- **`_handle_existing_user()`:** aceita `remember_me`, repassa para `_set_session()` (IP match) ou armazena em `session['pending_remember_me']` (fluxo 2FA)
+- **`_set_session()`:** define `session.permanent = remember_me`, armazena `session['session_expires_at']` — 30 dias (marcado) ou 8 horas (desmarcado)
+- **`verify_2fa()`:** pop de `pending_remember_me` antes de chamar `_set_session`
+- **`before_request` no blueprint:** valida server-side o `session_expires_at` em todo request, limpando a sessão se expirada — independe de browser restaurar cookies
+- **`apps/config.py`:** `from datetime import timedelta` + `PERMANENT_SESSION_LIFETIME = timedelta(days=30)` em Production e Debug
+
+#### Sidenav — `apps/templates/partials/sidenav.html`
+- Título da seção: `Navigation` → `Main`
+- Ícone do item Dashboards: `circle-gauge` → `layout-grid`
+- Badge `02` removido; substituído por `menu-arrow`
+- Item **About** movido para logo abaixo de Dashboards (dentro de Main), removido do lugar antigo (após Users)
+
+#### Pending Confirmation — `apps/templates/pages/pending-confirmation.html`
+- **Widgets:** altura uniforme (`align-items-stretch`), `line-clamp: 2` nos títulos, avatares reduzidos para 40px
+- **Toolbar:** padrão idêntico ao NDF Commodities — card-header com `Show [n] entries per page` acima, DataTables DOM com botões alinhados à esquerda abaixo (`btn-toolbar d-flex`)
+- Classe `btn-toolbar-all` aplicada nos botões Add Row e Export
+
+### Padrões identificados nesta sessão
+
+- **Padrão de toolbar DataTables:** card-header com select `data-table-set-rows-per-page` + DataTables DOM com `btn-toolbar d-flex flex-wrap align-items-center`. Ver NDF Commodities como referência canônica.
+- **Aspas Jinja2:** nunca usar aspas tipográficas curvas (`'`) dentro de expressões `{{ }}` ou `{% %}`; causam `unexpected char` no lexer.
+- **"Keep me signed in" server-side:** validação por timestamp em `session['session_expires_at']` via `@blueprint.before_request` é obrigatória — browsers modernos restauram session cookies e ignoram a ausência de `session.permanent`.
+
+---
+
 ## 8. Instruções para a próxima sessão
 
 **Tom e abordagem:**

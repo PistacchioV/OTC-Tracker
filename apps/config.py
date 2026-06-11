@@ -1,4 +1,5 @@
 import os, random, string
+from datetime import timedelta
 
 class Config(object):
 
@@ -57,9 +58,11 @@ class ProductionConfig(Config):
     SESSION_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_DURATION = 3600
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
 class DebugConfig(Config):
     DEBUG = True
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
 # Load all possible configurations
 config_dict = {

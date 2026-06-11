@@ -1050,6 +1050,23 @@ class I18nManager {
                 console.warn(`Missing translation for key: ${key}`);
             }
         });
+
+        // Suporte a data-lang-placeholder (inputs de busca)
+        document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-lang-placeholder');
+            const value = getNestedValue(translations, key);
+            if (value) el.setAttribute('placeholder', value);
+        });
+
+        // Recalcula larguras de colunas DataTables após textos dos <th> mudarem.
+        // Duplo rAF garante que o browser completou reflow antes do adjust.
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                if (window.jQuery && jQuery.fn.dataTable) {
+                    jQuery.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+                }
+            });
+        });
     }
 
     setLanguage(lang) {

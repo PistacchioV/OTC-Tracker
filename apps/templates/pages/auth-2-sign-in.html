@@ -103,20 +103,30 @@
                     </div>
                     <div class="mt-auto">
                         <p class="text-muted text-center auth-sub-text mx-auto" data-lang="auth-signin-sub">Let’s get you signed in. Enter your SID to continue.</p>
-                        <form class="mt-4">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show py-2 px-3 small" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+                        <form class="mt-4" action="/login" method="POST">
                             <div class="mb-3">
                                 <label class="form-label" for="SID">SID <span
                                         class="text-danger">*</span></label>
                                 <div class="app-search">
-                                    <input class="form-control" id="SID" placeholder="SID Number" required=""
+                                    <input class="form-control" id="SID" name="sid" placeholder="SID Number" required=""
                                         type="text" autofocus />
                                     <i class="app-search-icon text-muted" data-lucide="circle-user"></i>
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="form-check">
-                                    <input checked="" class="form-check-input form-check-input-light fs-14"
-                                        id="rememberMe" type="checkbox" />
+                                    <input class="form-check-input form-check-input-light fs-14"
+                                        id="rememberMe" name="remember_me" type="checkbox" />
                                     <label class="form-check-label" for="rememberMe" data-lang="auth-keep-signed">Keep me signed in</label>
                                 </div>
                             </div>
