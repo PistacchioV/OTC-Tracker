@@ -710,5 +710,9 @@
   "col-fixing-end-date": "FixingEndDate",
   "col-trading-book": "Trading Book",
   "col-other-book": "Otro Book",
-  "col-quoted-in-cents": "¿Cotizado en Centavos?"
+  "col-quoted-in-cents": "¿Cotizado en Centavos?",
+  "col-premium": "Prima",
+  "col-premium-per-unit": "Prima/Unidad",
+  "col-premium-ccy": "Moneda Prima",
+  "col-spot-date": "Fecha Spot"
 }

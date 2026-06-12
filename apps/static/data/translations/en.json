@@ -711,5 +711,9 @@
   "col-fixing-end-date": "FixingEndDate",
   "col-trading-book": "TradingBook",
   "col-other-book": "OtherBook",
-  "col-quoted-in-cents": "Quoted in Cents?"
+  "col-quoted-in-cents": "Quoted in Cents?",
+  "col-premium": "Premium",
+  "col-premium-per-unit": "PremiumPerUnit",
+  "col-premium-ccy": "PremiumCCY",
+  "col-spot-date": "SpotDate"
 }

@@ -711,5 +711,9 @@
   "col-fixing-end-date": "FixingEndDate",
   "col-trading-book": "Trading Book",
   "col-other-book": "Outro Book",
-  "col-quoted-in-cents": "Cotado em Centavos?"
+  "col-quoted-in-cents": "Cotado em Centavos?",
+  "col-premium": "Prêmio",
+  "col-premium-per-unit": "Prêmio/Unidade",
+  "col-premium-ccy": "Moeda Prêmio",
+  "col-spot-date": "Data Spot"
 }
