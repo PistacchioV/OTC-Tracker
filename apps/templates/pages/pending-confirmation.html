@@ -1026,11 +1026,11 @@
                     </div><!-- end row g-3 -->
                 </div><!-- end modal-body -->
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-danger bg-gradient" data-bs-dismiss="modal">
-                        <i class="ti ti-x me-1"></i> Cancel
+                    <button type="button" class="btn btn-danger bg-gradient" data-bs-dismiss="modal" title="Cancel">
+                        <i class="ti ti-x"></i>
                     </button>
-                    <button type="button" class="btn btn-success bg-gradient" id="arSaveBtn">
-                        <i class="ti ti-device-floppy me-1"></i> Save
+                    <button type="button" class="btn btn-success bg-gradient" id="arSaveBtn" title="Save">
+                        <i class="ti ti-device-floppy"></i>
                     </button>
                 </div>
             </div>
@@ -1229,7 +1229,7 @@ $(document).ready(function() {
 
                 btn.addEventListener('click', function() {
                     arEditTr = null;
-                    document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+                    document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy"></i>';
                     document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
                     // Reset all modal fields
                     ['ar_lob','ar_spn','ar_client','ar_owner','ar_economic_group',
@@ -2036,7 +2036,7 @@ $(document).ready(function() {
             // UPDATE MODE — replace data in existing row
             table.row(arEditTr).data(rowArray).draw(false);
             arEditTr = null;
-            document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+            document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy"></i>';
             document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
         } else {
             // ADD MODE — append new row
@@ -2051,7 +2051,7 @@ $(document).ready(function() {
     // Reset edit state when modal is dismissed
     document.getElementById('addRowModal').addEventListener('hidden.bs.modal', function() {
         arEditTr = null;
-        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy"></i>';
         document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
         arClearErrors();
     });
@@ -2099,7 +2099,7 @@ $(document).ready(function() {
         document.getElementById('ar_abono').value           = d[23] || '';
 
         arClearErrors();
-        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-refresh me-1"></i> Update';
+        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-refresh"></i>';
         document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-edit me-2"></i>Edit Record — Pending Confirmation';
 
         var modalEl = document.getElementById('addRowModal');

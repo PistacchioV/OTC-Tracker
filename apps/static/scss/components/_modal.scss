@@ -54,13 +54,13 @@
 .modal-backdrop {
     background: rgba(0, 0, 0, 0.16) !important;
     opacity: 1 !important;
-    backdrop-filter: blur(24px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+    backdrop-filter: blur(6px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(6px) saturate(160%) !important;
 }
 [data-bs-theme=dark] .modal-backdrop {
     background: rgba(0, 0, 0, 0.30) !important;
-    backdrop-filter: blur(28px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
 }
 
 
