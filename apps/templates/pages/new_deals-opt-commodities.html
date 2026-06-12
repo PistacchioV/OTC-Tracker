@@ -2872,6 +2872,9 @@ $(document).ready(function() {
             if (!td15.find('.row-edit-field, .dt-cell-readonly').length) {
                 td15.html(MISSING_B3_BADGE_HTML);
             }
+            // Mark col 2 (Status) as Missing Index B3
+            var col2Node = table.cell(tr, 2).node();
+            if (col2Node) $(col2Node).html(MISSING_B3_BADGE_HTML);
             $(tr).attr('data-missing-asset', '1');
         } else {
             td15.find('.missing-b3-badge').remove();
@@ -2879,6 +2882,11 @@ $(document).ready(function() {
             if (!td15.find('.row-edit-field, .dt-cell-readonly').length && !td15.text().trim()) {
                 var restoredComm = code ? (_SUBJACENTE_MAP[code] || '') : '';
                 if (restoredComm) td15.text(restoredComm);
+            }
+            // Restore Status (col 2) if it currently shows Missing Index B3
+            var col2RestNode = table.cell(tr, 2).node();
+            if (col2RestNode && $(col2RestNode).find('.missing-b3-badge').length) {
+                $(col2RestNode).html(table.row(tr).data()[2]);
             }
         }
     }
