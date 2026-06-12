@@ -1626,7 +1626,7 @@ $(document).ready(function() {
 
                 // Process all files queued in the dropzone, then clear it
                 importBtn.addEventListener('click', function() {
-                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID);
+                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap']);
                 });
             }
 

@@ -1157,10 +1157,39 @@ var OTCFileUpload = (function () {
     }
 
     // -------------------------------------------------------------------------
+    // Subject-based pre-filter helpers
+    // -------------------------------------------------------------------------
+    function _getEmlSubject(text) {
+        // Extract Subject from MIME headers; handles folded continuation lines
+        var m = text.match(/^Subject[ \t]*:[ \t]*([\s\S]*?)(?=\r?\n[^\t ]|$)/im);
+        if (!m) return '';
+        return m[1].replace(/\r?\n[\t ]+/g, ' ').trim();
+    }
+
+    function _getFileSubject(file) {
+        var ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'eml') {
+            return new Promise(function(resolve) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var header = (e.target.result || '').slice(0, 4096);
+                    resolve(_getEmlSubject(header) || file.name);
+                };
+                reader.onerror = function() { resolve(file.name); };
+                reader.readAsText(file.slice(0, 4096));
+            });
+        }
+        // .msg: Outlook names files after their subject; .html: use filename
+        return Promise.resolve(file.name);
+    }
+
+    // -------------------------------------------------------------------------
     // Process ALL files in the Dropzone and clear it afterwards.
     // Called by the Import button.
+    // subjectBlockWords: string[] — files whose subject contains any of these
+    //   words (case-insensitive) are silently skipped.
     // -------------------------------------------------------------------------
-    function processDropzone(tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout) {
+    function processDropzone(tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout, subjectBlockWords) {
         var dz = window.myDropzone;
         if (!dz || !dz.files || dz.files.length === 0) {
             Swal.fire({
@@ -1175,6 +1204,7 @@ var OTCFileUpload = (function () {
         makerSid = makerSid || '';
         cacheEndpoint = cacheEndpoint || '/api/new-deals/opt-commodities/cache';
         rowLayout = rowLayout || 'opt';
+        subjectBlockWords = subjectBlockWords || [];
 
         var importBtn = document.getElementById('importBtn');
         if (importBtn) {
@@ -1183,93 +1213,110 @@ var OTCFileUpload = (function () {
         }
 
         var files = dz.files.slice(); // snapshot
+        var blockUpper = subjectBlockWords.map(function(w) { return w.toUpperCase(); });
 
-        // Skip files whose name contains "CANCEL" (case-insensitive)
-        var skippedCancel = [];
-        var filesToProcess = [];
-        files.forEach(function(file) {
-            if (file.name.toUpperCase().indexOf('CANCEL') !== -1) {
-                skippedCancel.push(file.name);
-            } else {
-                filesToProcess.push(file);
-            }
-        });
-        if (skippedCancel.length) {
-            console.warn('[OTCFileUpload] CANCEL files skipped:', skippedCancel);
+        function _isBlocked(subject) {
+            var up = (subject || '').toUpperCase();
+            return blockUpper.some(function(w) { return up.indexOf(w) !== -1; });
         }
 
-        var totalDeals = 0;
-        var chain = Promise.resolve();
-        filesToProcess.forEach(function (file) {
-            chain = chain.then(function () {
-                return processEmailFile(file, tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout)
-                    .then(function (count) { totalDeals += (count || 0); });
+        Promise.all(files.map(function(f) { return _getFileSubject(f); }))
+            .then(function(subjects) {
+                var skippedFiles = [];
+                var filesToProcess = [];
+                files.forEach(function(file, i) {
+                    if (_isBlocked(subjects[i])) {
+                        skippedFiles.push(file.name);
+                    } else {
+                        filesToProcess.push(file);
+                    }
+                });
+                if (skippedFiles.length) {
+                    console.warn('[OTCFileUpload] Subject-blocked files skipped:', skippedFiles);
+                }
+
+                var totalDeals = 0;
+                var chain = Promise.resolve();
+                filesToProcess.forEach(function (file) {
+                    chain = chain.then(function () {
+                        return processEmailFile(file, tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout)
+                            .then(function (count) { totalDeals += (count || 0); });
+                    });
+                });
+                chain.then(function () {
+                    dz.removeAllFiles(true);
+                    if (importBtn) {
+                        importBtn.disabled = false;
+                        importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                    }
+                    if (totalDeals > 0) {
+                        var _pageName = (cacheEndpoint || '').indexOf('ndf-commodities') !== -1 ? 'NDF Comm' : 'Opt Comm';
+                        fetch('/api/notifications', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'New Deals',
+                                page: _pageName,
+                                detail: totalDeals + ' deal' + (totalDeals !== 1 ? 's' : '') + ' imported'
+                            })
+                        }).catch(function() {});
+                    }
+                    var skipNote = skippedFiles.length
+                        ? '<br><br><small class="text-warning"><strong>' + skippedFiles.length +
+                          ' file(s) ignored (subject contains: ' + subjectBlockWords.join(', ') +
+                          '):</strong> ' + skippedFiles.join(', ') + '</small>'
+                        : '';
+                    if (filesToProcess.length === 0 && skippedFiles.length > 0) {
+                        Swal.fire({
+                            title: 'All Files Skipped',
+                            html:  'All dropped files were ignored — their subject contains a blocked word (' +
+                                   subjectBlockWords.join(', ') + ').' + skipNote,
+                            icon:  'info',
+                            confirmButtonText: 'OK',
+                            confirmButtonColor: '#6c757d'
+                        });
+                    } else if (totalDeals === 0) {
+                        Swal.fire({
+                            title: 'No Deals Found',
+                            html:  'No deal rows were found in the dropped file(s).<br><br>' +
+                                   '<small class="text-muted">Supported formats: <strong>.msg</strong>, <strong>.eml</strong>, <strong>.html</strong>.<br>' +
+                                   'The email must contain a table with a <em>DealName</em> column header.</small>' + skipNote,
+                            icon:  'warning',
+                            confirmButtonText: 'OK',
+                            confirmButtonColor: '#6c757d'
+                        });
+                    } else if (skippedFiles.length > 0) {
+                        Swal.fire({
+                            title: 'Import Complete',
+                            html:  skippedFiles.length + ' file(s) were ignored (blocked subject).' + skipNote,
+                            icon:  'info',
+                            confirmButtonText: 'OK',
+                            confirmButtonColor: '#0dcaf0'
+                        });
+                    }
+                }).catch(function (err) {
+                    console.error('OTCFileUpload: error processing files', err);
+                    dz.removeAllFiles(true);
+                    if (importBtn) {
+                        importBtn.disabled = false;
+                        importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                    }
+                    Swal.fire({
+                        title: 'Import Error',
+                        text:  err && err.message ? err.message : String(err),
+                        icon:  'error',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#dc3545'
+                    });
+                });
+            })
+            .catch(function(err) {
+                console.error('OTCFileUpload: subject extraction error', err);
+                if (importBtn) {
+                    importBtn.disabled = false;
+                    importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                }
             });
-        });
-        chain.then(function () {
-            dz.removeAllFiles(true);
-            if (importBtn) {
-                importBtn.disabled = false;
-                importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
-            }
-            if (totalDeals > 0) {
-                var _pageName = (cacheEndpoint || '').indexOf('ndf-commodities') !== -1 ? 'NDF Comm' : 'Opt Comm';
-                fetch('/api/notifications', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'New Deals',
-                        page: _pageName,
-                        detail: totalDeals + ' deal' + (totalDeals !== 1 ? 's' : '') + ' imported'
-                    })
-                }).catch(function() {});
-            }
-            var cancelNote = skippedCancel.length
-                ? '<br><br><small class="text-warning"><strong>' + skippedCancel.length +
-                  ' CANCEL file(s) ignored:</strong> ' + skippedCancel.join(', ') + '</small>'
-                : '';
-            if (filesToProcess.length === 0 && skippedCancel.length > 0) {
-                Swal.fire({
-                    title: 'All Files Skipped',
-                    html:  'All dropped files contained "CANCEL" in the name and were not processed.' + cancelNote,
-                    icon:  'info',
-                    confirmButtonText: 'OK',
-                    confirmButtonColor: '#6c757d'
-                });
-            } else if (totalDeals === 0) {
-                Swal.fire({
-                    title: 'No Deals Found',
-                    html:  'No deal rows were found in the dropped file(s).<br><br>' +
-                           '<small class="text-muted">Supported formats: <strong>.msg</strong>, <strong>.eml</strong>, <strong>.html</strong>.<br>' +
-                           'The email must contain a table with a <em>DealName</em> column header.</small>' + cancelNote,
-                    icon:  'warning',
-                    confirmButtonText: 'OK',
-                    confirmButtonColor: '#6c757d'
-                });
-            } else if (skippedCancel.length > 0) {
-                Swal.fire({
-                    title: 'Import Complete',
-                    html:  skippedCancel.length + ' CANCEL file(s) were ignored.' + cancelNote,
-                    icon:  'info',
-                    confirmButtonText: 'OK',
-                    confirmButtonColor: '#0dcaf0'
-                });
-            }
-        }).catch(function (err) {
-            console.error('OTCFileUpload: error processing files', err);
-            dz.removeAllFiles(true);
-            if (importBtn) {
-                importBtn.disabled = false;
-                importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
-            }
-            Swal.fire({
-                title: 'Import Error',
-                text:  err && err.message ? err.message : String(err),
-                icon:  'error',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#dc3545'
-            });
-        });
     }
 
     return {

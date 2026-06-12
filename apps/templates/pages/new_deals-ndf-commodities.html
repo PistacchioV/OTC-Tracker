@@ -1598,7 +1598,7 @@ $(document).ready(function() {
 
                 // Process all files queued in the dropzone, then clear it
                 importBtn.addEventListener('click', function() {
-                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/ndf-commodities/cache', 'ndf');
+                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/ndf-commodities/cache', 'ndf', ['Cancel', 'Option']);
                 });
             }
 
