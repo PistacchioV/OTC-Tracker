@@ -15610,6 +15610,9 @@ html[data-menu-color=gray][data-topbar-color=gradient] .sidenav-menu .logo {
 .side-nav .side-nav-item .side-nav-link .menu-icon {
   font-size: var(--ins-sidenav-item-icon-size);
   line-height: var(--ins-sidenav-item-icon-size);
+  transform-origin: center;
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: transform;
 }
 .side-nav .side-nav-item .side-nav-link .menu-icon i {
   font-size: var(--ins-sidenav-item-icon-size);
@@ -15618,6 +15621,11 @@ html[data-menu-color=gray][data-topbar-color=gradient] .sidenav-menu .logo {
 .side-nav .side-nav-item .side-nav-link .menu-icon svg {
   height: var(--ins-sidenav-item-icon-size);
   width: var(--ins-sidenav-item-icon-size);
+}
+@media (hover: hover) and (pointer: fine) {
+  .side-nav .side-nav-item .side-nav-link:hover .menu-icon {
+    transform: scale(1.22);
+  }
 }
 .side-nav .side-nav-item .side-nav-link .menu-text {
   text-overflow: ellipsis;
