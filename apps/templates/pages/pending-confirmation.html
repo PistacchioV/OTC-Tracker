@@ -115,6 +115,18 @@
         width: 230px;
     }
 
+    /* ── Dark mode: native select + option elements ─────────────────── */
+    [data-bs-theme=dark] .form-select,
+    [data-bs-theme=dark] select.form-control {
+        background-color: var(--ins-secondary-bg) !important;
+        color: var(--ins-body-color) !important;
+        border-color: var(--ins-border-color) !important;
+    }
+    [data-bs-theme=dark] select option {
+        background-color: #1e1f27;
+        color: #aab8c5;
+    }
+
     /* ── Smart filter widget ─────────────────────────────────────────── */
     .smart-filter-wrapper {
         position: relative;
@@ -896,7 +908,7 @@
                         <!-- Trade Date -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Trade Date</label>
-                            <input type="text" id="ar_trade_date" class="form-control" placeholder="dd/mm/yyyy">
+                            <input type="date" id="ar_trade_date" class="form-control">
                         </div>
 
                         <!-- Aging (auto) -->
@@ -938,7 +950,7 @@
                         <!-- Trade Number -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Trade Number</label>
-                            <input type="text" id="ar_trade_number" class="form-control" placeholder="e.g. TRD20260611001">
+                            <input type="text" id="ar_trade_number" class="form-control" placeholder="e.g. TRD20260611001" value="">
                         </div>
 
                         <!-- Pending Status -->
@@ -1219,13 +1231,7 @@ $(document).ready(function() {
                         if (el) el.value = '';
                     });
                     document.getElementById('ar_product_type').value = '';
-                    var now = new Date();
-                    var tnow = now.getFullYear() +
-                        (now.getMonth()+1).toString().padStart(2,'0') +
-                        now.getDate().toString().padStart(2,'0') +
-                        now.getHours().toString().padStart(2,'0') +
-                        Math.floor(Math.random()*100).toString().padStart(2,'0');
-                    document.getElementById('ar_trade_number').value = 'TRD' + tnow;
+                    document.getElementById('ar_trade_number').value = '';
                     new bootstrap.Modal(document.getElementById('addRowModal')).show();
                 });
             }
@@ -1641,6 +1647,75 @@ $(document).ready(function() {
     });
 
     // ========================================================================
+    // WIDGET UPDATER — counts table rows and refreshes the 6 widget cards
+    // ========================================================================
+    function updateWidgets() {
+        var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
+        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa'];
+
+        var statusToRange = {
+            '< 10 dias de pendência':         'u10',
+            '>= 10 e < 20 dias de pendência': 'r10',
+            '>= 20 e < 30 dias de pendência': 'r20',
+            '>= 30 e < 60 dias de pendência': 'r30',
+            '>= 60 e < 90 dias de pendência': 'r60',
+            '>= 90 dias de pendência':         'r90'
+        };
+        var pendingToType = {
+            'Pending Digital Signature': 'ds',
+            'Pending FO':                'fo',
+            'Pending MO':                'mo',
+            'Pending MO/FO':             'mofo',
+            'Pending Original':          'orig',
+            'Pending OTC':               'otc',
+            'Pending POA':               'poa',
+            'Pending Signature Allowance': 'sa'
+        };
+
+        // Zero out counts
+        var counts = {};
+        RANGE_ORDER.forEach(function(r) {
+            counts[r] = { total: 0 };
+            TYPE_ORDER.forEach(function(t) { counts[r][t] = 0; });
+        });
+
+        // Iterate ALL rows (not just visible)
+        table.rows().nodes().each(function(row) {
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 12) return;
+            var statusText = cells[6].textContent.trim();
+            var range = statusToRange[statusText];
+            if (!range) return;
+            counts[range]['total']++;
+
+            // Pending Status (col 11) — may be a <select> or plain text
+            var psSel = cells[11].querySelector('select');
+            var psVal = psSel ? psSel.value : cells[11].textContent.trim();
+            var pType = pendingToType[psVal];
+            if (pType) counts[range][pType]++;
+        });
+
+        // Update widget cards in DOM order (matches RANGE_ORDER)
+        document.querySelectorAll('.pending-widgets-row .card-body').forEach(function(cardBody, i) {
+            var range = RANGE_ORDER[i];
+            if (!range) return;
+            // Total value
+            var totalEl = cardBody.querySelector('.pending-widget-value');
+            if (totalEl) totalEl.textContent = counts[range]['total'];
+            // Per-type rows (always in TYPE_ORDER sequence)
+            cardBody.querySelectorAll('.float-end b').forEach(function(b, j) {
+                if (TYPE_ORDER[j]) b.textContent = counts[range][TYPE_ORDER[j]];
+            });
+        });
+    }
+
+    // Call once on init (table may already have server-loaded rows)
+    updateWidgets();
+
+    // Re-run after every DataTable draw (filters, pagination, etc.)
+    table.on('draw', function() { updateWidgets(); });
+
+    // ========================================================================
     // SMART FILTER — client-side DataTable column search
     // ========================================================================
     var SF_COLS = [
@@ -1961,6 +2036,7 @@ $(document).ready(function() {
         ]).draw(false);
 
         bootstrap.Modal.getInstance(document.getElementById('addRowModal')).hide();
+        updateWidgets();
     });
 
 }); // end $(document).ready
