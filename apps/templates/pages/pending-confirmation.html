@@ -224,10 +224,23 @@
     }
 
     /* Todas as células da tabela devem ter nowrap */
+    #pending-confirmation-table thead th {
+        font-size: 0.7rem;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
     #pending-confirmation-table td {
+        font-size: 0.8rem;
         white-space: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
+        vertical-align: middle;
+    }
+    .dt-scroll-head thead th,
+    .dt-scroll-headInner thead th,
+    .dataTables_scrollHeadInner thead th {
+        font-size: 0.7rem;
+        vertical-align: middle;
     }
 
     .table-centered th,
