@@ -863,10 +863,12 @@
                         <!-- LOB -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">LOB</label>
-                            <div class="position-relative">
-                                <input type="text" id="ar_lob" class="form-control" placeholder="CEM or EDG" autocomplete="off">
-                                <ul id="ar_lob_dd" class="smart-filter-dropdown mb-0 ps-0"></ul>
-                            </div>
+                            <select id="ar_lob" class="form-select">
+                                <option value="">— Select —</option>
+                                <option value="CEM">CEM</option>
+                                <option value="EDG">EDG</option>
+                            </select>
+                            <div class="invalid-feedback">This field is required.</div>
                         </div>
 
                         <!-- SPN -->
@@ -875,6 +877,7 @@
                             <div class="position-relative">
                                 <input type="text" id="ar_spn" class="form-control" placeholder="Type SPN…" autocomplete="off">
                                 <ul id="ar_spn_dd" class="smart-filter-dropdown mb-0 ps-0"></ul>
+                                <div class="invalid-feedback">This field is required.</div>
                             </div>
                         </div>
 
@@ -884,6 +887,7 @@
                             <div class="position-relative">
                                 <input type="text" id="ar_client" class="form-control" placeholder="Type client name…" autocomplete="off">
                                 <ul id="ar_client_dd" class="smart-filter-dropdown mb-0 ps-0"></ul>
+                                <div class="invalid-feedback">This field is required.</div>
                             </div>
                         </div>
 
@@ -909,6 +913,7 @@
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Trade Date</label>
                             <input type="date" id="ar_trade_date" class="form-control">
+                            <div class="invalid-feedback">This field is required.</div>
                         </div>
 
                         <!-- Aging (auto) -->
@@ -939,6 +944,7 @@
                                 <option>UNWIND OPTION COMM</option>
                                 <option>UNWIND SWAP</option>
                             </select>
+                            <div class="invalid-feedback">This field is required.</div>
                         </div>
 
                         <!-- Maturity Date -->
@@ -951,6 +957,7 @@
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Trade Number</label>
                             <input type="text" id="ar_trade_number" class="form-control" placeholder="e.g. TRD20260611001" value="">
+                            <div class="invalid-feedback">This field is required.</div>
                         </div>
 
                         <!-- Pending Status -->
@@ -1221,6 +1228,9 @@ $(document).ready(function() {
                 btnContainer.appendChild(btn);
 
                 btn.addEventListener('click', function() {
+                    arEditTr = null;
+                    document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+                    document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
                     // Reset all modal fields
                     ['ar_lob','ar_spn','ar_client','ar_owner','ar_economic_group',
                      'ar_signature_type','ar_trade_date','ar_aging','ar_status',
@@ -1449,7 +1459,7 @@ $(document).ready(function() {
         var modalHTML =
             '<div id="confirm-mass-update-modal" class="modal fade" tabindex="-1" aria-hidden="true">' +
             '  <div class="modal-dialog modal-dialog-centered">' +
-            '    <div class="modal-content">' +
+            '    <div class="modal-content liquid-glass">' +
             '      <div class="modal-header">' +
             '        <h4 class="modal-title">Please Confirm</h4>' +
             '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
@@ -1536,7 +1546,7 @@ $(document).ready(function() {
         var modalHTML =
             '<div id="confirm-delete-modal" class="modal fade" tabindex="-1" aria-hidden="true">' +
             '  <div class="modal-dialog modal-dialog-centered">' +
-            '    <div class="modal-content">' +
+            '    <div class="modal-content liquid-glass">' +
             '      <div class="modal-header">' +
             '        <h4 class="modal-title">Please Confirm</h4>' +
             '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
@@ -1837,6 +1847,7 @@ $(document).ready(function() {
         .catch(function(){ console.warn('RefData.json not loaded'); });
 
     var LOB_OPTS = ['CEM', 'EDG'];
+    var arEditTr = null; // null = add mode; <tr> element = edit mode
     var PENDING_STATUS_OPTS = [
         'Abonado via PDF','Client Treasury Allowance','Concluded',
         'Exception','Exception Digital Fep Web','Exception Fepweb',
@@ -1894,11 +1905,6 @@ $(document).ready(function() {
         });
         inp.addEventListener('blur', function(){ setTimeout(function(){ dd.style.display='none'; },160); });
     }
-
-    // LOB autocomplete
-    arMakeDropdown('ar_lob', 'ar_lob_dd', LOB_OPTS, function(v){
-        document.getElementById('ar_lob').value = v;
-    });
 
     // SPN autocomplete — on select, auto-fill client + owner + group + sig type
     arMakeDropdown('ar_spn', 'ar_spn_dd',
@@ -1959,83 +1965,154 @@ $(document).ready(function() {
         document.getElementById('ar_status').value = as.status;
     });
 
-    // Save button — build row and add to DataTable
+    // Validation helpers
+    var AR_REQUIRED = ['ar_lob','ar_spn','ar_client','ar_product_type','ar_trade_date','ar_trade_number'];
+    function arClearErrors() {
+        AR_REQUIRED.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('is-invalid');
+        });
+    }
+    function arShowError(fieldId) {
+        var el = document.getElementById(fieldId);
+        if (el) el.classList.add('is-invalid');
+    }
+
+    // Save / Update button
     document.getElementById('arSaveBtn').addEventListener('click', function() {
-        var lob     = document.getElementById('ar_lob').value;
-        var spn     = document.getElementById('ar_spn').value;
-        var client  = document.getElementById('ar_client').value;
-        var aging   = document.getElementById('ar_aging').value;
-        var status  = document.getElementById('ar_status').value;
-        var prodType= document.getElementById('ar_product_type').value;
-        var tDate   = document.getElementById('ar_trade_date').value;
-        var matDate = document.getElementById('ar_maturity_date').value;
-        var tradeNo = document.getElementById('ar_trade_number').value;
-        var pStatus = document.getElementById('ar_pending_status').value;
-        var owner   = document.getElementById('ar_owner').value;
-        var ea      = document.getElementById('ar_ea').value;
-        var sendDate= document.getElementById('ar_send_date').value;
-        var retDate = document.getElementById('ar_return_date').value;
-        var bReason = document.getElementById('ar_break_reason').value;
-        var comments= document.getElementById('ar_comments').value;
-        var econGrp = document.getElementById('ar_economic_group').value;
-        var sigType = document.getElementById('ar_signature_type').value;
-        var fepweb  = document.getElementById('ar_fepweb_id').value;
-        var bAbono  = document.getElementById('ar_baixa_sem_abono').value;
-        var pend    = document.getElementById('ar_pendencia').value;
-        var abono   = document.getElementById('ar_abono').value;
+        arClearErrors();
 
-        var lobSel =
-            '<select class="form-select form-select-sm">' +
-            '<option value="">—</option>' +
-            '<option value="CEM"'+(lob==='CEM'?' selected':'')+'>CEM</option>' +
-            '<option value="EDG"'+(lob==='EDG'?' selected':'')+'>EDG</option>' +
-            '</select>';
+        var lob     = document.getElementById('ar_lob').value.trim();
+        var spn     = document.getElementById('ar_spn').value.trim();
+        var client  = document.getElementById('ar_client').value.trim();
+        var aging   = document.getElementById('ar_aging').value.trim();
+        var status  = document.getElementById('ar_status').value.trim();
+        var prodType= document.getElementById('ar_product_type').value.trim();
+        var tDate   = document.getElementById('ar_trade_date').value.trim();
+        var matDate = document.getElementById('ar_maturity_date').value.trim();
+        var tradeNo = document.getElementById('ar_trade_number').value.trim();
+        var pStatus = document.getElementById('ar_pending_status').value.trim();
+        var owner   = document.getElementById('ar_owner').value.trim();
+        var ea      = document.getElementById('ar_ea').value.trim();
+        var sendDate= document.getElementById('ar_send_date').value.trim();
+        var retDate = document.getElementById('ar_return_date').value.trim();
+        var bReason = document.getElementById('ar_break_reason').value.trim();
+        var comments= document.getElementById('ar_comments').value.trim();
+        var econGrp = document.getElementById('ar_economic_group').value.trim();
+        var sigType = document.getElementById('ar_signature_type').value.trim();
+        var fepweb  = document.getElementById('ar_fepweb_id').value.trim();
+        var bAbono  = document.getElementById('ar_baixa_sem_abono').value.trim();
+        var pend    = document.getElementById('ar_pendencia').value.trim();
+        var abono   = document.getElementById('ar_abono').value.trim();
 
-        var prodSel =
-            '<select class="form-select form-select-sm">' +
-            ['','NDF','NDF COMM','OPTION','OPTION COMM','SWAP',
-             'UNWIND NDF','UNWIND NDF COMM','UNWIND OPTION','UNWIND OPTION COMM','UNWIND SWAP'].map(function(o){
-                return '<option value="'+o+'"'+(o===prodType?' selected':'')+'>'+( o||'— Select —' )+'</option>';
-            }).join('') + '</select>';
+        // Required field validation
+        var valid = true;
+        if (!lob)             { arShowError('ar_lob');          valid = false; }
+        if (!client && !spn)  { arShowError('ar_client');       arShowError('ar_spn'); valid = false; }
+        if (!prodType)        { arShowError('ar_product_type'); valid = false; }
+        if (!tDate)           { arShowError('ar_trade_date');   valid = false; }
+        if (!tradeNo)         { arShowError('ar_trade_number'); valid = false; }
+        if (!valid) return;
 
-        var psSel =
-            '<select class="form-select form-select-sm">' +
-            [''].concat(PENDING_STATUS_OPTS).map(function(o){
-                return '<option value="'+o+'"'+(o===pStatus?' selected':'')+'>'+( o||'— Select —' )+'</option>';
-            }).join('') + '</select>';
-
-        table.row.add([
-            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
+        // Action buttons HTML (plain, no stored data — values read from DT row on demand)
+        var actionsHtml =
             '<div class="d-flex justify-content-center gap-1">' +
-                '<a class="btn btn-success btn-sm rounded-circle" href="#"><i class="ti ti-check"></i></a>' +
-                '<a class="btn btn-info btn-sm rounded-circle" href="#"><i class="ti ti-edit"></i></a>' +
-                '<a class="btn btn-danger btn-sm rounded-circle" href="#"><i class="ti ti-trash"></i></a>' +
-            '</div>',
-            lobSel,
-            spn,
-            client,
-            aging,
-            status,
-            prodSel,
-            tDate  ? '<input type="date" class="form-control form-control-sm" value="'+tDate+'">' : '<input type="text" class="form-control form-control-sm" value="" placeholder="dd/mm/yyyy">',
-            matDate? '<input type="date" class="form-control form-control-sm" value="'+matDate+'">' : '<input type="date" class="form-control form-control-sm">',
-            tradeNo,
-            psSel,
-            owner,
-            ea     ? '<input type="date" class="form-control form-control-sm" value="'+ea+'">'      : '<input type="date" class="form-control form-control-sm">',
-            sendDate?'<input type="date" class="form-control form-control-sm" value="'+sendDate+'">' : '<input type="date" class="form-control form-control-sm">',
-            retDate ?'<input type="date" class="form-control form-control-sm" value="'+retDate+'">'  : '<input type="date" class="form-control form-control-sm">',
-            '<input type="text" class="form-control form-control-sm" value="'+bReason+'" placeholder="Break reason">',
-            '<input type="text" class="form-control form-control-sm" value="'+comments+'" placeholder="Comments">',
-            econGrp,
-            sigType,
-            '<input type="text" class="form-control form-control-sm" value="'+fepweb+'" placeholder="FepWeb ID">',
-            bAbono ?'<input type="date" class="form-control form-control-sm" value="'+bAbono+'">'   : '<input type="date" class="form-control form-control-sm">',
-            pend   ?'<input type="date" class="form-control form-control-sm" value="'+pend+'">'     : '<input type="date" class="form-control form-control-sm">',
-            abono  ?'<input type="date" class="form-control form-control-sm" value="'+abono+'">'    : '<input type="date" class="form-control form-control-sm">'
-        ]).draw(false);
+            '<button type="button" class="btn btn-success btn-sm rounded-circle ar-confirm" title="Mark Concluded"><i class="ti ti-check"></i></button>' +
+            '<button type="button" class="btn btn-info btn-sm rounded-circle ar-edit" title="Edit"><i class="ti ti-edit"></i></button>' +
+            '<button type="button" class="btn btn-danger btn-sm rounded-circle ar-delete" title="Delete"><i class="ti ti-trash"></i></button>' +
+            '</div>';
+
+        // Row array — all cells are plain text (columns 2–23)
+        var rowArray = [
+            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
+            actionsHtml,
+            lob, spn, client, aging, status, prodType,
+            tDate, matDate, tradeNo, pStatus, owner, ea,
+            sendDate, retDate, bReason, comments,
+            econGrp, sigType, fepweb, bAbono, pend, abono
+        ];
+
+        if (arEditTr) {
+            // UPDATE MODE — replace data in existing row
+            table.row(arEditTr).data(rowArray).draw(false);
+            arEditTr = null;
+            document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+            document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
+        } else {
+            // ADD MODE — append new row
+            table.row.add(rowArray).draw(false);
+        }
 
         bootstrap.Modal.getInstance(document.getElementById('addRowModal')).hide();
+        arClearErrors();
+        updateWidgets();
+    });
+
+    // Reset edit state when modal is dismissed
+    document.getElementById('addRowModal').addEventListener('hidden.bs.modal', function() {
+        arEditTr = null;
+        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save';
+        document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation';
+        arClearErrors();
+    });
+
+    // ── Row-level action buttons (event delegation) ─────────────────────────
+
+    // DELETE: remove row after confirmation
+    $('#pending-confirmation-table tbody').on('click', '.ar-delete', function() {
+        var tr = $(this).closest('tr')[0];
+        if (confirm('Remove this row?')) {
+            table.row(tr).remove().draw(false);
+            updateWidgets();
+        }
+    });
+
+    // EDIT: open modal pre-filled with this row's data
+    $('#pending-confirmation-table tbody').on('click', '.ar-edit', function() {
+        var tr = $(this).closest('tr')[0];
+        var d  = table.row(tr).data(); // d[0..23] — plain text values
+        if (!d) return;
+        arEditTr = tr;
+
+        // Populate modal fields from row data
+        document.getElementById('ar_lob').value             = d[2]  || '';
+        document.getElementById('ar_spn').value             = d[3]  || '';
+        document.getElementById('ar_client').value          = d[4]  || '';
+        document.getElementById('ar_aging').value           = d[5]  || '';
+        document.getElementById('ar_status').value          = d[6]  || '';
+        document.getElementById('ar_product_type').value    = d[7]  || '';
+        document.getElementById('ar_trade_date').value      = d[8]  || '';
+        document.getElementById('ar_maturity_date').value   = d[9]  || '';
+        document.getElementById('ar_trade_number').value    = d[10] || '';
+        document.getElementById('ar_pending_status').value  = d[11] || '';
+        document.getElementById('ar_owner').value           = d[12] || '';
+        document.getElementById('ar_ea').value              = d[13] || '';
+        document.getElementById('ar_send_date').value       = d[14] || '';
+        document.getElementById('ar_return_date').value     = d[15] || '';
+        document.getElementById('ar_break_reason').value    = d[16] || '';
+        document.getElementById('ar_comments').value        = d[17] || '';
+        document.getElementById('ar_economic_group').value  = d[18] || '';
+        document.getElementById('ar_signature_type').value  = d[19] || '';
+        document.getElementById('ar_fepweb_id').value       = d[20] || '';
+        document.getElementById('ar_baixa_sem_abono').value = d[21] || '';
+        document.getElementById('ar_pendencia').value       = d[22] || '';
+        document.getElementById('ar_abono').value           = d[23] || '';
+
+        arClearErrors();
+        document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-refresh me-1"></i> Update';
+        document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-edit me-2"></i>Edit Record — Pending Confirmation';
+
+        var modalEl = document.getElementById('addRowModal');
+        (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).show();
+    });
+
+    // CONFIRM: mark Pending Status as "Concluded"
+    $('#pending-confirmation-table tbody').on('click', '.ar-confirm', function() {
+        var tr = $(this).closest('tr')[0];
+        var dtRow = table.row(tr);
+        var d = dtRow.data().slice();
+        d[11] = 'Concluded';
+        dtRow.data(d).draw(false);
         updateWidgets();
     });
 

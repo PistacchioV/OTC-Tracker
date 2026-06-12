@@ -47,16 +47,16 @@
     align-content: center;
 }
 
-// Backdrop — light mode: enough contrast for frosted glass
+// Backdrop — plain dim scrim only, NO blur.
+// The glass element itself handles the blur via its own backdrop-filter.
+// Keeping blur here would pre-blur the page before the glass sees it,
+// making the frosted effect invisible (you'd just blur a dark/light overlay).
 .modal-backdrop {
-    backdrop-filter: blur(8px);
-    background: rgba(0, 0, 0, 0.32) !important;
+    background: rgba(0, 0, 0, 0.22) !important;
     opacity: 1 !important;
 }
-// Dark mode: lighter backdrop so page content shows through
 [data-bs-theme=dark] .modal-backdrop {
-    backdrop-filter: blur(4px);
-    background: rgba(0, 0, 0, 0.22) !important;
+    background: rgba(0, 0, 0, 0.38) !important;
 }
 
 
@@ -89,14 +89,16 @@
 
 // ── Liquid Glass modal ────────────────────────────────────────────────────────
 // Apply class="liquid-glass" to .modal-content to activate.
-// Two variants: light-mode (opaque frosted white) / dark-mode (near-transparent).
+// Note: overflow:hidden is intentionally NOT used here — it breaks backdrop-filter
+// in Chromium. Use clip-path for rounded-corner clipping instead.
 
 // ── SHARED structure ──────────────────────────────────────────────────────────
 .liquid-glass {
     border-radius: 1.125rem !important;
-    overflow: hidden;
-    backdrop-filter: saturate(200%) blur(32px) !important;
-    -webkit-backdrop-filter: saturate(200%) blur(32px) !important;
+    // clip-path clips to rounded rect without blocking backdrop-filter
+    clip-path: inset(0 round 1.125rem);
+    backdrop-filter: saturate(180%) blur(28px) !important;
+    -webkit-backdrop-filter: saturate(180%) blur(28px) !important;
 
     // Top specular sheen — the signature liquid bubble highlight
     &::before {
@@ -129,46 +131,46 @@
 
 // ── LIGHT MODE ────────────────────────────────────────────────────────────────
 .liquid-glass {
-    background: rgba(255, 255, 255, 0.62) !important;
-    border: 1px solid rgba(255, 255, 255, 0.85) !important;
+    background: rgba(255, 255, 255, 0.46) !important;
+    border: 1px solid rgba(255, 255, 255, 0.80) !important;
 
     box-shadow:
-        0 24px 64px rgba(0, 0, 0, 0.18),
-        0 6px 20px rgba(0, 0, 0, 0.10),
+        0 24px 64px rgba(0, 0, 0, 0.16),
+        0 6px 20px rgba(0, 0, 0, 0.08),
         inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
         inset 1px 0 0 rgba(255, 255, 255, 0.60),
         inset -10px -8px 0 -11px rgba(255, 255, 255, 1),
         inset 0 -9px 0 -8px rgba(255, 255, 255, 0.80) !important;
 
     .modal-header {
-        border-bottom: 1px solid rgba(0, 0, 0, 0.07) !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
     }
 
     .modal-footer {
-        border-top: 1px solid rgba(0, 0, 0, 0.07) !important;
+        border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
     }
 }
 
 // ── DARK MODE ─────────────────────────────────────────────────────────────────
 [data-bs-theme=dark] .liquid-glass {
-    background: rgba(255, 255, 255, 0.07) !important;
-    backdrop-filter: saturate(180%) blur(40px) brightness(1.08) !important;
-    -webkit-backdrop-filter: saturate(180%) blur(40px) brightness(1.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    background: rgba(255, 255, 255, 0.10) !important;
+    backdrop-filter: saturate(160%) blur(40px) brightness(1.45) !important;
+    -webkit-backdrop-filter: saturate(160%) blur(40px) brightness(1.45) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
 
     box-shadow:
         0 32px 80px rgba(0, 0, 0, 0.55),
         0 8px 24px rgba(0, 0, 0, 0.30),
-        inset 0 1.5px 0 rgba(255, 255, 255, 0.50),
+        inset 0 1.5px 0 rgba(255, 255, 255, 0.55),
         inset 1px 0 0 rgba(255, 255, 255, 0.18),
         inset -10px -8px 0 -11px rgba(255, 255, 255, 0.85),
         inset 0 -9px 0 -8px rgba(255, 255, 255, 0.55) !important;
 
     .modal-header {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
     }
 
     .modal-footer {
-        border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
     }
 }
