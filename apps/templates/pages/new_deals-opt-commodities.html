@@ -2853,6 +2853,8 @@ $(document).ready(function() {
 
     var MISSING_B3_BADGE_HTML = '<span class="badge rounded-pill bg-danger missing-b3-badge" style="font-size:0.74em;vertical-align:middle">Missing Index B3</span>';
 
+    var _b3OrigStatusOPT = {};
+
     function _isAssetMissing(code) {
         code = (code || '').trim();
         if (!code || _ASSET_OPTIONS.length === 0) return false;
@@ -2867,20 +2869,21 @@ $(document).ready(function() {
         var td15 = $(col15Node);
         td14.find('.missing-b3-badge').remove();
         var code = td14.text().trim();
+        var dtIdx = table.row(tr).index();
+        var col2Cell = table.cell(tr, 2);
         if (_isAssetMissing(code)) {
             td14.append(' ' + MISSING_B3_BADGE_HTML);
             if (!td15.find('.row-edit-field, .dt-cell-readonly').length) {
                 td15.html(MISSING_B3_BADGE_HTML);
             }
-            // Update col 2 (Status): mutate data array so column filter finds "Missing Index B3",
-            // cache original status so it can be restored when the asset is registered.
-            var col2Node = table.cell(tr, 2).node();
-            if (col2Node) {
-                var rd = table.row(tr).data();
-                if (!$(tr).data('origStatus')) $(tr).data('origStatus', rd[2]);
-                rd[2] = MISSING_B3_BADGE_HTML; // direct mutation — no redraw
-                $(col2Node).html(MISSING_B3_BADGE_HTML);
+            // Update DataTables filter cache + DOM for col 2 (Status).
+            var curVal = col2Cell.data();
+            if (curVal !== MISSING_B3_BADGE_HTML) {
+                _b3OrigStatusOPT[dtIdx] = curVal;
+                col2Cell.data(MISSING_B3_BADGE_HTML); // rebuilds filter cache — no draw
             }
+            var col2Node = col2Cell.node();
+            if (col2Node) $(col2Node).html(MISSING_B3_BADGE_HTML);
             $(tr).attr('data-missing-asset', '1');
         } else {
             td15.find('.missing-b3-badge').remove();
@@ -2889,21 +2892,48 @@ $(document).ready(function() {
                 var restoredComm = code ? (_SUBJACENTE_MAP[code] || '') : '';
                 if (restoredComm) td15.text(restoredComm);
             }
-            // Restore Status (col 2) from cached original
-            var origStatus = $(tr).data('origStatus');
-            if (origStatus) {
-                var rd2 = table.row(tr).data();
-                rd2[2] = origStatus; // restore data array
-                var col2RestNode = table.cell(tr, 2).node();
-                if (col2RestNode) $(col2RestNode).html(origStatus);
-                $(tr).removeData('origStatus');
+            // Restore DataTables filter cache + DOM for col 2
+            var orig = _b3OrigStatusOPT[dtIdx];
+            if (orig) {
+                col2Cell.data(orig); // restore filter cache
+                delete _b3OrigStatusOPT[dtIdx];
+            }
+            var col2Val = col2Cell.data();
+            var col2Node2 = col2Cell.node();
+            if (col2Node2 && col2Val && col2Val !== MISSING_B3_BADGE_HTML) {
+                $(col2Node2).html(col2Val);
             }
         }
     }
 
     function refreshAllMissingBadges() {
         if (_ASSET_OPTIONS.length === 0) return;
-        table.rows().every(function() { refreshRowMissingBadge(this.node()); });
+        // Pass 1: update DataTables filter cache for EVERY row (visible + off-page).
+        table.rows().every(function() {
+            var rd = this.data();
+            if (!rd) return;
+            var rawCode = String(rd[14] || '').replace(/<[^>]+>/g, '').trim();
+            var dtIdx = this.index();
+            var col2Cell = table.cell(dtIdx, 2);
+            var curVal = col2Cell.data();
+            if (_isAssetMissing(rawCode)) {
+                if (curVal !== MISSING_B3_BADGE_HTML) {
+                    _b3OrigStatusOPT[dtIdx] = curVal;
+                    col2Cell.data(MISSING_B3_BADGE_HTML);
+                }
+            } else if (curVal === MISSING_B3_BADGE_HTML) {
+                var orig = _b3OrigStatusOPT[dtIdx];
+                if (orig) {
+                    col2Cell.data(orig);
+                    delete _b3OrigStatusOPT[dtIdx];
+                }
+            }
+        });
+        // Pass 2: update DOM for currently-rendered rows.
+        table.rows().every(function() {
+            var tr = this.node();
+            if (tr) refreshRowMissingBadge(tr);
+        });
     }
     window._refreshMissingBadgesOPT = refreshAllMissingBadges;
 

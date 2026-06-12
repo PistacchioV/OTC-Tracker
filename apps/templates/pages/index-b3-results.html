@@ -1011,7 +1011,8 @@ $(document).ready(function () {
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7,8,9,10,11,12,13,14,15]),
         language: dtLang(),
         columnDefs: [
-            {targets:[0,1], orderable:false, searchable:false},
+            {targets:[0], orderable:false, searchable:false},
+            {targets:[1], orderable:false},
             {targets:'_all', defaultContent:''}
         ],
         initComplete: function() {
@@ -1037,7 +1038,8 @@ $(document).ready(function () {
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
         language: dtLang(),
         columnDefs: [
-            {targets:[0,1], orderable:false, searchable:false},
+            {targets:[0], orderable:false, searchable:false},
+            {targets:[1], orderable:false},
             {targets:'_all', defaultContent:''}
         ],
         initComplete: function() {
@@ -1056,7 +1058,8 @@ $(document).ready(function () {
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
         language: dtLang(),
         columnDefs: [
-            {targets:[0,1], orderable:false, searchable:false},
+            {targets:[0], orderable:false, searchable:false},
+            {targets:[1], orderable:false},
             {targets:'_all', defaultContent:''}
         ],
         initComplete: function() {
