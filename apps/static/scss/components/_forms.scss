@@ -63,6 +63,24 @@ input::-webkit-inner-spin-button {
 }
 
 
+// Dark mode: force correct bg/color on form elements (some browsers keep OS light rendering)
+[data-bs-theme="dark"] {
+    .form-control,
+    .form-select {
+        background-color: var(--#{$prefix}secondary-bg) !important;
+        color: var(--#{$prefix}body-color) !important;
+        border-color: var(--#{$prefix}border-color) !important;
+        color-scheme: dark;
+    }
+
+    // Disabled/readonly "auto" fields that use bg-light
+    .form-control[disabled],
+    .form-control:disabled {
+        background-color: var(--#{$prefix}tertiary-bg) !important;
+        color: var(--#{$prefix}secondary-color) !important;
+    }
+}
+
 // card radio
 .card-radio {
     padding: 0;
