@@ -47,16 +47,20 @@
     align-content: center;
 }
 
-// Backdrop — plain dim scrim only, NO blur.
-// The glass element itself handles the blur via its own backdrop-filter.
-// Keeping blur here would pre-blur the page before the glass sees it,
-// making the frosted effect invisible (you'd just blur a dark/light overlay).
+// Backdrop — blurs the page behind the modal.
+// The blur lives HERE (not on .modal-content) to avoid:
+//   1. Chromium overflow:hidden + backdrop-filter breakage on scrollable modals
+//   2. Stacking-context issues from .modal-dialog transform animation
 .modal-backdrop {
-    background: rgba(0, 0, 0, 0.22) !important;
+    background: rgba(0, 0, 0, 0.16) !important;
     opacity: 1 !important;
+    backdrop-filter: blur(24px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
 }
 [data-bs-theme=dark] .modal-backdrop {
-    background: rgba(0, 0, 0, 0.38) !important;
+    background: rgba(0, 0, 0, 0.30) !important;
+    backdrop-filter: blur(28px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
 }
 
 
@@ -89,16 +93,14 @@
 
 // ── Liquid Glass modal ────────────────────────────────────────────────────────
 // Apply class="liquid-glass" to .modal-content to activate.
-// Note: overflow:hidden is intentionally NOT used here — it breaks backdrop-filter
-// in Chromium. Use clip-path for rounded-corner clipping instead.
+// The backdrop (above) handles the background blur. The glass panel provides
+// the frosted surface: semi-transparent background + specular sheen + shadows.
+// No backdrop-filter here avoids overflow/stacking-context bugs in Chromium.
 
 // ── SHARED structure ──────────────────────────────────────────────────────────
 .liquid-glass {
     border-radius: 1.125rem !important;
-    // clip-path clips to rounded rect without blocking backdrop-filter
     clip-path: inset(0 round 1.125rem);
-    backdrop-filter: saturate(180%) blur(28px) !important;
-    -webkit-backdrop-filter: saturate(180%) blur(28px) !important;
 
     // Top specular sheen — the signature liquid bubble highlight
     &::before {
@@ -131,8 +133,8 @@
 
 // ── LIGHT MODE ────────────────────────────────────────────────────────────────
 .liquid-glass {
-    background: rgba(255, 255, 255, 0.46) !important;
-    border: 1px solid rgba(255, 255, 255, 0.80) !important;
+    background: rgba(255, 255, 255, 0.68) !important;
+    border: 1px solid rgba(255, 255, 255, 0.90) !important;
 
     box-shadow:
         0 24px 64px rgba(0, 0, 0, 0.16),
@@ -154,8 +156,6 @@
 // ── DARK MODE ─────────────────────────────────────────────────────────────────
 [data-bs-theme=dark] .liquid-glass {
     background: rgba(255, 255, 255, 0.10) !important;
-    backdrop-filter: saturate(160%) blur(40px) brightness(1.45) !important;
-    -webkit-backdrop-filter: saturate(160%) blur(40px) brightness(1.45) !important;
     border: 1px solid rgba(255, 255, 255, 0.18) !important;
 
     box-shadow:
