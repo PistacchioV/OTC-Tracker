@@ -1443,6 +1443,9 @@ $(document).ready(function() {
                     });
                 });
             }
+            // Re-apply Missing Index B3 badges after every draw (pagination/sort/filter
+            // rebuilds DOM from data array which doesn't store the badge HTML)
+            if (typeof refreshAllMissingBadges === 'function') refreshAllMissingBadges();
         },
         initComplete: function() {
             var api = this.api();
