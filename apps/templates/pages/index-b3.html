@@ -187,6 +187,8 @@
     'use strict';
 
     const DATA = { subj: [], vcp: [], dominio: [] };
+    let _TRANS = {};
+    function t(key, fallback) { return _TRANS[key] || fallback || key; }
 
     /* ------------------------------------------------------------------ */
     function unique(arr, key) {
@@ -317,6 +319,16 @@
             return true;
         });
 
+        if (!subjResult.length && !vcpResult.length && !domResult.length) {
+            Swal.fire({
+                icon: 'info',
+                title: t('b3-no-results', 'No results found.'),
+                text: t('b3-no-results-hint', 'Go back and refine your search filters.'),
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
         const payload = {
             filters: { classe, codigo, bolsa, indice, tipoIF, moeda, tipoCot, commodity, mes, ano, ticker, calc, status },
             subj: subjResult,
@@ -350,11 +362,14 @@
         btnPes.disabled = true;
 
         try {
-            const [subj, vcp, dom] = await Promise.all([
+            const _lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+            const [subj, vcp, dom, trans] = await Promise.all([
                 fetch('{{ config.ASSETS_ROOT }}/data/Subjacente.json').then(r => r.json()),
                 fetch('{{ config.ASSETS_ROOT }}/data/VCP.json').then(r => r.json()),
-                fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json())
+                fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json()),
+                fetch('{{ config.ASSETS_ROOT }}/data/translations/' + _lang + '.json').then(r => r.json()).catch(() => ({}))
             ]);
+            _TRANS = trans;
 
             subj.forEach(function(r,i){ r._idx = i; });
             vcp.forEach(function(r,i){ r._idx = i; });

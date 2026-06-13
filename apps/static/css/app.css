@@ -15732,6 +15732,16 @@ html[data-sidenav-size=condensed] .sidenav-menu {
   position: absolute;
   width: var(--ins-sidenav-width-sm);
 }
+html[data-sidenav-size=condensed] .sidenav-menu::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--ins-sidenav-width-sm);
+  background: var(--ins-sidenav-bg);
+  z-index: -1;
+}
 html[data-sidenav-size=condensed] .sidenav-menu .simplebar-mask,
 html[data-sidenav-size=condensed] .sidenav-menu .simplebar-content-wrapper {
   overflow: visible !important;
@@ -15742,12 +15752,12 @@ html[data-sidenav-size=condensed] .sidenav-menu .simplebar-scrollbar {
 html[data-sidenav-size=condensed] .sidenav-menu .simplebar-offset {
   bottom: 0 !important;
 }
-html[data-sidenav-size=condensed] .sidenav-menu .logo {
+html[data-sidenav-size=condensed] .sidenav-menu a.logo {
   z-index: 1;
   background: var(--ins-sidenav-bg);
   text-align: center;
   padding: 0;
-  height: 90px;
+  height: 64px !important;
 }
 html[data-sidenav-size=condensed] .sidenav-menu .logo span.logo-lg {
   display: none;

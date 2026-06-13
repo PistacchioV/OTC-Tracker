@@ -216,6 +216,21 @@ html[data-sidenav-size="condensed"] {
         position: absolute;
         width: $sidenav-width-sm;
 
+        // Fixed pseudo-element ensures the background always fills the full
+        // viewport height regardless of page content length. The sidenav itself
+        // is position:absolute (needed for flyout submenus), so its own
+        // background clips at content height — the ::before compensates.
+        &::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: $sidenav-width-sm;
+            background: $sidenav-bg;
+            z-index: -1;
+        }
+
         .simplebar-mask,
         .simplebar-content-wrapper {
             overflow: visible !important;
@@ -229,13 +244,18 @@ html[data-sidenav-size="condensed"] {
             bottom: 0 !important;
         }
 
-        .logo {
+        // Only target the <a> wrapper — inner span.logo-light/logo-dark also carry
+        // the "logo" class and would incorrectly receive height: 90px, causing
+        // overflow onto the first nav icon.
+        a.logo {
             z-index: 1;
             background: $sidenav-bg;
             text-align: center;
             padding: 0;
-            height: 90px;
+            height: 64px !important;
+        }
 
+        .logo {
             span.logo-lg {
                 display: none;
             }
