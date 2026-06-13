@@ -17167,6 +17167,28 @@ html.sidebar-with-line .sub-menu .side-nav-link::after {
   box-shadow: none !important;
 }
 
+.btn.rounded-circle,
+.btn.btn-act,
+.btn.btn-icon.btn-sm,
+.btn-group-sm > .btn.btn-icon {
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: transform;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn.rounded-circle:hover,
+  .btn.btn-act:hover,
+  .btn.btn-icon.btn-sm:hover,
+  .btn-group-sm > .btn.btn-icon:hover {
+    transform: scale(1.18);
+  }
+}
+.btn.rounded-circle:active,
+.btn.btn-act:active,
+.btn.btn-icon.btn-sm:active,
+.btn-group-sm > .btn.btn-icon:active {
+  transform: scale(0.93) !important;
+}
+
 .btn-soft-dark {
   --ins-btn-hover-color: var(--ins-light);
   --ins-btn-active-color: var(--ins-light);
