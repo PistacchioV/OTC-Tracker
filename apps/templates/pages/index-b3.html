@@ -3,6 +3,7 @@
 {% block title %}Index B3{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <style>
     .filter-card .form-label { font-weight: 500; font-size: 0.85rem; margin-bottom: 4px; }
     .filter-card select:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -408,4 +409,5 @@
     });
 }());
 </script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 {% endblock extra_javascript %}
