@@ -899,7 +899,6 @@ def resend_code():
     return redirect(url_for('pages_blueprint.two_factor_page'))
 
 
-
 # ==============================================================================
 # ROTAS — APLICAÇÃO (PÓS-AUTENTICAÇÃO)
 # ==============================================================================
@@ -2611,12 +2610,21 @@ def reconciliation_comitente_run():
         # Envia email com sumário + Excel em background (não bloqueia resposta)
         file_path = result.pop('file_path', None)
         filename  = result.pop('filename', None)
-        if result.get('counts', {}).get('total', 0) > 0:
+        counts = result.get('counts', {})
+        if counts.get('total', 0) > 0:
             try:
                 from apps.pages.recon_comitente import send_recon_comitente_email
-                send_recon_comitente_email(recon_date, result['counts'], file_path, filename)
+                send_recon_comitente_email(recon_date, counts, file_path, filename)
             except Exception as mail_err:
                 log.warning('[reconciliation_comitente_run] email não enviado: %s', mail_err)
+
+            _create_notification(
+                session.get('user_sid', ''),
+                session.get('user_name', ''),
+                'Recon Generated',
+                'Recon Comitente',
+                f"{counts.get('total', 0)} records — OK:{counts.get('ok', 0)} Check:{counts.get('check', 0)} Amend:{counts.get('amend', 0)} ({recon_date})"
+            )
 
         return jsonify(result)
     except FileNotFoundError as e:

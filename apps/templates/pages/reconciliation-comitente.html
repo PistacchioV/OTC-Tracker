@@ -76,7 +76,10 @@
     text-align:center !important; vertical-align:middle !important;
 }
 #recon-table td { font-size:0.72rem; padding:6px 10px; vertical-align:middle; }
-#recon-table td.score-cell { text-align:center; font-weight:600; }
+#recon-table td.score-cell {
+    text-align:center; font-weight:600;
+    box-shadow: none !important;
+}
 
 /* ── Upload modal ────────────────────────────────────────────────── */
 #uploadModal .modal-content {
@@ -376,7 +379,10 @@ function sBadge(s) {
 /* ── Score cell helper ───────────────────────────────────────────── */
 function scoreCell(td, data) {
     const c = scoreColor(data);
-    if (c) { td.style.backgroundColor = c; td.style.color = '#222'; }
+    if (c) {
+        td.style.setProperty('background-color', c, 'important');
+        td.style.setProperty('color', '#222', 'important');
+    }
     td.classList.add('score-cell');
 }
 function scoreRender(d) {
