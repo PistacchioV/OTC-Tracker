@@ -340,10 +340,10 @@ def _compare_with_db(df, db_path):
 
 # ─── Função principal ─────────────────────────────────────────────────────────
 
-def run_reconciliation(file_b3_cgd, file_dcad, file_party):
+def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
     """
     Executa reconciliação completa com os 3 arquivos enviados via upload.
-    Salva resultado em SQLite e retorna {'data': [...], 'counts': {...}}.
+    Salva resultado em SQLite e retorna {'data': [...], 'counts': {...}, 'file_path': ..., 'filename': ...}.
     """
     # STEP 1: Base B3 & CGD
     df_cgd = pd.read_excel(file_b3_cgd)
@@ -500,12 +500,21 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party):
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     df = _compare_with_db(df, DB_PATH)
 
-    # Salva
+    # Salva no SQLite
     conn = sqlite3.connect(DB_PATH)
     df.to_sql('comitentes', conn, if_exists='replace', index=False)
     conn.close()
 
-    return _build_response(df)
+    result = _build_response(df)
+
+    # Salva Excel no drive de rede
+    filepath, filename = (None, None)
+    if recon_date_str:
+        filepath, filename = _save_to_network(df, recon_date_str)
+    result['file_path'] = filepath
+    result['filename']  = filename
+
+    return result
 
 
 def load_from_db():
@@ -551,19 +560,122 @@ def _build_response_from_list(rows):
     return {'data': rows, 'counts': counts}
 
 
-# ─── Caminho de rede B3 (ambiente JP) ────────────────────────────────────────
-_DCAD_BASE = r"I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP"
+# ─── Caminhos de rede (ambiente JP) ──────────────────────────────────────────
+_DCAD_BASE   = r"I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP"
+_OUTPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Comitente"
 
 # Caixas Outlook e subjects dos emails
 _MAILBOX         = 'brazil.otc.ops@jpmorgan.com'
 _SUBJECT_B3_CGD  = 'Base B3 & CGD Consolidada'
 _SUBJECT_PARTY   = '[PROD] - REPORT - Party Central Client Report General - SUCCESS - Client Report Generated (general)'
 
+_MONTH_EN = {
+    '01':'January','02':'February','03':'March','04':'April',
+    '05':'May','06':'June','07':'July','08':'August',
+    '09':'September','10':'October','11':'November','12':'December'
+}
+
 _MONTH_PT = {
     '01':'Janeiro','02':'Fevereiro','03':'Março','04':'Abril',
     '05':'Maio','06':'Junho','07':'Julho','08':'Agosto',
     '09':'Setembro','10':'Outubro','11':'Novembro','12':'Dezembro'
 }
+
+
+def _save_to_network(df, recon_date_str):
+    """Salva Excel no drive de rede. Retorna (filepath, filename) ou (None, None)."""
+    try:
+        dt       = datetime.strptime(recon_date_str, '%Y-%m-%d')
+        year     = dt.strftime('%Y')
+        mm       = dt.strftime('%m')
+        dd       = dt.strftime('%d')
+        month_en = _MONTH_EN[mm]
+
+        out_dir  = os.path.join(_OUTPUT_BASE, year, f'{mm}. {month_en}', dd)
+        os.makedirs(out_dir, exist_ok=True)
+
+        filename = f'Comitente_Reconciliation_{year}{mm}{dd}.xlsx'
+        filepath = os.path.join(out_dir, filename)
+        df.to_excel(filepath, index=False)
+        return filepath, filename
+    except Exception:
+        return None, None
+
+
+def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
+    """Envia email de sumário da reconciliação com o Excel anexo."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    from email.mime.image import MIMEImage
+    from flask import render_template, current_app
+
+    SMTP_HOST     = 'mailhost.jpmchase.net'
+    SMTP_PORT     = 25
+    SHARED_MAILBOX = 'otc.tracker@jpmorgan.com'
+
+    try:
+        dt             = datetime.strptime(recon_date_str, '%Y-%m-%d')
+        recon_date_fmt = dt.strftime('%d/%m/%Y')
+        current_year   = dt.year
+
+        html_body = render_template(
+            'pages/email-template-recon-comitente.html',
+            recon_date_fmt=recon_date_fmt,
+            counts=counts,
+            filename=filename or '',
+            file_path=filepath or '',
+            current_year=current_year,
+        )
+
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = f'[OTC Tracker] Comitente Reconciliation - {recon_date_fmt}'
+        msg['From']    = SHARED_MAILBOX
+        msg['To']      = _MAILBOX
+
+        msg_related     = MIMEMultipart('related')
+        msg_alternative = MIMEMultipart('alternative')
+        msg_alternative.attach(MIMEText(
+            f'Comitente Reconciliation {recon_date_fmt}: Total={counts["total"]} | '
+            f'New={counts["new"]} | Check={counts["check"]} | OK={counts["ok"]} | Amend={counts["amend"]}',
+            'plain'
+        ))
+        msg_alternative.attach(MIMEText(html_body, 'html'))
+        msg_related.attach(msg_alternative)
+
+        # Logo inline
+        logo_candidates = []
+        try:
+            logo_candidates = [
+                os.path.join(current_app.root_path, 'static', 'images', 'logo.png'),
+                os.path.normpath(os.path.join(current_app.root_path, '..', 'static', 'images', 'logo.png')),
+            ]
+        except Exception:
+            pass
+        for lp in logo_candidates:
+            if os.path.exists(lp):
+                with open(lp, 'rb') as f:
+                    logo_img = MIMEImage(f.read())
+                    logo_img.add_header('Content-ID', '<otc_logo>')
+                    logo_img.add_header('Content-Disposition', 'inline', filename='logo.png')
+                    msg_related.attach(logo_img)
+                break
+
+        msg.attach(msg_related)
+
+        # Anexo Excel
+        if filepath and os.path.exists(filepath):
+            with open(filepath, 'rb') as f:
+                xlsx = MIMEApplication(f.read(), _subtype='xlsx')
+                xlsx.add_header('Content-Disposition', 'attachment', filename=filename)
+                msg.attach(xlsx)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.sendmail(SHARED_MAILBOX, _MAILBOX, msg.as_string())
+        return True
+    except Exception:
+        return False
 
 
 def _outlook_download(inbox, subject_filter, tmpdir):
@@ -594,38 +706,43 @@ def run_auto(recon_date_str: str):
     """
     try:
         import win32com.client as _win32
+        import pythoncom
     except ImportError:
         raise EnvironmentError(
             'win32com não disponível. O modo automático requer Windows com Outlook instalado.'
         )
 
     recon_date = datetime.strptime(recon_date_str, '%Y-%m-%d').date()
-    str_date   = recon_date.strftime('%y%m%d')          # ex: 250603
+    str_date   = recon_date.strftime('%y%m%d')
     year       = recon_date.strftime('%Y')
     month_num  = recon_date.strftime('%m')
     day        = recon_date.strftime('%d')
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # ── Outlook ──────────────────────────────────────────────────────────
-        outlook  = _win32.Dispatch('Outlook.Application').GetNamespace('MAPI')
-        mailbox  = outlook.Folders[_MAILBOX]
-        inbox    = mailbox.Folders['Inbox']
+    pythoncom.CoInitialize()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # ── Outlook ──────────────────────────────────────────────────────
+            outlook = _win32.Dispatch('Outlook.Application').GetNamespace('MAPI')
+            mailbox = outlook.Folders[_MAILBOX]
+            inbox   = mailbox.Folders['Inbox']
 
-        path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir)
-        path_party  = _outlook_download(inbox, _SUBJECT_PARTY,  tmpdir)
+            path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir)
+            path_party  = _outlook_download(inbox, _SUBJECT_PARTY,  tmpdir)
 
-        # ── DCADCOMITENTES via drive de rede ─────────────────────────────────
-        dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
-        path_dcad = os.path.join(_DCAD_BASE, year, month_num, day, dcad_name)
+            # ── DCADCOMITENTES via drive de rede ─────────────────────────────
+            dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
+            path_dcad = os.path.join(_DCAD_BASE, year, month_num, day, dcad_name)
 
-        if not os.path.exists(path_dcad):
-            raise FileNotFoundError(
-                f'Arquivo não encontrado: {path_dcad}\n'
-                f'Verifique se o drive I:\\ está mapeado e se o arquivo do dia {recon_date.strftime("%d/%m/%Y")} já foi gerado.'
-            )
+            if not os.path.exists(path_dcad):
+                raise FileNotFoundError(
+                    f'Arquivo não encontrado: {path_dcad}\n'
+                    f'Verifique se o drive I:\\ está mapeado e se o arquivo do dia {recon_date.strftime("%d/%m/%Y")} já foi gerado.'
+                )
 
-        # ── Abre como file objects e chama a lógica comum ────────────────────
-        with open(path_b3_cgd, 'rb') as f1, \
-             open(path_dcad, 'rb') as f2, \
-             open(path_party, 'rb') as f3:
-            return run_reconciliation(f1, f2, f3)
+            # ── Abre como file objects e chama a lógica comum ────────────────
+            with open(path_b3_cgd, 'rb') as f1, \
+                 open(path_dcad, 'rb') as f2, \
+                 open(path_party, 'rb') as f3:
+                return run_reconciliation(f1, f2, f3, recon_date_str)
+    finally:
+        pythoncom.CoUninitialize()

@@ -2,7 +2,6 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='plugins/datatables/datatables.min.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='plugins/daterangepicker/daterangepicker.css') }}">
 <style>
 /* ── Widgets ─────────────────────────────────────────────────────── */
 .recon-widget {
@@ -92,8 +91,21 @@
 .upload-zone input[type=file] { display:none; }
 .upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
 
-/* ── Daterangepicker overrides ───────────────────────────────────── */
-.daterangepicker { border-radius:12px !important; border:1px solid var(--bs-border-color) !important; }
+/* ── Column filters ──────────────────────────────────────────────── */
+#recon-table tfoot th { padding:4px 6px; }
+#recon-table tfoot input {
+    width:100%; font-size:.65rem; padding:2px 5px; border-radius:6px;
+    border:1px solid var(--bs-border-color); background:var(--bs-body-bg);
+    color:var(--bs-body-color);
+}
+#recon-table tfoot input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
+
+/* ── Date wrapper ────────────────────────────────────────────────── */
+.date-wrap { position:relative; width:130px; }
+.date-wrap input[type=date] {
+    position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2;
+}
+.date-wrap input[type=text] { pointer-events:none; }
 </style>
 {% endblock %}
 
@@ -103,7 +115,7 @@
     <!-- Page Header -->
     <div class="page-title-head d-flex align-items-center mb-4">
         <div class="flex-grow-1 d-flex align-items-center gap-2">
-            <i data-lucide="refresh-cw" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <i data-lucide="square-user" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
             <h4 class="mb-0 fw-semibold" data-lang="recon-comitente-title">Comitente Reconciliation</h4>
         </div>
         <div class="text-end">
@@ -162,7 +174,10 @@
             <div id="reconLengthWrap"></div>
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Data:</label>
-                <input type="text" id="recon-date" class="form-control form-control-sm" placeholder="DD/MM/YYYY" style="width:130px;" readonly>
+                <div class="date-wrap">
+                    <input type="text" id="recon-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
+                    <input type="date" id="recon-date">
+                </div>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-score">Max Score:</label>
@@ -238,6 +253,15 @@
                             <th data-lang="rc-status">Status</th>
                         </tr>
                     </thead>
+                    <tfoot>
+                        <tr>
+                            <th></th><th></th><th></th><th></th><th></th><th></th>
+                            <th></th><th></th><th></th><th></th><th></th><th></th>
+                            <th></th><th></th><th></th><th></th><th></th><th></th>
+                            <th></th><th></th><th></th><th></th><th></th><th></th>
+                            <th></th><th></th><th></th><th></th><th></th><th></th>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
@@ -317,12 +341,11 @@
 {% endblock %}
 
 {% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/datatables.min.js') }}"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/jszip.min.js') }}"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/dataTables.buttons.min.js') }}"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/buttons.html5.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/daterangepicker/moment.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/daterangepicker/daterangepicker.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 /* ── Score → gradient RGB ────────────────────────────────────────── */
@@ -355,47 +378,50 @@ function scoreRender(d) {
 }
 
 /* ── Column definitions (30 cols) ────────────────────────────────── */
+// data como função evita o parser de dot-notation do DataTables 2.x
+// que interpreta () em nomes como chamada de função
+const _d = key => function(row) { return row[key] ?? null; };
 const SC = (key, title) => ({
-    data: key, title, render: scoreRender,
+    data: _d(key), title, render: scoreRender,
     createdCell: scoreCell
 });
 const COLS = [
-    { data:'Dono do Cadastro',  title:'Dono Cad.',  width:'72px',  className:'text-center' },
-    { data:'LE',                title:'LE',          width:'60px',  className:'text-center' },
-    { data:'Party Central SPN', title:'SPN',         width:'80px'  },
-    { data:'B3_Root_CNPJ',      title:'Raiz CNPJ',  width:'90px'  },
-    { data:'B3 CNPJ',           title:'B3 CNPJ',    width:'135px' },
-    { data:'Party Central CNPJ',title:'PC CNPJ',    width:'135px' },
-    { data:'B3 Name',           title:'B3 Name',    width:'180px' },
-    { data:'Party Central Name',title:'PC Name',    width:'180px' },
+    { data:_d('Dono do Cadastro'),  title:'Dono Cad.',  width:'72px',  className:'text-center' },
+    { data:_d('LE'),                title:'LE',          width:'60px',  className:'text-center' },
+    { data:_d('Party Central SPN'), title:'SPN',         width:'80px'  },
+    { data:_d('B3_Root_CNPJ'),      title:'Raiz CNPJ',  width:'90px'  },
+    { data:_d('B3 CNPJ'),           title:'B3 CNPJ',    width:'135px' },
+    { data:_d('Party Central CNPJ'),title:'PC CNPJ',    width:'135px' },
+    { data:_d('B3 Name'),           title:'B3 Name',    width:'180px' },
+    { data:_d('Party Central Name'),title:'PC Name',    width:'180px' },
     SC('Name Matching Score (%)',            'Name Score'),
-    { data:'B3 Address',                title:'B3 Address',  width:'210px' },
-    { data:'Party Central Address',      title:'PC Address',  width:'210px' },
+    { data:_d('B3 Address'),                title:'B3 Address',  width:'210px' },
+    { data:_d('Party Central Address'),      title:'PC Address',  width:'210px' },
     SC('Address Matching Score (%)',         'Addr Score'),
-    { data:'B3 Phone',                  title:'B3 Phone',    width:'120px' },
-    { data:'Party Central Phone',        title:'PC Phone',    width:'120px' },
+    { data:_d('B3 Phone'),                  title:'B3 Phone',    width:'120px' },
+    { data:_d('Party Central Phone'),        title:'PC Phone',    width:'120px' },
     SC('Phone Matching Score (%)',           'Phone Score'),
-    { data:'B3 E-mail',                 title:'B3 E-mail',   width:'180px' },
-    { data:'Party Central E-mail',       title:'PC E-mail',   width:'180px' },
+    { data:_d('B3 E-mail'),                 title:'B3 E-mail',   width:'180px' },
+    { data:_d('Party Central E-mail'),       title:'PC E-mail',   width:'180px' },
     SC('E-mail Matching Score (%)',          'Email Score'),
-    { data:'B3 Fins Lucrativos',         title:'B3 Fins',    width:'60px',  className:'text-center' },
-    { data:'Party Central Fins Lucrativos', title:'PC Fins', width:'60px',  className:'text-center' },
+    { data:_d('B3 Fins Lucrativos'),         title:'B3 Fins',    width:'60px',  className:'text-center' },
+    { data:_d('Party Central Fins Lucrativos'), title:'PC Fins', width:'60px',  className:'text-center' },
     SC('Fins Lucrativos Matching Score (%)','Fins Score'),
-    { data:'B3 Start Date',             title:'B3 Start',    width:'100px' },
-    { data:'Party Central Start Date',   title:'PC Start',    width:'100px' },
+    { data:_d('B3 Start Date'),             title:'B3 Start',    width:'100px' },
+    { data:_d('Party Central Start Date'),   title:'PC Start',    width:'100px' },
     SC('Start Date Matching Score (%)',      'Start Score'),
-    { data:'B3 CNAE',                   title:'B3 CNAE',     width:'80px' },
-    { data:'Party Central CNAE',         title:'PC CNAE',     width:'80px' },
+    { data:_d('B3 CNAE'),                   title:'B3 CNAE',     width:'80px' },
+    { data:_d('Party Central CNAE'),         title:'PC CNAE',     width:'80px' },
     SC('CNAE Matching Score (%)',           'CNAE Score'),
-    { data:'Natureza Fiscal',           title:'Natureza Fiscal', width:'110px' },
+    { data:_d('Natureza Fiscal'),           title:'Natureza Fiscal', width:'110px' },
     {
-        data:'Matching Score Averaged', title:'Avg Score',
+        data: _d('Matching Score Averaged'), title:'Avg Score',
         className:'text-center',
         render: d => (!d ? '' : parseFloat(d).toFixed(2)),
         createdCell: function(td, data) { scoreCell(td, data); td.style.fontWeight='700'; }
     },
     {
-        data:'Status', title:'Status', className:'text-center',
+        data: _d('Status'), title:'Status', className:'text-center',
         render: d => sBadge(d)
     }
 ];
@@ -403,112 +429,130 @@ const COLS = [
 let table = null;
 
 /* ── Helpers de data ─────────────────────────────────────────────── */
-function lastBizDay() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    if (d.getDay() === 0) d.setDate(d.getDate() - 2);
-    else if (d.getDay() === 6) d.setDate(d.getDate() - 1);
-    return d;
-}
 function getIsoDate() {
-    const v = $('#recon-date').val();
-    if (!v) return '';
-    const [dd, mm, yyyy] = v.split('/');
-    return `${yyyy}-${mm}-${dd}`;
+    return document.getElementById('recon-date').value || '';
 }
-
-/* ── Event listeners vinculados imediatamente ────────────────────── */
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('btnLoadDb').addEventListener('click', loadFromDB);
-    document.getElementById('btnFilterScore').addEventListener('click', filterByScore);
-    document.getElementById('btnClearFilters').addEventListener('click', clearFilters);
-    document.getElementById('btnProcess').addEventListener('click', processFiles);
-    document.getElementById('btnRunAuto').addEventListener('click', runAuto);
-
-    // File input → show filename in zone
-    [['file-b3-cgd','name1','zone1'],
-     ['file-dcad',  'name2','zone2'],
-     ['file-party', 'name3','zone3']].forEach(([fid,nid,zid]) => {
-        document.getElementById(fid).addEventListener('change', function() {
-            const n = document.getElementById(nid), z = document.getElementById(zid);
-            if (this.files[0]) {
-                n.textContent = this.files[0].name; n.classList.remove('d-none');
-                z.style.borderColor = '#0d6efd'; z.style.background = 'var(--bs-secondary-bg)';
-            }
-        });
-    });
-
-    // Drag-over style
-    document.querySelectorAll('.upload-zone').forEach(z => {
-        z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('dragover'); });
-        z.addEventListener('dragleave', () => z.classList.remove('dragover'));
-    });
-
-    // Daterangepicker
-    $('#recon-date').daterangepicker({
-        singleDatePicker: true,
-        showDropdowns: true,
-        autoApply: true,
-        locale: { format: 'DD/MM/YYYY' },
-        startDate: lastBizDay()
-    });
-});
+function setReconDate(isoStr) {
+    document.getElementById('recon-date').value = isoStr;
+    const [y, m, d] = isoStr.split('-');
+    document.getElementById('recon-date-display').value = d + '/' + m + '/' + y;
+}
 
 $(document).ready(function() {
-    /* ── DataTable init ──────────────────────────────────────────── */
-    table = $('#recon-table').DataTable({
-        columns: COLS,
-        data: [],
-        scrollX: true,
-        pageLength: 25,
-        order: [[28, 'asc']],
-        dom: "<'row'<'col-sm-12'tr>>" +
-             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
-        language: {
-            info: '_START_–_END_ / _TOTAL_',
-            search: '',
-            paginate: {
-                next: '<i class="ti ti-chevron-right"></i>',
-                previous: '<i class="ti ti-chevron-left"></i>'
-            },
-            emptyTable: 'Nenhum dado. Clique em <strong>Load DB</strong> ou execute uma reconciliação.'
-        },
-        buttons: [
-            {
-                extend: 'excelHtml5',
-                text: '<i data-lucide="file-spreadsheet" style="width:12px;height:12px;"></i> Excel',
-                className: 'btn btn-sm btn-outline-success btn-toolbar-all',
-                title: 'Recon Comitentes',
-                exportOptions: { orthogonal: 'export' }
-            },
-            {
-                extend: 'colvis',
-                text: '<i data-lucide="columns" style="width:12px;height:12px;"></i> Colunas',
-                className: 'btn btn-sm btn-outline-secondary btn-toolbar-all',
-                collectionLayout: 'two-column'
-            }
-        ],
-        initComplete: function() {
-            // Show entries control
-            const lenWrap = document.getElementById('reconLengthWrap');
-            const div = document.createElement('div');
-            div.className = 'd-flex align-items-center gap-2';
-            div.innerHTML = '<label class="form-label mb-0 fw-semibold" style="font-size:.75rem;">Show</label>';
-            const sel = document.createElement('select');
-            sel.className = 'form-select form-select-sm'; sel.style.width = '70px';
-            [10,25,50,100].forEach(n => {
-                const o = document.createElement('option');
-                o.value = n; o.textContent = n; if (n===25) o.selected=true;
-                sel.appendChild(o);
-            });
-            sel.addEventListener('change', e => table.page.len(+e.target.value).draw());
-            div.appendChild(sel); lenWrap.appendChild(div);
 
-            // Place DataTable buttons
-            table.buttons().container().appendTo(document.getElementById('reconExportWrap'));
-            lucide.createIcons();
+    /* ── 1. Event listeners (primeiro, independente do DataTable) ── */
+    $('#btnLoadDb').on('click', loadFromDB);
+    $('#btnFilterScore').on('click', filterByScore);
+    $('#btnClearFilters').on('click', clearFilters);
+    $('#btnProcess').on('click', processFiles);
+    $('#btnRunAuto').on('click', runAuto);
+
+    $('#file-b3-cgd').on('change', function() {
+        if (this.files[0]) {
+            $('#name1').text(this.files[0].name).removeClass('d-none');
+            $('#zone1').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
         }
     });
+    $('#file-dcad').on('change', function() {
+        if (this.files[0]) {
+            $('#name2').text(this.files[0].name).removeClass('d-none');
+            $('#zone2').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
+        }
+    });
+    $('#file-party').on('change', function() {
+        if (this.files[0]) {
+            $('#name3').text(this.files[0].name).removeClass('d-none');
+            $('#zone3').css({borderColor:'#0d6efd', background:'var(--bs-secondary-bg)'});
+        }
+    });
+
+    $('.upload-zone').on('dragover', function(e) {
+        e.preventDefault(); $(this).addClass('dragover');
+    }).on('dragleave', function() {
+        $(this).removeClass('dragover');
+    });
+
+    $('#recon-date').on('change', function() {
+        if (this.value) {
+            var p = this.value.split('-');
+            $('#recon-date-display').val(p[2] + '/' + p[1] + '/' + p[0]);
+        }
+    });
+
+    /* ── 2. Data padrão: último dia útil ─────────────────────────── */
+    var ld = new Date();
+    ld.setDate(ld.getDate() - 1);
+    if (ld.getDay() === 0) ld.setDate(ld.getDate() - 2);
+    else if (ld.getDay() === 6) ld.setDate(ld.getDate() - 1);
+    setReconDate(ld.toISOString().split('T')[0]);
+
+    /* ── 3. DataTable init ───────────────────────────────────────── */
+    try {
+        table = $('#recon-table').DataTable({
+            columns: COLS,
+            data: [],
+            scrollX: true,
+            pageLength: 25,
+            order: [[28, 'asc']],
+            dom: "<'row'<'col-sm-12'tr>>" +
+                 "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            language: {
+                info: '_START_–_END_ / _TOTAL_',
+                search: '',
+                paginate: {
+                    next: '<i class="ti ti-chevron-right"></i>',
+                    previous: '<i class="ti ti-chevron-left"></i>'
+                },
+                emptyTable: 'Nenhum dado. Clique em <strong>Load DB</strong> ou execute uma reconciliação.'
+            },
+            buttons: [
+                {
+                    extend: 'excelHtml5',
+                    text: '<i data-lucide="file-spreadsheet" style="width:12px;height:12px;"></i> Excel',
+                    className: 'btn btn-sm btn-outline-success btn-toolbar-all',
+                    title: 'Recon Comitentes',
+                    exportOptions: { orthogonal: 'export' }
+                },
+                {
+                    extend: 'colvis',
+                    text: '<i data-lucide="columns" style="width:12px;height:12px;"></i> Colunas',
+                    className: 'btn btn-sm btn-outline-secondary btn-toolbar-all',
+                    collectionLayout: 'two-column'
+                }
+            ],
+            initComplete: function() {
+                var lenWrap = document.getElementById('reconLengthWrap');
+                var div = document.createElement('div');
+                div.className = 'd-flex align-items-center gap-2';
+                div.innerHTML = '<label class="form-label mb-0 fw-semibold" style="font-size:.75rem;">Show</label>';
+                var sel = document.createElement('select');
+                sel.className = 'form-select form-select-sm'; sel.style.width = '70px';
+                [10,25,50,100].forEach(function(n) {
+                    var o = document.createElement('option');
+                    o.value = n; o.textContent = n; if (n===25) o.selected=true;
+                    sel.appendChild(o);
+                });
+                sel.addEventListener('change', function(e) { table.page.len(+e.target.value).draw(); });
+                div.appendChild(sel); lenWrap.appendChild(div);
+                try { table.buttons().container().appendTo($('#reconExportWrap')); } catch(e) {}
+
+                // Filtros por coluna no tfoot (DataTables 2.x: usar this.columns() diretamente)
+                this.columns().every(function() {
+                    var col = this;
+                    var th = $(col.footer());
+                    var title = $(col.header()).text().trim();
+                    if (!title) return;
+                    $('<input type="text" placeholder="' + title + '">')
+                        .appendTo(th.empty())
+                        .on('input', function() { col.search(this.value).draw(); });
+                });
+
+                lucide.createIcons();
+            }
+        });
+    } catch(err) {
+        console.error('DataTable init error:', err);
+    }
 
     lucide.createIcons();
     loadFromDB();
@@ -526,14 +570,14 @@ function updateWidgets(c) {
 /* ── Load from DB ────────────────────────────────────────────────── */
 function loadFromDB() {
     fetch('/reconciliation-comitente/data')
-        .then(r => r.json())
-        .then(res => {
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
             if (res.error) { console.warn('Recon DB:', res.error); return; }
-            table.clear().rows.add(res.data).draw();
+            if (table) { table.clear().rows.add(res.data).draw(); }
             updateWidgets(res.counts);
             lucide.createIcons();
         })
-        .catch(err => console.error(err));
+        .catch(function(err) { console.error('loadFromDB:', err); });
 }
 
 /* ── Score filter ────────────────────────────────────────────────── */
@@ -546,8 +590,8 @@ function filterByScore() {
     }
     $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
     const fn = function(s, data, idx, rowData) {
-        if (s.nTable.id !== 'recon-table') return true;
-        const avg = parseFloat(rowData['Matching Score Averaged']);
+        if (s.nTable && s.nTable.id !== 'recon-table') return true;
+        const avg = parseFloat(rowData['Matching Score Averaged'] ?? data[28]);
         return isNaN(avg) || avg <= v;
     };
     fn._reconScore = true;
@@ -604,6 +648,30 @@ function runAuto() {
                 btn.disabled = false;
                 btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i> <span data-lang="recon-btn-run">Run Reconciliation</span>';
                 lucide.createIcons();
+                if (res.not_found) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Arquivos não encontrados',
+                        html: `<div class="text-start small">
+                            <p class="mb-2">Nenhum arquivo foi localizado automaticamente:</p>
+                            <ul class="mb-0">
+                                <li>Verifique o e-mail <code>brazil.otc.ops@jpmorgan.com</code></li>
+                                <li>Confirme se o drive <code>I:\\</code> está acessível</li>
+                                <li>Tente o upload manual como alternativa</li>
+                            </ul>
+                        </div>`,
+                        confirmButtonText: 'Upload Manual',
+                        showCancelButton: true,
+                        cancelButtonText: 'Fechar',
+                        confirmButtonColor: '#0d6efd',
+                        customClass: { popup: 'rounded-4' }
+                    }).then(r => {
+                        if (r.isConfirmed) {
+                            new bootstrap.Modal(document.getElementById('uploadModal')).show();
+                        }
+                    });
+                    return;
+                }
                 if (res.error) {
                     Swal.fire({ icon:'error', title:'Erro', text: res.error,
                         confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });

@@ -2596,20 +2596,31 @@ def reconciliation_comitente_run():
 
     try:
         if mode == 'auto':
-            # Modo automático: Outlook + drive de rede I:\
             from apps.pages.recon_comitente import run_auto
             result = run_auto(recon_date)
         else:
-            # Modo manual: arquivos enviados via upload
             f_b3_cgd = request.files.get('file_b3_cgd')
             f_dcad   = request.files.get('file_dcad')
             f_party  = request.files.get('file_party')
             if not f_b3_cgd or not f_dcad or not f_party:
                 return jsonify({'error': 'Os 3 arquivos são obrigatórios no modo manual.'}), 400
             from apps.pages.recon_comitente import run_reconciliation
-            result = run_reconciliation(f_b3_cgd, f_dcad, f_party)
+            result = run_reconciliation(f_b3_cgd, f_dcad, f_party, recon_date)
+
+        # Envia email com sumário + Excel em background (não bloqueia resposta)
+        file_path = result.pop('file_path', None)
+        filename  = result.pop('filename', None)
+        if result.get('counts', {}).get('total', 0) > 0:
+            try:
+                from apps.pages.recon_comitente import send_recon_comitente_email
+                send_recon_comitente_email(recon_date, result['counts'], file_path, filename)
+            except Exception as mail_err:
+                log.warning('[reconciliation_comitente_run] email não enviado: %s', mail_err)
 
         return jsonify(result)
+    except FileNotFoundError as e:
+        log.warning('[reconciliation_comitente_run] arquivo não encontrado: %s', e)
+        return jsonify({'not_found': True, 'detail': str(e)})
     except Exception as e:
         log.error('[reconciliation_comitente_run] %s', e)
         return jsonify({'error': str(e)}), 500

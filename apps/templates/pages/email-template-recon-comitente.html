@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width"/>
+    <title>Comitente Reconciliation Report</title>
+    <style>
+        body { margin:0; font-family:Arial,sans-serif; background:#f4f6f9; color:#333; }
+        .wrapper { width:100%; padding:40px 0; background:#f4f6f9; }
+        .content { max-width:620px; margin:auto; background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.08); overflow:hidden; }
+        .header { background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%); padding:28px 32px; text-align:center; }
+        .header img { height:30px; margin-bottom:12px; display:block; margin:0 auto 10px; }
+        .header-title { color:#fff; font-size:17px; font-weight:700; margin:0; letter-spacing:.3px; }
+        .header-sub   { color:rgba(255,255,255,.80); font-size:13px; margin:4px 0 0; }
+        .body { padding:32px; }
+        .body h2 { font-size:18px; color:#1a1a2e; margin:0 0 6px; }
+        .body .date-badge { display:inline-block; background:#e8f0ff; color:#0d6efd; font-size:12px; font-weight:700; padding:4px 12px; border-radius:20px; margin-bottom:22px; }
+        .summary-grid { display:table; width:100%; border-collapse:separate; border-spacing:8px; margin:0 -8px 24px; }
+        .summary-cell { display:table-cell; width:20%; text-align:center; background:#f8f9fa; border-radius:8px; padding:14px 8px; }
+        .summary-cell .val { font-size:24px; font-weight:700; line-height:1; margin-bottom:4px; }
+        .summary-cell .lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#888; }
+        .total  .val { color:#6f42c1; }
+        .new    .val { color:#495057; }
+        .check  .val { color:#856404; }
+        .ok     .val { color:#198754; }
+        .amend  .val { color:#dc3545; }
+        .divider { border:none; border-top:1px solid #eee; margin:24px 0; }
+        .info-box { background:#f0f4ff; border-left:4px solid #0d6efd; border-radius:6px; padding:14px 18px; font-size:13px; color:#333; margin-bottom:20px; }
+        .info-box strong { color:#0d6efd; }
+        .body p { font-size:14px; line-height:1.65; color:#555; margin:0 0 12px; }
+        .footer { background:#f0f0f0; border-top:1px solid #e0e0e0; text-align:center; padding:18px; font-size:11px; color:#999; }
+        .footer strong { color:#666; }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+    <div class="content">
+        <div class="header">
+            <img src="cid:otc_logo" alt="OTC Tracker"/>
+            <p class="header-title">Comitente Reconciliation Report</p>
+            <p class="header-sub">Generated automatically by OTC Tracker</p>
+        </div>
+        <div class="body">
+            <h2>Reconciliation Summary</h2>
+            <span class="date-badge">{{ recon_date_fmt }}</span>
+
+            <div class="summary-grid">
+                <div class="summary-cell total">
+                    <div class="val">{{ counts.total }}</div>
+                    <div class="lbl">Total</div>
+                </div>
+                <div class="summary-cell new">
+                    <div class="val">{{ counts.new }}</div>
+                    <div class="lbl">New</div>
+                </div>
+                <div class="summary-cell check">
+                    <div class="val">{{ counts.check }}</div>
+                    <div class="lbl">Check</div>
+                </div>
+                <div class="summary-cell ok">
+                    <div class="val">{{ counts.ok }}</div>
+                    <div class="lbl">OK</div>
+                </div>
+                <div class="summary-cell amend">
+                    <div class="val">{{ counts.amend }}</div>
+                    <div class="lbl">Amend</div>
+                </div>
+            </div>
+
+            <hr class="divider"/>
+
+            <div class="info-box">
+                <strong>Attached file:</strong> {{ filename }}<br/>
+                Also saved to: <code style="font-size:11px;">{{ file_path }}</code>
+            </div>
+
+            <p>The reconciliation between <strong>B3 Comitentes</strong> and <strong>Party Central</strong> has been completed for <strong>{{ recon_date_fmt }}</strong>. Please review the records flagged as <em>Check</em> or <em>Amend</em> and take the appropriate action in the system.</p>
+
+            <p style="margin-top:20px;font-size:12px;color:#aaa;">This is an automated notification from OTC Tracker. Do not reply to this email.</p>
+        </div>
+        <div class="footer">
+            <strong>OTC Tracker</strong> — JPMorgan Chase &amp; Co. — {{ current_year }}<br/>
+            Brazil OTC Operations · <a href="mailto:brazil.otc.ops@jpmorgan.com" style="color:#999;">brazil.otc.ops@jpmorgan.com</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>
