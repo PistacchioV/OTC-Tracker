@@ -271,6 +271,74 @@ gunicorn --config gunicorn-cfg.py run:app
 
 ---
 
+## 11. Sessão 2026-06-14 — Holidays Calendar: design, contraste, animações Emil
+
+### O que foi feito
+
+#### Holidays Calendar — nova página
+- **`apps/templates/pages/holidays-calendar.html`** criado com layout completo: sidebar de calendários arrastáveis, FullCalendar integrado (Month/Week/Day/List/Year), modal de criação/edição de feriados, SweetAlert2 para popup de detalhes ao clicar num evento
+- **`apps/static/js/pages/apps-holidays-calendar.js`** criado: classe `CalendarSchedule`, carregamento assíncrono dos JSONs de feriados, lógica de drag-and-drop, persistência via `/api/holidays/save`
+- **`apps/static/data/anbima.json`** e **`apps/static/data/sofr.json`** adicionados
+
+#### Fix 1 — Textos das views não apareciam (list view)
+- O CSS cobria apenas as 4 cores customizadas (purple/teal/indigo/pink) na list view do FullCalendar
+- As 7 cores semânticas Bootstrap (primary/secondary/success/danger/info/warning/dark) não tinham regra de override — o `<a>` da list view usava cor padrão de link, sobrescrevendo a herança do `<tr>`
+- Adicionadas regras `.fc-list-event.bg-*-subtle` para todas as variantes Bootstrap
+
+#### Fix 2 — Contraste (ICEAGS e IPE invisíveis)
+- `text-info` do Bootstrap = `#0dcaf0` → contraste 1.7:1 com fundo branco — **invisível**
+- `text-warning` = `#ffc107` → contraste ~2:1 — muito fraco
+- Substituídos por versões escuras com contraste adequado:
+  - ICEAGS (info): `#0dcaf0` → **`#0284c7`** (sky-600, contraste ~4.5:1)
+  - IPE (warning): `#f59e0b` → **`#b45309`** (amber-700, contraste ~4.8:1)
+- Fix aplicado em `.fc-daygrid-event` e `.fc-list-event` para todas as views
+
+#### Fix 3 — Botões de view sem texto visível
+- CSS sobrescrevia `background-color` dos botões mas não forçava `color: #fff`
+- Bootstrap theme calculava cor de texto por contraste e escolhia cor escura sobre fundo azul
+- Adicionado `color: #fff !important` em todos os estados (normal, hover, active)
+- Adicionado `buttonIcons: false` no JS para garantir labels de texto em todos os botões
+
+#### Design Apple — event badges pill
+- `.fc-daygrid-event`: `border-radius: 999px`, `border-width: 0`, `font-weight: 600`, `font-size: 0.70rem`
+- `.fc-daygrid-more-link`: estilizado com `color: #0066cc`
+
+#### Animações Emil (mesmo padrão da sidebar)
+- `.fc-daygrid-event` recebeu a mesma curva e tempo dos pills da sidebar (`transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 140ms ...`)
+- `:active`: `scale(0.96)` (press feedback)
+- `:hover` (gated em `@media (hover: hover)`): `translateY(-2px)` + `box-shadow: 0 3px 10px rgba(0,0,0,0.12)` — lift vertical em vez de translateX horizontal (que ficaria estranho em badges dentro de células)
+
+#### Script commit-push seguro
+- **`scripts/commit-push.sh`** criado: remove automaticamente o bloco DEV BYPASS do `routes.py` antes do commit, faz push, e restaura a versão dev local após
+- **Workflow obrigatório**: sempre que `routes.py` estiver entre os arquivos a commitar, usar este fluxo (ou fazê-lo manualmente)
+
+### Padrões identificados nesta sessão
+
+- **FullCalendar list view + Bootstrap classes:** `text-*` no `<tr>` NÃO cascateia para `<a>` interno porque o browser default link style tem prioridade. É obrigatório ter regra explícita `.fc-list-event.bg-*-subtle a { color: ... !important }` para cada variante de cor.
+- **Contraste mínimo em badges:** Bootstrap `text-info` (`#0dcaf0`) e `text-warning` (`#ffc107`) têm contraste < 3:1 sobre fundo branco/claro — nunca usar diretamente em texto sobre fundos claros sem override.
+- **FC toolbar buttons:** ao sobrescrever `background-color` de `.fc-button-primary`, sempre incluir `color: #fff !important` — o tema Bootstrap recalcula a cor do texto e pode escolher escuro.
+- **Emil em calendário:** `translateX` não faz sentido em badges horizontais; usar `translateY(-2px)` para o lift effect.
+- **Commit+push com routes.py:** bloco DEV BYPASS nunca vai para o repositório. Usar `scripts/commit-push.sh` ou o processo manual de backup → strip → commit → push → restore.
+
+### Arquivos criados/modificados nesta sessão
+```
+apps/templates/pages/holidays-calendar.html   ← CRIADO
+apps/static/js/pages/apps-holidays-calendar.js ← CRIADO
+apps/static/data/anbima.json                  ← CRIADO
+apps/static/data/sofr.json                    ← CRIADO
+scripts/commit-push.sh                        ← CRIADO
+apps/pages/routes.py                          ← MODIFICADO (outras mudanças da branch)
+apps/templates/pages/about.html               ← MODIFICADO
+apps/templates/pages/new_deals-ndf-commodities.html ← MODIFICADO
+apps/templates/pages/new_deals-opt-commodities.html ← MODIFICADO
+apps/templates/partials/footer.html           ← MODIFICADO
+apps/static/images/logo-black.png             ← MODIFICADO
+apps/static/images/logo-sm-black.png          ← ADICIONADO
+apps/templates/pages/NDF Comm - Strike USD.html ← ADICIONADO
+```
+
+---
+
 ## 8. Instruções para a próxima sessão
 
 **Tom e abordagem:**
@@ -298,6 +366,10 @@ gunicorn --config gunicorn-cfg.py run:app
 5. **O usuário pode editar os arquivos manualmente** — sempre ler o arquivo atual antes de editar; não confiar no estado da sessão anterior
 6. **`block page_content`** — páginas in-app sempre usam `{% block page_content %}`, nunca `{% block content %}`
 7. **SECRET_KEY** — já está definida no `.env`; não alterar sem avisar o usuário
+8. **Bootstrap `text-info` / `text-warning` em fundos claros** — `#0dcaf0` e `#ffc107` têm contraste < 2:1 sobre branco. Nunca usar diretamente como cor de texto visível; substituir por `#0284c7` (info) e `#b45309` (warning)
+9. **FullCalendar list view + classes Bootstrap** — `text-*` no `<tr>` não cascateia para `<a>` interno (link style tem prioridade). Sempre adicionar regra explícita `.fc-list-event.bg-*-subtle a { color: ... !important }` para cada cor
+10. **FC toolbar buttons com background sobrescrito** — ao mudar `background-color` de `.fc-button-primary`, sempre adicionar `color: #fff !important` — o Bootstrap theme recalcula a cor e pode escolher texto escuro
+11. **Commit+push com `routes.py`** — o bloco DEV BYPASS (`/dev-login`) nunca vai para o repositório. Usar `scripts/commit-push.sh` ou: backup → remover bloco → commit+push → restaurar backup
 
 ---
 

@@ -20,6 +20,14 @@
     .pending-widgets-row .card {
         flex: 1;
         height: 100%;
+        transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
+                    box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .pending-widgets-row .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(0,0,0,.08);
+        }
     }
     .pending-widgets-row .card-body {
         padding: 10px 12px;
@@ -304,6 +312,23 @@
     #pending-confirmation-table tbody td:nth-child(2):hover {
         background-color: transparent !important;
     }
+
+    /* ── Emil Design — button press + hover feedback ───────────── */
+    .container-fluid .btn {
+        transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+                    border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out,
+                    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .container-fluid .btn:active {
+        transform: scale(0.97) !important;
+        box-shadow: none !important;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .container-fluid .btn:not(:active):hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        }
+    }
 </style>
 {% endblock extra_css %}
 
@@ -314,10 +339,20 @@
     -->
     <div class="container-fluid" data-content="">
 
-        {# Título e subtítulo da página, renderizados por um partial compartilhado. #}
-        {% set subtitle='Documentation' %}
-        {% set title='Pending Confirmation' %}
-        {% include 'partials/page-title.html' %}
+        <div class="page-title-head d-flex align-items-center">
+            <div class="flex-grow-1">
+                <h4 class="fs-xl fw-bold m-0">
+                    <i data-lucide="clock" style="width:20px;height:20px;flex-shrink:0;" class="me-2"></i>Pending Confirmation
+                </h4>
+            </div>
+            <div class="text-end">
+                <ol class="breadcrumb m-0 py-0">
+                    <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                    <li class="breadcrumb-item">Documentation</li>
+                    <li class="breadcrumb-item active">Pending Confirmation</li>
+                </ol>
+            </div>
+        </div>
 
         <!-- ===============================================================
              LINHA DE WIDGETS (PENDING STATUS POR FAIXA DE DIAS)
@@ -780,10 +815,16 @@
                         </div>
                     </div>
 
-                    <!-- Corpo do card com a DataTable -->
-                    <div class="card-body" style="padding-top: 10px;">
-                        <div style="margin-bottom: 10px;"></div>
+                    <!-- Action buttons — fora do .table-responsive para evitar overflow clipping -->
+                    <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                        <div id="pendColToggleWrap"></div>
+                        <div id="pendExportWrap"></div>
+                        <div id="pendAddRowWrap"></div>
+                        <div id="pendCondActionsWrap" class="d-flex align-items-center"></div>
+                    </div>
 
+                    <!-- Corpo do card com a DataTable -->
+                    <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-striped dt-responsive align-middle mb-0" id="pending-confirmation-table">
                                 <thead class="thead-sm text-uppercase fs-xxs">
@@ -1111,16 +1152,7 @@ $(document).ready(function() {
                 targets: '_all'
             }
         ],
-        dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
-             "<'btn-toolbar d-flex flex-wrap align-items-center'" +
-             "<'columnToggleWrapper me-2'>" +
-             "<'addRowBtn me-2'>" +
-             "B" +
-             "<'conditionalActions ms-2 d-flex align-items-center'>" +
-             ">" +
-             "<'ms-auto'>" +
-             ">" +
-             "<'row'<'col-sm-12'tr>>" +
+        dom: "<'row'<'col-sm-12'tr>>" +
              "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
         buttons: [
             {
@@ -1231,7 +1263,7 @@ $(document).ready(function() {
             // ==============================================================
             // ADD ROW BUTTON — opens modal
             // ==============================================================
-            var btnContainer = document.querySelector('.addRowBtn');
+            var btnContainer = document.getElementById('pendAddRowWrap');
 
             if (btnContainer && !document.getElementById('addRow')) {
                 var btn = document.createElement('button');
@@ -1270,7 +1302,7 @@ $(document).ready(function() {
                 "FepWeb ID", "Baixa Sem Abono", "Pendência", "Abono"
             ];
 
-            var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
+            var columnToggleWrapper = document.getElementById('pendColToggleWrap');
             if (columnToggleWrapper) {
                 var dropdown = document.createElement('div');
                 dropdown.className = 'dropdown';
@@ -1311,7 +1343,7 @@ $(document).ready(function() {
             // ==============================================================
             // CONDITIONAL ACTIONS: Status combobox + Confirm + Delete
             // ==============================================================
-            var conditionalActions = document.querySelector('.conditionalActions');
+            var conditionalActions = document.getElementById('pendCondActionsWrap');
             if (conditionalActions) {
 
                 // ---------------------------------------------------------
@@ -1366,6 +1398,9 @@ $(document).ready(function() {
             }
         } // end initComplete
     }); // end DataTable init
+
+    // Coloca os botões de export (criados pelo DataTables Buttons) no card-header estático
+    table.buttons().container().appendTo(document.getElementById('pendExportWrap'));
 
 
     // ========================================================================
