@@ -1,7 +1,8 @@
 {% extends "layouts/vertical.html" %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='plugins/datatables/datatables.min.css') }}">
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ── Widgets ─────────────────────────────────────────────────────── */
 .recon-widget {
@@ -91,14 +92,18 @@
 .upload-zone input[type=file] { display:none; }
 .upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
 
-/* ── Column filters ──────────────────────────────────────────────── */
-#recon-table tfoot th { padding:4px 6px; }
-#recon-table tfoot input {
-    width:100%; font-size:.65rem; padding:2px 5px; border-radius:6px;
+/* ── Column filters (second thead row via headerCallback) ────────── */
+#recon-table thead .recon-col-filters th,
+.dt-scroll-headInner thead .recon-col-filters th,
+.dataTables_scrollHeadInner thead .recon-col-filters th { padding:3px 4px; }
+#recon-table thead .recon-col-filters input,
+.dt-scroll-headInner thead .recon-col-filters input,
+.dataTables_scrollHeadInner thead .recon-col-filters input {
+    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
     border:1px solid var(--bs-border-color); background:var(--bs-body-bg);
     color:var(--bs-body-color);
 }
-#recon-table tfoot input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
+.recon-col-filters input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
 
 /* ── Date wrapper ────────────────────────────────────────────────── */
 .date-wrap { position:relative; width:130px; }
@@ -169,11 +174,24 @@
     <!-- ── Main Card ─────────────────────────────────────────────── -->
     <div class="card">
 
-        <!-- Card Header 1: Show entries + date + score filter -->
-        <div class="card-header d-flex flex-wrap align-items-center gap-3">
-            <div id="reconLengthWrap"></div>
+        <!-- Card Header 1: Show entries -->
+        <div class="card-header">
             <div class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Data:</label>
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
+                <select id="reconPageLength" class="form-select form-select-sm" style="width:80px;">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <label class="form-label mb-0" style="font-size:.75rem;" data-lang="b3-entries">entries</label>
+            </div>
+        </div>
+
+        <!-- Card Header 2: Date + Score filter -->
+        <div class="card-header d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
                 <div class="date-wrap">
                     <input type="text" id="recon-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
                     <input type="date" id="recon-date">
@@ -190,9 +208,8 @@
             </div>
         </div>
 
-        <!-- Card Header 2: Botões de ação — fora do table-responsive -->
+        <!-- Card Header 3: Botões de ação -->
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
-            <div id="reconColToggleWrap"></div>
             <div id="reconExportWrap"></div>
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
                 <i data-lucide="x-circle" style="width:12px;height:12px;"></i>
@@ -202,13 +219,11 @@
                 <i data-lucide="database" style="width:12px;height:12px;"></i>
                 <span data-lang="recon-btn-load">Load DB</span>
             </button>
-            <!-- Upload manual (fallback) -->
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all"
                     data-bs-toggle="modal" data-bs-target="#uploadModal">
                 <i data-lucide="upload-cloud" style="width:12px;height:12px;"></i>
                 <span data-lang="recon-btn-manual">Manual Upload</span>
             </button>
-            <!-- Run automático — Outlook + drive de rede -->
             <button class="btn btn-sm btn-primary btn-toolbar-all" id="btnRunAuto">
                 <i data-lucide="play" style="width:12px;height:12px;"></i>
                 <span data-lang="recon-btn-run">Run Reconciliation</span>
@@ -253,15 +268,6 @@
                             <th data-lang="rc-status">Status</th>
                         </tr>
                     </thead>
-                    <tfoot>
-                        <tr>
-                            <th></th><th></th><th></th><th></th><th></th><th></th>
-                            <th></th><th></th><th></th><th></th><th></th><th></th>
-                            <th></th><th></th><th></th><th></th><th></th><th></th>
-                            <th></th><th></th><th></th><th></th><th></th><th></th>
-                            <th></th><th></th><th></th><th></th><th></th><th></th>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
         </div>
@@ -342,10 +348,12 @@
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
-<script src="{{ url_for('static', filename='plugins/datatables/datatables.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/datatables/jszip.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/datatables/dataTables.buttons.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/datatables/buttons.html5.min.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 /* ── Score → gradient RGB ────────────────────────────────────────── */
@@ -427,6 +435,8 @@ const COLS = [
 ];
 
 let table = null;
+let _TRANS = {};
+function t(key, fallback) { return _TRANS[key] || fallback || key; }
 
 /* ── Helpers de data ─────────────────────────────────────────────── */
 function getIsoDate() {
@@ -439,6 +449,13 @@ function setReconDate(isoStr) {
 }
 
 $(document).ready(function() {
+
+    /* ── 0. Load translations ────────────────────────────────────── */
+    var _lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+    fetch('{{ config.ASSETS_ROOT }}/data/translations/' + _lang + '.json')
+        .then(function(r) { return r.json(); })
+        .then(function(trans) { _TRANS = trans; })
+        .catch(function() {});
 
     /* ── 1. Event listeners (primeiro, independente do DataTable) ── */
     $('#btnLoadDb').on('click', loadFromDB);
@@ -500,59 +517,83 @@ $(document).ready(function() {
                 info: '_START_–_END_ / _TOTAL_',
                 search: '',
                 paginate: {
-                    next: '<i class="ti ti-chevron-right"></i>',
-                    previous: '<i class="ti ti-chevron-left"></i>'
+                    first:    '<i class="ti ti-chevrons-left"></i>',
+                    previous: '<i class="ti ti-chevron-left"></i>',
+                    next:     '<i class="ti ti-chevron-right"></i>',
+                    last:     '<i class="ti ti-chevrons-right"></i>'
                 },
-                emptyTable: 'Nenhum dado. Clique em <strong>Load DB</strong> ou execute uma reconciliação.'
+                emptyTable: 'No data. Click <strong>Load DB</strong> or run a reconciliation.'
             },
-            buttons: [
-                {
-                    extend: 'excelHtml5',
-                    text: '<i data-lucide="file-spreadsheet" style="width:12px;height:12px;"></i> Excel',
-                    className: 'btn btn-sm btn-outline-success btn-toolbar-all',
-                    title: 'Recon Comitentes',
-                    exportOptions: { orthogonal: 'export' }
-                },
-                {
-                    extend: 'colvis',
-                    text: '<i data-lucide="columns" style="width:12px;height:12px;"></i> Colunas',
-                    className: 'btn btn-sm btn-outline-secondary btn-toolbar-all',
-                    collectionLayout: 'two-column'
-                }
-            ],
             initComplete: function() {
-                var lenWrap = document.getElementById('reconLengthWrap');
-                var div = document.createElement('div');
-                div.className = 'd-flex align-items-center gap-2';
-                div.innerHTML = '<label class="form-label mb-0 fw-semibold" style="font-size:.75rem;">Show</label>';
-                var sel = document.createElement('select');
-                sel.className = 'form-select form-select-sm'; sel.style.width = '70px';
-                [10,25,50,100].forEach(function(n) {
-                    var o = document.createElement('option');
-                    o.value = n; o.textContent = n; if (n===25) o.selected=true;
-                    sel.appendChild(o);
-                });
-                sel.addEventListener('change', function(e) { table.page.len(+e.target.value).draw(); });
-                div.appendChild(sel); lenWrap.appendChild(div);
-                try { table.buttons().container().appendTo($('#reconExportWrap')); } catch(e) {}
+                var api = this.api();
 
-                // Filtros por coluna no tfoot (DataTables 2.x: usar this.columns() diretamente)
-                this.columns().every(function() {
-                    var col = this;
-                    var th = $(col.footer());
-                    var title = $(col.header()).text().trim();
-                    if (!title) return;
-                    $('<input type="text" placeholder="' + title + '">')
-                        .appendTo(th.empty())
-                        .on('input', function() { col.search(this.value).draw(); });
+                // Build filter row from rendered column headers
+                var $filterRow = $('<tr class="recon-col-filters"></tr>');
+                api.columns().every(function() {
+                    var title = $(this.header()).text().trim();
+                    $filterRow.append(
+                        $('<th style="padding:3px 4px">').append(
+                            $('<input>', {
+                                type: 'text',
+                                placeholder: title,
+                                class: 'form-control form-control-sm bg-light-subtle border-light',
+                                style: 'font-size:.62rem'
+                            })
+                        )
+                    );
                 });
 
+                // Inject into the original thead (hidden, in scroll body)
+                $(api.table().node()).find('thead').append($filterRow.clone());
+
+                // Inject into the CLONED thead (visible, in fixed scroll head)
+                $(api.table().container())
+                    .find('.dt-scroll-headInner table thead, .dataTables_scrollHeadInner table thead')
+                    .append($filterRow.clone());
+
+                api.columns.adjust();
                 lucide.createIcons();
             }
         });
     } catch(err) {
         console.error('DataTable init error:', err);
     }
+
+    /* ── 4. Buttons ─────────────────────────────────────────────── */
+    if (table) {
+        try {
+            new $.fn.dataTable.Buttons(table, {
+                buttons: [
+                    {
+                        extend: 'excelHtml5',
+                        text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel',
+                        className: 'btn btn-sm btn-outline-success btn-toolbar-all',
+                        title: 'Recon Comitentes'
+                    },
+                    {
+                        extend: 'colvis',
+                        text: '<i class="ti ti-columns me-1"></i> Columns',
+                        className: 'btn btn-sm btn-outline-secondary btn-toolbar-all'
+                    }
+                ]
+            }).container().appendTo($('#reconExportWrap'));
+        } catch(btnErr) {
+            console.warn('Buttons init:', btnErr);
+        }
+    }
+
+    /* ── 5. Show entries select ──────────────────────────────────── */
+    $('#reconPageLength').on('change', function() {
+        if (table) table.page.len(+this.value).draw();
+    });
+
+    /* ── 6. Column filter event delegation ──────────────────────── */
+    // Only fires from the fixed/cloned header (visible to user)
+    $('#recon-table_wrapper').on('input', '.recon-col-filters input', function() {
+        if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
+        var idx = $(this).closest('th').index();
+        if (table) table.column(idx).search(this.value).draw();
+    });
 
     lucide.createIcons();
     loadFromDB();
@@ -584,7 +625,9 @@ function loadFromDB() {
 function filterByScore() {
     const v = parseFloat(document.getElementById('max-score').value);
     if (isNaN(v)) {
-        Swal.fire({ icon:'warning', title:'Valor inválido', text:'Digite um número entre 0 e 100.',
+        Swal.fire({ icon:'warning',
+            title: t('rc-swal-invalid-val', 'Invalid value'),
+            text:  t('rc-swal-invalid-val-text', 'Enter a number between 0 and 100.'),
             confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
         return;
     }
@@ -603,32 +646,35 @@ function filterByScore() {
 function clearFilters() {
     $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
     document.getElementById('max-score').value = '';
-    table.search('').columns().search('').draw();
+    $('#recon-table_wrapper .recon-col-filters input').val('');
+    if (table) table.search('').columns().search('').draw();
 }
 
 /* ── Run automático (Outlook + drive de rede) ────────────────────── */
 function runAuto() {
     const recon_date = getIsoDate();
     if (!recon_date) {
-        Swal.fire({ icon:'warning', title:'Data necessária', text:'Selecione a data da reconciliação.',
+        Swal.fire({ icon:'warning',
+            title: t('rc-swal-date-req', 'Date required'),
+            text:  t('rc-swal-date-req-text', 'Please select a reconciliation date.'),
             confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
         return;
     }
 
     Swal.fire({
-        title: 'Executar Reconciliação',
+        title: t('rc-swal-run-title', 'Run Reconciliation'),
         html: `<div class="text-start small">
-            <p class="mb-1">O sistema irá automaticamente:</p>
+            <p class="mb-1">${t('rc-swal-run-body-p','The system will automatically:')}</p>
             <ul class="mb-0">
-                <li>Conectar ao Outlook (<code>brazil.otc.ops@jpmorgan.com</code>)</li>
-                <li>Baixar anexos de Base B3 &amp; CGD e Party Central</li>
-                <li>Ler DCADCOMITENTES do drive <code>I:\\</code></li>
+                <li>${t('rc-swal-run-li1','Connect to Outlook')} (<code>brazil.otc.ops@jpmorgan.com</code>)</li>
+                <li>${t('rc-swal-run-li2','Download B3 &amp; CGD and Party Central attachments')}</li>
+                <li>${t('rc-swal-run-li3','Read DCADCOMITENTES from drive')} <code>I:\\</code></li>
             </ul>
         </div>`,
         icon: 'question',
         showCancelButton: true,
-        confirmButtonText: 'Executar',
-        cancelButtonText: 'Cancelar',
+        confirmButtonText: t('rc-swal-run-confirm', 'Run'),
+        cancelButtonText:  t('rc-swal-cancel', 'Cancel'),
         confirmButtonColor: '#0d6efd',
         customClass: { popup: 'rounded-4' }
     }).then(r => {
@@ -636,7 +682,7 @@ function runAuto() {
 
         const btn = document.getElementById('btnRunAuto');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processando...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ' + t('rc-swal-processing', 'Processing...');
 
         const fd = new FormData();
         fd.append('mode', 'auto');
@@ -651,18 +697,18 @@ function runAuto() {
                 if (res.not_found) {
                     Swal.fire({
                         icon: 'warning',
-                        title: 'Arquivos não encontrados',
+                        title: t('rc-swal-notfound-title', 'Files not found'),
                         html: `<div class="text-start small">
-                            <p class="mb-2">Nenhum arquivo foi localizado automaticamente:</p>
+                            <p class="mb-2">${t('rc-swal-notfound-p','No files were found automatically:')}</p>
                             <ul class="mb-0">
-                                <li>Verifique o e-mail <code>brazil.otc.ops@jpmorgan.com</code></li>
-                                <li>Confirme se o drive <code>I:\\</code> está acessível</li>
-                                <li>Tente o upload manual como alternativa</li>
+                                <li>${t('rc-swal-notfound-li1','Check the email')} <code>brazil.otc.ops@jpmorgan.com</code></li>
+                                <li>${t('rc-swal-notfound-li2','Confirm that drive')} <code>I:\\</code> ${t('rc-swal-notfound-li2b','is accessible')}</li>
+                                <li>${t('rc-swal-notfound-li3','Try manual upload as an alternative')}</li>
                             </ul>
                         </div>`,
-                        confirmButtonText: 'Upload Manual',
+                        confirmButtonText: t('rc-swal-manual-upload', 'Manual Upload'),
                         showCancelButton: true,
-                        cancelButtonText: 'Fechar',
+                        cancelButtonText:  t('rc-swal-close', 'Close'),
                         confirmButtonColor: '#0d6efd',
                         customClass: { popup: 'rounded-4' }
                     }).then(r => {
@@ -673,22 +719,22 @@ function runAuto() {
                     return;
                 }
                 if (res.error) {
-                    Swal.fire({ icon:'error', title:'Erro', text: res.error,
+                    Swal.fire({ icon:'error', title: t('rc-swal-error','Error'), text: res.error,
                         confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
                     return;
                 }
-                table.clear().rows.add(res.data).draw();
+                if (table) { table.clear().rows.add(res.data).draw(); }
                 updateWidgets(res.counts);
                 lucide.createIcons();
-                Swal.fire({ icon:'success', title:'Concluído!',
-                    text:`${res.counts.total} registros reconciliados.`,
+                Swal.fire({ icon:'success', title: t('rc-swal-done','Done!'),
+                    text: res.counts.total + ' ' + t('rc-swal-records-recon','records reconciled.'),
                     timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });
             })
             .catch(err => {
                 btn.disabled = false;
                 btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i> <span data-lang="recon-btn-run">Run Reconciliation</span>';
                 lucide.createIcons();
-                Swal.fire({ icon:'error', title:'Erro de comunicação', text: String(err),
+                Swal.fire({ icon:'error', title: t('rc-swal-comm-error','Communication error'), text: String(err),
                     confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
             });
     });
@@ -700,8 +746,9 @@ function processFiles() {
     const f2 = document.getElementById('file-dcad').files[0];
     const f3 = document.getElementById('file-party').files[0];
     if (!f1 || !f2 || !f3) {
-        Swal.fire({ icon:'warning', title:'Arquivos necessários',
-            text:'Selecione os 3 arquivos para processar.',
+        Swal.fire({ icon:'warning',
+            title: t('rc-swal-files-req', 'Files required'),
+            text:  t('rc-swal-files-req-text', 'Please select all 3 files to process.'),
             confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
         return;
     }
@@ -720,21 +767,22 @@ function processFiles() {
         .then(res => {
             prog.classList.add('d-none'); btn.disabled = false;
             if (res.error) {
-                Swal.fire({ icon:'error', title:'Erro no processamento', text: res.error,
+                Swal.fire({ icon:'error',
+                    title: t('rc-swal-proc-error', 'Processing error'), text: res.error,
                     confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
                 return;
             }
             bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
-            table.clear().rows.add(res.data).draw();
+            if (table) { table.clear().rows.add(res.data).draw(); }
             updateWidgets(res.counts);
             lucide.createIcons();
-            Swal.fire({ icon:'success', title:'Concluído!',
-                text:`${res.counts.total} registros processados com sucesso.`,
+            Swal.fire({ icon:'success', title: t('rc-swal-done','Done!'),
+                text: res.counts.total + ' ' + t('rc-swal-records-proc','records processed.'),
                 timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });
         })
         .catch(err => {
             prog.classList.add('d-none'); btn.disabled = false;
-            Swal.fire({ icon:'error', title:'Erro de comunicação', text: String(err),
+            Swal.fire({ icon:'error', title: t('rc-swal-comm-error','Communication error'), text: String(err),
                 confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
         });
 }
