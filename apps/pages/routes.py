@@ -900,6 +900,23 @@ def resend_code():
 
 
 # ==============================================================================
+# DEV BYPASS — local testing only, not committed
+# ==============================================================================
+
+@blueprint.route('/dev-login')
+def dev_login():
+    from datetime import datetime, timezone, timedelta
+    session['authenticated'] = True
+    session['user_sid'] = 'A000000'
+    session['user_name'] = 'Dev User'
+    session['user_email'] = 'dev@local'
+    session['user_role'] = 'Admin'
+    session['remember_me'] = False
+    session['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
+    return redirect(url_for('pages_blueprint.dashboard'))
+
+
+# ==============================================================================
 # ROTAS — APLICAÇÃO (PÓS-AUTENTICAÇÃO)
 # ==============================================================================
 
@@ -1707,7 +1724,7 @@ def api_ndf_send_conecta():
         qic              = _sh(deal.get('QuotedInCents', 'NO')).upper() == 'YES'
         asian            = trade_type == 'ASIAN'
         vanilla          = trade_type == 'VANILLA'
-        brr              = strike_ccy == 'BRR'
+        brl              = strike_ccy == 'BRL'
         is_tas           = instrument.startswith('TAS')
         is_fixed         = underlying in FIXED_UNDERLYINGS
 
@@ -1795,7 +1812,7 @@ def api_ndf_send_conecta():
             _pos(settl_date, 8)                      +  # Data de Vencimento
             _pos('', 1)                              +  # Boletim
             _pos(tipo_cotacao, 1)                    +  # Tipo de Cotação
-            _pos('' if brr else fxconv, 8)           +  # Data de Fixing da Moeda
+            _pos('' if brl else fxconv, 8)           +  # Data de Fixing da Moeda
             _pos('', 1)                              +  # Cross Rate na Avaliação?
             _pos('', 1)                              +  # Fonte de Consulta
             _pos('', 8)                              +  # Tela ou Função de Consulta
@@ -1826,7 +1843,7 @@ def api_ndf_send_conecta():
             _pos('', 1)                              +  # Modalidade de Liquidação
             _pos('', 1)                              +  # Prêmio em Moeda Estrangeira
             _pos('', 8)                              +  # Data de Fixing da Moeda do Prêmio
-            _pos('S' if brr else '', 1)              +  # Taxa a Termo em Reais
+            _pos('S' if brl else '', 1)              +  # Taxa a Termo em Reais
             _pos('', 280)                            +  # Observação
             _pos(deal_id, 14, 'right')               +  # Código Identificador
             _pos(tipo_media, 1)                      +  # Tipo Média Asiático
@@ -1848,7 +1865,7 @@ def api_ndf_send_conecta():
                 while _cur2 <= _e2:
                     if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
                         _d  = _cur2.strftime('%Y%m%d')
-                        _fx = _d if brr else ''
+                        _fx = _d if brl else ''
                         fix_line = (
                             _pos('TER  ', 5)   +  # ID do Sistema
                             _pos('2', 1)        +  # ID Tipo de Linha

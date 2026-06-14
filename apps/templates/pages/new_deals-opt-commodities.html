@@ -1343,7 +1343,7 @@ $(document).ready(function() {
             "<'addRowBtn me-2'>" +
             "B" +
             "<'importBtn ms-2 me-2'>" +
-            "<'refreshBtn ms-2 me-2'>" +
+            "<'refreshBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
             "<'ms-auto'>" +
@@ -1646,7 +1646,9 @@ $(document).ready(function() {
                 mappingBtn.innerHTML = '<i class="ti ti-refresh"></i>';
                 refreshBtnContainer.appendChild(mappingBtn);
 
+                var _mappingOptRunning = false;
                 mappingBtn.addEventListener('click', function() {
+                    if (_mappingOptRunning) return;
                     var sentDeals = [];
                     table.rows().every(function() {
                         var d = this.data();
@@ -1669,7 +1671,8 @@ $(document).ready(function() {
                         return;
                     }
 
-                    mappingBtn.disabled = true;
+                    _mappingOptRunning = true;
+                    mappingBtn.style.pointerEvents = 'none';
                     mappingBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
 
                     fetch('/api/new-deals/opt-commodities/mapping-b3', {
@@ -1679,7 +1682,8 @@ $(document).ready(function() {
                     })
                     .then(function(r) { return r.json(); })
                     .then(function(res) {
-                        mappingBtn.disabled = false;
+                        _mappingOptRunning = false;
+                        mappingBtn.style.pointerEvents = '';
                         mappingBtn.innerHTML = '<i class="ti ti-refresh"></i>';
 
                         if (!res.ok) {
@@ -1733,7 +1737,8 @@ $(document).ready(function() {
                         });
                     })
                     .catch(function(err) {
-                        mappingBtn.disabled = false;
+                        _mappingOptRunning = false;
+                        mappingBtn.style.pointerEvents = '';
                         mappingBtn.innerHTML = '<i class="ti ti-refresh"></i>';
                         Swal.fire({
                             title: t('swal-err-title', 'Error'),
