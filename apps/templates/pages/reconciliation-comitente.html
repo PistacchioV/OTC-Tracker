@@ -2,6 +2,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='plugins/datatables/datatables.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='plugins/daterangepicker/daterangepicker.css') }}">
 <style>
 /* ── Widgets ─────────────────────────────────────────────────────── */
 .recon-widget {
@@ -83,13 +84,16 @@
     box-shadow:0 24px 60px rgba(0,0,0,.15);
 }
 .upload-zone {
-    border:2px dashed #dee2e6; border-radius:12px; padding:.9rem 1rem;
-    text-align:center; background:#fafafa; cursor:pointer;
+    border:2px dashed var(--bs-border-color); border-radius:12px; padding:.9rem 1rem;
+    text-align:center; background:var(--bs-tertiary-bg); cursor:pointer;
     transition:border-color 160ms, background 160ms;
 }
-.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:#f0f5ff; }
+.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--bs-secondary-bg); }
 .upload-zone input[type=file] { display:none; }
 .upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
+
+/* ── Daterangepicker overrides ───────────────────────────────────── */
+.daterangepicker { border-radius:12px !important; border:1px solid var(--bs-border-color) !important; }
 </style>
 {% endblock %}
 
@@ -158,7 +162,7 @@
             <div id="reconLengthWrap"></div>
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Data:</label>
-                <input type="date" id="recon-date" class="form-control form-control-sm" style="width:145px;">
+                <input type="text" id="recon-date" class="form-control form-control-sm" placeholder="DD/MM/YYYY" style="width:130px;" readonly>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-score">Max Score:</label>
@@ -314,9 +318,11 @@
 
 {% block extra_javascript %}
 <script src="{{ url_for('static', filename='plugins/datatables/datatables.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/datatables/jszip.min.js') }}"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/dataTables.buttons.min.js') }}"></script>
 <script src="{{ url_for('static', filename='plugins/datatables/buttons.html5.min.js') }}"></script>
-<script src="{{ url_for('static', filename='plugins/datatables/jszip.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/daterangepicker/moment.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/daterangepicker/daterangepicker.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 /* ── Score → gradient RGB ────────────────────────────────────────── */
@@ -396,6 +402,58 @@ const COLS = [
 
 let table = null;
 
+/* ── Helpers de data ─────────────────────────────────────────────── */
+function lastBizDay() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() === 0) d.setDate(d.getDate() - 2);
+    else if (d.getDay() === 6) d.setDate(d.getDate() - 1);
+    return d;
+}
+function getIsoDate() {
+    const v = $('#recon-date').val();
+    if (!v) return '';
+    const [dd, mm, yyyy] = v.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+/* ── Event listeners vinculados imediatamente ────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('btnLoadDb').addEventListener('click', loadFromDB);
+    document.getElementById('btnFilterScore').addEventListener('click', filterByScore);
+    document.getElementById('btnClearFilters').addEventListener('click', clearFilters);
+    document.getElementById('btnProcess').addEventListener('click', processFiles);
+    document.getElementById('btnRunAuto').addEventListener('click', runAuto);
+
+    // File input → show filename in zone
+    [['file-b3-cgd','name1','zone1'],
+     ['file-dcad',  'name2','zone2'],
+     ['file-party', 'name3','zone3']].forEach(([fid,nid,zid]) => {
+        document.getElementById(fid).addEventListener('change', function() {
+            const n = document.getElementById(nid), z = document.getElementById(zid);
+            if (this.files[0]) {
+                n.textContent = this.files[0].name; n.classList.remove('d-none');
+                z.style.borderColor = '#0d6efd'; z.style.background = 'var(--bs-secondary-bg)';
+            }
+        });
+    });
+
+    // Drag-over style
+    document.querySelectorAll('.upload-zone').forEach(z => {
+        z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('dragover'); });
+        z.addEventListener('dragleave', () => z.classList.remove('dragover'));
+    });
+
+    // Daterangepicker
+    $('#recon-date').daterangepicker({
+        singleDatePicker: true,
+        showDropdowns: true,
+        autoApply: true,
+        locale: { format: 'DD/MM/YYYY' },
+        startDate: lastBizDay()
+    });
+});
+
 $(document).ready(function() {
     /* ── DataTable init ──────────────────────────────────────────── */
     table = $('#recon-table').DataTable({
@@ -452,39 +510,6 @@ $(document).ready(function() {
         }
     });
 
-    /* ── Default date = último dia útil ─────────────────────────── */
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    if (d.getDay() === 0) d.setDate(d.getDate() - 2);
-    else if (d.getDay() === 6) d.setDate(d.getDate() - 1);
-    document.getElementById('recon-date').value = d.toISOString().split('T')[0];
-
-    /* ── Event listeners ─────────────────────────────────────────── */
-    document.getElementById('btnLoadDb').addEventListener('click', loadFromDB);
-    document.getElementById('btnFilterScore').addEventListener('click', filterByScore);
-    document.getElementById('btnClearFilters').addEventListener('click', clearFilters);
-    document.getElementById('btnProcess').addEventListener('click', processFiles);   // upload manual
-    document.getElementById('btnRunAuto').addEventListener('click', runAuto);        // automático
-
-    // File input → show filename in zone
-    [['file-b3-cgd','name1','zone1'],
-     ['file-dcad',  'name2','zone2'],
-     ['file-party', 'name3','zone3']].forEach(([fid,nid,zid]) => {
-        document.getElementById(fid).addEventListener('change', function() {
-            const n = document.getElementById(nid), z = document.getElementById(zid);
-            if (this.files[0]) {
-                n.textContent = this.files[0].name; n.classList.remove('d-none');
-                z.style.borderColor = '#0d6efd'; z.style.background = '#f0f5ff';
-            }
-        });
-    });
-
-    // Drag-over style
-    document.querySelectorAll('.upload-zone').forEach(z => {
-        z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('dragover'); });
-        z.addEventListener('dragleave', () => z.classList.remove('dragover'));
-    });
-
     lucide.createIcons();
     loadFromDB();
 });
@@ -539,7 +564,7 @@ function clearFilters() {
 
 /* ── Run automático (Outlook + drive de rede) ────────────────────── */
 function runAuto() {
-    const recon_date = document.getElementById('recon-date').value;
+    const recon_date = getIsoDate();
     if (!recon_date) {
         Swal.fire({ icon:'warning', title:'Data necessária', text:'Selecione a data da reconciliação.',
             confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
@@ -620,7 +645,7 @@ function processFiles() {
     fd.append('file_b3_cgd', f1);
     fd.append('file_dcad', f2);
     fd.append('file_party', f3);
-    fd.append('recon_date', document.getElementById('recon-date').value);
+    fd.append('recon_date', getIsoDate());
 
     fetch('/reconciliation-comitente/run', { method:'POST', body: fd })
         .then(r => r.json())
