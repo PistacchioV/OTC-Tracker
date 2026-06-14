@@ -2564,6 +2564,58 @@ def api_create_notification():
 
 
 # ==============================================================================
+# RECONCILIAÇÃO DE COMITENTES
+# ==============================================================================
+
+@blueprint.route('/reconciliation-comitente')
+def reconciliation_comitente():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/reconciliation-comitente.html', segment='reconciliation-comitente')
+
+
+@blueprint.route('/reconciliation-comitente/data')
+def reconciliation_comitente_data():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from apps.pages.recon_comitente import load_from_db
+        return jsonify(load_from_db())
+    except Exception as e:
+        log.error('[recon_comitente_data] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-comitente/run', methods=['POST'])
+def reconciliation_comitente_run():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    mode        = request.form.get('mode', 'auto')
+    recon_date  = request.form.get('recon_date', '')
+
+    try:
+        if mode == 'auto':
+            # Modo automático: Outlook + drive de rede I:\
+            from apps.pages.recon_comitente import run_auto
+            result = run_auto(recon_date)
+        else:
+            # Modo manual: arquivos enviados via upload
+            f_b3_cgd = request.files.get('file_b3_cgd')
+            f_dcad   = request.files.get('file_dcad')
+            f_party  = request.files.get('file_party')
+            if not f_b3_cgd or not f_dcad or not f_party:
+                return jsonify({'error': 'Os 3 arquivos são obrigatórios no modo manual.'}), 400
+            from apps.pages.recon_comitente import run_reconciliation
+            result = run_reconciliation(f_b3_cgd, f_dcad, f_party)
+
+        return jsonify(result)
+    except Exception as e:
+        log.error('[reconciliation_comitente_run] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+# ==============================================================================
 # ROTA GENÉRICA — TEMPLATES (deve ser a ÚLTIMA rota definida)
 # ==============================================================================
 

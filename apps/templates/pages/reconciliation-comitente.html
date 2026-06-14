@@ -1,0 +1,649 @@
+{% extends "layouts/vertical.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='plugins/datatables/datatables.min.css') }}">
+<style>
+/* ── Widgets ─────────────────────────────────────────────────────── */
+.recon-widget {
+    border-radius: 20px;
+    border: none;
+    padding: 1.25rem 1.4rem;
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1);
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+}
+@media (hover: hover) and (pointer: fine) {
+    .recon-widget:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 32px rgba(0,0,0,.10);
+    }
+}
+.recon-widget .widget-icon {
+    opacity: .20;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.recon-widget .widget-val {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.recon-widget .widget-lbl {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    opacity: .65;
+    margin-bottom: .4rem;
+}
+.widget-total { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; }
+.widget-new   { background:#f1f3f5; color:#495057; border:1px solid #dee2e6 !important; }
+.widget-check { background:#fff8e1; color:#7b5e00; border:1px solid #ffe082 !important; }
+.widget-ok    { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7 !important; }
+.widget-amend { background:#fde8e8; color:#b71c1c; border:1px solid #ef9a9a !important; }
+
+/* ── Status badges ───────────────────────────────────────────────── */
+.s-badge {
+    display:inline-block; font-size:.68rem; font-weight:700;
+    padding:.22rem .7rem; border-radius:20px; white-space:nowrap; letter-spacing:.03em;
+}
+.s-new   { background:#e9ecef; color:#495057; }
+.s-check { background:#fff3cd; color:#856404; }
+.s-ok    { background:#d1e7dd; color:#0a3622; }
+.s-amend { background:#f8d7da; color:#842029; }
+
+/* ── Toolbar buttons ─────────────────────────────────────────────── */
+.btn-toolbar-all {
+    font-size:0.75rem !important; padding:0.25rem 0.6rem !important;
+    height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
+    transition: transform 140ms cubic-bezier(0.23,1,0.32,1),
+                box-shadow 140ms cubic-bezier(0.23,1,0.32,1);
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-toolbar-all:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.10); }
+}
+.btn-toolbar-all:active { transform:scale(0.97) !important; }
+
+/* ── Table ───────────────────────────────────────────────────────── */
+#recon-table th {
+    white-space:nowrap; font-size:0.68rem; padding:8px 10px;
+    text-align:center !important; vertical-align:middle !important;
+}
+#recon-table td { font-size:0.72rem; padding:6px 10px; vertical-align:middle; }
+#recon-table td.score-cell { text-align:center; font-weight:600; }
+
+/* ── Upload modal ────────────────────────────────────────────────── */
+#uploadModal .modal-content {
+    border-radius:20px; border:none;
+    box-shadow:0 24px 60px rgba(0,0,0,.15);
+}
+.upload-zone {
+    border:2px dashed #dee2e6; border-radius:12px; padding:.9rem 1rem;
+    text-align:center; background:#fafafa; cursor:pointer;
+    transition:border-color 160ms, background 160ms;
+}
+.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:#f0f5ff; }
+.upload-zone input[type=file] { display:none; }
+.upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid">
+
+    <!-- Page Header -->
+    <div class="page-title-head d-flex align-items-center mb-4">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="refresh-cw" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="recon-comitente-title">Comitente Reconciliation</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="reconciliations-title">Reconciliations</a></li>
+                <li class="breadcrumb-item active"><a href="javascript:void(0);" data-lang="nav-comitente">Comitente</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ── Widgets ───────────────────────────────────────────────── -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-total h-100">
+                <div class="widget-lbl" data-lang="recon-w-total">Total</div>
+                <div class="widget-val" id="w-total">—</div>
+                <i data-lucide="bar-chart-2" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-new h-100">
+                <div class="widget-lbl" data-lang="recon-w-new">New</div>
+                <div class="widget-val" id="w-new">—</div>
+                <i data-lucide="plus-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-check h-100">
+                <div class="widget-lbl" data-lang="recon-w-check">Check</div>
+                <div class="widget-val" id="w-check">—</div>
+                <i data-lucide="search" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-ok h-100">
+                <div class="widget-lbl" data-lang="recon-w-ok">OK</div>
+                <div class="widget-val" id="w-ok">—</div>
+                <i data-lucide="check-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-amend h-100">
+                <div class="widget-lbl" data-lang="recon-w-amend">Amend</div>
+                <div class="widget-val" id="w-amend">—</div>
+                <i data-lucide="alert-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Main Card ─────────────────────────────────────────────── -->
+    <div class="card">
+
+        <!-- Card Header 1: Show entries + date + score filter -->
+        <div class="card-header d-flex flex-wrap align-items-center gap-3">
+            <div id="reconLengthWrap"></div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Data:</label>
+                <input type="date" id="recon-date" class="form-control form-control-sm" style="width:145px;">
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-score">Max Score:</label>
+                <input type="number" id="max-score" class="form-control form-control-sm"
+                       min="0" max="100" step="0.01" placeholder="0–100" style="width:90px;">
+                <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnFilterScore">
+                    <i data-lucide="filter" style="width:12px;height:12px;"></i>
+                    <span data-lang="recon-btn-filter">Filter</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Card Header 2: Botões de ação — fora do table-responsive -->
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <div id="reconColToggleWrap"></div>
+            <div id="reconExportWrap"></div>
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
+                <i data-lucide="x-circle" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-clear">Clear Filters</span>
+            </button>
+            <button class="btn btn-sm btn-outline-primary btn-toolbar-all" id="btnLoadDb">
+                <i data-lucide="database" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-load">Load DB</span>
+            </button>
+            <!-- Upload manual (fallback) -->
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all"
+                    data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i data-lucide="upload-cloud" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-manual">Manual Upload</span>
+            </button>
+            <!-- Run automático — Outlook + drive de rede -->
+            <button class="btn btn-sm btn-primary btn-toolbar-all" id="btnRunAuto">
+                <i data-lucide="play" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-run">Run Reconciliation</span>
+            </button>
+        </div>
+
+        <!-- Card Body -->
+        <div class="card-body">
+            <div class="table-responsive">
+                <table id="recon-table" class="table table-striped table-hover nowrap" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th data-lang="rc-dono">Dono Cad.</th>
+                            <th>LE</th>
+                            <th data-lang="rc-spn">SPN</th>
+                            <th data-lang="rc-root">Raiz CNPJ</th>
+                            <th data-lang="rc-b3cnpj">B3 CNPJ</th>
+                            <th data-lang="rc-pccnpj">PC CNPJ</th>
+                            <th data-lang="rc-b3name">B3 Name</th>
+                            <th data-lang="rc-pcname">PC Name</th>
+                            <th data-lang="rc-namescore">Name Score</th>
+                            <th data-lang="rc-b3addr">B3 Address</th>
+                            <th data-lang="rc-pcaddr">PC Address</th>
+                            <th data-lang="rc-addrscore">Addr Score</th>
+                            <th data-lang="rc-b3phone">B3 Phone</th>
+                            <th data-lang="rc-pcphone">PC Phone</th>
+                            <th data-lang="rc-phonescore">Phone Score</th>
+                            <th data-lang="rc-b3email">B3 E-mail</th>
+                            <th data-lang="rc-pcemail">PC E-mail</th>
+                            <th data-lang="rc-emailscore">Email Score</th>
+                            <th data-lang="rc-b3fins">B3 Fins</th>
+                            <th data-lang="rc-pcfins">PC Fins</th>
+                            <th data-lang="rc-finsscore">Fins Score</th>
+                            <th data-lang="rc-b3start">B3 Start</th>
+                            <th data-lang="rc-pcstart">PC Start</th>
+                            <th data-lang="rc-startscore">Start Score</th>
+                            <th data-lang="rc-b3cnae">B3 CNAE</th>
+                            <th data-lang="rc-pccnae">PC CNAE</th>
+                            <th data-lang="rc-cnaescore">CNAE Score</th>
+                            <th data-lang="rc-natureza">Natureza Fiscal</th>
+                            <th data-lang="rc-avgscore">Avg Score</th>
+                            <th data-lang="rc-status">Status</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Upload Modal ───────────────────────────────────────────────── -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
+                    <i data-lucide="upload-cloud" style="width:18px;height:18px;" class="text-primary"></i>
+                    <span data-lang="recon-modal-title">Upload de Arquivos</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted small mb-3" data-lang="recon-modal-desc">
+                    Selecione os 3 arquivos necessários para executar a reconciliação.
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1" style="font-size:.73rem;" data-lang="recon-file1">
+                            1. Base B3 &amp; CGD Consolidada (.xlsx)
+                        </label>
+                        <div class="upload-zone" id="zone1" onclick="document.getElementById('file-b3-cgd').click()">
+                            <i data-lucide="file-spreadsheet" style="width:26px;height:26px;" class="text-muted"></i>
+                            <div class="small text-muted mt-1" data-lang="recon-click-select">Clique para selecionar</div>
+                            <div class="fn d-none" id="name1"></div>
+                            <input type="file" id="file-b3-cgd" accept=".xlsx,.xls">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1" style="font-size:.73rem;" data-lang="recon-file2">
+                            2. DCADCOMITENTES B3 (.txt)
+                        </label>
+                        <div class="upload-zone" id="zone2" onclick="document.getElementById('file-dcad').click()">
+                            <i data-lucide="file-text" style="width:26px;height:26px;" class="text-muted"></i>
+                            <div class="small text-muted mt-1" data-lang="recon-click-select">Clique para selecionar</div>
+                            <div class="fn d-none" id="name2"></div>
+                            <input type="file" id="file-dcad" accept=".txt,.csv">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1" style="font-size:.73rem;" data-lang="recon-file3">
+                            3. Party Central Report (.xlsx)
+                        </label>
+                        <div class="upload-zone" id="zone3" onclick="document.getElementById('file-party').click()">
+                            <i data-lucide="file-spreadsheet" style="width:26px;height:26px;" class="text-muted"></i>
+                            <div class="small text-muted mt-1" data-lang="recon-click-select">Clique para selecionar</div>
+                            <div class="fn d-none" id="name3"></div>
+                            <input type="file" id="file-party" accept=".xlsx,.xls">
+                        </div>
+                    </div>
+                </div>
+                <div id="upload-progress" class="mt-3 d-none">
+                    <div class="d-flex align-items-center gap-2 text-primary">
+                        <div class="spinner-border spinner-border-sm"></div>
+                        <span class="small fw-semibold" data-lang="recon-processing">Processando arquivos...</span>
+                    </div>
+                    <div class="progress mt-2" style="height:4px;border-radius:4px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" data-lang="recon-btn-cancel">Cancelar</button>
+                <button class="btn btn-sm btn-primary" id="btnProcess">
+                    <i data-lucide="cpu" style="width:12px;height:12px;" class="me-1"></i>
+                    <span data-lang="recon-btn-process">Processar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_javascript %}
+<script src="{{ url_for('static', filename='plugins/datatables/datatables.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/datatables/dataTables.buttons.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/datatables/buttons.html5.min.js') }}"></script>
+<script src="{{ url_for('static', filename='plugins/datatables/jszip.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+/* ── Score → gradient RGB ────────────────────────────────────────── */
+function scoreColor(val) {
+    if (!val || val === 'N/A') return null;
+    const s = parseFloat(val);
+    if (isNaN(s)) return null;
+    let r, g;
+    if (s <= 50) { r = 255; g = Math.round(100 + s * (255 - 100) / 50); }
+    else          { r = Math.round(255 - (s - 50) * (255 - 100) / 50); g = 255; }
+    return `rgb(${r},${g},100)`;
+}
+
+/* ── Status badge ────────────────────────────────────────────────── */
+function sBadge(s) {
+    const m = { New:'s-new', Check:'s-check', OK:'s-ok', Amend:'s-amend' };
+    return `<span class="s-badge ${m[s]||'s-new'}">${s||'—'}</span>`;
+}
+
+/* ── Score cell helper ───────────────────────────────────────────── */
+function scoreCell(td, data) {
+    const c = scoreColor(data);
+    if (c) { td.style.backgroundColor = c; td.style.color = '#222'; }
+    td.classList.add('score-cell');
+}
+function scoreRender(d) {
+    return (!d || d === 'N/A')
+        ? '<span class="text-muted" style="font-size:.68rem;">N/A</span>'
+        : (parseFloat(d) !== undefined ? parseFloat(d).toFixed(2) : d);
+}
+
+/* ── Column definitions (30 cols) ────────────────────────────────── */
+const SC = (key, title) => ({
+    data: key, title, render: scoreRender,
+    createdCell: scoreCell
+});
+const COLS = [
+    { data:'Dono do Cadastro',  title:'Dono Cad.',  width:'72px',  className:'text-center' },
+    { data:'LE',                title:'LE',          width:'60px',  className:'text-center' },
+    { data:'Party Central SPN', title:'SPN',         width:'80px'  },
+    { data:'B3_Root_CNPJ',      title:'Raiz CNPJ',  width:'90px'  },
+    { data:'B3 CNPJ',           title:'B3 CNPJ',    width:'135px' },
+    { data:'Party Central CNPJ',title:'PC CNPJ',    width:'135px' },
+    { data:'B3 Name',           title:'B3 Name',    width:'180px' },
+    { data:'Party Central Name',title:'PC Name',    width:'180px' },
+    SC('Name Matching Score (%)',            'Name Score'),
+    { data:'B3 Address',                title:'B3 Address',  width:'210px' },
+    { data:'Party Central Address',      title:'PC Address',  width:'210px' },
+    SC('Address Matching Score (%)',         'Addr Score'),
+    { data:'B3 Phone',                  title:'B3 Phone',    width:'120px' },
+    { data:'Party Central Phone',        title:'PC Phone',    width:'120px' },
+    SC('Phone Matching Score (%)',           'Phone Score'),
+    { data:'B3 E-mail',                 title:'B3 E-mail',   width:'180px' },
+    { data:'Party Central E-mail',       title:'PC E-mail',   width:'180px' },
+    SC('E-mail Matching Score (%)',          'Email Score'),
+    { data:'B3 Fins Lucrativos',         title:'B3 Fins',    width:'60px',  className:'text-center' },
+    { data:'Party Central Fins Lucrativos', title:'PC Fins', width:'60px',  className:'text-center' },
+    SC('Fins Lucrativos Matching Score (%)','Fins Score'),
+    { data:'B3 Start Date',             title:'B3 Start',    width:'100px' },
+    { data:'Party Central Start Date',   title:'PC Start',    width:'100px' },
+    SC('Start Date Matching Score (%)',      'Start Score'),
+    { data:'B3 CNAE',                   title:'B3 CNAE',     width:'80px' },
+    { data:'Party Central CNAE',         title:'PC CNAE',     width:'80px' },
+    SC('CNAE Matching Score (%)',           'CNAE Score'),
+    { data:'Natureza Fiscal',           title:'Natureza Fiscal', width:'110px' },
+    {
+        data:'Matching Score Averaged', title:'Avg Score',
+        className:'text-center',
+        render: d => (!d ? '' : parseFloat(d).toFixed(2)),
+        createdCell: function(td, data) { scoreCell(td, data); td.style.fontWeight='700'; }
+    },
+    {
+        data:'Status', title:'Status', className:'text-center',
+        render: d => sBadge(d)
+    }
+];
+
+let table = null;
+
+$(document).ready(function() {
+    /* ── DataTable init ──────────────────────────────────────────── */
+    table = $('#recon-table').DataTable({
+        columns: COLS,
+        data: [],
+        scrollX: true,
+        pageLength: 25,
+        order: [[28, 'asc']],
+        dom: "<'row'<'col-sm-12'tr>>" +
+             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        language: {
+            info: '_START_–_END_ / _TOTAL_',
+            search: '',
+            paginate: {
+                next: '<i class="ti ti-chevron-right"></i>',
+                previous: '<i class="ti ti-chevron-left"></i>'
+            },
+            emptyTable: 'Nenhum dado. Clique em <strong>Load DB</strong> ou execute uma reconciliação.'
+        },
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i data-lucide="file-spreadsheet" style="width:12px;height:12px;"></i> Excel',
+                className: 'btn btn-sm btn-outline-success btn-toolbar-all',
+                title: 'Recon Comitentes',
+                exportOptions: { orthogonal: 'export' }
+            },
+            {
+                extend: 'colvis',
+                text: '<i data-lucide="columns" style="width:12px;height:12px;"></i> Colunas',
+                className: 'btn btn-sm btn-outline-secondary btn-toolbar-all',
+                collectionLayout: 'two-column'
+            }
+        ],
+        initComplete: function() {
+            // Show entries control
+            const lenWrap = document.getElementById('reconLengthWrap');
+            const div = document.createElement('div');
+            div.className = 'd-flex align-items-center gap-2';
+            div.innerHTML = '<label class="form-label mb-0 fw-semibold" style="font-size:.75rem;">Show</label>';
+            const sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm'; sel.style.width = '70px';
+            [10,25,50,100].forEach(n => {
+                const o = document.createElement('option');
+                o.value = n; o.textContent = n; if (n===25) o.selected=true;
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', e => table.page.len(+e.target.value).draw());
+            div.appendChild(sel); lenWrap.appendChild(div);
+
+            // Place DataTable buttons
+            table.buttons().container().appendTo(document.getElementById('reconExportWrap'));
+            lucide.createIcons();
+        }
+    });
+
+    /* ── Default date = último dia útil ─────────────────────────── */
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() === 0) d.setDate(d.getDate() - 2);
+    else if (d.getDay() === 6) d.setDate(d.getDate() - 1);
+    document.getElementById('recon-date').value = d.toISOString().split('T')[0];
+
+    /* ── Event listeners ─────────────────────────────────────────── */
+    document.getElementById('btnLoadDb').addEventListener('click', loadFromDB);
+    document.getElementById('btnFilterScore').addEventListener('click', filterByScore);
+    document.getElementById('btnClearFilters').addEventListener('click', clearFilters);
+    document.getElementById('btnProcess').addEventListener('click', processFiles);   // upload manual
+    document.getElementById('btnRunAuto').addEventListener('click', runAuto);        // automático
+
+    // File input → show filename in zone
+    [['file-b3-cgd','name1','zone1'],
+     ['file-dcad',  'name2','zone2'],
+     ['file-party', 'name3','zone3']].forEach(([fid,nid,zid]) => {
+        document.getElementById(fid).addEventListener('change', function() {
+            const n = document.getElementById(nid), z = document.getElementById(zid);
+            if (this.files[0]) {
+                n.textContent = this.files[0].name; n.classList.remove('d-none');
+                z.style.borderColor = '#0d6efd'; z.style.background = '#f0f5ff';
+            }
+        });
+    });
+
+    // Drag-over style
+    document.querySelectorAll('.upload-zone').forEach(z => {
+        z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('dragover'); });
+        z.addEventListener('dragleave', () => z.classList.remove('dragover'));
+    });
+
+    lucide.createIcons();
+    loadFromDB();
+});
+
+/* ── Widget update ───────────────────────────────────────────────── */
+function updateWidgets(c) {
+    document.getElementById('w-total').textContent  = c.total  ?? 0;
+    document.getElementById('w-new').textContent    = c.new    ?? 0;
+    document.getElementById('w-check').textContent  = c.check  ?? 0;
+    document.getElementById('w-ok').textContent     = c.ok     ?? 0;
+    document.getElementById('w-amend').textContent  = c.amend  ?? 0;
+}
+
+/* ── Load from DB ────────────────────────────────────────────────── */
+function loadFromDB() {
+    fetch('/reconciliation-comitente/data')
+        .then(r => r.json())
+        .then(res => {
+            if (res.error) { console.warn('Recon DB:', res.error); return; }
+            table.clear().rows.add(res.data).draw();
+            updateWidgets(res.counts);
+            lucide.createIcons();
+        })
+        .catch(err => console.error(err));
+}
+
+/* ── Score filter ────────────────────────────────────────────────── */
+function filterByScore() {
+    const v = parseFloat(document.getElementById('max-score').value);
+    if (isNaN(v)) {
+        Swal.fire({ icon:'warning', title:'Valor inválido', text:'Digite um número entre 0 e 100.',
+            confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+        return;
+    }
+    $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
+    const fn = function(s, data, idx, rowData) {
+        if (s.nTable.id !== 'recon-table') return true;
+        const avg = parseFloat(rowData['Matching Score Averaged']);
+        return isNaN(avg) || avg <= v;
+    };
+    fn._reconScore = true;
+    $.fn.dataTable.ext.search.push(fn);
+    table.draw();
+}
+
+/* ── Clear filters ───────────────────────────────────────────────── */
+function clearFilters() {
+    $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
+    document.getElementById('max-score').value = '';
+    table.search('').columns().search('').draw();
+}
+
+/* ── Run automático (Outlook + drive de rede) ────────────────────── */
+function runAuto() {
+    const recon_date = document.getElementById('recon-date').value;
+    if (!recon_date) {
+        Swal.fire({ icon:'warning', title:'Data necessária', text:'Selecione a data da reconciliação.',
+            confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+        return;
+    }
+
+    Swal.fire({
+        title: 'Executar Reconciliação',
+        html: `<div class="text-start small">
+            <p class="mb-1">O sistema irá automaticamente:</p>
+            <ul class="mb-0">
+                <li>Conectar ao Outlook (<code>brazil.otc.ops@jpmorgan.com</code>)</li>
+                <li>Baixar anexos de Base B3 &amp; CGD e Party Central</li>
+                <li>Ler DCADCOMITENTES do drive <code>I:\\</code></li>
+            </ul>
+        </div>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Executar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0d6efd',
+        customClass: { popup: 'rounded-4' }
+    }).then(r => {
+        if (!r.isConfirmed) return;
+
+        const btn = document.getElementById('btnRunAuto');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processando...';
+
+        const fd = new FormData();
+        fd.append('mode', 'auto');
+        fd.append('recon_date', recon_date);
+
+        fetch('/reconciliation-comitente/run', { method:'POST', body: fd })
+            .then(res => res.json())
+            .then(res => {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i> <span data-lang="recon-btn-run">Run Reconciliation</span>';
+                lucide.createIcons();
+                if (res.error) {
+                    Swal.fire({ icon:'error', title:'Erro', text: res.error,
+                        confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+                    return;
+                }
+                table.clear().rows.add(res.data).draw();
+                updateWidgets(res.counts);
+                lucide.createIcons();
+                Swal.fire({ icon:'success', title:'Concluído!',
+                    text:`${res.counts.total} registros reconciliados.`,
+                    timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i> <span data-lang="recon-btn-run">Run Reconciliation</span>';
+                lucide.createIcons();
+                Swal.fire({ icon:'error', title:'Erro de comunicação', text: String(err),
+                    confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+            });
+    });
+}
+
+/* ── Process files (upload manual — fallback) ────────────────────── */
+function processFiles() {
+    const f1 = document.getElementById('file-b3-cgd').files[0];
+    const f2 = document.getElementById('file-dcad').files[0];
+    const f3 = document.getElementById('file-party').files[0];
+    if (!f1 || !f2 || !f3) {
+        Swal.fire({ icon:'warning', title:'Arquivos necessários',
+            text:'Selecione os 3 arquivos para processar.',
+            confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+        return;
+    }
+    const prog = document.getElementById('upload-progress');
+    const btn  = document.getElementById('btnProcess');
+    prog.classList.remove('d-none'); btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('file_b3_cgd', f1);
+    fd.append('file_dcad', f2);
+    fd.append('file_party', f3);
+    fd.append('recon_date', document.getElementById('recon-date').value);
+
+    fetch('/reconciliation-comitente/run', { method:'POST', body: fd })
+        .then(r => r.json())
+        .then(res => {
+            prog.classList.add('d-none'); btn.disabled = false;
+            if (res.error) {
+                Swal.fire({ icon:'error', title:'Erro no processamento', text: res.error,
+                    confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+                return;
+            }
+            bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+            table.clear().rows.add(res.data).draw();
+            updateWidgets(res.counts);
+            lucide.createIcons();
+            Swal.fire({ icon:'success', title:'Concluído!',
+                text:`${res.counts.total} registros processados com sucesso.`,
+                timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });
+        })
+        .catch(err => {
+            prog.classList.add('d-none'); btn.disabled = false;
+            Swal.fire({ icon:'error', title:'Erro de comunicação', text: String(err),
+                confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
+        });
+}
+</script>
+{% endblock %}
