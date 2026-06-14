@@ -5,253 +5,417 @@
 {% block extra_css %}
 <style>
 /* ================================================================
- *  ABOUT PAGE — CONFIGURAÇÃO VISUAL
- *  Ajuste as variáveis abaixo para personalizar cada componente
+ *  ABOUT — Apple Design Language + Emil Kowalski Motion
  * ================================================================ */
+
 :root {
-
-    /* ---- HERO -------------------------------------------------- */
-    --about-hero-color-start:   #0066cc;               /* Apple Action Blue */
-    --about-hero-color-end:     #004499;               /* Apple Action Blue darker */
-    --about-hero-angle:         135deg;                /* ângulo do gradiente */
-    --about-hero-padding:       4rem 2rem;             /* padding interno */
-    --about-hero-radius:        1.125rem;              /* Apple rounded.lg = 18px */
-    --about-hero-logo-h:        90px;                  /* altura do logo */
-    --about-hero-title-size:    1.75rem;               /* tamanho do H1 */
-    --about-hero-title-weight:  600;                   /* Apple: 600 not 700 for headlines */
-    --about-hero-lead-size:     1rem;                  /* tamanho do texto descritivo */
-    --about-hero-lead-opacity:  .85;                   /* opacidade do texto descritivo */
-    --about-hero-badge-size:    .72rem;                /* fonte do badge "JPMorganChase" */
-    --about-hero-badge-bg:      rgba(255,255,255,.20); /* bg do badge */
-
-    /* ---- STAT CARDS ------------------------------------------- */
-    --about-stat-border-width:  4px;                   /* espessura da borda lateral colorida */
-    --about-stat-label-size:    .70rem;                /* rótulo (TIPOS DE CONTRATO) */
-    --about-stat-label-weight:  600;
-    --about-stat-value-size:    1.5rem;                /* valor principal (2 / B3 / 100%) */
-    --about-stat-value-weight:  700;
-    --about-stat-sub-size:      .78rem;                /* subtítulo (NDF & Opções) */
-
-    /* ---- SECTION HEADERS -------------------------------------- */
-    --about-label-size:         .72rem;                /* rótulo da seção (FUNCIONALIDADES) */
-    --about-label-weight:       600;
-    --about-label-spacing:      .08em;                 /* letter-spacing do rótulo */
-    --about-title-size:         1.1rem;                /* título de seção (h4) */
-    --about-title-weight:       700;
-
-    /* ---- ÍCONES (feature-icon / step icons) ------------------- */
-    --about-icon-size:          56px;                  /* diâmetro do círculo */
-    --about-icon-font:          1.4rem;                /* tamanho do ícone dentro do círculo */
-
-    /* ---- CAPABILITY CARDS ------------------------------------- */
-    --about-feat-title-size:    .95rem;                /* h5 dos cards */
-    --about-feat-title-weight:  600;
-    --about-feat-desc-size:     .80rem;                /* parágrafo de descrição */
-    --about-feat-link-size:     .80rem;                /* link "Acessar" */
-    --about-feat-link-weight:   600;
-
-    /* ---- FLOW STEPS (Como Funciona) --------------------------- */
-    --about-step-num-size:      40px;                  /* diâmetro do círculo do número */
-    --about-step-num-font:      1rem;                  /* fonte do número */
-    --about-step-num-weight:    700;
-    --about-step-title-size:    .90rem;                /* h6 do step */
-    --about-step-title-weight:  700;
-    --about-step-desc-size:     .78rem;                /* texto do step */
-
-    /* ---- INFO CARDS (Notificações + Auth) --------------------- */
-    --about-info-title-size:    .95rem;                /* h5 */
-    --about-info-title-weight:  600;
-    --about-info-desc-size:     .80rem;                /* texto descritivo */
-
-    /* ---- TECH STACK ------------------------------------------- */
-    --about-tech-padding:       1rem;                  /* padding interno do item */
-    --about-tech-radius:        .75rem;                /* borda arredondada do item */
-    --about-tech-icon-size:     1.75rem;               /* tamanho do ícone */
-    --about-tech-label-size:    .78rem;                /* fonte do rótulo (Python / Flask) */
-    --about-tech-label-weight:  600;
-    /* fundo e letra dos itens */
-    --about-tech-item-bg:          #f4f6fb;            /* fundo do item (hex; substitui var() para controle direto) */
-    --about-tech-label-color:      #4c4c5c;            /* cor da letra dos rótulos */
-    /* cores dos ícones */
-    --about-tech-color-python:     #0066cc;            /* Apple Action Blue */
-    --about-tech-color-duckdb:     #2997ff;            /* Apple Sky Link Blue */
-    --about-tech-color-bootstrap:  #7952b3;            /* Bootstrap 5 */
-    --about-tech-color-datatables: #198754;            /* DataTables */
-    --about-tech-color-dropzone:   #ffc107;            /* Dropzone.js */
-    --about-tech-color-gunicorn:   #dc3545;            /* Gunicorn */
-
-    /* ---- CTA CARD --------------------------------------------- */
-    --about-cta-bg:             #0066cc;               /* Apple Action Blue */
-    --about-cta-padding-y:      2rem;                  /* padding vertical */
-    --about-cta-title-size:     1.1rem;                /* h4 "Pronto para começar?" */
-    --about-cta-title-weight:   600;                   /* Apple headline weight */
-    --about-cta-desc-size:      .90rem;                /* parágrafo */
-    --about-cta-desc-opacity:   .85;                   /* opacidade do parágrafo */
-
+    --ab-ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
+    --ab-ease-io:   cubic-bezier(0.77, 0, 0.175, 1);
+    --ab-blue:      #0066cc;
+    --ab-blue-dk:   #2997ff;
+    --ab-muted:     #6e6e73;
+    --ab-dark1:     #1d1d1f;
+    --ab-dark2:     #272729;
+    --ab-parchment: #f5f5f7;
+    --ab-white:     #ffffff;
+    --ab-hairline:  #e0e0e0;
 }
 
-/* Dark-mode overrides — tech stack cards must adapt to the theme */
-[data-bs-theme=dark] {
-    --about-tech-item-bg:       var(--ins-secondary-bg);
-    --about-tech-label-color:   var(--ins-body-color);
+/* ── Scroll reveal ──────────────────────────────────────────── */
+.ab-rv {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 640ms var(--ab-ease-out),
+                transform 640ms var(--ab-ease-out);
+}
+.ab-rv.in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ab-rv { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
 
-/* ================================================================
- *  HERO
- * ================================================================ */
-.about-hero {
-    background: linear-gradient(
-        var(--about-hero-angle),
-        var(--about-hero-color-start) 0%,
-        var(--about-hero-color-end) 100%
-    ) !important;
-    border-radius: var(--about-hero-radius);
-    padding: var(--about-hero-padding);
-    color: #fff !important;
-}
-.about-hero h1,
-.about-hero h2,
-.about-hero h3,
-.about-hero h4,
-.about-hero h5,
-.about-hero span,
-.about-hero p { color: #fff !important; }
-.about-hero h1 {
-    font-size: var(--about-hero-title-size) !important;
-    font-weight: var(--about-hero-title-weight) !important;
-    letter-spacing: -0.374px; /* Apple display tracking */
-}
-.about-hero .lead {
-    color: rgba(255, 255, 255, var(--about-hero-lead-opacity)) !important;
-    font-size: var(--about-hero-lead-size) !important;
-}
-.about-hero img         { height: var(--about-hero-logo-h) !important; width: auto; }
-.about-hero .badge      { background-color: var(--about-hero-badge-bg) !important; font-size: var(--about-hero-badge-size) !important; }
-/* btn-light perde fundo sólido no dark mode em bg fixo */
-.about-hero .btn-light,
-.about-cta-card .btn-light {
-    background-color: #fff !important;
-    color: var(--about-hero-color-start) !important;
-    border-color: #fff !important;
-}
-.about-hero .btn-light:hover,
-.about-cta-card .btn-light:hover {
-    background-color: #e9ecef !important;
-    color: #0a58ca !important;
-    border-color: #e9ecef !important;
-}
-.about-hero .btn-outline-light       { color: #fff !important; border-color: rgba(255,255,255,0.7) !important; }
-.about-hero .btn-outline-light:hover { background-color: rgba(255,255,255,0.15) !important; color: #fff !important; }
+/* Stagger delays — children of .ab-sg */
+.ab-sg > .ab-rv:nth-child(1) { transition-delay:   0ms; }
+.ab-sg > .ab-rv:nth-child(2) { transition-delay:  65ms; }
+.ab-sg > .ab-rv:nth-child(3) { transition-delay: 130ms; }
+.ab-sg > .ab-rv:nth-child(4) { transition-delay: 195ms; }
+.ab-sg > .ab-rv:nth-child(5) { transition-delay: 260ms; }
+.ab-sg > .ab-rv:nth-child(6) { transition-delay: 325ms; }
 
-/* ================================================================
- *  STAT CARDS
- * ================================================================ */
-.stat-card                  { border-left: var(--about-stat-border-width) solid var(--bs-primary); }
-.stat-card .section-label   { font-size: var(--about-stat-label-size) !important; font-weight: var(--about-stat-label-weight); }
-.stat-card h3               { font-size: var(--about-stat-value-size) !important; font-weight: var(--about-stat-value-weight) !important; }
-.stat-card small            { font-size: var(--about-stat-sub-size) !important; }
-
-/* ================================================================
- *  SECTION HEADERS
- * ================================================================ */
-.section-label {
-    font-size:      var(--about-label-size);
-    font-weight:    var(--about-label-weight);
-    letter-spacing: var(--about-label-spacing);
+/* ── HERO ───────────────────────────────────────────────────── */
+.ab-hero {
+    background: linear-gradient(145deg, #003d99 0%, #0066cc 55%, #004db3 100%) !important;
+    border-radius: 18px;
+    padding: 5rem 2rem 4.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.ab-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(255,255,255,.07) 0%, transparent 65%);
+    pointer-events: none;
+}
+.ab-hero__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,.13);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.18);
+    color: rgba(255,255,255,.88);
+    font-size: .67rem;
+    font-weight: 600;
+    letter-spacing: .1em;
     text-transform: uppercase;
+    border-radius: 9999px;
+    padding: .35rem 1rem;
+    margin-bottom: 1.75rem;
 }
-.section-title {
-    font-size:      var(--about-title-size) !important;
-    font-weight:    var(--about-title-weight) !important;
-    letter-spacing: -0.224px; /* Apple caption-strong tracking */
-    color:          var(--ins-heading-color);
+.ab-hero__logo {
+    height: 78px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 1.5rem;
+    filter: drop-shadow(0 4px 20px rgba(0,0,0,.28));
+}
+.ab-hero h1 {
+    font-size: clamp(2.25rem, 4.5vw, 3.25rem) !important;
+    font-weight: 700 !important;
+    color: #fff !important;
+    letter-spacing: -0.5px !important;
+    line-height: 1.07 !important;
+    margin-bottom: 1.125rem !important;
+}
+.ab-hero .ab-lead {
+    font-size: 1rem;
+    color: rgba(255,255,255,.76) !important;
+    line-height: 1.62;
+    max-width: 540px;
+    margin: 0 auto 2.25rem;
+}
+.ab-hero__btns { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+
+/* Hero/CTA buttons */
+.ab-btn-w {
+    background: #fff;
+    color: var(--ab-blue);
+    border: none;
+    border-radius: 9999px;
+    padding: .55rem 1.5rem;
+    font-size: .875rem;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: .375rem;
+    transition: background 150ms ease, transform 150ms ease;
+}
+.ab-btn-w:active { transform: scale(0.97); color: var(--ab-blue); }
+@media (hover:hover) and (pointer:fine) {
+    .ab-btn-w:hover { background: #e4ecf7; color: var(--ab-blue); }
+}
+.ab-btn-o {
+    background: rgba(255,255,255,.10);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.36);
+    border-radius: 9999px;
+    padding: .55rem 1.5rem;
+    font-size: .875rem;
+    font-weight: 400;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: .375rem;
+    transition: background 150ms ease, transform 150ms ease;
+}
+.ab-btn-o:active { transform: scale(0.97); color: #fff; }
+@media (hover:hover) and (pointer:fine) {
+    .ab-btn-o:hover { background: rgba(255,255,255,.20); color: #fff; }
 }
 
-/* ================================================================
- *  ÍCONES (feature-icon)
- * ================================================================ */
-.feature-icon {
-    width:           var(--about-icon-size);
-    height:          var(--about-icon-size);
-    border-radius:   50%;
-    display:         inline-flex;
-    align-items:     center;
+/* ── Section labels ─────────────────────────────────────────── */
+.ab-sl {
+    font-size: .67rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ab-blue);
+    display: block;
+    margin-bottom: .4rem;
+}
+.ab-st {
+    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--ins-heading-color, #1d1d1f);
+    line-height: 1.15;
+    margin: 0;
+}
+
+/* ── Tiles ──────────────────────────────────────────────────── */
+/* Light-mode defaults; dark-mode overrides below */
+.ab-tile-dark  { background: #eef1f6; border-radius: 18px; padding: 2.75rem 2rem; }
+.ab-tile-dark .ab-sl { color: var(--ab-blue); }
+.ab-tile-dark .ab-st { color: #1d1d1f !important; }
+[data-bs-theme=dark] .ab-tile-dark  { background: var(--ab-dark1); }
+[data-bs-theme=dark] .ab-tile-dark .ab-sl { color: var(--ab-blue-dk); }
+[data-bs-theme=dark] .ab-tile-dark .ab-st { color: #fff !important; }
+
+.ab-tile-parchment { background: var(--ab-parchment); border-radius: 18px; padding: 2.75rem 2rem; }
+[data-bs-theme=dark] .ab-tile-parchment { background: var(--ins-tertiary-bg, #2a2a2c); }
+
+.ab-tile-white {
+    background: var(--ab-white);
+    border: 1px solid var(--ab-hairline);
+    border-radius: 18px;
+    padding: 2.75rem 2rem;
+}
+[data-bs-theme=dark] .ab-tile-white {
+    background: var(--ins-secondary-bg, #1c1c1e);
+    border-color: rgba(255,255,255,.07);
+}
+
+.ab-tile-dark2 { background: #f0f2f7; border-radius: 18px; padding: 2.75rem 2rem; }
+.ab-tile-dark2 .ab-sl { color: var(--ab-blue); }
+.ab-tile-dark2 .ab-st { color: #1d1d1f !important; }
+[data-bs-theme=dark] .ab-tile-dark2 { background: var(--ab-dark2); }
+[data-bs-theme=dark] .ab-tile-dark2 .ab-sl { color: var(--ab-blue-dk); }
+[data-bs-theme=dark] .ab-tile-dark2 .ab-st { color: #fff !important; }
+
+.ab-tile-blue {
+    background: var(--ab-blue);
+    border-radius: 18px;
+    padding: 3.5rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.ab-tile-blue::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 50% -15%, rgba(255,255,255,.10) 0%, transparent 70%);
+    pointer-events: none;
+}
+.ab-tile-blue .ab-sl { color: rgba(255,255,255,.55); }
+.ab-tile-blue .ab-st { color: #fff !important; }
+
+/* ── Stats (dark tile) ──────────────────────────────────────── */
+.ab-stat {
+    text-align: center;
+    padding: 1.25rem .75rem;
+    border-right: 1px solid rgba(0,0,0,.08);
+}
+.ab-stat:last-child { border-right: none; }
+@media (max-width: 767.98px) {
+    .ab-stat { border-right: none; border-bottom: 1px solid rgba(0,0,0,.08); }
+    .ab-stat:last-child { border-bottom: none; }
+}
+[data-bs-theme=dark] .ab-stat { border-right-color: rgba(255,255,255,.07); }
+@media (max-width: 767.98px) {
+    [data-bs-theme=dark] .ab-stat { border-bottom-color: rgba(255,255,255,.07); }
+}
+.ab-stat__label {
+    font-size: .64rem;
+    font-weight: 600;
+    color: #6e6e73;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    display: block;
+    margin-bottom: .5rem;
+}
+[data-bs-theme=dark] .ab-stat__label { color: rgba(255,255,255,.42); }
+.ab-stat__val {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--ab-blue);
+    letter-spacing: -1px;
+    line-height: 1;
+    display: block;
+    margin-bottom: .4rem;
+}
+[data-bs-theme=dark] .ab-stat__val { color: var(--ab-blue-dk); }
+.ab-stat__sub {
+    font-size: .78rem;
+    color: #6e6e73;
+    display: block;
+}
+[data-bs-theme=dark] .ab-stat__sub { color: rgba(255,255,255,.52); }
+
+/* ── Feature cards (parchment tile) ────────────────────────── */
+.ab-feat {
+    background: var(--ab-white);
+    border: 1px solid var(--ab-hairline);
+    border-radius: 18px;
+    padding: 1.5rem;
+    height: 100%;
+    transition: transform 220ms var(--ab-ease-out),
+                box-shadow 220ms var(--ab-ease-out);
+}
+[data-bs-theme=dark] .ab-feat {
+    background: var(--ins-secondary-bg, #1c1c1e);
+    border-color: rgba(255,255,255,.07);
+}
+@media (hover:hover) and (pointer:fine) {
+    .ab-feat:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 32px rgba(0,0,0,.08);
+    }
+}
+.ab-feat:active { transform: scale(0.98); }
+.ab-feat__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 11px;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    font-size:       var(--about-icon-font);
-    flex-shrink:     0;
+    font-size: 1.2rem;
+    margin-bottom: .875rem;
+    flex-shrink: 0;
+}
+.ab-feat__title {
+    font-size: .9375rem;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--ins-heading-color, #1d1d1f);
+    margin-bottom: .45rem;
+}
+.ab-feat__desc {
+    font-size: .8125rem;
+    color: var(--ab-muted);
+    line-height: 1.55;
+    margin-bottom: .875rem;
+}
+.ab-feat__link {
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--ab-blue);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    transition: gap 160ms ease;
+}
+@media (hover:hover) and (pointer:fine) {
+    .ab-feat__link:hover { gap: .55rem; color: var(--ab-blue); }
 }
 
-/* ================================================================
- *  STEP NUMBERS
- * ================================================================ */
-.step-number {
-    width:           var(--about-step-num-size);
-    height:          var(--about-step-num-size);
-    border-radius:   50%;
-    display:         inline-flex;
-    align-items:     center;
+/* ── Flow steps (white tile) ────────────────────────────────── */
+.ab-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: .5rem 1rem;
+}
+.ab-step__num {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--ab-blue);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.0625rem;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    font-weight:     var(--about-step-num-weight);
-    font-size:       var(--about-step-num-font);
-    flex-shrink:     0;
+    margin-bottom: .875rem;
+    flex-shrink: 0;
+}
+.ab-step__icon { font-size: 1.4rem; color: var(--ab-blue); display: block; margin-bottom: .5rem; }
+.ab-step__title {
+    font-size: .9375rem;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    color: var(--ins-heading-color, #1d1d1f);
+    margin-bottom: .35rem;
+}
+.ab-step__desc {
+    font-size: .78rem;
+    color: var(--ab-muted);
+    line-height: 1.55;
+    max-width: 155px;
+    margin: 0;
+}
+.ab-step-arrow {
+    color: rgba(0, 102, 204, .28);
+    font-size: 1.125rem;
+    flex-shrink: 0;
 }
 
-/* ================================================================
- *  CAPABILITY CARDS  (#about-capabilities)
- * ================================================================ */
-#about-capabilities .card h5 {
-    font-size:   var(--about-feat-title-size) !important;
-    font-weight: var(--about-feat-title-weight) !important;
-    color:       var(--ins-heading-color);
+/* ── Info cards (dark-2 tile) ───────────────────────────────── */
+.ab-info {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 18px;
+    padding: 1.5rem;
+    height: 100%;
 }
-#about-capabilities .card p.text-muted   { font-size: var(--about-feat-desc-size) !important; }
-#about-capabilities .card a.link-primary { font-size: var(--about-feat-link-size) !important; font-weight: var(--about-feat-link-weight) !important; }
-
-/* ================================================================
- *  FLOW STEPS  (#about-flow)
- * ================================================================ */
-#about-flow .card h6 {
-    font-size:   var(--about-step-title-size) !important;
-    font-weight: var(--about-step-title-weight) !important;
-    color:       var(--ins-heading-color);
+[data-bs-theme=dark] .ab-info {
+    background: rgba(255,255,255,.05);
+    border-color: rgba(255,255,255,.07);
 }
-#about-flow .card p.text-muted { font-size: var(--about-step-desc-size) !important; }
-
-/* ================================================================
- *  INFO CARDS  (#about-info-row)
- * ================================================================ */
-#about-info-row .card h5 {
-    font-size:   var(--about-info-title-size) !important;
-    font-weight: var(--about-info-title-weight) !important;
-    color:       var(--ins-heading-color);
+.ab-info__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 11px;
+    background: rgba(0,102,204,.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: .875rem;
 }
-#about-info-row .card p.text-muted { font-size: var(--about-info-desc-size) !important; }
+[data-bs-theme=dark] .ab-info__icon { background: rgba(255,255,255,.07); }
+.ab-info__title { font-size: .9375rem; font-weight: 600; color: #1d1d1f; margin-bottom: .5rem; }
+[data-bs-theme=dark] .ab-info__title { color: #fff; }
+.ab-info__desc  { font-size: .8125rem; color: #6e6e73; line-height: 1.55; margin: 0; }
+[data-bs-theme=dark] .ab-info__desc  { color: rgba(255,255,255,.52); }
 
-/* ================================================================
- *  TECH STACK
- * ================================================================ */
-.tech-stack-item {
-    background:    var(--about-tech-item-bg) !important;
-    border:        1px solid var(--ins-border-color);
-    padding:       var(--about-tech-padding) !important;
-    border-radius: var(--about-tech-radius) !important;
-    transition:    background 0.2s;
+/* ── Tech items (parchment tile) ────────────────────────────── */
+.ab-tech {
+    background: var(--ab-white);
+    border: 1px solid var(--ab-hairline);
+    border-radius: 18px;
+    padding: 1.375rem 1rem;
+    text-align: center;
+    height: 100%;
+    transition: transform 220ms var(--ab-ease-out),
+                box-shadow 220ms var(--ab-ease-out);
 }
-.tech-stack-item i     { font-size: var(--about-tech-icon-size) !important; }
-.tech-stack-item small { font-size: var(--about-tech-label-size) !important; font-weight: var(--about-tech-label-weight) !important; color: var(--about-tech-label-color); }
+[data-bs-theme=dark] .ab-tech {
+    background: var(--ins-secondary-bg, #1c1c1e);
+    border-color: rgba(255,255,255,.07);
+}
+@media (hover:hover) and (pointer:fine) {
+    .ab-tech:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0,0,0,.07);
+    }
+}
+.ab-tech i { font-size: 1.75rem; display: block; margin-bottom: .5rem; }
+.ab-tech__label { font-size: .72rem; font-weight: 600; color: var(--ab-muted); }
 
-/* ================================================================
- *  CTA CARD
- * ================================================================ */
-.about-cta-card                 { background-color: var(--about-cta-bg) !important; }
-.about-cta-card .card-body      { padding-top: var(--about-cta-padding-y) !important; padding-bottom: var(--about-cta-padding-y) !important; }
-.about-cta-card h4              { font-size: var(--about-cta-title-size) !important; font-weight: var(--about-cta-title-weight) !important; }
-.about-cta-card .card-body > p  { font-size: var(--about-cta-desc-size) !important; color: rgba(255, 255, 255, var(--about-cta-desc-opacity)) !important; }
-
-/* ================================================================
- *  MISC
- * ================================================================ */
-.connector-line { width: 2px; min-height: 40px; background: var(--bs-border-color); margin: 0 auto; }
+/* CTA text */
+.ab-cta-title {
+    font-size: clamp(1.4rem, 2.5vw, 2rem);
+    font-weight: 700;
+    color: #fff !important;
+    letter-spacing: -0.3px;
+    margin-bottom: .5rem;
+}
+.ab-cta-desc {
+    font-size: .9375rem;
+    color: rgba(255,255,255,.70);
+    margin-bottom: 1.875rem;
+    line-height: 1.55;
+}
 </style>
 {% endblock extra_css %}
 
@@ -261,405 +425,328 @@
     {% set title='About OTC Tracker' %}
     {% include 'partials/page-title.html' %}
 
-    <!-- ===== HERO ===== -->
+    <!-- ═══ HERO ══════════════════════════════════════════════════ -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="about-hero text-center">
-                <img src="{{ config.ASSETS_ROOT }}/images/logo.png" alt="OTC Tracker"
-                     class="mb-3" style="height:90px; width:auto; object-fit:contain;">
-                <br>
-                <span class="badge bg-white bg-opacity-25 text-white mb-3 px-3 py-2 rounded-pill fs-xs fw-semibold">
-                    JPMorganChase & Co. — OTC Derivatives Operations
-                </span>
-                <h1 class="fw-bold mb-3 text-white fs-28">OTC Tracker</h1>
-                <p class="lead mb-4 mx-auto" data-lang="about-hero-desc" style="max-width:600px;">
+            <div class="ab-hero">
+                <div class="ab-hero__badge">
+                    <i class="ti ti-building-bank" style="font-size:.75rem;"></i>
+                    JPMorgan Chase &amp; Co. — OTC Derivatives Operations
+                </div>
+                <img src="{{ config.ASSETS_ROOT }}/images/logo.png" alt="OTC Tracker" class="ab-hero__logo">
+                <h1>OTC Tracker</h1>
+                <p class="ab-lead" data-lang="about-hero-desc">
                     Plataforma interna para gestão, validação e envio de operações OTC de Commodities à B3 —
                     centralizada, rastreável e integrada ao fluxo operacional.
                 </p>
-                <div class="d-flex gap-2 justify-content-center flex-wrap">
-                    <a href="/new_deals-ndf-commodities" class="btn btn-light fw-semibold rounded-pill px-4">
-                        <i class="ti ti-file-plus me-1"></i> NDF Commodities
+                <div class="ab-hero__btns">
+                    <a href="/new_deals-ndf-commodities" class="ab-btn-w">
+                        <i class="ti ti-file-plus"></i>
+                        <span>NDF Commodities</span>
                     </a>
-                    <a href="/new_deals-opt-commodities" class="btn btn-outline-light fw-semibold rounded-pill px-4">
-                        <i class="ti ti-chart-candle me-1"></i> Option Commodities
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== STATS ===== -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card stat-card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1 fs-xs section-label" data-lang="about-stat-contracts">Tipos de Contrato</p>
-                    <h3 class="fw-bold mb-0 text-primary">2</h3>
-                    <small class="text-muted" data-lang="about-stat-contracts-sub">NDF &amp; Opções</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card h-100" style="border-left-color: var(--bs-success);">
-                <div class="card-body">
-                    <p class="text-muted mb-1 fs-xs section-label" data-lang="about-stat-integration">Integração</p>
-                    <h3 class="fw-bold mb-0 text-success">B3</h3>
-                    <small class="text-muted" data-lang="about-stat-integration-sub">Envio &amp; Mapeamento</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card h-100" style="border-left-color: var(--bs-info);">
-                <div class="card-body">
-                    <p class="text-muted mb-1 fs-xs section-label" data-lang="about-stat-traceability">Rastreabilidade</p>
-                    <h3 class="fw-bold mb-0 text-info">100%</h3>
-                    <small class="text-muted" data-lang="about-stat-traceability-sub">Status em tempo real</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card stat-card h-100" style="border-left-color: var(--bs-warning);">
-                <div class="card-body">
-                    <p class="text-muted mb-1 fs-xs section-label" data-lang="about-stat-access">Acesso</p>
-                    <h3 class="fw-bold mb-0 text-warning">SID</h3>
-                    <small class="text-muted" data-lang="about-stat-access-sub">Autenticação interna JPM</small>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== CAPABILITIES ===== -->
-    <div class="row mb-4" id="about-capabilities">
-        <div class="col-12 mb-3">
-            <span class="section-label text-muted" data-lang="about-features-label">Funcionalidades</span>
-            <h4 class="fw-bold mt-1 mb-0 section-title" data-lang="about-features-title">O que o OTC Tracker oferece</h4>
-        </div>
-
-        <!-- NDF Commodities -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-primary-subtle text-primary">
-                        <i class="ti ti-file-description"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1">NDF Commodities</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-ndf-desc">
-                            Importação de arquivos de operações NDF via Dropzone, validação automática,
-                            visualização em tabela e envio ao Conecta B3.
-                        </p>
-                        <a href="/new_deals-ndf-commodities" class="link-primary fw-semibold fs-sm" data-lang="about-access">
-                            Acessar <i class="ti ti-arrow-right ms-1 align-middle"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Option Commodities -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-success-subtle text-success">
+                    <a href="/new_deals-opt-commodities" class="ab-btn-o">
                         <i class="ti ti-chart-candle"></i>
+                        <span>Option Commodities</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ STATS — dark tile ════════════════════════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-dark">
+                <div class="row g-0 ab-sg">
+                    <div class="col-6 col-md-3 ab-rv">
+                        <div class="ab-stat">
+                            <span class="ab-stat__label" data-lang="about-stat-contracts">Tipos de Contrato</span>
+                            <span class="ab-stat__val">2</span>
+                            <span class="ab-stat__sub" data-lang="about-stat-contracts-sub">NDF &amp; Opções</span>
+                        </div>
                     </div>
-                    <div>
-                        <h5 class="mb-1">Option Commodities</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-opt-desc">
-                            Gestão de operações de Opções de Commodities, com suporte a importação em lote,
-                            parse de mensagens e integração completa com a B3.
-                        </p>
-                        <a href="/new_deals-opt-commodities" class="link-primary fw-semibold fs-sm" data-lang="about-access">
-                            Acessar <i class="ti ti-arrow-right ms-1 align-middle"></i>
-                        </a>
+                    <div class="col-6 col-md-3 ab-rv">
+                        <div class="ab-stat">
+                            <span class="ab-stat__label" data-lang="about-stat-integration">Integração</span>
+                            <span class="ab-stat__val">B3</span>
+                            <span class="ab-stat__sub" data-lang="about-stat-integration-sub">Envio &amp; Mapeamento</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 ab-rv">
+                        <div class="ab-stat">
+                            <span class="ab-stat__label" data-lang="about-stat-traceability">Rastreabilidade</span>
+                            <span class="ab-stat__val">100%</span>
+                            <span class="ab-stat__sub" data-lang="about-stat-traceability-sub">Status em tempo real</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 ab-rv">
+                        <div class="ab-stat">
+                            <span class="ab-stat__label" data-lang="about-stat-access">Acesso</span>
+                            <span class="ab-stat__val">SID</span>
+                            <span class="ab-stat__sub" data-lang="about-stat-access-sub">Autenticação interna JPM</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Index B3 -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-info-subtle text-info">
+    <!-- ═══ CAPABILITIES — parchment tile ═══════════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-parchment">
+                <div class="mb-4 ab-rv">
+                    <span class="ab-sl" data-lang="about-features-label">Funcionalidades</span>
+                    <h2 class="ab-st" data-lang="about-features-title">O que o OTC Tracker oferece</h2>
+                </div>
+                <div class="row g-3 ab-sg">
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__title">NDF Commodities</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ndf-desc">
+                                Importação de arquivos de operações NDF via Dropzone, validação automática,
+                                visualização em tabela e envio ao Conecta B3.
+                            </p>
+                            <a href="/new_deals-ndf-commodities" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
+                            <div class="ab-feat__title">Option Commodities</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-opt-desc">
+                                Gestão de operações de Opções de Commodities, com suporte a importação em lote,
+                                parse de mensagens e integração completa com a B3.
+                            </p>
+                            <a href="/new_deals-opt-commodities" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-database"></i></div>
+                            <div class="ab-feat__title">Index B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-index-desc">
+                                Cadastro e manutenção de índices de referência da B3 utilizados no mapeamento
+                                e validação das operações de Commodities.
+                            </p>
+                            <a href="/index-b3" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-send"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-submit-title">Envio ao Conecta B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-submit-desc">
+                                Geração automática dos arquivos de envio no formato exigido pela B3 e disparo
+                                para o sistema Conecta, com rastreio do resultado por operação.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-link"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapeamento B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
+                                Vinculação do ID interno de cada operação ao ID atribuído pela B3 após o registro,
+                                garantindo rastreabilidade ponta-a-ponta.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-users"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-users-title">Gestão de Usuários</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-users-desc">
+                                Controle de acesso baseado em SID JPMorgan, autenticação 2FA por e-mail,
+                                aprovação de novos usuários e gestão de perfis e roles.
+                            </p>
+                            <a href="/users-roles" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ HOW IT WORKS — white tile ════════════════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-white">
+                <div class="mb-4 ab-rv">
+                    <span class="ab-sl" data-lang="about-flow-label">Fluxo Operacional</span>
+                    <h2 class="ab-st" data-lang="about-flow-title">Como funciona</h2>
+                </div>
+                <div class="d-flex flex-column flex-md-row align-items-center justify-content-center">
+                    <!-- Step 1 -->
+                    <div class="ab-step ab-rv" style="transition-delay:0ms">
+                        <div class="ab-step__num">1</div>
+                        <i class="ti ti-upload ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step1-title">Importação</div>
+                        <p class="ab-step__desc" data-lang="about-step1-desc">
+                            Arraste ou selecione os arquivos. O sistema valida e filtra automaticamente.
+                        </p>
+                    </div>
+                    <div class="d-none d-md-flex align-items-center ab-step-arrow px-1">
+                        <i class="ti ti-chevron-right"></i>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="ab-step ab-rv" style="transition-delay:80ms">
+                        <div class="ab-step__num">2</div>
+                        <i class="ti ti-clipboard-check ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step2-title">Revisão</div>
+                        <p class="ab-step__desc" data-lang="about-step2-desc">
+                            Visualize, filtre e edite as operações na tabela interativa.
+                        </p>
+                    </div>
+                    <div class="d-none d-md-flex align-items-center ab-step-arrow px-1">
+                        <i class="ti ti-chevron-right"></i>
+                    </div>
+                    <!-- Step 3 -->
+                    <div class="ab-step ab-rv" style="transition-delay:160ms">
+                        <div class="ab-step__num">3</div>
+                        <i class="ti ti-send ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step3-title">Envio à B3</div>
+                        <p class="ab-step__desc" data-lang="about-step3-desc">
+                            Geração automática do arquivo Conecta e envio ao sistema da B3.
+                        </p>
+                    </div>
+                    <div class="d-none d-md-flex align-items-center ab-step-arrow px-1">
+                        <i class="ti ti-chevron-right"></i>
+                    </div>
+                    <!-- Step 4 -->
+                    <div class="ab-step ab-rv" style="transition-delay:240ms">
+                        <div class="ab-step__num">4</div>
+                        <i class="ti ti-link ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step4-title">Mapeamento</div>
+                        <p class="ab-step__desc" data-lang="about-step4-desc">
+                            Vinculação do B3 ID ao registro interno, completando a rastreabilidade.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ NOTIFICATIONS + AUTH — dark-2 tile ═══════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-dark2">
+                <div class="row g-3 ab-sg">
+                    <div class="col-md-6 ab-rv">
+                        <div class="ab-info">
+                            <div class="ab-info__icon">
+                                <i class="ti ti-bell" style="color: var(--ab-blue-dk);"></i>
+                            </div>
+                            <div class="ab-info__title" data-lang="about-notif-title">Notificações em Tempo Real</div>
+                            <p class="ab-info__desc" data-lang="about-notif-desc">
+                                Alertas automáticos para eventos relevantes: novos deals importados, alterações de status,
+                                atualizações no Index B3, deleções em lote, envios e mapeamentos B3.
+                                Usuários ADMIN recebem também notificações de solicitações de acesso.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 ab-rv">
+                        <div class="ab-info">
+                            <div class="ab-info__icon">
+                                <i class="ti ti-shield-lock" style="color: #30d158;"></i>
+                            </div>
+                            <div class="ab-info__title" data-lang="about-auth-title">Autenticação Segura</div>
+                            <p class="ab-info__desc" data-lang="about-auth-desc">
+                                Acesso baseado em SID JPMorgan com verificação pelo phonebook interno. Novos acessos
+                                passam por fluxo de aprovação com código 2FA enviado por e-mail corporativo.
+                                Roles e permissões gerenciadas por administradores.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TECH STACK — parchment tile ══════════════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-parchment">
+                <div class="mb-4 ab-rv">
+                    <span class="ab-sl" data-lang="about-tech-label">Tecnologia</span>
+                    <h2 class="ab-st" data-lang="about-tech-title">Stack da plataforma</h2>
+                </div>
+                <div class="row g-3 ab-sg">
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-brand-python" style="color:#0066cc;"></i>
+                            <div class="ab-tech__label">Python / Flask</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-database" style="color:#2997ff;"></i>
+                            <div class="ab-tech__label">DuckDB</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-brand-bootstrap" style="color:#7952b3;"></i>
+                            <div class="ab-tech__label">Bootstrap 5</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-table" style="color:#198754;"></i>
+                            <div class="ab-tech__label">DataTables</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-cloud-upload" style="color:#c08000;"></i>
+                            <div class="ab-tech__label">Dropzone.js</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 ab-rv">
+                        <div class="ab-tech">
+                            <i class="ti ti-server" style="color:#dc3545;"></i>
+                            <div class="ab-tech__label">Gunicorn</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ CTA — blue tile ════════════════════════════════════════ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="ab-tile-blue ab-rv">
+                <h2 class="ab-cta-title" data-lang="about-cta-title">Pronto para começar?</h2>
+                <p class="ab-cta-desc" data-lang="about-cta-desc">
+                    Acesse os módulos de operações e gerencie seus deals diretamente na plataforma.
+                </p>
+                <div class="ab-hero__btns">
+                    <a href="/new_deals-ndf-commodities" class="ab-btn-w">
+                        <i class="ti ti-file-plus"></i>
+                        <span>NDF Commodities</span>
+                    </a>
+                    <a href="/new_deals-opt-commodities" class="ab-btn-o">
+                        <i class="ti ti-chart-candle"></i>
+                        <span>Option Commodities</span>
+                    </a>
+                    <a href="/index-b3" class="ab-btn-o">
                         <i class="ti ti-database"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1">Index B3</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-index-desc">
-                            Cadastro e manutenção de índices de referência da B3 utilizados no mapeamento
-                            e validação das operações de Commodities.
-                        </p>
-                        <a href="/index-b3" class="link-primary fw-semibold fs-sm" data-lang="about-access">
-                            Acessar <i class="ti ti-arrow-right ms-1 align-middle"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Envio à B3 -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-warning-subtle text-warning">
-                        <i class="ti ti-send"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1" data-lang="about-feat-submit-title">Envio ao Conecta B3</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-submit-desc">
-                            Geração automática dos arquivos de envio no formato exigido pela B3 e disparo
-                            para o sistema Conecta, com rastreio do resultado por operação.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Mapeamento B3 -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-secondary-subtle text-secondary">
-                        <i class="ti ti-link"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1" data-lang="about-feat-mapping-title">Mapeamento B3</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-mapping-desc">
-                            Vinculação do ID interno de cada operação ao ID atribuído pela B3 após o registro,
-                            garantindo rastreabilidade ponta-a-ponta.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Gestão de Usuários -->
-        <div class="col-xl-4 col-md-6 mb-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-danger-subtle text-danger">
-                        <i class="ti ti-users"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1" data-lang="about-feat-users-title">Gestão de Usuários</h5>
-                        <p class="text-muted fs-sm mb-2" data-lang="about-feat-users-desc">
-                            Controle de acesso baseado em SID JPMorgan, autenticação 2FA por e-mail,
-                            aprovação de novos usuários e gestão de perfis e roles.
-                        </p>
-                        <a href="/users-roles" class="link-primary fw-semibold fs-sm" data-lang="about-access">
-                            Acessar <i class="ti ti-arrow-right ms-1 align-middle"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== HOW IT WORKS ===== -->
-    <div class="row mb-4" id="about-flow">
-        <div class="col-12 mb-3">
-            <span class="section-label text-muted" data-lang="about-flow-label">Fluxo Operacional</span>
-            <h4 class="fw-bold mt-1 mb-0 section-title" data-lang="about-flow-title">Como funciona</h4>
-        </div>
-
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4">
-                    <div class="row g-0 justify-content-center">
-
-                        <!-- Step 1 -->
-                        <div class="col-12 col-md d-flex flex-column align-items-center text-center">
-                            <div class="step-number bg-primary text-white mb-2">1</div>
-                            <div class="feature-icon bg-primary-subtle text-primary mb-3">
-                                <i class="ti ti-upload"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1" data-lang="about-step1-title">Importação</h6>
-                            <p class="text-muted fs-sm px-2 mb-0" data-lang="about-step1-desc">
-                                Arraste ou selecione os arquivos de operações. O sistema valida e filtra
-                                automaticamente duplicatas e operações canceladas.
-                            </p>
-                        </div>
-
-                        <!-- Arrow -->
-                        <div class="col-auto d-none d-md-flex align-items-center px-2">
-                            <i class="ti ti-chevron-right text-muted fs-22"></i>
-                        </div>
-                        <div class="col-12 d-md-none d-flex justify-content-center my-2">
-                            <i class="ti ti-chevron-down text-muted fs-22"></i>
-                        </div>
-
-                        <!-- Step 2 -->
-                        <div class="col-12 col-md d-flex flex-column align-items-center text-center">
-                            <div class="step-number bg-info text-white mb-2">2</div>
-                            <div class="feature-icon bg-info-subtle text-info mb-3">
-                                <i class="ti ti-clipboard-check"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1" data-lang="about-step2-title">Revisão</h6>
-                            <p class="text-muted fs-sm px-2 mb-0" data-lang="about-step2-desc">
-                                Visualize, filtre e edite as operações importadas na tabela interativa
-                                antes de prosseguir com o envio.
-                            </p>
-                        </div>
-
-                        <!-- Arrow -->
-                        <div class="col-auto d-none d-md-flex align-items-center px-2">
-                            <i class="ti ti-chevron-right text-muted fs-22"></i>
-                        </div>
-                        <div class="col-12 d-md-none d-flex justify-content-center my-2">
-                            <i class="ti ti-chevron-down text-muted fs-22"></i>
-                        </div>
-
-                        <!-- Step 3 -->
-                        <div class="col-12 col-md d-flex flex-column align-items-center text-center">
-                            <div class="step-number bg-warning text-white mb-2">3</div>
-                            <div class="feature-icon bg-warning-subtle text-warning mb-3">
-                                <i class="ti ti-send"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1" data-lang="about-step3-title">Envio à B3</h6>
-                            <p class="text-muted fs-sm px-2 mb-0" data-lang="about-step3-desc">
-                                Geração automática do arquivo Conecta e envio ao sistema da B3
-                                com acompanhamento do status por operação.
-                            </p>
-                        </div>
-
-                        <!-- Arrow -->
-                        <div class="col-auto d-none d-md-flex align-items-center px-2">
-                            <i class="ti ti-chevron-right text-muted fs-22"></i>
-                        </div>
-                        <div class="col-12 d-md-none d-flex justify-content-center my-2">
-                            <i class="ti ti-chevron-down text-muted fs-22"></i>
-                        </div>
-
-                        <!-- Step 4 -->
-                        <div class="col-12 col-md d-flex flex-column align-items-center text-center">
-                            <div class="step-number bg-success text-white mb-2">4</div>
-                            <div class="feature-icon bg-success-subtle text-success mb-3">
-                                <i class="ti ti-link"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1" data-lang="about-step4-title">Mapeamento</h6>
-                            <p class="text-muted fs-sm px-2 mb-0" data-lang="about-step4-desc">
-                                Vinculação do B3 ID retornado ao registro interno, completando
-                                a rastreabilidade da operação de ponta a ponta.
-                            </p>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== NOTIFICATIONS + AUTH ===== -->
-    <div class="row mb-4 g-3" id="about-info-row">
-        <div class="col-md-6">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-primary-subtle text-primary align-self-start">
-                        <i class="ti ti-bell"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1" data-lang="about-notif-title">Notificações em Tempo Real</h5>
-                        <p class="text-muted fs-sm mb-0" data-lang="about-notif-desc">
-                            Alertas automáticos para eventos relevantes: novos deals importados, alterações de status,
-                            atualizações no Index B3, deleções em lote, envios e mapeamentos B3.
-                            Usuários ADMIN recebem também notificações de solicitações de acesso.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex gap-3">
-                    <div class="feature-icon bg-success-subtle text-success align-self-start">
-                        <i class="ti ti-shield-lock"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-1" data-lang="about-auth-title">Autenticação Segura</h5>
-                        <p class="text-muted fs-sm mb-0" data-lang="about-auth-desc">
-                            Acesso baseado em SID JPMorgan com verificação pelo phonebook interno. Novos acessos
-                            passam por fluxo de aprovação com código 2FA enviado por e-mail corporativo.
-                            Roles e permissões gerenciadas por administradores.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== TECH STACK ===== -->
-    <div class="row mb-4">
-        <div class="col-12 mb-3">
-            <span class="section-label text-muted" data-lang="about-tech-label">Tecnologia</span>
-            <h4 class="fw-bold mt-1 mb-0 section-title" data-lang="about-tech-title">Stack da plataforma</h4>
-        </div>
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="row g-3 text-center">
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-brand-python fs-28 d-block mb-1" style="color: var(--about-tech-color-python);"></i>
-                                <small class="fw-semibold">Python / Flask</small>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-database fs-28 d-block mb-1" style="color: var(--about-tech-color-duckdb);"></i>
-                                <small class="fw-semibold">DuckDB</small>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-brand-bootstrap fs-28 d-block mb-1" style="color: var(--about-tech-color-bootstrap);"></i>
-                                <small class="fw-semibold">Bootstrap 5</small>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-table fs-28 d-block mb-1" style="color: var(--about-tech-color-datatables);"></i>
-                                <small class="fw-semibold">DataTables</small>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-cloud-upload fs-28 d-block mb-1" style="color: var(--about-tech-color-dropzone);"></i>
-                                <small class="fw-semibold">Dropzone.js</small>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="p-3 rounded-3 tech-stack-item h-100">
-                                <i class="ti ti-server fs-28 d-block mb-1" style="color: var(--about-tech-color-gunicorn);"></i>
-                                <small class="fw-semibold">Gunicorn</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ===== CTA ===== -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card border-0 bg-primary text-white shadow-sm about-cta-card">
-                <div class="card-body text-center py-4">
-                    <h4 class="fw-bold mb-2 text-white" data-lang="about-cta-title">Pronto para começar?</h4>
-                    <p class="mb-3" data-lang="about-cta-desc">
-                        Acesse os módulos de operações e gerencie seus deals diretamente na plataforma.
-                    </p>
-                    <div class="d-flex gap-2 justify-content-center flex-wrap">
-                        <a href="/new_deals-ndf-commodities" class="btn btn-light fw-semibold rounded-pill px-4">
-                            <i class="ti ti-file-plus me-1"></i> NDF Commodities
-                        </a>
-                        <a href="/new_deals-opt-commodities" class="btn btn-outline-light fw-semibold rounded-pill px-4">
-                            <i class="ti ti-chart-candle me-1"></i> Option Commodities
-                        </a>
-                        <a href="/index-b3" class="btn btn-outline-light fw-semibold rounded-pill px-4">
-                            <i class="ti ti-database me-1"></i> Index B3
-                        </a>
-                    </div>
+                        <span>Index B3</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -667,3 +754,23 @@
 
 </div>
 {% endblock page_content %}
+
+{% block extra_javascript %}
+<script>
+(function () {
+    'use strict';
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+            if (e.isIntersecting) {
+                e.target.classList.add('in');
+                io.unobserve(e.target);
+            }
+        });
+    }, { threshold: 0.06, rootMargin: '0px 0px -28px 0px' });
+
+    document.querySelectorAll('.ab-rv').forEach(function (el) {
+        io.observe(el);
+    });
+}());
+</script>
+{% endblock extra_javascript %}

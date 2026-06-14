@@ -1,0 +1,535 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Holidays Calendar{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+/* Custom Colors for Calendar Events */
+
+/* Date Input Styling */
+#event-date {
+    position: relative;
+}
+
+#event-date::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    font-size: 1.2em;
+}
+
+/* Purple */
+.bg-purple-subtle {
+    background-color: rgba(139, 92, 246, 0.15) !important;
+}
+
+.text-purple {
+    color: #8b5cf6 !important;
+}
+
+.border-purple {
+    border-color: #8b5cf6 !important;
+}
+
+/* Teal */
+.bg-teal-subtle {
+    background-color: rgba(20, 184, 166, 0.15) !important;
+}
+
+.text-teal {
+    color: #14b8a6 !important;
+}
+
+.border-teal {
+    border-color: #14b8a6 !important;
+}
+
+/* Indigo */
+.bg-indigo-subtle {
+    background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.text-indigo {
+    color: #6366f1 !important;
+}
+
+.border-indigo {
+    border-color: #6366f1 !important;
+}
+
+/* Pink */
+.bg-pink-subtle {
+    background-color: rgba(236, 72, 153, 0.15) !important;
+}
+
+.text-pink {
+    color: #ec4899 !important;
+}
+
+.border-pink {
+    border-color: #ec4899 !important;
+}
+
+/* FullCalendar Event Styles */
+.fc-event.bg-purple-subtle {
+    border-color: #8b5cf6 !important;
+}
+
+.fc-event.bg-purple-subtle .fc-event-title {
+    color: #8b5cf6 !important;
+}
+
+.fc-event.bg-teal-subtle {
+    border-color: #14b8a6 !important;
+}
+
+.fc-event.bg-teal-subtle .fc-event-title {
+    color: #14b8a6 !important;
+}
+
+.fc-event.bg-indigo-subtle {
+    border-color: #6366f1 !important;
+}
+
+.fc-event.bg-indigo-subtle .fc-event-title {
+    color: #6366f1 !important;
+}
+
+.fc-event.bg-pink-subtle {
+    border-color: #ec4899 !important;
+}
+
+.fc-event.bg-pink-subtle .fc-event-title {
+    color: #ec4899 !important;
+}
+
+/* FullCalendar List View */
+/* Purple - NYMEX */
+.fc-list-event.bg-purple-subtle .fc-list-event-dot {
+    border-color: #8b5cf6 !important;
+}
+
+.fc-list-event.bg-purple-subtle .fc-list-event-title a,
+.fc-list-event.bg-purple-subtle a {
+    color: #8b5cf6 !important;
+}
+
+/* Teal - PLATTS-ASIA */
+.fc-list-event.bg-teal-subtle .fc-list-event-dot {
+    border-color: #14b8a6 !important;
+}
+
+.fc-list-event.bg-teal-subtle .fc-list-event-title a,
+.fc-list-event.bg-teal-subtle a {
+    color: #14b8a6 !important;
+}
+
+/* Indigo - PLATTS-EUROPE */
+.fc-list-event.bg-indigo-subtle .fc-list-event-dot {
+    border-color: #6366f1 !important;
+}
+
+.fc-list-event.bg-indigo-subtle .fc-list-event-title a,
+.fc-list-event.bg-indigo-subtle a {
+    color: #6366f1 !important;
+}
+
+/* Pink - SOFR */
+.fc-list-event.bg-pink-subtle .fc-list-event-dot {
+    border-color: #ec4899 !important;
+}
+
+.fc-list-event.bg-pink-subtle .fc-list-event-title a,
+.fc-list-event.bg-pink-subtle a {
+    color: #ec4899 !important;
+}
+
+/* FullCalendar List View — Bootstrap semantic colors (missing before) */
+.fc-list-event.bg-primary-subtle .fc-list-event-dot { border-color: #0d6efd !important; }
+.fc-list-event.bg-primary-subtle .fc-list-event-title a,
+.fc-list-event.bg-primary-subtle a { color: #0d6efd !important; }
+
+.fc-list-event.bg-secondary-subtle .fc-list-event-dot { border-color: #6c757d !important; }
+.fc-list-event.bg-secondary-subtle .fc-list-event-title a,
+.fc-list-event.bg-secondary-subtle a { color: #6c757d !important; }
+
+.fc-list-event.bg-success-subtle .fc-list-event-dot { border-color: #198754 !important; }
+.fc-list-event.bg-success-subtle .fc-list-event-title a,
+.fc-list-event.bg-success-subtle a { color: #198754 !important; }
+
+.fc-list-event.bg-danger-subtle .fc-list-event-dot { border-color: #dc3545 !important; }
+.fc-list-event.bg-danger-subtle .fc-list-event-title a,
+.fc-list-event.bg-danger-subtle a { color: #dc3545 !important; }
+
+/* ICEAGS (info): #0dcaf0 tem contraste 1.7:1 — invisível em fundo claro → usar azul-petróleo legível */
+.fc-list-event.bg-info-subtle .fc-list-event-dot { border-color: #0284c7 !important; }
+.fc-list-event.bg-info-subtle .fc-list-event-title a,
+.fc-list-event.bg-info-subtle a { color: #0284c7 !important; }
+
+/* IPE (warning): amarelo tem contraste ~2:1 → usar âmbar escuro legível */
+.fc-list-event.bg-warning-subtle .fc-list-event-dot { border-color: #b45309 !important; }
+.fc-list-event.bg-warning-subtle .fc-list-event-title a,
+.fc-list-event.bg-warning-subtle a { color: #b45309 !important; }
+
+.fc-list-event.bg-dark-subtle .fc-list-event-dot { border-color: #374151 !important; }
+.fc-list-event.bg-dark-subtle .fc-list-event-title a,
+.fc-list-event.bg-dark-subtle a { color: #374151 !important; }
+
+/* FullCalendar Day Grid — Apple pill badges + Emil animation (mesma curva/tempo da sidebar) */
+.fc-daygrid-event {
+    border-radius: 999px !important;
+    padding: 2px 9px !important;
+    border-width: 0 !important;
+    font-size: 0.70rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em !important;
+    cursor: pointer !important;
+    /* Mesma transição que .external-event da sidebar */
+    transition: transform 140ms var(--hc-ease-out), box-shadow 140ms var(--hc-ease-out) !important;
+}
+.fc-daygrid-event .fc-event-title {
+    padding: 0 !important;
+    font-weight: 600 !important;
+}
+/* Press feedback — scale(0.96) = mesmo feeling da sidebar (.external-event:active usa 0.97) */
+.fc-daygrid-event:active {
+    transform: scale(0.96) !important;
+}
+/* Hover — lift vertical (translateX ficaria estranho em badges horizontais na célula) */
+@media (hover: hover) and (pointer: fine) {
+    .fc-daygrid-event:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
+    }
+}
+.fc-daygrid-more-link {
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    color: #0066cc !important;
+    padding: 1px 6px !important;
+}
+
+/* Color overrides para dayGrid pills — Bootstrap semantic + custom */
+/* info (#0dcaf0) e warning (#ffc107) são invisíveis em fundo claro → versões escuras */
+.fc-daygrid-event.bg-info-subtle    { color: #0284c7 !important; }
+.fc-daygrid-event.bg-warning-subtle { color: #b45309 !important; }
+
+/* Custom colors — já têm bom contraste, mantém */
+.fc-daygrid-event.bg-purple-subtle  { color: #8b5cf6 !important; }
+.fc-daygrid-event.bg-teal-subtle    { color: #14b8a6 !important; }
+.fc-daygrid-event.bg-indigo-subtle  { color: #6366f1 !important; }
+.fc-daygrid-event.bg-pink-subtle    { color: #ec4899 !important; }
+
+/* Garante text color nos títulos de eventos FC para todos os casos */
+.fc-daygrid-event .fc-event-title { color: inherit !important; }
+
+/* ── Apple Design Language + Emil Motion ────────────────────────────── */
+:root { --hc-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+
+@keyframes hc-slide-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hc-rv-1, .hc-rv-2 { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+.hc-rv-1 { animation: hc-slide-in 480ms var(--hc-ease-out) both; }
+.hc-rv-2 { animation: hc-slide-in 480ms var(--hc-ease-out) 70ms both; }
+
+/* Page header */
+.hc-product-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: rgba(0, 102, 204, 0.1);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 20px; color: #0066cc;
+}
+.hc-product-badge {
+    font-size: 0.67rem; padding: 2px 9px; border-radius: 999px;
+    background: rgba(0, 102, 204, 0.09); color: #0066cc;
+    font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    border: 1px solid rgba(0, 102, 204, 0.18);
+}
+
+/* Calendar accent */
+.hc-cal-card { border-left: 3px solid #0066cc !important; }
+
+/* Sidebar hint text */
+.hc-sidebar-hint {
+    font-size: 0.74rem;
+    color: var(--ins-secondary-color, #6e6e73);
+    margin-top: 10px; margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+/* External event pills */
+.external-event {
+    border-radius: 8px !important;
+    padding: 7px 12px !important;
+    font-size: 0.79rem !important;
+    font-weight: 500 !important;
+    margin-bottom: 5px !important;
+    cursor: grab !important;
+    transition: transform 140ms var(--hc-ease-out), box-shadow 140ms var(--hc-ease-out) !important;
+    display: flex !important;
+    align-items: center !important;
+}
+.external-event:active { transform: scale(0.97) !important; cursor: grabbing !important; }
+@media (hover: hover) and (pointer: fine) {
+    .external-event:hover {
+        transform: translateX(4px) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    }
+}
+
+/* Create New Holiday button */
+.btn-new-event {
+    border-radius: 999px !important;
+    font-weight: 600 !important;
+    transition: transform 100ms ease-out !important;
+}
+.btn-new-event:active { transform: scale(0.97) !important; }
+
+/* FullCalendar button refinements */
+.fc .fc-button {
+    border-radius: 8px !important;
+    font-size: 0.82rem !important;
+    font-weight: 500 !important;
+    transition: transform 100ms ease-out !important;
+    padding: 0.35rem 0.75rem !important;
+}
+.fc .fc-button:active { transform: scale(0.96) !important; }
+.fc .fc-button-primary { background-color: #0066cc !important; border-color: #0066cc !important; color: #fff !important; }
+.fc .fc-button-primary:not(:disabled):hover { background-color: #0051a8 !important; border-color: #0051a8 !important; color: #fff !important; }
+.fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #004899 !important; border-color: #004899 !important; color: #fff !important; }
+.fc .fc-toolbar-title { font-size: 1.05rem !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+
+/* Modal refinements */
+#event-modal .modal-content { border-radius: 14px !important; }
+#event-modal .modal-header { border-bottom: 1px solid var(--ins-border-color, #e0e0e0); }
+#event-modal .modal-footer { border-top: 1px solid var(--ins-border-color, #e0e0e0); gap: 6px; }
+#event-modal .btn { border-radius: 8px !important; transition: transform 100ms ease-out !important; }
+#event-modal .btn:active { transform: scale(0.97) !important; }
+#event-modal .btn-primary { background-color: #0066cc !important; border-color: #0066cc !important; }
+#event-modal .btn-primary:hover { background-color: #0051a8 !important; border-color: #0051a8 !important; }
+
+/* ── Custom SweetAlert2 Holiday Popup ──────────────────────────── */
+@keyframes hc-swal-in {
+    from { opacity: 0; transform: scale(0.94); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes hc-swal-out {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.96); }
+}
+.swal2-popup.hc-swal-popup {
+    border-radius: 18px !important;
+    padding: 24px 24px 20px !important;
+    max-width: 360px !important;
+}
+.swal2-popup.hc-swal-popup .swal2-html-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+    overflow: visible !important;
+}
+.swal2-popup.hc-swal-popup .swal2-actions {
+    margin-top: 18px !important;
+    padding: 0 !important;
+}
+.swal2-popup.hc-swal-popup .swal2-close {
+    top: 10px !important;
+    right: 12px !important;
+    font-size: 1.1rem !important;
+}
+.hc-swal-enter {
+    animation: hc-swal-in 280ms cubic-bezier(0.23, 1, 0.32, 1) both !important;
+}
+.hc-swal-exit {
+    animation: hc-swal-out 180ms ease-in forwards !important;
+}
+
+/* ── External event pill: colored dot indicator ───────────────── */
+.hc-cal-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0; display: inline-block;
+    margin-right: 8px;
+}
+/* ── Press feedback (JS adds .is-pressing — :active não dispara dentro do drag do FC) */
+.external-event.is-pressing,
+.external-event:active { transform: scale(0.95) !important; cursor: grabbing !important; }
+.btn-new-event.is-pressing,
+.btn-new-event:active  { transform: scale(0.96) !important; box-shadow: none !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+
+    <div class="page-title-head d-flex align-items-center hc-rv-1">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="hc-product-icon">
+                <i class="ti ti-calendar-event"></i>
+            </div>
+            <div>
+                <h4 class="fs-xl fw-bold m-0">Holidays Calendar</h4>
+            </div>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);">Apps</a></li>
+                <li class="breadcrumb-item active">Holidays Calendar</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="d-flex mb-3 gap-1 hc-rv-2">
+        <div class="card h-100 mb-0 d-none d-lg-flex rounded-end-0">
+            <div class="card-body">
+                <button class="btn btn-primary w-100 btn-new-event">
+                    <i class="ti ti-plus me-2 align-middle"></i>
+                    Create New Holiday
+                </button>
+                <div id="external-events">
+                    <p class="hc-sidebar-hint">Drag a calendar to a date, or click a date to create a new holiday.</p>
+                    <div class="external-event fc-event bg-primary-subtle text-primary fw-semibold"
+                        data-class="bg-primary-subtle text-primary border-primary">
+                        <i class="ti ti-circle-filled me-2"></i>ANBIMA
+                    </div>
+                    <div class="external-event fc-event bg-secondary-subtle text-secondary fw-semibold"
+                        data-class="bg-secondary-subtle text-secondary border-secondary">
+                        <i class="ti ti-circle-filled me-2"></i>BURSA
+                    </div>
+                    <div class="external-event fc-event bg-success-subtle text-success fw-semibold"
+                        data-class="bg-success-subtle text-success border-success">
+                        <i class="ti ti-circle-filled me-2"></i>CBY_AGS
+                    </div>
+                    <div class="external-event fc-event bg-danger-subtle text-danger fw-semibold"
+                        data-class="bg-danger-subtle text-danger border-danger">
+                        <i class="ti ti-circle-filled me-2"></i>EURIBOR
+                    </div>
+                    <div class="external-event fc-event bg-info-subtle text-info fw-semibold"
+                        data-class="bg-info-subtle text-info border-info">
+                        <i class="ti ti-circle-filled me-2"></i>ICEAGS
+                    </div>
+                    <div class="external-event fc-event bg-warning-subtle text-warning fw-semibold"
+                        data-class="bg-warning-subtle text-warning border-warning">
+                        <i class="ti ti-circle-filled me-2"></i>IPE
+                    </div>
+                    <div class="external-event fc-event bg-dark-subtle text-dark fw-semibold"
+                        data-class="bg-dark-subtle text-dark border-dark">
+                        <i class="ti ti-circle-filled me-2"></i>LME
+                    </div>
+                    <div class="external-event fc-event bg-purple-subtle text-purple fw-semibold"
+                        data-class="bg-purple-subtle text-purple border-purple">
+                        <i class="ti ti-circle-filled me-2"></i>NYMEX
+                    </div>
+                    <div class="external-event fc-event bg-teal-subtle text-teal fw-semibold"
+                        data-class="bg-teal-subtle text-teal border-teal">
+                        <i class="ti ti-circle-filled me-2"></i>PLATTS-ASIA
+                    </div>
+                    <div class="external-event fc-event bg-indigo-subtle text-indigo fw-semibold"
+                        data-class="bg-indigo-subtle text-indigo border-indigo">
+                        <i class="ti ti-circle-filled me-2"></i>PLATTS-EUROPE
+                    </div>
+                    <div class="external-event fc-event bg-pink-subtle text-pink fw-semibold"
+                        data-class="bg-pink-subtle text-pink border-pink">
+                        <i class="ti ti-circle-filled me-2"></i>SOFR
+                    </div>
+                </div>
+            </div>
+        </div> <!-- end card-->
+        <div class="card h-100 mb-0 rounded-start-0 flex-grow-1 border-start-0 hc-cal-card">
+            <div class="d-lg-none d-inline-flex card-header">
+                <button class="btn btn-primary btn-new-event">
+                    <i class="ti ti-plus me-2 align-middle"></i>
+                    Create New Holiday
+                </button>
+            </div>
+            <div class="card-body" data-simplebar="" data-simplebar-md="" style="height: calc(100% - 350px);">
+                <div id="calendar"></div>
+            </div> <!-- end card-body -->
+        </div> <!-- end card-->
+    </div> <!-- end row-->
+    <!-- Modal Add/Edit -->
+    <div class="modal fade" id="event-modal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content liquid-glass">
+                <form class="needs-validation" id="forms-event" name="event-form" novalidate="">
+                    <div class="modal-header">
+                        <h4 class="modal-title" id="modal-title">
+                            Create Holiday Event
+                        </h4>
+                        <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-2">
+                                    <label class="control-label form-label" for="event-date">Holiday
+                                        Date</label>
+                                    <input class="form-control" id="event-date" name="date"
+                                        placeholder="dd/mm/yyyy" required="" type="text" 
+                                        pattern="\d{2}/\d{2}/\d{4}" 
+                                        maxlength="10" />
+                                    <div class="invalid-feedback">Please provide a valid date in dd/mm/yyyy format</div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-2">
+                                    <label class="control-label form-label" for="event-title">Holiday
+                                        Name</label>
+                                    <input class="form-control" id="event-title" name="title"
+                                        placeholder="Insert Holiday Name" required="" type="text" />
+                                    <div class="invalid-feedback">Please provide a valid holiday name</div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-2">
+                                    <label class="control-label form-label" for="event-category">Calendar</label>
+                                    <select class="form-select" id="event-category" name="category" required="">
+                                        <option disabled="" value="">Select a Calendar</option>
+                                        <option selected="" value="bg-primary-subtle text-primary">ANBIMA</option>
+                                        <option value="bg-secondary-subtle text-secondary">BURSA</option>
+                                        <option value="bg-success-subtle text-success">CBY_AGS</option>
+                                        <option value="bg-danger-subtle text-danger">EURIBOR</option>
+                                        <option value="bg-info-subtle text-info">ICEAGS</option>
+                                        <option value="bg-warning-subtle text-warning">IPE</option>
+                                        <option value="bg-dark-subtle text-dark">LME</option>
+                                        <option value="bg-purple-subtle text-purple">NYMEX</option>
+                                        <option value="bg-teal-subtle text-teal">PLATTS-ASIA</option>
+                                        <option value="bg-indigo-subtle text-indigo">PLATTS-EUROPE</option>
+                                        <option value="bg-pink-subtle text-pink">SOFR</option>
+                                    </select>
+                                    <div class="invalid-feedback">Please select a valid event category</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <button class="btn btn-danger" id="btn-delete-event" type="button">
+                                Delete
+                            </button>
+                            <button class="btn btn-light ms-auto" data-bs-dismiss="modal" type="button">
+                                Close
+                            </button>
+                            <button class="btn btn-primary" id="btn-save-event" type="submit">
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <!-- end modal-content-->
+        </div>
+        <!-- end modal dialog-->
+    </div>
+    <!-- end modal-->
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/fullcalendar/index.global.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/fullcalendar/multimonth.global.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/apps-holidays-calendar.js"></script>
+{% endblock extra_javascript %}

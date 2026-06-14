@@ -900,23 +900,6 @@ def resend_code():
 
 
 # ==============================================================================
-# DEV BYPASS — local testing only, not committed
-# ==============================================================================
-
-@blueprint.route('/dev-login')
-def dev_login():
-    from datetime import datetime, timezone, timedelta
-    session['authenticated'] = True
-    session['user_sid'] = 'A000000'
-    session['user_name'] = 'Dev User'
-    session['user_email'] = 'dev@local'
-    session['user_role'] = 'Admin'
-    session['remember_me'] = False
-    session['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
-    return redirect(url_for('pages_blueprint.dashboard'))
-
-
-# ==============================================================================
 # ROTAS — APLICAÇÃO (PÓS-AUTENTICAÇÃO)
 # ==============================================================================
 
@@ -932,6 +915,13 @@ def about():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/about.html', segment='about')
+
+
+@blueprint.route('/holidays-calendar')
+def holidays_calendar():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/holidays-calendar.html', segment='holidays-calendar')
 
 
 @blueprint.route('/logout')
@@ -2037,6 +2027,63 @@ def api_fx_holiday_schedules():
         return jsonify({'ok': True, 'schedules': schedules})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
+
+
+_HOLIDAY_FILE_MAP = {
+    'ANBIMA':       'anbima.json',
+    'BURSA':        'bursa.json',
+    'CBY_AGS':      'cby_ags.json',
+    'EURIBOR':      'euribor.json',
+    'ICEAGS':       'iceags.json',
+    'IPE':          'ipe.json',
+    'LME':          'lme.json',
+    'NYMEX':        'nymex.json',
+    'PLATTS-ASIA':  'platts_asia.json',
+    'PLATTS-EUROPE':'platts_europe.json',
+    'SOFR':         'sofr.json',
+}
+
+
+@blueprint.route('/api/holidays/save', methods=['POST'])
+def api_holidays_save():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    calendar_name = payload.get('calendar', '').strip()
+    date          = payload.get('date', '').strip()   # YYYY-MM-DD
+    title         = payload.get('title', '').strip()
+
+    if not all([calendar_name, date, title]):
+        return jsonify({'ok': False, 'error': 'Missing fields'})
+
+    filename = _HOLIDAY_FILE_MAP.get(calendar_name)
+    if not filename:
+        return jsonify({'ok': False, 'error': f'Unknown calendar: {calendar_name}'})
+
+    file_path = os.path.join(_B3_DATA_DIR, filename)
+
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, encoding='utf-8') as f:
+                holidays = json.load(f)
+        else:
+            holidays = []
+    except (json.JSONDecodeError, IOError):
+        holidays = []
+
+    new_entry = {'date': date, 'title': title, 'calendar': calendar_name}
+    if new_entry not in holidays:
+        holidays.append(new_entry)
+        holidays.sort(key=lambda x: x.get('date', ''))
+
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(holidays, f, ensure_ascii=False, indent=4)
+    except IOError as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+    return jsonify({'ok': True, 'total': len(holidays)})
 
 
 @blueprint.route('/api/b3/update', methods=['POST'])

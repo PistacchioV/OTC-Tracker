@@ -654,6 +654,51 @@
   #deals-processing-table tbody td:nth-child(2):hover {
       background-color: transparent !important;
   }
+
+  /* ── OPT Product Identity & Motion ──────────────────────────────────── */
+  :root { --nd-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+
+  @keyframes nd-slide-in {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+      .nd-rv-1, .nd-rv-2, .nd-rv-3 { animation: none !important; opacity: 1 !important; transform: none !important; }
+  }
+  .nd-rv-1 { animation: nd-slide-in 480ms var(--nd-ease-out) both; }
+  .nd-rv-2 { animation: nd-slide-in 480ms var(--nd-ease-out) 70ms both; }
+  .nd-rv-3 { animation: nd-slide-in 480ms var(--nd-ease-out) 140ms both; }
+
+  .nd-product-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: rgba(102, 88, 221, 0.1);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 20px; color: #6658dd;
+  }
+  .nd-product-badge {
+      font-size: 0.67rem; padding: 2px 9px; border-radius: 999px;
+      background: rgba(102, 88, 221, 0.09); color: #6658dd;
+      font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+      border: 1px solid rgba(102, 88, 221, 0.18);
+  }
+  .nd-deal-card { border-left: 3px solid #6658dd !important; }
+  .nd-filter-bar { background: var(--ins-secondary-bg, #f8f9fa); }
+
+  #myAwesomeDropzone.dropzone {
+      transition: border-color 180ms var(--nd-ease-out), background 180ms var(--nd-ease-out);
+  }
+  #myAwesomeDropzone.dropzone:hover,
+  #myAwesomeDropzone.dropzone.dz-drag-hover {
+      border-color: #6658dd !important;
+      background: rgba(102, 88, 221, 0.025) !important;
+  }
+  .nd-upload-icon { background: rgba(102, 88, 221, 0.12) !important; color: #6658dd !important; }
+
+  .btn-toolbar-all { transition: transform 100ms ease-out; }
+  .btn-toolbar-all:active { transform: scale(0.96) !important; }
+  @media (hover: hover) and (pointer: fine) {
+      .btn-toolbar-all:hover { transform: translateY(-1px); transition: transform 160ms var(--nd-ease-out); }
+  }
 </style>
 <!-- ╔══════════════════════════════════════════════════════════════════╗ -->
 <!-- ║  FIM DO AJUSTE DE TAMANHO                                      ║ -->
@@ -663,9 +708,14 @@
 
 {% block page_content %}
 <div class="container-fluid" data-content="">
-    <div class="page-title-head d-flex align-items-center">
-        <div class="flex-grow-1">
-            <h4 class="fs-xl fw-bold m-0" data-lang="nd-page-title">Commodities Options</h4>
+    <div class="page-title-head d-flex align-items-center nd-rv-1">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="nd-product-icon">
+                <i class="ti ti-trending-up"></i>
+            </div>
+            <div>
+                <h4 class="fs-xl fw-bold m-0" data-lang="nd-page-title">Commodities Options</h4>
+            </div>
         </div>
         <div class="text-end">
             <ol class="breadcrumb m-0 py-0">
@@ -677,9 +727,9 @@
         </div>
     </div>
 
-    <div class="row">
+    <div class="row nd-rv-2">
         <div class="col-12">
-            <div class="card">
+            <div class="card nd-deal-card">
 
                 <!-- ── Dropzone ─────────────────────────────────────────── -->
                 <div class="card-body" style="padding: 10px;">
@@ -692,7 +742,7 @@
                         </div>
                         <div class="dz-message needsclick">
                             <div class="avatar-lg mx-auto mb-3">
-                                <span class="avatar-title bg-success-subtle text-success rounded-circle">
+                                <span class="avatar-title nd-upload-icon rounded-circle">
                                     <i class="fs-24 ti ti-cloud-upload"></i>
                                 </span>
                             </div>
@@ -731,7 +781,7 @@
                 </div>
 
                 <!-- ── Filter + Search ──────────────────────────────────── -->
-                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom nd-filter-bar">
                     <div class="flex-grow-1 position-relative">
                         <div class="smart-filter-wrapper" id="smartFilter">
                             <div class="smart-filter-chips" id="sfChips"></div>
