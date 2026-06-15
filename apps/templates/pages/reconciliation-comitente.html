@@ -732,6 +732,7 @@ function runAuto() {
                 if (table) { table.clear().rows.add(res.data).draw(); }
                 updateWidgets(res.counts);
                 lucide.createIcons();
+                if (window.fetchNotifications) window.fetchNotifications();
                 Swal.fire({ icon:'success', title: t('rc-swal-done','Done!'),
                     text: res.counts.total + ' ' + t('rc-swal-records-recon','records reconciled.'),
                     timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });
@@ -782,6 +783,7 @@ function processFiles() {
             if (table) { table.clear().rows.add(res.data).draw(); }
             updateWidgets(res.counts);
             lucide.createIcons();
+            if (window.fetchNotifications) window.fetchNotifications();
             Swal.fire({ icon:'success', title: t('rc-swal-done','Done!'),
                 text: res.counts.total + ' ' + t('rc-swal-records-proc','records processed.'),
                 timer:2800, showConfirmButton:false, customClass:{popup:'rounded-4'} });

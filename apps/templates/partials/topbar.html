@@ -384,15 +384,17 @@
                 'User Updated':   { icon: 'user-check',   color: 'bg-info'    },
                 'User Deleted':   { icon: 'user-x',       color: 'bg-danger'  },
                 'Access Request': { icon: 'user-plus',    color: 'bg-warning' },
-                'Sent to B3':     { icon: 'send',          color: 'bg-success' },
-                'B3 Mapped':      { icon: 'link-2',        color: 'bg-primary' }
+                'Sent to B3':       { icon: 'send',          color: 'bg-success' },
+                'B3 Mapped':        { icon: 'link-2',        color: 'bg-primary' },
+                'Recon Generated':  { icon: 'shield-check',  color: 'bg-success' }
             };
 
             var PAGE_URL = {
-                'NDF Comm':       '/new_deals-ndf-commodities',
-                'Opt Comm':       '/new_deals-opt-commodities',
-                'Index B3':       '/index-b3',
-                'Users':          '/users-roles'
+                'NDF Comm':         '/new_deals-ndf-commodities',
+                'Opt Comm':         '/new_deals-opt-commodities',
+                'Index B3':         '/index-b3',
+                'Users':            '/users-roles',
+                'Recon Comitente':  '/reconciliation-comitente'
             };
 
             function esc(s) {
@@ -478,6 +480,7 @@
                 });
             }
 
+            window.fetchNotifications = fetchNotifications;
             fetchNotifications();
             setInterval(fetchNotifications, 30000);
         });
