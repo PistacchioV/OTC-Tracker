@@ -567,7 +567,7 @@ _OUTPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Comiten
 # Caixas Outlook e subjects dos emails
 _MAILBOX         = 'brazil.otc.ops@jpmorgan.com'
 _SUBJECT_B3_CGD  = 'Base B3 & CGD Consolidada'
-_SUBJECT_PARTY   = '[PROD] - REPORT - Party Central Client Report General - SUCCESS - Client Report Generated (general)'
+_SUBJECT_PARTY   = '[PROD] - REPORT - Party Central Client Report General'
 
 _MONTH_EN = {
     '01':'January','02':'February','03':'March','04':'April',
@@ -678,20 +678,30 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
         return False
 
 
-def _outlook_download(inbox, subject_filter, tmpdir):
+def _outlook_download(inbox, subject_filter, tmpdir, exact=True):
     """
     Baixa o anexo mais recente do email que corresponde ao subject_filter.
+    exact=True  → match exato de subject
+    exact=False → subject deve CONTER subject_filter (ignora data/sufixo variável)
     Retorna o caminho do arquivo salvo ou levanta FileNotFoundError.
     """
     mapi_prop = "http://schemas.microsoft.com/mapi/proptag/0x0E1D001F"
-    restriction = f'@SQL="{mapi_prop}" = \'{subject_filter}\''
+    if exact:
+        restriction = f'@SQL="{mapi_prop}" = \'{subject_filter}\''
+    else:
+        # LIKE para pré-filtrar no MAPI; verificação Python garante o match correto
+        restriction = f'@SQL="{mapi_prop}" LIKE \'%{subject_filter}%\''
+
     messages = inbox.Items.Restrict(restriction)
     for msg in list(messages):
-        if msg.Class == 43 and msg.Attachments.Count > 0:
-            att = msg.Attachments.Item(1)
-            dest = os.path.join(tmpdir, att.FileName)
-            att.SaveAsFile(dest)
-            return dest
+        if msg.Class != 43 or msg.Attachments.Count == 0:
+            continue
+        if not exact and subject_filter.lower() not in str(msg.Subject).lower():
+            continue
+        att = msg.Attachments.Item(1)
+        dest = os.path.join(tmpdir, att.FileName)
+        att.SaveAsFile(dest)
+        return dest
     raise FileNotFoundError(f"Email '{subject_filter}' não encontrado na Inbox.")
 
 
@@ -726,8 +736,8 @@ def run_auto(recon_date_str: str):
             mailbox = outlook.Folders[_MAILBOX]
             inbox   = mailbox.Folders['Inbox']
 
-            path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir)
-            path_party  = _outlook_download(inbox, _SUBJECT_PARTY,  tmpdir)
+            path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir, exact=True)
+            path_party  = _outlook_download(inbox, _SUBJECT_PARTY,  tmpdir, exact=False)
 
             # ── DCADCOMITENTES via drive de rede ─────────────────────────────
             dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
