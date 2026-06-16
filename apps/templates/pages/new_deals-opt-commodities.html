@@ -856,7 +856,7 @@
                 <div class="card-body" style="padding-top: 10px;">
                     <div style="margin-bottom: 10px;"></div>
 
-                    <div class="table-responsive">
+                    <div>
                         <table class="table table-striped dt-responsive align-middle mb-0"
                                id="deals-processing-table">
                             <thead class="thead-sm text-uppercase fs-xxs">
@@ -1398,7 +1398,7 @@ $(document).ready(function() {
     var table = window.dealsTable = $('#deals-processing-table').DataTable({
         responsive: false,
         scrollX: true,
-        autoWidth: false,
+        autoWidth: true,
         pageLength: 15,
         select: {
             style: 'os',
@@ -1981,6 +1981,11 @@ $(document).ready(function() {
 
         } // end initComplete
     }); // end DataTable init
+
+    // Fix header alignment after load (scrollX clones header — needs width recalc)
+    function _fixTableHeader() { table.columns.adjust().draw(false); }
+    if (document.readyState === 'complete') { setTimeout(_fixTableHeader, 150); }
+    else { window.addEventListener('load', function(){ setTimeout(_fixTableHeader, 150); }); }
 
 
     // ========================================================================

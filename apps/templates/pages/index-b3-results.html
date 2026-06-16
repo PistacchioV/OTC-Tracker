@@ -27,9 +27,88 @@
     .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
     /* Add Row button (matches new_deals style) */
     .btn-toolbar-addrow { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
+
+    /* ── Emil animations ────────────────────────────────────────────── */
+    /* Toolbar buttons: Columns, Add Row, Export */
+    .btn-toolbar-all,
+    .btn-toolbar-addrow {
+        will-change: transform;
+        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+                    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .btn-toolbar-all:hover,
+        .btn-toolbar-addrow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.13) !important;
+        }
+    }
+    .btn-toolbar-all:active,
+    .btn-toolbar-addrow:active {
+        transform: scale(0.96) !important;
+        box-shadow: none !important;
+    }
+
+    /* Edit filters button */
+    .btn-edit-filters {
+        will-change: transform;
+        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+                    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
+                    opacity 140ms ease !important;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .btn-edit-filters:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(13,110,253,0.18) !important;
+        }
+    }
+    .btn-edit-filters:active { transform: scale(0.96) !important; }
+    .btn-edit-filters.loading { pointer-events: none; opacity: 0.65; }
+
+    /* Result tabs */
+    #resultTabs .nav-link {
+        will-change: transform;
+        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+                    color 120ms ease,
+                    border-color 120ms ease;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        #resultTabs .nav-link:not(.active):hover {
+            transform: translateY(-2px);
+        }
+    }
+    #resultTabs .nav-link:active {
+        transform: scale(0.97);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .btn-toolbar-all, .btn-toolbar-addrow,
+        .btn-edit-filters, #resultTabs .nav-link {
+            transition: none !important;
+            transform: none !important;
+        }
+    }
     /* Select2 dropdown — never wider than viewport, opens below */
     .select2-dropdown { font-size:0.78rem; }
     .new-row-edit td { background-color: rgba(0,102,204,0.06)!important; }
+    /* Show entries — visual card-header inside card-body */
+    .tab-show-header {
+        background: rgba(0,0,0,0.02);
+        border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        margin: -1.5rem -1.5rem 1rem -1.5rem;
+        padding: 0.6rem 1.5rem;
+    }
+    [data-bs-theme="dark"] .tab-show-header {
+        background: rgba(255,255,255,0.03);
+    }
+    /* Edit filters button */
+    .btn-edit-filters {
+        font-size: 0.72rem !important;
+        padding: 0.2rem 0.55rem !important;
+        line-height: 1.4;
+        transition: opacity 140ms ease;
+    }
+    .btn-edit-filters.loading { pointer-events: none; opacity: 0.7; }
     /* Export collection dropdown — fundo sólido e texto legível */
     .dt-button-collection {
         background: #fff !important;
@@ -88,8 +167,8 @@
     <div class="alert alert-soft-primary d-flex align-items-center gap-2 py-2 mb-3" id="filterSummary" style="display:none!important;">
         <i class="ti ti-filter fs-lg"></i>
         <span id="filterSummaryText" class="fs-sm"></span>
-        <a href="/index-b3" class="ms-auto btn btn-xs btn-outline-primary btn-sm">
-            <i class="ti ti-edit me-1"></i><span data-lang="b3-edit-filters">Edit filters</span>
+        <a href="/index-b3" class="ms-auto btn btn-xs btn-outline-primary btn-edit-filters" id="btnEditFilters">
+            <i class="ti ti-edit me-1" id="editFiltersIcon"></i><span data-lang="b3-edit-filters">Edit filters</span>
         </a>
     </div>
 
@@ -135,14 +214,14 @@
 
                         <!-- ══ TAB: UNDERLYING ASSETS ══ -->
                         <div class="tab-pane fade show active" id="tabSubjacente" role="tabpanel">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm">Show</label>
+                            <div class="tab-show-header d-flex align-items-center gap-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenSubj">
                                     <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm">entries</label>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
                             </div>
-                            <div class="table-responsive">
+                            <div>
                                 <table id="tblSubjacente" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
@@ -189,14 +268,14 @@
 
                         <!-- ══ TAB: VCP ══ -->
                         <div class="tab-pane fade" id="tabVCP" role="tabpanel">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm">Show</label>
+                            <div class="tab-show-header d-flex align-items-center gap-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenVCP">
                                     <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm">entries</label>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
                             </div>
-                            <div class="table-responsive">
+                            <div>
                                 <table id="tblVCP" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
@@ -225,14 +304,14 @@
 
                         <!-- ══ TAB: DOMAIN ══ -->
                         <div class="tab-pane fade" id="tabDominio" role="tabpanel">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <label class="form-label mb-0 fs-sm">Show</label>
+                            <div class="tab-show-header d-flex align-items-center gap-2">
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-show">Show</label>
                                 <select class="form-select form-select-sm" style="width:75px;" id="pageLenDom">
                                     <option>25</option><option>50</option><option>100</option><option>200</option>
                                 </select>
-                                <label class="form-label mb-0 fs-sm">entries</label>
+                                <label class="form-label mb-0 fs-sm" data-lang="b3-entries">entries</label>
                             </div>
-                            <div class="table-responsive">
+                            <div>
                                 <table id="tblDominio" class="table table-striped table-bordered dt-responsive align-middle mb-0 nowrap w-100">
                                     <thead>
                                         <tr class="text-uppercase fs-xxs">
@@ -528,7 +607,7 @@ $(document).ready(function () {
     }
 
     function makeDom() {
-        return "<'d-md-flex justify-content-between align-items-center my-2'" +
+        return "<'d-md-flex justify-content-between align-items-center mt-3 mb-2'" +
                "<'columnToggleWrapper me-2'><'addRowWrapper me-2'>B<'ms-auto'>" +
                ">" +
                "<'row'<'col-sm-12'tr>>" +
@@ -1040,7 +1119,7 @@ $(document).ready(function () {
     /* ── Init Subjacente ─────────────────────────────────────────────── */
     var dtSubj = $('#tblSubjacente').DataTable({
         data: buildSubjRows(subjDataArr),
-        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7,8,9,10,11,12,13,14,15]),
         language: dtLang(),
         columnDefs: [
@@ -1056,18 +1135,18 @@ $(document).ready(function () {
         }
     });
     $('#pageLenSubj').on('change', function(){ dtSubj.page.len(+this.value).draw(); });
-    /* Subjacente is the first visible tab — fire columns.adjust after all assets are loaded */
+    /* Subjacente is the first visible tab — fire columns.adjust after assets load */
     function _fixSubjHeader() { dtSubj.columns.adjust().draw(false); }
     if (document.readyState === 'complete') {
-        setTimeout(_fixSubjHeader, 50);
+        setTimeout(_fixSubjHeader, 150);
     } else {
-        window.addEventListener('load', function(){ setTimeout(_fixSubjHeader, 50); });
+        window.addEventListener('load', function(){ setTimeout(_fixSubjHeader, 150); });
     }
 
     /* ── Init VCP ────────────────────────────────────────────────────── */
     var dtVCP = $('#tblVCP').DataTable({
         data: buildVCPRows(vcpDataArr),
-        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
         language: dtLang(),
         columnDefs: [
@@ -1087,7 +1166,7 @@ $(document).ready(function () {
     /* ── Init Dominio ────────────────────────────────────────────────── */
     var dtDom = $('#tblDominio').DataTable({
         data: buildDomRows(dominioDataArr),
-        responsive: false, scrollX: true, autoWidth: false, pageLength: 25,
+        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
         language: dtLang(),
         columnDefs: [
@@ -1146,6 +1225,13 @@ $(document).ready(function () {
         var dt = getDtForTable(tableKey);
         if (!dt) return;
         handleDelete(btn, dt);
+    });
+
+    /* Edit Filters button — spinner on click */
+    document.getElementById('btnEditFilters').addEventListener('click', function() {
+        var icon = document.getElementById('editFiltersIcon');
+        icon.className = 'spinner-border spinner-border-sm me-1';
+        this.classList.add('loading');
     });
 
 }); // end ready
