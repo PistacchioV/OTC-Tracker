@@ -28,65 +28,43 @@
     /* Add Row button (matches new_deals style) */
     .btn-toolbar-addrow { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
 
-    /* ── Emil animations ────────────────────────────────────────────── */
+    /* ── Animations — mesmo padrão do NDF Commodities ──────────────── */
+    :root { --nd-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+
+    @keyframes nd-slide-in {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .nd-rv-1, .nd-rv-2, .nd-rv-3 { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
+    .nd-rv-1 { animation: nd-slide-in 480ms var(--nd-ease-out) both; }
+    .nd-rv-2 { animation: nd-slide-in 480ms var(--nd-ease-out) 70ms both; }
+    .nd-rv-3 { animation: nd-slide-in 480ms var(--nd-ease-out) 140ms both; }
+
     /* Toolbar buttons: Columns, Add Row, Export */
     .btn-toolbar-all,
-    .btn-toolbar-addrow {
-        will-change: transform;
-        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
-                    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1) !important;
-    }
+    .btn-toolbar-addrow { transition: transform 100ms ease-out; }
+    .btn-toolbar-all:active,
+    .btn-toolbar-addrow:active { transform: scale(0.96) !important; }
     @media (hover: hover) and (pointer: fine) {
         .btn-toolbar-all:hover,
-        .btn-toolbar-addrow:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 3px 10px rgba(0,0,0,0.13) !important;
-        }
-    }
-    .btn-toolbar-all:active,
-    .btn-toolbar-addrow:active {
-        transform: scale(0.96) !important;
-        box-shadow: none !important;
+        .btn-toolbar-addrow:hover { transform: translateY(-1px); transition: transform 160ms var(--nd-ease-out); }
     }
 
     /* Edit filters button */
-    .btn-edit-filters {
-        will-change: transform;
-        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
-                    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
-                    opacity 140ms ease !important;
-    }
-    @media (hover: hover) and (pointer: fine) {
-        .btn-edit-filters:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 3px 10px rgba(13,110,253,0.18) !important;
-        }
-    }
+    .btn-edit-filters { transition: transform 100ms ease-out, opacity 140ms ease; }
     .btn-edit-filters:active { transform: scale(0.96) !important; }
     .btn-edit-filters.loading { pointer-events: none; opacity: 0.65; }
+    @media (hover: hover) and (pointer: fine) {
+        .btn-edit-filters:hover { transform: translateY(-1px); transition: transform 160ms var(--nd-ease-out); }
+    }
 
     /* Result tabs */
-    #resultTabs .nav-link {
-        will-change: transform;
-        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
-                    color 120ms ease,
-                    border-color 120ms ease;
-    }
+    #resultTabs .nav-link { transition: transform 100ms ease-out; }
+    #resultTabs .nav-link:active { transform: scale(0.97) !important; }
     @media (hover: hover) and (pointer: fine) {
-        #resultTabs .nav-link:not(.active):hover {
-            transform: translateY(-2px);
-        }
-    }
-    #resultTabs .nav-link:active {
-        transform: scale(0.97);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .btn-toolbar-all, .btn-toolbar-addrow,
-        .btn-edit-filters, #resultTabs .nav-link {
-            transition: none !important;
-            transform: none !important;
-        }
+        #resultTabs .nav-link:not(.active):hover { transform: translateY(-1px); transition: transform 160ms var(--nd-ease-out); }
     }
     /* Select2 dropdown — never wider than viewport, opens below */
     .select2-dropdown { font-size:0.78rem; }
@@ -148,7 +126,7 @@
 {% block page_content %}
 <div class="container-fluid" data-content="">
 
-    <div class="page-title-head d-flex align-items-center mb-3">
+    <div class="page-title-head d-flex align-items-center mb-3 nd-rv-1">
         <div class="flex-grow-1 d-flex align-items-center gap-3">
             <a href="/index-b3" class="btn btn-sm btn-light">
                 <i class="ti ti-arrow-left me-1"></i><span data-lang="b3-new-search">New Search</span>
@@ -164,7 +142,7 @@
         </div>
     </div>
 
-    <div class="alert alert-soft-primary d-flex align-items-center gap-2 py-2 mb-3" id="filterSummary" style="display:none!important;">
+    <div class="alert alert-soft-primary d-flex align-items-center gap-2 py-2 mb-3 nd-rv-2" id="filterSummary" style="display:none!important;">
         <i class="ti ti-filter fs-lg"></i>
         <span id="filterSummaryText" class="fs-sm"></span>
         <a href="/index-b3" class="ms-auto btn btn-xs btn-outline-primary btn-edit-filters" id="btnEditFilters">
@@ -181,7 +159,7 @@
         </div>
     </div>
 
-    <div class="row" id="resultsWrapper">
+    <div class="row nd-rv-2" id="resultsWrapper">
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
