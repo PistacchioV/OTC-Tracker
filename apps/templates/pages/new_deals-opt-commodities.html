@@ -1514,7 +1514,7 @@ $(document).ready(function() {
                 var rowId = _rowKey(d);
                 var node = this.node();
                 if (node) {
-                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId)));
+                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + this.index())));
                 }
             });
             // Sync selectAll header checkbox (count across all pages, current search)
@@ -2260,7 +2260,7 @@ $(document).ready(function() {
             table.rows({search: 'applied', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = _rowKey(d);
-                if (rowId) selectedRowIds.add(rowId);
+                if (rowId) selectedRowIds.add(rowId + '|' + this.index());
             });
         }
         $('input[type="checkbox"]', table.rows({page: 'current'}).nodes()).prop('checked', this.checked);
@@ -2279,10 +2279,12 @@ $(document).ready(function() {
         var rowId = _rowKey(d);
 
         if (rowId) {
+            // Include row index — two rows can share the same key (e.g. duplicate Deal+Client)
+            var selKey = rowId + '|' + row.index();
             if (this.checked) {
-                selectedRowIds.add(rowId);
+                selectedRowIds.add(selKey);
             } else {
-                selectedRowIds.delete(rowId);
+                selectedRowIds.delete(selKey);
             }
         }
 
@@ -2538,7 +2540,7 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = _rowKey(d);
-            if (!rowId || !selectedRowIds.has(rowId)) return;
+            if (!rowId || !selectedRowIds.has(rowId + '|' + this.index())) return;
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
@@ -2689,7 +2691,8 @@ $(document).ready(function() {
             table.rows({search: 'none', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = _rowKey(d);
-                if (!rowId || !selectedRowIds.has(rowId)) return;
+                // Include row index — duplicate Deal+Client rows would otherwise share one key
+                if (!rowId || !selectedRowIds.has(rowId + '|' + this.index())) return;
 
                 var rowIdx = this.index();
                 var changedFields = {};
@@ -2763,7 +2766,7 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var key = _rowKey(d);
-            if (key && selectedRowIds.has(key)) {
+            if (key && selectedRowIds.has(key + '|' + this.index())) {
                 // Store row index (not rowApi) — rowApi.remove() uses aoData.splice which shifts
                 // subsequent indices; we sort descending later to avoid that issue
                 rowsToDelete.push({ rowIdx: this.index(), rowId: _sh(d[3]), client: _sh(d[10]) });

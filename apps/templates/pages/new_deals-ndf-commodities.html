@@ -1490,7 +1490,7 @@ $(document).ready(function() {
                 var rowId = d ? _sh(d[3]) : null;
                 var node = this.node();
                 if (node) {
-                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]))));
+                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())));
                 }
             });
             // Sync selectAll header checkbox (count across all pages, current search)
@@ -2218,7 +2218,7 @@ $(document).ready(function() {
             table.rows({search: 'applied', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = d ? _sh(d[3]) : null;
-                if (rowId) selectedRowIds.add(rowId + '|' + _sh(d[10]));
+                if (rowId) selectedRowIds.add(rowId + '|' + _sh(d[10]) + '|' + this.index());
             });
         }
         $('input[type="checkbox"]', table.rows({page: 'current'}).nodes()).prop('checked', this.checked);
@@ -2237,7 +2237,8 @@ $(document).ready(function() {
         var rowId = d ? _sh(d[3]) : null;
 
         if (rowId) {
-            var selKey = rowId + '|' + _sh(d[10]);
+            // Include row index to handle duplicate Deal|Client rows correctly
+            var selKey = rowId + '|' + _sh(d[10]) + '|' + row.index();
             if (this.checked) {
                 selectedRowIds.add(selKey);
             } else {
@@ -2497,7 +2498,7 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[3]) : null;
-            if (!rowId || !selectedRowIds.has(rowId + '|' + _sh(d[10]))) return;
+            if (!rowId || !selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())) return;
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
@@ -2651,7 +2652,8 @@ $(document).ready(function() {
                 var rowId = d ? _sh(d[3]) : null;
                 var clientRaw = d ? d[10] : '';
                 var clientClean = _sh(clientRaw);
-                var selKey = rowId + '|' + clientClean;
+                // Include row index — two rows can share the same Deal+Client (e.g. Approved + New)
+                var selKey = rowId + '|' + clientClean + '|' + this.index();
 
                 if (!rowId || !selectedRowIds.has(selKey)) return;
 
@@ -2730,7 +2732,7 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[3]) : null;
-            if (rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]))) {
+            if (rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())) {
                 // Store row index (not rowApi) — rowApi.remove() uses aoData.splice which shifts
                 // subsequent indices; we sort descending later to avoid that issue
                 rowsToDelete.push({ rowIdx: this.index(), rowId: rowId, client: _sh(d[10]) });
