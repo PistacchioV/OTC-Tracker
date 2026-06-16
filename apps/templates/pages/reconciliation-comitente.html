@@ -114,6 +114,40 @@
     position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2;
 }
 .date-wrap input[type=text] { pointer-events:none; }
+
+/* ── Export/ColVis collection dropdown — fundo sólido e texto legível */
+.dt-button-collection {
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: 0.375rem !important;
+    padding: 0.25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button {
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: 0.4rem 1rem !important;
+    font-size: 0.82rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
 </style>
 {% endblock %}
 
@@ -191,7 +225,7 @@
             </div>
         </div>
 
-        <!-- Card Header 2: Date + Score filter -->
+        <!-- Card Header 2: Date filter -->
         <div class="card-header d-flex flex-wrap align-items-center gap-3">
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
@@ -200,20 +234,11 @@
                     <input type="date" id="recon-date">
                 </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-score">Max Score:</label>
-                <input type="number" id="max-score" class="form-control form-control-sm"
-                       min="0" max="100" step="0.01" placeholder="0–100" style="width:90px;">
-                <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnFilterScore">
-                    <i data-lucide="filter" style="width:12px;height:12px;"></i>
-                    <span data-lang="recon-btn-filter">Filter</span>
-                </button>
-            </div>
         </div>
 
         <!-- Card Header 3: Botões de ação -->
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
-            <div id="reconExportWrap"></div>
+            <div id="reconExportWrap" class="d-flex gap-2"></div>
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
                 <i data-lucide="x-circle" style="width:12px;height:12px;"></i>
                 <span data-lang="recon-btn-clear">Clear Filters</span>
@@ -356,7 +381,10 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 /* ── Score → gradient RGB ────────────────────────────────────────── */
@@ -444,6 +472,12 @@ let table = null;
 let _TRANS = {};
 function t(key, fallback) { return _TRANS[key] || fallback || key; }
 
+/* ── Export formatter: strip HTML para CSV/Excel/PDF/Print ──────── */
+function formatExportData(data) {
+    if (typeof data === 'string') return data.replace(/<[^>]*>/g, '').trim();
+    return data ?? '';
+}
+
 /* ── Helpers de data ─────────────────────────────────────────────── */
 function getIsoDate() {
     return document.getElementById('recon-date').value || '';
@@ -465,7 +499,6 @@ $(document).ready(function() {
 
     /* ── 1. Event listeners (primeiro, independente do DataTable) ── */
     $('#btnLoadDb').on('click', loadFromDB);
-    $('#btnFilterScore').on('click', filterByScore);
     $('#btnClearFilters').on('click', clearFilters);
     $('#btnProcess').on('click', processFiles);
     $('#btnRunAuto').on('click', runAuto);
@@ -533,7 +566,6 @@ $(document).ready(function() {
             initComplete: function() {
                 var api = this.api();
 
-                // Build filter row from rendered column headers
                 var $filterRow = $('<tr class="recon-col-filters"></tr>');
                 api.columns().every(function() {
                     var title = $(this.header()).text().trim();
@@ -549,12 +581,12 @@ $(document).ready(function() {
                     );
                 });
 
-                // Inject into the original thead (hidden, in scroll body)
+                // thead real (scroll body, oculta)
                 $(api.table().node()).find('thead').append($filterRow.clone());
 
-                // Inject into the CLONED thead (visible, in fixed scroll head)
+                // thead clonada (scroll head, visível ao usuário)
                 $(api.table().container())
-                    .find('.dt-scroll-headInner table thead, .dataTables_scrollHeadInner table thead')
+                    .find('.dt-scroll-headInner table thead')
                     .append($filterRow.clone());
 
                 api.columns.adjust();
@@ -563,29 +595,6 @@ $(document).ready(function() {
         });
     } catch(err) {
         console.error('DataTable init error:', err);
-    }
-
-    /* ── 4. Buttons ─────────────────────────────────────────────── */
-    if (table) {
-        try {
-            new $.fn.dataTable.Buttons(table, {
-                buttons: [
-                    {
-                        extend: 'excelHtml5',
-                        text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel',
-                        className: 'btn btn-sm btn-outline-success btn-toolbar-all',
-                        title: 'Recon Comitentes'
-                    },
-                    {
-                        extend: 'colvis',
-                        text: '<i class="ti ti-columns me-1"></i> Columns',
-                        className: 'btn btn-sm btn-outline-secondary btn-toolbar-all'
-                    }
-                ]
-            }).container().appendTo($('#reconExportWrap'));
-        } catch(btnErr) {
-            console.warn('Buttons init:', btnErr);
-        }
     }
 
     /* ── 5. Show entries select ──────────────────────────────────── */
@@ -627,31 +636,8 @@ function loadFromDB() {
         .catch(function(err) { console.error('loadFromDB:', err); });
 }
 
-/* ── Score filter ────────────────────────────────────────────────── */
-function filterByScore() {
-    const v = parseFloat(document.getElementById('max-score').value);
-    if (isNaN(v)) {
-        Swal.fire({ icon:'warning',
-            title: t('rc-swal-invalid-val', 'Invalid value'),
-            text:  t('rc-swal-invalid-val-text', 'Enter a number between 0 and 100.'),
-            confirmButtonColor:'#0d6efd', customClass:{popup:'rounded-4'} });
-        return;
-    }
-    $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
-    const fn = function(s, data, idx, rowData) {
-        if (s.nTable && s.nTable.id !== 'recon-table') return true;
-        const avg = parseFloat(rowData['Matching Score Averaged'] ?? data[28]);
-        return isNaN(avg) || avg <= v;
-    };
-    fn._reconScore = true;
-    $.fn.dataTable.ext.search.push(fn);
-    table.draw();
-}
-
 /* ── Clear filters ───────────────────────────────────────────────── */
 function clearFilters() {
-    $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(f => !f._reconScore);
-    document.getElementById('max-score').value = '';
     $('#recon-table_wrapper .recon-col-filters input').val('');
     if (table) table.search('').columns().search('').draw();
 }

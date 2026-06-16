@@ -339,6 +339,51 @@ apps/templates/pages/NDF Comm - Strike USD.html ← ADICIONADO
 
 ---
 
+## 12. Sessão 2026-06-14 (continuação) — Recon Comitente: score colors, notificações
+
+### O que foi feito
+
+#### Fix: cores das colunas de score não aparecendo (`reconciliation-comitente.html`)
+- **Causa raiz:** Bootstrap 5 `table-striped` usa `box-shadow: inset 0 0 0 9999px var(--bs-table-accent-bg)` que renderiza sobre o `background-color`. Em linhas pares, o `dataTables.bootstrap5.min.css` tem regra com `!important` que sobrescreve `backgroundColor` inline.
+- **Fix 1 (CSS):** adicionado `box-shadow: none !important` em `#recon-table td.score-cell` — desativa o overlay do striped nessas células.
+- **Fix 2 (JS):** `scoreCell()` alterada para usar `td.style.setProperty('background-color', c, 'important')` — inline `!important` vence qualquer regra de stylesheet, incluindo as do plugin DataTables Bootstrap 5.
+- Resultado: todas as colunas Score (Name, Addr, Phone, Email, Fins, Start, CNAE, Avg) mostram gradiente verde/vermelho em todas as linhas.
+
+#### Notificação ao gerar reconciliação (`routes.py`)
+- Adicionado `_create_notification()` no endpoint `/reconciliation-comitente/run` após processamento bem-sucedido (total > 0).
+- **action:** `Recon Generated` | **page:** `Recon Comitente` | **detail:** `N records — OK:X Check:Y Amend:Z (YYYY-MM-DD)`
+
+#### Atualização de notificação imediata sem refresh de página (`topbar.html` + `reconciliation-comitente.html`)
+- `fetchNotifications` exposta como `window.fetchNotifications` no topbar para ser acessível de qualquer página.
+- `window.fetchNotifications()` chamada após sucesso de `runAuto()` e `processFiles()` — notificação aparece imediatamente no dropdown.
+- `ACTION_META` atualizado: `'Recon Generated': { icon: 'shield-check', color: 'bg-success' }`
+- `PAGE_URL` atualizado: `'Recon Comitente': '/reconciliation-comitente'`
+
+#### Fix email Outlook: fundo branco no logo/header (`email-template-recon-comitente.html`)
+- **Causa:** CSS `background: linear-gradient(...)` shorthand reseta `background-color`. Outlook não suporta gradientes → fundo branco.
+- **Fix:** `bgcolor="#1a2c5e"` no atributo HTML do `<td>` + `background:#1a2c5e` como primeiro valor no `style` (antes do gradiente).
+
+### Padrões identificados nesta sessão
+
+- **Bootstrap 5 `table-striped` box-shadow:** nunca confiar em `background-color` inline para sobrescrever cells com `table-striped`. Usar dupla abordagem: `box-shadow: none !important` no CSS da célula + `td.style.setProperty('background-color', c, 'important')` no JS.
+- **`window.fetchNotifications` pattern:** expor a função de refresh de notificações globalmente permite que qualquer página a chame após uma ação que gera notificação — sem polling extra ou mudança de página.
+- **Outlook email `bgcolor`:** sempre usar atributo HTML `bgcolor` em `<td>` como fallback para Outlook. CSS `background` shorthand reseta `background-color` — usar `background-color` separado OU setar `background:#color;background:linear-gradient(...)` em sequência (mas `bgcolor` no HTML é mais seguro).
+
+### Arquivos modificados nesta sessão
+```
+apps/templates/pages/reconciliation-comitente.html  ← score colors fix (CSS + JS)
+apps/templates/pages/email-template-recon-comitente.html ← bgcolor Outlook fix
+apps/templates/partials/topbar.html                ← window.fetchNotifications, ACTION_META, PAGE_URL
+apps/pages/routes.py                               ← _create_notification em /reconciliation-comitente/run
+```
+
+### Commits desta sessão
+- `f6615d9` — fix email header bgcolor Outlook
+- `4452448` — fix(recon-comitente): score cell colors + notification on recon generated
+- `db2a580` — feat(notifications): instant refresh after recon + Recon Comitente action meta
+
+---
+
 ## 8. Instruções para a próxima sessão
 
 **Tom e abordagem:**
@@ -555,3 +600,82 @@ Usar como referência para:
 - **Espaçamento** — a grade de 8px base do Apple é compatível com Bootstrap (que também usa múltiplos de 8px via `rem`).
 
 > ⚠️ O OTC Tracker usa Bootstrap 5 + Tabler theme, não SF Pro. Adaptar os princípios ao sistema existente — não substituir as classes Bootstrap por tokens Apple diretamente.
+
+---
+
+## 12. Sessão 2026-06-15 — Export Dropdown Opacity + Comitente Toolbar
+
+### O que foi feito
+
+#### Fix de opacidade no dropdown Export (DataTables `collection`) — múltiplas páginas
+- O dropdown gerado pelo DataTables para botões `extend: 'collection'` tinha fundo semi-transparente, tornando as opções (CSV, Excel, PDF, Print) praticamente invisíveis.
+- **Solução:** adicionado bloco CSS com `.dt-button-collection` forçando fundo sólido (`#fff`), sombra e texto opaco. Suporte a dark mode via `[data-bs-theme="dark"]`.
+- **Arquivos corrigidos:**
+  - `apps/templates/pages/reference-data.html`
+  - `apps/templates/pages/index-b3-results.html`
+  - `apps/templates/pages/pending-confirmation.html`
+  - `apps/templates/pages/new_deals-opt-commodities.html`
+  - `apps/templates/pages/new_deals-ndf-commodities.html`
+  - `apps/templates/pages/reconciliation-comitente.html`
+
+#### Reconciliation Comitente — reestruturação do toolbar
+- **Removido:** filtro Max Score (input + botão Filter) do Card Header 2 — ficou só o seletor de Date.
+- **Adicionado:** botões Export (collection: CSV/Excel/PDF/Print) e Columns (colvis) no Card Header 3.
+- **Removidos:** `filterByScore()` e listener `$('#btnFilterScore')`, referência a `#max-score` no `clearFilters()`.
+- **Script adicionado:** `buttons.print.min.js` que estava faltando (causava falha silenciosa na criação dos Buttons).
+
+### Padrão crítico identificado: DataTables 2.x + Buttons 3.x sem `B` no dom
+
+**Problema:** quando o `dom` do DataTable não contém `B`, a instância de Buttons não é criada automaticamente. Chamar `new $.fn.dataTable.Buttons(table, {...})` fora do `initComplete` pode falhar silenciosamente se `extend: 'print'` estiver presente sem o `buttons.print.min.js` carregado.
+
+**Armadilha adicional:** adicionar `<'d-none'B>` ao dom quebra o cálculo de posição do scroll head quando `scrollX: true` está ativo, cortando o header da tabela e fazendo o filter row desaparecer.
+
+**Solução correta para botões fora do dom:**
+```javascript
+initComplete: function() {
+    var api = this.api();
+    try {
+        new $.fn.dataTable.Buttons(api, {
+            buttons: [ /* ... */ ]
+        });
+        api.buttons().container().appendTo($('#meuWrap'));
+    } catch(e) { console.error('Buttons init:', e); }
+    // ... resto do initComplete
+}
+```
+
+**Scripts obrigatórios para collection + print:**
+```html
+<script src=".../dataTables.buttons.min.js"></script>
+<script src=".../buttons.bootstrap5.min.js"></script>
+<script src=".../jszip.min.js"></script>
+<script src=".../buttons.html5.min.js"></script>
+<script src=".../buttons.print.min.js"></script>  <!-- obrigatório para extend:'print' -->
+```
+
+---
+
+## 13. Sessão 2026-06-15 (continuação) — Reconciliation Comitente: filtro por coluna + conflito B/scrollX
+
+### Conflito crítico: `B` no dom + `scrollX: true` + filter row manual
+
+**Problema confirmado:** qualquer posição de `B` no `dom` string do DataTable (`B` antes do `tr`, depois do `ip`, dentro de wrapper `d-none`, dentro de wrapper `position-absolute`) **quebra a linha de filtro por coluna** quando `scrollX: true` está ativo. Isso acontece porque qualquer referência a `B` altera o cálculo de largura do scroll head do DataTables 2.x, mesmo que o container seja invisível ou fora do fluxo.
+
+**Regra definitiva para páginas com `scrollX: true` + filter row manual:**
+- **NÃO usar `B` no `dom` de forma alguma** — nem com `d-none`, nem com `position-absolute`, nem antes, nem depois
+- `buttons:[]` no config sem `B` no dom: Buttons extension **não é inicializado** nessa versão (DataTables 2.x + Buttons 3.x)
+- `headerCallback` **não existe** nesta versão do DataTables — grep no `.min.js` retornou vazio
+
+**Estado atual da página `reconciliation-comitente.html`:**
+- Filter row por coluna: ✅ funciona (sem `B` no dom)
+- Botões Export/Columns: ❌ pendente — requer solução alternativa que não use `B` no dom
+
+**Solução pendente para botões sem `B` no dom:**
+- Opção A: Criar botões Bootstrap manualmente no card-header (HTML puro) que chamam `table.button()` via DataTables Buttons API inicializado com `new $.fn.dataTable.Buttons(api, config)` fora do contexto do dom — **não testado ainda**
+- Opção B: Remover `scrollX: true` e usar `overflow-x: auto` via CSS no wrapper — elimina o scroll head clonado, mas muda o comportamento visual
+- Opção C: Investigar se a versão instalada tem uma API de layout (`layout:{}`) que não conflita com o scroll head
+
+### O que foi feito nesta sessão
+- Filter row: restaurado e funcional (sem `B` no dom, injeção manual em `initComplete` nas duas theads)
+- `formatExportData`: função adicionada (strip HTML) para uso futuro quando botões forem implementados
+- Botões Export/Columns: removidos temporariamente até solução definitiva ser encontrada
