@@ -108,35 +108,81 @@ ROLE_META = {
 # ==============================================================================
 # FUNÇÕES AUXILIARES — BANCO DE DADOS (DuckDB)
 # ==============================================================================
+# DuckDB only allows ONE connection per process to an on-disk database.
+# We use a singleton connection + a threading lock so concurrent requests
+# queue up rather than failing with BinderException.
+
+_duckdb_conn = None
+_duckdb_conn_lock = threading.Lock()
+
+
+class _DuckDBHandle:
+    """Proxy that holds _duckdb_conn_lock for its lifetime; close() releases it."""
+    __slots__ = ('_conn', '_closed')
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._closed = False
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            _duckdb_conn_lock.release()
+
+
+def _duckdb_open():
+    global _duckdb_conn
+    abs_path = os.path.abspath(DB_PATH)
+    _duckdb_conn = duckdb.connect(
+        abs_path,
+        config={
+            "autoinstall_known_extensions": "false",
+            "autoload_known_extensions": "false",
+        }
+    )
+    log.debug("DuckDB singleton opened → %s", abs_path)
+    return _duckdb_conn
+
 
 def get_db_connection(max_retries=6, retry_delay=0.05):
-    abs_path = os.path.abspath(DB_PATH)
-    log.debug("Opening DuckDB connection → %s", abs_path)
+    global _duckdb_conn
     last_exc = None
     for attempt in range(max_retries):
         try:
-            conn = duckdb.connect(
-                abs_path,
-                config={
-                    "autoinstall_known_extensions": "false",
-                    "autoload_known_extensions": "false"
-                }
-            )
-            if attempt > 0:
-                log.debug("DuckDB connection OK (after %d retries)", attempt)
-            else:
-                log.debug("DuckDB connection OK")
-            return conn
+            _duckdb_conn_lock.acquire()
+            try:
+                if _duckdb_conn is None:
+                    _duckdb_open()
+                else:
+                    try:
+                        _duckdb_conn.execute("SELECT 1")
+                    except Exception:
+                        log.warning("DuckDB singleton unhealthy, reconnecting…")
+                        try:
+                            _duckdb_conn.close()
+                        except Exception:
+                            pass
+                        _duckdb_open()
+            except Exception:
+                _duckdb_conn_lock.release()
+                raise
+            return _DuckDBHandle(_duckdb_conn)
         except duckdb.IOException as e:
             last_exc = e
             if attempt < max_retries - 1:
-                wait = retry_delay * (2 ** attempt)  # 50, 100, 200, 400, 800, 1600 ms
-                log.warning("DuckDB locked (attempt %d/%d), retrying in %.0fms…", attempt + 1, max_retries, wait * 1000)
+                wait = retry_delay * (2 ** attempt)
+                log.warning("DuckDB locked (attempt %d/%d), retrying in %.0fms…",
+                            attempt + 1, max_retries, wait * 1000)
                 time.sleep(wait)
+            else:
+                _duckdb_conn_lock.release()
         except Exception:
             log.error("Failed to open DuckDB:\n%s", traceback.format_exc())
             raise
-    log.error("DuckDB unavailable after %d retries:\n%s", max_retries, traceback.format_exc())
+    log.error("DuckDB unavailable after %d retries", max_retries)
     raise last_exc
 
 
