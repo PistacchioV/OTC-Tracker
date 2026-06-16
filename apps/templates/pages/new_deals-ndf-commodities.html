@@ -2640,12 +2640,9 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
 
-            console.group('[NDF-DEALS APPLY] === BEGIN BULK APPLY ===');
-            console.log('[NDF-DEALS APPLY] colIdx:', colIdx, '| colName:', colName,
-                        '| isStatusCol:', isStatusCol, '| newValue:', newValue);
-            console.log('[NDF-DEALS APPLY] selectedRowIds (' + selectedRowIds.size + '):', Array.from(selectedRowIds));
-
-            var processedCount = 0, skippedCount = 0, patchCount = 0;
+            // Pass 1 (sync): update DataTable cells + collect patches
+            var patches = [];
+            var processedCount = 0, skippedCount = 0;
 
             table.rows().every(function() {
                 var d = this.data();
@@ -2656,25 +2653,12 @@ $(document).ready(function() {
 
                 if (!rowId || !selectedRowIds.has(selKey)) return;
 
-                console.log('[NDF-DEALS APPLY] Checking row — rowId:', rowId,
-                            '| clientRaw (col10):', JSON.stringify(clientRaw),
-                            '| clientClean:', clientClean,
-                            '| selKey:', selKey,
-                            '| in selectedRowIds:', selectedRowIds.has(selKey));
-
-                // Use stable row index — avoids null-node issue for off-page rows
                 var rowIdx = this.index();
                 var changedFields = {};
 
                 if (isStatusCol) {
-                    // Read status from data array, not DOM badge
-                    var rawStatus = d[STATUS_COL_INDEX];
-                    var curStatusText = _sh(rawStatus);
-                    console.log('[NDF-DEALS APPLY] STATUS check — rawStatus:', JSON.stringify(rawStatus),
-                                '| parsed:', curStatusText);
-                    // Only New/Amend deals can be batch-approved; skip Pending, Sent, Success, etc.
+                    var curStatusText = _sh(d[STATUS_COL_INDEX]);
                     if (curStatusText !== 'New' && curStatusText !== 'Amend') {
-                        console.warn('[NDF-DEALS APPLY] SKIPPED (status not New/Amend):', curStatusText, '— rowId:', rowId);
                         skippedCount++;
                         return;
                     }
@@ -2709,45 +2693,24 @@ $(document).ready(function() {
                 );
                 changedFields['Status'] = newStatus;
                 processedCount++;
-
-                if (rowId) {
-                    var capturedClient = clientClean;
-                    var patchUrl = '/api/new-deals/ndf-commodities/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(capturedClient);
-                    console.log('[NDF-DEALS APPLY] PATCH → URL:', patchUrl, '| body:', JSON.stringify(changedFields));
-                    patchCount++;
-                    (function(capturedD, capturedRowId, capturedChanges, capturedCli) {
-                        fetch(patchUrl, {
-                            method:  'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify(capturedChanges)
-                        }).then(function(r) {
-                            console.log('[NDF-DEALS APPLY] PATCH response status:', r.status, '— rowId:', capturedRowId, 'client:', capturedCli);
-                            if (r.status === 404) {
-                                var fullDeal = rowDataToNdfDeal(capturedD, capturedRowId, capturedChanges);
-                                console.warn('[NDF-DEALS APPLY] PATCH 404 — fallback POST for rowId:', capturedRowId, '| fullDeal keys:', Object.keys(fullDeal));
-                                fetch('/api/new-deals/ndf-commodities/cache', {
-                                    method:  'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body:    JSON.stringify(fullDeal)
-                                }).then(function(r2) {
-                                    console.log('[NDF-DEALS APPLY] Fallback POST status:', r2.status, '— rowId:', capturedRowId);
-                                }).catch(function(e2) { console.error('[NDF-DEALS APPLY] Fallback POST failed:', e2); });
-                            } else {
-                                r.json().then(function(j) {
-                                    console.log('[NDF-DEALS APPLY] PATCH response body:', j, '— rowId:', capturedRowId);
-                                }).catch(function(){});
-                            }
-                        }).catch(function(err) { console.error('[NDF-DEALS APPLY] PATCH network error:', err, '— rowId:', capturedRowId); });
-                    })(d, rowId, changedFields, capturedClient);
-                }
+                patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
             });
-
-            console.log('[NDF-DEALS APPLY] Summary: processed=' + processedCount + ' skipped=' + skippedCount + ' patches=' + patchCount);
-            console.groupEnd();
 
             selectedRowIds.clear();
             toggleActionButtons(false);
             table.draw(false);
+
+            // Pass 2 (async): single bulk-patch request — one read+write per file, no race condition
+            if (patches.length > 0) {
+                fetch('/api/new-deals/ndf-commodities/cache/bulk-patch', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ patches: patches })
+                }).then(function(r) { return r.json(); })
+                  .then(function(j) { console.log('[NDF-DEALS APPLY] bulk-patch OK — updated:', j.updated, 'of', patches.length); })
+                  .catch(function(err) { console.error('[NDF-DEALS APPLY] bulk-patch error:', err); });
+            }
+            console.log('[NDF-DEALS APPLY] processed=' + processedCount + ' skipped=' + skippedCount + ' patches=' + patches.length);
         });
     });
 

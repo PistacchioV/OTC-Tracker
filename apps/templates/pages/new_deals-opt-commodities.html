@@ -2681,30 +2681,22 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
 
+            // Pass 1 (sync): update DataTable cells + collect patches
+            var patches = [];
+
             table.rows().every(function() {
                 var d = this.data();
                 var rowId = _rowKey(d);
                 if (!rowId || !selectedRowIds.has(rowId)) return;
 
-                // Use stable row index — avoids null-node issue for off-page rows
                 var rowIdx = this.index();
                 var changedFields = {};
 
                 if (isStatusCol) {
-                    // Read status from data array, not DOM badge
                     var curStatusText = _sh(d[STATUS_COL_INDEX]);
                     var rowMakerSid   = d[33] || '';
-                    console.log('[OPT-DEALS APPLY] rowId:', rowId, '| status:', curStatusText, '| maker:', rowMakerSid, '| you:', CURRENT_USER_SID);
-                    // Sent/Success rows are final — cannot be re-approved
-                    if (curStatusText === 'Sent' || curStatusText === 'Success') {
-                        console.log('[OPT-DEALS APPLY] SKIPPED — already Sent/Success');
-                        return;
-                    }
-                    // 4-eyes rule: only for Pending rows (matches single-row confirm behaviour)
-                    if (curStatusText === 'Pending' && rowMakerSid && rowMakerSid === CURRENT_USER_SID) {
-                        console.log('[OPT-DEALS APPLY] SKIPPED — you are the Maker of a Pending deal (4-eyes)');
-                        return;
-                    }
+                    if (curStatusText === 'Sent' || curStatusText === 'Success') return;
+                    if (curStatusText === 'Pending' && rowMakerSid && rowMakerSid === CURRENT_USER_SID) return;
                 }
 
                 if (!isStatusCol) {
@@ -2735,33 +2727,23 @@ $(document).ready(function() {
                         : '<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>'
                 );
                 changedFields['Status'] = newStatus;
-
-                var dealName = _sh(d[3]);
-                var clientClean = _sh(d[10]);
-                if (dealName) {
-                    (function(capturedD, capturedDealName, capturedChanges, capturedCli) {
-                        fetch('/api/new-deals/opt-commodities/cache/' + encodeURIComponent(capturedDealName) + '?client=' + encodeURIComponent(capturedCli), {
-                            method:  'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify(capturedChanges)
-                        }).then(function(r) {
-                            if (r.status === 404) {
-                                var fullDeal = rowDataToOptDeal(capturedD, capturedDealName, capturedChanges);
-                                console.log('[OPT-DEALS APPLY] PATCH 404 → creating missing cache entry', capturedDealName);
-                                fetch('/api/new-deals/opt-commodities/cache', {
-                                    method:  'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body:    JSON.stringify(fullDeal)
-                                }).catch(function(e2) { console.warn('Bulk POST fallback failed:', e2); });
-                            }
-                        }).catch(function(err) { console.warn('Bulk PATCH failed:', err); });
-                    })(d, dealName, changedFields, clientClean);
-                }
+                patches.push({ deal_id: _sh(d[3]), client: _sh(d[10]), updates: changedFields });
             });
 
             selectedRowIds.clear();
             toggleActionButtons(false);
             table.draw(false);
+
+            // Pass 2 (async): single bulk-patch request — one read+write per file, no race condition
+            if (patches.length > 0) {
+                fetch('/api/new-deals/opt-commodities/cache/bulk-patch', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ patches: patches })
+                }).then(function(r) { return r.json(); })
+                  .then(function(j) { console.log('[OPT-DEALS APPLY] bulk-patch OK — updated:', j.updated, 'of', patches.length); })
+                  .catch(function(err) { console.error('[OPT-DEALS APPLY] bulk-patch error:', err); });
+            }
         });
     });
 

@@ -1291,6 +1291,54 @@ def api_bulk_delete_deal_cache():
     return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
 
 
+@blueprint.route('/api/new-deals/opt-commodities/cache/bulk-patch', methods=['POST'])
+def api_opt_bulk_patch_deal_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+
+    data    = request.get_json(silent=True)
+    patches = data.get('patches', []) if data else []
+    if not patches:
+        return jsonify({"success": False, "message": "No patches provided"}), 400
+
+    # Group by source file (outside lock — read-only scan)
+    file_patches = {}
+    for p in patches:
+        deal_id = p.get('deal_id', '')
+        client  = p.get('client', '')
+        updates = p.get('updates', {})
+        if not deal_id or not updates:
+            continue
+        fp, _ = _find_deal_in_cache(deal_id, client)
+        if fp:
+            file_patches.setdefault(fp, []).append((deal_id, client, updates))
+
+    updated = 0
+    for fp, file_ops in file_patches.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            for deal_id, client, updates in file_ops:
+                idx = next((i for i, d in enumerate(deals)
+                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
+                if idx is not None:
+                    deals[idx].update(updates)
+                    updated += 1
+            with open(fp, 'w', encoding='utf-8') as fh:
+                json.dump(deals, fh, ensure_ascii=False, indent=2)
+
+    if updated > 0:
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Bulk Update', 'Opt Comm',
+            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
+        )
+    return jsonify({"success": True, "updated": updated})
+
+
 # ==============================================================================
 # API — NDF COMMODITIES CACHE (mesma lógica que opt-commodities, arquivo _ndfcomm.json)
 # ==============================================================================
@@ -1615,6 +1663,60 @@ def api_ndf_bulk_delete_deal_cache():
             str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted'
         )
     return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+
+
+@blueprint.route('/api/new-deals/ndf-commodities/cache/bulk-patch', methods=['POST'])
+def api_ndf_bulk_patch_deal_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+
+    data    = request.get_json(silent=True)
+    patches = data.get('patches', []) if data else []
+    log.info("[NDF BULK-PATCH] Received %d patch(es)", len(patches))
+
+    if not patches:
+        return jsonify({"success": False, "message": "No patches provided"}), 400
+
+    # Group by source file (outside lock — read-only scan)
+    file_patches = {}
+    for p in patches:
+        deal_id = p.get('deal_id', '')
+        client  = p.get('client', '')
+        updates = p.get('updates', {})
+        if not deal_id or not updates:
+            continue
+        fp, _ = _find_ndf_deal_in_cache(deal_id, client)
+        if fp:
+            file_patches.setdefault(fp, []).append((deal_id, client, updates))
+        else:
+            log.warning("[NDF BULK-PATCH] NOT FOUND: deal=%r client=%r", deal_id, client)
+
+    updated = 0
+    for fp, file_ops in file_patches.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            for deal_id, client, updates in file_ops:
+                idx = next((i for i, d in enumerate(deals)
+                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
+                if idx is not None:
+                    deals[idx].update(updates)
+                    updated += 1
+                    log.debug("[NDF BULK-PATCH] Updated deal=%r client=%r", deal_id, client)
+            with open(fp, 'w', encoding='utf-8') as fh:
+                json.dump(deals, fh, ensure_ascii=False, indent=2)
+
+    log.info("[NDF BULK-PATCH] Done. updated=%d", updated)
+    if updated > 0:
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Bulk Update', 'NDF Comm',
+            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
+        )
+    return jsonify({"success": True, "updated": updated})
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
