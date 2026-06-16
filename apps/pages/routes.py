@@ -1057,20 +1057,50 @@ def user_info():
 def _find_deal_in_cache(deal_name, client_name=None):
     """Search all YYYYMMDD_optcomm.json files for a deal by Deal + Client.
     Returns (file_path, list_index) or (None, None)."""
+    files_scanned     = 0
+    deal_name_matches = []   # Deal matched but Client didn't
+
     for root, _dirs, files in os.walk(CACHE_BASE_DIR):
         for fname in sorted(files, reverse=True):   # newest files first
             if not fname.endswith('_optcomm.json'):
                 continue
             fpath = os.path.join(root, fname)
+            files_scanned += 1
             try:
                 with open(fpath, 'r', encoding='utf-8') as fh:
                     deals = json.load(fh)
-                if isinstance(deals, list):
-                    for i, deal in enumerate(deals):
-                        if deal.get('Deal') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
+                if not isinstance(deals, list):
+                    deals = [deals]
+                for i, deal in enumerate(deals):
+                    d_name   = (deal.get('Deal')   or '').strip()
+                    d_client = (deal.get('Client') or '').strip()
+                    if d_name == deal_name.strip():
+                        want = (client_name or '').strip()
+                        if not want or d_client == want:
+                            log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
+                                      deal_name, client_name, fname, i)
                             return fpath, i
+                        else:
+                            deal_name_matches.append({
+                                'file': fname, 'idx': i,
+                                'stored_client': repr(d_client),
+                                'wanted_client': repr(want)
+                            })
             except Exception:
+                log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
                 continue
+
+    if deal_name_matches:
+        log.warning(
+            "[_find_opt] CLIENT MISMATCH for deal=%r  wanted_client=%r\n"
+            "  Matches by name (stored vs wanted): %s",
+            deal_name, repr(client_name), deal_name_matches
+        )
+    elif files_scanned == 0:
+        log.error("[_find_opt] No _optcomm.json files found in %s", CACHE_BASE_DIR)
+    else:
+        log.warning("[_find_opt] deal=%r client=%r NOT FOUND in %d file(s)",
+                    deal_name, client_name, files_scanned)
     return None, None
 
 
@@ -1336,11 +1366,16 @@ def api_opt_bulk_patch_deal_cache():
             except (json.JSONDecodeError, ValueError):
                 deals = []
             for deal_id, client, updates in file_ops:
+                want_client = (client or '').strip()
                 idx = next((i for i, d in enumerate(deals)
-                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
+                            if (d.get('Deal') or '').strip() == deal_id.strip()
+                            and (not want_client or (d.get('Client') or '').strip() == want_client)), None)
                 if idx is not None:
                     deals[idx].update(updates)
                     updated += 1
+                else:
+                    log.warning("[OPT BULK-PATCH] idx not found: deal=%r client=%r in %s",
+                                deal_id, client, fp)
             with open(fp, 'w', encoding='utf-8') as fh:
                 json.dump(deals, fh, ensure_ascii=False, indent=2)
 
