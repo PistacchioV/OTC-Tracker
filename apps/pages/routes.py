@@ -75,14 +75,31 @@ _cache_lock = threading.Lock()
 
 
 def _atomic_write_json(file_path, data):
-    """Write JSON atomically: dump to a sibling temp file then os.replace()."""
+    """Write JSON safely: atomic rename on POSIX; direct write fallback on Windows.
+
+    On Windows, os.replace() raises PermissionError if a concurrent reader holds
+    the file open without FILE_SHARE_DELETE (e.g. _find_deal_in_cache). In that
+    case we fall back to a direct write — safe because _cache_lock already
+    serialises all concurrent writes to the same file.
+    """
     import tempfile
     dir_name = os.path.dirname(file_path)
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, file_path)
+        try:
+            os.replace(tmp_path, file_path)
+            return
+        except PermissionError:
+            pass  # Windows: target held open by a reader — fall through
+        # Fallback: copy content then remove temp
+        with open(file_path, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
     except Exception:
         try:
             os.unlink(tmp_path)
