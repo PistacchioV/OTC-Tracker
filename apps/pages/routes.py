@@ -8,6 +8,7 @@ import json
 import threading
 import traceback
 import logging
+import time
 import duckdb
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
@@ -89,22 +90,35 @@ ROLE_META = {
 # FUNÇÕES AUXILIARES — BANCO DE DADOS (DuckDB)
 # ==============================================================================
 
-def get_db_connection():
+def get_db_connection(max_retries=6, retry_delay=0.05):
     abs_path = os.path.abspath(DB_PATH)
     log.debug("Opening DuckDB connection → %s", abs_path)
-    try:
-        conn = duckdb.connect(
-            abs_path,
-            config={
-                "autoinstall_known_extensions": "false",
-                "autoload_known_extensions": "false"
-            }
-        )
-        log.debug("DuckDB connection OK")
-        return conn
-    except Exception:
-        log.error("Failed to open DuckDB:\n%s", traceback.format_exc())
-        raise
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            conn = duckdb.connect(
+                abs_path,
+                config={
+                    "autoinstall_known_extensions": "false",
+                    "autoload_known_extensions": "false"
+                }
+            )
+            if attempt > 0:
+                log.debug("DuckDB connection OK (after %d retries)", attempt)
+            else:
+                log.debug("DuckDB connection OK")
+            return conn
+        except duckdb.IOException as e:
+            last_exc = e
+            if attempt < max_retries - 1:
+                wait = retry_delay * (2 ** attempt)  # 50, 100, 200, 400, 800, 1600 ms
+                log.warning("DuckDB locked (attempt %d/%d), retrying in %.0fms…", attempt + 1, max_retries, wait * 1000)
+                time.sleep(wait)
+        except Exception:
+            log.error("Failed to open DuckDB:\n%s", traceback.format_exc())
+            raise
+    log.error("DuckDB unavailable after %d retries:\n%s", max_retries, traceback.format_exc())
+    raise last_exc
 
 
 def init_db():

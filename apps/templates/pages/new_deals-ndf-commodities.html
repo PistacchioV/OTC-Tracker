@@ -1493,8 +1493,8 @@ $(document).ready(function() {
                     $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]))));
                 }
             });
-            // Sync selectAll header checkbox
-            var total = api.rows().count();
+            // Sync selectAll header checkbox (count across all pages, current search)
+            var total = api.rows({search: 'applied', page: 'all'}).count();
             var selCount = selectedRowIds.size;
             var $sa = $('#selectAll');
             if ($sa.length) {
@@ -1705,7 +1705,7 @@ $(document).ready(function() {
                 mappingBtn.addEventListener('click', function() {
                     if (_mappingNdfRunning) return;
                     var sentDeals = [];
-                    table.rows().every(function() {
+                    table.rows({search: 'none', page: 'all'}).every(function() {
                         var d = this.data();
                         var deal   = _sh(d[3]);
                         var status = _sh(d[2]);
@@ -1753,7 +1753,7 @@ $(document).ready(function() {
 
                         var successCount = 0, errorCount = 0;
                         (res.results || []).forEach(function(result) {
-                            table.rows().every(function() {
+                            table.rows({search: 'none', page: 'all'}).every(function() {
                                 var d = this.data();
                                 if (_sh(d[3]) !== result.id) return;
                                 var node = this.node();
@@ -2214,15 +2214,16 @@ $(document).ready(function() {
     $('#selectAll').on('click', function() {
         selectedRowIds.clear();
         if (this.checked) {
-            table.rows().every(function() {
+            // DT2.x default is {page:'current'} — must be explicit to get all pages
+            table.rows({search: 'applied', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = d ? _sh(d[3]) : null;
                 if (rowId) selectedRowIds.add(rowId + '|' + _sh(d[10]));
             });
         }
-        $('input[type="checkbox"]', table.rows().nodes()).prop('checked', this.checked);
+        $('input[type="checkbox"]', table.rows({page: 'current'}).nodes()).prop('checked', this.checked);
         toggleActionButtons(this.checked && selectedRowIds.size >= 2);
-        console.log('[NDF-DEALS selectAll] checked:', this.checked, '| total rows in table:', table.rows().count(), '| selectedRowIds.size:', selectedRowIds.size);
+        console.log('[NDF-DEALS selectAll] checked:', this.checked, '| total rows in table:', table.rows({search:'applied',page:'all'}).count(), '| selectedRowIds.size:', selectedRowIds.size);
     });
 
 
@@ -2244,7 +2245,7 @@ $(document).ready(function() {
             }
         }
 
-        var total = table.rows().count();
+        var total = table.rows({search: 'applied', page: 'all'}).count();
         var selCount = selectedRowIds.size;
         var selectAllCheckbox = $('#selectAll')[0];
 
@@ -2493,7 +2494,7 @@ $(document).ready(function() {
         var sendableRows = [];
         var blockedCount = 0;
 
-        table.rows().every(function() {
+        table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[3]) : null;
             if (!rowId || !selectedRowIds.has(rowId + '|' + _sh(d[10]))) return;
@@ -2644,7 +2645,8 @@ $(document).ready(function() {
             var patches = [];
             var processedCount = 0, skippedCount = 0;
 
-            table.rows().every(function() {
+            // DT2.x defaults to {page:'current'} — use all pages + no search filter
+            table.rows({search: 'none', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = d ? _sh(d[3]) : null;
                 var clientRaw = d ? d[10] : '';
@@ -2723,9 +2725,9 @@ $(document).ready(function() {
 
         if (selectedRowIds.size === 0) return;
 
-        // Collect all rows matching selectedRowIds regardless of current page
+        // Collect all rows matching selectedRowIds regardless of current page/filter
         var rowsToDelete = [];
-        table.rows().every(function() {
+        table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[3]) : null;
             if (rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]))) {
@@ -2996,7 +2998,7 @@ $(document).ready(function() {
         if (_ASSET_NDF.length === 0) return;
         // Pass 1: update DataTables filter cache for EVERY row (visible + off-page).
         // cell().data() rebuilds the internal _aFilterData so column search works across all pages.
-        table.rows().every(function() {
+        table.rows({search: 'none', page: 'all'}).every(function() {
             var rd = this.data();
             if (!rd) return;
             var rawCode = String(rd[14] || '').replace(/<[^>]+>/g, '').trim();
@@ -3016,8 +3018,8 @@ $(document).ready(function() {
                 }
             }
         });
-        // Pass 2: update DOM for currently-rendered rows.
-        table.rows().every(function() {
+        // Pass 2: update DOM for currently-rendered rows only (off-page nodes are null).
+        table.rows({page: 'current'}).every(function() {
             var tr = this.node();
             if (tr) refreshRowMissingBadge(tr);
         });
