@@ -228,9 +228,9 @@ def _fmt_cnae_party(ir):
 def _fmt_start_party(d):
     if pd.isna(d) or not isinstance(d, str) or not d.strip() or d == 'nan':
         return ''
-    for fmt in ('%d-%b-%Y', '%d-%B-%Y', '%d-%b-%y', '%d-%B-%y'):
+    for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d-%B-%Y', '%d-%b-%y', '%d-%B-%y'):
         try:
-            return datetime.strptime(d.strip().title(), fmt).strftime('%d/%m/%Y')
+            return datetime.strptime(d.strip(), fmt).strftime('%d/%m/%Y')
         except Exception:
             continue
     return ''
