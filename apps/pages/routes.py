@@ -1367,12 +1367,13 @@ def api_opt_bulk_patch_deal_cache():
                 deals = []
             for deal_id, client, updates in file_ops:
                 want_client = (client or '').strip()
-                idx = next((i for i, d in enumerate(deals)
+                matching = [i for i, d in enumerate(deals)
                             if (d.get('Deal') or '').strip() == deal_id.strip()
-                            and (not want_client or (d.get('Client') or '').strip() == want_client)), None)
-                if idx is not None:
-                    deals[idx].update(updates)
-                    updated += 1
+                            and (not want_client or (d.get('Client') or '').strip() == want_client)]
+                if matching:
+                    for idx in matching:
+                        deals[idx].update(updates)
+                        updated += 1
                 else:
                     log.warning("[OPT BULK-PATCH] idx not found: deal=%r client=%r in %s",
                                 deal_id, client, fp)

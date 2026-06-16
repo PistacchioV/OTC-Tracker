@@ -1015,8 +1015,9 @@ var OTCFileUpload = (function () {
                             var acronym  = newData.Acronym;
 
                             // Search existing DataTable rows for same Deal + Acronym
+                            // Must use {search:'none', page:'all'} — default rows() only checks current page
                             var existingRowApi = null, existingRowData = null;
-                            tableInstance.rows().every(function () {
+                            tableInstance.rows({search: 'none', page: 'all'}).every(function () {
                                 var d = this.data();
                                 if (_stripHtml(String(d[3] || '')) === dealName &&
                                     _stripHtml(String(d[9] || '')) === acronym) {
