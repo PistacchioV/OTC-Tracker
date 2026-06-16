@@ -72,6 +72,25 @@ SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
 RETURN_PATH     = os.getenv('RETURN_PATH',     r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\Return')
 CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\New')
 _cache_lock = threading.Lock()
+
+
+def _atomic_write_json(file_path, data):
+    """Write JSON atomically: dump to a sibling temp file then os.replace()."""
+    import tempfile
+    dir_name = os.path.dirname(file_path)
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, file_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 SMTP_HOST = "mailhost.jpmchase.net"
 SMTP_PORT = 25
 CODE_EXPIRY_MINUTES = 10
@@ -1157,8 +1176,7 @@ def api_save_deal_cache():
         for _k in ('Maker', 'Checker'):
             if _k in deals[target_idx]:
                 deals[target_idx][_k] = deals[target_idx].pop(_k)
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
@@ -1240,8 +1258,7 @@ def api_update_deal_cache(deal_id):
         for _k in ('Maker', 'Checker'):
             if _k in deals[idx]:
                 deals[idx][_k] = deals[idx].pop(_k)
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -1280,8 +1297,7 @@ def api_delete_deal_cache(deal_id):
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals.pop(idx)
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
@@ -1322,8 +1338,7 @@ def api_bulk_delete_deal_cache():
             before = len(deals)
             deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
             deleted += before - len(deals)
-            with open(fp, 'w', encoding='utf-8') as fh:
-                json.dump(deals, fh, ensure_ascii=False, indent=2)
+            _atomic_write_json(fp, deals)
 
     not_found = len(pair_set) - deleted
     if deleted > 0:
@@ -1377,8 +1392,7 @@ def api_opt_bulk_patch_deal_cache():
                 else:
                     log.warning("[OPT BULK-PATCH] idx not found: deal=%r client=%r in %s",
                                 deal_id, client, fp)
-            with open(fp, 'w', encoding='utf-8') as fh:
-                json.dump(deals, fh, ensure_ascii=False, indent=2)
+            _atomic_write_json(fp, deals)
 
     if updated > 0:
         _create_notification(
@@ -1442,8 +1456,7 @@ def api_ndf_save_deal_cache():
         else:
             deals.append(data)
 
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
@@ -1598,8 +1611,7 @@ def api_ndf_update_deal_cache(deal_id):
         deals[idx].update(updates)
         log.info("[NDF PATCH] Updated deal[%d] %r: Status %r→%r updates=%s",
                  idx, deal_id, prev_status, deals[idx].get('Status', '?'), updates)
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -1638,8 +1650,7 @@ def api_ndf_delete_deal_cache(deal_id):
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals.pop(idx)
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(deals, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(file_path, deals)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
@@ -1701,8 +1712,7 @@ def api_ndf_bulk_delete_deal_cache():
             deleted += before - after
             log.info("[NDF BULK-DELETE] File %s: %d → %d deals (removed %d)",
                      os.path.basename(fp), before, after, before - after)
-            with open(fp, 'w', encoding='utf-8') as fh:
-                json.dump(deals, fh, ensure_ascii=False, indent=2)
+            _atomic_write_json(fp, deals)
 
     not_found = len(pair_set) - deleted
     log.info("[NDF BULK-DELETE] Done. deleted=%d not_found=%d", deleted, not_found)
@@ -1756,8 +1766,7 @@ def api_ndf_bulk_patch_deal_cache():
                     deals[idx].update(updates)
                     updated += 1
                     log.debug("[NDF BULK-PATCH] Updated deal=%r client=%r", deal_id, client)
-            with open(fp, 'w', encoding='utf-8') as fh:
-                json.dump(deals, fh, ensure_ascii=False, indent=2)
+            _atomic_write_json(fp, deals)
 
     log.info("[NDF BULK-PATCH] Done. updated=%d", updated)
     if updated > 0:
