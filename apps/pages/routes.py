@@ -1025,7 +1025,14 @@ def api_dashboard_stats():
             return fname_date.year == cur_year
         return True
 
-    def _load_cache(base_dir, suffix):
+    def _is_lawton(d):
+        return 'lawton' in (d.get('Client') or '').lower()
+
+    def _is_bank(d):
+        cl = (d.get('Client') or '').lower()
+        return 'banco' in cl or 'j.p morgan' in cl or 'jp morgan' in cl or 'jpmorgan' in cl
+
+    def _load_cache(base_dir, suffix, deal_type):
         deals = []
         for root, _dirs, files in os.walk(base_dir):
             for fname in sorted(files):
@@ -1043,46 +1050,50 @@ def api_dashboard_stats():
                         data = json.load(fh)
                     for d in data:
                         if isinstance(d, dict) and (d.get('Deal') or '').strip():
-                            d['_fdate'] = fdate
+                            d['_fdate'] = fdate.strftime('%Y-%m-%d')
+                            d['_type']  = deal_type
                             deals.append(d)
                 except Exception:
                     pass
         return deals
 
-    opt_deals = _load_cache(CACHE_BASE_DIR, '_optcomm.json')
-    ndf_deals = _load_cache(NDF_COMM_CACHE_DIR, '_ndfcomm.json')
+    opt_deals = _load_cache(CACHE_BASE_DIR, '_optcomm.json', 'OPT')
+    ndf_deals = _load_cache(NDF_COMM_CACHE_DIR, '_ndfcomm.json', 'NDF')
     all_deals = opt_deals + ndf_deals
 
-    pending_statuses = {'Pending', 'New', 'pending', 'new'}
-    pending_total = sum(1 for d in all_deals if (d.get('Status') or '').strip() in pending_statuses)
+    # Lawton rows = one row per real deal (canonical count)
+    lawton_deals = [d for d in all_deals if _is_lawton(d)]
+    # Client rows = actual client (for Top 5 and recent table)
+    client_deals = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
 
+    # Counts based on Lawton rows only
+    ndf_lawton = [d for d in lawton_deals if d['_type'] == 'NDF']
+    opt_lawton  = [d for d in lawton_deals if d['_type'] == 'OPT']
+    pending_statuses = {'Pending', 'New', 'pending', 'new'}
+    pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
+
+    # Top 5 clients — exclude Lawton and bank rows
     client_counts = Counter(
         (d.get('Client') or '').strip()
-        for d in all_deals
+        for d in client_deals
         if (d.get('Client') or '').strip()
     )
-    product_counts = Counter(
-        (d.get('Commodities') or '').strip() or ('OPT Commodities' if '_fdate' in d and d in opt_deals else 'NDF Commodities')
-        for d in all_deals
-    )
+    top5_clients = [{'label': c, 'count': n} for c, n in client_counts.most_common(5)]
 
-    # Build product counts with explicit OPT/NDF fallback
-    product_counts2 = Counter()
-    opt_set = set(id(d) for d in opt_deals)
-    for d in all_deals:
+    # Top 5 products — use Lawton rows, Commodities field
+    product_counts = Counter()
+    for d in lawton_deals:
         prod = (d.get('Commodities') or '').strip()
         if not prod:
-            prod = 'OPT Commodities' if id(d) in opt_set else 'NDF Commodities'
-        product_counts2[prod] += 1
+            prod = 'OPT Commodities' if d['_type'] == 'OPT' else 'NDF Commodities'
+        product_counts[prod] += 1
+    top5_products = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
 
-    top5_clients  = [{'label': c, 'count': n} for c, n in client_counts.most_common(5)]
-    top5_products = [{'label': p, 'count': n} for p, n in product_counts2.most_common(5)]
-
-    # Monthly deal counts for the current year (always full year, independent of filter)
+    # Monthly deal counts for current year — Lawton rows only
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
 
-    def _monthly(base_dir, suffix, monthly_arr):
+    def _monthly(base_dir, suffix, deal_type, monthly_arr):
         for root, _dirs, files in os.walk(base_dir):
             for fname in files:
                 if not fname.endswith(suffix):
@@ -1097,23 +1108,42 @@ def api_dashboard_stats():
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
-                    cnt = sum(1 for d in data if isinstance(d, dict) and (d.get('Deal') or '').strip())
+                    cnt = sum(
+                        1 for d in data
+                        if isinstance(d, dict)
+                        and (d.get('Deal') or '').strip()
+                        and 'lawton' in (d.get('Client') or '').lower()
+                    )
                     monthly_arr[fdate.month - 1] += cnt
                 except Exception:
                     pass
 
-    _monthly(CACHE_BASE_DIR, '_optcomm.json', monthly_opt)
-    _monthly(NDF_COMM_CACHE_DIR, '_ndfcomm.json', monthly_ndf)
+    _monthly(CACHE_BASE_DIR, '_optcomm.json', 'OPT', monthly_opt)
+    _monthly(NDF_COMM_CACHE_DIR, '_ndfcomm.json', 'NDF', monthly_ndf)
+
+    # Recent deals — last 10 client rows sorted by date desc
+    recent_sorted = sorted(client_deals, key=lambda d: d.get('_fdate', ''), reverse=True)[:10]
+    recent_deals = [
+        {
+            'deal':   d.get('Deal', ''),
+            'client': d.get('Client', ''),
+            'date':   d.get('TradeDate', '') or d.get('_fdate', ''),
+            'status': d.get('Status', ''),
+            'type':   d['_type'],
+        }
+        for d in recent_sorted
+    ]
 
     return jsonify({
-        'ndf_total':     len(ndf_deals),
-        'opt_total':     len(opt_deals),
+        'ndf_total':     len(ndf_lawton),
+        'opt_total':     len(opt_lawton),
         'pending_total': pending_total,
-        'total_deals':   len(all_deals),
+        'total_deals':   len(lawton_deals),
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
+        'recent_deals':  recent_deals,
     })
 
 

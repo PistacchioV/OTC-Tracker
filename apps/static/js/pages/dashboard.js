@@ -5,21 +5,27 @@
 
 const bodyFont = getComputedStyle(document.body).fontFamily.trim();
 
-// ─── helpers ───────────────────────────────────────────────────────────────
-
-const PERIOD_LABELS = { month: 'Mês Atual', year: 'Ano Atual', all: 'Todos' };
+// ─── status config ──────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-    Approved:  { cls: 'bg-success-subtle text-success',  label: 'Aprovado'  },
-    Sent:      { cls: 'bg-primary-subtle text-primary',   label: 'Enviado'   },
-    Pending:   { cls: 'bg-warning-subtle text-warning',   label: 'Pendente'  },
-    New:       { cls: 'bg-info-subtle text-info',         label: 'Novo'      },
-    Error:     { cls: 'bg-danger-subtle text-danger',     label: 'Erro'      },
+    Approved:  { cls: 'bg-success-subtle text-success' },
+    Sent:      { cls: 'bg-primary-subtle text-primary'  },
+    Pending:   { cls: 'bg-warning-subtle text-warning'  },
+    New:       { cls: 'bg-info-subtle text-info'        },
+    Error:     { cls: 'bg-danger-subtle text-danger'    },
 };
 
-function statusBadge(status) {
-    const cfg = STATUS_CONFIG[status] || { cls: 'bg-secondary-subtle text-secondary', label: status || '—' };
-    return `<span class="badge ${cfg.cls}">${cfg.label}</span>`;
+function statusBadge(status, translatedStatus) {
+    const cfg = STATUS_CONFIG[status] || { cls: 'bg-secondary-subtle text-secondary' };
+    return `<span class="badge ${cfg.cls}">${translatedStatus || status || '—'}</span>`;
+}
+
+// ─── translation helper ─────────────────────────────────────────────────────
+// Reads the translation key from a [data-lang] element that I18nManager already translated.
+
+function getTranslatedText(key) {
+    const el = document.querySelector(`[data-lang="${key}"]`);
+    return el ? el.textContent.trim() : key;
 }
 
 // ─── chart instances ────────────────────────────────────────────────────────
@@ -37,7 +43,7 @@ function buildPieChart(ndf, opt) {
     pieChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['NDF Commodities', 'OPT Commodities'],
+            labels: ['NDF Commodities', 'Option Commodities'],
             datasets: [{
                 data: [ndf, opt],
                 backgroundColor: [ins('chart-primary'), ins('chart-secondary')],
@@ -62,9 +68,7 @@ function buildPieChart(ndf, opt) {
                     }
                 },
                 tooltip: {
-                    callbacks: {
-                        label: ctx => ` ${ctx.label}: ${ctx.parsed}`
-                    }
+                    callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` }
                 }
             }
         }
@@ -94,7 +98,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt) {
                 },
                 {
                     type: 'bar',
-                    label: 'OPT Commodities',
+                    label: 'Option Commodities',
                     data: monthlyOpt,
                     backgroundColor: ins('chart-secondary'),
                     borderColor: ins('chart-secondary'),
@@ -145,16 +149,18 @@ function buildClientsChart(top5) {
     if (!ctx) return;
     if (clientsChart) clientsChart.destroy();
 
-    const labels = top5.map(d => d.label);
-    const data   = top5.map(d => d.count);
+    if (!top5.length) {
+        ctx.closest('.card-body').innerHTML = '<p class="text-muted text-center py-5 mb-0" data-lang="dash-no-deals">Nenhum deal encontrado para o período.</p>';
+        return;
+    }
 
     clientsChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels,
+            labels: top5.map(d => d.label),
             datasets: [{
                 label: 'Deals',
-                data,
+                data: top5.map(d => d.count),
                 backgroundColor: ins('chart-primary'),
                 borderRadius: 6,
                 barThickness: 22,
@@ -180,7 +186,7 @@ function buildClientsChart(top5) {
                     ticks: {
                         font: { family: bodyFont, size: 11 },
                         color: ins('secondary-color'),
-                        callback: function(val) {
+                        callback: function (val) {
                             const lbl = this.getLabelForValue(val);
                             return lbl.length > 22 ? lbl.slice(0, 21) + '…' : lbl;
                         }
@@ -198,8 +204,10 @@ function buildProductsChart(top5) {
     if (!ctx) return;
     if (productsChart) productsChart.destroy();
 
-    const labels = top5.map(d => d.label);
-    const data   = top5.map(d => d.count);
+    if (!top5.length) {
+        ctx.closest('.card-body').innerHTML = '<p class="text-muted text-center py-5 mb-0" data-lang="dash-no-deals">Nenhum deal encontrado para o período.</p>';
+        return;
+    }
 
     const colors = [
         ins('chart-primary'),
@@ -212,9 +220,9 @@ function buildProductsChart(top5) {
     productsChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels,
+            labels: top5.map(d => d.label),
             datasets: [{
-                data,
+                data: top5.map(d => d.count),
                 backgroundColor: colors,
                 borderColor: 'transparent',
                 borderWidth: 2,
@@ -237,9 +245,7 @@ function buildProductsChart(top5) {
                     }
                 },
                 tooltip: {
-                    callbacks: {
-                        label: ctx => ` ${ctx.label}: ${ctx.parsed}`
-                    }
+                    callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` }
                 }
             }
         }
@@ -248,70 +254,78 @@ function buildProductsChart(top5) {
 
 // ─── recent deals table ─────────────────────────────────────────────────────
 
-function renderRecentTable(allDeals) {
+function renderRecentTable(recent) {
     const tbody = document.getElementById('dash-recent-tbody');
     if (!tbody) return;
 
-    // Sort by file date desc, take last 10
-    const sorted = [...allDeals].sort((a, b) => (b._fdate || '').localeCompare(a._fdate || '')).slice(0, 10);
-
-    if (!sorted.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Nenhum deal encontrado para o período.</td></tr>';
+    if (!recent || !recent.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">${getTranslatedText('dash-no-deals')}</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = sorted.map(d => {
-        const prod = d._type === 'OPT'
-            ? '<span class="badge bg-info-subtle text-info">OPT Commodities</span>'
-            : '<span class="badge bg-primary-subtle text-primary">NDF Commodities</span>';
+    tbody.innerHTML = recent.map(d => {
+        const prod = d.type === 'OPT'
+            ? `<span class="badge bg-info-subtle text-info">${getTranslatedText('dash-prod-opt')}</span>`
+            : `<span class="badge bg-primary-subtle text-primary">${getTranslatedText('dash-prod-ndf')}</span>`;
+        const statusTrans = getTranslatedText(`dash-status-${(d.status || '').toLowerCase()}`) || d.status || '—';
         return `<tr>
-            <td><span class="fw-semibold text-primary">${d.Deal || '—'}</span></td>
+            <td><span class="fw-semibold text-primary">${d.deal || '—'}</span></td>
             <td>${prod}</td>
-            <td>${d.Client || '—'}</td>
-            <td>${d.TradeDate || d._fdate || '—'}</td>
-            <td>${statusBadge(d.Status)}</td>
+            <td>${d.client || '—'}</td>
+            <td>${d.date || '—'}</td>
+            <td>${statusBadge(d.status, statusTrans)}</td>
         </tr>`;
     }).join('');
 }
 
-// ─── main load ──────────────────────────────────────────────────────────────
+// ─── period badge update ─────────────────────────────────────────────────────
 
-let _rawDeals = [];
+function updatePeriodBadges(period) {
+    const langKey = `dash-filter-${period}`;
+    const label = getTranslatedText(langKey);
+
+    ['dash-top5-clients-period', 'dash-top5-products-period'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.setAttribute('data-lang', langKey);
+            el.textContent = label;
+        }
+    });
+}
+
+// ─── main load ──────────────────────────────────────────────────────────────
 
 async function loadDashboard(period) {
     try {
         const res  = await fetch(`/api/dashboard-stats?period=${period}`);
         const data = await res.json();
 
-        // Update widgets
+        // Widgets
         document.getElementById('dash-ndf-count').textContent     = data.ndf_total;
         document.getElementById('dash-opt-count').textContent     = data.opt_total;
         document.getElementById('dash-pending-count').textContent = data.pending_total;
         document.getElementById('dash-total-count').textContent   = data.total_deals;
 
-        // Update period badges
-        const periodLabel = PERIOD_LABELS[period] || 'Todos';
-        const el1 = document.getElementById('dash-top5-clients-period');
-        const el2 = document.getElementById('dash-top5-products-period');
-        if (el1) el1.textContent = periodLabel;
-        if (el2) el2.textContent = periodLabel;
+        updatePeriodBadges(period);
 
-        // Build / update charts
         buildPieChart(data.ndf_total, data.opt_total);
         buildFlowChart(data.monthly_ndf, data.monthly_opt);
         buildClientsChart(data.top5_clients);
         buildProductsChart(data.top5_products);
+        renderRecentTable(data.recent_deals);
 
     } catch (err) {
         console.error('[Dashboard] Failed to load stats:', err);
+        const tbody = document.getElementById('dash-recent-tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erro ao carregar dados.</td></tr>';
     }
 }
 
 // ─── init ───────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Default period = month
-    loadDashboard('month');
+    // Wait a tick so I18nManager has applied translations before we read them
+    setTimeout(() => loadDashboard('month'), 300);
 
     document.querySelectorAll('#dash-period-filter [data-period]').forEach(btn => {
         btn.addEventListener('click', () => {

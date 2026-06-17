@@ -15,9 +15,9 @@
     <div class="row mb-3">
         <div class="col-12 d-flex justify-content-end">
             <div class="btn-group" role="group" id="dash-period-filter">
-                <button type="button" class="btn btn-sm btn-outline-primary active" data-period="month">Mês Atual</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-period="year">Ano Atual</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-period="all">Todos</button>
+                <button type="button" class="btn btn-sm btn-outline-primary active" data-period="month" data-lang="dash-filter-month">Mês Atual</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-period="year" data-lang="dash-filter-year">Ano Atual</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-period="all" data-lang="dash-filter-all">Todos</button>
             </div>
         </div>
     </div>
@@ -90,7 +90,7 @@
                         </div>
                         <div class="text-end">
                             <h3 class="mb-2 fw-normal"><span id="dash-total-count">–</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-refdata-title">Total Deals</p>
+                            <p class="mb-0 text-muted" data-lang="dash-total-title">Total Deals</p>
                         </div>
                     </div>
                 </div>
@@ -148,8 +148,8 @@
         <div class="col-xxl-6">
             <div class="card h-100">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
-                    <h4 class="card-title mb-0">Top 5 Clientes</h4>
-                    <span class="badge bg-primary-subtle text-primary fs-xxs" id="dash-top5-clients-period">Todos</span>
+                    <h4 class="card-title mb-0" data-lang="dash-top5-clients">Top 5 Clientes</h4>
+                    <span class="badge bg-primary-subtle text-primary fs-xxs" id="dash-top5-clients-period" data-lang="dash-filter-month">Mês Atual</span>
                 </div>
                 <div class="card-body">
                     <div style="height: 260px;">
@@ -163,8 +163,8 @@
         <div class="col-xxl-6">
             <div class="card h-100">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
-                    <h4 class="card-title mb-0">Top 5 Produtos</h4>
-                    <span class="badge bg-success-subtle text-success fs-xxs" id="dash-top5-products-period">Todos</span>
+                    <h4 class="card-title mb-0" data-lang="dash-top5-products">Top 5 Produtos</h4>
+                    <span class="badge bg-success-subtle text-success fs-xxs" id="dash-top5-products-period" data-lang="dash-filter-month">Mês Atual</span>
                 </div>
                 <div class="card-body">
                     <div style="height: 260px;">

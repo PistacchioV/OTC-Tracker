@@ -269,5 +269,13 @@
   "layouts-title": "Layouts",
   "components-title": "Komponente",
   "items-title": "Menüelemente",
-  "demo-text": "Dies ist die englische Version des in dieser Demo verwendeten Textes. Es dient als Standardsprachinhalt, bevor die Übersetzung angewendet wird. Durch die Einrichtung der i18n-Unterstützung kann dieser Text problemlos in andere Sprachen umgestellt werden, was eine umfassendere und zugänglichere Benutzererfahrung gewährleistet.."
+  "demo-text": "Dies ist die englische Version des in dieser Demo verwendeten Textes. Es dient als Standardsprachinhalt, bevor die Übersetzung angewendet wird. Durch die Einrichtung der i18n-Unterstützung kann dieser Text problemlos in andere Sprachen umgestellt werden, was eine umfassendere und zugänglichere Benutzererfahrung gewährleistet..",
+  "dash-filter-month": "Aktueller Monat",
+  "dash-filter-year": "Aktuelles Jahr",
+  "dash-filter-all": "Alle",
+  "dash-total-title": "Deals Gesamt",
+  "dash-top5-clients": "Top 5 Kunden",
+  "dash-top5-products": "Top 5 Produkte",
+  "dash-no-deals": "Keine Deals für den Zeitraum gefunden.",
+  "dash-loading": "Laden..."
 }

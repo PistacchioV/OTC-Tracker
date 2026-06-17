@@ -268,5 +268,13 @@
   "layouts-title": "Disposición",
   "components-title": "Componente",
   "items-title": "Voci di menu",
-  "demo-text": "Questa è la versione inglese del testo utilizzato in questa demo. Funge da contenuto linguistico predefinito prima dell'applicazione della traduzione. Impostando il supporto i18n, questo testo può può essere facilmente convertito in altre lingue, garantendo un'esperienza utente più inclusiva e accessibile."
+  "demo-text": "Questa è la versione inglese del testo utilizzato in questa demo. Funge da contenuto linguistico predefinito prima dell'applicazione della traduzione. Impostando il supporto i18n, questo testo può può essere facilmente convertito in altre lingue, garantendo un'esperienza utente più inclusiva e accessibile.",
+  "dash-filter-month": "Mese Corrente",
+  "dash-filter-year": "Anno Corrente",
+  "dash-filter-all": "Tutti",
+  "dash-total-title": "Totale Operazioni",
+  "dash-top5-clients": "Top 5 Clienti",
+  "dash-top5-products": "Top 5 Prodotti",
+  "dash-no-deals": "Nessuna operazione trovata per il periodo.",
+  "dash-loading": "Caricamento..."
 }
