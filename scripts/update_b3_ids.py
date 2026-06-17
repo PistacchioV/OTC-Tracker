@@ -46,19 +46,19 @@ def _normalize_deal(v):
 
 
 def _normalize_date(v):
-    """Return 'YYYY-MM-DD' string or empty string."""
+    """Return 'YYYY-MM-DD' string or empty string. Primary format: YYYYMMDD."""
     if v is None:
         return ""
     if isinstance(v, (datetime, date)):
         return v.strftime("%Y-%m-%d")
-    s = str(v).strip()
-    # Try common formats
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+    s = str(v).strip().replace("-", "").replace("/", "")
+    # Primary: YYYYMMDD (8 digits)
+    if len(s) == 8 and s.isdigit():
         try:
-            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(s, "%Y%m%d").strftime("%Y-%m-%d")
         except ValueError:
             pass
-    return s  # Return as-is if unrecognised
+    return ""
 
 
 def _atomic_write_json(file_path, data):
