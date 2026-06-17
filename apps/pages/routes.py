@@ -2556,6 +2556,7 @@ def api_ndf_mapping_b3():
             new_status = 'Error'
             updates    = {'Status': new_status}
 
+        intrag_candidate = None
         if deal_text:
             file_path, idx = _find_ndf_deal_in_cache(deal_text, client_name)
             if file_path is not None:
@@ -2566,8 +2567,18 @@ def api_ndf_mapping_b3():
                         deals_list[idx].update(updates)
                         with open(file_path, 'w', encoding='utf-8') as fh:
                             json.dump(deals_list, fh, ensure_ascii=False, indent=2)
+                        if new_status == 'Success':
+                            intrag_candidate = deals_list[idx].copy()
                     except Exception:
                         pass
+
+        if intrag_candidate is not None:
+            cl_low = (intrag_candidate.get('Client', '') or '').lower()
+            if 'banco' in cl_low and ('jp morgan' in cl_low or 'jpmorgan' in cl_low):
+                try:
+                    _save_intrag_ndf_entry(intrag_candidate)
+                except Exception as exc:
+                    log.error('[MAPPING-B3] Intrag save failed for deal=%r: %s', deal_text, exc)
 
         results.append({
             'id':     deal_text,
