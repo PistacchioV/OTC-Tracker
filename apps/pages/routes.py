@@ -10,6 +10,7 @@ import traceback
 import logging
 import time
 import duckdb
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -1006,6 +1007,114 @@ def dashboard():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/index.html', segment='index')
+
+
+@blueprint.route('/api/dashboard-stats')
+def api_dashboard_stats():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'unauthorized'}), 401
+
+    period = request.args.get('period', 'all')  # month | year | all
+    now = datetime.now()
+    cur_month, cur_year = now.month, now.year
+
+    def _file_in_period(fname_date):
+        if period == 'month':
+            return fname_date.month == cur_month and fname_date.year == cur_year
+        if period == 'year':
+            return fname_date.year == cur_year
+        return True
+
+    def _load_cache(base_dir, suffix):
+        deals = []
+        for root, _dirs, files in os.walk(base_dir):
+            for fname in sorted(files):
+                if not fname.endswith(suffix):
+                    continue
+                try:
+                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
+                except ValueError:
+                    continue
+                if not _file_in_period(fdate):
+                    continue
+                fp = os.path.join(root, fname)
+                try:
+                    with open(fp, 'r', encoding='utf-8') as fh:
+                        data = json.load(fh)
+                    for d in data:
+                        if isinstance(d, dict) and (d.get('Deal') or '').strip():
+                            d['_fdate'] = fdate
+                            deals.append(d)
+                except Exception:
+                    pass
+        return deals
+
+    opt_deals = _load_cache(CACHE_BASE_DIR, '_optcomm.json')
+    ndf_deals = _load_cache(NDF_COMM_CACHE_DIR, '_ndfcomm.json')
+    all_deals = opt_deals + ndf_deals
+
+    pending_statuses = {'Pending', 'New', 'pending', 'new'}
+    pending_total = sum(1 for d in all_deals if (d.get('Status') or '').strip() in pending_statuses)
+
+    client_counts = Counter(
+        (d.get('Client') or '').strip()
+        for d in all_deals
+        if (d.get('Client') or '').strip()
+    )
+    product_counts = Counter(
+        (d.get('Commodities') or '').strip() or ('OPT Commodities' if '_fdate' in d and d in opt_deals else 'NDF Commodities')
+        for d in all_deals
+    )
+
+    # Build product counts with explicit OPT/NDF fallback
+    product_counts2 = Counter()
+    opt_set = set(id(d) for d in opt_deals)
+    for d in all_deals:
+        prod = (d.get('Commodities') or '').strip()
+        if not prod:
+            prod = 'OPT Commodities' if id(d) in opt_set else 'NDF Commodities'
+        product_counts2[prod] += 1
+
+    top5_clients  = [{'label': c, 'count': n} for c, n in client_counts.most_common(5)]
+    top5_products = [{'label': p, 'count': n} for p, n in product_counts2.most_common(5)]
+
+    # Monthly deal counts for the current year (always full year, independent of filter)
+    monthly_opt = [0] * 12
+    monthly_ndf = [0] * 12
+
+    def _monthly(base_dir, suffix, monthly_arr):
+        for root, _dirs, files in os.walk(base_dir):
+            for fname in files:
+                if not fname.endswith(suffix):
+                    continue
+                try:
+                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
+                except ValueError:
+                    continue
+                if fdate.year != cur_year:
+                    continue
+                fp = os.path.join(root, fname)
+                try:
+                    with open(fp, 'r', encoding='utf-8') as fh:
+                        data = json.load(fh)
+                    cnt = sum(1 for d in data if isinstance(d, dict) and (d.get('Deal') or '').strip())
+                    monthly_arr[fdate.month - 1] += cnt
+                except Exception:
+                    pass
+
+    _monthly(CACHE_BASE_DIR, '_optcomm.json', monthly_opt)
+    _monthly(NDF_COMM_CACHE_DIR, '_ndfcomm.json', monthly_ndf)
+
+    return jsonify({
+        'ndf_total':     len(ndf_deals),
+        'opt_total':     len(opt_deals),
+        'pending_total': pending_total,
+        'total_deals':   len(all_deals),
+        'top5_clients':  top5_clients,
+        'top5_products': top5_products,
+        'monthly_opt':   monthly_opt,
+        'monthly_ndf':   monthly_ndf,
+    })
 
 
 @blueprint.route('/about')

@@ -11,6 +11,18 @@
     {% set title='Dashboard' %}
     {% include 'partials/page-title.html' %}
 
+    <!-- Period filter -->
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-end">
+            <div class="btn-group" role="group" id="dash-period-filter">
+                <button type="button" class="btn btn-sm btn-outline-primary active" data-period="month">Mês Atual</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-period="year">Ano Atual</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-period="all">Todos</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats widgets -->
     <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
         <!-- NDF Deals Widget -->
         <div class="col">
@@ -23,7 +35,7 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="142">0</span></h3>
+                            <h3 class="mb-2 fw-normal"><span id="dash-ndf-count">–</span></h3>
                             <p class="mb-0 text-muted" data-lang="dash-ndf-title">NDF Deals</p>
                         </div>
                     </div>
@@ -41,7 +53,7 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="67">0</span></h3>
+                            <h3 class="mb-2 fw-normal"><span id="dash-opt-count">–</span></h3>
                             <p class="mb-0 text-muted" data-lang="dash-opt-title">Options Deals</p>
                         </div>
                     </div>
@@ -59,14 +71,14 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="23">0</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-pending-title">Pending Confirmations</p>
+                            <h3 class="mb-2 fw-normal"><span id="dash-pending-count">–</span></h3>
+                            <p class="mb-0 text-muted" data-lang="dash-pending-title">Pendentes</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div><!-- end col -->
-        <!-- Reference Data Widget -->
+        <!-- Total Deals Widget -->
         <div class="col">
             <div class="card">
                 <div class="card-body">
@@ -77,8 +89,8 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="318">0</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-refdata-title">Reference Data</p>
+                            <h3 class="mb-2 fw-normal"><span id="dash-total-count">–</span></h3>
+                            <p class="mb-0 text-muted" data-lang="dash-refdata-title">Total Deals</p>
                         </div>
                     </div>
                 </div>
@@ -86,6 +98,7 @@
         </div><!-- end col -->
     </div><!-- end row -->
 
+    <!-- Deal Distribution + Flow Analytics -->
     <div class="row">
         <div class="col-12">
             <div class="card">
@@ -112,7 +125,7 @@
                                 <div class="d-flex justify-content-between mb-3">
                                     <h4 class="card-title" data-lang="dash-chart-title">Deal Flow Analytics</h4>
                                     <a class="link-reset text-decoration-underline fw-semibold link-offset-3"
-                                        href="/intrag-ndf">
+                                        href="/new_deals-ndf-commodities">
                                         <span data-lang="dash-view-all">View All</span> <i class="ti ti-arrow-right"></i>
                                     </a>
                                 </div>
@@ -129,7 +142,41 @@
         </div><!-- end col-->
     </div><!-- end row-->
 
+    <!-- Top 5 Charts -->
     <div class="row">
+        <!-- Top 5 Clientes -->
+        <div class="col-xxl-6">
+            <div class="card h-100">
+                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
+                    <h4 class="card-title mb-0">Top 5 Clientes</h4>
+                    <span class="badge bg-primary-subtle text-primary fs-xxs" id="dash-top5-clients-period">Todos</span>
+                </div>
+                <div class="card-body">
+                    <div style="height: 260px;">
+                        <canvas id="top5-clients-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end col -->
+
+        <!-- Top 5 Produto -->
+        <div class="col-xxl-6">
+            <div class="card h-100">
+                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
+                    <h4 class="card-title mb-0">Top 5 Produtos</h4>
+                    <span class="badge bg-success-subtle text-success fs-xxs" id="dash-top5-products-period">Todos</span>
+                </div>
+                <div class="card-body">
+                    <div style="height: 260px;">
+                        <canvas id="top5-products-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end col -->
+    </div><!-- end row -->
+
+    <!-- Recent Deals table -->
+    <div class="row mt-3">
         <div class="col-12">
             <div class="card" data-table="" data-table-rows-per-page="7">
                 <div class="card-header justify-content-between align-items-center border-dashed">
@@ -138,165 +185,28 @@
                         <a class="btn btn-sm btn-soft-secondary" href="/new_deals-ndf-commodities">
                             <i class="ti ti-plus me-1"></i> <span data-lang="dash-new-deal">New Deal</span>
                         </a>
-                        <a class="btn btn-sm btn-primary" href="/pending-confirmation">
-                            <i class="ti ti-clock-exclamation me-1"></i> <span data-lang="dash-view-pending">View Pending</span>
+                        <a class="btn btn-sm btn-primary" href="/new_deals-opt-commodities">
+                            <i class="ti ti-chart-candle me-1"></i> <span>OPT Commodities</span>
                         </a>
                     </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-centered table-custom table-sm table-nowrap table-hover mb-0">
+                        <table class="table table-centered table-custom table-sm table-nowrap table-hover mb-0" id="dash-recent-table">
                             <thead>
                                 <tr>
                                     <th data-lang="dash-col-deal">Deal #</th>
-                                    <th data-lang="dash-col-product">Product</th>
-                                    <th data-lang="dash-col-client">Client</th>
-                                    <th data-lang="dash-col-notional">Notional</th>
-                                    <th data-lang="dash-col-currency">Currency</th>
+                                    <th data-lang="dash-col-product">Produto</th>
+                                    <th data-lang="dash-col-client">Cliente</th>
                                     <th data-lang="dash-col-date">Trade Date</th>
                                     <th data-lang="dash-col-status">Status</th>
-                                    <th></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="dash-recent-tbody">
                                 <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-ndf">#NDF-2025-0001</a></td>
-                                    <td><span class="badge bg-primary-subtle text-primary" data-lang="dash-prod-ndf">NDF Commodities</span></td>
-                                    <td>Petrobras S.A.</td>
-                                    <td class="fw-semibold">R$ 4,500,000</td>
-                                    <td>BRL/USD</td>
-                                    <td>2025-06-10</td>
-                                    <td><span class="badge bg-success-subtle text-success" data-lang="dash-status-approved">Approved</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-ndf" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-ndf">#NDF-2025-0002</a></td>
-                                    <td><span class="badge bg-primary-subtle text-primary" data-lang="dash-prod-ndf">NDF Commodities</span></td>
-                                    <td>Vale S.A.</td>
-                                    <td class="fw-semibold">USD 2,100,000</td>
-                                    <td>USD/BRL</td>
-                                    <td>2025-06-10</td>
-                                    <td><span class="badge bg-warning-subtle text-warning" data-lang="dash-status-pending">Pending</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-ndf" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-option">#OPT-2025-0001</a></td>
-                                    <td><span class="badge bg-info-subtle text-info" data-lang="dash-prod-opt">Option Commodities</span></td>
-                                    <td>Glencore Agri S.A.</td>
-                                    <td class="fw-semibold">USD 980,000</td>
-                                    <td>USD</td>
-                                    <td>2025-06-09</td>
-                                    <td><span class="badge bg-success-subtle text-success" data-lang="dash-status-approved">Approved</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-option" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-ndf">#NDF-2025-0003</a></td>
-                                    <td><span class="badge bg-primary-subtle text-primary" data-lang="dash-prod-ndf">NDF Commodities</span></td>
-                                    <td>Raízen Energia S.A.</td>
-                                    <td class="fw-semibold">BRL 7,250,000</td>
-                                    <td>BRL/USD</td>
-                                    <td>2025-06-09</td>
-                                    <td><span class="badge bg-primary-subtle text-primary" data-lang="dash-status-sent">Sent</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-ndf" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-option">#OPT-2025-0002</a></td>
-                                    <td><span class="badge bg-info-subtle text-info" data-lang="dash-prod-opt">Option Commodities</span></td>
-                                    <td>Suzano S.A.</td>
-                                    <td class="fw-semibold">USD 1,500,000</td>
-                                    <td>USD</td>
-                                    <td>2025-06-08</td>
-                                    <td><span class="badge bg-warning-subtle text-warning" data-lang="dash-status-pending">Pending</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-option" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-ndf">#NDF-2025-0004</a></td>
-                                    <td><span class="badge bg-primary-subtle text-primary" data-lang="dash-prod-ndf">NDF Commodities</span></td>
-                                    <td>Minerva Foods S.A.</td>
-                                    <td class="fw-semibold">USD 3,800,000</td>
-                                    <td>USD/BRL</td>
-                                    <td>2025-06-07</td>
-                                    <td><span class="badge bg-success-subtle text-success" data-lang="dash-status-approved">Approved</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-ndf" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><a class="fw-semibold text-primary" href="/intrag-option">#OPT-2025-0003</a></td>
-                                    <td><span class="badge bg-info-subtle text-info" data-lang="dash-prod-opt">Option Commodities</span></td>
-                                    <td>Bunge Alimentos S.A.</td>
-                                    <td class="fw-semibold">USD 620,000</td>
-                                    <td>USD</td>
-                                    <td>2025-06-07</td>
-                                    <td><span class="badge bg-danger-subtle text-danger" data-lang="dash-status-error">Error</span></td>
-                                    <td style="width: 30px;">
-                                        <div class="dropdown">
-                                            <a class="dropdown-toggle text-muted drop-arrow-none card-drop p-0"
-                                                data-bs-toggle="dropdown" href="#">
-                                                <i class="ti ti-dots-vertical fs-lg"></i>
-                                            </a>
-                                            <div class="dropdown-menu dropdown-menu-end">
-                                                <a class="dropdown-item" href="/intrag-option" data-lang="dash-view-details">View Details</a>
-                                            </div>
-                                        </div>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                        Carregando...
                                     </td>
                                 </tr>
                             </tbody>
