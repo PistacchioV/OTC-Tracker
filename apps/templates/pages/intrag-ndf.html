@@ -61,6 +61,9 @@
         font-size: 12px;
         height: 28px;
         white-space: nowrap;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
     }
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
   .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
@@ -83,6 +86,13 @@
   [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
   [data-bs-theme=dark] #column-search-inputs th { border-top-color: rgba(255,255,255,0.08) !important; }
   [data-bs-theme=dark] #column-search-inputs input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
+
+  /* Fix: keep scrollBody original thead invisible — prevents double-header on language change.
+     visibility:hidden (not display:none) so DataTables can still measure column widths. */
+  .dataTables_scrollBody > table > thead,
+  .dt-scroll-body > table > thead {
+      visibility: hidden !important;
+  }
 
   /* ── Emil Design — button press + hover feedback ───────────── */
   .container-fluid .btn {
@@ -176,37 +186,37 @@
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs">
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
-                                    <th data-lang="nd-col-actions">Actions</th>
-                                    <th data-lang="intrag-ndf-col-0">Contract Type</th>
-                                    <th data-lang="intrag-ndf-col-1">CETIP Contract Code</th>
-                                    <th data-lang="intrag-ndf-col-2">Portfolio Code</th>
-                                    <th data-lang="intrag-ndf-col-3">Participant Position</th>
-                                    <th data-lang="intrag-ndf-col-4">Client Tax ID (Party)</th>
-                                    <th data-lang="intrag-ndf-col-5">Counterparty</th>
-                                    <th data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</th>
-                                    <th data-lang="intrag-ndf-col-7">Cpty Collateral Basket</th>
-                                    <th data-lang="intrag-ndf-col-8">Party Collateral Basket</th>
-                                    <th data-lang="intrag-ndf-col-9">Notional Value</th>
-                                    <th data-lang="intrag-ndf-col-10">Trade Date</th>
-                                    <th data-lang="intrag-ndf-col-11">Registration Date</th>
-                                    <th data-lang="intrag-ndf-col-12">Maturity Date</th>
-                                    <th data-lang="intrag-ndf-col-13">Currency</th>
-                                    <th data-lang="intrag-ndf-col-14">Reference Exchange</th>
-                                    <th data-lang="intrag-ndf-col-15">Commodity</th>
-                                    <th data-lang="intrag-ndf-col-16">Type (Form)</th>
-                                    <th data-lang="intrag-ndf-col-17">Quantity</th>
-                                    <th data-lang="intrag-ndf-col-18">Trading Unit</th>
-                                    <th data-lang="intrag-ndf-col-19">Trade Price</th>
-                                    <th data-lang="intrag-ndf-col-20">Settlement Parity</th>
-                                    <th data-lang="intrag-ndf-col-21">Maturity Month/Year</th>
-                                    <th data-lang="intrag-ndf-col-22">Spot / Adj. Rate</th>
-                                    <th data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</th>
-                                    <th data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</th>
-                                    <th data-lang="intrag-ndf-col-25">Information Source</th>
-                                    <th data-lang="intrag-ndf-col-26">Maturity Rate</th>
-                                    <th data-lang="intrag-ndf-col-27">Adjustment Type</th>
-                                    <th data-lang="intrag-ndf-col-28">Observation</th>
-                                    <th data-lang="intrag-ndf-col-29">Discount Factor</th>
+                                    <th><span data-lang="nd-col-actions">Actions</span></th>
+                                    <th><span data-lang="intrag-ndf-col-0">Contract Type</span></th>
+                                    <th><span data-lang="intrag-ndf-col-1">CETIP Contract Code</span></th>
+                                    <th><span data-lang="intrag-ndf-col-2">Portfolio Code</span></th>
+                                    <th><span data-lang="intrag-ndf-col-3">Participant Position</span></th>
+                                    <th><span data-lang="intrag-ndf-col-4">Client Tax ID (Party)</span></th>
+                                    <th><span data-lang="intrag-ndf-col-5">Counterparty</span></th>
+                                    <th><span data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</span></th>
+                                    <th><span data-lang="intrag-ndf-col-7">Cpty Collateral Basket</span></th>
+                                    <th><span data-lang="intrag-ndf-col-8">Party Collateral Basket</span></th>
+                                    <th><span data-lang="intrag-ndf-col-9">Notional Value</span></th>
+                                    <th><span data-lang="intrag-ndf-col-10">Trade Date</span></th>
+                                    <th><span data-lang="intrag-ndf-col-11">Registration Date</span></th>
+                                    <th><span data-lang="intrag-ndf-col-12">Maturity Date</span></th>
+                                    <th><span data-lang="intrag-ndf-col-13">Currency</span></th>
+                                    <th><span data-lang="intrag-ndf-col-14">Reference Exchange</span></th>
+                                    <th><span data-lang="intrag-ndf-col-15">Commodity</span></th>
+                                    <th><span data-lang="intrag-ndf-col-16">Type (Form)</span></th>
+                                    <th><span data-lang="intrag-ndf-col-17">Quantity</span></th>
+                                    <th><span data-lang="intrag-ndf-col-18">Trading Unit</span></th>
+                                    <th><span data-lang="intrag-ndf-col-19">Trade Price</span></th>
+                                    <th><span data-lang="intrag-ndf-col-20">Settlement Parity</span></th>
+                                    <th><span data-lang="intrag-ndf-col-21">Maturity Month/Year</span></th>
+                                    <th><span data-lang="intrag-ndf-col-22">Spot / Adj. Rate</span></th>
+                                    <th><span data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</span></th>
+                                    <th><span data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</span></th>
+                                    <th><span data-lang="intrag-ndf-col-25">Information Source</span></th>
+                                    <th><span data-lang="intrag-ndf-col-26">Maturity Rate</span></th>
+                                    <th><span data-lang="intrag-ndf-col-27">Adjustment Type</span></th>
+                                    <th><span data-lang="intrag-ndf-col-28">Observation</span></th>
+                                    <th><span data-lang="intrag-ndf-col-29">Discount Factor</span></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                                 <tr id="column-search-inputs">
@@ -320,7 +330,7 @@ $(document).ready(function() {
     }
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
-        responsive: false, scrollX: true, autoWidth: false, pageLength: 15,
+        responsive: false, scrollX: true, pageLength: 15,
         orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
@@ -354,7 +364,7 @@ $(document).ready(function() {
                 else{$sa.prop('checked',false).prop('indeterminate',true);}
             }
             toggleDelBtn(sel>=2);
-            setTimeout(function(){ api.columns.adjust(); }, 0);
+            setTimeout(function(){ api.columns.adjust(); }, 50);
             console.log('[NDF-INTRAG drawCallback] total rows:', total, '| selected:', sel);
         },
         initComplete: function() {
@@ -399,7 +409,7 @@ $(document).ready(function() {
     setTimeout(function() {
         table.columns.adjust();
         $(window).trigger('resize');
-    }, 150);
+    }, 300);
 
     // Add Row button (static in filter bar)
     document.getElementById('btnAddNdf').addEventListener('click',function(){
@@ -576,7 +586,7 @@ $(document).ready(function() {
                 table.columns().search('');
                 (colFilters||[]).forEach(function(f){table.column(f.col.dtCol).search(f.value);});
                 table.draw();
-                setTimeout(function(){ table.columns.adjust(); $(window).trigger('resize'); }, 60);
+                setTimeout(function(){ table.columns.adjust(); $(window).trigger('resize'); }, 200);
             })
             .catch(function(err){console.error('[Intrag NDF] Load error:',err);});
     }
