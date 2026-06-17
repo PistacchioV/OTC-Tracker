@@ -1621,7 +1621,7 @@ NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
 ))
 
 INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag"
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "NDF"
 ))
 
 # ── ANBIMA calendar ───────────────────────────────────────────────────────────
@@ -1822,20 +1822,34 @@ def _save_intrag_ndf_entry(deal):
 def api_intrag_ndf():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    date_str = request.args.get('date', '').strip()  # YYYY-MM-DD
     entries = []
-    if os.path.isdir(INTRAG_NDF_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-            for fname in sorted(files):
-                if not fname.endswith('_intrag_ndf.json'):
-                    continue
-                fp = os.path.join(root, fname)
-                try:
-                    with open(fp, 'r', encoding='utf-8') as fh:
-                        data = json.load(fh)
-                    if isinstance(data, list):
-                        entries.extend(data)
-                except Exception as exc:
-                    log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
+    if date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
+            fp = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
+            if os.path.isfile(fp):
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    entries = json.load(fh)
+                if not isinstance(entries, list):
+                    entries = []
+        except Exception as exc:
+            log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
+    else:
+        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith('_intrag_ndf.json'):
+                        continue
+                    fp = os.path.join(root, fname)
+                    try:
+                        with open(fp, 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -2044,7 +2058,7 @@ def api_ndf_update_deal_cache(deal_id):
     # Save to Intrag when Status→Success and client is BANCO JP MORGAN
     new_status = updated_deal.get('Status', '')
     cl_lower = (updated_deal.get('Client', '') or '').lower()
-    if new_status == 'Success' and 'banco' in cl_lower and ('jp morgan' in cl_lower or 'jpmorgan' in cl_lower):
+    if new_status == 'Success' and 'banco' in cl_lower and 'morgan' in cl_lower:
         try:
             _save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
@@ -2574,7 +2588,7 @@ def api_ndf_mapping_b3():
 
         if intrag_candidate is not None:
             cl_low = (intrag_candidate.get('Client', '') or '').lower()
-            if 'banco' in cl_low and ('jp morgan' in cl_low or 'jpmorgan' in cl_low):
+            if 'banco' in cl_low and 'morgan' in cl_low:
                 try:
                     _save_intrag_ndf_entry(intrag_candidate)
                 except Exception as exc:

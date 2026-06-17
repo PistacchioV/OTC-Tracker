@@ -130,8 +130,11 @@
         <div class="col-12">
             <div class="card">
 
-                <!-- ── Smart filter bar: thin (input + search only) ─────────── -->
+                <!-- ── Smart filter bar ───────────────────────────────────────── -->
                 <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <label class="form-label mb-0 text-nowrap fw-semibold" style="font-size:.8rem;">Trade Date</label>
+                    <input type="text" id="sfTradeDate" class="form-control form-control-sm"
+                           style="width:120px;" placeholder="dd/mm/yyyy" autocomplete="off">
                     <div class="flex-grow-1 position-relative">
                         <div class="smart-filter-wrapper" id="sfWrapper">
                             <div class="smart-filter-chips" id="sfChips"></div>
@@ -536,8 +539,21 @@ $(document).ready(function() {
     sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
     sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
-    document.getElementById('sfSearchBtn').addEventListener('click', function() {
-        fetch('/api/intrag/ndf')
+    function _dmyToIso(dmy) {
+        // Convert dd/mm/yyyy → yyyy-mm-dd; return '' if invalid
+        var p = dmy.trim().split('/');
+        if (p.length !== 3 || p[0].length > 2 || p[1].length > 2 || p[2].length !== 4) return '';
+        return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+
+    function _todayDmy() {
+        var d = new Date();
+        return ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
+    }
+
+    function intragLoad(dateIso) {
+        var url = '/api/intrag/ndf' + (dateIso ? '?date=' + encodeURIComponent(dateIso) : '');
+        fetch(url)
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 table.clear();
@@ -555,13 +571,18 @@ $(document).ready(function() {
                         table.row.add(row);
                     });
                 }
-                // Clear column searches first, then apply smart filter chips
                 table.columns().search('');
                 sfActive.forEach(function(f) { table.column(f.col.dtCol).search(f.value); });
                 table.draw();
             })
             .catch(function(err) { console.error('[Intrag NDF] Load error:', err); });
+    }
+
+    document.getElementById('sfSearchBtn').addEventListener('click', function() {
+        var dmy = document.getElementById('sfTradeDate').value.trim();
+        intragLoad(dmy ? _dmyToIso(dmy) : '');
     });
+
     sfInput.addEventListener('keydown',function(e) {
         if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
         var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
@@ -570,6 +591,11 @@ $(document).ready(function() {
         else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
         items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
     });
+
+    // Default trade date = today; auto-load on page entry
+    var _tradeDateEl = document.getElementById('sfTradeDate');
+    _tradeDateEl.value = _todayDmy();
+    intragLoad(_dmyToIso(_tradeDateEl.value));
 });
 </script>
 
