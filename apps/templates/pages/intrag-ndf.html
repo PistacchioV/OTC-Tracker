@@ -132,13 +132,12 @@
 
                 <!-- ── Smart filter bar ───────────────────────────────────────── -->
                 <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
-                    <label class="form-label mb-0 text-nowrap fw-semibold" style="font-size:.8rem;">Trade Date</label>
-                    <input type="text" id="sfTradeDate" class="form-control form-control-sm"
-                           style="width:120px;" placeholder="dd/mm/yyyy" autocomplete="off">
                     <div class="flex-grow-1 position-relative">
                         <div class="smart-filter-wrapper" id="sfWrapper">
                             <div class="smart-filter-chips" id="sfChips"></div>
-                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <input type="text" class="smart-filter-input" id="sfInput"
+                                   placeholder="Type a letter for text fields, or a number / date for value fields…"
+                                   autocomplete="off">
                             <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
                         </div>
                     </div>
@@ -502,12 +501,28 @@ $(document).ready(function() {
         NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=''; });
     });
 
-    // Smart Filter
+    // ── helpers ────────────────────────────────────────────────────────────────
+    function _dmyToIso(dmy) {
+        var p = (dmy || '').trim().split('/');
+        if (p.length !== 3 || p[2].length !== 4) return '';
+        return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+    function _todayDmy() {
+        var d = new Date();
+        return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+    }
+
+    // ── Smart Filter ───────────────────────────────────────────────────────────
     var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
         sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
         sfActive=[], sfKbdIdx=-1;
-    var SF_COLS=NDF_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2};});
+
+    // Trade Date is a special col (dtCol=-1): drives the API call, not DT column search
+    var SF_DATE_COL = {label:'Trade Date', dtCol:-1, isDate:true};
+    var SF_COLS = [SF_DATE_COL].concat(NDF_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2};}));
+
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
     function sfRenderDropdown(val) {
         sfDropdown.innerHTML=''; sfKbdIdx=-1;
         if(!val){sfDropdown.style.display='none';return;}
@@ -515,75 +530,73 @@ $(document).ready(function() {
         if(!matches.length){sfDropdown.style.display='none';return;}
         matches.forEach(function(col) {
             var li=document.createElement('li');
-            li.innerHTML='<span class="sf-type-badge sf-type-text">text</span><span>'+sfEsc(col.label)+'</span>';
+            var badge = col.isDate ? 'date' : 'text';
+            li.innerHTML='<span class="sf-type-badge sf-type-'+badge+'">'+badge+'</span><span>'+sfEsc(col.label)+'</span>';
             li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(col,sfInput.value.trim());});
             sfDropdown.appendChild(li);
         });
         sfDropdown.style.display='block';
     }
+
     function sfAddFilter(col,value) {
         if(!value) return;
-        sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});
+        sfActive=sfActive.filter(function(f){return f.col.label!==col.label;});
         sfActive.push({col:col,value:value}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
         sfRenderChips(); sfInput.focus();
     }
+
     function sfRenderChips() {
         sfChips.innerHTML='';
         sfActive.forEach(function(f) {
             var chip=document.createElement('span'); chip.className='smart-filter-chip';
-            chip.innerHTML='<strong>'+sfEsc(f.col.label.toUpperCase())+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
-            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.col.dtCol!==f.col.dtCol;});sfRenderChips();});
+            chip.innerHTML='<strong>'+sfEsc(f.col.label.toUpperCase())+':</strong>&nbsp;'+sfEsc(f.value)
+                          +'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){
+                sfActive=sfActive.filter(function(x){return x.col.label!==f.col.label;});
+                sfRenderChips();
+            });
             sfChips.appendChild(chip);
         });
     }
+
     sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
     sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
-    function _dmyToIso(dmy) {
-        // Convert dd/mm/yyyy → yyyy-mm-dd; return '' if invalid
-        var p = dmy.trim().split('/');
-        if (p.length !== 3 || p[0].length > 2 || p[1].length > 2 || p[2].length !== 4) return '';
-        return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
-    }
 
-    function _todayDmy() {
-        var d = new Date();
-        return ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
-    }
-
-    function intragLoad(dateIso) {
-        var url = '/api/intrag/ndf' + (dateIso ? '?date=' + encodeURIComponent(dateIso) : '');
+    // ── intragLoad ─────────────────────────────────────────────────────────────
+    function intragLoad(dateIso, colFilters) {
+        var url = '/api/intrag/ndf' + (dateIso ? '?date='+encodeURIComponent(dateIso) : '');
         fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+            .then(function(r){return r.json();})
+            .then(function(data){
                 table.clear();
                 if (data.success && data.entries && data.entries.length) {
                     data.entries.forEach(function(entry) {
-                        var actions = '<div class="d-flex justify-content-center gap-1">' +
-                            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
-                            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>';
-                        var row = [
-                            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                            actions
-                        ];
-                        ENTRY_FIELDS.forEach(function(f) { row.push(entry[f] != null ? String(entry[f]) : ''); });
-                        row.push(entry._deal || _ndfId());
+                        var actions='<div class="d-flex justify-content-center gap-1">'
+                            +'<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>'
+                            +'<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>';
+                        var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',actions];
+                        ENTRY_FIELDS.forEach(function(f){row.push(entry[f]!=null?String(entry[f]):'');});
+                        row.push(entry._deal||_ndfId());
                         table.row.add(row);
                     });
                 }
                 table.columns().search('');
-                sfActive.forEach(function(f) { table.column(f.col.dtCol).search(f.value); });
+                (colFilters||[]).forEach(function(f){table.column(f.col.dtCol).search(f.value);});
                 table.draw();
+                setTimeout(function(){table.columns.adjust();},60);
             })
-            .catch(function(err) { console.error('[Intrag NDF] Load error:', err); });
+            .catch(function(err){console.error('[Intrag NDF] Load error:',err);});
     }
 
     document.getElementById('sfSearchBtn').addEventListener('click', function() {
-        var dmy = document.getElementById('sfTradeDate').value.trim();
-        intragLoad(dmy ? _dmyToIso(dmy) : '');
+        var dateChip  = sfActive.find(function(f){return f.col.isDate;});
+        var colChips  = sfActive.filter(function(f){return !f.col.isDate && f.col.dtCol>=0;});
+        var dateIso   = dateChip ? _dmyToIso(dateChip.value) : '';
+        intragLoad(dateIso, colChips);
     });
 
-    sfInput.addEventListener('keydown',function(e) {
+    sfInput.addEventListener('keydown',function(e){
         if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
         var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
         if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
@@ -592,10 +605,9 @@ $(document).ready(function() {
         items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
     });
 
-    // Default trade date = today; auto-load on page entry
-    var _tradeDateEl = document.getElementById('sfTradeDate');
-    _tradeDateEl.value = _todayDmy();
-    intragLoad(_dmyToIso(_tradeDateEl.value));
+    // Pre-add today's Trade Date chip and auto-load
+    sfAddFilter(SF_DATE_COL, _todayDmy());
+    document.getElementById('sfSearchBtn').click();
 });
 </script>
 
