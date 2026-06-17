@@ -801,5 +801,6 @@
   "dash-top5-clients": "Top 5 Clientes",
   "dash-top5-products": "Top 5 Productos",
   "dash-no-deals": "No se encontraron negocios para el período.",
-  "dash-loading": "Cargando..."
+  "dash-loading": "Cargando...",
+  "btn-clear-filters": "Limpiar Filtros"
 }

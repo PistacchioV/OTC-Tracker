@@ -1427,6 +1427,7 @@ $(document).ready(function() {
             "B" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
+            "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
             "<'ms-auto'>" +
@@ -1831,6 +1832,38 @@ $(document).ready(function() {
                             confirmButtonColor: '#dc3545'
                         });
                     });
+                });
+            }
+
+            // ==============================================================
+            // CLEAR FILTERS BUTTON
+            // ==============================================================
+            var clearFiltersContainer = document.querySelector('.clearFiltersBtn');
+            if (clearFiltersContainer && !document.getElementById('clearFiltersBtn')) {
+                var clearFiltersBtn = document.createElement('button');
+                clearFiltersBtn.id = 'clearFiltersBtn';
+                clearFiltersBtn.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                clearFiltersBtn.setAttribute('type', 'button');
+                clearFiltersBtn.setAttribute('data-lang', 'btn-clear-filters');
+                clearFiltersBtn.setAttribute('data-bs-toggle', 'tooltip');
+                clearFiltersBtn.setAttribute('data-bs-placement', 'bottom');
+                clearFiltersBtn.setAttribute('data-bs-title', t('btn-clear-filters', 'Clear Filters'));
+                clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off me-1"></i>' + t('btn-clear-filters', 'Clear Filters');
+                clearFiltersContainer.appendChild(clearFiltersBtn);
+
+                clearFiltersBtn.addEventListener('click', function() {
+                    // Clear column search inputs
+                    document.querySelectorAll('#column-search-inputs th input').forEach(function(input) {
+                        input.value = '';
+                    });
+                    // Clear DataTables column search state and redraw
+                    api.columns().search('').draw();
+                    // Clear smart filter chips and active filters
+                    if (typeof sfActive !== 'undefined') sfActive = [];
+                    var sfChipsEl = document.getElementById('sfChips');
+                    if (sfChipsEl) sfChipsEl.innerHTML = '';
+                    var sfInputEl = document.getElementById('sfInput');
+                    if (sfInputEl) sfInputEl.value = '';
                 });
             }
 

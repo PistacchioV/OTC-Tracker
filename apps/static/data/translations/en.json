@@ -802,5 +802,6 @@
   "dash-top5-clients": "Top 5 Clients",
   "dash-top5-products": "Top 5 Products",
   "dash-no-deals": "No deals found for the period.",
-  "dash-loading": "Loading..."
+  "dash-loading": "Loading...",
+  "btn-clear-filters": "Clear Filters"
 }
