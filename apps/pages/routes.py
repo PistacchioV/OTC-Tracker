@@ -1018,11 +1018,11 @@ def api_dashboard_stats():
     now = datetime.now()
     cur_month, cur_year = now.month, now.year
 
-    def _file_in_period(fname_date):
+    def _file_in_period(fdate):
         if period == 'month':
-            return fname_date.month == cur_month and fname_date.year == cur_year
+            return fdate.month == cur_month and fdate.year == cur_year
         if period == 'year':
-            return fname_date.year == cur_year
+            return fdate.year == cur_year
         return True
 
     def _is_lawton(d):
@@ -1032,47 +1032,56 @@ def api_dashboard_stats():
         cl = (d.get('Client') or '').lower()
         return 'banco' in cl or 'j.p morgan' in cl or 'jp morgan' in cl or 'jpmorgan' in cl
 
-    def _load_cache(base_dir, suffix, deal_type):
-        deals = []
-        for root, _dirs, files in os.walk(base_dir):
+    def _product_from_path(file_path):
+        """Derive product label from directory path relative to new deals/ root.
+        e.g. .../Option/Commodities/2026/06/file.json  → 'Option Commodities'
+             .../NDF/FWD Start/2026/06/file.json       → 'NDF FWD Start'
+        """
+        rel = os.path.relpath(file_path, NEW_DEALS_CACHE_ROOT).replace('\\', '/')
+        parts = rel.split('/')
+        label_parts = [p for p in parts[:-1] if not p.isdigit()][:2]
+        return ' '.join(label_parts) if label_parts else 'Other'
+
+    def _type_from_product(product):
+        return 'OPT' if product.lower().startswith('option') else 'NDF'
+
+    # Generic scan of all new deals cache directories
+    all_deals = []
+    if os.path.isdir(NEW_DEALS_CACHE_ROOT):
+        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in sorted(files):
-                if not fname.endswith(suffix):
+                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
                     continue
+                date_str = fname[:8]
                 try:
-                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
+                    fdate = datetime.strptime(date_str, '%Y%m%d')
                 except ValueError:
                     continue
                 if not _file_in_period(fdate):
                     continue
                 fp = os.path.join(root, fname)
+                product = _product_from_path(fp)
+                deal_type = _type_from_product(product)
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
                     for d in data:
                         if isinstance(d, dict) and (d.get('Deal') or '').strip():
-                            d['_fdate'] = fdate.strftime('%Y-%m-%d')
-                            d['_type']  = deal_type
-                            deals.append(d)
+                            d['_fdate']   = fdate.strftime('%Y-%m-%d')
+                            d['_product'] = product
+                            d['_type']    = deal_type
+                            all_deals.append(d)
                 except Exception:
                     pass
-        return deals
 
-    opt_deals = _load_cache(CACHE_BASE_DIR, '_optcomm.json', 'OPT')
-    ndf_deals = _load_cache(NDF_COMM_CACHE_DIR, '_ndfcomm.json', 'NDF')
-    all_deals = opt_deals + ndf_deals
-
-    # Lawton rows = one row per real deal (canonical count)
     lawton_deals = [d for d in all_deals if _is_lawton(d)]
-    # Client rows = actual client (for Top 5 and recent table)
     client_deals = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
 
-    # Counts based on Lawton rows only
     ndf_lawton = [d for d in lawton_deals if d['_type'] == 'NDF']
     opt_lawton  = [d for d in lawton_deals if d['_type'] == 'OPT']
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
     pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
 
-    # Top 5 clients — exclude Lawton and bank rows
     client_counts = Counter(
         (d.get('Client') or '').strip()
         for d in client_deals
@@ -1080,23 +1089,16 @@ def api_dashboard_stats():
     )
     top5_clients = [{'label': c, 'count': n} for c, n in client_counts.most_common(5)]
 
-    # Top 5 products — use Lawton rows, Commodities field
-    product_counts = Counter()
-    for d in lawton_deals:
-        prod = (d.get('Commodities') or '').strip()
-        if not prod:
-            prod = 'OPT Commodities' if d['_type'] == 'OPT' else 'NDF Commodities'
-        product_counts[prod] += 1
-    top5_products = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
+    product_counts = Counter(d['_product'] for d in lawton_deals)
+    top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
 
-    # Monthly deal counts for current year — Lawton rows only
+    # Monthly counts for current year (always full year, ignores period filter)
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
-
-    def _monthly(base_dir, suffix, deal_type, monthly_arr):
-        for root, _dirs, files in os.walk(base_dir):
+    if os.path.isdir(NEW_DEALS_CACHE_ROOT):
+        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in files:
-                if not fname.endswith(suffix):
+                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
                     continue
                 try:
                     fdate = datetime.strptime(fname[:8], '%Y%m%d')
@@ -1105,6 +1107,9 @@ def api_dashboard_stats():
                 if fdate.year != cur_year:
                     continue
                 fp = os.path.join(root, fname)
+                product = _product_from_path(fp)
+                deal_type = _type_from_product(product)
+                target = monthly_opt if deal_type == 'OPT' else monthly_ndf
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
@@ -1114,22 +1119,20 @@ def api_dashboard_stats():
                         and (d.get('Deal') or '').strip()
                         and 'lawton' in (d.get('Client') or '').lower()
                     )
-                    monthly_arr[fdate.month - 1] += cnt
+                    target[fdate.month - 1] += cnt
                 except Exception:
                     pass
 
-    _monthly(CACHE_BASE_DIR, '_optcomm.json', 'OPT', monthly_opt)
-    _monthly(NDF_COMM_CACHE_DIR, '_ndfcomm.json', 'NDF', monthly_ndf)
-
-    # Recent deals — last 10 client rows sorted by date desc
-    recent_sorted = sorted(client_deals, key=lambda d: d.get('_fdate', ''), reverse=True)[:10]
+    # Recent deals: last 50 client rows sorted desc — frontend filters by product
+    recent_sorted = sorted(client_deals, key=lambda d: d.get('_fdate', ''), reverse=True)[:50]
     recent_deals = [
         {
-            'deal':   d.get('Deal', ''),
-            'client': d.get('Client', ''),
-            'date':   d.get('TradeDate', '') or d.get('_fdate', ''),
-            'status': d.get('Status', ''),
-            'type':   d['_type'],
+            'deal':    d.get('Deal', ''),
+            'client':  d.get('Client', ''),
+            'date':    d.get('TradeDate', '') or d.get('_fdate', ''),
+            'status':  d.get('Status', ''),
+            'product': d['_product'],
+            'type':    d['_type'],
         }
         for d in recent_sorted
     ]
@@ -1611,6 +1614,10 @@ def api_opt_bulk_patch_deal_cache():
 
 NDF_COMM_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "NDF", "Commodities"
+))
+
+NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals"
 ))
 
 

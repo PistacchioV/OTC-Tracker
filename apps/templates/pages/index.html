@@ -181,12 +181,18 @@
             <div class="card" data-table="" data-table-rows-per-page="7">
                 <div class="card-header justify-content-between align-items-center border-dashed">
                     <h4 class="card-title mb-0" data-lang="dash-recent-title">Recent Deals</h4>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dash-product-filter-btn" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="ti ti-filter me-1"></i><span id="dash-product-filter-label" data-lang="dash-filter-all">Todos</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" id="dash-product-filter-menu" aria-labelledby="dash-product-filter-btn">
+                                <li><a class="dropdown-item active" href="#" data-product="all" data-lang="dash-filter-all">Todos</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                            </ul>
+                        </div>
                         <a class="btn btn-sm btn-soft-secondary" href="/new_deals-ndf-commodities">
                             <i class="ti ti-plus me-1"></i> <span data-lang="dash-new-deal">New Deal</span>
-                        </a>
-                        <a class="btn btn-sm btn-primary" href="/new_deals-opt-commodities">
-                            <i class="ti ti-chart-candle me-1"></i> <span>OPT Commodities</span>
                         </a>
                     </div>
                 </div>
