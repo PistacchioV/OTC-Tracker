@@ -178,12 +178,12 @@
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
                                     <th data-lang="intrag-ndf-col-0">Contract Type</th>
-                                    <th data-lang="intrag-ndf-col-1">B3 ID</th>
+                                    <th data-lang="intrag-ndf-col-1">CETIP Contract Code</th>
                                     <th data-lang="intrag-ndf-col-2">Portfolio Code</th>
                                     <th data-lang="intrag-ndf-col-3">Participant Position</th>
-                                    <th data-lang="intrag-ndf-col-4">Party Tax ID</th>
+                                    <th data-lang="intrag-ndf-col-4">Client Tax ID (Party)</th>
                                     <th data-lang="intrag-ndf-col-5">Counterparty</th>
-                                    <th data-lang="intrag-ndf-col-6">Cpty Tax ID</th>
+                                    <th data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</th>
                                     <th data-lang="intrag-ndf-col-7">Cpty Collateral Basket</th>
                                     <th data-lang="intrag-ndf-col-8">Party Collateral Basket</th>
                                     <th data-lang="intrag-ndf-col-9">Notional Value</th>
@@ -193,54 +193,54 @@
                                     <th data-lang="intrag-ndf-col-13">Currency</th>
                                     <th data-lang="intrag-ndf-col-14">Reference Exchange</th>
                                     <th data-lang="intrag-ndf-col-15">Commodity</th>
-                                    <th data-lang="intrag-ndf-col-16">Underlying Asset</th>
+                                    <th data-lang="intrag-ndf-col-16">Type (Form)</th>
                                     <th data-lang="intrag-ndf-col-17">Quantity</th>
-                                    <th data-lang="intrag-ndf-col-18">Unit of Negotiation</th>
-                                    <th data-lang="intrag-ndf-col-19">Strike</th>
-                                    <th data-lang="intrag-ndf-col-20">Strike Currency</th>
-                                    <th data-lang="intrag-ndf-col-21">Expiry Month/Year</th>
-                                    <th data-lang="intrag-ndf-col-22">ANBIMA Biz Days</th>
+                                    <th data-lang="intrag-ndf-col-18">Trading Unit</th>
+                                    <th data-lang="intrag-ndf-col-19">Trade Price</th>
+                                    <th data-lang="intrag-ndf-col-20">Settlement Parity</th>
+                                    <th data-lang="intrag-ndf-col-21">Maturity Month/Year</th>
+                                    <th data-lang="intrag-ndf-col-22">Spot / Adj. Rate</th>
                                     <th data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</th>
                                     <th data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</th>
                                     <th data-lang="intrag-ndf-col-25">Information Source</th>
-                                    <th data-lang="intrag-ndf-col-26">Weekday Biz Days</th>
-                                    <th data-lang="intrag-ndf-col-27">Trade Type</th>
-                                    <th data-lang="intrag-ndf-col-28">Strike CCY Label</th>
-                                    <th data-lang="intrag-ndf-col-29">N/A</th>
+                                    <th data-lang="intrag-ndf-col-26">Maturity Rate</th>
+                                    <th data-lang="intrag-ndf-col-27">Adjustment Type</th>
+                                    <th data-lang="intrag-ndf-col-28">Observation</th>
+                                    <th data-lang="intrag-ndf-col-29">Discount Factor</th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                                 <tr id="column-search-inputs">
                                     <th></th><th></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contract Type"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CETIP Code"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Participant Position"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Tax ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Position"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID (Party)"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Tax ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID (Cpty)"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Collateral"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Collateral"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Notional Value"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Registration Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Reg. Date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Reference Exchange"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Ref. Exchange"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Underlying Asset"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Type (Form)"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit of Negotiation"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Currency"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Expiry Month/Year"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ANBIMA Biz Days"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Forward Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trading Unit"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Parity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Mo/Yr"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot/Adj. Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Fwd Rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Avg Rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Info Source"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Weekday Biz Days"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike CCY Label"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="" disabled></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Adj. Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Observation"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Discount Factor"></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                             </thead>
@@ -286,13 +286,13 @@
 <script>
 // col index 2-31 = data, col 32 = hidden row ID
 var NDF_COLS = [
-    'Contract Type','B3 ID','Portfolio Code','Participant Position',
-    'Party Tax ID','Counterparty','Cpty Tax ID',
+    'Contract Type','CETIP Contract Code','Portfolio Code','Participant Position',
+    'Client Tax ID (Party)','Counterparty','Client Tax ID (Cpty)',
     'Cpty Collateral Basket','Party Collateral Basket','Notional Value',
     'Trade Date','Registration Date','Maturity Date','Currency',
-    'Reference Exchange','Commodity','Underlying Asset','Quantity','Unit of Negotiation',
-    'Strike','Strike Currency','Expiry Month/Year','ANBIMA Biz Days',
-    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source','Weekday Biz Days','Trade Type','Strike CCY Label','N/A'
+    'Reference Exchange','Commodity','Type (Form)','Quantity','Trading Unit',
+    'Trade Price','Settlement Parity','Maturity Month/Year','Spot / Adj. Rate',
+    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source','Maturity Rate','Adjustment Type','Observation','Discount Factor'
 ];
 
 // Ordered field keys matching NDF_COLS (used when loading from API)
