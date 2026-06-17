@@ -133,28 +133,11 @@
  *    - min-width : largura mínima
  */
 .btn-search {
-    width: auto !important;           /* ← ALTERE A LARGURA AQUI */
-    margin-right: 10px !important;
-}
-
-/*
- * 2) ALTURA do botão
- *    - height     : altura fixa ou 100% para acompanhar o choices
- *    - padding    : espaçamento interno vertical (reduzir = botão menor)
- */
-.btn-search_inner {
-    min-height: 0 !important;
-    height: 100% !important;          /* ← ALTERE A ALTURA AQUI */
-}
-
-/*
- * 3) APARÊNCIA do botão
- *    - font-size  : tamanho do texto/ícone
- *    - Não altere a menos que queira mudar a aparência visual.
- */
-.btn-search {
-    font-size: 0.9rem !important;     /* ← ALTERE O TAMANHO DO TEXTO AQUI */
-    white-space: nowrap !important;   /* impede quebra de linha */
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.6rem !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    white-space: nowrap !important;
 }
 
 /* ╔══════════════════════════════════════════════════════════════════╗ */
@@ -515,16 +498,17 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 4px;
-      border: 1px solid var(--ins-border-color);
-      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 0.6875rem;
       padding: 4px 8px;
       min-height: 38px;
       background: var(--ins-secondary-bg);
       cursor: text;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .smart-filter-wrapper:focus-within {
-      border-color: var(--ins-primary);
-      box-shadow: 0 0 0 0.2rem rgba(var(--ins-primary-rgb), .15);
+      border-color: #0066cc;
+      box-shadow: 0 0 0 3px rgba(0,102,204,0.15);
   }
   .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .smart-filter-chip {
@@ -533,7 +517,7 @@
       gap: 5px;
       background: #6c757d;
       color: #fff;
-      border-radius: 4px;
+      border-radius: 50rem;
       padding: 2px 8px;
       font-size: 10px;
       font-weight: 500;
@@ -825,9 +809,7 @@
                         </div>
                     </div>
                     <div>
-                        <button class="btn btn-secondary bg-gradient btn-search" type="button" id="sfSearchBtn"
-                                data-bs-toggle="tooltip" data-bs-placement="bottom"
-                                data-bs-title="Search" data-bs-custom-class="tooltip-secondary">
+                        <button class="btn btn-secondary bg-gradient btn-search" type="button" id="sfSearchBtn">
                             <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
                         </button>
                     </div>

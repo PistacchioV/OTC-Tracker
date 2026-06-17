@@ -234,13 +234,13 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Currency"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Expiry Month/Year"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ANBIMA Biz Days"></th>
-                                    <th></th>
-                                    <th></th>
-                                    <th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="" style="pointer-events:none;opacity:0;"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="" style="pointer-events:none;opacity:0;"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="" style="pointer-events:none;opacity:0;"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Weekday Biz Days"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike CCY Label"></th>
-                                    <th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="" style="pointer-events:none;opacity:0;"></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                             </thead>
@@ -354,6 +354,7 @@ $(document).ready(function() {
                 else{$sa.prop('checked',false).prop('indeterminate',true);}
             }
             toggleDelBtn(sel>=2);
+            setTimeout(function(){ api.columns.adjust(); }, 0);
             console.log('[NDF-INTRAG drawCallback] total rows:', total, '| selected:', sel);
         },
         initComplete: function() {
@@ -394,20 +395,11 @@ $(document).ready(function() {
     // Move Export button into filter bar static container
     table.buttons().container().appendTo('#ndfExportWrap');
 
-    // Fix double-header on first load: scrollX clones <thead> before height
-    // calculations run; columns.adjust() forces a re-sync after the DOM settles.
+    // Force header/body column alignment after DOM settles (scrollX clone fix)
     setTimeout(function() {
         table.columns.adjust();
-        var shRows = document.querySelectorAll('.dataTables_scrollHead thead tr').length;
-        var sbRows = document.querySelectorAll('.dataTables_scrollBody thead tr').length;
-        var sbHead = document.querySelector('.dataTables_scrollBody thead');
-        console.log('[NDF-INTRAG header debug] scrollHead thead rows:', shRows);
-        console.log('[NDF-INTRAG header debug] scrollBody thead rows:', sbRows);
-        if (sbHead) {
-            console.log('[NDF-INTRAG header debug] scrollBody thead offsetHeight:', sbHead.offsetHeight);
-            console.log('[NDF-INTRAG header debug] scrollBody thead visibility:', getComputedStyle(sbHead).visibility);
-        }
-    }, 100);
+        $(window).trigger('resize');
+    }, 150);
 
     // Add Row button (static in filter bar)
     document.getElementById('btnAddNdf').addEventListener('click',function(){
@@ -584,7 +576,7 @@ $(document).ready(function() {
                 table.columns().search('');
                 (colFilters||[]).forEach(function(f){table.column(f.col.dtCol).search(f.value);});
                 table.draw();
-                setTimeout(function(){table.columns.adjust();},60);
+                setTimeout(function(){ table.columns.adjust(); $(window).trigger('resize'); }, 60);
             })
             .catch(function(err){console.error('[Intrag NDF] Load error:',err);});
     }
