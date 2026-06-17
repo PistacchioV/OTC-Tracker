@@ -219,40 +219,6 @@
                                     <th><span data-lang="intrag-ndf-col-29">Discount Factor</span></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
-                                <tr id="column-search-inputs">
-                                    <th></th><th></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contract Type"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CETIP Code"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Position"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID (Party)"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID (Cpty)"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Collateral"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Collateral"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Notional Value"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Reg. Date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Ref. Exchange"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Type (Form)"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trading Unit"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Price"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Parity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Mo/Yr"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot/Adj. Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Fwd Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Avg Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Info Source"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Adj. Type"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Observation"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Discount Factor"></th>
-                                    <th></th><!-- hidden row ID -->
-                                </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
@@ -331,7 +297,6 @@ $(document).ready(function() {
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
         responsive: false, scrollX: true, pageLength: 15,
-        orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
             { orderable: false, targets: [0,1] },
@@ -370,17 +335,42 @@ $(document).ready(function() {
         initComplete: function() {
             var api = this.api();
 
-            // Column search
-            document.querySelectorAll('#column-search-inputs th').forEach(function(th){ th.addEventListener('click',function(e){e.stopPropagation();}); });
-            document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
-                inp.addEventListener('click',function(e){e.stopPropagation();});
-                inp.addEventListener('keyup',function() {
+            // ── Inject filter row into the scrollHead clone ───────────────────────────
+            // Root fix for scrollX alignment: original thead has 1 row (correct for DT
+            // width calculation); the clone gets a 2nd row (filter) appended here so
+            // both rows share the same column widths set by DataTables.
+            var SF_PH = [
+                null,null,                                          // checkbox, actions
+                'Contract Type','CETIP Code','Portfolio Code','Position',
+                'Tax ID (Party)','Counterparty','Tax ID (Cpty)',
+                'Cpty Collateral','Party Collateral','Notional Value',
+                'Trade Date','Reg. Date','Maturity Date','Currency',
+                'Ref. Exchange','Commodity','Type (Form)','Quantity','Trading Unit',
+                'Trade Price','Settlement Parity','Maturity Mo/Yr','Spot/Adj. Rate',
+                'Fwd Rate','Asian Avg Rate','Info Source','Maturity Rate',
+                'Adj. Type','Observation','Discount Factor',
+                null                                                // col 32 hidden
+            ];
+            var filterCells = SF_PH.map(function(ph,i){
+                if(i===32) return '<th style="display:none"></th>';
+                if(!ph)    return '<th></th>';
+                return '<th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="'+ph+'"></th>';
+            }).join('');
+            var $filterRow = $('<tr id="column-search-inputs">'+filterCells+'</tr>');
+            var $sh = $('.dt-scroll-head table thead, .dataTables_scrollHead table thead').first();
+            if($sh.length) $sh.append($filterRow);
+
+            $filterRow.on('click',function(e){e.stopPropagation();});
+            $filterRow.find('input').each(function(){
+                var inp=this;
+                $(inp).on('click',function(e){e.stopPropagation();});
+                $(inp).on('keyup',function(){
                     var ci=inp.closest('th').cellIndex;
                     if(api.column(ci).search()!==this.value) api.column(ci).search(this.value).draw();
                 });
             });
 
-            // Show/Hide columns — inject into static container in the filter bar
+            // Show/Hide columns
             var ctw=document.getElementById('ndfColToggleWrap');
             if(ctw) {
                 var dd=document.createElement('div'); dd.className='dropdown';
@@ -396,7 +386,11 @@ $(document).ready(function() {
                     '<ul class="dropdown-menu" id="ndfColMenu">'+items+'</ul>';
                 ctw.appendChild(dd);
                 document.getElementById('ndfColMenu').addEventListener('change',function(e){
-                    if(e.target.classList.contains('toggle-vis')) table.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                    if(e.target.classList.contains('toggle-vis')){
+                        var colIdx=parseInt(e.target.dataset.column), vis=e.target.checked;
+                        table.column(colIdx).visible(vis);
+                        $filterRow.find('th').eq(colIdx).css('display',vis?'':'none');
+                    }
                 });
             }
         }
