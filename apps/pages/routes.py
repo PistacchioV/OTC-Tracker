@@ -1666,16 +1666,24 @@ def _weekday_bizdays_between(d1, d2):
         cur += timedelta(days=1)
     return count
 
-# ── Market → Unit of Negotiation mapping ─────────────────────────────────────
+# ── Subjacente.json lookup (keyed by Codigo do Ativo Subjacente, first match) ──
 
-_MARKET_TO_UNIT = {
-    'CBOT':  'Bushel',
-    'ICE':   'Libra',
-    'CME':   'Libra',
-    'NYMEX': 'Barril',
-    'BMF':   'Saca',
-    'B3':    'Saca',
-}
+def _load_subjacente_lookup():
+    try:
+        fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+        with open(fp, 'r', encoding='utf-8') as fh:
+            rows = json.load(fh)
+        result = {}
+        for row in rows:
+            code = (row.get('Codigo do Ativo Subjacente') or '').strip().upper()
+            if code and code not in result:
+                result[code] = row
+        return result
+    except Exception as exc:
+        log.warning('[SUBJACENTE] Failed to load: %s', exc)
+        return {}
+
+_SUBJACENTE_BY_CODE = _load_subjacente_lookup()
 
 _MONTH_ABBR = {
     'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
@@ -1706,22 +1714,25 @@ def _save_intrag_ndf_entry(deal):
     position = 'VENDEDOR' if direction == 'SELL' else ('COMPRADOR' if direction == 'BUY' else '')
 
     try:
-        total_notional = float(deal.get('TotalNotional', 0) or 0)
+        total_notional = float(str(deal.get('TotalNotional', 0) or 0).replace(',', ''))
     except (ValueError, TypeError):
         total_notional = 0.0
     try:
-        strike_val = float(deal.get('Strike', 0) or 0)
+        strike_val = float(str(deal.get('Strike', 0) or 0).replace(',', ''))
     except (ValueError, TypeError):
         strike_val = 0.0
 
-    notional_value_str = f'{total_notional * strike_val:.2f}' if (total_notional and strike_val) else ''
+    qic = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
+    strike_effective = strike_val / 100.0 if qic else strike_val
+    notional_value_str = f'{total_notional * strike_effective:.2f}' if (total_notional and strike_val) else ''
     qty_str = str(int(round(total_notional))) if total_notional else ''
-    strike_str = f'{strike_val:.4f}' if strike_val else ''
+    strike_str = f'{strike_effective:.4f}' if strike_val else ''
 
-    reference_exchange = (deal.get('Market', '') or '').strip()
-    commodity = (deal.get('Commodities', '') or '').strip()
     underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
-    unit = _MARKET_TO_UNIT.get(reference_exchange.upper(), '')
+    subj = _SUBJACENTE_BY_CODE.get(underlying_asset.upper(), {})
+    reference_exchange = (subj.get('Bolsa de Negociacao') or '').strip()
+    commodity = (deal.get('Commodities', '') or '').strip()
+    unit = (subj.get('Unidade de Negociacao') or '').strip()
     strike_ccy = (deal.get('StrikeCurrency', '') or '').strip()
 
     # Expiry month/year from Month field (e.g. "DEC26" → "12-2026")
