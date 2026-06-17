@@ -179,9 +179,9 @@
                                     <th data-lang="intrag-ndf-col-1">B3 ID</th>
                                     <th data-lang="intrag-ndf-col-2">Portfolio Code</th>
                                     <th data-lang="intrag-ndf-col-3">Participant Position</th>
-                                    <th data-lang="intrag-ndf-col-4">Client Tax ID (Party)</th>
+                                    <th data-lang="intrag-ndf-col-4">Party Tax ID</th>
                                     <th data-lang="intrag-ndf-col-5">Counterparty</th>
-                                    <th data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</th>
+                                    <th data-lang="intrag-ndf-col-6">Cpty Tax ID</th>
                                     <th data-lang="intrag-ndf-col-7">Cpty Collateral Basket</th>
                                     <th data-lang="intrag-ndf-col-8">Party Collateral Basket</th>
                                     <th data-lang="intrag-ndf-col-9">Notional Value</th>
@@ -191,20 +191,20 @@
                                     <th data-lang="intrag-ndf-col-13">Currency</th>
                                     <th data-lang="intrag-ndf-col-14">Reference Exchange</th>
                                     <th data-lang="intrag-ndf-col-15">Commodity</th>
-                                    <th data-lang="intrag-ndf-col-16">Type (Form)</th>
+                                    <th data-lang="intrag-ndf-col-16">Underlying Asset</th>
                                     <th data-lang="intrag-ndf-col-17">Quantity</th>
-                                    <th data-lang="intrag-ndf-col-18">Trading Unit</th>
-                                    <th data-lang="intrag-ndf-col-19">Trade Price</th>
-                                    <th data-lang="intrag-ndf-col-20">Settlement Parity</th>
-                                    <th data-lang="intrag-ndf-col-21">Maturity Month/Year</th>
-                                    <th data-lang="intrag-ndf-col-22">Spot / Adj. Rate</th>
-                                    <th data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</th>
-                                    <th data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</th>
-                                    <th data-lang="intrag-ndf-col-25">Information Source</th>
-                                    <th data-lang="intrag-ndf-col-26">Maturity Rate</th>
-                                    <th data-lang="intrag-ndf-col-27">Adjustment Type</th>
-                                    <th data-lang="intrag-ndf-col-28">Observation</th>
-                                    <th data-lang="intrag-ndf-col-29">Discount Factor</th>
+                                    <th data-lang="intrag-ndf-col-18">Unit of Negotiation</th>
+                                    <th data-lang="intrag-ndf-col-19">Strike</th>
+                                    <th data-lang="intrag-ndf-col-20">Strike Currency</th>
+                                    <th data-lang="intrag-ndf-col-21">Expiry Month/Year</th>
+                                    <th data-lang="intrag-ndf-col-22">ANBIMA Biz Days</th>
+                                    <th data-lang="intrag-ndf-col-23">0</th>
+                                    <th data-lang="intrag-ndf-col-24">N/A</th>
+                                    <th data-lang="intrag-ndf-col-25">N/A</th>
+                                    <th data-lang="intrag-ndf-col-26">Weekday Biz Days</th>
+                                    <th data-lang="intrag-ndf-col-27">Trade Type</th>
+                                    <th data-lang="intrag-ndf-col-28">Strike CCY Label</th>
+                                    <th data-lang="intrag-ndf-col-29">N/A</th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                                 <tr id="column-search-inputs">
@@ -213,11 +213,11 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Participant Position"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client Tax ID (Party)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Tax ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client Tax ID (Cpty)"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Collateral Basket"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Collateral Basket"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Tax ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Cpty Collateral"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Party Collateral"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Notional Value"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Registration Date"></th>
@@ -225,20 +225,20 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Currency"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Reference Exchange"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Type (Form)"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Underlying Asset"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trading Unit"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Price"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Parity"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Month/Year"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot / Adj. Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Forward Rate (R$/CCY)"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Fwd Avg Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Information Source"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Adjustment Type"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Observation"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Discount Factor"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit of Negotiation"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Currency"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Expiry Month/Year"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="ANBIMA Biz Days"></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Weekday Biz Days"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike CCY Label"></th>
+                                    <th></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
                             </thead>
@@ -285,13 +285,23 @@
 // col index 2-31 = data, col 32 = hidden row ID
 var NDF_COLS = [
     'Contract Type','B3 ID','Portfolio Code','Participant Position',
-    'Client Tax ID (Party)','Counterparty','Client Tax ID (Cpty)',
+    'Party Tax ID','Counterparty','Cpty Tax ID',
     'Cpty Collateral Basket','Party Collateral Basket','Notional Value',
     'Trade Date','Registration Date','Maturity Date','Currency',
-    'Reference Exchange','Commodity','Type (Form)','Quantity','Trading Unit',
-    'Trade Price','Settlement Parity','Maturity Month/Year','Spot / Adj. Rate',
-    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source',
-    'Maturity Rate','Adjustment Type','Observation','Discount Factor'
+    'Reference Exchange','Commodity','Underlying Asset','Quantity','Unit of Negotiation',
+    'Strike','Strike Currency','Expiry Month/Year','ANBIMA Biz Days',
+    '0','N/A','N/A','Weekday Biz Days','Trade Type','Strike CCY Label','N/A'
+];
+
+// Ordered field keys matching NDF_COLS (used when loading from API)
+var ENTRY_FIELDS = [
+    'contract_type','b3_id','portfolio_code','participant_position',
+    'party_tax_id','counterparty','cpty_tax_id',
+    'cpty_collateral_basket','party_collateral_basket','notional_value',
+    'trade_date','registration_date','maturity_date','currency',
+    'reference_exchange','commodity','underlying_asset','quantity','unit_of_negotiation',
+    'strike','strike_currency','expiry_month_year','anbima_bizdays',
+    'fixed_0','na_1','na_2','weekday_bizdays','trade_type_label','strike_ccy_label','na_3'
 ];
 
 var selectedRowIds = new Set();
@@ -526,7 +536,32 @@ $(document).ready(function() {
     sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
     sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
-    document.getElementById('sfSearchBtn').addEventListener('click',function(){sfActive.forEach(function(f){table.column(f.col.dtCol).search(f.value);});table.draw();});
+    document.getElementById('sfSearchBtn').addEventListener('click', function() {
+        fetch('/api/intrag/ndf')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                table.clear();
+                if (data.success && data.entries && data.entries.length) {
+                    data.entries.forEach(function(entry) {
+                        var actions = '<div class="d-flex justify-content-center gap-1">' +
+                            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
+                            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>';
+                        var row = [
+                            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+                            actions
+                        ];
+                        ENTRY_FIELDS.forEach(function(f) { row.push(entry[f] != null ? String(entry[f]) : ''); });
+                        row.push(entry._deal || _ndfId());
+                        table.row.add(row);
+                    });
+                }
+                // Clear column searches first, then apply smart filter chips
+                table.columns().search('');
+                sfActive.forEach(function(f) { table.column(f.col.dtCol).search(f.value); });
+                table.draw();
+            })
+            .catch(function(err) { console.error('[Intrag NDF] Load error:', err); });
+    });
     sfInput.addEventListener('keydown',function(e) {
         if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
         var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
@@ -552,9 +587,9 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-1">B3 ID</label><input type="text" class="form-control form-control-sm" id="ndf-f-1"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-2">Portfolio Code</label><input type="text" class="form-control form-control-sm" id="ndf-f-2"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-3">Participant Position</label><input type="text" class="form-control form-control-sm" id="ndf-f-3"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-4">Client Tax ID (Party)</label><input type="text" class="form-control form-control-sm" id="ndf-f-4"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-4">Party Tax ID</label><input type="text" class="form-control form-control-sm" id="ndf-f-4"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-5">Counterparty</label><input type="text" class="form-control form-control-sm" id="ndf-f-5"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-6">Client Tax ID (Cpty)</label><input type="text" class="form-control form-control-sm" id="ndf-f-6"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-6">Cpty Tax ID</label><input type="text" class="form-control form-control-sm" id="ndf-f-6"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-7">Cpty Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-7"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-8">Party Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-8"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-9">Notional Value</label><input type="text" class="form-control form-control-sm" id="ndf-f-9"></div>
@@ -564,20 +599,20 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-13">Currency</label><input type="text" class="form-control form-control-sm" id="ndf-f-13"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-14">Reference Exchange</label><input type="text" class="form-control form-control-sm" id="ndf-f-14"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-15">Commodity</label><input type="text" class="form-control form-control-sm" id="ndf-f-15"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-16">Type (Form)</label><input type="text" class="form-control form-control-sm" id="ndf-f-16"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-16">Underlying Asset</label><input type="text" class="form-control form-control-sm" id="ndf-f-16"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-17">Quantity</label><input type="text" class="form-control form-control-sm" id="ndf-f-17"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-18">Trading Unit</label><input type="text" class="form-control form-control-sm" id="ndf-f-18"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-19">Trade Price</label><input type="text" class="form-control form-control-sm" id="ndf-f-19"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-20">Settlement Parity</label><input type="text" class="form-control form-control-sm" id="ndf-f-20"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-21">Maturity Month/Year</label><input type="text" class="form-control form-control-sm" id="ndf-f-21"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-22">Spot / Adj. Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-22"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</label><input type="text" class="form-control form-control-sm" id="ndf-f-23"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-24"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-25">Information Source</label><input type="text" class="form-control form-control-sm" id="ndf-f-25"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-26">Maturity Rate</label><input type="text" class="form-control form-control-sm" id="ndf-f-26"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-27">Adjustment Type</label><input type="text" class="form-control form-control-sm" id="ndf-f-27"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-28">Observation</label><input type="text" class="form-control form-control-sm" id="ndf-f-28"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-29">Discount Factor</label><input type="text" class="form-control form-control-sm" id="ndf-f-29"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-18">Unit of Negotiation</label><input type="text" class="form-control form-control-sm" id="ndf-f-18"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-19">Strike</label><input type="text" class="form-control form-control-sm" id="ndf-f-19"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-20">Strike Currency</label><input type="text" class="form-control form-control-sm" id="ndf-f-20"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-21">Expiry Month/Year</label><input type="text" class="form-control form-control-sm" id="ndf-f-21"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-22">ANBIMA Biz Days</label><input type="text" class="form-control form-control-sm" id="ndf-f-22"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-23">0</label><input type="text" class="form-control form-control-sm" id="ndf-f-23"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-24">N/A</label><input type="text" class="form-control form-control-sm" id="ndf-f-24"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-25">N/A</label><input type="text" class="form-control form-control-sm" id="ndf-f-25"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-26">Weekday Biz Days</label><input type="text" class="form-control form-control-sm" id="ndf-f-26"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-27">Trade Type</label><input type="text" class="form-control form-control-sm" id="ndf-f-27"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-28">Strike CCY Label</label><input type="text" class="form-control form-control-sm" id="ndf-f-28"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-29">N/A</label><input type="text" class="form-control form-control-sm" id="ndf-f-29"></div>
         </div>
       </div>
       <div class="modal-footer py-2">

@@ -1620,6 +1620,224 @@ NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals"
 ))
 
+INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag"
+))
+
+# ── ANBIMA calendar ───────────────────────────────────────────────────────────
+
+_ANBIMA_HOLIDAYS: set = set()
+_anbima_loaded = False
+
+def _load_anbima():
+    global _ANBIMA_HOLIDAYS, _anbima_loaded
+    if _anbima_loaded:
+        return
+    try:
+        path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'anbima.json')
+        with open(path, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+        _ANBIMA_HOLIDAYS = {d['date'] for d in data}
+    except Exception as exc:
+        log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
+        _ANBIMA_HOLIDAYS = set()
+    _anbima_loaded = True
+
+def _anbima_bizdays_between(d1, d2):
+    """Count ANBIMA business days strictly between d1 and d2 (exclusive both ends)."""
+    _load_anbima()
+    if d1 >= d2:
+        return 0
+    count, cur = 0, d1 + timedelta(days=1)
+    while cur < d2:
+        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
+            count += 1
+        cur += timedelta(days=1)
+    return count
+
+def _weekday_bizdays_between(d1, d2):
+    """Count weekday-only business days strictly between d1 and d2 (exclusive both ends)."""
+    if d1 >= d2:
+        return 0
+    count, cur = 0, d1 + timedelta(days=1)
+    while cur < d2:
+        if cur.weekday() < 5:
+            count += 1
+        cur += timedelta(days=1)
+    return count
+
+# ── Market → Unit of Negotiation mapping ─────────────────────────────────────
+
+_MARKET_TO_UNIT = {
+    'CBOT':  'Bushel',
+    'ICE':   'Libra',
+    'CME':   'Libra',
+    'NYMEX': 'Barril',
+    'BMF':   'Saca',
+    'B3':    'Saca',
+}
+
+_MONTH_ABBR = {
+    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+    'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+    'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
+}
+
+def _parse_deal_date(s):
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d'):
+        try:
+            return datetime.strptime(s.strip(), fmt)
+        except (ValueError, AttributeError):
+            pass
+    return None
+
+def _save_intrag_ndf_entry(deal):
+    """Compute all Intrag NDF fields and append/update in the daily JSON file."""
+    td = _parse_deal_date(deal.get('TradeDate', '') or '')
+    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
+    fx = _parse_deal_date(deal.get('FXConvDate', '') or '')
+    fe = _parse_deal_date(deal.get('FixingEndDate', '') or '')
+
+    fmt_d = lambda d: d.strftime('%Y-%m-%d') if d else ''
+
+    direction = (deal.get('Direction', '') or '').upper()
+    position = 'VENDEDOR' if direction == 'SELL' else ('COMPRADOR' if direction == 'BUY' else '')
+
+    try:
+        total_notional = float(deal.get('TotalNotional', 0) or 0)
+    except (ValueError, TypeError):
+        total_notional = 0.0
+    try:
+        strike_val = float(deal.get('Strike', 0) or 0)
+    except (ValueError, TypeError):
+        strike_val = 0.0
+
+    notional_value_str = f'{total_notional * strike_val:.2f}' if (total_notional and strike_val) else ''
+    qty_str = str(int(round(total_notional))) if total_notional else ''
+    strike_str = f'{strike_val:.4f}' if strike_val else ''
+
+    reference_exchange = (deal.get('Market', '') or '').strip()
+    commodity = (deal.get('Commodities', '') or '').strip()
+    underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
+    unit = _MARKET_TO_UNIT.get(reference_exchange.upper(), '')
+    strike_ccy = (deal.get('StrikeCurrency', '') or '').strip()
+
+    # Expiry month/year from Month field (e.g. "DEC26" → "12-2026")
+    expiry_str = ''
+    month_raw = (deal.get('Month', '') or '').strip().upper()
+    m = re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
+    if m:
+        mon_num = _MONTH_ABBR.get(m.group(1), '')
+        yr = m.group(2) if len(m.group(2)) == 4 else '20' + m.group(2)
+        if mon_num:
+            expiry_str = f'{mon_num}-{yr}'
+    elif re.match(r'^\d{4}-\d{2}$', month_raw):
+        parts = month_raw.split('-')
+        expiry_str = f'{parts[1]}-{parts[0]}'
+    elif sd:
+        expiry_str = sd.strftime('%m-%Y')
+
+    # ANBIMA biz days between FXConvDate and SettlementDate
+    anbima_days = ''
+    if fx and sd:
+        lo, hi = (fx, sd) if fx < sd else (sd, fx)
+        anbima_days = f'D-{_anbima_bizdays_between(lo, hi)}'
+
+    # Weekday biz days between SettlementDate and FixingEndDate
+    weekday_days = ''
+    if sd and fe:
+        lo, hi = (sd, fe) if sd < fe else (fe, sd)
+        weekday_days = f'D-{_weekday_bizdays_between(lo, hi)}'
+
+    trade_type = (deal.get('TradeType', '') or '').upper()
+    trade_type_label = 'ASIATICO' if 'ASIAN' in trade_type else ('FINAL' if 'VANILLA' in trade_type else '')
+
+    strike_ccy_label = 'Strike em BRL' if strike_ccy.upper() == 'BRL' else ''
+
+    entry = {
+        'contract_type':          'NDF - TERMO MERCADORIA',
+        'b3_id':                  deal.get('B3_ID', '') or '',
+        'portfolio_code':         'INTRAGJP552',
+        'participant_position':   position,
+        'party_tax_id':           '',
+        'counterparty':           'JPM',
+        'cpty_tax_id':            '',
+        'cpty_collateral_basket': 'NÃO',
+        'party_collateral_basket':'NÃO',
+        'notional_value':         notional_value_str,
+        'trade_date':             fmt_d(td),
+        'registration_date':      fmt_d(td),
+        'maturity_date':          fmt_d(sd),
+        'currency':               'N/A',
+        'reference_exchange':     reference_exchange,
+        'commodity':              commodity,
+        'underlying_asset':       underlying_asset,
+        'quantity':               qty_str,
+        'unit_of_negotiation':    unit,
+        'strike':                 strike_str,
+        'strike_currency':        strike_ccy,
+        'expiry_month_year':      expiry_str,
+        'anbima_bizdays':         anbima_days,
+        'fixed_0':                '0',
+        'na_1':                   'N/A',
+        'na_2':                   'N/A',
+        'weekday_bizdays':        weekday_days,
+        'trade_type_label':       trade_type_label,
+        'strike_ccy_label':       strike_ccy_label,
+        'na_3':                   'N/A',
+        '_deal':                  deal.get('Deal', '') or '',
+        '_client':                deal.get('Client', '') or '',
+    }
+
+    ref = td or datetime.now()
+    dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
+    fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
+    file_path = os.path.join(dir_path, fname)
+
+    with _cache_lock:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    entries = json.load(fh)
+                if not isinstance(entries, list):
+                    entries = []
+            except (json.JSONDecodeError, ValueError):
+                entries = []
+        else:
+            entries = []
+        deal_id = entry['_deal']
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            entries[idx] = entry
+        else:
+            entries.append(entry)
+        _atomic_write_json(file_path, entries)
+    log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
+
+
+@blueprint.route('/api/intrag/ndf')
+def api_intrag_ndf():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    entries = []
+    if os.path.isdir(INTRAG_NDF_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
+            for fname in sorted(files):
+                if not fname.endswith('_intrag_ndf.json'):
+                    continue
+                fp = os.path.join(root, fname)
+                try:
+                    with open(fp, 'r', encoding='utf-8') as fh:
+                        data = json.load(fh)
+                    if isinstance(data, list):
+                        entries.extend(data)
+                except Exception as exc:
+                    log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
+    return jsonify({'success': True, 'entries': entries})
+
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])
 def api_ndf_save_deal_cache():
@@ -1821,6 +2039,16 @@ def api_ndf_update_deal_cache(deal_id):
         log.info("[NDF PATCH] Updated deal[%d] %r: Status %r→%r updates=%s",
                  idx, deal_id, prev_status, deals[idx].get('Status', '?'), updates)
         _atomic_write_json(file_path, deals)
+        updated_deal = deals[idx].copy()
+
+    # Save to Intrag when Status→Success and client is BANCO JP MORGAN
+    new_status = updated_deal.get('Status', '')
+    cl_lower = (updated_deal.get('Client', '') or '').lower()
+    if new_status == 'Success' and 'banco' in cl_lower and ('jp morgan' in cl_lower or 'jpmorgan' in cl_lower):
+        try:
+            _save_intrag_ndf_entry(updated_deal)
+        except Exception as exc:
+            log.error('[NDF PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
