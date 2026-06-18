@@ -83,10 +83,15 @@
     <!-- Period filter -->
     <div class="row mb-3">
         <div class="col-12 d-flex justify-content-end">
-            <div class="btn-group" role="group" id="dash-period-filter">
-                <button type="button" class="btn btn-sm btn-outline-primary active" data-period="month" data-lang="dash-filter-month">Mês Atual</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-period="year" data-lang="dash-filter-year">Ano Atual</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-period="all" data-lang="dash-filter-all">Todos</button>
+            <div class="dropdown" id="dash-period-filter">
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="dash-period-btn" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-calendar me-1"></i><span id="dash-period-label" data-lang="dash-filter-month">Mês Atual</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dash-period-btn">
+                    <li><a class="dropdown-item active" href="#" data-period="month" data-lang="dash-filter-month">Mês Atual</a></li>
+                    <li><a class="dropdown-item" href="#" data-period="year" data-lang="dash-filter-year">Ano Atual</a></li>
+                    <li><a class="dropdown-item" href="#" data-period="all" data-lang="dash-filter-all">Todos</a></li>
+                </ul>
             </div>
         </div>
     </div>

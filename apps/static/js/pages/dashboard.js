@@ -92,6 +92,24 @@ function hGradient(hex, leftAlpha, rightAlpha) {
     };
 }
 
+/**
+ * Per-segment vertical gradient for doughnut/pie charts. Returns a SINGLE
+ * scriptable function (Chart.js does not resolve an array of functions as
+ * scriptable — it would render them as invalid → black), picking the segment
+ * color by context.dataIndex.
+ */
+function doughnutGradient(hexColors, topAlpha, bottomAlpha) {
+    return (context) => {
+        const hex = hexColors[context.dataIndex] || hexColors[0];
+        const { ctx, chartArea } = context.chart;
+        if (!chartArea) return hexToRgba(hex, topAlpha);
+        const g = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+        g.addColorStop(0, hexToRgba(hex, bottomAlpha));
+        g.addColorStop(1, hexToRgba(hex, topAlpha));
+        return g;
+    };
+}
+
 function hexToRgba(hex, a) {
     hex = (hex || '').trim();
     if (hex.startsWith('rgb')) return hex;
@@ -116,7 +134,7 @@ function buildPieChart(ndf, opt) {
             labels: ['NDF Commodities', 'Option Commodities'],
             datasets: [{
                 data: [ndf, opt],
-                backgroundColor: [vGradient(ins('chart-primary'), 1, 0.55), vGradient(ins('chart-secondary'), 1, 0.55)],
+                backgroundColor: doughnutGradient([ins('chart-primary'), ins('chart-secondary')], 1, 0.55),
                 borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
                 borderWidth: 2,
                 hoverOffset: 8,
@@ -195,10 +213,9 @@ function buildProductsChart(top5) {
         return;
     }
     const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary')];
-    const colors = baseColors.map((c, i) => vGradient(c, 1, i === 4 ? 0.4 : 0.6));
     productsChart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: colors, borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
+        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(baseColors, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: { animateRotate: true, animateScale: true, duration: 700 },
@@ -331,11 +348,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTranslations();
     loadDashboard('month');
 
-    document.querySelectorAll('#dash-period-filter [data-period]').forEach(btn => {
-        btn.addEventListener('click', () => {
+    document.querySelectorAll('#dash-period-filter [data-period]').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
             document.querySelectorAll('#dash-period-filter [data-period]').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadDashboard(btn.dataset.period);
+            item.classList.add('active');
+            const label = document.getElementById('dash-period-label');
+            if (label) {
+                label.setAttribute('data-lang', 'dash-filter-' + item.dataset.period);
+                label.textContent = item.textContent;
+            }
+            loadDashboard(item.dataset.period);
         });
     });
 
