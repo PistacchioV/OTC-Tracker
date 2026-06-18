@@ -330,10 +330,15 @@ async function loadDashboard(period) {
         const data = await res.json();
         _lastData = data;
 
-        document.getElementById('dash-ndf-count').textContent     = data.ndf_total;
-        document.getElementById('dash-opt-count').textContent     = data.opt_total;
-        document.getElementById('dash-swap-count').textContent    = data.swap_total ?? 0;
-        document.getElementById('dash-total-count').textContent   = data.total_deals;
+        // Null-safe: a missing/renamed count element must never halt chart rendering
+        const setText = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        setText('dash-ndf-count', data.ndf_total);
+        setText('dash-opt-count', data.opt_total);
+        setText('dash-swap-count', data.swap_total ?? 0);
+        setText('dash-total-count', data.total_deals);
 
         updatePeriodBadges(period);
         buildPieChart(data.ndf_total, data.opt_total);

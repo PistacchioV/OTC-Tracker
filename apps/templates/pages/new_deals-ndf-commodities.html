@@ -1149,6 +1149,33 @@ function formatExportData(data, row, column, node) {
 // Current authenticated user SID (set by Flask session)
 var CURRENT_USER_SID = '{{ session.get("user_sid", "") }}';
 
+// ── Real-time notifications ──────────────────────────────────────────────────
+// Refresh the topbar bell immediately after any mutating action on this page
+// (PATCH/DELETE/POST to new-deals or a notification create), so the actor sees
+// the bulk/individual notification without waiting for the 8s poll cycle.
+(function () {
+    var _origFetch = window.fetch;
+    var _pending = false;
+    function scheduleNotifRefresh() {
+        if (_pending) return;
+        _pending = true;
+        setTimeout(function () {
+            _pending = false;
+            if (typeof window.fetchNotifications === 'function') window.fetchNotifications();
+        }, 250);
+    }
+    window.fetch = function (input, init) {
+        var url    = (typeof input === 'string') ? input : (input && input.url) || '';
+        var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        var p = _origFetch.apply(this, arguments);
+        if (method !== 'GET' && url.indexOf('/cache/search') === -1 &&
+            (url.indexOf('/api/new-deals/') !== -1 || url.indexOf('/api/notifications') !== -1)) {
+            p.then(scheduleNotifRefresh).catch(function () {});
+        }
+        return p;
+    };
+})();
+
 // ── Translation cache & helper ───────────────────────────────────────────────
 var _TRANS_CACHE = {};
 (function () {
@@ -2773,6 +2800,11 @@ $(document).ready(function() {
                         skippedCount++;
                         return;
                     }
+                    // 4-eyes: you cannot approve a deal you imported/last edited
+                    if ((d[29] || '') === CURRENT_USER_SID) {
+                        skippedCount++;
+                        return;
+                    }
                 }
 
                 if (!isStatusCol) {
@@ -2803,6 +2835,9 @@ $(document).ready(function() {
                         : '<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>'
                 );
                 changedFields['Status'] = newStatus;
+                // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
+                table.cell(rowIdx, 29).data(CURRENT_USER_SID);
+                changedFields['Maker'] = CURRENT_USER_SID;
                 processedCount++;
                 patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
             });
@@ -3602,12 +3637,14 @@ $(document).ready(function() {
             if (statusNode) {
                 $(statusNode).html('<span class="badge badge-label text-bg-secondary rounded-pill">Approved</span>');
             }
+            // Approver becomes the new Maker → next step (Send) must be a different user
+            table.cell(tr[0], 29).data(CURRENT_USER_SID);
             var approveRowId = _sh(table.cell(tr[0], 3).data()) || '';
             if (approveRowId) {
                 fetch('/api/new-deals/ndf-commodities/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 10).data())), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ Status: 'Approved' })
+                    body:    JSON.stringify({ Status: 'Approved', Maker: CURRENT_USER_SID })
                 }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
             }
             table.row(tr[0]).invalidate('dom');
