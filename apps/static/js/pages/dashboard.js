@@ -43,6 +43,65 @@ function productBadge(product, type) {
     return `<span class="badge bg-primary-subtle text-primary">${product || t('dash-prod-ndf', 'NDF Commodities')}</span>`;
 }
 
+// ─── chart theme helpers ─────────────────────────────────────────────────────
+
+function isDark() {
+    return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+}
+
+/** Premium theme-aware tooltip config (shared by all charts). */
+function premiumTooltip(extra) {
+    const dark = isDark();
+    return Object.assign({
+        backgroundColor: dark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.97)',
+        titleColor:      dark ? '#f1f5f9' : '#1e293b',
+        bodyColor:       dark ? '#cbd5e1' : '#475569',
+        borderColor:     dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 10,
+        titleFont: { family: bodyFont, weight: '600', size: 13 },
+        bodyFont:  { family: bodyFont, size: 12 },
+        usePointStyle: true,
+        boxPadding: 6,
+        displayColors: true,
+    }, extra || {});
+}
+
+/** Vertical gradient (bottom → top) for area/bar fills. */
+function vGradient(hex, topAlpha, bottomAlpha) {
+    return (context) => {
+        const { ctx, chartArea } = context.chart;
+        if (!chartArea) return hexToRgba(hex, topAlpha);
+        const g = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+        g.addColorStop(0, hexToRgba(hex, bottomAlpha));
+        g.addColorStop(1, hexToRgba(hex, topAlpha));
+        return g;
+    };
+}
+
+/** Horizontal gradient (left → right) for horizontal-bar fills. */
+function hGradient(hex, leftAlpha, rightAlpha) {
+    return (context) => {
+        const { ctx, chartArea } = context.chart;
+        if (!chartArea) return hexToRgba(hex, rightAlpha);
+        const g = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+        g.addColorStop(0, hexToRgba(hex, leftAlpha));
+        g.addColorStop(1, hexToRgba(hex, rightAlpha));
+        return g;
+    };
+}
+
+function hexToRgba(hex, a) {
+    hex = (hex || '').trim();
+    if (hex.startsWith('rgb')) return hex;
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const n = parseInt(full, 16);
+    if (isNaN(n)) return `rgba(106, 17, 203, ${a})`;
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
 // ─── chart instances ─────────────────────────────────────────────────────────
 
 let pieChart = null, flowChart = null, clientsChart = null, productsChart = null;
@@ -55,13 +114,21 @@ function buildPieChart(ndf, opt) {
         type: 'doughnut',
         data: {
             labels: ['NDF Commodities', 'Option Commodities'],
-            datasets: [{ data: [ndf, opt], backgroundColor: [ins('chart-primary'), ins('chart-secondary')], borderColor: 'transparent', borderWidth: 1, cutout: '65%' }]
+            datasets: [{
+                data: [ndf, opt],
+                backgroundColor: [vGradient(ins('chart-primary'), 1, 0.55), vGradient(ins('chart-secondary'), 1, 0.55)],
+                borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
+                borderWidth: 2,
+                hoverOffset: 8,
+                cutout: '65%'
+            }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            animation: { animateRotate: true, animateScale: true, duration: 700 },
             plugins: {
                 legend: { position: 'bottom', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
             }
         }
     });
@@ -76,14 +143,18 @@ function buildFlowChart(monthlyNdf, monthlyOpt) {
         data: {
             labels: months,
             datasets: [
-                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: ins('chart-primary'), borderColor: ins('chart-primary'), stack: 'deals', barThickness: 20, borderRadius: 6 },
-                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: ins('chart-secondary'), borderColor: ins('chart-secondary'), stack: 'deals', barThickness: 20, borderRadius: 6 },
+                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
+                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             layout: { padding: { top: -10 } },
-            plugins: { legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } } },
+            animation: { duration: 700, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
+                tooltip: premiumTooltip({ mode: 'index', intersect: false })
+            },
             scales: {
                 x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
                 y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
@@ -102,10 +173,11 @@ function buildClientsChart(top5) {
     }
     clientsChart = new Chart(ctx, {
         type: 'bar',
-        data: { labels: top5.map(d => d.label), datasets: [{ label: 'Deals', data: top5.map(d => d.count), backgroundColor: ins('chart-primary'), borderRadius: 6, barThickness: 22 }] },
+        data: { labels: top5.map(d => d.label), datasets: [{ label: 'Deals', data: top5.map(d => d.count), backgroundColor: hGradient(ins('chart-primary'), 0.55, 1), borderRadius: 6, barThickness: 22 }] },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x} deal${ctx.parsed.x !== 1 ? 's' : ''}` } } },
+            animation: { duration: 700, easing: 'easeOutQuart' },
+            plugins: { legend: { display: false }, tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x} deal${ctx.parsed.x !== 1 ? 's' : ''}` } }) },
             scales: {
                 x: { ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color') }, border: { display: false } },
                 y: { ticks: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), callback(val) { const l = this.getLabelForValue(val); return l.length > 22 ? l.slice(0, 21) + '…' : l; } }, grid: { display: false }, border: { display: false } }
@@ -122,15 +194,17 @@ function buildProductsChart(top5) {
         ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
         return;
     }
-    const colors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary-rgb', 0.5)];
+    const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary')];
+    const colors = baseColors.map((c, i) => vGradient(c, 1, i === 4 ? 0.4 : 0.6));
     productsChart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: colors, borderColor: 'transparent', borderWidth: 2, cutout: '60%' }] },
+        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: colors, borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
+            animation: { animateRotate: true, animateScale: true, duration: 700 },
             plugins: {
                 legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
             }
         }
     });
@@ -205,10 +279,13 @@ function updatePeriodBadges(period) {
 
 // ─── main load ───────────────────────────────────────────────────────────────
 
+let _lastData = null;
+
 async function loadDashboard(period) {
     try {
         const res  = await fetch(`/api/dashboard-stats?period=${period}`);
         const data = await res.json();
+        _lastData = data;
 
         document.getElementById('dash-ndf-count').textContent     = data.ndf_total;
         document.getElementById('dash-opt-count').textContent     = data.opt_total;
@@ -237,6 +314,17 @@ async function loadDashboard(period) {
     }
 }
 
+// ─── theme-aware re-render ───────────────────────────────────────────────────
+
+/** Rebuild every chart from the cached data using the current theme's tokens. */
+function rerenderCharts() {
+    if (!_lastData) return;
+    buildPieChart(_lastData.ndf_total, _lastData.opt_total);
+    buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt);
+    buildClientsChart(_lastData.top5_clients);
+    buildProductsChart(_lastData.top5_products);
+}
+
 // ─── init ────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -249,5 +337,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             btn.classList.add('active');
             loadDashboard(btn.dataset.period);
         });
+    });
+
+    // Re-render charts when the theme (light/dark) or skin changes so colors,
+    // gradients and tooltips follow the active palette. Debounced to coalesce
+    // the rapid attribute flips the theme switcher can emit.
+    const _rerender = debounce(rerenderCharts, 120);
+    new MutationObserver(_rerender).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-bs-theme', 'data-skin']
     });
 });

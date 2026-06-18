@@ -3,10 +3,79 @@
 {% block title %}Dashboard{% endblock title %}
 
 {% block extra_css %}
+<style>
+/* ── Dashboard Premium Styles ───────────────────────────────── */
+
+/* 1. Fade-in entrance animation */
+@keyframes dashFadeIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.dash-fade-in { animation: dashFadeIn 0.5s ease both; }
+
+/* Stagger for stat widgets row */
+.row-cols-xxl-4 > .col:nth-child(1) .dash-fade-in { animation-delay: 0.05s; }
+.row-cols-xxl-4 > .col:nth-child(2) .dash-fade-in { animation-delay: 0.13s; }
+.row-cols-xxl-4 > .col:nth-child(3) .dash-fade-in { animation-delay: 0.21s; }
+.row-cols-xxl-4 > .col:nth-child(4) .dash-fade-in { animation-delay: 0.29s; }
+.dash-fade-in-2 { animation-delay: 0.20s; }
+.dash-fade-in-3 { animation-delay: 0.30s; }
+.dash-fade-in-3b { animation-delay: 0.36s; }
+.dash-fade-in-4 { animation-delay: 0.42s; }
+
+/* 2. Glassmorphism — Light mode */
+[data-bs-theme="light"] #dash-page .card {
+    background: rgba(255, 255, 255, 0.82) !important;
+    backdrop-filter: blur(18px) saturate(1.8);
+    -webkit-backdrop-filter: blur(18px) saturate(1.8);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.65) !important;
+}
+
+/* 2. Glassmorphism — Dark mode */
+[data-bs-theme="dark"] #dash-page .card {
+    background: rgba(255, 255, 255, 0.09) !important;
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.45), 0 1px 6px rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+/* 3. Global transitions on card elements */
+#dash-page .card,
+#dash-page .card-body,
+#dash-page .card-header,
+#dash-page .card-footer,
+#dash-page .btn,
+#dash-page .badge {
+    transition: background-color 0.3s ease, color 0.3s ease,
+                box-shadow 0.25s ease, border-color 0.3s ease,
+                transform 0.25s ease;
+}
+
+/* 4. Card hover lift */
+#dash-page .card:hover { transform: translateY(-3px); }
+[data-bs-theme="light"] #dash-page .card:hover {
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.13), 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+[data-bs-theme="dark"] #dash-page .card:hover {
+    box-shadow: 0 14px 52px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.32) !important;
+}
+
+/* 5. Button hover */
+#dash-page .btn { transition: all 0.25s ease; }
+
+/* 6. Stat card avatar icon scale */
+#dash-page .avatar-title { transition: transform 0.22s ease; }
+#dash-page .card:hover .avatar-title { transform: scale(1.1); }
+
+/* 7. Count number transition */
+#dash-page .card h3 { transition: color 0.3s ease; }
+</style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid" data-content="">
+<div id="dash-page" class="container-fluid" data-content="">
 
     {% set title='Dashboard' %}
     {% include 'partials/page-title.html' %}
@@ -26,7 +95,7 @@
     <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
         <!-- NDF Deals Widget -->
         <div class="col">
-            <div class="card">
+            <div class="card dash-fade-in">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="avatar fs-60 avatar-img-size flex-shrink-0">
@@ -44,7 +113,7 @@
         </div><!-- end col -->
         <!-- Options Deals Widget -->
         <div class="col">
-            <div class="card">
+            <div class="card dash-fade-in">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="avatar fs-60 avatar-img-size flex-shrink-0">
@@ -62,7 +131,7 @@
         </div><!-- end col -->
         <!-- Pending Confirmations Widget -->
         <div class="col">
-            <div class="card">
+            <div class="card dash-fade-in">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="avatar fs-60 avatar-img-size flex-shrink-0">
@@ -80,7 +149,7 @@
         </div><!-- end col -->
         <!-- Total Deals Widget -->
         <div class="col">
-            <div class="card">
+            <div class="card dash-fade-in">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="avatar fs-60 avatar-img-size flex-shrink-0">
@@ -101,7 +170,7 @@
     <!-- Deal Distribution + Flow Analytics -->
     <div class="row">
         <div class="col-12">
-            <div class="card">
+            <div class="card dash-fade-in dash-fade-in-2">
                 <div class="card-body p-0">
                     <div class="row g-0">
                         <div class="col-xxl-3 col-xl-6 order-xl-1 order-xxl-0">
@@ -146,7 +215,7 @@
     <div class="row">
         <!-- Top 5 Clientes -->
         <div class="col-xxl-6">
-            <div class="card h-100">
+            <div class="card h-100 dash-fade-in dash-fade-in-3">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
                     <h4 class="card-title mb-0" data-lang="dash-top5-clients">Top 5 Clientes</h4>
                     <span class="badge bg-primary-subtle text-primary fs-xxs" id="dash-top5-clients-period" data-lang="dash-filter-month">Mês Atual</span>
@@ -161,7 +230,7 @@
 
         <!-- Top 5 Produto -->
         <div class="col-xxl-6">
-            <div class="card h-100">
+            <div class="card h-100 dash-fade-in dash-fade-in-3b">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
                     <h4 class="card-title mb-0" data-lang="dash-top5-products">Top 5 Produtos</h4>
                     <span class="badge bg-success-subtle text-success fs-xxs" id="dash-top5-products-period" data-lang="dash-filter-month">Mês Atual</span>
@@ -178,7 +247,7 @@
     <!-- Recent Deals table -->
     <div class="row mt-3">
         <div class="col-12">
-            <div class="card" data-table="" data-table-rows-per-page="7">
+            <div class="card dash-fade-in dash-fade-in-4" data-table="" data-table-rows-per-page="7">
                 <div class="card-header justify-content-between align-items-center border-dashed">
                     <h4 class="card-title mb-0" data-lang="dash-recent-title">Recent Deals</h4>
                     <div class="d-flex align-items-center gap-2">
