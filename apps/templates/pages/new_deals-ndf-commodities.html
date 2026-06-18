@@ -1728,13 +1728,18 @@ $(document).ready(function() {
                 var _mappingNdfRunning = false;
                 mappingBtn.addEventListener('click', function() {
                     if (_mappingNdfRunning) return;
-                    var sentDeals = [];
+                    var sentDeals = [], _seenDeals = {};
                     table.rows({search: 'none', page: 'all'}).every(function() {
                         var d = this.data();
                         var deal   = _sh(d[3]);
                         var status = _sh(d[2]);
                         if ((status === 'Sent' || status === 'Error') && deal) {
-                            sentDeals.push({ Deal: deal, Client: _sh(d[10]) });
+                            // Dedupe by Deal+Client so duplicate rows aren't sent/counted twice
+                            var client = _sh(d[10]);
+                            var key = deal + '|' + client;
+                            if (_seenDeals[key]) return;
+                            _seenDeals[key] = true;
+                            sentDeals.push({ Deal: deal, Client: client });
                         }
                     });
 
@@ -1775,8 +1780,18 @@ $(document).ready(function() {
                             return;
                         }
 
-                        var successCount = 0, errorCount = 0;
+                        var successCount = 0, errorCount = 0, _countedIds = {};
                         (res.results || []).forEach(function(result) {
+                            // Count each distinct Deal once (not per matched row nor per
+                            // duplicate result) so duplicate rows never inflate the total.
+                            if (!_countedIds[result.id]) {
+                                _countedIds[result.id] = true;
+                                if (result.status === 'Success') {
+                                    successCount++;
+                                } else if (result.status === 'Error') {
+                                    errorCount++;
+                                }
+                            }
                             table.rows({search: 'none', page: 'all'}).every(function() {
                                 var d = this.data();
                                 if (_sh(d[3]) !== result.id) return;
@@ -1786,12 +1801,10 @@ $(document).ready(function() {
                                     table.cell(node, 2).data(
                                         '<span class="badge badge-label text-bg-success rounded-pill">Success</span>'
                                     );
-                                    successCount++;
                                 } else if (result.status === 'Error') {
                                     table.cell(node, 2).data(
                                         '<span class="badge badge-label text-bg-danger rounded-pill">Error</span>'
                                     );
-                                    errorCount++;
                                 }
                             });
                         });
