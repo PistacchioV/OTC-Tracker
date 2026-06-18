@@ -1472,35 +1472,33 @@ $(document).ready(function() {
             //        remove data-lang from hidden body sizing row
             // ==============================================================
             var ND_COL_KEYS = [
-                null,                  // col 0  — checkbox (no label)
-                'nd-col-actions',      // col 1
-                'nd-col-status',       // col 2
-                'nd-col-deal',         // col 3
-                'nd-col-b3-id',        // col 4
-                'nd-col-trade-date',   // col 5
-                'nd-col-month',        // col 6
-                'nd-col-settle-date',  // col 7
-                'nd-col-spn',          // col 8
-                'nd-col-acronym',      // col 9
-                'nd-col-client',       // col 10
-                'nd-col-tax-id',       // col 11
-                'nd-col-trade-type',   // col 12
-                'nd-col-market',           // col 13
-                'nd-col-ativo-subjacente', // col 14
-                'nd-col-commodities',      // col 15
-                'nd-col-fx-holiday',       // col 16
-                'nd-col-notional',         // col 17
-                'nd-col-instrument',       // col 18
-                'nd-col-contract',         // col 19
-                'nd-col-strike',           // col 20
-                'nd-col-strike-ccy',       // col 21
-                'nd-col-direction',        // col 22
-                'nd-col-fxconv-date',      // col 23
-                'nd-col-fix-start',        // col 24
-                'nd-col-fix-end',          // col 25
-                'nd-col-trading-book',     // col 26
-                'nd-col-other-book',       // col 27
-                'nd-col-quoted-cents'      // col 28
+                null,                       // col 0  — checkbox (no label)
+                'nd-col-actions',           // col 1
+                'nd-col-status',            // col 2
+                'nd-col-le',                // col 3
+                'nd-col-deal',              // col 4
+                'nd-col-b3-id',             // col 5
+                'nd-col-trade-date',        // col 6
+                'nd-col-month',             // col 7
+                'nd-col-settle-date',       // col 8
+                'nd-col-spn',               // col 9
+                'nd-col-client',            // col 10
+                'nd-col-tax-id',            // col 11
+                'nd-col-first-fix',         // col 12
+                'nd-col-last-fix',          // col 13
+                'nd-col-strike-set-date',   // col 14
+                'nd-col-strike-set-offset', // col 15
+                'nd-col-instrument',        // col 16
+                'nd-col-trade-type',        // col 17
+                'nd-col-direction',         // col 18
+                'nd-col-fx-pair',           // col 19
+                'nd-col-qty-ccy',           // col 20
+                'nd-col-publisher',         // col 21
+                'nd-col-notional',          // col 22
+                'nd-col-rate',              // col 23
+                'nd-col-is-brr-fixed',      // col 24
+                'nd-col-trading-book'       // col 25
+                // col 26 — Maker (hidden, no label)
             ];
             var container = api.table().container();
             // DT2.x uses .dt-scroll-head; DT1.x used .dataTables_scrollHead
