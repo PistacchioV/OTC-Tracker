@@ -1210,7 +1210,7 @@ var OTCFileUpload = (function () {
         var importBtn = document.getElementById('importBtn');
         if (importBtn) {
             importBtn.disabled = true;
-            importBtn.innerHTML = '<i class="ti ti-loader me-1"></i> Importing...';
+            importBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         }
 
         var files = dz.files.slice(); // snapshot

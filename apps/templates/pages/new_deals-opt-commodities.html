@@ -646,6 +646,10 @@
       from { opacity: 0; transform: translateY(14px); }
       to   { opacity: 1; transform: none; }
   }
+  /* ti-spin: Tabler webfont 3.31 não define animação para .ti-spin → spinner congelava */
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  .ti-spin { display: inline-block; animation: ti-spin 0.8s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .ti-spin { animation-duration: 1.6s; } }
   @media (prefers-reduced-motion: reduce) {
       .nd-rv-1, .nd-rv-2, .nd-rv-3 { animation: none !important; opacity: 1 !important; transform: none !important; }
   }
@@ -1826,11 +1830,10 @@ $(document).ready(function() {
                 clearFiltersBtn.id = 'clearFiltersBtn';
                 clearFiltersBtn.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
                 clearFiltersBtn.setAttribute('type', 'button');
-                clearFiltersBtn.setAttribute('data-lang', 'btn-clear-filters');
                 clearFiltersBtn.setAttribute('data-bs-toggle', 'tooltip');
                 clearFiltersBtn.setAttribute('data-bs-placement', 'bottom');
                 clearFiltersBtn.setAttribute('data-bs-title', t('btn-clear-filters', 'Clear Filters'));
-                clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off me-1"></i>' + t('btn-clear-filters', 'Clear Filters');
+                clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">' + t('btn-clear-filters', 'Clear Filters') + '</span>';
                 clearFiltersContainer.appendChild(clearFiltersBtn);
 
                 clearFiltersBtn.addEventListener('click', function() {
