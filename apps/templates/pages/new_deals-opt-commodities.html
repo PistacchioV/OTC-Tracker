@@ -3966,22 +3966,22 @@ $(document).ready(function() {
             var calBanner = '';
             if (calInfo) {
                 var _cn = calInfo.calendar || '';
-                var _cl = _cn ? '<b>' + _cn + '</b>' : '<span style="color:#6c757d">nenhum (Seg&ndash;Sex)</span>';
+                var _cl = _cn ? '<b>' + _cn + '</b>' : '<span style="color:#6c757d">' + t('nd-preview-no-cal', 'none (Mon&ndash;Fri)') + '</span>';
                 var _st = '';
                 if (_cn) {
                     if (calInfo.fetchStatus === true)
-                        _st = ' &nbsp;<span style="color:#198754">&#10003; ' + calInfo.holidaysTotal + ' feriado(s)</span>';
+                        _st = ' &nbsp;<span style="color:#198754">&#10003; ' + calInfo.holidaysTotal + ' ' + t('nd-preview-holidays', 'holiday(s)') + '</span>';
                     else if (calInfo.fetchStatus === false)
-                        _st = ' &nbsp;<span style="color:#dc3545">&#10007; arquivo n&atilde;o encontrado</span>';
+                        _st = ' &nbsp;<span style="color:#dc3545">&#10007; ' + t('nd-preview-file-not-found', 'file not found') + '</span>';
                 }
                 var _sk = '';
                 if (_cn && calInfo.fetchStatus === true) {
                     _sk = (calInfo.skipped && calInfo.skipped.length)
-                        ? ' &nbsp;| <b>Pulados:</b> <span style="color:#dc3545">' + calInfo.skipped.join(', ') + '</span>'
-                        : ' &nbsp;| <span style="color:#6c757d">nenhum feriado no per&iacute;odo</span>';
+                        ? ' &nbsp;| <b>' + t('nd-preview-skipped', 'Skipped:') + '</b> <span style="color:#dc3545">' + calInfo.skipped.join(', ') + '</span>'
+                        : ' &nbsp;| <span style="color:#6c757d">' + t('nd-preview-no-holidays', 'no holidays in the period') + '</span>';
                 }
                 var _bz = calInfo.bizCount !== undefined
-                    ? ' &nbsp;| <b>Dias &uacute;teis: ' + calInfo.bizCount + '</b>' : '';
+                    ? ' &nbsp;| <b>' + t('nd-preview-bizdays', 'Business days:') + ' ' + calInfo.bizCount + '</b>' : '';
                 calBanner = '<div style="margin-bottom:10px;padding:7px 10px;background:#eef2ff;border:1px solid #c5d0f0;border-radius:4px;font-size:0.81em;line-height:1.8">&#128197;&nbsp;' + _cl + _st + _sk + _bz + '</div>';
             }
 
@@ -4024,10 +4024,10 @@ $(document).ready(function() {
                     '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
                     '<thead><tr style="background:#495057;color:#fff">' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">ID do Sistema</span></th>' +
-                    '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">ID Tipo de Linha</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Data de Fixing do Ativo Subjacente</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Data de Fixing da Moeda</span></th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">System ID</span></th>' +
+                    '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">Line Type ID</span></th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Underlying Asset Fixing Date</span></th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>' +
                     '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Quantidade de refer&ecirc;ncia</span></th>' +
                     '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
@@ -4035,7 +4035,7 @@ $(document).ready(function() {
             }
 
             Swal.fire({
-                title: '<span style="font-size:1rem">Preview &mdash; Deal ' + (deal.Deal || '') + '</span>',
+                title: '<span style="font-size:1rem">' + t('nd-preview-title', 'Preview') + ' &mdash; Deal ' + (deal.Deal || '') + '</span>',
                 html: tableHtml,
                 width: 760,
                 showConfirmButton: true,
