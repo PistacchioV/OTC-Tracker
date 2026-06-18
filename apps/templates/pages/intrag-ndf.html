@@ -196,6 +196,7 @@
                     <div id="ndfExportWrap"></div>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddNdf">Add Row +</button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelNdf" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
                 </div>
 
                 <div class="card-body" style="padding-top:10px;">
@@ -663,6 +664,15 @@ $(document).ready(function() {
         else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
         else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
         items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+
+    document.getElementById('btnClearFilters').addEventListener('click', function() {
+        document.querySelectorAll('#column-search-inputs th input').forEach(function(inp){ inp.value = ''; });
+        table.columns().search('').draw();
+        sfActive = [];
+        sfChips.innerHTML = '';
+        sfInput.value = '';
+        sfDropdown.style.display = 'none';
     });
 
     // Pre-add today's Trade Date chip and auto-load
