@@ -440,11 +440,43 @@ $(document).ready(function() {
     }
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
-        responsive: false, scrollX: true, autoWidth: true, pageLength: 15, orderCellsTop: true,
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 15, orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
-            { orderable: false, targets: [0,1], width: '50px' },
-            { visible: false, targets: [32] }
+            { orderable: false,  targets: [0, 1] },
+            { visible: false,    targets: [32] },
+            { width:  '50px',    targets: 0  },
+            { width:  '70px',    targets: 1  },
+            { width: '120px',    targets: 2  },
+            { width: '170px',    targets: 3  },
+            { width: '130px',    targets: 4  },
+            { width: '145px',    targets: 5  },
+            { width: '150px',    targets: 6  },
+            { width: '180px',    targets: 7  },
+            { width: '150px',    targets: 8  },
+            { width: '155px',    targets: 9  },
+            { width: '155px',    targets: 10 },
+            { width: '130px',    targets: 11 },
+            { width: '110px',    targets: 12 },
+            { width: '140px',    targets: 13 },
+            { width: '120px',    targets: 14 },
+            { width:  '90px',    targets: 15 },
+            { width: '155px',    targets: 16 },
+            { width: '110px',    targets: 17 },
+            { width: '100px',    targets: 18 },
+            { width: '110px',    targets: 19 },
+            { width: '120px',    targets: 20 },
+            { width: '110px',    targets: 21 },
+            { width: '150px',    targets: 22 },
+            { width: '155px',    targets: 23 },
+            { width: '120px',    targets: 24 },
+            { width: '170px',    targets: 25 },
+            { width: '150px',    targets: 26 },
+            { width: '155px',    targets: 27 },
+            { width: '120px',    targets: 28 },
+            { width: '140px',    targets: 29 },
+            { width: '130px',    targets: 30 },
+            { width: '130px',    targets: 31 }
         ],
         dom: "<'row'<'col-sm-12'tr>>" +
              "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -740,7 +772,7 @@ $(document).ready(function() {
                 table.columns().search('');
                 (colFilters||[]).forEach(function(f){table.column(f.col.dtCol).search(f.value);});
                 table.draw();
-                setTimeout(function(){ table.columns.adjust(); $(window).trigger('resize'); }, 200);
+                setTimeout(function(){ table.columns.adjust().draw(false); }, 100);
             })
             .catch(function(err){console.error('[Intrag NDF] Load error:',err);});
     }
