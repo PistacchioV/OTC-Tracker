@@ -1697,11 +1697,15 @@ def _load_anbima():
     _anbima_loaded = True
 
 def _anbima_bizdays_between(d1, d2):
-    """Count ANBIMA business days strictly between d1 and d2 (exclusive both ends)."""
+    """Count ANBIMA business days from d1 (inclusive) up to d2 - 1 (d2 exclusive).
+
+    Counts the first date and stops at the second date minus one day, using the
+    ANBIMA holiday calendar (weekdays minus ANBIMA holidays).
+    """
     _load_anbima()
     if d1 >= d2:
         return 0
-    count, cur = 0, d1 + timedelta(days=1)
+    count, cur = 0, d1
     while cur < d2:
         if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
             count += 1
@@ -1709,10 +1713,14 @@ def _anbima_bizdays_between(d1, d2):
     return count
 
 def _weekday_bizdays_between(d1, d2):
-    """Count weekday-only business days strictly between d1 and d2 (exclusive both ends)."""
+    """Count weekday-only days from d1 (inclusive) up to d2 - 1 (d2 exclusive).
+
+    Counts the first date and stops at the second date minus one day, using only
+    weekdays (Mon-Fri), with no holiday calendar.
+    """
     if d1 >= d2:
         return 0
-    count, cur = 0, d1 + timedelta(days=1)
+    count, cur = 0, d1
     while cur < d2:
         if cur.weekday() < 5:
             count += 1
