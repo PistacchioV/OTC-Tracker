@@ -184,7 +184,7 @@
     #intrag-ndf-table th:nth-child(25),
     #intrag-ndf-table td:nth-child(25),
     .dt-scroll-head thead th:nth-child(25),
-    .dataTables_scrollHead thead th:nth-child(25) { width: 120px; min-width: 120px; } /* Spot / Adj. Rate */
+    .dataTables_scrollHead thead th:nth-child(25) { width: 120px; min-width: 120px; } /* Spot Fixing */
 
     #intrag-ndf-table th:nth-child(26),
     #intrag-ndf-table td:nth-child(26),
@@ -204,7 +204,7 @@
     #intrag-ndf-table th:nth-child(29),
     #intrag-ndf-table td:nth-child(29),
     .dt-scroll-head thead th:nth-child(29),
-    .dataTables_scrollHead thead th:nth-child(29) { width: 120px; min-width: 120px; } /* Maturity Rate */
+    .dataTables_scrollHead thead th:nth-child(29) { width: 120px; min-width: 120px; } /* Comm Fixing */
 
     #intrag-ndf-table th:nth-child(30),
     #intrag-ndf-table td:nth-child(30),
@@ -403,11 +403,11 @@
                                     <th><span data-lang="intrag-ndf-col-19">Trade Price</span></th>
                                     <th><span data-lang="intrag-ndf-col-20">Settlement Parity</span></th>
                                     <th><span data-lang="intrag-ndf-col-21">Maturity Month/Year</span></th>
-                                    <th><span data-lang="intrag-ndf-col-22">Spot / Adj. Rate</span></th>
+                                    <th><span data-lang="intrag-ndf-col-22">Spot Fixing</span></th>
                                     <th><span data-lang="intrag-ndf-col-23">Forward Rate (R$/CCY)</span></th>
                                     <th><span data-lang="intrag-ndf-col-24">Asian Fwd Avg Rate</span></th>
                                     <th><span data-lang="intrag-ndf-col-25">Information Source</span></th>
-                                    <th><span data-lang="intrag-ndf-col-26">Maturity Rate</span></th>
+                                    <th><span data-lang="intrag-ndf-col-26">Comm Fixing</span></th>
                                     <th><span data-lang="intrag-ndf-col-27">Adjustment Type</span></th>
                                     <th><span data-lang="intrag-ndf-col-28">Observation</span></th>
                                     <th><span data-lang="intrag-ndf-col-29">Discount Factor</span></th>
@@ -438,11 +438,11 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Price"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Parity"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Mo/Yr"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot/Adj. Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Spot Fixing"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Fwd Rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Avg Rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Info Source"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Rate"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Comm Fixing"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Adj. Type"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Observation"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Discount Factor"></th>
@@ -484,8 +484,8 @@ var NDF_COLS = [
     'Cpty Collateral Basket','Party Collateral Basket','Notional Value',
     'Trade Date','Registration Date','Maturity Date','Currency',
     'Reference Exchange','Commodity','Type (Form)','Quantity','Trading Unit',
-    'Trade Price','Settlement Parity','Maturity Month/Year','Spot / Adj. Rate',
-    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source','Maturity Rate','Adjustment Type','Observation','Discount Factor'
+    'Trade Price','Settlement Parity','Maturity Month/Year','Spot Fixing',
+    'Forward Rate (R$/CCY)','Asian Fwd Avg Rate','Information Source','Comm Fixing','Adjustment Type','Observation','Discount Factor'
 ];
 
 // Ordered field keys matching NDF_COLS (used when loading from API)
@@ -724,10 +724,10 @@ $(document).ready(function() {
         { label: 'Quantity',                type: 'number', dtCol: 19 },
         { label: 'Trade Price',             type: 'number', dtCol: 21 },
         { label: 'Settlement Parity',       type: 'number', dtCol: 22 },
-        { label: 'Spot / Adj. Rate',        type: 'number', dtCol: 24 },
+        { label: 'Spot Fixing',             type: 'number', dtCol: 24 },
         { label: 'Forward Rate (R$/CCY)',   type: 'number', dtCol: 25 },
         { label: 'Asian Fwd Avg Rate',      type: 'number', dtCol: 26 },
-        { label: 'Maturity Rate',           type: 'number', dtCol: 28 },
+        { label: 'Comm Fixing',             type: 'number', dtCol: 28 },
         { label: 'Discount Factor',         type: 'number', dtCol: 31 },
         // text columns
         { label: 'Contract Type',           type: 'text',   dtCol: 2  },
