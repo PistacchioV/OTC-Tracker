@@ -1780,17 +1780,16 @@ $(document).ready(function() {
                             return;
                         }
 
-                        var successCount = 0, errorCount = 0, _countedIds = {};
+                        var successCount = 0, errorCount = 0;
                         (res.results || []).forEach(function(result) {
-                            // Count each distinct Deal once (not per matched row nor per
-                            // duplicate result) so duplicate rows never inflate the total.
-                            if (!_countedIds[result.id]) {
-                                _countedIds[result.id] = true;
-                                if (result.status === 'Success') {
-                                    successCount++;
-                                } else if (result.status === 'Error') {
-                                    errorCount++;
-                                }
+                            // One backend result == one mapped deal; count per result so the
+                            // total matches len(results)/the notification. Duplicate rows are
+                            // already prevented upstream by the Deal+Client dedupe of sentDeals.
+                            // The visual loop below may legitimately touch several rows.
+                            if (result.status === 'Success') {
+                                successCount++;
+                            } else if (result.status === 'Error') {
+                                errorCount++;
                             }
                             table.rows({search: 'none', page: 'all'}).every(function() {
                                 var d = this.data();
