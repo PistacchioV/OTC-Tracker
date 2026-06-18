@@ -2633,10 +2633,15 @@ def api_ndf_mapping_b3():
             try:
                 with open(fpath, 'r', encoding='latin-1') as fh:
                     lines = fh.readlines()
+                file_has_ter = False
                 for line in lines[1:]:  # skip header row
                     line = line.strip()
                     if not line:
                         continue
+                    # Sigla at chars 57-59 (1-based): NDF maps only 'TER' (termo) lines
+                    if line[56:59] != 'TER':
+                        continue
+                    file_has_ter = True
                     if 'EXECUCAO OK' not in line:
                         continue
                     parts = line.split(';')
@@ -2647,7 +2652,9 @@ def api_ndf_mapping_b3():
                         deal_text = sd.get('Deal', '')
                         if deal_text and deal_text not in mapping and deal_text in line:
                             mapping[deal_text] = b3_id
-                files_to_delete.append(fpath)
+                # Only delete return files that actually carried TER (NDF) lines
+                if file_has_ter:
+                    files_to_delete.append(fpath)
             except Exception:
                 continue
     except Exception as exc:
@@ -3159,10 +3166,15 @@ def api_mapping_b3():
             try:
                 with open(fpath, encoding='utf-8', errors='replace') as fh:
                     lines = fh.readlines()
+                file_has_opc = False
                 for line in lines[1:]:   # skip header
                     line = line.strip()
                     if not line:
                         continue
+                    # Sigla at chars 57-59 (1-based): Options map only 'OPC' (opção) lines
+                    if line[56:59] != 'OPC':
+                        continue
+                    file_has_opc = True
                     parts = line.split(';')
                     if len(parts) < 5:
                         continue
@@ -3180,7 +3192,9 @@ def api_mapping_b3():
                     is_ok = (status_text == 'EXECUCAO OK')
                     if deal_text not in mapping or (is_ok and not mapping[deal_text]['ok']):
                         mapping[deal_text] = {'b3_id': b3_id, 'ok': is_ok}
-                files_to_delete.append(fpath)
+                # Only delete return files that actually carried OPC (Option) lines
+                if file_has_opc:
+                    files_to_delete.append(fpath)
             except Exception:
                 continue
     except Exception as exc:
