@@ -57,102 +57,169 @@
     }
 
     /* Colunas específicas com larguras adequadas — um bloco por coluna */
-    /* nth-child(1)=checkbox  (2)=actions  (3..32)=dados  (33)=hidden ID */
+    /* nth-child(1)=checkbox  (2)=actions  (3..32)=dados  (33)=hidden ID
+       IMPORTANTE: cada regra inclui também .dt-scroll-head/.dataTables_scrollHead
+       porque o DataTables REMOVE o id da tabela clonada do header (scrollX) — sem
+       esses seletores o CSS não alcança o header e ele desalinha. Edite só o px (1×). */
     #intrag-ndf-table th:nth-child(1),
-    #intrag-ndf-table td:nth-child(1) { width: 50px;  min-width: 50px;  }
+    #intrag-ndf-table td:nth-child(1),
+    .dt-scroll-head thead th:nth-child(1),
+    .dataTables_scrollHead thead th:nth-child(1) { width: 50px;  min-width: 50px;  }
 
     #intrag-ndf-table th:nth-child(2),
-    #intrag-ndf-table td:nth-child(2) { width: 70px;  min-width: 70px;  } /* Actions */
+    #intrag-ndf-table td:nth-child(2),
+    .dt-scroll-head thead th:nth-child(2),
+    .dataTables_scrollHead thead th:nth-child(2) { width: 70px;  min-width: 70px;  } /* Actions */
 
     #intrag-ndf-table th:nth-child(3),
-    #intrag-ndf-table td:nth-child(3) { width: 120px; min-width: 120px; } /* Contract Type */
+    #intrag-ndf-table td:nth-child(3),
+    .dt-scroll-head thead th:nth-child(3),
+    .dataTables_scrollHead thead th:nth-child(3) { width: 120px; min-width: 120px; } /* Contract Type */
 
     #intrag-ndf-table th:nth-child(4),
-    #intrag-ndf-table td:nth-child(4) { width: 170px; min-width: 170px; } /* CETIP Contract Code */
+    #intrag-ndf-table td:nth-child(4),
+    .dt-scroll-head thead th:nth-child(4),
+    .dataTables_scrollHead thead th:nth-child(4) { width: 170px; min-width: 170px; } /* CETIP Contract Code */
 
     #intrag-ndf-table th:nth-child(5),
-    #intrag-ndf-table td:nth-child(5) { width: 130px; min-width: 130px; } /* Portfolio Code */
+    #intrag-ndf-table td:nth-child(5),
+    .dt-scroll-head thead th:nth-child(5),
+    .dataTables_scrollHead thead th:nth-child(5) { width: 130px; min-width: 130px; } /* Portfolio Code */
 
     #intrag-ndf-table th:nth-child(6),
-    #intrag-ndf-table td:nth-child(6) { width: 145px; min-width: 145px; } /* Participant Position */
+    #intrag-ndf-table td:nth-child(6),
+    .dt-scroll-head thead th:nth-child(6),
+    .dataTables_scrollHead thead th:nth-child(6) { width: 145px; min-width: 145px; } /* Participant Position */
 
     #intrag-ndf-table th:nth-child(7),
-    #intrag-ndf-table td:nth-child(7) { width: 150px; min-width: 150px; } /* Client Tax ID (Party) */
+    #intrag-ndf-table td:nth-child(7),
+    .dt-scroll-head thead th:nth-child(7),
+    .dataTables_scrollHead thead th:nth-child(7) { width: 150px; min-width: 150px; } /* Client Tax ID (Party) */
 
     #intrag-ndf-table th:nth-child(8),
-    #intrag-ndf-table td:nth-child(8) { width: 180px; min-width: 180px; } /* Counterparty */
+    #intrag-ndf-table td:nth-child(8),
+    .dt-scroll-head thead th:nth-child(8),
+    .dataTables_scrollHead thead th:nth-child(8) { width: 180px; min-width: 180px; } /* Counterparty */
 
     #intrag-ndf-table th:nth-child(9),
-    #intrag-ndf-table td:nth-child(9) { width: 150px; min-width: 150px; } /* Client Tax ID (Cpty) */
+    #intrag-ndf-table td:nth-child(9),
+    .dt-scroll-head thead th:nth-child(9),
+    .dataTables_scrollHead thead th:nth-child(9) { width: 150px; min-width: 150px; } /* Client Tax ID (Cpty) */
 
     #intrag-ndf-table th:nth-child(10),
-    #intrag-ndf-table td:nth-child(10) { width: 155px; min-width: 155px; } /* Cpty Collateral Basket */
+    #intrag-ndf-table td:nth-child(10),
+    .dt-scroll-head thead th:nth-child(10),
+    .dataTables_scrollHead thead th:nth-child(10) { width: 155px; min-width: 155px; } /* Cpty Collateral Basket */
 
     #intrag-ndf-table th:nth-child(11),
-    #intrag-ndf-table td:nth-child(11) { width: 155px; min-width: 155px; } /* Party Collateral Basket */
+    #intrag-ndf-table td:nth-child(11),
+    .dt-scroll-head thead th:nth-child(11),
+    .dataTables_scrollHead thead th:nth-child(11) { width: 155px; min-width: 155px; } /* Party Collateral Basket */
 
     #intrag-ndf-table th:nth-child(12),
-    #intrag-ndf-table td:nth-child(12) { width: 130px; min-width: 130px; } /* Notional Value */
+    #intrag-ndf-table td:nth-child(12),
+    .dt-scroll-head thead th:nth-child(12),
+    .dataTables_scrollHead thead th:nth-child(12) { width: 130px; min-width: 130px; } /* Notional Value */
 
     #intrag-ndf-table th:nth-child(13),
-    #intrag-ndf-table td:nth-child(13) { width: 110px; min-width: 110px; } /* Trade Date */
+    #intrag-ndf-table td:nth-child(13),
+    .dt-scroll-head thead th:nth-child(13),
+    .dataTables_scrollHead thead th:nth-child(13) { width: 110px; min-width: 110px; } /* Trade Date */
 
     #intrag-ndf-table th:nth-child(14),
-    #intrag-ndf-table td:nth-child(14) { width: 140px; min-width: 140px; } /* Registration Date */
+    #intrag-ndf-table td:nth-child(14),
+    .dt-scroll-head thead th:nth-child(14),
+    .dataTables_scrollHead thead th:nth-child(14) { width: 140px; min-width: 140px; } /* Registration Date */
 
     #intrag-ndf-table th:nth-child(15),
-    #intrag-ndf-table td:nth-child(15) { width: 120px; min-width: 120px; } /* Maturity Date */
+    #intrag-ndf-table td:nth-child(15),
+    .dt-scroll-head thead th:nth-child(15),
+    .dataTables_scrollHead thead th:nth-child(15) { width: 120px; min-width: 120px; } /* Maturity Date */
 
     #intrag-ndf-table th:nth-child(16),
-    #intrag-ndf-table td:nth-child(16) { width: 90px;  min-width: 90px;  } /* Currency */
+    #intrag-ndf-table td:nth-child(16),
+    .dt-scroll-head thead th:nth-child(16),
+    .dataTables_scrollHead thead th:nth-child(16) { width: 90px;  min-width: 90px;  } /* Currency */
 
     #intrag-ndf-table th:nth-child(17),
-    #intrag-ndf-table td:nth-child(17) { width: 155px; min-width: 155px; } /* Reference Exchange */
+    #intrag-ndf-table td:nth-child(17),
+    .dt-scroll-head thead th:nth-child(17),
+    .dataTables_scrollHead thead th:nth-child(17) { width: 155px; min-width: 155px; } /* Reference Exchange */
 
     #intrag-ndf-table th:nth-child(18),
-    #intrag-ndf-table td:nth-child(18) { width: 110px; min-width: 110px; } /* Commodity */
+    #intrag-ndf-table td:nth-child(18),
+    .dt-scroll-head thead th:nth-child(18),
+    .dataTables_scrollHead thead th:nth-child(18) { width: 110px; min-width: 110px; } /* Commodity */
 
     #intrag-ndf-table th:nth-child(19),
-    #intrag-ndf-table td:nth-child(19) { width: 100px; min-width: 100px; } /* Type (Form) */
+    #intrag-ndf-table td:nth-child(19),
+    .dt-scroll-head thead th:nth-child(19),
+    .dataTables_scrollHead thead th:nth-child(19) { width: 100px; min-width: 100px; } /* Type (Form) */
 
     #intrag-ndf-table th:nth-child(20),
-    #intrag-ndf-table td:nth-child(20) { width: 110px; min-width: 110px; } /* Quantity */
+    #intrag-ndf-table td:nth-child(20),
+    .dt-scroll-head thead th:nth-child(20),
+    .dataTables_scrollHead thead th:nth-child(20) { width: 110px; min-width: 110px; } /* Quantity */
 
     #intrag-ndf-table th:nth-child(21),
-    #intrag-ndf-table td:nth-child(21) { width: 120px; min-width: 120px; } /* Trading Unit */
+    #intrag-ndf-table td:nth-child(21),
+    .dt-scroll-head thead th:nth-child(21),
+    .dataTables_scrollHead thead th:nth-child(21) { width: 120px; min-width: 120px; } /* Trading Unit */
 
     #intrag-ndf-table th:nth-child(22),
-    #intrag-ndf-table td:nth-child(22) { width: 110px; min-width: 110px; } /* Trade Price */
+    #intrag-ndf-table td:nth-child(22),
+    .dt-scroll-head thead th:nth-child(22),
+    .dataTables_scrollHead thead th:nth-child(22) { width: 110px; min-width: 110px; } /* Trade Price */
 
     #intrag-ndf-table th:nth-child(23),
-    #intrag-ndf-table td:nth-child(23) { width: 150px; min-width: 150px; } /* Settlement Parity */
+    #intrag-ndf-table td:nth-child(23),
+    .dt-scroll-head thead th:nth-child(23),
+    .dataTables_scrollHead thead th:nth-child(23) { width: 150px; min-width: 150px; } /* Settlement Parity */
 
     #intrag-ndf-table th:nth-child(24),
-    #intrag-ndf-table td:nth-child(24) { width: 155px; min-width: 155px; } /* Maturity Month/Year */
+    #intrag-ndf-table td:nth-child(24),
+    .dt-scroll-head thead th:nth-child(24),
+    .dataTables_scrollHead thead th:nth-child(24) { width: 155px; min-width: 155px; } /* Maturity Month/Year */
 
     #intrag-ndf-table th:nth-child(25),
-    #intrag-ndf-table td:nth-child(25) { width: 120px; min-width: 120px; } /* Spot / Adj. Rate */
+    #intrag-ndf-table td:nth-child(25),
+    .dt-scroll-head thead th:nth-child(25),
+    .dataTables_scrollHead thead th:nth-child(25) { width: 120px; min-width: 120px; } /* Spot / Adj. Rate */
 
     #intrag-ndf-table th:nth-child(26),
-    #intrag-ndf-table td:nth-child(26) { width: 170px; min-width: 170px; } /* Forward Rate (R$/CCY) */
+    #intrag-ndf-table td:nth-child(26),
+    .dt-scroll-head thead th:nth-child(26),
+    .dataTables_scrollHead thead th:nth-child(26) { width: 170px; min-width: 170px; } /* Forward Rate (R$/CCY) */
 
     #intrag-ndf-table th:nth-child(27),
-    #intrag-ndf-table td:nth-child(27) { width: 150px; min-width: 150px; } /* Asian Fwd Avg Rate */
+    #intrag-ndf-table td:nth-child(27),
+    .dt-scroll-head thead th:nth-child(27),
+    .dataTables_scrollHead thead th:nth-child(27) { width: 150px; min-width: 150px; } /* Asian Fwd Avg Rate */
 
     #intrag-ndf-table th:nth-child(28),
-    #intrag-ndf-table td:nth-child(28) { width: 155px; min-width: 155px; } /* Information Source */
+    #intrag-ndf-table td:nth-child(28),
+    .dt-scroll-head thead th:nth-child(28),
+    .dataTables_scrollHead thead th:nth-child(28) { width: 155px; min-width: 155px; } /* Information Source */
 
     #intrag-ndf-table th:nth-child(29),
-    #intrag-ndf-table td:nth-child(29) { width: 120px; min-width: 120px; } /* Maturity Rate */
+    #intrag-ndf-table td:nth-child(29),
+    .dt-scroll-head thead th:nth-child(29),
+    .dataTables_scrollHead thead th:nth-child(29) { width: 120px; min-width: 120px; } /* Maturity Rate */
 
     #intrag-ndf-table th:nth-child(30),
-    #intrag-ndf-table td:nth-child(30) { width: 140px; min-width: 140px; } /* Adjustment Type */
+    #intrag-ndf-table td:nth-child(30),
+    .dt-scroll-head thead th:nth-child(30),
+    .dataTables_scrollHead thead th:nth-child(30) { width: 140px; min-width: 140px; } /* Adjustment Type */
 
     #intrag-ndf-table th:nth-child(31),
-    #intrag-ndf-table td:nth-child(31) { width: 130px; min-width: 130px; } /* Observation */
+    #intrag-ndf-table td:nth-child(31),
+    .dt-scroll-head thead th:nth-child(31),
+    .dataTables_scrollHead thead th:nth-child(31) { width: 130px; min-width: 130px; } /* Observation */
 
     #intrag-ndf-table th:nth-child(32),
-    #intrag-ndf-table td:nth-child(32) { width: 130px; min-width: 130px; } /* Discount Factor */
+    #intrag-ndf-table td:nth-child(32),
+    .dt-scroll-head thead th:nth-child(32),
+    .dataTables_scrollHead thead th:nth-child(32) { width: 130px; min-width: 130px; } /* Discount Factor */
 
     /* ── Segunda linha do thead: inputs de filtro por coluna ── */
     #column-search-inputs th {
@@ -186,7 +253,9 @@
   .sf-type-text   { background: #6c757d; }
   .sf-type-date   { background: #0dcaf0; color: #000 !important; }
   .sf-type-number { background: #ffc107; color: #000 !important; }
-  #intrag-ndf-table .btn-sm.rounded-circle { width: 28px; height: 28px; padding: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; }
+  #intrag-ndf-table .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; border-radius: 50%; box-sizing: border-box; }
+  /* Wrapper das ações: não deixa o flex encolher os botões (mantém círculo perfeito) */
+  #intrag-ndf-table td:nth-child(2) > div { flex-wrap: nowrap; }
   /* Dark mode overrides */
   [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
   [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
@@ -451,7 +520,7 @@ $(document).ready(function() {
     }
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
-        responsive: false, scrollX: true, autoWidth: true, pageLength: 15, orderCellsTop: true,
+        responsive: false, scrollX: true, autoWidth: false, pageLength: 15, orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
             { orderable: false, targets: [0, 1] },
