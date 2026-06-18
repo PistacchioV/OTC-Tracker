@@ -122,7 +122,7 @@ function hexToRgba(hex, a) {
 
 // ─── chart instances ─────────────────────────────────────────────────────────
 
-let pieChart = null, flowChart = null, clientsChart = null, productsChart = null;
+let pieChart = null, flowChart = null, clientsChart = null, productsChart = null, commoditiesChart = null;
 
 function buildPieChart(ndf, opt) {
     const ctx = document.getElementById('multi-pie-chart');
@@ -227,6 +227,32 @@ function buildProductsChart(top5) {
     });
 }
 
+// Distinct, light multi-hue palette for commodities — harmonious with the
+// theme but visually separate from the products chart (purple/blue tokens).
+const COMMODITY_COLORS = ['#0ea5e9', '#14b8a6', '#f59e0b', '#f43f5e', '#a855f7'];
+
+function buildCommoditiesChart(top5) {
+    const ctx = document.getElementById('top5-commodities-chart');
+    if (!ctx) return;
+    if (commoditiesChart) commoditiesChart.destroy();
+    if (!top5 || !top5.length) {
+        ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
+        return;
+    }
+    commoditiesChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: { animateRotate: true, animateScale: true, duration: 700 },
+            plugins: {
+                legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
+            }
+        }
+    });
+}
+
 // ─── recent deals ────────────────────────────────────────────────────────────
 
 let _allRecentDeals = [];
@@ -288,7 +314,7 @@ function renderRecentTable(deals) {
 function updatePeriodBadges(period) {
     const langKey = `dash-filter-${period}`;
     const label   = t(langKey);
-    ['dash-top5-clients-period', 'dash-top5-products-period'].forEach(id => {
+    ['dash-top5-clients-period', 'dash-top5-products-period', 'dash-top5-commodities-period'].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.setAttribute('data-lang', langKey); el.textContent = label; }
     });
@@ -314,6 +340,7 @@ async function loadDashboard(period) {
         buildFlowChart(data.monthly_ndf, data.monthly_opt);
         buildClientsChart(data.top5_clients);
         buildProductsChart(data.top5_products);
+        buildCommoditiesChart(data.top5_commodities);
 
         _allRecentDeals = data.recent_deals || [];
         _activeProduct  = 'all';
@@ -340,6 +367,7 @@ function rerenderCharts() {
     buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt);
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
+    buildCommoditiesChart(_lastData.top5_commodities);
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────

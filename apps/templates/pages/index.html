@@ -21,6 +21,7 @@
 .dash-fade-in-2 { animation-delay: 0.20s; }
 .dash-fade-in-3 { animation-delay: 0.30s; }
 .dash-fade-in-3b { animation-delay: 0.36s; }
+.dash-fade-in-3c { animation-delay: 0.42s; }
 .dash-fade-in-4 { animation-delay: 0.42s; }
 
 /* 2. Glassmorphism — Light mode */
@@ -219,7 +220,7 @@
     <!-- Top 5 Charts -->
     <div class="row">
         <!-- Top 5 Clientes -->
-        <div class="col-xxl-6">
+        <div class="col-xxl-4 col-md-6">
             <div class="card h-100 dash-fade-in dash-fade-in-3">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
                     <h4 class="card-title mb-0" data-lang="dash-top5-clients">Top 5 Clientes</h4>
@@ -234,7 +235,7 @@
         </div><!-- end col -->
 
         <!-- Top 5 Produto -->
-        <div class="col-xxl-6">
+        <div class="col-xxl-4 col-md-6">
             <div class="card h-100 dash-fade-in dash-fade-in-3b">
                 <div class="card-header border-dashed d-flex align-items-center justify-content-between">
                     <h4 class="card-title mb-0" data-lang="dash-top5-products">Top 5 Produtos</h4>
@@ -243,6 +244,21 @@
                 <div class="card-body">
                     <div style="height: 260px;">
                         <canvas id="top5-products-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end col -->
+
+        <!-- Top 5 Commodities -->
+        <div class="col-xxl-4 col-md-6">
+            <div class="card h-100 dash-fade-in dash-fade-in-3c">
+                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
+                    <h4 class="card-title mb-0" data-lang="dash-top5-commodities">Top 5 Commodities</h4>
+                    <span class="badge bg-info-subtle text-info fs-xxs" id="dash-top5-commodities-period" data-lang="dash-filter-month">Mês Atual</span>
+                </div>
+                <div class="card-body">
+                    <div style="height: 260px;">
+                        <canvas id="top5-commodities-chart"></canvas>
                     </div>
                 </div>
             </div>

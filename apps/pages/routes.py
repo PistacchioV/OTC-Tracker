@@ -1092,6 +1092,13 @@ def api_dashboard_stats():
     product_counts = Counter(d['_product'] for d in lawton_deals)
     top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
 
+    commodity_counts = Counter(
+        (d.get('Commodities') or d.get('Commodity') or '').strip()
+        for d in lawton_deals
+        if (d.get('Commodities') or d.get('Commodity') or '').strip()
+    )
+    top5_commodities = [{'label': c, 'count': n} for c, n in commodity_counts.most_common(5)]
+
     # Monthly counts for current year (always full year, ignores period filter)
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
@@ -1144,6 +1151,7 @@ def api_dashboard_stats():
         'total_deals':   len(lawton_deals),
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
+        'top5_commodities': top5_commodities,
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
         'recent_deals':  recent_deals,
