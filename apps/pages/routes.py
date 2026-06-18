@@ -1082,6 +1082,10 @@ def api_dashboard_stats():
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
     pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
 
+    # Swap deals not yet implemented in the project — placeholder until the
+    # Swap product cache directory exists. Will count Swap-type deals later.
+    swap_total = 0
+
     client_counts = Counter(
         (d.get('Client') or '').strip()
         for d in client_deals
@@ -1148,6 +1152,7 @@ def api_dashboard_stats():
         'ndf_total':     len(ndf_lawton),
         'opt_total':     len(opt_lawton),
         'pending_total': pending_total,
+        'swap_total':    swap_total,
         'total_deals':   len(lawton_deals),
         'top5_clients':  top5_clients,
         'top5_products': top5_products,

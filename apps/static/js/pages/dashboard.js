@@ -332,7 +332,7 @@ async function loadDashboard(period) {
 
         document.getElementById('dash-ndf-count').textContent     = data.ndf_total;
         document.getElementById('dash-opt-count').textContent     = data.opt_total;
-        document.getElementById('dash-pending-count').textContent = data.pending_total;
+        document.getElementById('dash-swap-count').textContent    = data.swap_total ?? 0;
         document.getElementById('dash-total-count').textContent   = data.total_deals;
 
         updatePeriodBadges(period);
