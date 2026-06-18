@@ -344,7 +344,7 @@ $(document).ready(function() {
     }
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({
-        responsive: false, scrollX: true, pageLength: 15, orderCellsTop: true,
+        responsive: false, scrollX: true, autoWidth: true, pageLength: 15, orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
             { orderable: false, targets: [0,1] },
@@ -423,11 +423,10 @@ $(document).ready(function() {
     // Move Export button into filter bar static container
     table.buttons().container().appendTo('#ndfExportWrap');
 
-    // Force header/body column alignment after DOM settles (scrollX clone fix)
-    setTimeout(function() {
-        table.columns.adjust();
-        $(window).trigger('resize');
-    }, 300);
+    // Fix header alignment after load (scrollX clones header — needs width recalc)
+    function _fixTableHeader() { table.columns.adjust().draw(false); }
+    if (document.readyState === 'complete') { setTimeout(_fixTableHeader, 150); }
+    else { window.addEventListener('load', function(){ setTimeout(_fixTableHeader, 150); }); }
 
     // Add Row button (static in filter bar)
     document.getElementById('btnAddNdf').addEventListener('click',function(){
