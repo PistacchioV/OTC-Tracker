@@ -3965,7 +3965,7 @@ $(document).ready(function() {
         f[11] = fonteInfo;
         f[15] = _qty(deal.TotalNotional || '');
         f[16] = _sh(deal.UnderlyingAsset || '');
-        f[17] = _num(deal.Strike || '', qic);
+        f[17] = _num(deal.Strike || '', qic && strikeCcy !== 'BRL');
         f[18] = fixSingle;
         f[19] = tradeDate;
         f[20] = settlDate;

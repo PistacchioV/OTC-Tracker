@@ -2437,7 +2437,7 @@ def api_ndf_send_conecta():
         settl_date = _date(deal.get('SettlementDate', ''))
         deal_id    = _sh(deal.get('Deal', ''))
         notional   = _sh(deal.get('TotalNotional', ''))
-        strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)
+        strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=(qic and not brl))
 
         # Notional: integer right-justified to 14 chars + '00' = 16 chars total
         try:
