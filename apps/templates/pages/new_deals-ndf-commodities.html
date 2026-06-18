@@ -3932,7 +3932,7 @@ $(document).ready(function() {
         var qic        = _sh(deal.QuotedInCents || 'NO').toUpperCase() === 'YES';
         var vanilla    = tradeType === 'VANILLA';
         var asian      = tradeType === 'ASIAN';
-        var brl        = strikeCcy === 'BRR';
+        var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
         var FIXED_UND   = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
@@ -4008,7 +4008,7 @@ $(document).ready(function() {
         var isAsian   = _sh(deal.TradeType || '').toUpperCase() === 'ASIAN';
         var isVanilla = _sh(deal.TradeType || '').toUpperCase() === 'VANILLA';
         var fxSched   = _sh(deal.FXHolidaySchedule || '');
-        var isBrr     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRR';
+        var isBrl     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRL';
 
         var today = (function() {
             var d = new Date();
@@ -4198,7 +4198,7 @@ $(document).ready(function() {
             };
             if (isAsian && bizList.length > 0) {
                 var fixingRows = bizList.map(function(d) {
-                    return { fixDate: d, fxDate: isBrr ? d : '' };
+                    return { fixDate: d, fxDate: isBrl ? d : '' };
                 });
                 showPreview(cnt, fixingRows, calInfo);
             } else {

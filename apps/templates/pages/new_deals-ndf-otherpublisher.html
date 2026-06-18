@@ -3770,7 +3770,7 @@ $(document).ready(function() {
         var qic        = _sh(deal.QuotedInCents || 'NO').toUpperCase() === 'YES';
         var vanilla    = tradeType === 'VANILLA';
         var asian      = tradeType === 'ASIAN';
-        var brr        = strikeCcy === 'BRR';
+        var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
         var FIXED_UND   = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
@@ -3808,13 +3808,13 @@ $(document).ready(function() {
         f[19] = tradeDate;
         f[20] = settlDate;
         f[22] = tipoCotacao;
-        f[23] = !brr ? fxconv : '';
+        f[23] = !brl ? fxconv : '';
         f[34] = isTas ? 'S' : 'N';
         f[35] = isTas ? tradeDate : '';
         f[36] = isTas ? 'V' : '';
         f[39] = 'N';
         f[41] = 'N';
-        f[54] = brr ? 'S' : '';
+        f[54] = brl ? 'S' : '';
         f[56] = _sh(deal.Deal || '');
         f[57] = tipoMedia;
         if (!vanilla) {
@@ -3846,7 +3846,7 @@ $(document).ready(function() {
         var isAsian   = _sh(deal.TradeType || '').toUpperCase() === 'ASIAN';
         var isVanilla = _sh(deal.TradeType || '').toUpperCase() === 'VANILLA';
         var fxSched   = _sh(deal.FXHolidaySchedule || '');
-        var isBrr     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRR';
+        var isBrl     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRL';
 
         var today = (function() {
             var d = new Date();
@@ -4036,7 +4036,7 @@ $(document).ready(function() {
             };
             if (isAsian && bizList.length > 0) {
                 var fixingRows = bizList.map(function(d) {
-                    return { fixDate: d, fxDate: isBrr ? d : '' };
+                    return { fixDate: d, fxDate: isBrl ? d : '' };
                 });
                 showPreview(cnt, fixingRows, calInfo);
             } else {
