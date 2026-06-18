@@ -2073,18 +2073,57 @@ $(document).ready(function() {
         return /^\d{1,2}[\/\-]\d/.test(s) || /^\d{4}[\/\-]/.test(s);
     }
 
+    // Range word (FROM/TO) — English labels with translations, read live
+    var SF_RANGE_WORDS = {
+        en: { from: 'FROM', to: 'TO' },
+        br: { from: 'DE',   to: 'ATÉ' },
+        es: { from: 'DESDE', to: 'HASTA' }
+    };
+    function sfRangeWord(mode) {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        var m = SF_RANGE_WORDS[lang] || SF_RANGE_WORDS.en;
+        return mode === 'from' ? m.from : m.to;
+    }
+
+    // Unique key for an active filter. Date columns can hold a 'from' and a 'to'
+    // simultaneously (the range), so the mode is part of the key.
+    function sfFilterKey(col, mode) {
+        return col.type === 'date' ? (col.dtCol + '|' + mode) : String(col.dtCol);
+    }
+
+    // Date candidates: for each date column, offer FROM+exact, or TO when a
+    // range is already open (a 'from' without its 'to') for that column.
+    function sfDateCandidates() {
+        var out = [];
+        SF_COLS.filter(function(c) { return c.type === 'date'; }).forEach(function(col) {
+            var hasFrom = sfActive.some(function(f) { return f.col.dtCol === col.dtCol && f.mode === 'from'; });
+            var hasTo   = sfActive.some(function(f) { return f.col.dtCol === col.dtCol && f.mode === 'to'; });
+            if (hasFrom && !hasTo) {
+                out.push({ col: col, mode: 'to',    label: sfRangeWord('to') + ': ' + col.label });
+            } else {
+                out.push({ col: col, mode: 'from',  label: sfRangeWord('from') + ': ' + col.label });
+                out.push({ col: col, mode: 'exact', label: col.label });
+            }
+        });
+        out.sort(function(a, b) { return (a.mode === 'to' ? 0 : 1) - (b.mode === 'to' ? 0 : 1); });
+        return out;
+    }
+
     function sfCandidates(val) {
         if (!val) return [];
         if (!/^\d/.test(val)) {
-            // starts with letter → show ALL text columns (val is the search value, not a column name filter)
-            return SF_COLS.filter(function(c) { return c.type === 'text'; });
+            return SF_COLS.filter(function(c) { return c.type === 'text'; })
+                          .map(function(c) { return { col: c, mode: 'text', label: c.label }; });
         }
         if (sfIsDateLike(val)) {
-            // date pattern → only date cols
-            return SF_COLS.filter(function(c) { return c.type === 'date'; });
+            return sfDateCandidates();
         }
-        // generic number → date + number cols
-        return SF_COLS.filter(function(c) { return c.type === 'date' || c.type === 'number'; });
+        var out = [];
+        SF_COLS.forEach(function(c) {
+            if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
+            else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
+        });
+        return out;
     }
 
     function sfRenderDropdown(val) {
@@ -2093,27 +2132,38 @@ $(document).ready(function() {
         var matches = sfCandidates(val);
         if (!matches.length) { sfDropdown.style.display = 'none'; return; }
 
-        matches.forEach(function(col) {
+        matches.forEach(function(cand) {
+            var col = cand.col;
             var li = document.createElement('li');
             var badgeCls = col.type === 'date' ? 'sf-type-date' : col.type === 'number' ? 'sf-type-number' : 'sf-type-text';
             li.innerHTML =
                 '<span class="sf-type-badge ' + badgeCls + '">' + col.type + '</span>' +
-                '<span>' + sfEscape(col.label) + '</span>';
-            li.dataset.colLabel = col.label;
+                '<span>' + sfEscape(cand.label) + '</span>';
+            li.dataset.colLabel = cand.label;
             li.addEventListener('mousedown', function(e) {
                 e.preventDefault();
-                sfAddFilter(col, sfInput.value.trim());
+                sfAddFilter(cand.col, sfInput.value.trim(), cand.mode);
             });
             sfDropdown.appendChild(li);
         });
         sfDropdown.style.display = 'block';
     }
 
-    function sfAddFilter(col, value) {
+    function sfAddFilter(col, value, mode) {
         if (!value) return;
-        // Replace existing filter for same column
-        sfActive = sfActive.filter(function(f) { return f.col.dtCol !== col.dtCol; });
-        sfActive.push({ col: col, value: value });
+        mode = mode || (col.type === 'date' ? 'exact' : col.type);
+        if (col.type === 'date') {
+            if (mode === 'exact') {
+                sfActive = sfActive.filter(function(f) { return f.col.dtCol !== col.dtCol; });
+            } else {
+                sfActive = sfActive.filter(function(f) {
+                    return !(f.col.dtCol === col.dtCol && (f.mode === mode || f.mode === 'exact'));
+                });
+            }
+        } else {
+            sfActive = sfActive.filter(function(f) { return f.col.dtCol !== col.dtCol; });
+        }
+        sfActive.push({ col: col, value: value, mode: mode, key: sfFilterKey(col, mode) });
         sfInput.value = '';
         sfDropdown.style.display = 'none';
         sfKbdIdx = -1;
@@ -2121,9 +2171,16 @@ $(document).ready(function() {
         sfInput.focus();
     }
 
-    function sfRemoveFilter(dtCol) {
-        sfActive = sfActive.filter(function(f) { return f.col.dtCol !== dtCol; });
+    function sfRemoveFilter(key) {
+        sfActive = sfActive.filter(function(f) { return f.key !== key; });
         sfRenderChips();
+    }
+
+    function sfChipPrefix(f) {
+        if (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to')) {
+            return sfRangeWord(f.mode) + ' ' + f.col.label.toUpperCase();
+        }
+        return f.col.label.toUpperCase();
     }
 
     function sfRenderChips() {
@@ -2132,11 +2189,11 @@ $(document).ready(function() {
             var chip = document.createElement('span');
             chip.className = 'smart-filter-chip';
             chip.innerHTML =
-                '<strong>' + sfEscape(f.col.label.toUpperCase()) + ':</strong>&nbsp;' +
+                '<strong>' + sfEscape(sfChipPrefix(f)) + ':</strong>&nbsp;' +
                 sfEscape(f.value) +
                 '<span class="sf-chip-remove" title="Remove filter">&#215;</span>';
             chip.querySelector('.sf-chip-remove').addEventListener('click', function() {
-                sfRemoveFilter(f.col.dtCol);
+                sfRemoveFilter(f.key);
             });
             sfChips.appendChild(chip);
         });
@@ -2184,7 +2241,8 @@ $(document).ready(function() {
                 return {
                     field: SF_LABEL_TO_FIELD[f.col.label] || '',
                     type:  f.col.type,
-                    value: f.value
+                    value: f.value,
+                    mode:  f.mode
                 };
             })
             .filter(function(f) { return f.field; });
@@ -2228,7 +2286,7 @@ $(document).ready(function() {
         // Backspace com input vazio → remove o último chip de filtro
         if (e.key === 'Backspace' && !this.value && sfActive.length) {
             e.preventDefault();
-            sfRemoveFilter(sfActive[sfActive.length - 1].col.dtCol);
+            sfRemoveFilter(sfActive[sfActive.length - 1].key);
             return;
         }
 
@@ -2282,7 +2340,7 @@ $(document).ready(function() {
         var today = dd + '/' + mm + '/' + yyyy;
         var tradeDateCol = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
         if (tradeDateCol) {
-            sfActive.push({ col: tradeDateCol, value: today });
+            sfActive.push({ col: tradeDateCol, value: today, mode: 'exact', key: sfFilterKey(tradeDateCol, 'exact') });
             sfRenderChips();
             sfApply();
         }

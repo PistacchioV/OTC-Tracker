@@ -1399,8 +1399,31 @@ def api_save_deal_cache():
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
 
+def _parse_date_any(val):
+    """Parse a date string in any supported format → datetime.date, or None.
+
+    Handles the smart-filter input (dd/mm/yyyy) and the formats stored in the
+    JSON cache (yyyy-mm-dd, yyyy-mm-dd HH:MM:SS, yyyymmdd, dd-mm-yyyy).
+    """
+    val = str(val or '').strip()
+    if not val:
+        return None
+    val = val.split('T')[0].split(' ')[0]  # drop any time component
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%Y%m%d', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _deal_matches(deal, filters):
-    """Return True when a deal dict satisfies every filter."""
+    """Return True when a deal dict satisfies every filter.
+
+    Date filters support a `mode` of 'from' (cell >= value), 'to'
+    (cell <= value) or 'exact'/absent (equality, both bounds inclusive when a
+    'from'+'to' pair is supplied for the same field).
+    """
     for f in filters:
         field = f.get('field', '')
         ftype = f.get('type', 'text')
@@ -1412,8 +1435,25 @@ def _deal_matches(deal, filters):
             if value.lower() not in cell_val.lower():
                 return False
         elif ftype == 'date':
-            if value not in cell_val:
-                return False
+            mode = (f.get('mode') or 'exact').lower()
+            fval = _parse_date_any(value)
+            cval = _parse_date_any(cell_val)
+            if mode in ('from', 'to'):
+                # Range bound — both the filter value and the cell must parse
+                if fval is None or cval is None:
+                    return False
+                if mode == 'from' and cval < fval:
+                    return False
+                if mode == 'to' and cval > fval:
+                    return False
+            else:
+                # Exact: compare as dates when both parse, else fall back to
+                # substring so partial inputs (e.g. "06/2026") still work
+                if fval is not None and cval is not None:
+                    if cval != fval:
+                        return False
+                elif value not in cell_val:
+                    return False
         elif ftype == 'number':
             if value.replace(',', '') not in cell_val.replace(',', ''):
                 return False
@@ -1846,9 +1886,34 @@ def _save_intrag_ndf_entry(deal):
 def api_intrag_ndf():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    date_str = request.args.get('date', '').strip()  # YYYY-MM-DD
+    date_str  = request.args.get('date', '').strip()       # YYYY-MM-DD (single day)
+    date_from = request.args.get('date_from', '').strip()  # YYYY-MM-DD (range start)
+    date_to   = request.args.get('date_to', '').strip()    # YYYY-MM-DD (range end)
     entries = []
-    if date_str:
+    if date_from or date_to:
+        # Trade Date range — load every day-file within [from, to] inclusive
+        d_from = _parse_date_any(date_from)
+        d_to   = _parse_date_any(date_to)
+        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith('_intrag_ndf.json'):
+                        continue
+                    fdate = _parse_date_any(fname[:8])
+                    if fdate is None:
+                        continue
+                    if d_from and fdate < d_from:
+                        continue
+                    if d_to and fdate > d_to:
+                        continue
+                    try:
+                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG NDF] Skip %s: %s', fname, exc)
+    elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
