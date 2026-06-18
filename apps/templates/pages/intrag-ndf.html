@@ -56,8 +56,8 @@
         vertical-align: middle;
     }
 
-    /* ── Larguras explícitas por coluna — âncora para colgroup do scrollX ──
-       nth-child(1)=checkbox  (2)=actions  (3..32)=dados  (33)=hidden ID */
+    /* Colunas específicas com larguras adequadas — um bloco por coluna */
+    /* nth-child(1)=checkbox  (2)=actions  (3..32)=dados  (33)=hidden ID */
     #intrag-ndf-table th:nth-child(1),
     #intrag-ndf-table td:nth-child(1) { width: 50px;  min-width: 50px;  }
 
@@ -765,8 +765,28 @@ $(document).ready(function() {
     });
 
     sfInput.addEventListener('keydown',function(e){
-        if(e.key==='Enter'){document.getElementById('sfSearchBtn').click();return;}
-        var items=sfDropdown.querySelectorAll('li'); if(!items.length) return;
+        var items=sfDropdown.querySelectorAll('li');
+        var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
+        // Backspace com input vazio → remove o último chip de filtro
+        if(e.key==='Backspace'&&!this.value&&sfActive.length){
+            e.preventDefault();
+            var last=sfActive[sfActive.length-1];
+            sfActive=sfActive.filter(function(x){return x.col.label!==last.col.label;});
+            sfRenderChips();
+            return;
+        }
+        // Enter → seleciona item destacado do dropdown; senão aciona o botão Search
+        if(e.key==='Enter'){
+            e.preventDefault();
+            if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){
+                items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
+            }else{
+                sfDropdown.style.display='none';
+                document.getElementById('sfSearchBtn').click();
+            }
+            return;
+        }
+        if(!items.length) return;
         if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
         else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
         else if(e.key==='Escape'){sfDropdown.style.display='none';return;}

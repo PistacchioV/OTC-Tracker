@@ -284,8 +284,10 @@
   }
 
   #deals-processing-table th {
-      white-space: nowrap;
-      text-overflow: ellipsis;
+      white-space: normal;        /* permite quebra de linha no header (texto inteiro visível) */
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      line-height: 1.15;
       min-width: 120px;
       padding: 8px 12px;
       text-align: center !important;
@@ -306,6 +308,10 @@
       text-align: center !important;
       vertical-align: middle !important;
       font-size: 0.7rem;
+      white-space: normal !important;   /* header do clone quebra linha → texto inteiro */
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      line-height: 1.15;
   }
 
   /* ── Inline autocomplete dropdown ── */
@@ -2175,6 +2181,27 @@ $(document).ready(function() {
 
     sfInput.addEventListener('keydown', function(e) {
         var items = sfDropdown.querySelectorAll('li');
+        var dropdownOpen = sfDropdown.style.display !== 'none' && items.length;
+
+        // Backspace com input vazio → remove o último chip de filtro
+        if (e.key === 'Backspace' && !this.value && sfActive.length) {
+            e.preventDefault();
+            sfRemoveFilter(sfActive[sfActive.length - 1].col.dtCol);
+            return;
+        }
+
+        // Enter → se há item do dropdown destacado, seleciona; senão aciona o botão Search
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (dropdownOpen && sfKbdIdx >= 0 && items[sfKbdIdx]) {
+                items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
+            } else {
+                sfDropdown.style.display = 'none';
+                document.getElementById('sfSearchBtn').click();
+            }
+            return;
+        }
+
         if (!items.length) return;
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -2182,12 +2209,6 @@ $(document).ready(function() {
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             sfKbdIdx = Math.max(sfKbdIdx - 1, 0);
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (sfKbdIdx >= 0 && items[sfKbdIdx]) {
-                items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
-            }
-            return;
         } else if (e.key === 'Escape') {
             sfDropdown.style.display = 'none';
             return;
