@@ -77,7 +77,9 @@
   .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
   .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
   .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
-  .sf-type-text { background: #6c757d; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #ffc107; color: #000 !important; }
   #intrag-ndf-table .btn-sm.rounded-circle { width: 28px; height: 28px; padding: 0; font-size: 13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; }
   /* Dark mode overrides */
   [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
@@ -535,21 +537,61 @@ $(document).ready(function() {
         sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
         sfActive=[], sfKbdIdx=-1;
 
-    // Trade Date is a special col (dtCol=-1): drives the API call, not DT column search
-    var SF_DATE_COL = {label:'Trade Date', dtCol:-1, isDate:true};
-    var SF_COLS = [SF_DATE_COL].concat(NDF_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2};}));
+    var SF_COLS = [
+        // Trade Date — special: drives the API date param (dtCol:-1 = not a DT column search)
+        { label: 'Trade Date',              type: 'date',   dtCol: -1,  isDate: true },
+        // date columns applied via DT column search after load
+        { label: 'Registration Date',       type: 'date',   dtCol: 13 },
+        { label: 'Maturity Date',           type: 'date',   dtCol: 14 },
+        // number columns
+        { label: 'Notional Value',          type: 'number', dtCol: 11 },
+        { label: 'Quantity',                type: 'number', dtCol: 19 },
+        { label: 'Trade Price',             type: 'number', dtCol: 21 },
+        { label: 'Settlement Parity',       type: 'number', dtCol: 22 },
+        { label: 'Spot / Adj. Rate',        type: 'number', dtCol: 24 },
+        { label: 'Forward Rate (R$/CCY)',   type: 'number', dtCol: 25 },
+        { label: 'Asian Fwd Avg Rate',      type: 'number', dtCol: 26 },
+        { label: 'Maturity Rate',           type: 'number', dtCol: 28 },
+        { label: 'Discount Factor',         type: 'number', dtCol: 31 },
+        // text columns
+        { label: 'Contract Type',           type: 'text',   dtCol: 2  },
+        { label: 'CETIP Contract Code',     type: 'text',   dtCol: 3  },
+        { label: 'Portfolio Code',          type: 'text',   dtCol: 4  },
+        { label: 'Participant Position',    type: 'text',   dtCol: 5  },
+        { label: 'Client Tax ID (Party)',   type: 'text',   dtCol: 6  },
+        { label: 'Counterparty',            type: 'text',   dtCol: 7  },
+        { label: 'Client Tax ID (Cpty)',    type: 'text',   dtCol: 8  },
+        { label: 'Cpty Collateral Basket',  type: 'text',   dtCol: 9  },
+        { label: 'Party Collateral Basket', type: 'text',   dtCol: 10 },
+        { label: 'Currency',                type: 'text',   dtCol: 15 },
+        { label: 'Reference Exchange',      type: 'text',   dtCol: 16 },
+        { label: 'Commodity',               type: 'text',   dtCol: 17 },
+        { label: 'Type (Form)',             type: 'text',   dtCol: 18 },
+        { label: 'Trading Unit',            type: 'text',   dtCol: 20 },
+        { label: 'Maturity Month/Year',     type: 'text',   dtCol: 23 },
+        { label: 'Information Source',      type: 'text',   dtCol: 27 },
+        { label: 'Adjustment Type',         type: 'text',   dtCol: 29 },
+        { label: 'Observation',             type: 'text',   dtCol: 30 }
+    ];
 
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
+    function sfIsDateLike(s) { return /^\d{1,2}[\/\-]\d/.test(s) || /^\d{4}[\/\-]/.test(s); }
+
+    function sfCandidates(val) {
+        if (!val) return [];
+        if (!/^\d/.test(val)) return SF_COLS.filter(function(c){ return c.type === 'text'; });
+        if (sfIsDateLike(val)) return SF_COLS.filter(function(c){ return c.type === 'date'; });
+        return SF_COLS.filter(function(c){ return c.type === 'date' || c.type === 'number'; });
+    }
+
     function sfRenderDropdown(val) {
         sfDropdown.innerHTML=''; sfKbdIdx=-1;
-        if(!val){sfDropdown.style.display='none';return;}
-        var q=val.toLowerCase(), matches=SF_COLS.filter(function(c){return c.label.toLowerCase().indexOf(q)!==-1;});
+        var matches = sfCandidates(val);
         if(!matches.length){sfDropdown.style.display='none';return;}
         matches.forEach(function(col) {
             var li=document.createElement('li');
-            var badge = col.isDate ? 'date' : 'text';
-            li.innerHTML='<span class="sf-type-badge sf-type-'+badge+'">'+badge+'</span><span>'+sfEsc(col.label)+'</span>';
+            li.innerHTML='<span class="sf-type-badge sf-type-'+col.type+'">'+col.type+'</span><span>'+sfEsc(col.label)+'</span>';
             li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(col,sfInput.value.trim());});
             sfDropdown.appendChild(li);
         });
@@ -579,6 +621,7 @@ $(document).ready(function() {
 
     sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
     sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfInput.addEventListener('focus',function(){if(this.value.trim()) sfRenderDropdown(this.value.trim());});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
 
     // ── intragLoad ─────────────────────────────────────────────────────────────
@@ -624,7 +667,7 @@ $(document).ready(function() {
     });
 
     // Pre-add today's Trade Date chip and auto-load
-    sfAddFilter(SF_DATE_COL, _todayDmy());
+    sfAddFilter(SF_COLS[0], _todayDmy());
     document.getElementById('sfSearchBtn').click();
 });
 </script>
