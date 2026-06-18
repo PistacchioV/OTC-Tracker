@@ -334,27 +334,33 @@
                 var d = new Date();
                 return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
             })();
-            var LS_DATE  = 'otc_notif_date';
-            var LS_COUNT = 'otc_notif_read_count';
+            // Read-state is tracked by the highest notification ID the user has seen,
+            // NOT by a count — total_today is capped at 50 by the API LIMIT, so a
+            // count-based diff can never detect new items once the cap is reached.
+            var LS_SEEN = 'otc_notif_last_seen_id';
             var _totalToday = 0;
+            var _notifs = [];
 
-            function getReadCount() {
-                if (localStorage.getItem(LS_DATE) !== TODAY) {
-                    localStorage.setItem(LS_DATE, TODAY);
-                    localStorage.setItem(LS_COUNT, '0');
-                    return 0;
-                }
-                return parseInt(localStorage.getItem(LS_COUNT) || '0', 10);
+            function getLastSeenId() {
+                return parseInt(localStorage.getItem(LS_SEEN) || '0', 10) || 0;
+            }
+            function setLastSeenId(id) {
+                localStorage.setItem(LS_SEEN, String(id || 0));
+            }
+            function maxNotifId(items) {
+                var m = 0;
+                (items || []).forEach(function (n) { var v = Number(n.id) || 0; if (v > m) m = v; });
+                return m;
+            }
+            function computeUnread(items) {
+                var seen = getLastSeenId();
+                var c = 0;
+                (items || []).forEach(function (n) { if ((Number(n.id) || 0) > seen) c++; });
+                return c;
             }
 
-            function setReadCount(n) {
-                localStorage.setItem(LS_DATE, TODAY);
-                localStorage.setItem(LS_COUNT, String(n));
-            }
-
-            function updateBadge(total) {
-                var unread = Math.max(0, total - getReadCount());
-                var badge  = document.getElementById('notif-badge');
+            function updateBadge(unread) {
+                var badge = document.getElementById('notif-badge');
                 if (!badge) return;
                 if (unread > 0) {
                     badge.textContent = unread > 99 ? '99+' : String(unread);
@@ -378,6 +384,7 @@
                 'Deal Updated':   { icon: 'pencil',       color: 'bg-info'    },
                 'Deal Deleted':   { icon: 'trash-2',      color: 'bg-danger'  },
                 'Bulk Delete':    { icon: 'trash-2',      color: 'bg-danger'  },
+                'Bulk Update':    { icon: 'refresh-cw',   color: 'bg-info'    },
                 'New Item':       { icon: 'plus-circle',  color: 'bg-primary' },
                 'Item Updated':   { icon: 'pencil',       color: 'bg-info'    },
                 'Item Deleted':   { icon: 'trash-2',      color: 'bg-danger'  },
@@ -390,11 +397,13 @@
             };
 
             var PAGE_URL = {
-                'NDF Comm':         '/new_deals-ndf-commodities',
-                'Opt Comm':         '/new_deals-opt-commodities',
-                'Index B3':         '/index-b3',
-                'Users':            '/users-roles',
-                'Recon Comitente':  '/reconciliation-comitente'
+                'NDF Comm':            '/new_deals-ndf-commodities',
+                'Opt Comm':            '/new_deals-opt-commodities',
+                'NDF FWD Start':       '/new_deals-ndf-fwdstart',
+                'NDF Other Publisher': '/new_deals-ndf-otherpublisher',
+                'Index B3':            '/index-b3',
+                'Users':               '/users-roles',
+                'Recon Comitente':     '/reconciliation-comitente'
             };
 
             function esc(s) {
@@ -455,8 +464,9 @@
                     .then(function (resp) {
                         if (!resp.success) return;
                         _totalToday = resp.total_today || 0;
-                        updateBadge(_totalToday);
-                        renderNotifications(resp.notifications || []);
+                        _notifs = resp.notifications || [];
+                        updateBadge(computeUnread(_notifs));
+                        renderNotifications(_notifs);
                         var cb = document.getElementById('notif-count-badge');
                         if (cb) cb.textContent = _totalToday + ' Notification' + (_totalToday !== 1 ? 's' : '');
                     })
@@ -466,8 +476,8 @@
             var toggleBtn = document.getElementById('notif-toggle-btn');
             if (toggleBtn) {
                 toggleBtn.addEventListener('show.bs.dropdown', function () {
-                    setReadCount(_totalToday);
-                    updateBadge(_totalToday);
+                    setLastSeenId(maxNotifId(_notifs));
+                    updateBadge(0);
                 });
             }
 
@@ -475,8 +485,8 @@
             if (markBtn) {
                 markBtn.addEventListener('click', function (e) {
                     e.preventDefault();
-                    setReadCount(_totalToday);
-                    updateBadge(_totalToday);
+                    setLastSeenId(maxNotifId(_notifs));
+                    updateBadge(0);
                 });
             }
 

@@ -3247,6 +3247,293 @@ def api_mapping_b3():
 
 
 # ==============================================================================
+# API — GENERIC NEW-DEALS CACHE (NDF FWD Start / NDF Other Publisher)
+# Page + CRUD only. Same Deal+Client keyed JSON cache model as ndf-commodities.
+# Import-parse / mapping-B3 / send-Conecta are product-specific and intentionally
+# not wired here (handled per-product later).
+# ==============================================================================
+
+_GENERIC_ND_PRODUCTS = {
+    'fwd-start': {
+        'dir':    os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
+        'suffix': '_ndffwdstart.json',
+        'label':  'NDF FWD Start',
+    },
+    'other-publishers': {
+        'dir':    os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'OtherPublisher'),
+        'suffix': '_ndfotherpub.json',
+        'label':  'NDF Other Publisher',
+    },
+}
+
+
+def _generic_nd_cfg(product):
+    return _GENERIC_ND_PRODUCTS.get(product)
+
+
+def _find_generic_nd_deal(cfg, deal_name, client_name=None):
+    """Locate a deal by Deal (+optional Client) across the product's cache files.
+    Returns (file_path, list_index) or (None, None)."""
+    base = cfg['dir']
+    if not os.path.isdir(base):
+        return None, None
+    for root, _dirs, files in os.walk(base):
+        for fname in sorted(files):
+            if not fname.endswith(cfg['suffix']):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+                if not isinstance(deals, list):
+                    deals = [deals]
+                for i, deal in enumerate(deals):
+                    if deal.get('Deal', '') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
+                        return fpath, i
+            except Exception:
+                continue
+    return None, None
+
+
+@blueprint.route('/api/new-deals/<product>/cache', methods=['POST'])
+def api_generic_nd_save_cache(product):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "message": "No data provided"}), 400
+
+    try:
+        ref_date = datetime.strptime(data.get('TradeDate', ''), '%d/%m/%Y')
+    except (ValueError, TypeError):
+        ref_date = datetime.now()
+
+    dir_path = os.path.join(cfg['dir'], ref_date.strftime('%Y'), ref_date.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
+    file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + cfg['suffix'])
+
+    with _cache_lock:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+                if not isinstance(deals, list):
+                    deals = [deals]
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+        else:
+            deals = []
+
+        deal_name   = data.get('Deal', '').strip()
+        client_name = data.get('Client', '').strip()
+        existing_idx = next((i for i, d in enumerate(deals)
+                             if deal_name
+                             and d.get('Deal', '').strip() == deal_name
+                             and d.get('Client', '').strip() == client_name), None)
+        if existing_idx is not None:
+            deals[existing_idx] = data
+        else:
+            deals.append(data)
+        _atomic_write_json(file_path, deals)
+
+    return jsonify({"success": True, "deal": data.get('Deal', '')})
+
+
+@blueprint.route('/api/new-deals/<product>/cache/search', methods=['POST'])
+def api_generic_nd_search_cache(product):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    filters = (request.get_json(silent=True) or {}).get('filters', [])
+    matched = []
+    if os.path.isdir(cfg['dir']):
+        for root, _dirs, files in os.walk(cfg['dir']):
+            for fname in sorted(files):
+                if not fname.endswith(cfg['suffix']):
+                    continue
+                try:
+                    with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                        deals = json.load(fh)
+                    if not isinstance(deals, list):
+                        deals = [deals]
+                    for deal in deals:
+                        if _deal_matches(deal, filters):
+                            matched.append(deal)
+                except Exception:
+                    continue
+    return jsonify({"success": True, "deals": matched})
+
+
+@blueprint.route('/api/new-deals/<product>/cache/<deal_id>', methods=['PATCH'])
+def api_generic_nd_update_cache(product, deal_id):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    client  = request.args.get('client')
+    updates = request.get_json(silent=True)
+    if not updates:
+        return jsonify({"success": False, "message": "No data provided"}), 400
+
+    file_path, _ = _find_generic_nd_deal(cfg, deal_id, client)
+    if file_path is None:
+        return jsonify({"success": False, "message": "Deal not found"}), 404
+
+    with _cache_lock:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                deals = json.load(fh)
+        except (json.JSONDecodeError, ValueError):
+            deals = []
+        idx = next((i for i, d in enumerate(deals)
+                    if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        if idx is None:
+            return jsonify({"success": False, "message": "Deal not found"}), 404
+        deals[idx].update(updates)
+        _atomic_write_json(file_path, deals)
+
+    _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
+    if _fields:
+        if 'Status' in _fields:
+            _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                 'Status Updated', cfg['label'], deal_id + ' → ' + str(_fields.get('Status', '')))
+        else:
+            _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                 'Deal Updated', cfg['label'], deal_id + ' (' + ', '.join(_fields.keys()) + ')')
+    return jsonify({"success": True})
+
+
+@blueprint.route('/api/new-deals/<product>/cache/<deal_id>', methods=['DELETE'])
+def api_generic_nd_delete_cache(product, deal_id):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    client = request.args.get('client')
+    file_path, _ = _find_generic_nd_deal(cfg, deal_id, client)
+    if file_path is None:
+        return jsonify({"success": False, "message": "Deal not found"}), 404
+
+    with _cache_lock:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                deals = json.load(fh)
+        except (json.JSONDecodeError, ValueError):
+            deals = []
+        idx = next((i for i, d in enumerate(deals)
+                    if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        if idx is None:
+            return jsonify({"success": False, "message": "Deal not found"}), 404
+        deals.pop(idx)
+        _atomic_write_json(file_path, deals)
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deal Deleted', cfg['label'], deal_id)
+    return jsonify({"success": True})
+
+
+@blueprint.route('/api/new-deals/<product>/cache/bulk-delete', methods=['POST'])
+def api_generic_nd_bulk_delete_cache(product):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    data  = request.get_json(silent=True)
+    pairs = data.get('pairs', []) if data else []
+    if not pairs:
+        return jsonify({"success": False, "message": "No pairs provided"}), 400
+
+    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
+    file_pairs = {}
+    for deal_name, client_name in pair_set:
+        fp, _ = _find_generic_nd_deal(cfg, deal_name, client_name)
+        if fp:
+            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
+
+    deleted = 0
+    for fp, pairs_in_file in file_pairs.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            if not isinstance(deals, list):
+                deals = [deals]
+            before = len(deals)
+            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
+            deleted += before - len(deals)
+            _atomic_write_json(fp, deals)
+
+    not_found = len(pair_set) - deleted
+    if deleted > 0:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Bulk Delete', cfg['label'],
+                             str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted')
+    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+
+
+@blueprint.route('/api/new-deals/<product>/cache/bulk-patch', methods=['POST'])
+def api_generic_nd_bulk_patch_cache(product):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({"success": False, "message": "Unknown product"}), 404
+
+    data    = request.get_json(silent=True)
+    patches = data.get('patches', []) if data else []
+    if not patches:
+        return jsonify({"success": False, "message": "No patches provided"}), 400
+
+    file_patches = {}
+    for p in patches:
+        deal_id = p.get('deal_id', '')
+        client  = p.get('client', '')
+        updates = p.get('updates', {})
+        if not deal_id or not updates:
+            continue
+        fp, _ = _find_generic_nd_deal(cfg, deal_id, client)
+        if fp:
+            file_patches.setdefault(fp, []).append((deal_id, client, updates))
+
+    updated = 0
+    for fp, file_ops in file_patches.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            for deal_id, client, updates in file_ops:
+                idx = next((i for i, d in enumerate(deals)
+                            if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
+                if idx is not None:
+                    deals[idx].update(updates)
+                    updated += 1
+            _atomic_write_json(fp, deals)
+
+    if updated > 0:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Bulk Update', cfg['label'],
+                             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated')
+    return jsonify({"success": True, "updated": updated})
+
+
+# ==============================================================================
 # NOTIFICATIONS
 # ==============================================================================
 
