@@ -640,8 +640,10 @@
      (transform/rotate é ignorado em display:inline). !important garante sobre app.min.css,
      que carrega DEPOIS do extra_css (ver base.html). */
   @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  i.ti-spin, .ti-spin { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
-  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin { animation-duration: 1.6s !important; } }
+  /* anima também os ícones loader diretamente (não só .ti-spin) → à prova de cache do JS,
+     pois ti-loader/ti-loader-2 só são usados como spinner nesta página */
+  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
   @media (prefers-reduced-motion: reduce) {
       .nd-rv-1, .nd-rv-2, .nd-rv-3 { animation: none !important; opacity: 1 !important; transform: none !important; }
   }

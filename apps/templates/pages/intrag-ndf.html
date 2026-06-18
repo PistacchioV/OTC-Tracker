@@ -10,7 +10,18 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
 <style>
   .card-body { padding: 5px; }
-  .table-responsive { overflow-x: auto; }  
+  .table-responsive { overflow-x: auto; }
+  /* ── FIX DEFINITIVO alinhamento scrollX ──
+     table-layout:fixed torna a largura do <col> autoritativa nas duas tabelas
+     (header clone + corpo), imune à diferença de padding th(8px 12px) vs td(8px)
+     e a conteúdo longo. Sem isso, table-layout:auto recalcula cada tabela pelo
+     próprio conteúdo+padding → header mais largo que o corpo → drift cumulativo. */
+  .dt-scroll-headInner table,
+  .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table,
+  .dataTables_scrollBody > table {
+      table-layout: fixed !important;
+  }
   /* ── Scroll-header clone (DataTables injeta .dataTables_scrollHead) ── */
     .dt-scroll-head thead th,
     .dt-scroll-headInner thead th,
