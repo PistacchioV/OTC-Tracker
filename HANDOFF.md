@@ -679,3 +679,86 @@ initComplete: function() {
 - Filter row: restaurado e funcional (sem `B` no dom, injeção manual em `initComplete` nas duas theads)
 - `formatExportData`: função adicionada (strip HTML) para uso futuro quando botões forem implementados
 - Botões Export/Columns: removidos temporariamente até solução definitiva ser encontrada
+
+---
+
+## 14. Mapping de Moedas — código interno (final "B") → ISO 3 letras
+
+> Mapping de uso frequente no desenvolvimento de New Deals (Fwd Start e Other Publisher). Os feeds internos usam códigos de moeda com terminação "B" (ou variantes) que devem ser normalizados para o código ISO padrão de 3 letras.
+
+| Código interno | ISO 3 letras |
+|---|---|
+| USB | USD |
+| EUB | EUR |
+| GBB | GBP |
+| CHB | CHF |
+| NOB | NOK |
+| COB | COP |
+| PEB | PEN |
+| CLB | CLP |
+| TWF | TWD |
+| BRR | BRL |
+| BRL | BRL |
+| USD | USD |
+| RMB | CNH |
+
+**Notas:**
+- `BRR` → `BRL` e `BRL` → `BRL`: ambos os códigos internos mapeiam para BRL (ver seção 13 / memória [[project_new_deals_conecta]] — strike BRL nunca divide por 100; checar via `brl`/`isBrl`, nunca `BRR`).
+- `TWF` → `TWD` (não termina em "B") e `RMB` → `CNH` (RMB = renminbi → offshore CNH) são exceções ao padrão "final B".
+- `USD` e `BRL` já vêm no formato ISO em alguns feeds — manter no mapping para idempotência (input já normalizado retorna o próprio valor).
+
+---
+
+## 15. Sessão 2026-06-19 — Coluna Accronym (NDF/Opt) + insert de coluna em DataTable
+
+### O que foi feito
+
+#### Rename `Acronym` → `Accronym` (commodities NDF + Opt)
+- Trocado **apenas o texto exibido** (th, placeholder, labels do modal, export headers, `<option>` do seletor de colunas, label do smart-filter, mass-edit, comentário CSS) + valor de tradução **EN** (`nd-col-acronym`, `col-acronym` → "Accronym"). br/es seguem "Sigla".
+- **Mantidas as chaves de dados JSON** (`Acronym` em `COL_TO_JSON_FIELD`, `deal.Acronym`, lado direito de `SF_LABEL_TO_FIELD`, payload do cache) — renomear quebraria a releitura de deals já cacheados.
+
+#### Coluna Accronym entre SPN e Client (fwdstart + otherpublisher)
+- Comportamento espelhado de commodities: campo `#ar-acronym` no modal com autocomplete (`arBuildDrop`) que auto-preenche `#ar-spn`/`#ar-client`/`#ar-taxid` (agora `disabled`) via RefData.
+- **Fonte do autocomplete = `FX CASH ACCRONYM`** (não COMMODITIES) — são páginas FX NDF. Commodities usa `COMMODITIES ACCRONYM`.
+- Layouts: fwdstart passou de 27→28 colunas (Maker 26→27); otherpublisher de 25→26 (Maker 24→25). otherpublisher **não tem** Strike Set Date/Offset.
+
+#### SheetJS adicionado
+- `apps/static/plugins/xlsx/xlsx.full.min.js` (build standalone 0.20.3, baixado do cdn.sheetjs.com) + `<script>` em fwdstart e otherpublisher antes de `otc-fileupload.js`.
+- `gulp plugins` copia por-plugin de `node_modules` e **não limpa** `plugins/`, então o arquivo manual sobrevive ao build.
+
+### Padrão crítico: INSERIR uma coluna no meio de um DataTable destas páginas New Deals
+
+Inserir 1 coluna desloca **todos** os índices ≥ ponto de inserção. Pontos a ajustar (checklist completo):
+1. **CSS** `th/td:nth-child(N)` — renumerar e adicionar a nova.
+2. **Header row** + **filter row** (2 `<th>`).
+3. **`COL_TO_JSON_FIELD`** (mapa col→campo).
+4. **`dealJsonToRow`** (array da linha).
+5. **Export** `columnLabels` (ATENÇÃO: nessas páginas estava com labels STALE de commodities — corrigido para os reais).
+6. **Seletor de coluna** do mass-edit (`<option value="N">`).
+7. **Smart-filter** `SF_COLS` (`dtCol`) + `SF_LABEL_TO_FIELD` (label→campo).
+8. **`columnDefs`** target oculto (Maker).
+9. **Constantes**: `SKIP_EDIT_COLS`, `DATE_COL_INDICES`, `*_COL_INDEX`.
+10. **Loop save-edit** (`for colIdx ... <= N`).
+11. **Dois extratores** de deal a partir do row (`extractRowDeal` parcial + `rowDataToNdfDeal`/reconstruct com `overrides`+`Maker`).
+12. **Modal**: `arOpenEditModal` (`d[N]`), `arBuildDeal`, `arClearFields`.
+13. **Refs hardcoded por índice** (perigoso): Client (`?client=` nas APIs de cache, chaves de seleção `rowId|client|index`, `clientRaw`, `rowsToDelete.client`), Maker (`rowMaker`, 4-eyes maker-checker, `cell(rowIdx, Maker)`).
+
+**Validação:** contar `<th>` da header row == `<th>` da filter row == nº de elementos do array de `dealJsonToRow`.
+
+**Armadilhas confirmadas nesta sessão:**
+- Há **código morto copiado de commodities** nestas páginas FX: `buildDropdown` (in-cell autocomplete) **nunca é chamado**; bloco `type==='acronym'`/`'underlying'` e `refreshRowMissingBadge` (cols 14/15/28) são no-op (`_ASSET_NDF` sempre vazio). Constantes `MARKET_COL_INDEX`/`UNDERLYING_COL_INDEX`/etc. definidas mas não usadas. Não confiar nelas; ajustar só o que é LIVE.
+- `_sh(d[10])` aparecia tanto como Client (chaves de seleção) quanto, após o insert, como Accronym (extratores/modal) — **não** dá pra `replace_all` cego; editar por contexto.
+
+### Pendente / bloqueado
+- **Import fwdstart `Brazil_NDF_Blotter_Extended*.xlsx`**: contraparte resolvida por **Accronym OU SPN (o que achar primeiro)** no RefData. NÃO existe parser de Excel ainda (`otc-fileupload.js` só lê `.msg`/`.eml`; `buildRow` é layout commodities). SheetJS já adicionado. **Aguardando o mapeamento das colunas do blotter** (usuário enviará) para construir o parser. Nota: `loadRefData` em `otc-fileupload.js` indexa só por acrônimo → para resolver por SPN será preciso um índice por SPN também.
+
+### Arquivos modificados nesta sessão
+```
+apps/templates/pages/new_deals-ndf-commodities.html      ← Acronym→Accronym (display)
+apps/templates/pages/new_deals-opt-commodities.html      ← Acronym→Accronym (display)
+apps/static/data/translations/en.json                    ← nd-col-acronym/col-acronym → "Accronym"
+apps/templates/pages/new_deals-ndf-fwdstart.html         ← coluna Accronym + modal + SheetJS
+apps/templates/pages/new_deals-ndf-otherpublisher.html   ← coluna Accronym + modal + SheetJS
+apps/templates/partials/sidenav.html                     ← removidos ícones dos subitens Live Position
+apps/static/plugins/xlsx/xlsx.full.min.js                ← ADICIONADO (SheetJS 0.20.3)
+```

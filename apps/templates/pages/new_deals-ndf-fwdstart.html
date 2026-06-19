@@ -379,52 +379,55 @@
   #deals-processing-table td:nth-child(10) { min-width: 90px;  width: 90px;   } /* SPN */
 
   #deals-processing-table th:nth-child(11),
-  #deals-processing-table td:nth-child(11) { min-width: 220px; width: 220px;  } /* Client */
+  #deals-processing-table td:nth-child(11) { min-width: 90px;  width: 90px;   } /* Accronym */
 
   #deals-processing-table th:nth-child(12),
-  #deals-processing-table td:nth-child(12) { min-width: 150px; width: 150px;  } /* Tax ID */
+  #deals-processing-table td:nth-child(12) { min-width: 220px; width: 220px;  } /* Client */
 
   #deals-processing-table th:nth-child(13),
-  #deals-processing-table td:nth-child(13) { min-width: 130px; width: 130px;  } /* First Fixing Date */
+  #deals-processing-table td:nth-child(13) { min-width: 150px; width: 150px;  } /* Tax ID */
 
   #deals-processing-table th:nth-child(14),
-  #deals-processing-table td:nth-child(14) { min-width: 130px; width: 130px;  } /* Last Fixing Date */
+  #deals-processing-table td:nth-child(14) { min-width: 130px; width: 130px;  } /* First Fixing Date */
 
   #deals-processing-table th:nth-child(15),
-  #deals-processing-table td:nth-child(15) { min-width: 130px; width: 130px;  } /* Strike Set Date */
+  #deals-processing-table td:nth-child(15) { min-width: 130px; width: 130px;  } /* Last Fixing Date */
 
   #deals-processing-table th:nth-child(16),
-  #deals-processing-table td:nth-child(16) { min-width: 130px; width: 130px;  } /* Strike Set Offset */
+  #deals-processing-table td:nth-child(16) { min-width: 130px; width: 130px;  } /* Strike Set Date */
 
   #deals-processing-table th:nth-child(17),
-  #deals-processing-table td:nth-child(17) { min-width: 110px; width: 110px;  } /* Intrument */
+  #deals-processing-table td:nth-child(17) { min-width: 130px; width: 130px;  } /* Strike Set Offset */
 
   #deals-processing-table th:nth-child(18),
-  #deals-processing-table td:nth-child(18) { min-width: 95px;  width: 95px;   } /* Trade Type */
+  #deals-processing-table td:nth-child(18) { min-width: 110px; width: 110px;  } /* Intrument */
 
   #deals-processing-table th:nth-child(19),
-  #deals-processing-table td:nth-child(19) { min-width: 85px;  width: 85px;   } /* Direction */
+  #deals-processing-table td:nth-child(19) { min-width: 95px;  width: 95px;   } /* Trade Type */
 
   #deals-processing-table th:nth-child(20),
-  #deals-processing-table td:nth-child(20) { min-width: 100px; width: 100px;  } /* FX Pair */
+  #deals-processing-table td:nth-child(20) { min-width: 85px;  width: 85px;   } /* Direction */
 
   #deals-processing-table th:nth-child(21),
-  #deals-processing-table td:nth-child(21) { min-width: 140px; width: 140px;  } /* Quantity Currency */
+  #deals-processing-table td:nth-child(21) { min-width: 100px; width: 100px;  } /* FX Pair */
 
   #deals-processing-table th:nth-child(22),
-  #deals-processing-table td:nth-child(22) { min-width: 130px; width: 130px;  } /* Publisher */
+  #deals-processing-table td:nth-child(22) { min-width: 140px; width: 140px;  } /* Quantity Currency */
 
   #deals-processing-table th:nth-child(23),
-  #deals-processing-table td:nth-child(23) { min-width: 130px; width: 130px;  } /* Notional */
+  #deals-processing-table td:nth-child(23) { min-width: 130px; width: 130px;  } /* Publisher */
 
   #deals-processing-table th:nth-child(24),
-  #deals-processing-table td:nth-child(24) { min-width: 110px; width: 110px;  } /* Rate */
+  #deals-processing-table td:nth-child(24) { min-width: 130px; width: 130px;  } /* Notional */
 
   #deals-processing-table th:nth-child(25),
-  #deals-processing-table td:nth-child(25) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
+  #deals-processing-table td:nth-child(25) { min-width: 110px; width: 110px;  } /* Rate */
 
   #deals-processing-table th:nth-child(26),
-  #deals-processing-table td:nth-child(26) { min-width: 120px; width: 120px;  } /* TradingBook */
+  #deals-processing-table td:nth-child(26) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
+
+  #deals-processing-table th:nth-child(27),
+  #deals-processing-table td:nth-child(27) { min-width: 120px; width: 120px;  } /* TradingBook */
 
   /* Todas as células da tabela devem ter nowrap */
   #deals-processing-table td {
@@ -854,6 +857,7 @@
                                     <th data-table-sort="" data-format="month-name" data-lang="nd-col-month">Month</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-settle-date">Settlement Date</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-spn">SPN</th>
+                                    <th data-table-sort="" data-format="text" data-lang="nd-col-acronym">Accronym</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-client">Client</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-tax-id">Tax ID</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-first-fix">First Fixing Date</th>
@@ -870,7 +874,7 @@
                                     <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-rate">Rate</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-is-brr-fixed">Is BRR Fixed?</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trading-book">TradingBook</th>
-                                    <th></th><!-- col 26: Maker  (hidden) -->
+                                    <th></th><!-- col 27: Maker  (hidden) -->
                                 </tr>
 
                                 <!-- Linha de inputs para busca por coluna -->
@@ -885,6 +889,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Month" data-lang-placeholder="b3-col-month"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Date" data-lang-placeholder="col-settlement-date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SPN" data-lang-placeholder="col-spn"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Accronym" data-lang-placeholder="col-acronym"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client" data-lang-placeholder="col-client"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID" data-lang-placeholder="col-tax-id"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="First Fixing Date" data-lang-placeholder="col-first-fix"></th>
@@ -951,17 +956,24 @@
             <input type="date" class="form-control form-control-sm" id="ar-settledate">
           </div>
           <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">SPN</label>
-            <input type="text" class="form-control form-control-sm" id="ar-spn">
+            <label class="form-label form-label-sm mb-1">Accronym</label>
+            <div class="position-relative">
+              <input type="text" class="form-control form-control-sm" id="ar-acronym" autocomplete="off" placeholder="Type to search…">
+              <div id="ar-acronym-drop" class="ar-ac-drop" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9200;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 6px rgba(0,0,0,.12)"></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">SPN <small class="text-muted">(auto from Accronym)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="ar-spn" disabled>
           </div>
 
           <div class="col-md-6">
-            <label class="form-label form-label-sm mb-1">Client</label>
-            <input type="text" class="form-control form-control-sm" id="ar-client">
+            <label class="form-label form-label-sm mb-1">Client <small class="text-muted">(auto from Accronym)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="ar-client" disabled>
           </div>
           <div class="col-md-6">
-            <label class="form-label form-label-sm mb-1">Tax ID</label>
-            <input type="text" class="form-control form-control-sm" id="ar-taxid">
+            <label class="form-label form-label-sm mb-1">Tax ID <small class="text-muted">(auto from Accronym)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="ar-taxid" disabled>
           </div>
 
           <div class="col-md-4">
@@ -1057,6 +1069,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-file-validate-size.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-image-exif-orientation.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-file-encode.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/xlsx/xlsx.full.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/choices/choices.min.js"></script>
@@ -1151,7 +1164,7 @@ function t(key, fallback) { return _TRANS_CACHE[key] || fallback || key; }
 
 // ── Reference data for inline dropdowns ─────────────────────────────────────
 var _REFDATA             = [];   // full RefData array
-var _ACRONYM_NDF     = [];   // unique COMMODITIES ACCRONYM values
+var _ACRONYM_NDF     = [];   // unique FX CASH ACCRONYM values
 var _ASSET_NDF       = [];   // unique Underlying Asset codes (COMM OPC)
 var _SUBJACENTE_MAP_NDF      = {};   // asset code → Commodity name
 var _SUBJACENTE_FATOR_NDF    = {};   // asset code → Fator Conversao (all entries)
@@ -1164,7 +1177,7 @@ var _FX_HOLIDAY_NDF  = [];   // available FX holiday schedule names
             _REFDATA = d;
             var seen = {};
             d.forEach(function (x) {
-                var acc = x['COMMODITIES ACCRONYM'];
+                var acc = x['FX CASH ACCRONYM'];
                 if (acc && !seen[acc]) { seen[acc] = true; _ACRONYM_NDF.push(acc); }
             });
             _ACRONYM_NDF.sort();
@@ -1206,15 +1219,15 @@ var COL_TO_JSON_FIELD = {
     4:  'Deal',           5:  'B3_ID',
     6:  'TradeDate',       7:  'Month',
     8:  'SettlementDate',  9:  'SPN',
-    10: 'Client',          11: 'TaxID',
-    12: 'FirstFixingDate', 13: 'LastFixingDate',
-    14: 'StrikeSetDate',   15: 'StrikeSetOffset',
-    16: 'Instrument',      17: 'TradeType',
-    18: 'Direction',       19: 'FXPair',
-    20: 'QuantityCurrency', 21: 'Publisher',
-    22: 'Notional',        23: 'Rate',
-    24: 'IsBRRFixed',      25: 'TradingBook',
-    26: 'Maker'
+    10: 'Acronym',         11: 'Client',
+    12: 'TaxID',           13: 'FirstFixingDate',
+    14: 'LastFixingDate',  15: 'StrikeSetDate',
+    16: 'StrikeSetOffset', 17: 'Instrument',
+    18: 'TradeType',       19: 'Direction',
+    20: 'FXPair',          21: 'QuantityCurrency',
+    22: 'Publisher',       23: 'Notional',
+    24: 'Rate',            25: 'IsBRRFixed',
+    26: 'TradingBook',     27: 'Maker'
 };
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
@@ -1257,6 +1270,7 @@ function dealJsonToRow(deal) {
         deal.Month             || '',
         deal.SettlementDate    || '',
         deal.SPN               || '',
+        deal.Acronym           || '',
         clientHtml,
         taxIdHtml,
         deal.FirstFixingDate   || '',
@@ -1326,7 +1340,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [26]       // Maker SID — hidden metadata
+                targets: [27]       // Maker SID — hidden metadata
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1424,7 +1438,7 @@ $(document).ready(function() {
                 var rowId = d ? _sh(d[4]) : null;
                 var node = this.node();
                 if (node) {
-                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())));
+                    $(node).find('input[type="checkbox"]').prop('checked', !!(rowId && selectedRowIds.has(rowId + '|' + _sh(d[11]) + '|' + this.index())));
                 }
             });
             // Sync selectAll header checkbox (count across all pages, current search)
@@ -1643,7 +1657,7 @@ $(document).ready(function() {
                         var status = _sh(d[2]);
                         if ((status === 'Sent' || status === 'Error') && deal) {
                             // Dedupe by Deal+Client so duplicate rows aren't sent/counted twice
-                            var client = _sh(d[10]);
+                            var client = _sh(d[11]);
                             var key = deal + '|' + client;
                             if (_seenDeals[key]) return;
                             _seenDeals[key] = true;
@@ -1784,11 +1798,11 @@ $(document).ready(function() {
             // SHOW/HIDE COLUMNS DROPDOWN
             // ==============================================================
             var columnLabels = [
-                "Status", "Deal", "B3 ID", "Trade Date", "Month",
-                "Settlement Date", "SPN", "Acronym", "Client", "Tax ID",
-                "Trade Type", "Market", "Underlying Asset", "Commodities", "FX Holiday Schedule", "Total Notional",
-                "Instrument", "Contract", "Strike", "Strike Currency", "Direction",
-                "FXConvDate", "FixingStartDate", "FixingEndDate", "TradingBook", "OtherBook", "Quoted in Cents?"
+                "Status", "LE", "Deal", "B3 ID", "Trade Date", "Month",
+                "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
+                "First Fixing Date", "Last Fixing Date", "Strike Set Date", "Strike Set Offset",
+                "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
+                "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook"
             ];
 
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
@@ -1863,22 +1877,23 @@ $(document).ready(function() {
                     '<option value="7">Month</option>' +
                     '<option value="8">Settlement Date</option>' +
                     '<option value="9">SPN</option>' +
-                    '<option value="10">Client</option>' +
-                    '<option value="11">Tax ID</option>' +
-                    '<option value="12">First Fixing Date</option>' +
-                    '<option value="13">Last Fixing Date</option>' +
-                    '<option value="14">Strike Set Date</option>' +
-                    '<option value="15">Strike Set Offset</option>' +
-                    '<option value="16">Intrument</option>' +
-                    '<option value="17">Trade Type</option>' +
-                    '<option value="18">Direction</option>' +
-                    '<option value="19">FX Pair</option>' +
-                    '<option value="20">Quantity Currency</option>' +
-                    '<option value="21">Publisher</option>' +
-                    '<option value="22">Notional</option>' +
-                    '<option value="23">Rate</option>' +
-                    '<option value="24">Is BRR Fixed?</option>' +
-                    '<option value="25">TradingBook</option>';
+                    '<option value="10">Accronym</option>' +
+                    '<option value="11">Client</option>' +
+                    '<option value="12">Tax ID</option>' +
+                    '<option value="13">First Fixing Date</option>' +
+                    '<option value="14">Last Fixing Date</option>' +
+                    '<option value="15">Strike Set Date</option>' +
+                    '<option value="16">Strike Set Offset</option>' +
+                    '<option value="17">Intrument</option>' +
+                    '<option value="18">Trade Type</option>' +
+                    '<option value="19">Direction</option>' +
+                    '<option value="20">FX Pair</option>' +
+                    '<option value="21">Quantity Currency</option>' +
+                    '<option value="22">Publisher</option>' +
+                    '<option value="23">Notional</option>' +
+                    '<option value="24">Rate</option>' +
+                    '<option value="25">Is BRR Fixed?</option>' +
+                    '<option value="26">TradingBook</option>';
 
                 // Botão Send
                 var confirmBtn = document.createElement('button');
@@ -1937,26 +1952,27 @@ $(document).ready(function() {
         { label: 'B3 ID',             type: 'text',   dtCol: 5  },
         { label: 'Month',             type: 'text',   dtCol: 7  },
         { label: 'SPN',               type: 'text',   dtCol: 9  },
-        { label: 'Client',            type: 'text',   dtCol: 10 },
-        { label: 'Tax ID',            type: 'text',   dtCol: 11 },
-        { label: 'Strike Set Offset', type: 'text',   dtCol: 15 },
-        { label: 'Intrument',         type: 'text',   dtCol: 16 },
-        { label: 'Trade Type',        type: 'text',   dtCol: 17 },
-        { label: 'Direction',         type: 'text',   dtCol: 18 },
-        { label: 'FX Pair',           type: 'text',   dtCol: 19 },
-        { label: 'Quantity Currency', type: 'text',   dtCol: 20 },
-        { label: 'Publisher',         type: 'text',   dtCol: 21 },
-        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 24 },
-        { label: 'TradingBook',       type: 'text',   dtCol: 25 },
+        { label: 'Accronym',          type: 'text',   dtCol: 10 },
+        { label: 'Client',            type: 'text',   dtCol: 11 },
+        { label: 'Tax ID',            type: 'text',   dtCol: 12 },
+        { label: 'Strike Set Offset', type: 'text',   dtCol: 16 },
+        { label: 'Intrument',         type: 'text',   dtCol: 17 },
+        { label: 'Trade Type',        type: 'text',   dtCol: 18 },
+        { label: 'Direction',         type: 'text',   dtCol: 19 },
+        { label: 'FX Pair',           type: 'text',   dtCol: 20 },
+        { label: 'Quantity Currency', type: 'text',   dtCol: 21 },
+        { label: 'Publisher',         type: 'text',   dtCol: 22 },
+        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 25 },
+        { label: 'TradingBook',       type: 'text',   dtCol: 26 },
         // date columns
         { label: 'Trade Date',        type: 'date',   dtCol: 6  },
         { label: 'Settlement Date',   type: 'date',   dtCol: 8  },
-        { label: 'First Fixing Date', type: 'date',   dtCol: 12 },
-        { label: 'Last Fixing Date',  type: 'date',   dtCol: 13 },
-        { label: 'Strike Set Date',   type: 'date',   dtCol: 14 },
+        { label: 'First Fixing Date', type: 'date',   dtCol: 13 },
+        { label: 'Last Fixing Date',  type: 'date',   dtCol: 14 },
+        { label: 'Strike Set Date',   type: 'date',   dtCol: 15 },
         // number columns
-        { label: 'Notional',          type: 'number', dtCol: 22 },
-        { label: 'Rate',              type: 'number', dtCol: 23 }
+        { label: 'Notional',          type: 'number', dtCol: 23 },
+        { label: 'Rate',              type: 'number', dtCol: 24 }
     ];
 
     var sfActive = [];      // [{col, value}]
@@ -2117,6 +2133,7 @@ $(document).ready(function() {
         'B3 ID':             'B3_ID',
         'Month':             'Month',
         'SPN':               'SPN',
+        'Accronym':          'Acronym',
         'Client':            'Client',
         'Tax ID':            'TaxID',
         'Strike Set Offset': 'StrikeSetOffset',
@@ -2265,7 +2282,7 @@ $(document).ready(function() {
             table.rows({search: 'applied', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = d ? _sh(d[4]) : null;
-                if (rowId) selectedRowIds.add(rowId + '|' + _sh(d[10]) + '|' + this.index());
+                if (rowId) selectedRowIds.add(rowId + '|' + _sh(d[11]) + '|' + this.index());
             });
         }
         $('input[type="checkbox"]', table.rows({page: 'current'}).nodes()).prop('checked', this.checked);
@@ -2285,7 +2302,7 @@ $(document).ready(function() {
 
         if (rowId) {
             // Include row index to handle duplicate Deal|Client rows correctly
-            var selKey = rowId + '|' + _sh(d[10]) + '|' + row.index();
+            var selKey = rowId + '|' + _sh(d[11]) + '|' + row.index();
             if (this.checked) {
                 selectedRowIds.add(selKey);
             } else {
@@ -2550,11 +2567,11 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[4]) : null;
-            if (!rowId || !selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())) return;
+            if (!rowId || !selectedRowIds.has(rowId + '|' + _sh(d[11]) + '|' + this.index())) return;
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[26] || '';
+            var rowMaker  = d[27] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -2702,7 +2719,7 @@ $(document).ready(function() {
             table.rows({search: 'none', page: 'all'}).every(function() {
                 var d = this.data();
                 var rowId = d ? _sh(d[4]) : null;
-                var clientRaw = d ? d[10] : '';
+                var clientRaw = d ? d[11] : '';
                 var clientClean = _sh(clientRaw);
                 // Include row index — two rows can share the same Deal+Client (e.g. Approved + New)
                 var selKey = rowId + '|' + clientClean + '|' + this.index();
@@ -2719,7 +2736,7 @@ $(document).ready(function() {
                         return;
                     }
                     // 4-eyes: you cannot approve a deal you imported/last edited
-                    if ((d[26] || '') === CURRENT_USER_SID) {
+                    if ((d[27] || '') === CURRENT_USER_SID) {
                         skippedCount++;
                         return;
                     }
@@ -2754,7 +2771,7 @@ $(document).ready(function() {
                 );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
-                table.cell(rowIdx, 26).data(CURRENT_USER_SID);
+                table.cell(rowIdx, 27).data(CURRENT_USER_SID);
                 changedFields['Maker'] = CURRENT_USER_SID;
                 processedCount++;
                 patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
@@ -2792,10 +2809,10 @@ $(document).ready(function() {
         table.rows({search: 'none', page: 'all'}).every(function() {
             var d = this.data();
             var rowId = d ? _sh(d[4]) : null;
-            if (rowId && selectedRowIds.has(rowId + '|' + _sh(d[10]) + '|' + this.index())) {
+            if (rowId && selectedRowIds.has(rowId + '|' + _sh(d[11]) + '|' + this.index())) {
                 // Store row index (not rowApi) — rowApi.remove() uses aoData.splice which shifts
                 // subsequent indices; we sort descending later to avoid that issue
-                rowsToDelete.push({ rowIdx: this.index(), rowId: rowId, client: _sh(d[10]) });
+                rowsToDelete.push({ rowIdx: this.index(), rowId: rowId, client: _sh(d[11]) });
             }
         });
 
@@ -3098,15 +3115,15 @@ $(document).ready(function() {
     // ROW ACTION BUTTONS: Edit / Confirm / Delete / Send
     // ========================================================================
 
-    var DATE_COL_INDICES      = [6, 8, 12, 13, 14];
+    var DATE_COL_INDICES      = [6, 8, 13, 14, 15];
     var QUOTED_COL_INDEX      = -1;   // no Quoted-in-Cents column on this page
     var STATUS_COL_INDEX      = 2;
     // Columns never turned into inputs (auto-populated or structural)
-    var SKIP_EDIT_COLS        = [0, 1, 2, 9, 10, 11]; // checkbox, actions, status, SPN, Client, TaxID
+    var SKIP_EDIT_COLS        = [0, 1, 2, 9, 11, 12]; // checkbox, actions, status, SPN, Client, TaxID
 
     // Named column indices used by dropdowns
     var MONTH_COL_INDEX       = 6;
-    var ACRONYM_COL_INDEX     = 9;
+    var ACRONYM_COL_INDEX     = 10;
     var TRADETYPE_COL_INDEX   = 12;
     var MARKET_COL_INDEX      = 13;
     var UNDERLYING_COL_INDEX  = 14;
@@ -3158,21 +3175,22 @@ $(document).ready(function() {
             Deal:             _sh(d[4]),
             TradeDate:        _sh(d[6]),
             SettlementDate:   _sh(d[8]),
-            Client:           _sh(d[10]),
-            TaxID:            _sh(d[11]),
-            FirstFixingDate:  _sh(d[12]),
-            LastFixingDate:   _sh(d[13]),
-            StrikeSetDate:    _sh(d[14]),
-            StrikeSetOffset:  _sh(d[15]),
-            Instrument:       _sh(d[16]),
-            TradeType:        _sh(d[17]),
-            Direction:        _sh(d[18]),
-            FXPair:           _sh(d[19]),
-            QuantityCurrency: _sh(d[20]),
-            Publisher:        _sh(d[21]),
-            Notional:         _sh(d[22]),
-            Rate:             _sh(d[23]),
-            IsBRRFixed:       _sh(d[24])
+            Acronym:          _sh(d[10]),
+            Client:           _sh(d[11]),
+            TaxID:            _sh(d[12]),
+            FirstFixingDate:  _sh(d[13]),
+            LastFixingDate:   _sh(d[14]),
+            StrikeSetDate:    _sh(d[15]),
+            StrikeSetOffset:  _sh(d[16]),
+            Instrument:       _sh(d[17]),
+            TradeType:        _sh(d[18]),
+            Direction:        _sh(d[19]),
+            FXPair:           _sh(d[20]),
+            QuantityCurrency: _sh(d[21]),
+            Publisher:        _sh(d[22]),
+            Notional:         _sh(d[23]),
+            Rate:             _sh(d[24]),
+            IsBRRFixed:       _sh(d[25])
         };
     }
 
@@ -3188,23 +3206,24 @@ $(document).ready(function() {
             Month:            _sh(d[7]),
             SettlementDate:   _sh(d[8]),
             SPN:              _sh(d[9]),
-            Client:           _sh(d[10]),
-            TaxID:            _sh(d[11]),
-            FirstFixingDate:  _sh(d[12]),
-            LastFixingDate:   _sh(d[13]),
-            StrikeSetDate:    _sh(d[14]),
-            StrikeSetOffset:  _sh(d[15]),
-            Instrument:       _sh(d[16]),
-            TradeType:        _sh(d[17]),
-            Direction:        _sh(d[18]),
-            FXPair:           _sh(d[19]),
-            QuantityCurrency: _sh(d[20]),
-            Publisher:        _sh(d[21]),
-            Notional:         _sh(d[22]),
-            Rate:             _sh(d[23]),
-            IsBRRFixed:       _sh(d[24]),
-            TradingBook:      _sh(d[25]),
-            Maker:            d[26] || '',
+            Acronym:          _sh(d[10]),
+            Client:           _sh(d[11]),
+            TaxID:            _sh(d[12]),
+            FirstFixingDate:  _sh(d[13]),
+            LastFixingDate:   _sh(d[14]),
+            StrikeSetDate:    _sh(d[15]),
+            StrikeSetOffset:  _sh(d[16]),
+            Instrument:       _sh(d[17]),
+            TradeType:        _sh(d[18]),
+            Direction:        _sh(d[19]),
+            FXPair:           _sh(d[20]),
+            QuantityCurrency: _sh(d[21]),
+            Publisher:        _sh(d[22]),
+            Notional:         _sh(d[23]),
+            Rate:             _sh(d[24]),
+            IsBRRFixed:       _sh(d[25]),
+            TradingBook:      _sh(d[26]),
+            Maker:            d[27] || '',
             Checker:          ''
         };
         if (overrides) {
@@ -3308,15 +3327,15 @@ $(document).ready(function() {
         if (!tr) return;
 
         if (type === 'acronym') {
-            // Look up RefData and fill SPN (col 8), Client (col 10), TaxID (col 11)
+            // Look up RefData and fill SPN (col 9), Client (col 11), TaxID (col 12)
             var match = null;
             for (var i = 0; i < _REFDATA.length; i++) {
-                if (_REFDATA[i]['COMMODITIES ACCRONYM'] === val) { match = _REFDATA[i]; break; }
+                if (_REFDATA[i]['FX CASH ACCRONYM'] === val) { match = _REFDATA[i]; break; }
             }
             if (match) {
-                var spnNode    = table.cell(tr, 8).node();
-                var clientNode = table.cell(tr, 10).node();
-                var taxidNode  = table.cell(tr, 11).node();
+                var spnNode    = table.cell(tr, 9).node();
+                var clientNode = table.cell(tr, 11).node();
+                var taxidNode  = table.cell(tr, 12).node();
                 if (spnNode)    { $(spnNode).find('.dt-cell-readonly').text(match['SPN'] || ''); }
                 if (clientNode) { $(clientNode).find('.dt-cell-readonly').text(match['COUNTERPARTY'] || ''); }
                 if (taxidNode)  { $(taxidNode).find('.dt-cell-readonly').text(match['TAX ID'] || ''); }
@@ -3378,12 +3397,12 @@ $(document).ready(function() {
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
         var badge = statusNode ? $(statusNode).find('.badge') : $();
         var currentStatus = badge.length ? badge.text().trim() : '';
-        var origClient = _sh(table.cell(tr[0], 10).data());
+        var origClient = _sh(table.cell(tr[0], 11).data());
 
         var changedFields = {};
 
         // Save all editable fields back to plain text; capture plain values for JSON sync
-        for (var colIdx = 2; colIdx <= 25; colIdx++) {
+        for (var colIdx = 2; colIdx <= 26; colIdx++) {
             if (SKIP_EDIT_COLS.indexOf(colIdx) !== -1) {
                 var roNode = table.cell(tr[0], colIdx).node();
                 if (!roNode) continue;
@@ -3429,7 +3448,7 @@ $(document).ready(function() {
 
         // Maker = editor's SID; sync to DataTable hidden col
         var rowId = _sh(table.cell(tr[0], 4).data()) || '';
-        table.cell(tr[0], 26).data(CURRENT_USER_SID);
+        table.cell(tr[0], 27).data(CURRENT_USER_SID);
         changedFields['Maker'] = CURRENT_USER_SID;
 
         // Status always becomes Pending after an edit
@@ -3507,7 +3526,7 @@ $(document).ready(function() {
                 });
                 return;
             }
-            var approverMaker = table.cell(tr[0], 26).data() || '';
+            var approverMaker = table.cell(tr[0], 27).data() || '';
             if (approverMaker && approverMaker === CURRENT_USER_SID) {
                 Swal.fire({
                     title: t('swal-not-allowed-title', 'Not Allowed'),
@@ -3522,10 +3541,10 @@ $(document).ready(function() {
                 $(statusNode).html('<span class="badge badge-label text-bg-secondary rounded-pill">Approved</span>');
             }
             // Approver becomes the new Maker → next step (Send) must be a different user
-            table.cell(tr[0], 26).data(CURRENT_USER_SID);
+            table.cell(tr[0], 27).data(CURRENT_USER_SID);
             var approveRowId = _sh(table.cell(tr[0], 4).data()) || '';
             if (approveRowId) {
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 10).data())), {
+                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ Status: 'Approved', Maker: CURRENT_USER_SID })
@@ -3554,7 +3573,7 @@ $(document).ready(function() {
             if (result.isConfirmed) {
                 var rowId = _sh(table.cell(tr[0], 4).data()) || '';
                 if (rowId) {
-                    var clientVal = _sh(table.cell(tr[0], 10).data());
+                    var clientVal = _sh(table.cell(tr[0], 11).data());
                     fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(clientVal), {
                         method: 'DELETE'
                     }).catch(function(err) { console.warn('Cache DELETE failed:', err); });
@@ -3570,7 +3589,7 @@ $(document).ready(function() {
         var tr = $(this).closest('tr');
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
         var currentStatus = statusNode ? $(statusNode).find('.badge').text().trim() : '';
-        var makerSid = table.cell(tr[0], 26).data() || '';
+        var makerSid = table.cell(tr[0], 27).data() || '';
 
         if (currentStatus !== 'Approved' && currentStatus !== 'Error') {
             var msg = currentStatus === 'New'
@@ -3617,7 +3636,7 @@ $(document).ready(function() {
                 if (res.ok) {
                     var rowId = _sh(table.cell(tr[0], 4).data()) || '';
                     if (rowId) {
-                        fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 10).data())), {
+                        fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
@@ -4011,7 +4030,7 @@ $(document).ready(function() {
                         if (res.ok) {
                             var rowId = _sh(table.cell(tr, 4).data()) || '';
                             if (rowId) {
-                                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr, 10).data())), {
+                                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr, 11).data())), {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
@@ -4113,12 +4132,13 @@ $(document).ready(function() {
         }
 
         function arClearFields() {
-            $('#ar-le,#ar-deal,#ar-spn,#ar-client,#ar-taxid,#ar-strikesetoffset,' +
+            $('#ar-le,#ar-deal,#ar-acronym,#ar-spn,#ar-client,#ar-taxid,#ar-strikesetoffset,' +
               '#ar-fxpair,#ar-qtyccy,#ar-publisher,#ar-notional,#ar-rate,#ar-tradingbook').val('');
             $('#ar-tradedate,#ar-settledate,#ar-firstfix,#ar-lastfix,#ar-strikesetdate').val('');
             $('#ar-month').val('');
             $('#ar-instrument').val('Swap');
             $('#ar-tradetype,#ar-direction,#ar-isbrrfixed').val('');
+            $('.ar-ac-drop').hide();
         }
 
         var arModalEl = document.getElementById('addRowModal');
@@ -4146,22 +4166,23 @@ $(document).ready(function() {
             $('#ar-month').val(_sh(d[7]));
             $('#ar-settledate').val(dmy2isoLocal(_sh(d[8])));
             $('#ar-spn').val(_sh(d[9]));
-            $('#ar-client').val(_sh(d[10]));
-            $('#ar-taxid').val(_sh(d[11]));
-            $('#ar-firstfix').val(dmy2isoLocal(_sh(d[12])));
-            $('#ar-lastfix').val(dmy2isoLocal(_sh(d[13])));
-            $('#ar-strikesetdate').val(dmy2isoLocal(_sh(d[14])));
-            $('#ar-strikesetoffset').val(_sh(d[15]));
-            $('#ar-instrument').val(_sh(d[16]) || 'Swap');
-            $('#ar-tradetype').val(_sh(d[17]));
-            $('#ar-direction').val(_sh(d[18]));
-            $('#ar-fxpair').val(_sh(d[19]));
-            $('#ar-qtyccy').val(_sh(d[20]));
-            $('#ar-publisher').val(_sh(d[21]));
-            $('#ar-notional').val(_sh(d[22]));
-            $('#ar-rate').val(_sh(d[23]));
-            $('#ar-isbrrfixed').val(_sh(d[24]));
-            $('#ar-tradingbook').val(_sh(d[25]));
+            $('#ar-acronym').val(_sh(d[10]));
+            $('#ar-client').val(_sh(d[11]));
+            $('#ar-taxid').val(_sh(d[12]));
+            $('#ar-firstfix').val(dmy2isoLocal(_sh(d[13])));
+            $('#ar-lastfix').val(dmy2isoLocal(_sh(d[14])));
+            $('#ar-strikesetdate').val(dmy2isoLocal(_sh(d[15])));
+            $('#ar-strikesetoffset').val(_sh(d[16]));
+            $('#ar-instrument').val(_sh(d[17]) || 'Swap');
+            $('#ar-tradetype').val(_sh(d[18]));
+            $('#ar-direction').val(_sh(d[19]));
+            $('#ar-fxpair').val(_sh(d[20]));
+            $('#ar-qtyccy').val(_sh(d[21]));
+            $('#ar-publisher').val(_sh(d[22]));
+            $('#ar-notional').val(_sh(d[23]));
+            $('#ar-rate').val(_sh(d[24]));
+            $('#ar-isbrrfixed').val(_sh(d[25]));
+            $('#ar-tradingbook').val(_sh(d[26]));
             bootstrap.Modal.getOrCreateInstance(arModalEl).show();
         };
 
@@ -4169,6 +4190,53 @@ $(document).ready(function() {
             if (!$(arModalEl).data('editRowId')) {
                 arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-plus me-1"></i>Add New Deal &mdash; NDF FWD Start';
                 arClearFields();
+            }
+        });
+
+        // ── Accronym autocomplete (fills SPN / Client / Tax ID from RefData) ──
+        function arBuildDrop($drop, items, filter) {
+            var f = (filter || '').toLowerCase();
+            $drop.empty();
+            var n = 0;
+            items.forEach(function (item) {
+                if (!f || item.toLowerCase().indexOf(f) !== -1) {
+                    var safe = item.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+                    $drop.append('<div class="ar-item px-2 py-1" style="cursor:pointer;font-size:0.82rem;white-space:nowrap" data-val="' + safe + '">' + safe + '</div>');
+                    n++;
+                }
+            });
+            if (n > 0) $drop.show(); else $drop.hide();
+        }
+
+        $(document).on('focus click', '#ar-acronym', function (e) {
+            e.stopPropagation();
+            arBuildDrop($('#ar-acronym-drop'), _ACRONYM_NDF, this.value);
+        });
+        $(document).on('input', '#ar-acronym', function () {
+            arBuildDrop($('#ar-acronym-drop'), _ACRONYM_NDF, this.value);
+        });
+
+        $(document).on('mousedown', '#ar-acronym-drop .ar-item', function (e) {
+            e.preventDefault();
+            var val = $(this).data('val') || '';
+            $('#ar-acronym-drop').hide();
+            $('#ar-acronym').val(val);
+            var match = null;
+            for (var i = 0; i < _REFDATA.length; i++) {
+                if (_REFDATA[i]['FX CASH ACCRONYM'] === val) { match = _REFDATA[i]; break; }
+            }
+            if (match) {
+                $('#ar-spn').val(match['SPN'] || '');
+                $('#ar-client').val(match['COUNTERPARTY'] || '');
+                $('#ar-taxid').val(match['TAX ID'] || '');
+            } else {
+                $('#ar-spn,#ar-client,#ar-taxid').val('');
+            }
+        });
+
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#ar-acronym,#ar-acronym-drop').length) {
+                $('#ar-acronym-drop').hide();
             }
         });
 
@@ -4182,6 +4250,7 @@ $(document).ready(function() {
                 Month:            $('#ar-month').val().trim(),
                 SettlementDate:   isoToDmy($('#ar-settledate').val()),
                 SPN:              $('#ar-spn').val().trim(),
+                Acronym:          $('#ar-acronym').val().trim(),
                 Client:           $('#ar-client').val().trim(),
                 TaxID:            $('#ar-taxid').val().trim(),
                 FirstFixingDate:  isoToDmy($('#ar-firstfix').val()),
