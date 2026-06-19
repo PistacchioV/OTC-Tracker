@@ -2697,7 +2697,7 @@ $(document).ready(function() {
             t('swal-update-col', 'Update column') + ' <strong>' + colName + '</strong>' +
             (isStatusCol ? '' : ' ' + t('swal-to', 'to') + ' <strong>' + displayValue + '</strong>') +
             ' ' + t('swal-for', 'for') + ' <strong>' + selectedRowIds.size + '</strong> ' + t('swal-selected-rows-q', 'selected row(s)?') +
-            (isStatusCol ? '<br><small class="text-muted mt-1 d-block">Your own rows will be skipped (4-eyes rule). Sent/Success rows are also skipped.</small>' : '');
+            (isStatusCol ? '<br><small class="text-muted mt-1 d-block">Only New/Amend rows are approved. Pending/Sent/Success rows are skipped.</small>' : '');
 
         Swal.fire({
             title: t('swal-mass-update-title', 'Confirm Mass Update'),
@@ -2735,11 +2735,8 @@ $(document).ready(function() {
                         skippedCount++;
                         return;
                     }
-                    // 4-eyes: you cannot approve a deal you imported/last edited
-                    if ((d[27] || '') === CURRENT_USER_SID) {
-                        skippedCount++;
-                        return;
-                    }
+                    // New/Amend → Approved is allowed for the same user (4-eyes applies
+                    // only to Pending→Approved and Approved→Sent)
                 }
 
                 if (!isStatusCol) {
@@ -3513,6 +3510,25 @@ $(document).ready(function() {
         var badge = statusNode ? $(statusNode).find('.badge') : $();
         var currentStatus = badge.length ? badge.text().trim() : '';
 
+        // New/Amend → Pending (maker submits for approval — same user allowed)
+        if (currentStatus === 'New' || currentStatus === 'Amend') {
+            if (statusNode) {
+                $(statusNode).html('<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>');
+            }
+            table.cell(tr[0], 27).data(CURRENT_USER_SID);
+            var pendRowId = _sh(table.cell(tr[0], 4).data()) || '';
+            if (pendRowId) {
+                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
+                    method:  'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ Status: 'Pending', Maker: CURRENT_USER_SID })
+                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
+            }
+            table.row(tr[0]).invalidate('dom');
+            table.draw(false);
+            return;
+        }
+
         if (currentStatus === 'Pending') {
             var col14ForApprove = table.cell(tr[0], 14).node();
             var approveAssetCode = col14ForApprove ? $(col14ForApprove).clone().find('.missing-b3-badge').remove().end().text().trim() : '';
@@ -3553,7 +3569,7 @@ $(document).ready(function() {
             table.row(tr[0]).invalidate('dom');
             table.draw(false);
         }
-        // status New or Approved → do nothing
+        // status Approved/Sent/Success → do nothing
     });
 
     // ── DELETE: SweetAlert confirmation then remove row ────────────────────
