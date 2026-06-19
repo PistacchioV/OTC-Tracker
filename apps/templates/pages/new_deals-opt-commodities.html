@@ -2841,8 +2841,9 @@ $(document).ready(function() {
                     var curStatusText = _sh(d[STATUS_COL_INDEX]);
                     var rowMakerSid   = d[33] || '';
                     if (curStatusText === 'Sent' || curStatusText === 'Success') return;
-                    // 4-eyes: you cannot approve a deal you imported/last edited
-                    if (rowMakerSid && rowMakerSid === CURRENT_USER_SID) return;
+                    // 4-eyes only on Pending→Approved; New/Amend→Approved is allowed
+                    // for the same user
+                    if (curStatusText === 'Pending' && rowMakerSid && rowMakerSid === CURRENT_USER_SID) return;
                 }
 
                 if (!isStatusCol) {
@@ -3596,6 +3597,25 @@ $(document).ready(function() {
         var badge = statusNode ? $(statusNode).find('.badge') : $();
         var currentStatus = badge.length ? badge.text().trim() : '';
 
+        // New/Amend → Pending (maker submits for approval — same user allowed)
+        if (currentStatus === 'New' || currentStatus === 'Amend') {
+            if (statusNode) {
+                $(statusNode).html('<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>');
+            }
+            table.cell(tr[0], 33).data(CURRENT_USER_SID);
+            var pendRowId = _sh(table.cell(tr[0], 3).data()) || '';
+            if (pendRowId) {
+                fetch('/api/new-deals/opt-commodities/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 10).data())), {
+                    method:  'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ Status: 'Pending', Maker: CURRENT_USER_SID })
+                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
+            }
+            table.row(tr[0]).invalidate('dom');
+            table.draw(false);
+            return;
+        }
+
         if (currentStatus === 'Pending') {
             var col14ForApprove = table.cell(tr[0], 14).node();
             var approveAssetCode = col14ForApprove ? $(col14ForApprove).clone().find('.missing-b3-badge').remove().end().text().trim() : '';
@@ -3636,7 +3656,7 @@ $(document).ready(function() {
             table.row(tr[0]).invalidate('dom');
             table.draw(false);
         }
-        // status New or Approved → do nothing
+        // status Approved/Sent/Success → do nothing
     });
 
     // ── DELETE: SweetAlert confirmation then remove row ────────────────────
