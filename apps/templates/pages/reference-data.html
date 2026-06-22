@@ -63,6 +63,150 @@
         background: rgba(255,255,255,.08) !important;
         color: #6ea8fe !important;
     }
+
+    /* ════════════════════════════════════════════════════════════════════
+       Counterparty details dialog (double-click) — liquid glass + editor
+       ════════════════════════════════════════════════════════════════════ */
+    .swal2-container.cp-glass-bg { backdrop-filter: blur(3px); }
+
+    .cp-glass {
+        position: relative;
+        border-radius: 1.125rem !important;
+        background: rgba(255, 255, 255, 0.62) !important;
+        backdrop-filter: blur(22px) saturate(180%);
+        -webkit-backdrop-filter: blur(22px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.9) !important;
+        box-shadow:
+            0 24px 64px rgba(0,0,0,0.16),
+            0 6px 20px rgba(0,0,0,0.08),
+            inset 0 1.5px 0 rgba(255,255,255,0.95),
+            inset 1px 0 0 rgba(255,255,255,0.6) !important;
+        overflow: hidden;
+        padding: 0 !important;
+    }
+    .cp-glass::before {
+        content: '';
+        position: absolute; top: 0; left: 6%; right: 6%; height: 1.5px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 25%, rgba(255,255,255,.98) 50%, rgba(255,255,255,.85) 75%, transparent);
+        pointer-events: none; z-index: 5;
+    }
+    [data-bs-theme="dark"] .cp-glass {
+        background: rgba(28, 30, 38, 0.72) !important;
+        border: 1px solid rgba(255,255,255,0.16) !important;
+        box-shadow:
+            0 32px 80px rgba(0,0,0,0.55),
+            0 8px 24px rgba(0,0,0,0.30),
+            inset 0 1.5px 0 rgba(255,255,255,0.45),
+            inset 1px 0 0 rgba(255,255,255,0.15) !important;
+    }
+
+    /* entrance / exit — modal stays centered (origin: center) */
+    @keyframes cpGlassIn  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+    @keyframes cpGlassOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.97); } }
+    .cp-glass.swal2-show { animation: cpGlassIn 200ms cubic-bezier(0.23,1,0.32,1); }
+    .cp-glass.swal2-hide { animation: cpGlassOut 140ms ease-out; }
+    @media (prefers-reduced-motion: reduce) {
+        .cp-glass.swal2-show, .cp-glass.swal2-hide { animation: none; }
+    }
+
+    .cp-glass .swal2-html-container { margin: 0 !important; max-height: 72vh; overflow-y: auto; text-align: left; }
+
+    /* header: title + icon buttons */
+    .cp-head {
+        display: flex; align-items: center; gap: 10px;
+        padding: 16px 20px 12px; border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    [data-bs-theme="dark"] .cp-head { border-bottom-color: rgba(255,255,255,0.10); }
+    .cp-title { flex: 1 1 auto; min-width: 0; font-size: 1rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+    .cp-spn { font-size: 0.72rem; font-weight: 500; color: var(--ins-secondary-color, #6c757d); margin-top: 2px; }
+
+    .cp-iconbtn {
+        flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.55);
+        color: var(--ins-body-color, #343a40); cursor: pointer; font-size: 1rem;
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, color 160ms ease;
+    }
+    .cp-iconbtn:hover { background: rgba(255,255,255,0.9); }
+    .cp-iconbtn:active { transform: scale(0.92); }
+    .cp-iconbtn.cp-save { color: #0a8f4f; border-color: rgba(10,143,79,0.25); }
+    .cp-iconbtn.cp-save:hover { background: rgba(10,143,79,0.12); }
+    [data-bs-theme="dark"] .cp-iconbtn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); color: #e9ecef; }
+    [data-bs-theme="dark"] .cp-iconbtn:hover { background: rgba(255,255,255,0.16); }
+
+    .cp-body { padding: 14px 20px 20px; }
+
+    /* zone */
+    .cp-zone { margin-top: 16px; }
+    .cp-zone:first-child { margin-top: 4px; }
+    .cp-zone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .cp-zone-title {
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--ins-secondary-color, #6c757d); flex: 1 1 auto;
+    }
+    .cp-addbtn {
+        flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+        font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 7px;
+        border: 1px solid rgba(13,110,253,0.3); background: rgba(13,110,253,0.08);
+        color: #0d6efd; cursor: pointer;
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+    }
+    .cp-addbtn:hover { background: rgba(13,110,253,0.16); }
+    .cp-addbtn:active { transform: scale(0.95); }
+
+    .cp-subzone-title { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; color: var(--ins-secondary-color,#6c757d); opacity: 0.85; margin: 8px 0 4px; }
+
+    /* view-mode value lines */
+    .cp-kv { display: flex; gap: 8px; font-size: 0.84rem; padding: 3px 0; }
+    .cp-kv .cp-k { flex: 0 0 auto; min-width: 92px; font-weight: 600; color: var(--ins-secondary-color,#6c757d); }
+    .cp-kv .cp-v { flex: 1 1 auto; word-break: break-word; }
+    .cp-empty { font-size: 0.82rem; color: var(--ins-secondary-color,#6c757d); font-style: italic; }
+    .cp-card {
+        border: 1px solid rgba(0,0,0,0.07); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px;
+        background: rgba(255,255,255,0.4); font-size: 0.84rem;
+    }
+    [data-bs-theme="dark"] .cp-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
+
+    /* edit-mode rows */
+    .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px; }
+    .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) 32px; }
+    .cp-contact-card { border: 1px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.4); }
+    [data-bs-theme="dark"] .cp-contact-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
+    .cp-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .cp-contact-grid .cp-span2 { grid-column: 1 / -1; }
+    .cp-glass .form-control, .cp-glass .form-select { font-size: 0.8rem; }
+    .cp-glass .form-control-sm, .cp-glass .form-select-sm { font-size: 0.8rem; }
+    .cp-remove {
+        width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid rgba(220,53,69,0.25); background: rgba(220,53,69,0.06); color: #dc3545; cursor: pointer;
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+    }
+    .cp-remove:hover { background: rgba(220,53,69,0.14); }
+    .cp-remove:active { transform: scale(0.92); }
+
+    /* select2 inside the glass popup */
+    .cp-glass .select2-container { z-index: 2; }
+    .cp-glass .select2-selection { font-size: 0.8rem; min-height: 31px; }
+    .swal2-container .select2-dropdown { z-index: 2100; }
+    .cp-glass .select2-selection--single { height: 31px; padding-top: 2px; }
+    .cp-glass .select2-selection--single .select2-selection__rendered { line-height: 27px; }
+
+    [data-mode="view"] .cp-edit-only { display: none !important; }
+    [data-mode="edit"] .cp-view-only { display: none !important; }
+
+    /* transient "saved" note (Swal toasts would close the open dialog) */
+    .cp-toast {
+        position: absolute; top: 10px; left: 50%; z-index: 20;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+        color: #0a8f4f; background: rgba(10,143,79,0.12); border: 1px solid rgba(10,143,79,0.28);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        opacity: 0; transform: translate(-50%, -6px) scale(0.96);
+        transition: opacity 180ms cubic-bezier(0.23,1,0.32,1), transform 180ms cubic-bezier(0.23,1,0.32,1);
+        pointer-events: none;
+    }
+    .cp-toast.cp-toast-in { opacity: 1; transform: translate(-50%, 0) scale(1); }
 </style>
 {% endblock extra_css %}
 
@@ -578,40 +722,309 @@ $(document).ready(function () {
 
     function _txt(html) { return $('<div>').html(html == null ? '' : html).text().trim(); }
 
-    /* Double-click a row → show its CGD / banking / contact details */
+    /* ── Counterparty editor: option data ────────────────────────────── */
+    var CP_BANKS = [
+        'BANCO DO BRASIL S/A - 001',
+        'BANCO SANTANDER S/A - 033',
+        'BANCO BRADESCO S/A - 237',
+        'BANCO ITAU S/A - 341',
+        'BANCO JP MORGAN S/A - 376',
+        'BANCO CITIBANK S/A - 745',
+        'BOFA MERRILL LYNCH BM S/A - 755'
+    ];
+    var CP_RULES = ['Negotiation', 'Repurchase', 'Settlement', 'Confirmation Letter', 'Settlement Advice', 'Contact Confirmation', 'IOF'];
+    var CP_STATUSES = ['Active', 'Inactive'];
+
+    function _esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+    function _attr(v) { return _esc(v).replace(/"/g, '&quot;'); }
+
+    /* Normalize a stored counterparty record into the structured shape. */
+    function _normCp(cp) {
+        cp = cp || {};
+        var out = { CGD: [], BANKING: { PAY: [], RECEIVE: [] }, CONTACTS: [] };
+        // CGD → array of strings
+        if (Array.isArray(cp.CGD)) out.CGD = cp.CGD.map(function(x){ return String(x); }).filter(function(x){ return x.trim() !== ''; });
+        else if (cp.CGD != null && String(cp.CGD).trim() !== '') out.CGD = [String(cp.CGD).trim()];
+        // BANKING → { PAY:[{bank,agency,account}], RECEIVE:[...] }
+        function nb(b){ b = b || {}; return { bank: b.bank || b.BANK || '', agency: b.agency || b.AGENCY || '', account: b.account || b.ACCOUNT || '' }; }
+        if (cp.BANKING && (Array.isArray(cp.BANKING.PAY) || Array.isArray(cp.BANKING.RECEIVE))) {
+            out.BANKING.PAY = (cp.BANKING.PAY || []).map(nb);
+            out.BANKING.RECEIVE = (cp.BANKING.RECEIVE || []).map(nb);
+        } else if (cp.BANK || cp.AGENCY || cp.ACCOUNT) {
+            out.BANKING.PAY = [{ bank: cp.BANK || '', agency: cp.AGENCY || '', account: cp.ACCOUNT || '' }];
+        }
+        // CONTACTS → array of {name,phone,email,rules[],status}
+        if (Array.isArray(cp.CONTACTS)) {
+            out.CONTACTS = cp.CONTACTS.map(function(c){
+                c = c || {};
+                return {
+                    name:   c.name   || c.NAME   || '',
+                    phone:  c.phone  || c.PHONE  || '',
+                    email:  c.email  || c.EMAIL  || '',
+                    rules:  Array.isArray(c.rules) ? c.rules : (Array.isArray(c.RULES) ? c.RULES : []),
+                    status: c.status || c.STATUS || 'Active'
+                };
+            });
+        }
+        return out;
+    }
+
+    /* ════════ VIEW-MODE builders ════════ */
+    function _viewLine(html) { return '<div class="cp-kv"><span class="cp-v">' + html + '</span></div>'; }
+
+    function _viewCgd(model) {
+        if (!model.CGD.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
+        return model.CGD.map(function(v){ return '<div class="cp-card">' + _esc(v) + '</div>'; }).join('');
+    }
+    function _viewBankList(list) {
+        if (!list.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
+        return list.map(function(b){
+            var parts = [];
+            if (b.bank) parts.push('<strong>' + _esc(b.bank) + '</strong>');
+            var sub = [];
+            if (b.agency)  sub.push(t('rd-cp-agency','Agency') + ' ' + _esc(b.agency));
+            if (b.account) sub.push(t('rd-cp-account','Account') + ' ' + _esc(b.account));
+            return '<div class="cp-card">' + (parts.join('') || '—') + (sub.length ? '<div class="cp-spn">' + sub.join(' · ') + '</div>' : '') + '</div>';
+        }).join('');
+    }
+    function _viewContacts(model) {
+        function named(rule){
+            return model.CONTACTS
+                .filter(function(c){ return (c.rules || []).indexOf(rule) !== -1; })
+                .map(function(c){ return c.name || c.email || '—'; });
+        }
+        var settle = named('Settlement');
+        var nego   = named('Negotiation');
+        function line(labelKey, labelTxt, arr){
+            return '<div class="cp-kv"><span class="cp-k" data-lang="' + labelKey + '">' + labelTxt + '</span>' +
+                   '<span class="cp-v">' + (arr.length ? _esc(arr.join('; ')) : '—') + '</span></div>';
+        }
+        if (!model.CONTACTS.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
+        return line('rule-settlement', 'Settlement', settle) + line('rule-negotiation', 'Negotiation', nego);
+    }
+
+    /* ════════ EDIT-MODE builders ════════ */
+    function _cgdRow(val) {
+        return '<div class="cp-edit-row cp-cgd-row">' +
+            '<input type="text" class="form-control form-control-sm cp-cgd-input" value="' + _attr(val) + '">' +
+            '<button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div>';
+    }
+    function _bankRow(b) {
+        b = b || {};
+        var opts = '<option value=""></option>' + CP_BANKS.map(function(o){
+            return '<option value="' + _attr(o) + '"' + (b.bank === o ? ' selected' : '') + '>' + _esc(o) + '</option>';
+        }).join('');
+        // allow a stored value that isn't in the list
+        if (b.bank && CP_BANKS.indexOf(b.bank) === -1) opts += '<option value="' + _attr(b.bank) + '" selected>' + _esc(b.bank) + '</option>';
+        return '<div class="cp-edit-row cp-bank-row">' +
+            '<select class="form-select form-select-sm cp-bank-select">' + opts + '</select>' +
+            '<input type="text" class="form-control form-control-sm cp-bank-agency" placeholder="' + t('rd-cp-agency','Agency') + '" value="' + _attr(b.agency) + '">' +
+            '<input type="text" class="form-control form-control-sm cp-bank-account" placeholder="' + t('rd-cp-account','Account') + '" value="' + _attr(b.account) + '">' +
+            '<button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div>';
+    }
+    function _contactCard(c) {
+        c = c || {};
+        var ruleOpts = CP_RULES.map(function(r){
+            return '<option value="' + _attr(r) + '"' + ((c.rules||[]).indexOf(r) !== -1 ? ' selected' : '') + '>' + _esc(r) + '</option>';
+        }).join('');
+        var statusOpts = CP_STATUSES.map(function(s){
+            return '<option value="' + _attr(s) + '"' + (c.status === s ? ' selected' : '') + '>' + _esc(s) + '</option>';
+        }).join('');
+        return '<div class="cp-contact-card">' +
+            '<div class="cp-contact-grid">' +
+                '<input type="text" class="form-control form-control-sm cp-c-name" placeholder="' + t('rd-cp-c-name','Name') + '" value="' + _attr(c.name) + '">' +
+                '<input type="text" class="form-control form-control-sm cp-c-phone" placeholder="' + t('rd-cp-c-phone','Phone') + '" value="' + _attr(c.phone) + '">' +
+                '<input type="text" class="form-control form-control-sm cp-c-email cp-span2" placeholder="' + t('rd-cp-c-email','E-mail') + '" value="' + _attr(c.email) + '">' +
+                '<select class="form-select form-select-sm cp-c-rules" multiple>' + ruleOpts + '</select>' +
+                '<select class="form-select form-select-sm cp-c-status">' + statusOpts + '</select>' +
+            '</div>' +
+            '<div class="text-end mt-1"><button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div></div>';
+    }
+
+    /* ── Double-click a row → glass dialog (view ↔ edit) ──────────────── */
     $('#ref-data-table tbody').on('dblclick', 'tr', function() {
         var rowData = dt.row(this).data();
         if (!rowData) return;
         var spn  = _txt(rowData[9]).toUpperCase();
         var name = _txt(rowData[3]) || spn || '—';
-        var cp   = _CPDETAILS[spn] || {};
-        function _row(labelKey, labelTxt, value) {
-            var v = (value == null || String(value).trim() === '') ? '—' : value;
-            return '<tr>' +
-                '<td style="text-align:left;font-weight:600;white-space:nowrap;padding:4px 12px;" data-lang="' + labelKey + '">' + labelTxt + '</td>' +
-                '<td style="text-align:left;padding:4px 12px;">' + v + '</td></tr>';
-        }
-        var html =
-            '<div style="text-align:left;">' +
-            '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">' +
-                _row('rd-cp-spn',      'SPN',        spn || '—') +
-                _row('rd-cp-cgd',      'CGD',        cp.CGD) +
-                _row('rd-cp-bank',     'Bank',       cp.BANK) +
-                _row('rd-cp-agency',   'Agency',     cp.AGENCY) +
-                _row('rd-cp-account',  'Account',    cp.ACCOUNT) +
-                _row('rd-cp-contacts', 'Contacts',   cp.CONTACTS) +
-            '</table>' +
-            (_CPDETAILS[spn] ? '' :
-                '<p class="text-muted fst-italic mt-2 mb-0" style="font-size:0.78rem;" data-lang="rd-cp-none">No banking/contact details registered for this counterparty yet.</p>') +
+        var model = _normCp(_CPDETAILS[spn]);
+        var mode = 'view';
+
+        function renderHead() {
+            return '<div class="cp-head">' +
+                '<div class="cp-title">' + _esc(name) +
+                    '<div class="cp-spn">SPN ' + _esc(spn || '—') + '</div></div>' +
+                '<button type="button" class="cp-iconbtn cp-btn-primary" data-act="primary"></button>' +
+                '<button type="button" class="cp-iconbtn" data-act="secondary"></button>' +
             '</div>';
+        }
+        function zoneHead(titleKey, titleTxt, addKey) {
+            return '<div class="cp-zone-head">' +
+                '<span class="cp-zone-title" data-lang="' + titleKey + '">' + titleTxt + '</span>' +
+                '<button type="button" class="cp-addbtn cp-edit-only" data-add="' + addKey + '">' +
+                    '<i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>';
+        }
+        function renderBody() {
+            return '<div class="cp-body">' +
+                /* CGD */
+                '<div class="cp-zone">' + zoneHead('rd-cp-cgd', 'CGD', 'cgd') +
+                    '<div class="cp-view-only">' + _viewCgd(model) + '</div>' +
+                    '<div class="cp-edit-only" id="cp-cgd-list"></div>' +
+                '</div>' +
+                /* Banking */
+                '<div class="cp-zone">' +
+                    '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-zone-bank">Banking Data</span></div>' +
+                    '<div class="cp-subzone-title" data-lang="rd-cp-pay">PAY</div>' +
+                    '<div class="cp-view-only">' + _viewBankList(model.BANKING.PAY) + '</div>' +
+                    '<div class="cp-edit-only" id="cp-pay-list"></div>' +
+                    '<div class="cp-edit-only text-end"><button type="button" class="cp-addbtn" data-add="pay"><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
+                    '<div class="cp-subzone-title" data-lang="rd-cp-receive">RECEIVE</div>' +
+                    '<div class="cp-view-only">' + _viewBankList(model.BANKING.RECEIVE) + '</div>' +
+                    '<div class="cp-edit-only" id="cp-receive-list"></div>' +
+                    '<div class="cp-edit-only text-end"><button type="button" class="cp-addbtn" data-add="receive"><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
+                '</div>' +
+                /* Contacts */
+                '<div class="cp-zone">' + zoneHead('rd-cp-contacts', 'Contacts', 'contact') +
+                    '<div class="cp-view-only">' + _viewContacts(model) + '</div>' +
+                    '<div class="cp-edit-only" id="cp-contact-list"></div>' +
+                '</div>' +
+            '</div>';
+        }
+
         Swal.fire({
-            title: name,
-            html:  html,
-            icon:  'info',
-            confirmButtonText: t('swal-ok', 'OK'),
-            confirmButtonColor: '#0066cc',
-            width: 520
+            html: renderHead() + renderBody(),
+            width: 600,
+            padding: 0,
+            showConfirmButton: false,
+            showCloseButton: false,
+            allowOutsideClick: function(){ return mode === 'view'; },
+            customClass: { popup: 'cp-glass', container: 'cp-glass-bg' },
+            showClass: { popup: 'cp-glass swal2-show' },
+            hideClass: { popup: 'cp-glass swal2-hide' },
+            didOpen: function(popup){
+                popup.setAttribute('data-mode', 'view');
+                $(popup).find('[data-lang]').each(function(){
+                    var k = this.getAttribute('data-lang'); if (_TRANS_CACHE[k]) this.textContent = _TRANS_CACHE[k];
+                });
+                bindButtons(popup);
+                refreshButtons(popup);
+            }
         });
+
+        function initCpSelect2($scope, popup) {
+            $scope.find('.cp-bank-select').each(function(){
+                if ($(this).data('select2')) return;
+                $(this).select2({ width: '100%', dropdownParent: $(popup), placeholder: t('rd-cp-bank','Bank'), allowClear: true });
+            });
+            $scope.find('.cp-c-rules').each(function(){
+                if ($(this).data('select2')) return;
+                $(this).select2({ width: '100%', dropdownParent: $(popup), placeholder: t('rd-cp-c-rules','Rules') });
+            });
+        }
+
+        function populateEdit(popup) {
+            var $p = $(popup);
+            var $cgd = $p.find('#cp-cgd-list').empty();
+            (model.CGD.length ? model.CGD : ['']).forEach(function(v){ $cgd.append(_cgdRow(v)); });
+            var $pay = $p.find('#cp-pay-list').empty();
+            (model.BANKING.PAY.length ? model.BANKING.PAY : [{}]).forEach(function(b){ $pay.append(_bankRow(b)); });
+            var $rec = $p.find('#cp-receive-list').empty();
+            (model.BANKING.RECEIVE.length ? model.BANKING.RECEIVE : [{}]).forEach(function(b){ $rec.append(_bankRow(b)); });
+            var $ct = $p.find('#cp-contact-list').empty();
+            (model.CONTACTS.length ? model.CONTACTS : [{}]).forEach(function(c){ $ct.append(_contactCard(c)); });
+            initCpSelect2($p, popup);
+        }
+
+        function collect(popup) {
+            var $p = $(popup);
+            var cgd = [];
+            $p.find('.cp-cgd-input').each(function(){ var v = this.value.trim(); if (v) cgd.push(v); });
+            function banks(sel){
+                var out = [];
+                $p.find(sel + ' .cp-bank-row').each(function(){
+                    var bank = $(this).find('.cp-bank-select').val() || '';
+                    var ag   = $(this).find('.cp-bank-agency').val().trim();
+                    var ac   = $(this).find('.cp-bank-account').val().trim();
+                    if (bank || ag || ac) out.push({ bank: bank, agency: ag, account: ac });
+                });
+                return out;
+            }
+            var contacts = [];
+            $p.find('#cp-contact-list .cp-contact-card').each(function(){
+                var nm = $(this).find('.cp-c-name').val().trim();
+                var ph = $(this).find('.cp-c-phone').val().trim();
+                var em = $(this).find('.cp-c-email').val().trim();
+                var rl = $(this).find('.cp-c-rules').val() || [];
+                var st = $(this).find('.cp-c-status').val() || 'Active';
+                if (nm || ph || em || rl.length) contacts.push({ name: nm, phone: ph, email: em, rules: rl, status: st });
+            });
+            return { CGD: cgd, BANKING: { PAY: banks('#cp-pay-list'), RECEIVE: banks('#cp-receive-list') }, CONTACTS: contacts };
+        }
+
+        function rerenderView(popup) {
+            var $p = $(popup);
+            $p.find('.cp-zone').eq(0).find('.cp-view-only').html(_viewCgd(model));
+            $p.find('.cp-zone').eq(1).find('.cp-view-only').eq(0).html(_viewBankList(model.BANKING.PAY));
+            $p.find('.cp-zone').eq(1).find('.cp-view-only').eq(1).html(_viewBankList(model.BANKING.RECEIVE));
+            $p.find('.cp-zone').eq(2).find('.cp-view-only').html(_viewContacts(model));
+            $p.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
+        }
+
+        function flashSaved(popup) {
+            $(popup).find('.cp-toast').remove();
+            var $tn = $('<div class="cp-toast"><i class="ti ti-check"></i><span>' + _esc(t('rd-cp-saved','Saved (session only)')) + '</span></div>');
+            $(popup).append($tn);
+            requestAnimationFrame(function(){ $tn.addClass('cp-toast-in'); });
+            setTimeout(function(){ $tn.removeClass('cp-toast-in'); setTimeout(function(){ $tn.remove(); }, 220); }, 1700);
+        }
+
+        function refreshButtons(popup) {
+            var $primary = $(popup).find('[data-act="primary"]');
+            var $secondary = $(popup).find('[data-act="secondary"]');
+            if (mode === 'view') {
+                $primary.removeClass('cp-save').attr('title', t('rd-cp-edit','Edit')).html('<i class="ti ti-pencil"></i>');
+                $secondary.attr('title', t('swal-close','Close')).html('<i class="ti ti-x"></i>');
+            } else {
+                $primary.addClass('cp-save').attr('title', t('rd-cp-save','Save')).html('<i class="ti ti-check"></i>');
+                $secondary.attr('title', t('rd-cp-cancel','Cancel')).html('<i class="ti ti-arrow-back-up"></i>');
+            }
+        }
+
+        function bindButtons(popup) {
+            var $p = $(popup);
+            $p.on('click', '[data-act="primary"]', function(){
+                if (mode === 'view') {
+                    mode = 'edit';
+                    popup.setAttribute('data-mode', 'edit');
+                    populateEdit(popup);
+                    refreshButtons(popup);
+                } else {
+                    model = _normCp(collect(popup));
+                    _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, model);
+                    mode = 'view';
+                    popup.setAttribute('data-mode', 'view');
+                    rerenderView(popup);
+                    refreshButtons(popup);
+                    flashSaved(popup);
+                }
+            });
+            $p.on('click', '[data-act="secondary"]', function(){
+                if (mode === 'view') { Swal.close(); }
+                else { mode = 'view'; popup.setAttribute('data-mode','view'); rerenderView(popup); refreshButtons(popup); }
+            });
+            /* Add buttons */
+            $p.on('click', '[data-add]', function(){
+                var which = this.getAttribute('data-add');
+                if (which === 'cgd') { $p.find('#cp-cgd-list').append(_cgdRow('')); }
+                else if (which === 'pay') { var $r=$(_bankRow({})); $p.find('#cp-pay-list').append($r); initCpSelect2($r, popup); }
+                else if (which === 'receive') { var $r2=$(_bankRow({})); $p.find('#cp-receive-list').append($r2); initCpSelect2($r2, popup); }
+                else if (which === 'contact') { var $c=$(_contactCard({})); $p.find('#cp-contact-list').append($c); initCpSelect2($c, popup); }
+            });
+            /* Remove row */
+            $p.on('click', '[data-rm]', function(){
+                $(this).closest('.cp-edit-row, .cp-contact-card').remove();
+            });
+        }
     });
 
     /* ── Page length ─────────────────────────────────────────────────── */

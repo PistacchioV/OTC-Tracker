@@ -937,3 +937,71 @@ apps/templates/pages/intrag-option.html              ← larguras coluna +1 (Sta
 - `fix(intrag-option): shift column widths +1 after Status column insert`
 - `feat(new-deals): Premium D0 + Economic Affirmation e-mails, CP details, UI fixes`
 
+---
+
+## 19. Sessão 2026-06-22 (cont.) — Reference Data: editor Counterparty (glass) + padrão de contraste de checkbox
+
+### 19.1 Editor de Counterparty no duplo-clique (`reference-data.html`)
+O antigo popup (tabela `info`/SPN/CGD/Bank/Agency/Account/Contacts) foi substituído por um
+**editor liquid-glass com modo view ↔ edit**. Estrutura em **3 zonas**, cada uma com botão **Add**
+(visível só em edit):
+
+- **CGD** — lista de valores (N entradas). View: cards; Edit: inputs + Add/remover.
+- **Dados Bancários** — dividido em **PAY** e **RECEIVE**; cada um lista de `{bank, agency, account}`.
+  O campo **Bank** é um **select2 com autocomplete** populado por `CP_BANKS` (BB-001, Santander-033,
+  Bradesco-237, Itaú-341, JPM-376, Citibank-745, BofA ML-755).
+- **Contatos** — em **edit**, um card editável por contato (`Name, Phone, E-mail, Rules[multi], Status`);
+  em **view**, duas linhas resumo — **Settlement** e **Negotiation** — listando os contatos cuja
+  `rules` inclui aquela regra, juntos por `; `. Regras: `CP_RULES` (Negotiation, Repurchase, Settlement,
+  Confirmation Letter, Settlement Advice, Contact Confirmation, IOF).
+
+**Botões de ação** = 2 **ícones** no header (sem texto):
+- primário: ✎ Edit (view) ↔ ✓ Save (edit)
+- secundário: ✕ Close (view) ↔ ↩ Cancel (edit, descarta e volta pra view)
+
+**Visual/animação** (emil-design-eng): popup `.cp-glass` (bg translúcido + `backdrop-filter blur(22px)`
++ sheen `::before` + sombra; dark mode próprio). Entrada `cpGlassIn` 200ms `cubic-bezier(.23,1,.32,1)`,
+saída `cpGlassOut` 140ms (exit mais rápido); `transform-origin: center` (é modal); respeita
+`prefers-reduced-motion`. Botões com `:active { transform: scale(.92) }`. select2 usa
+`dropdownParent: $(popup)` para funcionar dentro do focus-trap do SweetAlert2.
+
+**Modelo de dados normalizado** (`_normCp`) — aceita o formato legado plano e o novo estruturado:
+```
+{ SPN, COUNTERPARTY,
+  CGD: ["..."],
+  BANKING: { PAY:[{bank,agency,account}], RECEIVE:[...] },
+  CONTACTS: [{name,phone,email,rules:[],status}] }
+```
+`CounterpartyDetails.json` continua no formato plano antigo (campos vazios) — `_normCp` converte na
+leitura; nenhum migration necessário.
+
+**⚠️ Persistência ainda é só em memória.** Save atualiza `_CPDETAILS[spn]` + toast
+"Saved (session only)" / "Salvo (somente nesta sessão)". **Falta endpoint backend** para gravar em
+`CounterpartyDetails.json` (próximo passo se quiser persistir entre reloads).
+
+i18n novos (en/br/es): `rd-cp-zone-bank, rd-cp-pay, rd-cp-receive, rd-cp-edit, rd-cp-save,
+rd-cp-cancel, rd-cp-saved, rd-cp-c-name, rd-cp-c-phone, rd-cp-c-email, rd-cp-c-rules,
+rule-settlement, rule-negotiation, cp-none, cp-add, swal-close`.
+
+### 19.2 Contraste de checkbox como padrão app-wide (`_forms.scss`)
+O contraste de borda do checkbox não-marcado usado em New Deals NDF/Opt Comm
+(`.form-check-input-light`) virou **padrão global**. Adicionado em `_forms.scss`:
+```scss
+.form-check-input:not(:checked) { border-color: rgba(var(--bs-dark-rgb), 0.4); &:hover { … 0.6 } }
+[data-bs-theme="dark"] .form-check-input:not(:checked) { border-color: rgba(var(--bs-light-rgb),0.45); &:hover{ …0.65 } }
+```
+Agora **todo** checkbox (não só os marcados `-light`) lê bem contra linhas claras. Só a borda do
+estado não-marcado é alterada; estado marcado mantém o fill. Switches em dark mode têm regra de maior
+especificidade, então não regridem. **Recompilado** `npm run build` → `app*.css`.
+
+### Arquivos (seção 19)
+```
+apps/templates/pages/reference-data.html      ← editor glass (CSS + JS dblclick reescrito)
+apps/static/scss/components/_forms.scss        ← .form-check-input:not(:checked) global (+ recompilado)
+apps/static/data/translations/{en,br,es}.json  ← +16 chaves rd-cp-*/rule-*/cp-*/swal-close
+```
+
+### Pendências (seção 19)
+- Endpoint p/ persistir `CounterpartyDetails.json` (hoje save é só sessão).
+- Popular `CounterpartyDetails.json` com dados reais (CGD/bancos/contatos) — hoje vazio.
+

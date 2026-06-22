@@ -11,12 +11,14 @@ Counterparty static data comes from two JSON files under static/data:
   - RefData.json           → B3 ACCOUNT, COUNTERPARTY, TAX ID, SPN by acronym
   - CounterpartyDetails.json → CGD / banking / contacts indexed by SPN
 
-Field mapping (legacy tkinter index → web deal field):
-  item[1]  TradeDate          item[2]  Market(+Commodities)   item[3]  Direction
-  item[4]  Instrument         item[6]  Strike                 item[9]  TotalNotional
-  item[10] SettlementDate     item[15] FXConvDate (fixing FX) item[16] FixingStartDate
-  item[17] FixingEndDate      item[18] Acronym                item[19] Premium
-  item[22] SpotDate           item[23] Contract
+E-mail column sources (New Deals Opt/NDF deal fields):
+  - "Contrato"     → Deal               (deal['Deal'])
+  - "Moeda/Ativo"  → Underlying Asset (+ Commodities)   (deal['UnderlyingAsset'] / ['Commodities'])
+
+Eligibility:
+  - Premium (D0):            B3 ACCOUNT == 73760.10-2, not Lawton, SpotDate == today
+  - Economic Affirmation:    TradeDate == today, not Lawton, not Banco JP Morgan,
+                             B3 ACCOUNT not in {73760.00-9, 73760.10-2, 00041.00-7}
 """
 
 import os
@@ -26,7 +28,10 @@ from datetime import datetime
 _DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
 
 JPM_B3_ACCOUNT   = '73760.00-9'           # JPMorgan's own CETIP account
-PREMIUM_CLIENT_B3 = '73760.10-2'          # premium "cliente" bucket (Lawton-style internal)
+PREMIUM_CLIENT_B3 = '73760.10-2'          # premium "cliente" bucket — only these get the D0 premium notice
+# Economic Affirmation is sent to Financial-Institution counterparties only:
+# everyone whose CETIP account is NOT one of these (and that isn't Lawton/JPMorgan).
+EXCLUDED_B3_AFFIRMATION = {'73760.00-9', '73760.10-2', '00041.00-7'}
 FOOTER_HTML = (
     '<p>Atenciosamente,</p>'
     '<p>Banco J.P. Morgan S.A. | Av. Brigadeiro Faria Lima, 3729 - 15º andar - São Paulo - SP | '
@@ -131,10 +136,22 @@ def _is_put(instrument):
     return 'PUT' in str(instrument or '').upper()
 
 
+def _is_lawton(name, acronym=''):
+    return 'LAWTON' in str(name or '').upper() or 'LAWTON' in str(acronym or '').upper()
+
+
+def _is_jpmorgan(name):
+    n = str(name or '').upper()
+    return 'JPMORGAN' in n or 'JP MORGAN' in n or 'J.P. MORGAN' in n
+
+
 def _asset_label(deal):
-    mkt = str(deal.get('Market', '') or '').strip()
+    """Moeda/Ativo column = Underlying Asset (+ Commodities) from the New Deals page."""
+    ua  = str(deal.get('UnderlyingAsset', '') or '').strip()
     com = str(deal.get('Commodities', '') or '').strip()
-    return '{}({})'.format(mkt, com) if com else mkt
+    if ua and com:
+        return '{}({})'.format(ua, com)
+    return ua or com
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -153,6 +170,11 @@ def _group_by_acronym_commodity(deals):
 # PREMIUM (D0) — SpotDate == today
 # ──────────────────────────────────────────────────────────────────────────
 def build_premium_emails(deals):
+    """D0 premium settlement notice.
+
+    Eligible counterparties: CETIP account (RefData) == 73760.10-2 AND not Lawton,
+    restricted to deals whose SpotDate (premium payment date) is today.
+    """
     ref = _build_refdata_index()
     cpd = _build_cpdetails_index()
     today = _today_br()
@@ -167,13 +189,12 @@ def build_premium_emails(deals):
         spn   = str(items[0].get('SPN', '') or rec.get('SPN', '') or '').strip().upper()
         taxid = rec.get('TAX ID', '')
 
-        cliente     = [d for d in items if b3 == PREMIUM_CLIENT_B3]
-        participante = [d for d in items if b3 != PREMIUM_CLIENT_B3]
+        if b3 != PREMIUM_CLIENT_B3:          # only the 73760.10-2 bucket
+            continue
+        if _is_lawton(name, acronym):        # never Lawton
+            continue
 
-        if cliente:
-            drafts.append(_premium_cliente_email(cliente, name, spn, taxid, cpd))
-        if participante:
-            drafts.append(_premium_participante_email(participante, name, b3))
+        drafts.append(_premium_cliente_email(items, name, spn, taxid, cpd))
 
     return drafts
 
@@ -201,7 +222,7 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
             '<td style="border:1px solid black;">{res}</td>'
             '</tr>'
         ).format(
-            contrato=d.get('Contract', ''),
+            contrato=d.get('Deal', ''),
             op=_date_br(d.get('TradeDate')),
             venc=_date_br(d.get('SettlementDate')),
             ativo=_asset_label(d),
@@ -279,6 +300,9 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     }
 
 
+# NOTE: as of the current spec the premium notice is only generated for the
+# 73760.10-2 ("cliente") bucket, so this participante variant is no longer wired
+# into build_premium_emails. Kept for reference / possible future reuse.
 def _premium_participante_email(items, contraparte, b3_account):
     apurado, _ir, _final = _premium_apurado(items)
 
@@ -286,7 +310,7 @@ def _premium_participante_email(items, contraparte, b3_account):
     for d in items:
         sell = _is_sell(d.get('Direction'))
         resultado = _num(d.get('Premium')) * (1 if sell else -1)
-        contrato = d.get('Contract', '') if sell else 'Mnemonico Lançador'
+        contrato = d.get('Deal', '') if sell else 'Mnemonico Lançador'
         titular  = b3_account if sell else JPM_B3_ACCOUNT
         rows += (
             '<tr style="border:1px solid black;">'
@@ -362,7 +386,11 @@ def _premium_participante_email(items, contraparte, b3_account):
 # ECONOMIC AFFIRMATION (D0 trade date, against Financial Institutions)
 # ──────────────────────────────────────────────────────────────────────────
 def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
-    """IF affirmation: TradeDate == today, B3 account != JPM account, not Lawton."""
+    """IF affirmation: TradeDate == today, against Financial Institutions only.
+
+    Eligible counterparties are those that are NOT Lawton, NOT Banco JP Morgan, and
+    whose CETIP account (RefData) is none of 73760.00-9 / 73760.10-2 / 00041.00-7.
+    """
     ref = _build_refdata_index()
     today = _today_br()
     drafts = []
@@ -374,7 +402,11 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
         rec = ref.get(acronym, {})
         b3 = str(rec.get('B3 ACCOUNT', '') or '').strip()
         name = str(rec.get('COUNTERPARTY', '') or d.get('Client', '') or '').upper()
-        return b3 != JPM_B3_ACCOUNT and 'LAWTON' not in name and acronym != 'LAWTON'
+        if b3 in EXCLUDED_B3_AFFIRMATION:
+            return False
+        if _is_lawton(name, acronym) or _is_jpmorgan(name):
+            return False
+        return True
 
     eligible = [d for d in deals if _eligible(d)]
 
@@ -394,6 +426,7 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
         fix_fim = _date_br(d.get('FixingEndDate'))
         rows += (
             '<tr style="border:1px solid black;">'
+            '<td style="border:1px solid black;">{contrato}</td>'
             '<td style="border:1px solid black;">{pos}</td>'
             '<td style="border:1px solid black;">{op}</td>'
             '<td style="border:1px solid black;">{base}</td>'
@@ -405,6 +438,7 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
             '<td style="border:1px solid black;">{venc}</td>'
             '</tr>'
         ).format(
+            contrato=d.get('Deal', ''),
             pos='Vendedor' if _is_sell(d.get('Direction')) else 'Comprador',
             op=_date_br(d.get('TradeDate')),
             base=_br(abs(_num(d.get('TotalNotional'))), 0),
@@ -424,6 +458,7 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
         '<p>Conta CETIP BANCO JP MORGAN S.A: {jpm}</p>'
         '<table style="font-family:\'Arial\';font-size:10pt;border-collapse:collapse;width:auto;border:1px solid black;text-align:center;">'
         '<tr style="font-weight:bold;border:1px solid black;">'
+        '<td style="border:1px solid black;">Contrato</td>'
         '<td style="border:1px solid black;">Posição JPMorgan</td>'
         '<td style="border:1px solid black;">Data Operação</td>'
         '<td style="border:1px solid black;">Valor Base/Quantidade</td>'

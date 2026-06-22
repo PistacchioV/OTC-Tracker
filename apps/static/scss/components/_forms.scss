@@ -141,3 +141,25 @@ input::-webkit-inner-spin-button {
         border-color: rgba(var(--#{$prefix}light-rgb), 0.65);
     }
 }
+
+// ── Standard checkbox/radio contrast (app-wide) ───────────────────────────────
+// Adopt the same unchecked-border contrast used by .form-check-input-light (the
+// New Deals NDF / Opt Comm selection columns) as the global default, so EVERY
+// checkbox across the app reads clearly against light table rows — not just the
+// ones explicitly tagged .form-check-input-light. Only the unchecked border is
+// touched; the checked state keeps its filled accent fill.
+.form-check-input:not(:checked) {
+    border-color: rgba(var(--#{$prefix}dark-rgb), 0.4);
+
+    &:hover {
+        border-color: rgba(var(--#{$prefix}dark-rgb), 0.6);
+    }
+}
+
+[data-bs-theme="dark"] .form-check-input:not(:checked) {
+    border-color: rgba(var(--#{$prefix}light-rgb), 0.45);
+
+    &:hover {
+        border-color: rgba(var(--#{$prefix}light-rgb), 0.65);
+    }
+}
