@@ -839,7 +839,7 @@
   "nd-col-qty-ccy": "Moeda da Quantidade",
   "nd-col-publisher": "Publisher",
   "nd-col-rate": "Taxa",
-  "nd-col-is-brr-fixed": "BRR Fixado?",
+  "nd-col-is-brr-fixed": "BRL Fixado?",
   "nd-page-title-ndf-fwdstart": "FWD Start NDF",
   "nd-page-title-ndf-otherpub": "Other Publisher NDF",
   "col-le": "LE",
@@ -852,5 +852,5 @@
   "col-publisher": "Publisher",
   "col-notional": "Notional",
   "col-rate": "Taxa",
-  "col-is-brr-fixed": "BRR Fixado?"
+  "col-is-brr-fixed": "BRL Fixado?"
 }

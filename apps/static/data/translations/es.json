@@ -838,7 +838,7 @@
   "nd-col-qty-ccy": "Moneda de Cantidad",
   "nd-col-publisher": "Publisher",
   "nd-col-rate": "Tasa",
-  "nd-col-is-brr-fixed": "¿BRR Fijado?",
+  "nd-col-is-brr-fixed": "¿BRL Fijado?",
   "nd-page-title-ndf-fwdstart": "FWD Start NDF",
   "nd-page-title-ndf-otherpub": "Other Publisher NDF",
   "col-le": "LE",
@@ -851,5 +851,5 @@
   "col-publisher": "Publisher",
   "col-notional": "Notional",
   "col-rate": "Tasa",
-  "col-is-brr-fixed": "¿BRR Fijado?"
+  "col-is-brr-fixed": "¿BRL Fijado?"
 }
