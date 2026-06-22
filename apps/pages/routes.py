@@ -1791,6 +1791,17 @@ INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "NDF"
 ))
 
+# Network share where generated Intrag NDF .txt files are written. Hardcoded
+# Windows path for the JPM machine (mirrors DB_PATH) — change per environment.
+INTRAG_NDF_SEND_DIR = r"I:\Confirmation\Derivativos\OTC Tracker\Intrag"
+
+# English month names for the "mm. Mmmm" folder (e.g. "06. June") — fixed list
+# so the folder name never depends on the server locale.
+_EN_MONTH_NAMES = (
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+)
+
 # ── ANBIMA calendar ───────────────────────────────────────────────────────────
 
 _ANBIMA_HOLIDAYS: set = set()
@@ -2062,6 +2073,78 @@ def api_intrag_ndf():
                     except Exception as exc:
                         log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
     return jsonify({'success': True, 'entries': entries})
+
+
+@blueprint.route('/api/intrag/ndf/send-file', methods=['POST'])
+def api_intrag_ndf_send_file():
+    """Generate the Intrag NDF .txt file(s) from the selected table rows.
+
+    Body: { "rows": [ [col0, col1, ... col29], ... ] } — the 30 data columns,
+    in NDF_COLS order. Rows are grouped by their Trade Date (data col index 10)
+    so each file lands in its own date folder:
+
+        I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\YYYY\\mm. Mmmm\\dd
+        (e.g. 2026\\06. June\\22)
+
+    Each file is named Intrag-NDF-YYYYMMDD.txt; if a file already exists it is
+    NOT overwritten — a copy with " (1)", " (2)", ... is created instead. Each
+    selected row becomes one line; columns are separated by ';'. A single-row
+    (row-level) send therefore produces a file with one line.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get('rows')
+    if not isinstance(rows, list) or not rows:
+        return jsonify({'success': False, 'message': 'No rows provided'}), 400
+
+    TRADE_DATE_IDX = 10  # index of Trade Date within the 30 data columns
+
+    # Group rows by Trade Date → one file per distinct trade date. For the common
+    # case (all rows share a trade date) this yields a single file.
+    groups = {}
+    for row in rows:
+        if not isinstance(row, list):
+            continue
+        cells = ['' if c is None else str(c) for c in row]
+        td_raw = cells[TRADE_DATE_IDX] if len(cells) > TRADE_DATE_IDX else ''
+        ref = _parse_date_any(td_raw) or datetime.now()
+        key = ref.strftime('%Y%m%d')
+        groups.setdefault(key, {'ref': ref, 'rows': []})['rows'].append(cells)
+
+    if not groups:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _cache_lock:
+            for key, grp in groups.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(
+                    INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d')
+                )
+                os.makedirs(dir_path, exist_ok=True)
+
+                base = 'Intrag-NDF-' + key
+                candidate = base + '.txt'
+                n = 0
+                while os.path.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ').txt'
+                file_path = os.path.join(dir_path, candidate)
+
+                content = '\n'.join(';'.join(r) for r in grp['rows'])
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write(content)
+                written.append(file_path)
+                log.info('[INTRAG NDF] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
+    except Exception as exc:
+        log.error('[INTRAG NDF] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    return jsonify({'success': True, 'files': written, 'count': len(rows)})
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])

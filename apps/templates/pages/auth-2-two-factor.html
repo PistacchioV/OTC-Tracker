@@ -104,9 +104,9 @@
                     <div class="mt-auto">
                         <p class="text-muted text-center auth-sub-text mx-auto" data-lang="auth-2fa-sub">We’ve emailed you a 6-digit verification code sent to</p>
                         <div class="text-center mb-4">
-                            <div class="fw-bold fs-3">******6789</div>
+                            <div class="fw-bold fs-3">{{ masked_email }}</div>
                         </div>
-                        <form class="mt-4">
+                        <form class="mt-4" id="twoFactorForm">
                             <div class="mb-3">
                                 <label class="form-label d-flex"><span data-lang="auth-2fa-code-label">Enter your 6-digit code</span> <span
                                         class="text-danger ms-1">*</span></label>
@@ -126,7 +126,7 @@
                     </div>
                     <p class="text-muted text-center mt-4 mb-0">
                         <span data-lang="auth-no-code">Don’t have a code?</span> <a class="text-decoration-underline link-offset-2 fw-semibold"
-                            href="#" data-lang="auth-resend">Resend</a>
+                            href="#" id="resendCodeLink" data-lang="auth-resend">Resend</a>
                     </p>
                     <p class="text-muted text-center mt-4 mb-0">
                         <span data-lang="auth-return">Return to</span> <a class="text-decoration-underline link-offset-3 fw-semibold"
@@ -157,4 +157,37 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/js/pages/auth-two-factor.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/auth-password.js"></script>
+<script>
+// Resend a fresh 6-digit code to the user's email.
+(function () {
+    var link = document.getElementById('resendCodeLink');
+    if (!link) return;
+    link.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (link.dataset.busy === '1') return;
+        link.dataset.busy = '1';
+        fetch('/resend-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (res) {
+                link.dataset.busy = '0';
+                var msg = (res.data && res.data.message) ||
+                    (res.ok ? 'A new code has been sent.' : 'Failed to resend code.');
+                if (window.Swal) {
+                    Swal.fire({ text: msg, icon: res.ok && res.data && res.data.success ? 'success' : 'error',
+                        confirmButtonText: 'OK' });
+                } else {
+                    alert(msg);
+                }
+            })
+            .catch(function () {
+                link.dataset.busy = '0';
+                if (window.Swal) { Swal.fire({ text: 'Request failed. Please try again.', icon: 'error' }); }
+                else { alert('Request failed. Please try again.'); }
+            });
+    });
+})();
+</script>
 {% endblock extra_javascript %}

@@ -69,7 +69,7 @@
     #intrag-ndf-table th:nth-child(2),
     #intrag-ndf-table td:nth-child(2),
     .dt-scroll-head thead th:nth-child(2),
-    .dataTables_scrollHead thead th:nth-child(2) { width: 70px;  min-width: 70px;  } /* Actions */
+    .dataTables_scrollHead thead th:nth-child(2) { width: 110px;  min-width: 110px;  } /* Actions */
 
     #intrag-ndf-table th:nth-child(3),
     #intrag-ndf-table td:nth-child(3),
@@ -371,6 +371,7 @@
                     <div id="ndfExportWrap"></div>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddNdf">Add Row +</button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelNdf" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendNdf" type="button"><i class="ti ti-brand-telegram me-1"></i> <span data-lang="intrag-btn-send">Send</span></button>
                     <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
                 </div>
 
@@ -613,7 +614,10 @@ $(document).ready(function() {
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
 
-    function toggleDelBtn(show) { var b=document.getElementById('btnDelNdf'); if(b) b.classList.toggle('d-none',!show); }
+    function toggleDelBtn(show) {
+        var b=document.getElementById('btnDelNdf'); if(b) b.classList.toggle('d-none',!show);
+        var s=document.getElementById('btnSendNdf'); if(s) s.classList.toggle('d-none',!show);
+    }
 
     $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
     $('[data-table-rows]').val(String(table.page.len()));
@@ -667,6 +671,54 @@ $(document).ready(function() {
         }).then(function(r){ if(r.isConfirmed) table.row(tr[0]).remove().draw(false); });
     });
 
+    // ── Send (generate .txt on the Intrag network folder) ───────────────────────
+    // Row data array: [0]=checkbox, [1]=actions, [2..31]=30 data cols, [32]=id.
+    function _intragRowData(d) { return d ? d.slice(2, 32) : []; }
+
+    function sendIntragRows(rows) {
+        if (!rows.length) return;
+        Swal.fire({
+            title: 'Send ' + rows.length + ' row(s)?',
+            text: 'A .txt file will be generated on the Intrag network folder.',
+            icon: 'question', showCancelButton: true,
+            confirmButtonText: 'Yes, send', cancelButtonText: 'Cancel',
+            confirmButtonColor: '#0d6efd', cancelButtonColor: '#6c757d'
+        }).then(function(r) {
+            if (!r.isConfirmed) return;
+            fetch('/api/intrag/ndf/send-file', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: rows })
+            }).then(function(resp){ return resp.json(); }).then(function(res) {
+                if (res.success) {
+                    Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).',
+                        icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
+                } else {
+                    Swal.fire({ title: 'Error', text: res.message || 'File generation failed.',
+                        icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(err) {
+                Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            });
+        });
+    }
+
+    // Row-level Send → single row → single-line file
+    $(document).on('click','#intrag-ndf-table tbody .btn-row-send',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data();
+        if(!d) return;
+        sendIntragRows([ _intragRowData(d) ]);
+    });
+
+    // Batch Send → all selected rows → single file (grouped by trade date server-side)
+    document.getElementById('btnSendNdf').addEventListener('click',function() {
+        if(selectedRowIds.size<2) return;
+        var rows=[];
+        table.rows().every(function(){ var d=this.data(), id=d?d[32]:null; if(id&&selectedRowIds.has(id)) rows.push(_intragRowData(d)); });
+        sendIntragRows(rows);
+    });
+
     $(document).on('click','#intrag-ndf-table tbody .btn-row-edit',function(e) {
         e.preventDefault();
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
@@ -683,7 +735,8 @@ $(document).ready(function() {
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
             '<div class="d-flex justify-content-center gap-1">' +
             '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
-            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>'
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>'
         ];
         NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); row.push(inp?inp.value.trim():''); });
         var id = editTr ? (table.row(editTr).data()[32]||_ndfId()) : _ndfId();
@@ -899,7 +952,8 @@ $(document).ready(function() {
                     data.entries.forEach(function(entry) {
                         var actions='<div class="d-flex justify-content-center gap-1">'
                             +'<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>'
-                            +'<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>';
+                            +'<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a>'
+                            +'<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>';
                         var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',actions];
                         ENTRY_FIELDS.forEach(function(f){row.push(entry[f]!=null?String(entry[f]):'');});
                         row.push(entry._deal||_ndfId());

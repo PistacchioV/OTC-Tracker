@@ -19,7 +19,8 @@ class TwoFactorAuth {
             return;
         }
 
-        this.confirmBtn = this.container.closest('form')?.querySelector('button[type="submit"]');
+        this.form = this.container.closest('form');
+        this.confirmBtn = this.form?.querySelector('button[type="submit"]');
         this.init();
     }
 
@@ -35,10 +36,15 @@ class TwoFactorAuth {
             input.addEventListener('paste', this.preventPaste);
         });
 
-        if (this.confirmBtn) {
+        // Bind the form submit so both the Confirm button click AND pressing
+        // Enter inside any digit input route through handleSubmit (which POSTs
+        // the code) instead of the browser's default GET reload.
+        if (this.form) {
+            this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+        } else if (this.confirmBtn) {
             this.confirmBtn.addEventListener('click', (e) => this.handleSubmit(e));
         } else {
-            console.warn('TwoFactorAuth: Submit button not found.');
+            console.warn('TwoFactorAuth: Submit form/button not found.');
         }
     }
 
@@ -73,10 +79,33 @@ class TwoFactorAuth {
             return;
         }
 
-        console.log('Entered 2FA code:', code);
+        if (this.submitting) return;
+        this.submitting = true;
+        this.clearError();
+        if (this.confirmBtn) this.confirmBtn.disabled = true;
 
-        // You can trigger your actual form submission logic here
-        // this.container.closest('form').submit();
+        fetch('/verify-2fa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ code: code })
+        })
+            .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data: data })))
+            .then(({ ok, data }) => {
+                if (ok && data && data.success) {
+                    window.location.href = data.redirect || '/dashboard';
+                    return;
+                }
+                this.submitting = false;
+                if (this.confirmBtn) this.confirmBtn.disabled = false;
+                this.showError((data && data.message) || 'Invalid or expired code. Please try again.');
+                this.inputs.forEach((inp) => { inp.value = ''; });
+                this.inputs[0].focus();
+            })
+            .catch(() => {
+                this.submitting = false;
+                if (this.confirmBtn) this.confirmBtn.disabled = false;
+                this.showError('Request failed. Please try again.');
+            });
     }
 
     showError(message) {
