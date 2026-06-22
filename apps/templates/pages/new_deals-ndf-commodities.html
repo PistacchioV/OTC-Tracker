@@ -1426,6 +1426,7 @@ $(document).ready(function() {
             "B" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
+            "<'econAffBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
@@ -1837,6 +1838,68 @@ $(document).ready(function() {
                             confirmButtonText: t('swal-ok', 'OK'),
                             confirmButtonColor: '#dc3545'
                         });
+                    });
+                });
+            }
+
+            // ==============================================================
+            // ECONOMIC AFFIRMATION BUTTON (IF, D0)
+            // ==============================================================
+            function _collectAllNdfDeals() {
+                var out = [];
+                table.rows({ search: 'none', page: 'all' }).every(function () {
+                    out.push(rowDataToNdfDeal(this.data(), this.data()[29] || ''));
+                });
+                return out;
+            }
+            var econAffContainer = document.querySelector('.econAffBtn');
+            if (econAffContainer && !document.getElementById('econAffBtn')) {
+                var econAffBtn = document.createElement('button');
+                econAffBtn.id = 'econAffBtn';
+                econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
+                econAffBtn.setAttribute('type', 'button');
+                econAffBtn.setAttribute('data-bs-toggle', 'tooltip');
+                econAffBtn.setAttribute('data-bs-placement', 'bottom');
+                econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+                econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
+                econAffContainer.appendChild(econAffBtn);
+                econAffBtn.addEventListener('click', function () {
+                    var btn = this;
+                    if (btn.dataset.running === '1') return;
+                    btn.dataset.running = '1';
+                    var prevHtml = btn.innerHTML;
+                    btn.style.pointerEvents = 'none';
+                    btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
+                    fetch('/api/new-deals/ndf-commodities/economic-affirmation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deals: _collectAllNdfDeals() })
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml;
+                        if (res.ok && (res.count || 0) === 0) {
+                            Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'),
+                                text: t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'),
+                                icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                            return;
+                        }
+                        if (!res.ok || res.error) {
+                            Swal.fire({ title: t('swal-err-title', 'Error'),
+                                text: res.error || t('swal-request-failed', 'Request failed:'),
+                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                            return;
+                        }
+                        Swal.fire({ title: t('swal-email-ok-title', 'Drafts Opened'),
+                            text: (res.opened || res.count) + ' ' + t('swal-email-ok-text', 'e-mail draft(s) opened in Outlook for review.'),
+                            icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc',
+                            timer: 3000, timerProgressBar: true });
+                    })
+                    .catch(function (err) {
+                        btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml;
+                        Swal.fire({ title: t('swal-err-title', 'Error'),
+                            text: t('swal-request-failed', 'Request failed:') + ' ' + err.message,
+                            icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
                     });
                 });
             }

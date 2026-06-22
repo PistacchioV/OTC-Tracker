@@ -1450,6 +1450,8 @@ $(document).ready(function() {
             "B" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
+            "<'premiumBtn me-2'>" +
+            "<'econAffBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
@@ -1731,9 +1733,51 @@ $(document).ready(function() {
                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importBtnContainer.appendChild(importBtn);
 
-                // Process all files queued in the dropzone, then clear it
+                // Process all files queued in the dropzone, then clear it.
+                // After a successful import, flag any operations whose premium
+                // payment (Spot Date, col 26) falls on today.
                 importBtn.addEventListener('click', function() {
-                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap']);
+                    OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap'])
+                        .then(function(res) {
+                            if (!res || res.totalDeals <= 0) return;
+                            var dueToday = _countPremiumDueToday();
+                            if (dueToday > 0) _showPremiumDueTodayAlert(dueToday);
+                        });
+                });
+            }
+
+            // ==============================================================
+            // PREMIUM DUE TODAY (Spot Date) — post-import check
+            // ==============================================================
+            // Parse a date string in dd/mm/yyyy (display format) or yyyy-mm-dd.
+            function _parseSpotDate(s) {
+                if (!s) return null;
+                s = String(s).trim();
+                var dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+                if (dmy) return new Date(+dmy[3], +dmy[2] - 1, +dmy[1]);
+                var iso = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+                if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+                return null;
+            }
+            // Count rows whose Spot Date (col 26 = premium payment date) is today.
+            function _countPremiumDueToday() {
+                var today = new Date(); today.setHours(0, 0, 0, 0);
+                var n = 0;
+                table.rows({ search: 'none', page: 'all' }).every(function () {
+                    var sd = _parseSpotDate(_sh(this.data()[26]));
+                    if (sd && sd.getTime() === today.getTime()) n++;
+                });
+                return n;
+            }
+            function _showPremiumDueTodayAlert(count) {
+                var msg = t('swal-premium-today-text', '{n} operation(s) have a premium payment (Spot Date) due today.')
+                            .replace('{n}', count);
+                Swal.fire({
+                    title: t('swal-premium-today-title', 'Premium Payment Due Today'),
+                    text:  msg,
+                    icon:  'warning',
+                    confirmButtonText: t('swal-ok', 'OK'),
+                    confirmButtonColor: '#0066cc'
                 });
             }
 
@@ -1867,6 +1911,94 @@ $(document).ready(function() {
                             confirmButtonColor: '#dc3545'
                         });
                     });
+                });
+            }
+
+            // ==============================================================
+            // PREMIUM (D0) + ECONOMIC AFFIRMATION BUTTONS
+            // ==============================================================
+            // Collect every row of the table as a complete deal object.
+            function _collectAllOptDeals() {
+                var out = [];
+                table.rows({ search: 'none', page: 'all' }).every(function () {
+                    out.push(rowDataToOptDeal(this.data(), this.data()[34] || ''));
+                });
+                return out;
+            }
+            // Generic helper: POST deals to an email endpoint and report the result.
+            function _runEmailAction(btn, endpoint, normalLabel, emptyText) {
+                if (btn.dataset.running === '1') return;
+                btn.dataset.running = '1';
+                var prevHtml = btn.innerHTML;
+                btn.style.pointerEvents = 'none';
+                btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deals: _collectAllOptDeals() })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    btn.dataset.running = '';
+                    btn.style.pointerEvents = '';
+                    btn.innerHTML = prevHtml;
+                    if (res.ok && (res.count || 0) === 0) {
+                        Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'), text: emptyText,
+                            icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                        return;
+                    }
+                    if (!res.ok || res.error) {
+                        Swal.fire({ title: t('swal-err-title', 'Error'),
+                            text: res.error || t('swal-request-failed', 'Request failed:'),
+                            icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                        return;
+                    }
+                    Swal.fire({ title: t('swal-email-ok-title', 'Drafts Opened'),
+                        text: (res.opened || res.count) + ' ' + t('swal-email-ok-text', 'e-mail draft(s) opened in Outlook for review.'),
+                        icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc',
+                        timer: 3000, timerProgressBar: true });
+                })
+                .catch(function (err) {
+                    btn.dataset.running = '';
+                    btn.style.pointerEvents = '';
+                    btn.innerHTML = prevHtml;
+                    Swal.fire({ title: t('swal-err-title', 'Error'),
+                        text: t('swal-request-failed', 'Request failed:') + ' ' + err.message,
+                        icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                });
+            }
+
+            var premiumContainer = document.querySelector('.premiumBtn');
+            if (premiumContainer && !document.getElementById('premiumBtn')) {
+                var premiumBtn = document.createElement('button');
+                premiumBtn.id = 'premiumBtn';
+                premiumBtn.className = 'btn btn-sm btn-soft-primary bg-gradient btn-toolbar-all';
+                premiumBtn.setAttribute('type', 'button');
+                premiumBtn.setAttribute('data-bs-toggle', 'tooltip');
+                premiumBtn.setAttribute('data-bs-placement', 'bottom');
+                premiumBtn.setAttribute('data-bs-title', t('nd-btn-premium', 'Premium settlement (D0)'));
+                premiumBtn.innerHTML = '<i class="ti ti-cash me-1"></i><span data-lang="nd-btn-premium">Premium</span>';
+                premiumContainer.appendChild(premiumBtn);
+                premiumBtn.addEventListener('click', function () {
+                    _runEmailAction(this, '/api/new-deals/opt-commodities/premium-email', 'Premium',
+                        t('swal-premium-none', 'No operations with premium payment (Spot Date) due today.'));
+                });
+            }
+
+            var econAffContainer = document.querySelector('.econAffBtn');
+            if (econAffContainer && !document.getElementById('econAffBtn')) {
+                var econAffBtn = document.createElement('button');
+                econAffBtn.id = 'econAffBtn';
+                econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
+                econAffBtn.setAttribute('type', 'button');
+                econAffBtn.setAttribute('data-bs-toggle', 'tooltip');
+                econAffBtn.setAttribute('data-bs-placement', 'bottom');
+                econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+                econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
+                econAffContainer.appendChild(econAffBtn);
+                econAffBtn.addEventListener('click', function () {
+                    _runEmailAction(this, '/api/new-deals/opt-commodities/economic-affirmation', 'Econ. Affirmation',
+                        t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'));
                 });
             }
 

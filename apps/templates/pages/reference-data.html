@@ -414,7 +414,7 @@ $(document).ready(function () {
         ],
         dom:
             "<'d-md-flex justify-content-between align-items-center my-2'" +
-                "<'columnToggleWrapper me-2'><'addRowWrapper me-2'><'bulkApproveWrapper me-2'>B<'ms-auto'>" +
+                "<'columnToggleWrapper me-2'><'addRowWrapper me-2'><'bulkApproveWrapper me-2'><'clearFiltersWrapper me-2'>B<'ms-auto'>" +
             ">" +
             "<'row'<'col-sm-12'tr>>" +
             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -535,6 +535,24 @@ $(document).ready(function () {
                 bulkBtn.addEventListener('click', function() { bulkApprove(); });
                 bulkWrap.appendChild(bulkBtn);
             }
+
+            /* Clear Filters button (same pattern as the New Deals pages) */
+            var clearWrap = container.querySelector('.clearFiltersWrapper');
+            if (clearWrap && !document.getElementById('clearFiltersBtn')) {
+                var clearBtn = document.createElement('button');
+                clearBtn.id = 'clearFiltersBtn';
+                clearBtn.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                clearBtn.setAttribute('type', 'button');
+                clearBtn.setAttribute('data-bs-toggle', 'tooltip');
+                clearBtn.setAttribute('data-bs-placement', 'bottom');
+                clearBtn.setAttribute('data-bs-title', t('btn-clear-filters', 'Clear Filters'));
+                clearBtn.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">' + t('btn-clear-filters', 'Clear Filters') + '</span>';
+                clearWrap.appendChild(clearBtn);
+                clearBtn.addEventListener('click', function() {
+                    document.querySelectorAll('#refdata-search-row th input').forEach(function(input) { input.value = ''; });
+                    api.columns().search('').draw();
+                });
+            }
         }
     });
 
@@ -546,6 +564,55 @@ $(document).ready(function () {
             dt.clear().rows.add(buildRows(data)).draw();
         })
         .catch(function(e){ console.error('RefData load error:', e); });
+
+    /* ── Counterparty banking/contact details (indexed by SPN) ────────── */
+    var _CPDETAILS = {};
+    fetch('{{ config.ASSETS_ROOT }}/data/CounterpartyDetails.json')
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            (data || []).forEach(function(c){
+                if (c && c.SPN) _CPDETAILS[String(c.SPN).trim().toUpperCase()] = c;
+            });
+        })
+        .catch(function(e){ console.error('CounterpartyDetails load error:', e); });
+
+    function _txt(html) { return $('<div>').html(html == null ? '' : html).text().trim(); }
+
+    /* Double-click a row → show its CGD / banking / contact details */
+    $('#ref-data-table tbody').on('dblclick', 'tr', function() {
+        var rowData = dt.row(this).data();
+        if (!rowData) return;
+        var spn  = _txt(rowData[9]).toUpperCase();
+        var name = _txt(rowData[3]) || spn || '—';
+        var cp   = _CPDETAILS[spn] || {};
+        function _row(labelKey, labelTxt, value) {
+            var v = (value == null || String(value).trim() === '') ? '—' : value;
+            return '<tr>' +
+                '<td style="text-align:left;font-weight:600;white-space:nowrap;padding:4px 12px;" data-lang="' + labelKey + '">' + labelTxt + '</td>' +
+                '<td style="text-align:left;padding:4px 12px;">' + v + '</td></tr>';
+        }
+        var html =
+            '<div style="text-align:left;">' +
+            '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">' +
+                _row('rd-cp-spn',      'SPN',        spn || '—') +
+                _row('rd-cp-cgd',      'CGD',        cp.CGD) +
+                _row('rd-cp-bank',     'Bank',       cp.BANK) +
+                _row('rd-cp-agency',   'Agency',     cp.AGENCY) +
+                _row('rd-cp-account',  'Account',    cp.ACCOUNT) +
+                _row('rd-cp-contacts', 'Contacts',   cp.CONTACTS) +
+            '</table>' +
+            (_CPDETAILS[spn] ? '' :
+                '<p class="text-muted fst-italic mt-2 mb-0" style="font-size:0.78rem;" data-lang="rd-cp-none">No banking/contact details registered for this counterparty yet.</p>') +
+            '</div>';
+        Swal.fire({
+            title: name,
+            html:  html,
+            icon:  'info',
+            confirmButtonText: t('swal-ok', 'OK'),
+            confirmButtonColor: '#0066cc',
+            width: 520
+        });
+    });
 
     /* ── Page length ─────────────────────────────────────────────────── */
     $('#pageLenRefData').on('change', function() { dt.page.len(+this.value).draw(); });

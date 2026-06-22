@@ -1221,7 +1221,7 @@ var OTCFileUpload = (function () {
             return blockUpper.some(function(w) { return up.indexOf(w) !== -1; });
         }
 
-        Promise.all(files.map(function(f) { return _getFileSubject(f); }))
+        return Promise.all(files.map(function(f) { return _getFileSubject(f); }))
             .then(function(subjects) {
                 var skippedFiles = [];
                 var filesToProcess = [];
@@ -1244,7 +1244,7 @@ var OTCFileUpload = (function () {
                             .then(function (count) { totalDeals += (count || 0); });
                     });
                 });
-                chain.then(function () {
+                return chain.then(function () {
                     dz.removeAllFiles(true);
                     if (importBtn) {
                         importBtn.disabled = false;
@@ -1295,6 +1295,13 @@ var OTCFileUpload = (function () {
                             confirmButtonColor: '#0dcaf0'
                         });
                     }
+                    // Resolve with how many deals were imported and whether a Swal
+                    // was already shown, so page-specific callers can chain extra
+                    // post-import logic (e.g. premium-due-today alert) without
+                    // clobbering an existing popup.
+                    var _shownSwal = (filesToProcess.length === 0 && skippedFiles.length > 0)
+                                     || totalDeals === 0 || skippedFiles.length > 0;
+                    return { totalDeals: totalDeals, shownSwal: _shownSwal };
                 }).catch(function (err) {
                     console.error('OTCFileUpload: error processing files', err);
                     dz.removeAllFiles(true);
@@ -1309,6 +1316,7 @@ var OTCFileUpload = (function () {
                         confirmButtonText: 'OK',
                         confirmButtonColor: '#dc3545'
                     });
+                    return { totalDeals: 0, shownSwal: true };
                 });
             })
             .catch(function(err) {
@@ -1317,6 +1325,7 @@ var OTCFileUpload = (function () {
                     importBtn.disabled = false;
                     importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 }
+                return { totalDeals: 0, shownSwal: true };
             });
     }
 

@@ -10,6 +10,22 @@
     display: block;
     flex-shrink: 0;
   }
+  /* Unread notifications: subtle tint + accent dot; read items render plain. */
+  .notification-item { position: relative; }
+  .notification-item.notif-unread {
+    background-color: rgba(var(--ins-primary-rgb, 13, 110, 253), 0.06);
+  }
+  .notification-item.notif-unread::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ins-primary, #0d6efd);
+  }
 </style>
 <header class="app-topbar">
     <div class="container-fluid topbar-menu">
@@ -334,29 +350,55 @@
                 var d = new Date();
                 return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
             })();
-            // Read-state is tracked by the highest notification ID the user has seen,
-            // NOT by a count — total_today is capped at 50 by the API LIMIT, so a
-            // count-based diff can never detect new items once the cap is reached.
-            var LS_SEEN = 'otc_notif_last_seen_id';
+            // Read-state is tracked per notification ID (a set of read IDs), so a
+            // notification only becomes "read" when the user clicks it specifically,
+            // or clicks "Mark All as Read". Opening the dropdown does NOT mark anything.
+            var LS_READ = 'otc_notif_read_ids';
+            var LS_SEEN = 'otc_notif_last_seen_id';   // legacy high-water mark (migrated once)
             var _totalToday = 0;
             var _notifs = [];
 
-            function getLastSeenId() {
-                return parseInt(localStorage.getItem(LS_SEEN) || '0', 10) || 0;
+            function getReadSet() {
+                try {
+                    var a = JSON.parse(localStorage.getItem(LS_READ) || '[]');
+                    return new Set((a || []).map(Number));
+                } catch (e) { return new Set(); }
             }
-            function setLastSeenId(id) {
-                localStorage.setItem(LS_SEEN, String(id || 0));
+            function saveReadSet(set) {
+                // Cap to the 500 most recent IDs so the set can't grow unbounded.
+                var arr = Array.from(set).map(Number).sort(function (a, b) { return b - a; }).slice(0, 500);
+                try { localStorage.setItem(LS_READ, JSON.stringify(arr)); } catch (e) {}
             }
-            function maxNotifId(items) {
-                var m = 0;
-                (items || []).forEach(function (n) { var v = Number(n.id) || 0; if (v > m) m = v; });
-                return m;
+            function isRead(id) { return getReadSet().has(Number(id) || 0); }
+            function markRead(id) {
+                id = Number(id) || 0; if (!id) return;
+                var s = getReadSet(); if (s.has(id)) return;
+                s.add(id); saveReadSet(s);
+                updateBadge(computeUnread(_notifs));
+            }
+            function markAllRead() {
+                var s = getReadSet();
+                (_notifs || []).forEach(function (n) { var v = Number(n.id) || 0; if (v) s.add(v); });
+                saveReadSet(s);
+                updateBadge(0);
             }
             function computeUnread(items) {
-                var seen = getLastSeenId();
+                var s = getReadSet();
                 var c = 0;
-                (items || []).forEach(function (n) { if ((Number(n.id) || 0) > seen) c++; });
+                (items || []).forEach(function (n) { if (!s.has(Number(n.id) || 0)) c++; });
                 return c;
+            }
+            // One-time migration from the old "last seen ID" model: everything at or
+            // below the previous high-water mark is treated as already read.
+            function migrateLegacySeen(items) {
+                if (localStorage.getItem(LS_READ) !== null) return;
+                var old = parseInt(localStorage.getItem(LS_SEEN) || '0', 10) || 0;
+                var s = new Set();
+                if (old > 0) {
+                    (items || []).forEach(function (n) { var v = Number(n.id) || 0; if (v && v <= old) s.add(v); });
+                }
+                saveReadSet(s);
+                try { localStorage.removeItem(LS_SEEN); } catch (e) {}
             }
 
             function updateBadge(unread) {
@@ -432,8 +474,14 @@
                     var initials = getInitials(n.actor_name || n.actor_sid);
                     var pageUrl  = PAGE_URL[n.page] || null;
                     var el       = document.createElement(pageUrl ? 'a' : 'div');
-                    el.className = 'dropdown-item notification-item py-2 text-wrap';
+                    el.className = 'dropdown-item notification-item py-2 text-wrap' + (isRead(n.id) ? '' : ' notif-unread');
+                    el.dataset.notifId = n.id;
                     if (pageUrl) { el.href = pageUrl; el.style.cursor = 'pointer'; }
+                    // Clicking a single notification marks only that one as read.
+                    el.addEventListener('click', function () {
+                        markRead(this.dataset.notifId);
+                        this.classList.remove('notif-unread');
+                    });
                     el.innerHTML =
                         '<span class="d-flex align-items-center gap-3">' +
                           '<span class="flex-shrink-0 position-relative">' +
@@ -465,6 +513,7 @@
                         if (!resp.success) return;
                         _totalToday = resp.total_today || 0;
                         _notifs = resp.notifications || [];
+                        migrateLegacySeen(_notifs);
                         updateBadge(computeUnread(_notifs));
                         renderNotifications(_notifs);
                         var cb = document.getElementById('notif-count-badge');
@@ -473,20 +522,17 @@
                     .catch(function () {});
             }
 
-            var toggleBtn = document.getElementById('notif-toggle-btn');
-            if (toggleBtn) {
-                toggleBtn.addEventListener('show.bs.dropdown', function () {
-                    setLastSeenId(maxNotifId(_notifs));
-                    updateBadge(0);
-                });
-            }
+            // NOTE: opening the dropdown no longer marks notifications as read —
+            // that only happens when the user clicks an item or "Mark All as Read".
 
             var markBtn = document.getElementById('notif-mark-all-read');
             if (markBtn) {
                 markBtn.addEventListener('click', function (e) {
                     e.preventDefault();
-                    setLastSeenId(maxNotifId(_notifs));
-                    updateBadge(0);
+                    markAllRead();
+                    // Reflect the change immediately in the open list.
+                    var list = document.getElementById('notif-list');
+                    if (list) list.querySelectorAll('.notif-unread').forEach(function (it) { it.classList.remove('notif-unread'); });
                 });
             }
 

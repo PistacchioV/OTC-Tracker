@@ -3584,6 +3584,62 @@ def api_mapping_b3():
 
 
 # ==============================================================================
+# API — SETTLEMENT / CONFIRMATION E-MAILS (Premium D0 + Economic Affirmation)
+# Builds the HTML drafts in apps/pages/otc_emails.py and opens them in Outlook
+# for manual review (win32com — Windows/JPM only; degrades gracefully elsewhere).
+# ==============================================================================
+@blueprint.route('/api/new-deals/opt-commodities/premium-email', methods=['POST'])
+def api_opt_premium_email():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_premium_emails(deals)
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+
+    opened, err = otc_emails.open_outlook_drafts(drafts)
+    if err and opened == 0:
+        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
+    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+
+
+@blueprint.route('/api/new-deals/opt-commodities/economic-affirmation', methods=['POST'])
+def api_opt_economic_affirmation_email():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_economic_affirmation_emails(deals, asset_label='Opção Mercadoria')
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+
+    opened, err = otc_emails.open_outlook_drafts(drafts)
+    if err and opened == 0:
+        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
+    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+
+
+@blueprint.route('/api/new-deals/ndf-commodities/economic-affirmation', methods=['POST'])
+def api_ndf_economic_affirmation_email():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria')
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+
+    opened, err = otc_emails.open_outlook_drafts(drafts)
+    if err and opened == 0:
+        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
+    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+
+
+# ==============================================================================
 # API — GENERIC NEW-DEALS CACHE (NDF FWD Start / NDF Other Publisher)
 # Page + CRUD only. Same Deal+Client keyed JSON cache model as ndf-commodities.
 # Import-parse / mapping-B3 / send-Conecta are product-specific and intentionally

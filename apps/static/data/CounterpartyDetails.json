@@ -1,0 +1,3953 @@
+[
+  {
+    "SPN": "135742",
+    "COUNTERPARTY": "3M DO BRASIL LIMITADA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2156027",
+    "COUNTERPARTY": "ABB AUTOMACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2155922",
+    "COUNTERPARTY": "ABB ELETRIFICACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2332891",
+    "COUNTERPARTY": "ABB ELETRIFICACAO LTDA - FILIAL 0003",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4060975",
+    "COUNTERPARTY": "ABBOTT DIAGNOSTICOS RAPIDOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "63235",
+    "COUNTERPARTY": "ABBOTT LABORATORIOS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "545454",
+    "COUNTERPARTY": "ABBVIE FARMACEUTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3906413",
+    "COUNTERPARTY": "ACCELLERON BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2149419",
+    "COUNTERPARTY": "ACHE LABORATORIOS FARMACEUTICOS S A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1554639",
+    "COUNTERPARTY": "ACHE LABORATORIOS FARMACEUTICOS S A - FILIAL 0001",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4063696",
+    "COUNTERPARTY": "ACHE LABORATORIOS FARMACEUTICOS S A - FILIAL 0032",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9585639",
+    "COUNTERPARTY": "ADIDAS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9529891",
+    "COUNTERPARTY": "ADIENT DO BRASIL BANCOS AUTOMOTIVOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9502462",
+    "COUNTERPARTY": "ADM DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2213351",
+    "COUNTERPARTY": "ADVANTA COMERCIO DE SEMENTES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1260054",
+    "COUNTERPARTY": "AGREX DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4820669",
+    "COUNTERPARTY": "AGRO JANGADA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5091711",
+    "COUNTERPARTY": "AGROCERRADO PRODUTOS AGRICOLAS E ASSIST TECNICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4813104",
+    "COUNTERPARTY": "AGROINDUSTRIAL SAO FRANCISCO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9530702",
+    "COUNTERPARTY": "AGROPECUARIA MAGGI LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "281628",
+    "COUNTERPARTY": "AKZO NOBEL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "480436",
+    "COUNTERPARTY": "ALCOA ALUMINIO SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9090643",
+    "COUNTERPARTY": "ALESAT COMBUSTIVEIS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "643521",
+    "COUNTERPARTY": "ALPARGATAS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7933568",
+    "COUNTERPARTY": "ALSTOM BRASIL ENERGIA E TRANSPORTE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "None",
+    "COUNTERPARTY": "ALSTOM GRID ENERGIA LTDA (FILIAL1)",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "155134",
+    "COUNTERPARTY": "ALUNORTE ALUMINA DO NORTE DO BRASIL S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9530701",
+    "COUNTERPARTY": "AMAGGI EXPORTACAO E IMPORTACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9618816",
+    "COUNTERPARTY": "AMCOR FLEXIBLES DO BRASIL INDUSTRIA E COMERCIO DE EMBALAGENS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2176160",
+    "COUNTERPARTY": "AMG BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5193561",
+    "COUNTERPARTY": "ANGELUS INDUSTRIA DE PRODUTOS ODONTOLOGICOS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "403786",
+    "COUNTERPARTY": "ANGLO AMERICAN MINERIO DE FERRO BRASIL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "403789",
+    "COUNTERPARTY": "ANGLO AMERICAN NIQUEL BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "480444",
+    "COUNTERPARTY": "APERAM INOX AMERICA DO SUL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8303517",
+    "COUNTERPARTY": "ARCELORMITTAL BRASIL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1576443",
+    "COUNTERPARTY": "ARCELORMITTAL PECEM S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9568056",
+    "COUNTERPARTY": "ARCELORMITTAL SUL FLUMINENSE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "74931",
+    "COUNTERPARTY": "ARCOS DOURADOS COMERCIO DE ALIMENTOS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3729418",
+    "COUNTERPARTY": "ASTEC DO BRASIL FABRICACAO DE EQUIPAMENTOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2371851",
+    "COUNTERPARTY": "ATLANTIC NICKEL MINERACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1593950",
+    "COUNTERPARTY": "AVERY DENNISON DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "292751",
+    "COUNTERPARTY": "AZUL LINHAS AEREAS BRASILEIRAS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1301780",
+    "COUNTERPARTY": "BANCO ABC BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "108383",
+    "COUNTERPARTY": "BANCO BRADESCO SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5795462",
+    "COUNTERPARTY": "BANCO C6 CONSIGNADO S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "69389",
+    "COUNTERPARTY": "BANCO CATERPILLAR SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "109703",
+    "COUNTERPARTY": "BANCO DO BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "23779",
+    "COUNTERPARTY": "BANCO J.P MORGAN S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1416537",
+    "COUNTERPARTY": "BANCO VOTORANTIM S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "863470",
+    "COUNTERPARTY": "BARRY CALLEBAUT BRASIL INDUSTRIA E COMERCIO DE PRODUTOS ALIMENTICIOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4810729",
+    "COUNTERPARTY": "BASE INDUSTRIA E COMERCIO DE OLEOS E PROTEINAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1660985",
+    "COUNTERPARTY": "BASF SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "399809",
+    "COUNTERPARTY": "BAYER S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1540044",
+    "COUNTERPARTY": "BE8 S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "249439",
+    "COUNTERPARTY": "BEMIS DO BRASIL INDUSTRIA E COMERCIO DE EMBALAGENS LTDA - FILIAL 0018",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1757031",
+    "COUNTERPARTY": "BIMBO DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "239395",
+    "COUNTERPARTY": "BIOSINTETICA FARMACEUTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9621415",
+    "COUNTERPARTY": "BMW DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1574993",
+    "COUNTERPARTY": "BMW MANUFACTURING INDUSTRIA DE MOTOS DA AMAZONIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9670122",
+    "COUNTERPARTY": "BRAINFARMA INDUSTRIA QUIMICA E FARMACEUTICA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3244316",
+    "COUNTERPARTY": "BRAVA ENERGIA S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1575406",
+    "COUNTERPARTY": "BRF S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4231522",
+    "COUNTERPARTY": "BUHLER DO BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1695460",
+    "COUNTERPARTY": "BUNGE ALIMENTOS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3853037",
+    "COUNTERPARTY": "CA PESQUISA E COMERCIO DE SEMENTES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1314572",
+    "COUNTERPARTY": "CAIXA ECONOMICA FEDERAL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2321297",
+    "COUNTERPARTY": "CAMARGO CORREA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9490512",
+    "COUNTERPARTY": "CARAMURU ALIMENTOS S/A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1329006",
+    "COUNTERPARTY": "CARGILL AGRICOLA S A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1728710",
+    "COUNTERPARTY": "CARGILL ALIMENTOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5672564",
+    "COUNTERPARTY": "CARGILL NOVOS HORIZONTES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3744916",
+    "COUNTERPARTY": "CARMO ENERGY S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "822048",
+    "COUNTERPARTY": "CARREFOUR COMERCIO E INDUSTRIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "766803",
+    "COUNTERPARTY": "CCRG SERVICOS DE AUTOMOVEIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "124398",
+    "COUNTERPARTY": "CENCOSUD BRASIL COMERCIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1851944",
+    "COUNTERPARTY": "CERAS JOHNSON LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4810680",
+    "COUNTERPARTY": "CEU DE MINAS NUTRICAO ANIMAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8837805",
+    "COUNTERPARTY": "CHOCOLATES GAROTO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "334027",
+    "COUNTERPARTY": "CHS AGRONEGOCIO - INDUSTRIA E COMERCIO LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6916761",
+    "COUNTERPARTY": "CIA DE GERACAO E TRANSMISSAO DE EN ELETRICA DO SUL DO BRSL ELETROBRAS CGT ELETRO",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5347154",
+    "COUNTERPARTY": "CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4491599",
+    "COUNTERPARTY": "CIA ENERGETICA DE PERNAMBUCO SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6352081",
+    "COUNTERPARTY": "CITROSUCO S/A AGROINDUSTRIA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9632520",
+    "COUNTERPARTY": "CJ DO BRASIL INDUSTRIA E COMERCIO DE PRODUTOS ALIMENTICIOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1519177",
+    "COUNTERPARTY": "CJ SELECTA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3904145",
+    "COUNTERPARTY": "CKBR BEBIDAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "716265",
+    "COUNTERPARTY": "CLAREX S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "130622",
+    "COUNTERPARTY": "CMPC CELULOSE RIOGRANDENSE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9624347",
+    "COUNTERPARTY": "CNH INDUSTRIAL BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "158787",
+    "COUNTERPARTY": "CNH INDUSTRIAL BRASIL LTDA - FILIAL 0005",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9621241",
+    "COUNTERPARTY": "CNH INDUSTRIAL LATIN AMERICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "19438",
+    "COUNTERPARTY": "COFCO INTERNATIONAL BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3381091",
+    "COUNTERPARTY": "COFCO INTERNATIONAL COMERCIO E ARMAZENAGEM DE GRAOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3381041",
+    "COUNTERPARTY": "COFCO INTERNATIONAL COTTON LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "716247",
+    "COUNTERPARTY": "COIMPA INDUSTRIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4724149",
+    "COUNTERPARTY": "COLGATE PALMOLIVE INDUSTRIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3979825",
+    "COUNTERPARTY": "COMAU DO BRASIL AUTOMACAO E SERVICOS INDUSTRIAIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "23870",
+    "COUNTERPARTY": "COMAU DO BRASIL INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9145225",
+    "COUNTERPARTY": "COMPANHIA BRASILEIRA DE ALUMINIO",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2341697",
+    "COUNTERPARTY": "COMPANHIA DE ELETRICIDADE DO ESTADO DA BAHIA COELBA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "125342",
+    "COUNTERPARTY": "COMPANHIA DE GAS DE SAO PAULO - COMGAS",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5818815",
+    "COUNTERPARTY": "COMPANHIA DE GAS DO ESPIRITO SANTO - ES GAS",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5717634",
+    "COUNTERPARTY": "COMPANHIA JAGUARI DE ENERGIA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "319732",
+    "COUNTERPARTY": "COMPANHIA PAULISTA DE FORCA E LUZ",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9619011",
+    "COUNTERPARTY": "COMPANHIA PIRATININGA DE FORCA E LUZ",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2718264",
+    "COUNTERPARTY": "CONCESSIONARIA DA RODOVIA DOS LAGOS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "787627",
+    "COUNTERPARTY": "CONTINENTAL DO BRASIL PRODUTOS AUTOMOTIVOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1562773",
+    "COUNTERPARTY": "COOPER POWER SYSTEMS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9496174",
+    "COUNTERPARTY": "COOPERATIVA REGIONAL DE CAFEICULTORES EM GUAXUPE LTDA COOXUPE",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9545176",
+    "COUNTERPARTY": "COPERSUCAR S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4810951",
+    "COUNTERPARTY": "CORDEIRO INDUSTRIA E COMERCIO DE FARINHA E GORDURA ANIMAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1345052",
+    "COUNTERPARTY": "CORTEVA AGRISCIENCE DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1228598",
+    "COUNTERPARTY": "CORTEVA AGRISCIENCE DO BRASIL LTDA  - FILIAL 0043",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9528199",
+    "COUNTERPARTY": "COSAN LUBRIFICANTES E ESPECIALIDADES S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5754054",
+    "COUNTERPARTY": "COSAN SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9669837",
+    "COUNTERPARTY": "COSMED INDUSTRIA DE COSMETICOS E MEDICAMENTOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8939980",
+    "COUNTERPARTY": "CPW BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "884381",
+    "COUNTERPARTY": "CSN MINERACAO S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1820028",
+    "COUNTERPARTY": "CTVA PROTECAO DE CULTIVOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "41529",
+    "COUNTERPARTY": "DAF CAMINHOES BRASIL INDUSTRIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3275856",
+    "COUNTERPARTY": "DAN VIGOR INDUSTRIA E COMERCIO DE LATICINIOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "409298",
+    "COUNTERPARTY": "DANA INDUSTRIAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1790808",
+    "COUNTERPARTY": "DANONE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "253207",
+    "COUNTERPARTY": "DELL COMPUTADORES DO BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "692572",
+    "COUNTERPARTY": "DIA BRASIL SOCIEDADE LIMITADA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1091036",
+    "COUNTERPARTY": "DIPAGRO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "593996",
+    "COUNTERPARTY": "DIVERSEY BRASIL INDUSTRIA QUIMICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "822403",
+    "COUNTERPARTY": "DONALDSON DO BRASIL EQUIPAMENTOS INDUSTRIAIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1354728",
+    "COUNTERPARTY": "DOW BRASIL INDUSTRIA E COMERCIO DE PRODUTOS QUIMICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9665305",
+    "COUNTERPARTY": "DRESSER-RAND DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1635863",
+    "COUNTERPARTY": "EATON INDUSTRIA E COMERCIO DE PRODUTOS ELETRICOS E SERVICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9546014",
+    "COUNTERPARTY": "EBAZAR.COM.BR LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3731473",
+    "COUNTERPARTY": "EDF EN DO BRASIL PARTICIPACOES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1189332",
+    "COUNTERPARTY": "EDP RENOVAVEIS BRASIL S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "138733",
+    "COUNTERPARTY": "ELECTROLUX DA AMAZONIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1045571",
+    "COUNTERPARTY": "ELECTROLUX DO BRASIL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1748489",
+    "COUNTERPARTY": "ELEVADORES ATLAS SCHINDLER LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1630828",
+    "COUNTERPARTY": "ENEL BRASIL S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5118455",
+    "COUNTERPARTY": "ENERGISA DISTRIBUIDORA DE GAS I SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8600244",
+    "COUNTERPARTY": "ENERGISA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1934446",
+    "COUNTERPARTY": "ENERGISA TRANSMISSAO DE ENERGIA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "289726",
+    "COUNTERPARTY": "ENERGY ASSETS DO BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1695827",
+    "COUNTERPARTY": "ERICSSON TELECOMUNICACOES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1133218",
+    "COUNTERPARTY": "ESSILOR DA AMAZONIA INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "885476",
+    "COUNTERPARTY": "ESSITY DO BRASIL INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2156311",
+    "COUNTERPARTY": "ESSITY SOLUCOES MEDICAS DO BRASIL COMERCIO E DISTRIBUICAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "56539",
+    "COUNTERPARTY": "ESTALEIRO BRASFELS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3968465",
+    "COUNTERPARTY": "EUROFARMA LABORATORIOS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "841678",
+    "COUNTERPARTY": "EUTELSAT DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "262393",
+    "COUNTERPARTY": "EVONIK BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4811444",
+    "COUNTERPARTY": "FARFRI INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4811443",
+    "COUNTERPARTY": "FAROS INDUSTRIA DE FARINHA DE OSSOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4650985",
+    "COUNTERPARTY": "FASA AMERICA LATINA PARTICIPACOES SOCIETARIAS SA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4811458",
+    "COUNTERPARTY": "FASA CARAMBEI INDUSTRIA DE OLEOS E PROTEINAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4850573",
+    "COUNTERPARTY": "FASA COMERCIAL EXPORTADORA LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3780781",
+    "COUNTERPARTY": "FASHION BUSINESS COMERCIO DE ROUPAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "610661",
+    "COUNTERPARTY": "FAZENDA PERDIZES EMPREENDIMENTOS AGRICOLAS LTDA-FILIAL 0001",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3947782",
+    "COUNTERPARTY": "FAZENDA PIONEIRA EMPREENDIMENTOS AGRICOLAS S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6932875",
+    "COUNTERPARTY": "FAZENDA PRECIOSA EMPREENDIMENTOS AGRICOLAS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5048135",
+    "COUNTERPARTY": "FERTIAL-FERTILIZANTES DE ALAGOAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "91738",
+    "COUNTERPARTY": "FERTIGRAN FERTILIZANTES VALE DO RIO GRANDE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5048136",
+    "COUNTERPARTY": "FERTILIZANTES DO NORDESTE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "91702",
+    "COUNTERPARTY": "FERTILIZANTES PIRATINI LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5051220",
+    "COUNTERPARTY": "FERTINOR FERTILIZANTES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1528499",
+    "COUNTERPARTY": "FERTIPAR - FERTILIZANTES DO PARANA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5046568",
+    "COUNTERPARTY": "FERTIPAR BANDEIRANTES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5048143",
+    "COUNTERPARTY": "FERTIPAR FERTILIZANTES DO MARANHAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "91705",
+    "COUNTERPARTY": "FERTIPAR FERTILIZANTES DO MATO GROSSO LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5049242",
+    "COUNTERPARTY": "FERTIPAR FERTILIZANTES DO NORDESTE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5049312",
+    "COUNTERPARTY": "FERTIPAR SUDESTE ADUBOS E CORRETIVOS AGRICOLAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9034791",
+    "COUNTERPARTY": "FLEURY SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9531478",
+    "COUNTERPARTY": "FLEXIBRAS TUBOS FLEXIVEIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "586379",
+    "COUNTERPARTY": "FLEXTRONICS INTERNATIONAL TECNOLOGIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "89652",
+    "COUNTERPARTY": "FMC QUIMICA DO BRASIL LIMITADA - FILIAL 0002",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "329997",
+    "COUNTERPARTY": "FMC QUIMICA DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3874450",
+    "COUNTERPARTY": "FPT INDUSTRIAL BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4559205",
+    "COUNTERPARTY": "FRONTEIRA COMERCIO E REPRESENTACAO DE PRODUTOS AGROPECUARIOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3284161",
+    "COUNTERPARTY": "FS INDUSTRIA DE BIOCOMBUSTIVEIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1121481",
+    "COUNTERPARTY": "GE CELMA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "696000",
+    "COUNTERPARTY": "GE ENERGIA TERMICA E INDUSTRIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "684757",
+    "COUNTERPARTY": "GE ENERGIAS RENOVAVEIS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5901237",
+    "COUNTERPARTY": "GE ENERGIAS RENOVAVEIS LTDA. - FILIAL 0004",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1773904",
+    "COUNTERPARTY": "GE POWER & WATER EQUIP E SERV DE ENERGIA E TRATAMENTO DE AGUA LTDA - FILIAL 0021",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5293548",
+    "COUNTERPARTY": "GE POWER & WATER EQUIP E SERV DE ENERGIA E TRATAMENTO DE AGUA LTDA - FILIAL 043",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6187583",
+    "COUNTERPARTY": "GE POWER & WATER EQUIP E SERVI DE ENERGIA E TRATAMENTO DE AGUA LTDA -FILIAL 0019",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1121636",
+    "COUNTERPARTY": "GE POWER & WATER EQUIPAMENTOS E SERVICOS DE ENERGIA E TRATAMENTO DE AGUA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1121210",
+    "COUNTERPARTY": "GE POWER CONVERSION BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1133239",
+    "COUNTERPARTY": "GE VERNOVA EQUIPAMENTOS E SOLUCOES ELETRICAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5133329",
+    "COUNTERPARTY": "GELNEX INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1165860",
+    "COUNTERPARTY": "GERDAU ACOMINAS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7685920",
+    "COUNTERPARTY": "GERDAU ACOS LONGOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6487297",
+    "COUNTERPARTY": "GERDAU INTERNACIONAL EMPREENDIMENTOS LTDA -GRUPO GERDAU",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "122556",
+    "COUNTERPARTY": "GERDAU S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "977431",
+    "COUNTERPARTY": "GERDAU SUMMIT ACOS FUNDIDOS E FORJADOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7234840",
+    "COUNTERPARTY": "GIVAUDAN DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2303778",
+    "COUNTERPARTY": "GLOBAL IMPORT BR LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9547753",
+    "COUNTERPARTY": "GLOBO COMUNICACAO E PARTICIPACOES S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6540586",
+    "COUNTERPARTY": "GRACA ARANHA SILVANIA TRANSMISSORA DE ENERGIA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9590245",
+    "COUNTERPARTY": "GRID SOLUTIONS TRANSMISSAO DE ENERGIA LTDA - FILIAL 0002",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9590230",
+    "COUNTERPARTY": "GRID SOLUTIONS TRANSMISSAO DE ENERGIA LTDA - FILIAL 0008",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9590239",
+    "COUNTERPARTY": "GRID SOLUTIONS TRANSMISSAO DE ENERGIA LTDA - FILIAL 0009",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3336413",
+    "COUNTERPARTY": "GRID SOLUTIONS TRANSMISSAO DE ENERGIA LTDA - FILIAL 0016",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5189287",
+    "COUNTERPARTY": "GRID SOLUTIONS TRANSMISSAO DE ENERGIA LTDA - FILIAL 0017",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5685845",
+    "COUNTERPARTY": "H&M HENNES & MAURITZ BRAZIL IMPORTACOES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1008902",
+    "COUNTERPARTY": "HARALD INDUSTRIA E COMERCIO DE ALIMENTOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1635502",
+    "COUNTERPARTY": "HARMAN DA AMAZONIA INDUSTRIA ELETRONICA E PARTICIPACOES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1635300",
+    "COUNTERPARTY": "HARMAN DA AMAZONIA INDUSTRIA ELETRONICA E PARTICIPACOES LTDA - FILIAL 0002",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "352391",
+    "COUNTERPARTY": "HARMAN DO BRASIL INDUSTRIA ELETRONICA E PARTICIPACOES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "272299",
+    "COUNTERPARTY": "HENKEL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9532045",
+    "COUNTERPARTY": "HERMASA NAVEGACAO DA AMAZONIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "78702",
+    "COUNTERPARTY": "HITACHI ENERGY BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1563655",
+    "COUNTERPARTY": "HNK BR BEBIDAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1563707",
+    "COUNTERPARTY": "HNK BR INDUSTRIA DE BEBIDAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2425102",
+    "COUNTERPARTY": "HOSPITAL ESPERANCA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "965713",
+    "COUNTERPARTY": "HP BRASIL INDUSTRIA E COMERCIO DE EQUIPAMENTOS ELETRONICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9354537",
+    "COUNTERPARTY": "HPE AUTOMOTORES DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9623757",
+    "COUNTERPARTY": "HUHTAMAKI EMBALAGENS FLEXIVEIS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "146582",
+    "COUNTERPARTY": "HUNTSMAN QUIMICA BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8680116",
+    "COUNTERPARTY": "HYPERA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "738726",
+    "COUNTERPARTY": "HYUNDAI MOTOR BRASIL MONTADORA DE AUTOMOVEIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2560104",
+    "COUNTERPARTY": "ICONIC LUBRIFICANTES S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3011085",
+    "COUNTERPARTY": "IFOOD.COM AGENCIA DE RESTAURANTES ONLINE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1563628",
+    "COUNTERPARTY": "INDUSTRIA DE BEBIDAS IGARASSU LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2137570",
+    "COUNTERPARTY": "INDUSTRIA E COMERCIO DE COSMETICOS NATURA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9584656",
+    "COUNTERPARTY": "INFINERA DO BRASIL TECNOLOGIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2116247",
+    "COUNTERPARTY": "INGRAM MICRO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "712073",
+    "COUNTERPARTY": "IPIRANGA PRODUTOS DE PETROLEO S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3872307",
+    "COUNTERPARTY": "IVG BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "20044",
+    "COUNTERPARTY": "J.P. MORGAN OVERSEAS CAPITAL LLC",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6926277",
+    "COUNTERPARTY": "JACOBINA 1 HOLDING S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2199807",
+    "COUNTERPARTY": "JANSSEN-CILAG FARMACEUTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5612721",
+    "COUNTERPARTY": "JBS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1260728",
+    "COUNTERPARTY": "JJSV PRODUTOS OTICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1662064",
+    "COUNTERPARTY": "JOHN BEAN TECHNOLOGIES MAQUINAS E EQUIPAMENTOS INDUSTRIAIS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9665363",
+    "COUNTERPARTY": "JOHN DEERE BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9477452",
+    "COUNTERPARTY": "JOHNSON & JOHNSON DO BRASIL INDUSTRIA E COMERCIO DE PRODUTOS PARA SAUDE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1506393",
+    "COUNTERPARTY": "JOHNSON CONTROLS BE DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "83236",
+    "COUNTERPARTY": "JOHNSON CONTROLS DO BRASIL AUTOMOTIVE LTDA FILIAL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "957418",
+    "COUNTERPARTY": "JOHNSON ELECTRIC AUTOMOTIVO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9467960",
+    "COUNTERPARTY": "JSL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3323469",
+    "COUNTERPARTY": "JSP HOLDING S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "576514",
+    "COUNTERPARTY": "KENVUE LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9564164",
+    "COUNTERPARTY": "KIMBERLY-CLARK BRASIL INDUSTRIA E COMERCIO DE PRODUTOS DE HIGIENE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1415425",
+    "COUNTERPARTY": "KINROSS BRASIL MINERACAO S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4080171",
+    "COUNTERPARTY": "KINTO BRASIL SERVICOS DE MOBILIDADE LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1412884",
+    "COUNTERPARTY": "KLABIN SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3966672",
+    "COUNTERPARTY": "KOMATSU BRASIL INTERNATIONAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5115174",
+    "COUNTERPARTY": "KUEHNE+NAGEL SERVICOS LOGISTICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "37862",
+    "COUNTERPARTY": "LAWTON MULTIMERCADO EXCLUSIVO",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9530301",
+    "COUNTERPARTY": "LG ELECTRONICS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1173808",
+    "COUNTERPARTY": "LINCOLN ELECTRIC DO BRASIL INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2768107",
+    "COUNTERPARTY": "LM TRANSPORTES INTERESTADUAIS SERVICOS E COMERCIO S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2000689",
+    "COUNTERPARTY": "LM WIND POWER DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1187038",
+    "COUNTERPARTY": "LOCALIZA FLEET S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2071878",
+    "COUNTERPARTY": "LOCALIZA RENT A CAR SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2100584",
+    "COUNTERPARTY": "LOJAS RENNER S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8120382",
+    "COUNTERPARTY": "LOUIS DREYFUS COMPANY BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "969046",
+    "COUNTERPARTY": "LSI SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3221312",
+    "COUNTERPARTY": "M DIAS BRANCO SA INDUSTRIA E COMERCIO DE ALIMENTOS",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "99517",
+    "COUNTERPARTY": "MAGNETI MARELLI COFAP AUTOPECAS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9676034",
+    "COUNTERPARTY": "MAHLE METAL LEVE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "14836",
+    "COUNTERPARTY": "MARELLI SISTEMAS AUTOMOTIVOS INDUSTRIA E COMERCIO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9486867",
+    "COUNTERPARTY": "MARFRIG GLOBAL FOODS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4781025",
+    "COUNTERPARTY": "MASTERFOODS BRASIL ALIMENTOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3784224",
+    "COUNTERPARTY": "MAXMIX COMERCIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5823329",
+    "COUNTERPARTY": "MDS CORRETORA E ADMINISTRADORA DE SEGUROS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4358819",
+    "COUNTERPARTY": "MEDQUIMICA INDUSTRIA FARMACEUTICA LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2486498",
+    "COUNTERPARTY": "MERCADO PAGO INSTITUICAO DE PAGAMENTO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2398174",
+    "COUNTERPARTY": "MERCEDES-BENZ CARS & VANS BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1111217",
+    "COUNTERPARTY": "MEXICHEM BRASIL INDUSTRIA DE TRANSFORMACAO PLASTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9492125",
+    "COUNTERPARTY": "MINERACAO TABOCA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9374629",
+    "COUNTERPARTY": "MINERVA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9437877",
+    "COUNTERPARTY": "MODINE DO BRASIL SISTEMAS TERMICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2652481",
+    "COUNTERPARTY": "MONDELEZ BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2724666",
+    "COUNTERPARTY": "MONDELEZ BRASIL NORTE NORDESTE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2161567",
+    "COUNTERPARTY": "MONSANTO DO BRASIL LIMITADA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7851839",
+    "COUNTERPARTY": "MOSAIC FERTILIZANTES DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9566191",
+    "COUNTERPARTY": "MOSAIC FERTILIZANTES P&K LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1183491",
+    "COUNTERPARTY": "MOVIDA PARTICIPACOES S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1598250",
+    "COUNTERPARTY": "MRS LOGISTICA S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1133257",
+    "COUNTERPARTY": "MULTI OPTICA DISTRIBUIDORA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6787336",
+    "COUNTERPARTY": "MULTILAB INDUSTRIA E COMERCIO DE PRODUTOS FARMACEUTICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1645627",
+    "COUNTERPARTY": "MULTILAB INDUSTRIA E COMERCIO DE PRODUTOS FARMACEUTICOS LTDA - FILIAL 0001",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2258374",
+    "COUNTERPARTY": "NATURA COSMETICOS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "806544",
+    "COUNTERPARTY": "NESTLE BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8937851",
+    "COUNTERPARTY": "NESTLE NORDESTE ALIMENTOS E BEBIDAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8937847",
+    "COUNTERPARTY": "NESTLE WATERS BRASIL-BEBIDAS E ALIMENTOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7847858",
+    "COUNTERPARTY": "NEXA RECURSOS MINERAIS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5823441",
+    "COUNTERPARTY": "NEXANS BRASIL S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2168224",
+    "COUNTERPARTY": "NEXANS BRASIL S/A - FILIAL 0001",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "69541",
+    "COUNTERPARTY": "NEXANS BRASIL S/A - FILIAL 0012",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1189103",
+    "COUNTERPARTY": "NORFIL S/A INDUSTRIA TEXTIL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2777133",
+    "COUNTERPARTY": "NORSA REFRIGERANTES SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "770403",
+    "COUNTERPARTY": "NOV FLEXIBLES EQUIPAMENTOS E SERVICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9611607",
+    "COUNTERPARTY": "NOV INTERVENTION AND STIMULATION EQUIPMENT - AFTRMKT COM DE EQUIP E SERV LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6780720",
+    "COUNTERPARTY": "NOVAMED FABRICACAO DE PRODUTOS FARMACEUTICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1353780",
+    "COUNTERPARTY": "NOVARTIS BIOCIENCIAS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9583099",
+    "COUNTERPARTY": "NOVELIS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2339802",
+    "COUNTERPARTY": "NUTRADE COMERCIAL EXPORTADORA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2581186",
+    "COUNTERPARTY": "NUTRIEN SOLUCOES AGRICOLAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6454316",
+    "COUNTERPARTY": "OESL AUTOMOTIVE BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2639513",
+    "COUNTERPARTY": "OI SA - EM RECUPERACAO JUDICIAL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2560236",
+    "COUNTERPARTY": "OIL TRADING IMPORTADORA E EXPORTADORA LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2385062",
+    "COUNTERPARTY": "OLAM AGRICOLA LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4131922",
+    "COUNTERPARTY": "ON-HIGHWAY BRASIL LTDA - FILIAL 0006",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5666144",
+    "COUNTERPARTY": "ONESUBSEA DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4811467",
+    "COUNTERPARTY": "OSSOTUBA - IND. E COM. DE OLEOS E PROTEINAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2133738",
+    "COUNTERPARTY": "OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3355178",
+    "COUNTERPARTY": "PARATI INDUSTRIA E COMERCIO DE ALIMENTOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1287198",
+    "COUNTERPARTY": "PAXAR DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1597249",
+    "COUNTERPARTY": "PAYPAL DO BRASIL INSTITUICAO DE PAGAMENTO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "62365",
+    "COUNTERPARTY": "PEPSI-COLA INDUSTRIAL DA AMAZONIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1282959",
+    "COUNTERPARTY": "PEPSICO DO BRASIL INDUSTRIA E COMERCIO DE ALIMENTOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9558705",
+    "COUNTERPARTY": "PEPSICO DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5190922",
+    "COUNTERPARTY": "PERFETTI VAN MELLE BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4818217",
+    "COUNTERPARTY": "PETFAR INDUSTRIA DE PROTEINA ANIMAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "168858",
+    "COUNTERPARTY": "PETROLEO BRASILEIRO SA.- PETROBRAS",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "323041",
+    "COUNTERPARTY": "PETRONAS LUBRIFICANTES BRASIL S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9584196",
+    "COUNTERPARTY": "PEUGEOT-CITROEN DO BRASIL AUTOMOVEIS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1301799",
+    "COUNTERPARTY": "PHILIPS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9601970",
+    "COUNTERPARTY": "PHILIPS MEDICAL SYSTEMS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1574976",
+    "COUNTERPARTY": "PHINIA DELPHI BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6290986",
+    "COUNTERPARTY": "PHINIA DO BRASIL PRODUTOS AUTOMOTIVOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1445405",
+    "COUNTERPARTY": "PIRELLI PNEUS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6078789",
+    "COUNTERPARTY": "PRODUTECNICA NORDESTE COMERCIO DE INSUMOS AGRICOLAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5166226",
+    "COUNTERPARTY": "PROLEC GE BRASIL TRANSMISSAO DE ENERGIA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1579850",
+    "COUNTERPARTY": "PRYSMIAN CABOS E SISTEMAS DO BRASIL S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "968127",
+    "COUNTERPARTY": "QUANTITY SERVICOS E COMERCIO DE PRODUTOS PARA SAUDE S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4613006",
+    "COUNTERPARTY": "QUIMICOS E SOLUCOES SUSTENTAVEIS DO BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9585909",
+    "COUNTERPARTY": "RAIZEN ENERGIA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "177873",
+    "COUNTERPARTY": "RAIZEN S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3160831",
+    "COUNTERPARTY": "RECKITT BENCKISER ( BRASIL ) LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "910711",
+    "COUNTERPARTY": "REDE D OR SAO LUIZ S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3998469",
+    "COUNTERPARTY": "REFINARIA DE MATARIPE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "430525",
+    "COUNTERPARTY": "RFG COMERCIO, TRANSPORTES E SERVICOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1128821",
+    "COUNTERPARTY": "RHODIA BRASIL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2384027",
+    "COUNTERPARTY": "RIO DE JANEIRO REFRESCOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2567776",
+    "COUNTERPARTY": "RIO GRANDE ENERGIA SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2529925",
+    "COUNTERPARTY": "ROBERT BOSCH LIMITADA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9618239",
+    "COUNTERPARTY": "ROLLS-ROYCE BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "60489",
+    "COUNTERPARTY": "ROLLS-ROYCE BRASIL LTDA - FILIAL 0008",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "256391",
+    "COUNTERPARTY": "ROLLS-ROYCE BRASIL LTDA - FILIAL 0013",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "560087",
+    "COUNTERPARTY": "ROUSSELOT GELATINAS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5899571",
+    "COUNTERPARTY": "ROYAL CANIN DISTRIBUIDORA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4920932",
+    "COUNTERPARTY": "ROYAL CANIN DO BRASIL INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2702965",
+    "COUNTERPARTY": "RUMO MALHA CENTRAL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1030031",
+    "COUNTERPARTY": "RUMO MALHA NORTE S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "322060",
+    "COUNTERPARTY": "RUMO MALHA PAULISTA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3590648",
+    "COUNTERPARTY": "RUMO MALHA SUL S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1165642",
+    "COUNTERPARTY": "RUMO S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9542731",
+    "COUNTERPARTY": "S A USINA CORURIPE ACUCAR E ALCOOL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5880559",
+    "COUNTERPARTY": "S.I.N. IMPLANT SYSTEM LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "114346",
+    "COUNTERPARTY": "SAINT GOBAIN DO BRASIL PRODUTOS INDUSTRIAIS E PARA CONSTRUCAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "810203",
+    "COUNTERPARTY": "SAINT-GOBAIN CANALIZACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "23885",
+    "COUNTERPARTY": "SAMSUNG ELETRONICA DA AMAZONIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "89426",
+    "COUNTERPARTY": "SAMSUNG ELETRONICA DA AMAZONIA LTDA - FILIAL 0007",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1190578",
+    "COUNTERPARTY": "SANDOZ DO BRASIL INDUSTRIA FARMACEUTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1863828",
+    "COUNTERPARTY": "SANOFI MEDLEY FARMACEUTICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "91819",
+    "COUNTERPARTY": "SAO MARTINHO S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "135856",
+    "COUNTERPARTY": "SAP BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9530355",
+    "COUNTERPARTY": "SCHERING DO BRASIL QUIMICA E FARMACEUTICA LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4457610",
+    "COUNTERPARTY": "SCHNEIDER ELECTRIC BRASIL AUTOMACAO DE PROCESSOS LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4753749",
+    "COUNTERPARTY": "SCHNEIDER ELECTRIC BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "175162",
+    "COUNTERPARTY": "SCHREIBER FOODS DO BRASIL INDUSTRIA ALIMENTICIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6848773",
+    "COUNTERPARTY": "SCHUSTER COMERCIO DE EQUIPAMENTOS ODONTOLOGICOS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8480516",
+    "COUNTERPARTY": "SCHWEITZER-MAUDUIT DO BRASIL INDUSTRIA E COMERCIO DE PAPEL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4812886",
+    "COUNTERPARTY": "SENHA FARINHA E OLEO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9674366",
+    "COUNTERPARTY": "SGS DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3940061",
+    "COUNTERPARTY": "SIEMENS BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "178322",
+    "COUNTERPARTY": "SIEMENS ENERGY BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "327003",
+    "COUNTERPARTY": "SIEMENS HEALTHCARE DIAGNOSTICOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "239280",
+    "COUNTERPARTY": "SIEMENS INDUSTRY SOFTWARE LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2033134",
+    "COUNTERPARTY": "SLC AGRICOLA CENTRO OESTE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8942425",
+    "COUNTERPARTY": "SLC AGRICOLA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2316857",
+    "COUNTERPARTY": "SLC-MIT EMPREENDIMENTOS AGRICOLAS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1669232",
+    "COUNTERPARTY": "SMS INFOCOMM SERVICOS E GERENCIAMENTO DE SOLUCOES DE TECNOLOGIA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9503535",
+    "COUNTERPARTY": "SOCIEDADE ALFA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1121344",
+    "COUNTERPARTY": "SOCIEDADE MICHELIN DE PARTICIPACOES INDUSTRIA E COMERCIO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1184331",
+    "COUNTERPARTY": "SOTREQ S/A - FILIAL 0001",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "573612",
+    "COUNTERPARTY": "SOUZA CRUZ LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8233560",
+    "COUNTERPARTY": "SPAL INDUSTRIA BRASILEIRA DE BEBIDAS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2081154",
+    "COUNTERPARTY": "SPIC BRASIL ENERGIA PARTICIPACOES SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4034919",
+    "COUNTERPARTY": "ST JUDE MEDICAL BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4457521",
+    "COUNTERPARTY": "STECK DA AMAZONIA INDUSTRIA ELETRICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4457467",
+    "COUNTERPARTY": "STECK INDUSTRIA ELETRICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1701649",
+    "COUNTERPARTY": "STELLANTIS AUTOMOVEIS BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "467172",
+    "COUNTERPARTY": "SUZANO S.A. FILIAL 0033",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "249556",
+    "COUNTERPARTY": "SUZANO SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9532674",
+    "COUNTERPARTY": "SYLVAMO EXPORTS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4228813",
+    "COUNTERPARTY": "SYNGENTA COMERCIAL AGRICOLA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1321598",
+    "COUNTERPARTY": "SYNGENTA PROTECAO DE CULTIVOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2508535",
+    "COUNTERPARTY": "SYNGENTA SEEDS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2218925",
+    "COUNTERPARTY": "TAM LINHAS AEREAS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "273187",
+    "COUNTERPARTY": "TD SOLUCOES AVANCADAS DE TECNOLOGIA BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4045410",
+    "COUNTERPARTY": "TD SYNNEX BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4780479",
+    "COUNTERPARTY": "TEC - TERMINAL EXPORT COFCO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9535076",
+    "COUNTERPARTY": "TECHNIP BRASIL - ENGENHARIA, INSTALACOES E APOIO MARITIMO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8964017",
+    "COUNTERPARTY": "TECHNIPFMC DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7376679",
+    "COUNTERPARTY": "TECHNIPFMC DO BRASIL LTDA - FILIAL 0040",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "14807",
+    "COUNTERPARTY": "TEKSID DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2639718",
+    "COUNTERPARTY": "TELEFONICA BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8144788",
+    "COUNTERPARTY": "TEREOS ACUCAR E ENERGIA BRASIL S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4650987",
+    "COUNTERPARTY": "THOR MAQUINAS E MONTAGENS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "113048",
+    "COUNTERPARTY": "TRANSPORTADORA BRASILEIRA GASODUTO BOLIVIA BRASIL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "227799",
+    "COUNTERPARTY": "TREK BRASIL COMERCIO DE BICICLETAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "608783",
+    "COUNTERPARTY": "TUPY SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "715297",
+    "COUNTERPARTY": "UMICORE BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9546834",
+    "COUNTERPARTY": "UNILEVER BRASIL INDUSTRIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "2214741",
+    "COUNTERPARTY": "UNILEVER BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "740693",
+    "COUNTERPARTY": "UPL DO BRASIL INDUSTRIA E COMERCIO DE INSUMOS AGROPECUARIOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1165630",
+    "COUNTERPARTY": "USINA ALTA MOGIANA S/A - ACUCAR E ALCOOL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1933982",
+    "COUNTERPARTY": "USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9531317",
+    "COUNTERPARTY": "USINA DE ACUCAR SANTA TEREZINHA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "288675",
+    "COUNTERPARTY": "USINAS SIDERURGICAS DE MINAS GERAIS S/A. USIMINAS",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "263362",
+    "COUNTERPARTY": "VALE S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1564644",
+    "COUNTERPARTY": "VAMOS LOCACAO DE CAMINHOES, MAQUINAS E EQUIPAMENTOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6898598",
+    "COUNTERPARTY": "VARIAN MEDICAL SYSTEMS BRASIL LTDA.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "6796027",
+    "COUNTERPARTY": "VEOLIA WATER TECHNOLOGIES AND SOLUTIONS BRASIL TRATAMENTO DE AGUAS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3006915",
+    "COUNTERPARTY": "VESTAS DO BRASIL ENERGIA EOLICA LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1962701",
+    "COUNTERPARTY": "VIBRA ENERGIA S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5736012",
+    "COUNTERPARTY": "VIBRA TRADING IMPORTACAO E EXPORTACAO LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9693645",
+    "COUNTERPARTY": "VIGOR ALIMENTOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "5399005",
+    "COUNTERPARTY": "VILLARES METALS SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1841431",
+    "COUNTERPARTY": "VITERRA AGRICULTURE BRASIL S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3272970",
+    "COUNTERPARTY": "VITERRA BIOENERGIA S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "1762670",
+    "COUNTERPARTY": "VITERRA LOGISTICA E TERMINAIS PORTUARIOS S.A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "813073",
+    "COUNTERPARTY": "VITOL DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9592879",
+    "COUNTERPARTY": "VOLKSWAGEN DO BRASIL INDUSTRIA DE VEICULOS AUTOMOTORES LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "35227",
+    "COUNTERPARTY": "VOLKSWAGEN TRUCK & BUS INDUSTRIA E COMERCIO DE VEICULOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9568495",
+    "COUNTERPARTY": "VOTORANTIM CIMENTOS N/NE S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9570285",
+    "COUNTERPARTY": "VOTORANTIM CIMENTOS S.A.",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "9531243",
+    "COUNTERPARTY": "WEG EQUIPAMENTOS ELETRICOS S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "7944209",
+    "COUNTERPARTY": "WHIRLPOOL SA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "942347",
+    "COUNTERPARTY": "WILMAR SUGAR BRASIL COMERCIAL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8587248",
+    "COUNTERPARTY": "YARA BRASIL FERTILIZANTES S/A",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "3421658",
+    "COUNTERPARTY": "YAZAKI DO BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "8748268",
+    "COUNTERPARTY": "ZF AUTOMOTIVE BRASIL LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "4594772",
+    "COUNTERPARTY": "ZF AUTOMOTIVE BRASIL LTDA - FILIAL 0018",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  },
+  {
+    "SPN": "71345",
+    "COUNTERPARTY": "ZOETIS INDUSTRIA DE PRODUTOS VETERINARIOS LTDA",
+    "CGD": "",
+    "BANK": "",
+    "AGENCY": "",
+    "ACCOUNT": "",
+    "CONTACTS": ""
+  }
+]
