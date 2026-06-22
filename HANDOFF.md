@@ -762,3 +762,43 @@ apps/templates/pages/new_deals-ndf-otherpublisher.html   ← coluna Accronym + m
 apps/templates/partials/sidenav.html                     ← removidos ícones dos subitens Live Position
 apps/static/plugins/xlsx/xlsx.full.min.js                ← ADICIONADO (SheetJS 0.20.3)
 ```
+
+---
+
+## 16. Sessão 2026-06-22 — Notificação "Sent" duplicada + Export recon + About
+
+### Sistema de notificações (sino do topbar)
+- Backend: `_create_notification(actor_sid, actor_name, action, page, detail)` em `apps/pages/routes.py` grava na tabela DuckDB `notifications`. O sino (`apps/templates/partials/topbar.html`) faz **polling** de `/api/notifications` e renderiza um dropdown (badge de não-lidos via `otc_notif_last_seen_id` no localStorage). Não é toast — é um centro de atividade passivo.
+- `ACTION_META` (em topbar.html) mapeia `action` → ícone/cor. Ações conhecidas: `New Deals`, `Status Updated`, `Deal Updated`, `Deal Deleted`, `Bulk Delete`, `Bulk Update`, `Sent to B3`, `B3 Mapped`, `Recon Generated`, `Access Request`, etc.
+
+### Bug: envio gerava 2 entradas no sino
+Ao enviar (bulk OU row-level), o frontend faz `POST send-conecta` → backend cria **"Sent to B3"** (correto), e logo depois faz `PATCH cache` com `{Status:'Sent'}` → endpoint de update via `if 'Status' in _fields` criava **"Status Updated → Sent"** (redundante). Resultado: popup SweetAlert + 2 itens no sino.
+
+**Fix:** suprimir a notificação "Status Updated" quando o novo status for `'Sent'` (o único caminho para `Status='Sent'` é o fluxo de envio, que já emite "Sent to B3"). Aplicado nos **3** endpoints de update:
+- `api_update_deal_cache` (Opt Comm, ~1521)
+- `api_ndf_update_deal_cache` (NDF Comm, ~2164)
+- `api_generic_nd_update_cache` (fwd-start/other-publishers, ~3404)
+
+Padrão: `if 'Status' in _fields: if str(_fields.get('Status','')) != 'Sent': _create_notification(... 'Status Updated' ...)`.
+
+Detalhe útil: o SweetAlert2 só mostra **um** popup por vez (uma nova chamada substitui a anterior) — então "ver duas notificações" nunca é double-binding de Swal; investigar outras fontes (backend/sino).
+
+### Export buttons em reconciliation-comitente.html
+Bug: os botões de export **nunca apareciam** porque a config `buttons:` não existia e o `dom` não tinha `'B'` — só havia o container vazio `<div id="reconExportWrap">`.
+
+**Fix (padrão p/ botões em container custom):**
+1. Adicionar `buttons: [...]` na init do DataTable (collection dropdown Copy/CSV/Excel/Print/PDF, usando `formatExportData` p/ stripar HTML; `columns: ':visible'`, `modifier:{page:'all'}`).
+2. No `initComplete`: `api.buttons().container().appendTo('#reconExportWrap');`
+Libs já incluídas na página (jszip, pdfmake, vfs_fonts, buttons.html5/print). Tabela tem 30 colunas (0-29; SC() também gera coluna).
+
+### About page atualizada
+`apps/templates/pages/about.html`: 3 cards novos (NDF Forward Start, NDF Other Publisher, Reconciliation Comitente) + botões no hero (5) e CTA (6). i18n `about-feat-{fwd,other,recon}-{title,desc}` em en/br/es.
+
+### Arquivos modificados nesta sessão
+```
+apps/pages/routes.py                                     ← dedup "Status Updated" quando Status=='Sent' (3 endpoints)
+apps/templates/pages/reconciliation-comitente.html       ← config buttons + appendTo #reconExportWrap
+apps/templates/pages/about.html                          ← 3 cards + botões hero/CTA dos novos módulos
+apps/static/data/translations/{en,br,es}.json            ← chaves about-feat-{fwd,other,recon}-*
+```
+
