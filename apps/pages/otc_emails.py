@@ -145,15 +145,17 @@ def _is_jpmorgan(name):
     return 'JPMORGAN' in n or 'JP MORGAN' in n or 'J.P. MORGAN' in n
 
 
-def _first_bank(cp):
+def _first_bank(cp, prefer='PAY'):
     """Return (bank, agency, account) from a CounterpartyDetails record.
 
-    Prefers the structured BANKING shape saved by the Reference Data editor
-    (RECEIVE first — the account the counterparty receives funds into — then PAY),
-    falling back to the legacy flat BANK/AGENCY/ACCOUNT fields.
+    Reads the structured BANKING shape saved by the Reference Data editor,
+    preferring the `prefer` bucket (PAY = the bank's view of paying the
+    counterparty; RECEIVE = the counterparty receiving), then the other bucket,
+    then the legacy flat BANK/AGENCY/ACCOUNT fields.
     """
     bk = cp.get('BANKING') or {}
-    for key in ('RECEIVE', 'PAY'):
+    order = (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY')
+    for key in order:
         lst = bk.get(key) or []
         if lst:
             b = lst[0] or {}
@@ -283,8 +285,9 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
 
     body += '<table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
     if final < 0:
+        # JPM is paying the counterparty → use the PAY banking details.
         cp = cpd.get(spn, {})
-        bank_name, agency, account = _first_bank(cp)
+        bank_name, agency, account = _first_bank(cp, 'PAY')
         body += (
             '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
             '<tr><td>Nº e nome da agência:</td><td style="font-weight:bold;">{ag}</td></tr>'
