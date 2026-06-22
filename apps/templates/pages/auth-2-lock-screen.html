@@ -105,9 +105,13 @@
                         <p class="text-muted text-center auth-sub-text mx-auto">Screen locked. Enter your SID to
                             unlock and continue.</p>
                         <div class="text-center mb-4">
-                            <span
-                                class="rounded-circle img-thumbnail avatar-xxl mb-2 d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary fw-bold fs-1">
-                                {{ (user_name[:1] | upper) if user_name else 'U' }}
+                            <img alt="user avatar" id="userAvatar"
+                                class="rounded-circle img-thumbnail avatar-xxl mb-2"
+                                src="{{ config.ASSETS_ROOT }}/images/users/{{ (user_sid or '') | lower }}.jpg"
+                                onerror="this.onerror=null;this.style.display='none';document.getElementById('avatarFallback').style.display='inline-flex';" />
+                            <span id="avatarFallback" style="display:none"
+                                class="rounded-circle img-thumbnail avatar-xxl mb-2 align-items-center justify-content-center bg-primary-subtle text-primary fw-bold fs-1">
+                                {{ (user_name[:1] | upper) if user_name else ((user_sid[:1] | upper) if user_sid else 'U') }}
                             </span>
                             <h5 class="fs-md">{{ user_name or user_sid }}</h5>
                         </div>
@@ -128,7 +132,8 @@
                                 <div class="app-search">
                                     <input class="form-control text-uppercase" id="SID" name="sid"
                                         placeholder="SID Number" required="" type="text" autofocus
-                                        pattern="[A-Za-z][0-9]{6}" maxlength="7" />
+                                        pattern="[A-Za-z][0-9]{6}" maxlength="7"
+                                        title="SID must be 1 letter followed by 6 numbers (e.g. A123456)." />
                                     <i class="app-search-icon text-muted" data-lucide="circle-user"></i>
                                 </div>
                             </div>
@@ -162,5 +167,27 @@
 {% endblock content %}
 
 {% block extra_javascript %}
-
+<script>
+  // Live SID-format validation: show a native tooltip bubble when the pattern
+  // is wrong (1 letter + 6 numbers, e.g. A123456), matching the server check.
+  (function () {
+    var sid = document.getElementById('SID');
+    if (!sid) return;
+    var RE = /^[A-Za-z][0-9]{6}$/;
+    var MSG = 'Invalid SID format. Must be 1 letter followed by 6 numbers (e.g. A123456).';
+    function validate() {
+      sid.setCustomValidity(sid.value && !RE.test(sid.value) ? MSG : '');
+    }
+    sid.addEventListener('input', validate);
+    if (sid.form) {
+      sid.form.addEventListener('submit', function (e) {
+        validate();
+        if (!sid.checkValidity()) {
+          e.preventDefault();
+          sid.reportValidity();
+        }
+      });
+    }
+  })();
+</script>
 {% endblock extra_javascript %}
