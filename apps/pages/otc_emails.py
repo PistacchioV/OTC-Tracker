@@ -35,7 +35,7 @@ EXCLUDED_B3_AFFIRMATION = {'73760.00-9', '73760.10-2', '00041.00-7'}
 FOOTER_HTML = (
     '<p>Atenciosamente,</p>'
     '<p>Banco J.P. Morgan S.A. | Av. Brigadeiro Faria Lima, 3729 - 15º andar - São Paulo - SP | '
-    'T: 55 11 4950 6717 | F: 55 11 4950 3557 |<br>'
+    'T: 55 11 4950 6717 |<br>'
     'brsp_otc_derivatives_ops@jpmorgan.com | jpmorgan.com | Ouvidoria JPMorgan: '
     'Tel.: 0800 – 7700847 / E-mail: ouvidoria.jp.morgan@jpmorgan.com</p>'
 )
@@ -163,6 +163,25 @@ def _first_bank(cp, prefer='PAY'):
     return cp.get('BANK', ''), cp.get('AGENCY', ''), cp.get('ACCOUNT', '')
 
 
+def _contacts_emails(cp, keywords):
+    """E-mails of a counterparty's contacts whose rules match any keyword
+    (substring, case-insensitive), de-duplicated, in order."""
+    out, seen = [], set()
+    for c in (cp.get('CONTACTS') or []):
+        rules = c.get('rules') or c.get('RULES') or []
+        rl = ' '.join(str(r).lower() for r in rules)
+        if any(k in rl for k in keywords):
+            em = str(c.get('email') or c.get('EMAIL') or '').strip()
+            if em and em.lower() not in seen:
+                seen.add(em.lower())
+                out.append(em)
+    return out
+
+
+# Settlement contacts: rules containing Settlement / Settlement Advice / Repurchase
+_SETTLEMENT_KEYWORDS = ('settlement', 'repurchase')
+
+
 def _asset_label(deal):
     """Moeda/Ativo column = Underlying Asset (+ Commodities) from the New Deals page."""
     ua  = str(deal.get('UnderlyingAsset', '') or '').strip()
@@ -226,6 +245,8 @@ def _premium_apurado(items):
 
 def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     apurado, ir, final = _premium_apurado(items)
+    cp = cpd.get(spn, {})
+    to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
 
     rows = ''
     for d in items:
@@ -286,7 +307,6 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     body += '<table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
     if final < 0:
         # JPM is paying the counterparty → use the PAY banking details.
-        cp = cpd.get(spn, {})
         bank_name, agency, account = _first_bank(cp, 'PAY')
         body += (
             '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
@@ -315,8 +335,8 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     return {
         'subject': '(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Commodities) - {} - {}'.format(_today_br(), contraparte),
         'html': body,
-        'cc': 'Liquidação',
-        'to': '',
+        'cc': 'Liquidação; Brazil Comm Sales',
+        'to': to_emails,
     }
 
 
@@ -496,7 +516,7 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
     return {
         'subject': 'Confirmação da(s) Operação(ões) Fechada(s) em {} - {} - {}'.format(_today_br(), contraparte, asset_label),
         'html': body,
-        'cc': 'brazil.otc.ops@jpmorgan.com',
+        'cc': 'brazil.otc.ops@jpmorgan.com; Brazil Comm Sales',
         'to': '',
     }
 

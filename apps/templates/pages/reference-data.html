@@ -833,13 +833,26 @@ $(document).ready(function () {
         }).join('');
     }
     function _viewContacts(model) {
-        function named(rule){
-            return model.CONTACTS
-                .filter(function(c){ return (c.rules || []).indexOf(rule) !== -1; })
-                .map(function(c){ return c.name || c.email || '—'; });
+        // Rule → group mapping (substring, case-insensitive):
+        //   Settlement  ← Settlement, Settlement Advice, Repurchase
+        //   Negotiation ← Negotiation, Confirmation (Letter / Contact Confirmation)
+        function hasAny(rules, keywords){
+            return (rules || []).some(function(r){
+                var rl = String(r || '').toLowerCase();
+                return keywords.some(function(k){ return rl.indexOf(k) !== -1; });
+            });
         }
-        var settle = named('Settlement');
-        var nego   = named('Negotiation');
+        function emailsFor(keywords){
+            var out = [], seen = {};
+            model.CONTACTS.forEach(function(c){
+                if (!hasAny(c.rules, keywords)) return;
+                var v = String(c.email || c.name || '').trim();
+                if (v && !seen[v.toLowerCase()]) { seen[v.toLowerCase()] = 1; out.push(v); }
+            });
+            return out;
+        }
+        var settle = emailsFor(['settlement', 'repurchase']);
+        var nego   = emailsFor(['negotiation', 'confirmation', 'letter']);
         function line(labelKey, labelTxt, arr){
             return '<div class="cp-kv"><span class="cp-k" data-lang="' + labelKey + '">' + labelTxt + '</span>' +
                    '<span class="cp-v">' + (arr.length ? _esc(arr.join('; ')) : '—') + '</span></div>';
