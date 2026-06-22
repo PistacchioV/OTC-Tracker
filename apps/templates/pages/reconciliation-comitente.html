@@ -552,6 +552,53 @@ $(document).ready(function() {
             order: [[28, 'asc']],
             dom: "<'row'<'col-sm-12'tr>>" +
                  "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            buttons: [
+                {
+                    extend: 'collection',
+                    text: '<i class="ti ti-download me-1"></i> <span data-lang="recon-btn-export">Export</span>',
+                    className: 'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all btn-toolbar-export',
+                    autoClose: true,
+                    buttons: [
+                        {
+                            extend: 'copy',
+                            text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',
+                            className: 'dropdown-item',
+                            exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
+                        },
+                        {
+                            extend: 'csv',
+                            text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',
+                            className: 'dropdown-item',
+                            title: 'Reconciliation_Comitente',
+                            bom: true,
+                            exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
+                        },
+                        {
+                            extend: 'excel',
+                            text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel',
+                            className: 'dropdown-item',
+                            title: 'Reconciliation_Comitente',
+                            exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
+                        },
+                        {
+                            extend: 'print',
+                            text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',
+                            className: 'dropdown-item',
+                            title: 'Reconciliation Comitente',
+                            exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
+                        },
+                        {
+                            extend: 'pdf',
+                            text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',
+                            className: 'dropdown-item',
+                            title: 'Reconciliation Comitente',
+                            orientation: 'landscape',
+                            pageSize: 'A3',
+                            exportOptions: { columns: ':visible', modifier: { page: 'all' }, orthogonal: 'export', format: { body: formatExportData } }
+                        }
+                    ]
+                }
+            ],
             language: {
                 info: '_START_–_END_ / _TOTAL_',
                 search: '',
@@ -588,6 +635,9 @@ $(document).ready(function() {
                 $(api.table().container())
                     .find('.dt-scroll-headInner table thead')
                     .append($filterRow.clone());
+
+                // Place the export buttons into the toolbar container (dom has no 'B')
+                api.buttons().container().appendTo('#reconExportWrap');
 
                 api.columns.adjust();
                 lucide.createIcons();

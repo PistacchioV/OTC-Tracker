@@ -1521,11 +1521,15 @@ def api_update_deal_cache(deal_id):
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
         if 'Status' in _fields:
-            _create_notification(
-                session.get('user_sid', ''), session.get('user_name', ''),
-                'Status Updated', 'Opt Comm',
-                deal_id + ' → ' + str(_fields.get('Status', ''))
-            )
+            # The 'Sent' transition is already announced by the 'Sent to B3'
+            # notification emitted from send-conecta — skip the redundant
+            # 'Status Updated' entry so the bell shows a single item per send.
+            if str(_fields.get('Status', '')) != 'Sent':
+                _create_notification(
+                    session.get('user_sid', ''), session.get('user_name', ''),
+                    'Status Updated', 'Opt Comm',
+                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                )
         else:
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
@@ -2164,11 +2168,15 @@ def api_ndf_update_deal_cache(deal_id):
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
         if 'Status' in _fields:
-            _create_notification(
-                session.get('user_sid', ''), session.get('user_name', ''),
-                'Status Updated', 'NDF Comm',
-                deal_id + ' → ' + str(_fields.get('Status', ''))
-            )
+            # The 'Sent' transition is already announced by the 'Sent to B3'
+            # notification emitted from send-conecta — skip the redundant
+            # 'Status Updated' entry so the bell shows a single item per send.
+            if str(_fields.get('Status', '')) != 'Sent':
+                _create_notification(
+                    session.get('user_sid', ''), session.get('user_name', ''),
+                    'Status Updated', 'NDF Comm',
+                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                )
         else:
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
@@ -3404,8 +3412,12 @@ def api_generic_nd_update_cache(product, deal_id):
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
         if 'Status' in _fields:
-            _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                                 'Status Updated', cfg['label'], deal_id + ' → ' + str(_fields.get('Status', '')))
+            # The 'Sent' transition is already announced by the 'Sent to B3'
+            # notification emitted from send-conecta — skip the redundant
+            # 'Status Updated' entry so the bell shows a single item per send.
+            if str(_fields.get('Status', '')) != 'Sent':
+                _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                     'Status Updated', cfg['label'], deal_id + ' → ' + str(_fields.get('Status', '')))
         else:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                  'Deal Updated', cfg['label'], deal_id + ' (' + ', '.join(_fields.keys()) + ')')
