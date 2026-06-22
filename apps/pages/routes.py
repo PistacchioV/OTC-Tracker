@@ -149,6 +149,21 @@ def _atomic_write_json(file_path, data):
         raise
 
 
+def _unique_filepath(output_dir, filename):
+    """Return a path inside output_dir that does not collide with an existing
+    file. If 'filename' is free it is used as-is; otherwise a copy suffix is
+    inserted before the extension based on how many same-named files exist:
+    'TCO_BANCO.txt' -> 'TCO_BANCO (1).txt' -> 'TCO_BANCO (2).txt' ...
+    """
+    base, ext = os.path.splitext(filename)
+    candidate = filename
+    n = 0
+    while os.path.exists(os.path.join(output_dir, candidate)):
+        n += 1
+        candidate = base + ' (' + str(n) + ')' + ext
+    return os.path.join(output_dir, candidate)
+
+
 SMTP_HOST = "mailhost.jpmchase.net"
 SMTP_PORT = 25
 CODE_EXPIRY_MINUTES = 10
@@ -2793,15 +2808,15 @@ def api_ndf_send_conecta():
     try:
         os.makedirs(output_dir, exist_ok=True)
         if lawton_lines:
-            lawton_path = os.path.join(output_dir, 'TCO_LAWTON.txt')
+            lawton_path = _unique_filepath(output_dir, 'TCO_LAWTON.txt')
             with open(lawton_path, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([lawton_header] + lawton_lines))
-            generated.append({'filename': 'TCO_LAWTON.txt', 'count': lawton_count})
+            generated.append({'filename': os.path.basename(lawton_path), 'count': lawton_count})
         if banco_lines:
-            banco_path = os.path.join(output_dir, 'TCO_BANCO.txt')
+            banco_path = _unique_filepath(output_dir, 'TCO_BANCO.txt')
             with open(banco_path, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([banco_header] + banco_lines))
-            generated.append({'filename': 'TCO_BANCO.txt', 'count': banco_count})
+            generated.append({'filename': os.path.basename(banco_path), 'count': banco_count})
         total = lawton_count + banco_count
         primary = generated[0]['filename'] if generated else ''
         if total > 0:
@@ -3327,14 +3342,14 @@ def api_send_conecta():
     content = '\n'.join([header] + all_lines)
 
     output_dir = CONECTA_NEW_PATH
-    filepath   = os.path.join(output_dir, 'OPC_Banco.txt')
     try:
         os.makedirs(output_dir, exist_ok=True)
+        filepath = _unique_filepath(output_dir, 'OPC_Banco.txt')
         with open(filepath, 'w', encoding='utf-8') as fh:
             fh.write(content)
         if deal_count > 0:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'Sent to B3', 'Opt Comm', str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
-        return jsonify({'ok': True, 'filename': 'OPC_Banco.txt', 'count': deal_count})
+        return jsonify({'ok': True, 'filename': os.path.basename(filepath), 'count': deal_count})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
