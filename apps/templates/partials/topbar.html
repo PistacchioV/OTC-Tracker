@@ -638,7 +638,7 @@
               <!-- Divider -->
               <div class="dropdown-divider"></div>
               <!-- Lock -->
-              <a class="dropdown-item" href="/auth-lock-screen">
+              <a class="dropdown-item" href="/lock">
                 <i class="me-1 fs-lg align-middle" data-lucide="lock-keyhole"></i>
                 <span class="align-middle">Lock Screen</span>
               </a>
@@ -684,3 +684,29 @@
       </div>
     </div>
   </div>
+
+  <!-- Auto-lock: send the user to the lock screen after 3h of inactivity.
+       Lives in the topbar (authenticated chrome only), so it never runs on the
+       auth pages themselves. Uses localStorage so activity is shared across
+       tabs and survives navigations. -->
+  <script>
+    (function () {
+      var IDLE_MS = 3 * 60 * 60 * 1000;   // 3 hours
+      var KEY = 'otc_last_activity';
+      function mark() { try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {} }
+      function lastActivity() {
+        var v = parseInt(localStorage.getItem(KEY) || '0', 10);
+        return v > 0 ? v : Date.now();
+      }
+      function check() {
+        if (Date.now() - lastActivity() >= IDLE_MS) {
+          window.location.href = '/lock';
+        }
+      }
+      ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (ev) {
+        window.addEventListener(ev, mark, { passive: true });
+      });
+      mark();
+      setInterval(check, 30 * 1000);      // re-check every 30s
+    })();
+  </script>

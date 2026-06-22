@@ -61,6 +61,46 @@ def enforce_session_expiry():
         session.clear()
 
 
+# Endpoints reachable while the screen is locked. Everything else is bounced to
+# the lock screen so the user cannot navigate (or "go back") into the app
+# without re-entering their SID and passing IP verification / 2FA.
+_LOCK_ALLOWED_ENDPOINTS = {
+    'static',
+    'pages_blueprint.lock_screen_page',   # the lock screen itself
+    'pages_blueprint.unlock',             # SID submit to unlock
+    'pages_blueprint.two_factor_page',    # 2FA page (IP-mismatch unlock path)
+    'pages_blueprint.verify_2fa',         # 2FA code submit
+    'pages_blueprint.resend_code',        # resend 2FA code
+    'pages_blueprint.sign_in_page',       # "Not you? Sign in"
+    'pages_blueprint.login',              # sign in as a different user
+    'pages_blueprint.logout',             # allow logging out while locked
+}
+
+
+@blueprint.before_request
+def enforce_screen_lock():
+    """While session['locked'] is set, only the unlock flow is reachable."""
+    if not session.get('locked') or not session.get('authenticated'):
+        return
+    if request.endpoint in _LOCK_ALLOWED_ENDPOINTS:
+        return
+    return redirect(url_for('pages_blueprint.lock_screen_page'))
+
+
+@blueprint.after_request
+def add_no_store_on_authed_pages(response):
+    """Prevent the browser back/forward cache from showing protected HTML after
+    the screen is locked or the session ends. Limited to HTML so static assets
+    keep caching normally."""
+    try:
+        if session.get('authenticated') and response.mimetype == 'text/html':
+            response.headers['Cache-Control'] = 'no-store, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+    except Exception:
+        pass
+    return response
+
+
 # ==============================================================================
 # CONFIGURAÇÕES
 # ==============================================================================
@@ -913,7 +953,11 @@ def _set_session(user, remember_me=False):
     session['user_email'] = user["Email"]
     session['user_role'] = user["Role"]
     session['remember_me'] = remember_me
-    lifetime = timedelta(days=30) if remember_me else timedelta(hours=8)
+    # A freshly established session is never locked.
+    session.pop('locked', None)
+    # Without "Keep me signed in": hard cap of 5 hours (absolute, even with
+    # activity). With it: 30 days + IP re-verification on a new IP.
+    lifetime = timedelta(days=30) if remember_me else timedelta(hours=5)
     session['session_expires_at'] = (datetime.now(tz=timezone.utc) + lifetime).isoformat()
 
 
@@ -1004,6 +1048,64 @@ def resend_code():
     return redirect(url_for('pages_blueprint.two_factor_page'))
 
 
+# ==============================================================================
+# ROTAS — LOCK SCREEN
+# ==============================================================================
+
+@blueprint.route('/lock')
+def lock():
+    """Lock the current session and send the user to the lock screen.
+    Used by the topbar 'Lock Screen' item and the 3h idle auto-lock."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    session['locked'] = True
+    log.info("[lock] Screen locked for SID=%s", session.get('user_sid'))
+    return redirect(url_for('pages_blueprint.lock_screen_page'))
+
+
+@blueprint.route('/auth-2-lock-screen')
+def lock_screen_page():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template(
+        'pages/auth-2-lock-screen.html',
+        segment='auth-2-lock-screen',
+        user_name=session.get('user_name', ''),
+        user_sid=session.get('user_sid', ''),
+    )
+
+
+@blueprint.route('/unlock', methods=['POST'])
+def unlock():
+    """Unlock the screen: the SID must match the locked account and pass the
+    same IP verification as login (direct on IP match, otherwise 2FA)."""
+    locked_sid = session.get('user_sid')
+    if not session.get('authenticated') or not locked_sid:
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+
+    sid = request.form.get('sid', '').strip().upper()
+    log.info("[unlock] Attempt SID=%s lockedSID=%s IP=%s", sid, locked_sid, get_client_ip())
+
+    if not _validate_sid(sid):
+        flash("Invalid SID format. Must be 1 letter + 6 numbers.", "error")
+        return redirect(url_for('pages_blueprint.lock_screen_page'))
+
+    if sid != locked_sid:
+        log.warning("[unlock] SID mismatch (entered=%s locked=%s)", sid, locked_sid)
+        flash("This SID does not match the locked account.", "error")
+        return redirect(url_for('pages_blueprint.lock_screen_page'))
+
+    user = get_user_by_sid(sid)
+    if not user:
+        session.clear()
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+
+    # Reuse the login IP-verification flow. On IP match _set_session clears the
+    # 'locked' flag; on mismatch it routes to 2FA, after which verify_2fa does.
+    remember_me = session.get('remember_me', False)
+    return _handle_existing_user(user, sid, get_client_ip(),
+                                 redirect_page='pages_blueprint.lock_screen_page',
+                                 remember_me=remember_me)
 
 
 # ==============================================================================

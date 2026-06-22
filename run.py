@@ -1,4 +1,13 @@
 import os
+
+# Load .env BEFORE importing apps.config — config reads os.getenv() at import
+# time (e.g. SECRET_KEY). Under Gunicorn the .env is not auto-loaded like it is
+# with `flask run`, so without this the SECRET_KEY falls back to a random value
+# on every startup, invalidating all session cookies (breaks "Keep me signed
+# in" across restarts).
+from dotenv import load_dotenv
+load_dotenv()
+
 from   flask_migrate import Migrate
 from   flask_minify  import Minify
 from   sys import exit

@@ -102,36 +102,38 @@
                         </a>
                     </div>
                     <div class="mt-auto">
-                        <p class="text-muted text-center auth-sub-text mx-auto">Let’s get you signed in. Enter your
-                            password to
-                            continue.</p>
+                        <p class="text-muted text-center auth-sub-text mx-auto">Screen locked. Enter your SID to
+                            unlock and continue.</p>
                         <div class="text-center mb-4">
-                            <img alt="thumbnail" class="rounded-circle img-thumbnail avatar-xxl mb-2"
-                                src="{{ config.ASSETS_ROOT }}/images/users/e930179.jpg" />
-                            <h5 class="fs-md">Giulliano De Luccia</h5>
+                            <span
+                                class="rounded-circle img-thumbnail avatar-xxl mb-2 d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary fw-bold fs-1">
+                                {{ (user_name[:1] | upper) if user_name else 'U' }}
+                            </span>
+                            <h5 class="fs-md">{{ user_name or user_sid }}</h5>
                         </div>
-                        <form class="mt-4">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show py-2 px-3 small" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+                        <form class="mt-4" action="/unlock" method="POST">
                             <div class="mb-3">
-                                <label class="form-label" for="userPassword">Password <span
+                                <label class="form-label" for="SID">SID <span
                                         class="text-danger">*</span></label>
                                 <div class="app-search">
-                                    <input class="form-control" id="userPassword" placeholder="••••••••" required=""
-                                        type="password" />
-                                    <i class="app-search-icon text-muted" data-lucide="key-round"></i>
+                                    <input class="form-control text-uppercase" id="SID" name="sid"
+                                        placeholder="SID Number" required="" type="text" autofocus
+                                        pattern="[A-Za-z][0-9]{6}" maxlength="7" />
+                                    <i class="app-search-icon text-muted" data-lucide="circle-user"></i>
                                 </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div class="form-check">
-                                    <input checked="" class="form-check-input form-check-input-light fs-14"
-                                        id="rememberMe" type="checkbox" />
-                                    <label class="form-check-label" for="rememberMe">Keep me signed in</label>
-                                </div>
-                                <a class="text-decoration-underline link-offset-3 text-muted"
-                                    href="/auth-2-reset-pass">Forgot
-                                    Password?</a>
                             </div>
                             <div class="d-grid">
-                                <button class="btn btn-primary fw-bold py-2" type="submit">Sign In</button>
+                                <button class="btn btn-primary fw-bold py-2" type="submit">Unlock</button>
                             </div>
                         </form>
                     </div>
