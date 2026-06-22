@@ -360,6 +360,7 @@
                                 <tr class="text-uppercase fs-xxs">
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="intrag-col-status">Status</th>
                                     <th data-lang="intrag-opt-col-0">Portfolio</th>
                                     <th data-lang="intrag-opt-col-1">System ID</th>
                                     <th data-lang="intrag-opt-col-2">Line Type ID</th>
@@ -402,6 +403,7 @@
                                 </tr>
                                 <tr id="column-search-inputs">
                                     <th></th><th></th>
+                                    <th></th><!-- Status -->
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="System ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Line Type ID"></th>
@@ -483,7 +485,7 @@
 </script>
 
 <script>
-// col index 2-39 = data, col 40 = hidden row ID
+// col index 2 = status, 3-40 = data, col 41 = hidden row ID
 var OPT_COLS = [
     'Portfolio','System ID','Line Type ID','Registration Date','Holder Account',
     'Holder Name','Contract','CETIP Contract','My Number','Trade Type',
@@ -500,10 +502,23 @@ var selectedRowIds = new Set();
 
 function _optId() { return 'o' + Date.now() + Math.random().toString(36).substr(2,4); }
 
+// Status badge (visual only — Intrag Option has no lifecycle backend yet).
+var OPT_STATUS_META = {
+    'New':      { cls: 'text-bg-secondary', lang: 'intrag-status-new' },
+    'Pending':  { cls: 'text-bg-warning',   lang: 'intrag-status-pending' },
+    'Approved': { cls: 'text-bg-success',   lang: 'intrag-status-approved' },
+    'Sent':     { cls: 'text-bg-info',      lang: 'intrag-status-sent' }
+};
+function statusBadge(status) {
+    var s = status || 'New';
+    var m = OPT_STATUS_META[s] || OPT_STATUS_META['New'];
+    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+}
+
 $(document).ready(function() {
     if (typeof JSZip !== 'undefined') window.JSZip = JSZip;
 
-    function exportCols() { var a=[]; for(var i=2;i<=39;i++) a.push(i); return a; }
+    function exportCols() { var a=[]; for(var i=3;i<=40;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
         var inp=$(node).find('input[type!="checkbox"]');
         return inp.length ? (inp.val()||'') : $(node).text().trim();
@@ -515,7 +530,8 @@ $(document).ready(function() {
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
             { orderable: false, targets: [0,1] },
-            { visible: false, targets: [40] }
+            { targets: 2, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
+            { visible: false, targets: [41] }
         ],
         dom: "<'row'<'col-sm-12'tr>>" +
              "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -534,7 +550,7 @@ $(document).ready(function() {
         drawCallback: function() {
             var api = this.api();
             api.rows().every(function() {
-                var d=this.data(), id=d?d[40]:null, node=this.node();
+                var d=this.data(), id=d?d[41]:null, node=this.node();
                 if(node) $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
             });
             var total=api.rows().count(), sel=selectedRowIds.size, $sa=$('#selectAll');
@@ -564,7 +580,7 @@ $(document).ready(function() {
                 var items=OPT_COLS.map(function(lbl,i){
                     return '<li class="dropdown-item"><div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
-                        ' data-column="'+(i+2)+'" id="optC'+i+'" checked>' +
+                        ' data-column="'+(i+3)+'" id="optC'+i+'" checked>' +
                         '<label class="form-check-label fw-medium" for="optC'+i+'">'+lbl+'</label>' +
                         '</div></li>';
                 }).join('');
@@ -612,14 +628,14 @@ $(document).ready(function() {
 
     $('#selectAll').on('click',function() {
         selectedRowIds.clear();
-        if(this.checked) { table.rows().every(function(){ var d=this.data(),id=d?d[40]:null; if(id) selectedRowIds.add(id); }); }
+        if(this.checked) { table.rows().every(function(){ var d=this.data(),id=d?d[41]:null; if(id) selectedRowIds.add(id); }); }
         $('input[type="checkbox"]',table.rows().nodes()).prop('checked',this.checked);
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
         console.log('[OPT-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
     });
 
     $('#intrag-opt-table tbody').on('change','input[type="checkbox"]',function() {
-        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[40]:null;
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[41]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
         var total=table.rows().count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
         if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
@@ -630,7 +646,7 @@ $(document).ready(function() {
         e.preventDefault(); if(selectedRowIds.size===0) return;
         var toDelete=[];
         table.rows().every(function(){
-            var d=this.data(), id=d?d[40]:null;
+            var d=this.data(), id=d?d[41]:null;
             if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
         });
         console.log('[OPT-INTRAG DELETE] selectedRowIds:', Array.from(selectedRowIds));
@@ -664,21 +680,24 @@ $(document).ready(function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
         var m=document.getElementById('optModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag Option';
-        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+2]||''; });
+        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+3]||''; });
         $(m).data('editTr',tr);
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
 
     document.getElementById('optSaveBtn').addEventListener('click',function() {
         var m=document.getElementById('optModal'), editTr=$(m).data('editTr')||null;
+        var prevData = editTr ? table.row(editTr).data() : null;
+        var status = prevData ? (prevData[2]||'New') : 'New';
         var row=[
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
             '<div class="d-flex justify-content-center gap-1">' +
             '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#"><i class="ti ti-edit"></i></a>' +
-            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>'
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#"><i class="ti ti-trash"></i></a></div>',
+            status
         ];
         OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); row.push(inp?inp.value.trim():''); });
-        var id = editTr ? (table.row(editTr).data()[40]||_optId()) : _optId();
+        var id = editTr ? (prevData[41]||_optId()) : _optId();
         row.push(id);
         if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
         bootstrap.Modal.getInstance(m).hide();
@@ -699,7 +718,7 @@ $(document).ready(function() {
         'Redemption Value':'number','Call Strike Price':'number','Put Strike Price':'number','Call Unit Premium':'number',
         'Put Unit Premium':'number','Barrier Rate':'number','Maturity Rate':'number','Quantity':'number','Asian Option Average':'number'
     };
-    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+2,type:(OPT_TYPES[lbl]||'text')};});
+    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+3,type:(OPT_TYPES[lbl]||'text')};});
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
     function sfToDate(s){
