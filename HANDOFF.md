@@ -1002,6 +1002,71 @@ apps/static/data/translations/{en,br,es}.json  ← +16 chaves rd-cp-*/rule-*/cp-
 ```
 
 ### Pendências (seção 19)
-- Endpoint p/ persistir `CounterpartyDetails.json` (hoje save é só sessão).
-- Popular `CounterpartyDetails.json` com dados reais (CGD/bancos/contatos) — hoje vazio.
+- ~~Endpoint p/ persistir `CounterpartyDetails.json`~~ → feito na seção 20.
+- Popular `CounterpartyDetails.json` com dados reais → script de import na seção 20.
+
+---
+
+## 20. Sessão 2026-06-22 (cont.) — Persistência CP, date picker, badges, botões sólidos, e-mails Premium/EA
+
+### 20.1 Persistência do editor de Counterparty
+- **Endpoint** `POST /api/counterparty-details/save` em `routes.py` (logo antes da seção
+  GENERIC NEW-DEALS CACHE). Auth check; recebe `{SPN, COUNTERPARTY, CGD, BANKING, CONTACTS}`;
+  faz upsert por SPN em `CounterpartyDetails.json` (grava `.bak` com timestamp antes de salvar);
+  preserva COUNTERPARTY existente se vier vazio.
+- **Front-end** (`reference-data.html`): o Save do diálogo agora faz `fetch` p/ o endpoint.
+  Feedback inline via `flashSaved(popup, text, type)` (`pending`→spinner `cpSpin` próprio, pois
+  Tabler não anima `.ti-spin`; `ok`→verde; `error`→vermelho). **Não** usa `Swal.fire` toast
+  (fecharia o diálogo — SweetAlert2 tem um único container). `rd-cp-saved` deixou de ser
+  "session only".
+
+### 20.2 Campo CGD = date picker (dd/mm/yyyy)
+Cada linha de CGD tem botão de calendário que sobrepõe um `<input type="date">` nativo (opacity 0);
+no `change` escreve a data como **dd/mm/yyyy** no input de texto. Helpers `_ymdToBr` / `_brToYmd`.
+Sem dependência externa (flatpickr não está realmente wired nos assets).
+
+### 20.3 Rules como badges + scroll no edit
+- Rules do contato = `select2` multiple; as tags são estilizadas como **badges** (pills azuis).
+- **Scroll** (fix importante): em edit o diálogo passava da viewport e escondia campos + footer.
+  Causa = flexbox: `.cp-body` precisava de `min-height: 0` p/ encolher e rolar. `.swal2-html-container`
+  vira `display:flex !important` (vence inline do SweetAlert), `flex-direction:column`, `max-height:88vh`;
+  `.cp-glass` cap `92vh`. Header (`.cp-head`) e footer (`.cp-footer`) ficam fixos (`flex:0 0 auto`),
+  body rola.
+
+### 20.4 Botões do diálogo (modelo "Edit Record")
+Movidos do header para um **footer** (bottom-right), sólidos com ícones brancos:
+`is-close` (vermelho, ✕) · `is-save` (verde, `ti-device-floppy`) · `is-edit` (azul, lápis).
+Ordem: cancelar (vermelho) à esquerda, salvar/editar à direita. `refreshButtons()` troca classe+ícone
+conforme modo view/edit.
+
+### 20.5 E-mails Premium (D0) e Economic Affirmation — ajustes finais
+- **Banco no Premium negativo**: quando `final < 0` (JPM paga a contraparte) usa `BANKING.PAY`
+  (`_first_bank(cp, 'PAY')`; fallback RECEIVE → flat). `prefer` parametriza o bucket.
+- **To do Premium** = e-mails dos contatos de **Settlement** (`_contacts_emails(cp, _SETTLEMENT_KEYWORDS)`,
+  keywords `('settlement','repurchase')`, dedup).
+- **CC**: Premium = `Liquidação; Brazil Comm Sales`; Economic Affirmation (opt+ndf) =
+  `brazil.otc.ops@jpmorgan.com; Brazil Comm Sales`.
+- **View do duplo-clique** (Settlement/Negotiation): mostra **e-mails** (dedup) agrupados por
+  keyword nas rules — Settlement←`settlement`/`repurchase`; Negotiation←`negotiation`/`confirmation`/`letter`.
+
+### 20.6 Script de import de contatos
+`scripts/import_client_contacts.py` — lê a planilha **CONTATO DE CLIENTES** (auto-localiza no
+`~/Downloads` ou recebe path), dados a partir da **linha 5**, colunas **B=SPN, C=nome, D=ativo(A),
+E=contato, F=fone, G=e-mail, H=Rule**. Casa por SPN **ignorando zeros à esquerda** (planilha e JSON);
+agrupa contatos por SPN, mapeia rules p/ as canônicas, status A/I→Active/Inactive; substitui CONTACTS
+do SPN (preserva CGD/BANKING), anexa SPNs novos; `.bak` antes de gravar. Flags `--dry-run`, path arg.
+Deps: pandas + openpyxl (instalados). Rodar: `python3 scripts/import_client_contacts.py [--dry-run]`.
+
+### Arquivos (seção 20)
+```
+apps/pages/routes.py                          ← endpoint /api/counterparty-details/save
+apps/pages/otc_emails.py                       ← _first_bank(prefer), _contacts_emails, To/CC, PAY
+apps/templates/pages/reference-data.html        ← persistência, date picker, badges, footer, scroll fix
+apps/static/data/translations/{en,br,es}.json   ← +rd-cp-saving/-save-error/-pickdate
+scripts/import_client_contacts.py               ← NOVO import da planilha
+```
+
+### Pendências (seção 20)
+- Popular `CounterpartyDetails.json` (rodar o script com a planilha real no Downloads).
+- Confirmar semântica PAY/RECEIVE vs sinal do resultado se surgir caso de `final > 0` com banco da CP.
 
