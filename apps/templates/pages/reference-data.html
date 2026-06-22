@@ -109,10 +109,12 @@
         .cp-glass.swal2-show, .cp-glass.swal2-hide { animation: none; }
     }
 
-    .cp-glass .swal2-html-container { margin: 0 !important; max-height: 72vh; overflow-y: auto; text-align: left; }
+    /* fixed header + footer, scrolling body */
+    .cp-glass .swal2-html-container { margin: 0 !important; max-height: 80vh; overflow: hidden; text-align: left; display: flex; flex-direction: column; }
 
-    /* header: title + icon buttons */
+    /* header: title only */
     .cp-head {
+        flex: 0 0 auto;
         display: flex; align-items: center; gap: 10px;
         padding: 16px 20px 12px; border-bottom: 1px solid rgba(0,0,0,0.06);
     }
@@ -120,21 +122,29 @@
     .cp-title { flex: 1 1 auto; min-width: 0; font-size: 1rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
     .cp-spn { font-size: 0.72rem; font-weight: 500; color: var(--ins-secondary-color, #6c757d); margin-top: 2px; }
 
-    .cp-iconbtn {
-        flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px;
-        display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.55);
-        color: var(--ins-body-color, #343a40); cursor: pointer; font-size: 1rem;
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, color 160ms ease;
-    }
-    .cp-iconbtn:hover { background: rgba(255,255,255,0.9); }
-    .cp-iconbtn:active { transform: scale(0.92); }
-    .cp-iconbtn.cp-save { color: #0a8f4f; border-color: rgba(10,143,79,0.25); }
-    .cp-iconbtn.cp-save:hover { background: rgba(10,143,79,0.12); }
-    [data-bs-theme="dark"] .cp-iconbtn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); color: #e9ecef; }
-    [data-bs-theme="dark"] .cp-iconbtn:hover { background: rgba(255,255,255,0.16); }
+    .cp-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 20px 20px; }
 
-    .cp-body { padding: 14px 20px 20px; }
+    /* footer: solid action buttons, right-aligned (red cancel/close · green save) */
+    .cp-footer {
+        flex: 0 0 auto;
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 12px 20px 16px; border-top: 1px solid rgba(0,0,0,0.06);
+    }
+    [data-bs-theme="dark"] .cp-footer { border-top-color: rgba(255,255,255,0.10); }
+
+    .cp-iconbtn {
+        flex: 0 0 auto; min-width: 44px; height: 34px; border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 0; color: #fff; cursor: pointer; font-size: 1.05rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), filter 160ms ease;
+    }
+    .cp-iconbtn i { color: #fff; }
+    .cp-iconbtn:hover { filter: brightness(1.07); }
+    .cp-iconbtn:active { transform: scale(0.93); }
+    .cp-iconbtn.is-edit  { background: #0d6efd; }
+    .cp-iconbtn.is-save  { background: #2e7d32; }
+    .cp-iconbtn.is-close { background: #d32f2f; }
 
     /* zone */
     .cp-zone { margin-top: 16px; }
@@ -169,8 +179,38 @@
 
     /* edit-mode rows */
     .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
-    .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px; }
+    .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px 32px; }
     .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) 32px; }
+
+    /* CGD date field: text shows dd/mm/yyyy; calendar button overlays a native date input */
+    .cp-date-btn {
+        position: relative; width: 32px; height: 32px; border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        border: 1px solid rgba(0,0,0,0.10); background: rgba(255,255,255,0.55);
+        color: var(--ins-body-color,#343a40);
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+    }
+    .cp-date-btn:hover { background: rgba(255,255,255,0.9); }
+    .cp-date-btn:active { transform: scale(0.92); }
+    [data-bs-theme="dark"] .cp-date-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); color: #e9ecef; }
+    .cp-date-btn .cp-cgd-picker {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        opacity: 0; cursor: pointer; border: 0; padding: 0;
+    }
+    .cp-date-btn .cp-cgd-picker::-webkit-calendar-picker-indicator { width: 100%; height: 100%; cursor: pointer; }
+
+    /* Rules rendered as badges inside the contact card (select2 multi tags) */
+    .cp-glass .select2-container--default .select2-selection--multiple { border-radius: 8px; min-height: 31px; }
+    .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        background: rgba(13,110,253,0.12); border: 1px solid rgba(13,110,253,0.30); color: #0d6efd;
+        border-radius: 999px; padding: 1px 8px; margin: 3px 4px 0 0; font-size: 0.72rem; font-weight: 600;
+    }
+    .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+        color: #0d6efd; margin-right: 4px; border: 0; background: transparent;
+    }
+    [data-bs-theme="dark"] .cp-glass .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        background: rgba(110,168,254,0.18); border-color: rgba(110,168,254,0.4); color: #9ec5fe;
+    }
     .cp-contact-card { border: 1px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.4); }
     [data-bs-theme="dark"] .cp-contact-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
     .cp-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -207,6 +247,11 @@
         pointer-events: none;
     }
     .cp-toast.cp-toast-in { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    .cp-toast.cp-toast-error { color: #c62828; background: rgba(198,40,40,0.12); border-color: rgba(198,40,40,0.30); }
+    .cp-toast.cp-toast-pending { color: var(--ins-secondary-color,#6c757d); background: rgba(108,117,125,0.12); border-color: rgba(108,117,125,0.28); }
+    /* Tabler webfont doesn't animate .ti-spin on its own — define keyframes. */
+    @keyframes cpSpin { to { transform: rotate(360deg); } }
+    .cp-toast .ti-spin { display: inline-block; animation: cpSpin 0.7s linear infinite; }
 </style>
 {% endblock extra_css %}
 
@@ -804,9 +849,15 @@ $(document).ready(function () {
     }
 
     /* ════════ EDIT-MODE builders ════════ */
+    function _ymdToBr(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+    function _brToYmd(s) { var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
+
     function _cgdRow(val) {
+        var ymd = _brToYmd(val);
         return '<div class="cp-edit-row cp-cgd-row">' +
-            '<input type="text" class="form-control form-control-sm cp-cgd-input" value="' + _attr(val) + '">' +
+            '<input type="text" class="form-control form-control-sm cp-cgd-input" placeholder="dd/mm/yyyy" value="' + _attr(val) + '">' +
+            '<span class="cp-date-btn" title="' + t('rd-cp-pickdate', 'Pick date') + '"><i class="ti ti-calendar"></i>' +
+                '<input type="date" class="cp-cgd-picker"' + (ymd ? ' value="' + ymd + '"' : '') + '></span>' +
             '<button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div>';
     }
     function _bankRow(b) {
@@ -854,8 +905,12 @@ $(document).ready(function () {
             return '<div class="cp-head">' +
                 '<div class="cp-title">' + _esc(name) +
                     '<div class="cp-spn">SPN ' + _esc(spn || '—') + '</div></div>' +
-                '<button type="button" class="cp-iconbtn cp-btn-primary" data-act="primary"></button>' +
+            '</div>';
+        }
+        function renderFooter() {
+            return '<div class="cp-footer">' +
                 '<button type="button" class="cp-iconbtn" data-act="secondary"></button>' +
+                '<button type="button" class="cp-iconbtn" data-act="primary"></button>' +
             '</div>';
         }
         function zoneHead(titleKey, titleTxt, addKey) {
@@ -892,7 +947,7 @@ $(document).ready(function () {
         }
 
         Swal.fire({
-            html: renderHead() + renderBody(),
+            html: renderHead() + renderBody() + renderFooter(),
             width: 600,
             padding: 0,
             showConfirmButton: false,
@@ -970,23 +1025,31 @@ $(document).ready(function () {
             $p.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
         }
 
-        function flashSaved(popup) {
+        function flashSaved(popup, text, type) {
+            type = type || 'ok';
+            text = text || t('rd-cp-saved', 'Saved');
             $(popup).find('.cp-toast').remove();
-            var $tn = $('<div class="cp-toast"><i class="ti ti-check"></i><span>' + _esc(t('rd-cp-saved','Saved (session only)')) + '</span></div>');
+            var icon = type === 'error' ? 'ti-alert-triangle' : (type === 'pending' ? 'ti-loader-2 ti-spin' : 'ti-check');
+            var $tn = $('<div class="cp-toast cp-toast-' + type + '"><i class="ti ' + icon + '"></i><span>' + _esc(text) + '</span></div>');
             $(popup).append($tn);
             requestAnimationFrame(function(){ $tn.addClass('cp-toast-in'); });
-            setTimeout(function(){ $tn.removeClass('cp-toast-in'); setTimeout(function(){ $tn.remove(); }, 220); }, 1700);
+            // pending stays until replaced; ok/error auto-dismiss
+            if (type !== 'pending') {
+                setTimeout(function(){ $tn.removeClass('cp-toast-in'); setTimeout(function(){ $tn.remove(); }, 220); }, type === 'error' ? 3000 : 1700);
+            }
         }
 
         function refreshButtons(popup) {
             var $primary = $(popup).find('[data-act="primary"]');
             var $secondary = $(popup).find('[data-act="secondary"]');
+            $primary.removeClass('is-edit is-save is-close');
+            $secondary.removeClass('is-edit is-save is-close');
             if (mode === 'view') {
-                $primary.removeClass('cp-save').attr('title', t('rd-cp-edit','Edit')).html('<i class="ti ti-pencil"></i>');
-                $secondary.attr('title', t('swal-close','Close')).html('<i class="ti ti-x"></i>');
+                $primary.addClass('is-edit').attr('title', t('rd-cp-edit','Edit')).html('<i class="ti ti-pencil"></i>');
+                $secondary.addClass('is-close').attr('title', t('swal-close','Close')).html('<i class="ti ti-x"></i>');
             } else {
-                $primary.addClass('cp-save').attr('title', t('rd-cp-save','Save')).html('<i class="ti ti-check"></i>');
-                $secondary.attr('title', t('rd-cp-cancel','Cancel')).html('<i class="ti ti-arrow-back-up"></i>');
+                $primary.addClass('is-save').attr('title', t('rd-cp-save','Save')).html('<i class="ti ti-device-floppy"></i>');
+                $secondary.addClass('is-close').attr('title', t('rd-cp-cancel','Cancel')).html('<i class="ti ti-x"></i>');
             }
         }
 
@@ -1005,7 +1068,15 @@ $(document).ready(function () {
                     popup.setAttribute('data-mode', 'view');
                     rerenderView(popup);
                     refreshButtons(popup);
-                    flashSaved(popup);
+                    flashSaved(popup, t('rd-cp-saving', 'Saving…'), 'pending');
+                    fetch('/api/counterparty-details/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ SPN: spn, COUNTERPARTY: name, CGD: model.CGD, BANKING: model.BANKING, CONTACTS: model.CONTACTS })
+                    }).then(function(r){ return r.json(); }).then(function(res){
+                        if (res && res.ok) flashSaved(popup, t('rd-cp-saved', 'Saved'), 'ok');
+                        else flashSaved(popup, (res && res.error) || t('rd-cp-save-error', 'Save failed'), 'error');
+                    }).catch(function(){ flashSaved(popup, t('rd-cp-save-error', 'Save failed'), 'error'); });
                 }
             });
             $p.on('click', '[data-act="secondary"]', function(){
@@ -1023,6 +1094,11 @@ $(document).ready(function () {
             /* Remove row */
             $p.on('click', '[data-rm]', function(){
                 $(this).closest('.cp-edit-row, .cp-contact-card').remove();
+            });
+            /* CGD date picker → write dd/mm/yyyy into the text field */
+            $p.on('change', '.cp-cgd-picker', function(){
+                var br = _ymdToBr(this.value);
+                if (br) $(this).closest('.cp-cgd-row').find('.cp-cgd-input').val(br);
             });
         }
     });

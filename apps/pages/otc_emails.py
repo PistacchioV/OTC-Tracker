@@ -145,6 +145,22 @@ def _is_jpmorgan(name):
     return 'JPMORGAN' in n or 'JP MORGAN' in n or 'J.P. MORGAN' in n
 
 
+def _first_bank(cp):
+    """Return (bank, agency, account) from a CounterpartyDetails record.
+
+    Prefers the structured BANKING shape saved by the Reference Data editor
+    (RECEIVE first — the account the counterparty receives funds into — then PAY),
+    falling back to the legacy flat BANK/AGENCY/ACCOUNT fields.
+    """
+    bk = cp.get('BANKING') or {}
+    for key in ('RECEIVE', 'PAY'):
+        lst = bk.get(key) or []
+        if lst:
+            b = lst[0] or {}
+            return b.get('bank', ''), b.get('agency', ''), b.get('account', '')
+    return cp.get('BANK', ''), cp.get('AGENCY', ''), cp.get('ACCOUNT', '')
+
+
 def _asset_label(deal):
     """Moeda/Ativo column = Underlying Asset (+ Commodities) from the New Deals page."""
     ua  = str(deal.get('UnderlyingAsset', '') or '').strip()
@@ -268,15 +284,16 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     body += '<table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
     if final < 0:
         cp = cpd.get(spn, {})
+        bank_name, agency, account = _first_bank(cp)
         body += (
             '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
             '<tr><td>Nº e nome da agência:</td><td style="font-weight:bold;">{ag}</td></tr>'
             '<tr><td>Conta–corrente nº:</td><td style="font-weight:bold;">{cc}</td></tr>'
             '<tr><td>CNPJ/MF nº:</td><td style="font-weight:bold;">{cnpj}</td></tr>'
         ).format(
-            bank=cp.get('BANK', '') or '—',
-            ag=cp.get('AGENCY', '') or '—',
-            cc=cp.get('ACCOUNT', '') or '—',
+            bank=bank_name or '—',
+            ag=agency or '—',
+            cc=account or '—',
             cnpj=_fmt_cnpj(taxid),
         )
     else:

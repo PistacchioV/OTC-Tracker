@@ -3640,6 +3640,59 @@ def api_ndf_economic_affirmation_email():
 
 
 # ==============================================================================
+# API — COUNTERPARTY DETAILS (Reference Data double-click editor)
+# Persists CGD / Banking (PAY+RECEIVE) / Contacts to CounterpartyDetails.json,
+# keyed by SPN. Replaces (or appends) the record for the edited counterparty.
+# ==============================================================================
+
+@blueprint.route('/api/counterparty-details/save', methods=['POST'])
+def api_counterparty_details_save():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    spn = str(payload.get('SPN', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+
+    record = {
+        'SPN':          spn,
+        'COUNTERPARTY': payload.get('COUNTERPARTY', '') or '',
+        'CGD':          payload.get('CGD', []) or [],
+        'BANKING':      payload.get('BANKING', {}) or {'PAY': [], 'RECEIVE': []},
+        'CONTACTS':     payload.get('CONTACTS', []) or [],
+    }
+
+    path = os.path.join(_B3_DATA_DIR, 'CounterpartyDetails.json')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        if not isinstance(data, list):
+            data = []
+    except (json.JSONDecodeError, IOError, FileNotFoundError):
+        data = []
+
+    found = False
+    for i, c in enumerate(data):
+        if str(c.get('SPN', '') or '').strip() == spn:
+            if not record['COUNTERPARTY']:
+                record['COUNTERPARTY'] = c.get('COUNTERPARTY', '')
+            data[i] = record
+            found = True
+            break
+    if not found:
+        data.append(record)
+
+    try:
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+    except IOError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+    return jsonify({'ok': True, 'created': not found})
+
+
+# ==============================================================================
 # API — GENERIC NEW-DEALS CACHE (NDF FWD Start / NDF Other Publisher)
 # Page + CRUD only. Same Deal+Client keyed JSON cache model as ndf-commodities.
 # Import-parse / mapping-B3 / send-Conecta are product-specific and intentionally
