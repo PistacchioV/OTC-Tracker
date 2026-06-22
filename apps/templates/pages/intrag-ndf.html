@@ -739,6 +739,9 @@ $(document).ready(function() {
                     table.rows().every(function(){
                         var d=this.data(); if(d && ids[d[33]]) { d[2]='Sent'; this.data(d); }
                     });
+                    // Clear any ticked checkboxes — drawCallback re-syncs the
+                    // checkbox / selectAll / toolbar state from selectedRowIds.
+                    selectedRowIds.clear();
                     table.draw(false);
                     Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).',
                         icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
