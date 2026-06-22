@@ -875,8 +875,12 @@ def _handle_existing_user(user, sid, client_ip, redirect_page, remember_me=False
     else:
         log.info("[_handle_existing_user] SID=%s IP mismatch (stored=%s vs current=%s) — triggering 2FA",
                  sid, stored_ip, client_ip)
-        update_user_ip(sid, client_ip)
+        # Do NOT persist the new IP yet: storing it before the code is verified
+        # would let anyone holding the SID overwrite the trusted IP and then log
+        # in directly (IP-match shortcut) without ever passing 2FA. Stash it in
+        # the session and only commit it after verify_2fa succeeds.
         session['pending_remember_me'] = remember_me
+        session['pending_ip'] = client_ip
         return _initiate_2fa(sid, user["Email"], user["Name"])
 
 
@@ -946,6 +950,10 @@ def verify_2fa():
     if is_valid:
         user = get_user_by_sid(sid)
         remember_me = session.pop('pending_remember_me', False)
+        # Now that the code is verified, trust this IP for future direct logins.
+        pending_ip = session.pop('pending_ip', None)
+        if pending_ip:
+            update_user_ip(sid, pending_ip)
         session.pop('pending_sid', None)
         session.pop('masked_email', None)
         session.pop('masked_phone', None)
