@@ -28,7 +28,7 @@ import io
 import json
 import zipfile
 from datetime import datetime
-from email.message import EmailMessage
+from email.header import Header
 
 _DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
 
@@ -560,22 +560,34 @@ def _safe_filename(s):
 
 
 def build_eml_bytes(draft, sender_email=None):
-    """Render one draft dict to RFC-822 .eml bytes that Outlook opens as a draft."""
-    msg = EmailMessage()
-    msg['Subject'] = draft.get('subject', '') or ''
+    """Render one draft dict to RFC-822 .eml bytes that Outlook opens as a draft.
+
+    Built by hand for full control of the encoding:
+    - Subject is RFC-2047 encoded (Outlook decodes it reliably).
+    - To/Cc are kept as RAW UTF-8 so Outlook resolves accented display names /
+      nicknames (e.g. the "Liquidação" CC) against the address book — a
+      MIME-encoded word there shows up unresolved/wrong.
+    - Body is single-part text/html, Content-Transfer-Encoding: 8bit, so the
+      HTML is byte-for-byte intact (quoted-printable would mangle the tables).
+    """
+    def _clean(s):
+        return str(s or '').replace('\r', ' ').replace('\n', ' ').strip()
+
+    subj = _clean(draft.get('subject'))
+    lines = ['MIME-Version: 1.0']
+    lines.append('Subject: ' + (Header(subj, 'utf-8').encode() if subj else ''))
     if sender_email:
-        msg['From'] = sender_email
+        lines.append('From: ' + _clean(sender_email))
     if draft.get('to'):
-        msg['To'] = draft['to']
+        lines.append('To: ' + _clean(draft.get('to')))
     if draft.get('cc'):
-        msg['Cc'] = draft['cc']
-    msg['X-Unsent'] = '1'                       # → opens as editable draft in Outlook
-    # Single-part text/html with 8-bit transfer encoding. The default
-    # quoted-printable encoding mangles the HTML when Outlook opens the draft
-    # (=3D for '=', =C3=A7 for accents, soft line breaks splitting tags) — 8bit
-    # keeps the markup byte-for-byte so the table renders correctly.
-    msg.set_content(draft.get('html', '') or '', subtype='html', cte='8bit')
-    return bytes(msg)
+        lines.append('Cc: ' + _clean(draft.get('cc')))
+    lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
+    lines.append('Content-Type: text/html; charset=utf-8')
+    lines.append('Content-Transfer-Encoding: 8bit')
+    header = '\r\n'.join(lines)
+    html = draft.get('html', '') or ''
+    return (header + '\r\n\r\n' + html).encode('utf-8')
 
 
 def build_drafts_download(drafts, sender_email=None):
