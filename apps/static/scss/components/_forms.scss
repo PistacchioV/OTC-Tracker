@@ -132,16 +132,17 @@ input::-webkit-inner-spin-button {
     }
 }
 
-// In dark mode a dark border vanishes against the dark surface — flip to a
-// light, sufficiently opaque hairline AND a faint fill so the empty box reads
-// on its own (a low-opacity border alone was almost invisible).
+// In dark mode a dark border vanishes against the dark surface. NOTE: this theme
+// redefines --ins-light-rgb to a DARK value (37,38,48) under [data-bs-theme=dark],
+// so rgba(light-rgb, …) is dark and invisible — use LITERAL white instead, with a
+// clearly visible border + a noticeable fill so the empty box reads on its own.
 [data-bs-theme="dark"] .form-check-input-light {
-    background-color: rgba(var(--#{$prefix}light-rgb), 0.12);
-    border-color: rgba(var(--#{$prefix}light-rgb), 0.7);
+    background-color: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.85) !important;
 
     &:not(:checked):hover {
-        background-color: rgba(var(--#{$prefix}light-rgb), 0.2);
-        border-color: rgba(var(--#{$prefix}light-rgb), 0.9);
+        background-color: rgba(255, 255, 255, 0.30) !important;
+        border-color: rgba(255, 255, 255, 1) !important;
     }
 }
 
@@ -160,11 +161,11 @@ input::-webkit-inner-spin-button {
 }
 
 [data-bs-theme="dark"] .form-check-input:not(:checked) {
-    background-color: rgba(var(--#{$prefix}light-rgb), 0.12);
-    border-color: rgba(var(--#{$prefix}light-rgb), 0.7);
+    background-color: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.85) !important;
 
     &:hover {
-        background-color: rgba(var(--#{$prefix}light-rgb), 0.2);
-        border-color: rgba(var(--#{$prefix}light-rgb), 0.9);
+        background-color: rgba(255, 255, 255, 0.30) !important;
+        border-color: rgba(255, 255, 255, 1) !important;
     }
 }

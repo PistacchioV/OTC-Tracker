@@ -17921,12 +17921,12 @@ input::-webkit-inner-spin-button {
 }
 
 [data-bs-theme=dark] .form-check-input-light {
-  background-color: rgba(var(--ins-light-rgb), 0.12);
-  border-color: rgba(var(--ins-light-rgb), 0.7);
+  background-color: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.85) !important;
 }
 [data-bs-theme=dark] .form-check-input-light:not(:checked):hover {
-  background-color: rgba(var(--ins-light-rgb), 0.2);
-  border-color: rgba(var(--ins-light-rgb), 0.9);
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgb(255, 255, 255) !important;
 }
 
 .form-check-input:not(:checked) {
@@ -17937,12 +17937,12 @@ input::-webkit-inner-spin-button {
 }
 
 [data-bs-theme=dark] .form-check-input:not(:checked) {
-  background-color: rgba(var(--ins-light-rgb), 0.12);
-  border-color: rgba(var(--ins-light-rgb), 0.7);
+  background-color: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.85) !important;
 }
 [data-bs-theme=dark] .form-check-input:not(:checked):hover {
-  background-color: rgba(var(--ins-light-rgb), 0.2);
-  border-color: rgba(var(--ins-light-rgb), 0.9);
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgb(255, 255, 255) !important;
 }
 
 .modal-content {
