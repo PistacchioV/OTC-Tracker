@@ -719,6 +719,15 @@ $(document).ready(function () {
                 });
             });
 
+            /* Deep-link from the notification bell: ?spn=NNN → pre-filter the SPN
+               column (index 9) so banking approvals land on the right row. */
+            var _spnParam = (new URLSearchParams(window.location.search).get('spn') || '').trim();
+            if (_spnParam) {
+                var _spnInput = document.querySelector('#refdata-search-row th:nth-child(10) input');
+                if (_spnInput) _spnInput.value = _spnParam;
+                api.column(9).search(_spnParam).draw();
+            }
+
             /* Column toggle (starts at col 2 = Status) */
             var colDefs = [
                 {lbl:'Status',         key:'rd-col-status'},

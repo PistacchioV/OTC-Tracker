@@ -479,6 +479,12 @@
                     var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
                     var initials = getInitials(n.actor_name || n.actor_sid);
                     var pageUrl  = PAGE_URL[n.page] || null;
+                    // Reference Data banking notifications deep-link to the SPN (parsed
+                    // from "SPN <spn> · …" in the detail) so approval lands pre-filtered.
+                    if (pageUrl && n.page === 'Reference Data') {
+                        var mSpn = /SPN\s+(\S+)/.exec(n.detail || '');
+                        if (mSpn) pageUrl += '?spn=' + encodeURIComponent(mSpn[1]);
+                    }
                     var el       = document.createElement(pageUrl ? 'a' : 'div');
                     el.className = 'dropdown-item notification-item py-2 text-wrap' + (isRead(n.id) ? '' : ' notif-unread');
                     el.dataset.notifId = n.id;

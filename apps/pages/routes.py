@@ -3791,6 +3791,14 @@ def _acc_disp(acc):
     return (acc.get('bank') or acc.get('account') or acc.get('id') or '').strip()
 
 
+def _bank_detail(spn, rec, extra=''):
+    """Notification detail: 'SPN <spn> · <counterparty> · <extra>'. The leading
+    'SPN <spn>' lets the bell deep-link to Reference Data filtered by that SPN."""
+    name = str((rec or {}).get('COUNTERPARTY', '') or '').strip()
+    head = 'SPN {} · {}'.format(spn, name) if name else 'SPN {}'.format(spn)
+    return head + ' · ' + extra if extra else head
+
+
 def _notify_bank(action, detail):
     """Emit a notification-bell entry for a banking maker/checker action."""
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
@@ -3817,7 +3825,7 @@ def api_cp_banking_account_add():
            'account': account, 'status': 'Pending', 'maker': sid, 'checker': ''}
     banking['ACCOUNTS'].append(acc)
     _cpd_save_list(data)
-    _notify_bank('Bank Account Added', 'SPN {} · {} (Pending approval)'.format(spn, _acc_disp(acc)))
+    _notify_bank('Bank Account Added', _bank_detail(spn, rec, _acc_disp(acc) + ' (Pending approval)'))
     return jsonify({'ok': True, 'account': acc})
 
 
@@ -3838,7 +3846,7 @@ def api_cp_banking_account_approve():
     acc['status'] = 'Active'
     acc['checker'] = sid
     _cpd_save_list(data)
-    _notify_bank('Bank Account Approved', 'SPN {} · {}'.format(spn, _acc_disp(acc)))
+    _notify_bank('Bank Account Approved', _bank_detail(spn, rec, _acc_disp(acc)))
     return jsonify({'ok': True, 'account': acc})
 
 
@@ -3859,7 +3867,7 @@ def api_cp_banking_account_delete():
         if d.get('pending') == acc_id:
             d['pending'] = None
     _cpd_save_list(data)
-    _notify_bank('Bank Account Deleted', 'SPN {} · {}'.format(spn, _acc_disp(removed)))
+    _notify_bank('Bank Account Deleted', _bank_detail(spn, rec, _acc_disp(removed)))
     return jsonify({'ok': True})
 
 
@@ -3885,7 +3893,7 @@ def api_cp_banking_default_set():
     slot['maker'] = sid
     slot['checker'] = ''
     _cpd_save_list(data)
-    _notify_bank('Bank Default Set', 'SPN {} · {} → {} (Pending approval)'.format(spn, kind, _acc_disp(acc)))
+    _notify_bank('Bank Default Set', _bank_detail(spn, rec, '{} → {} (Pending approval)'.format(kind, _acc_disp(acc))))
     return jsonify({'ok': True, 'slot': slot})
 
 
@@ -3910,7 +3918,7 @@ def api_cp_banking_default_approve():
     slot['checker'] = sid
     _cpd_save_list(data)
     _acc = next((a for a in banking['ACCOUNTS'] if a['id'] == slot['current']), None)
-    _notify_bank('Bank Default Approved', 'SPN {} · {} → {}'.format(spn, kind, _acc_disp(_acc)))
+    _notify_bank('Bank Default Approved', _bank_detail(spn, rec, '{} → {}'.format(kind, _acc_disp(_acc))))
     return jsonify({'ok': True, 'slot': slot})
 
 
