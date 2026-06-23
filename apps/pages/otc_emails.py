@@ -570,8 +570,11 @@ def build_eml_bytes(draft, sender_email=None):
     if draft.get('cc'):
         msg['Cc'] = draft['cc']
     msg['X-Unsent'] = '1'                       # → opens as editable draft in Outlook
-    msg.set_content('Este e-mail requer um cliente compatível com HTML.')
-    msg.add_alternative(draft.get('html', '') or '', subtype='html')
+    # Single-part text/html with 8-bit transfer encoding. The default
+    # quoted-printable encoding mangles the HTML when Outlook opens the draft
+    # (=3D for '=', =C3=A7 for accents, soft line breaks splitting tags) — 8bit
+    # keeps the markup byte-for-byte so the table renders correctly.
+    msg.set_content(draft.get('html', '') or '', subtype='html', cte='8bit')
     return bytes(msg)
 
 
