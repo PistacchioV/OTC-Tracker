@@ -165,12 +165,13 @@
     }
     .cp-addbtn {
         flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
-        font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 7px;
-        border: 1px solid rgba(13,110,253,0.3); background: rgba(13,110,253,0.08);
-        color: #0d6efd; cursor: pointer;
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+        font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 7px;
+        border: 1px solid #0d6efd; background: #0d6efd;
+        color: #fff; cursor: pointer;
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, box-shadow 160ms ease;
     }
-    .cp-addbtn:hover { background: rgba(13,110,253,0.16); }
+    .cp-addbtn i, .cp-addbtn span { color: #fff; }
+    .cp-addbtn:hover { background: #0b5ed7; border-color: #0b5ed7; box-shadow: 0 2px 8px rgba(13,110,253,0.35); }
     .cp-addbtn:active { transform: scale(0.95); }
 
     .cp-subzone-title { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; color: var(--ins-secondary-color,#6c757d); opacity: 0.85; margin: 8px 0 4px; }
@@ -194,7 +195,16 @@
     }
     [data-bs-theme="dark"] .cp-acc-row { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
     .cp-acc-main { font-size: 0.84rem; min-width: 0; }
-    .cp-acc-main .badge { margin-left: 6px; vertical-align: middle; }
+    .cp-acc-main .badge { display: inline-block; margin-top: 6px; vertical-align: middle; }
+    .cp-acc-chips { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .cp-def-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 0.64rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; letter-spacing: 0.02em; }
+    .cp-chip-pay  { background: rgba(13,110,253,0.16); color: #0d6efd; }
+    .cp-chip-rec  { background: rgba(13,202,240,0.20); color: #0aa2c0; }
+    .cp-chip-pend { background: rgba(255,193,7,0.20);  color: #b45309; }
+    [data-bs-theme="dark"] .cp-chip-pay  { color: #6ea8fe; }
+    [data-bs-theme="dark"] .cp-chip-rec  { color: #3dd5f3; }
+    [data-bs-theme="dark"] .cp-chip-pend { color: #ffda6a; }
+    .cp-acc-row.is-default { border-color: rgba(13,110,253,0.45); box-shadow: inset 2px 0 0 #0d6efd; }
     .cp-acc-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
     .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px; }
     .cp-glass .btn-xs:active { transform: scale(0.94); }
@@ -248,10 +258,11 @@
     .cp-glass .form-control-sm, .cp-glass .form-select-sm { font-size: 0.8rem; }
     .cp-remove {
         width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid rgba(220,53,69,0.25); background: rgba(220,53,69,0.06); color: #dc3545; cursor: pointer;
-        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+        border: 1px solid #dc3545; background: #dc3545; color: #fff; cursor: pointer;
+        transition: transform 160ms cubic-bezier(0.23,1,0.32,1), background 160ms ease, box-shadow 160ms ease;
     }
-    .cp-remove:hover { background: rgba(220,53,69,0.14); }
+    .cp-remove i { color: #fff; }
+    .cp-remove:hover { background: #bb2d3b; border-color: #bb2d3b; box-shadow: 0 2px 8px rgba(220,53,69,0.35); }
     .cp-remove:active { transform: scale(0.92); }
 
     /* select2 inside the glass popup */
@@ -977,17 +988,26 @@ $(document).ready(function () {
             var active  = String(a.status).toLowerCase() === 'active';
             var payDef  = bk.DEFAULT_PAY.current === a.id,     payPend = bk.DEFAULT_PAY.pending === a.id;
             var recDef  = bk.DEFAULT_RECEIVE.current === a.id, recPend = bk.DEFAULT_RECEIVE.pending === a.id;
-            var payBtn = '<button type="button" class="btn btn-xs ' + (payDef ? 'btn-primary' : 'btn-outline-primary') + (payPend ? ' cp-def-pend' : '') +
+            var payTip = _attr(t('rd-cp-set-pay','Set as Default PAY'));
+            var recTip = _attr(t('rd-cp-set-receive','Set as Default RECEIVE'));
+            var payBtn = '<button type="button" title="' + payTip + '" class="btn btn-xs ' + (payDef ? 'btn-primary' : 'btn-outline-primary') + (payPend ? ' cp-def-pend' : '') +
                 '" data-defset="PAY" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (payDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'PAY</button>';
-            var recBtn = '<button type="button" class="btn btn-xs ' + (recDef ? 'btn-info' : 'btn-outline-info') + (recPend ? ' cp-def-pend' : '') +
+            var recBtn = '<button type="button" title="' + recTip + '" class="btn btn-xs ' + (recDef ? 'btn-info' : 'btn-outline-info') + (recPend ? ' cp-def-pend' : '') +
                 '" data-defset="RECEIVE" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (recDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'RECEIVE</button>';
             var ops = '';
             if (!active) {
                 var own = a.maker && a.maker === CURRENT_USER;
                 ops += '<button type="button" class="btn btn-xs btn-success cp-acc-approve" data-id="' + a.id + '"' + (own ? ' disabled title="' + _attr(ownTitle) + '"' : '') + '><i class="ti ti-check"></i></button>';
             }
-            ops += '<button type="button" class="btn btn-xs btn-outline-danger cp-acc-del" data-id="' + a.id + '"><i class="ti ti-trash"></i></button>';
-            return '<div class="cp-acc-row"><div class="cp-acc-main">' + _accLabel(a) + ' ' + _accBadge(a.status) + '</div>' +
+            ops += '<button type="button" class="btn btn-xs btn-danger cp-acc-del" data-id="' + a.id + '"><i class="ti ti-trash"></i></button>';
+            // explicit default chips on the account itself (clearer than the toggle state alone)
+            var chips = '';
+            if (payDef)       chips += '<span class="cp-def-chip cp-chip-pay"><i class="ti ti-star-filled"></i> ' + t('rd-cp-default-pay','Default PAY') + '</span>';
+            else if (payPend) chips += '<span class="cp-def-chip cp-chip-pend"><i class="ti ti-clock"></i> PAY ' + t('rd-cp-pending-short','pending') + '</span>';
+            if (recDef)       chips += '<span class="cp-def-chip cp-chip-rec"><i class="ti ti-star-filled"></i> ' + t('rd-cp-default-receive','Default RECEIVE') + '</span>';
+            else if (recPend) chips += '<span class="cp-def-chip cp-chip-pend"><i class="ti ti-clock"></i> RECEIVE ' + t('rd-cp-pending-short','pending') + '</span>';
+            var chipsHtml = chips ? '<div class="cp-acc-chips">' + chips + '</div>' : '';
+            return '<div class="cp-acc-row' + ((payDef || recDef) ? ' is-default' : '') + '"><div class="cp-acc-main">' + _accLabel(a) + ' ' + _accBadge(a.status) + chipsHtml + '</div>' +
                    '<div class="cp-acc-actions">' + payBtn + recBtn + ops + '</div></div>';
         }).join('');
         if (!bk.ACCOUNTS.length) rows = '<div class="cp-empty" data-lang="cp-none">—</div>';
@@ -1138,6 +1158,7 @@ $(document).ready(function () {
                     if (res.j && res.j.ok) {
                         if (onOk) onOk(res.j);
                         flashSaved(popup, t('rd-cp-saved', 'Saved'), 'ok');
+                        if (window.fetchNotifications) window.fetchNotifications();  // bell updates immediately
                     } else {
                         var err = res.j && res.j.error;
                         var msg = err === 'same_user' ? t('rd-swal-own-changes-text','Another user must approve records you modified.')

@@ -1155,6 +1155,18 @@ apps/static/data/translations/{en,br,es}.json    ← swal-email-ok-*, rd-cp-acc-
 scripts/import_dados_bancarios.py                ← NOVO import de contas (ACCOUNTS model)
 ```
 
+### 21.6 Default mais claro + notificações no sino (incremento)
+- **UI:** cada conta default mostra um **chip explícito** (`★ Default PAY` azul / `★ Default RECEIVE`
+  ciano; `⏳ pending` quando proposto), além do estado ★ no botão; a linha da conta default ganha
+  `box-shadow inset 2px 0 0 #0d6efd` (`.cp-acc-row.is-default`). Botões PAY/RECEIVE têm `title` (tooltip
+  "Set as Default PAY/RECEIVE"). Botões de editor (Add/excluir) agora **sólidos** com ícone branco
+  (`.cp-addbtn` azul, `.cp-remove`/`.cp-acc-del` vermelho). i18n `rd-cp-default-pay/-receive`,
+  `rd-cp-set-pay/-receive`, `rd-cp-pending-short`.
+- **Notificações:** os 5 endpoints de banking chamam `_create_notification` (helper `_notify_bank`,
+  page=`Reference Data`) → ações `Bank Account Added/Approved/Deleted`, `Bank Default Set/Approved`.
+  `ACTION_META` (building-bank/star/trash) + `PAGE_URL['Reference Data']='/reference-data'` no topbar.
+  `bankFetch` chama `window.fetchNotifications()` no sucesso → sino atualiza na hora (padrão da seção 12).
+
 ### Pendências (seção 21)
 - Rodar `import_dados_bancarios.py` com a planilha real no Downloads.
 - Testar o fluxo maker/checker no app rodando (2 SIDs) — gating de Default e self-approval.
