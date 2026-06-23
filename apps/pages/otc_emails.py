@@ -3,9 +3,11 @@ OTC settlement / confirmation e-mail builders for the New Deals pages.
 
 Ports the legacy CommodiXchange `email_Premio` (premium settlement, D0) and
 `email_if` (economic affirmation against Financial Institutions) logic into the
-web app. Each builder returns a list of draft dicts; `open_outlook_drafts`
-opens them in Outlook for manual review via win32com (Windows/JPM only — it
-fails gracefully elsewhere, like the rest of the Outlook-bound features).
+web app. Each builder returns a list of draft dicts; `build_drafts_download`
+packages them as downloadable .eml files (single) or a .zip (several) with the
+`X-Unsent: 1` header, so the file opens as an editable draft in the ACTING
+user's own Outlook — the app runs on a shared server, so server-side Outlook
+automation would only ever open a draft on the server, never on the user.
 
 Counterparty static data comes from two JSON files under static/data:
   - RefData.json           → B3 ACCOUNT, COUNTERPARTY, TAX ID, SPN by acronym
@@ -22,8 +24,11 @@ Eligibility:
 """
 
 import os
+import io
 import json
+import zipfile
 from datetime import datetime
+from email.message import EmailMessage
 
 _DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
 
@@ -148,14 +153,28 @@ def _is_jpmorgan(name):
 def _first_bank(cp, prefer='PAY'):
     """Return (bank, agency, account) from a CounterpartyDetails record.
 
-    Reads the structured BANKING shape saved by the Reference Data editor,
-    preferring the `prefer` bucket (PAY = the bank's view of paying the
-    counterparty; RECEIVE = the counterparty receiving), then the other bucket,
-    then the legacy flat BANK/AGENCY/ACCOUNT fields.
+    Uses the ACCOUNTS model: the account flagged as the approved default for the
+    `prefer` side (DEFAULT_PAY/RECEIVE.current). Falls back to the other side's
+    default, then the first active (else any) account, then the legacy
+    PAY/RECEIVE lists, then the flat BANK/AGENCY/ACCOUNT fields.
     """
+    def _tuple(a):
+        return a.get('bank', ''), a.get('agency', ''), a.get('account', '')
+
     bk = cp.get('BANKING') or {}
-    order = (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY')
-    for key in order:
+    accounts = bk.get('ACCOUNTS')
+    if isinstance(accounts, list) and accounts:
+        by_id = {a.get('id'): a for a in accounts if isinstance(a, dict)}
+        for kind in (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY'):
+            slot = bk.get('DEFAULT_' + kind) or {}
+            acc = by_id.get(slot.get('current'))
+            if acc:
+                return _tuple(acc)
+        active = [a for a in accounts if str(a.get('status', '')).lower() == 'active']
+        return _tuple((active or accounts)[0])
+
+    # legacy shapes
+    for key in (prefer, 'RECEIVE' if prefer == 'PAY' else 'PAY'):
         lst = bk.get(key) or []
         if lst:
             b = lst[0] or {}
@@ -304,15 +323,16 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
                  'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
                  'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:</p>')
 
-    body += '<table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
+    # Blank line between the apurado/IR/final values block and the banking block.
+    body += '<br><table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
     if final < 0:
         # JPM is paying the counterparty → use the PAY banking details.
         bank_name, agency, account = _first_bank(cp, 'PAY')
         body += (
-            '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
-            '<tr><td>Nº e nome da agência:</td><td style="font-weight:bold;">{ag}</td></tr>'
-            '<tr><td>Conta–corrente nº:</td><td style="font-weight:bold;">{cc}</td></tr>'
-            '<tr><td>CNPJ/MF nº:</td><td style="font-weight:bold;">{cnpj}</td></tr>'
+            '<tr><td style="font-weight:bold;">Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
+            '<tr><td style="font-weight:bold;">Nº e nome da agência:</td><td style="font-weight:bold;">{ag}</td></tr>'
+            '<tr><td style="font-weight:bold;">Conta–corrente nº:</td><td style="font-weight:bold;">{cc}</td></tr>'
+            '<tr><td style="font-weight:bold;">CNPJ/MF nº:</td><td style="font-weight:bold;">{cnpj}</td></tr>'
         ).format(
             bank=bank_name or '—',
             ag=agency or '—',
@@ -321,10 +341,10 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
         )
     else:
         body += (
-            '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">BANCO JP MORGAN S/A - 376</td></tr>'
-            '<tr><td>Nº e nome da agência:</td><td style="font-weight:bold;">0011</td></tr>'
-            '<tr><td>Conta–corrente nº:</td><td style="font-weight:bold;">5116003</td></tr>'
-            '<tr><td>CNPJ/MF nº:</td><td style="font-weight:bold;">33.172.537/0001-98</td></tr>'
+            '<tr><td style="font-weight:bold;">Nome e nº do banco:</td><td style="font-weight:bold;">BANCO JP MORGAN S/A - 376</td></tr>'
+            '<tr><td style="font-weight:bold;">Nº e nome da agência:</td><td style="font-weight:bold;">0011</td></tr>'
+            '<tr><td style="font-weight:bold;">Conta–corrente nº:</td><td style="font-weight:bold;">5116003</td></tr>'
+            '<tr><td style="font-weight:bold;">CNPJ/MF nº:</td><td style="font-weight:bold;">33.172.537/0001-98</td></tr>'
         )
     body += '</table>'
 
@@ -522,28 +542,59 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Outlook draft opener (Windows/JPM only)
+# Draft delivery — .eml download (works on the ACTING user's machine)
 # ──────────────────────────────────────────────────────────────────────────
-def open_outlook_drafts(drafts):
-    """Open each draft in Outlook for manual review. Returns (opened, error)."""
-    if not drafts:
-        return 0, None
-    try:
-        import win32com.client as _win32
-    except Exception:
-        return 0, 'win32com não disponível. A geração de e-mails requer Windows com Outlook instalado.'
+# The Flask app runs on a shared server, so server-side Outlook automation
+# (win32com) would only ever open a draft on the SERVER's machine — never on the
+# remote user's. Instead we build a standard .eml per draft and let the user's
+# browser download it; double-clicking it opens an editable draft in *their*
+# Outlook. The `X-Unsent: 1` header is what makes Outlook open it in compose
+# (draft) mode rather than as a received message. The From is the acting user's
+# e-mail (looked up from their SID at login → session['user_email']).
+def _safe_filename(s):
+    out = []
+    for ch in str(s or ''):
+        out.append(ch if (ch.isalnum() or ch in ' -_().[]') else '_')
+    name = ''.join(out).strip()
+    return (name[:120] or 'draft')
 
-    opened = 0
-    try:
-        outlook = _win32.Dispatch('Outlook.Application')
+
+def build_eml_bytes(draft, sender_email=None):
+    """Render one draft dict to RFC-822 .eml bytes that Outlook opens as a draft."""
+    msg = EmailMessage()
+    msg['Subject'] = draft.get('subject', '') or ''
+    if sender_email:
+        msg['From'] = sender_email
+    if draft.get('to'):
+        msg['To'] = draft['to']
+    if draft.get('cc'):
+        msg['Cc'] = draft['cc']
+    msg['X-Unsent'] = '1'                       # → opens as editable draft in Outlook
+    msg.set_content('Este e-mail requer um cliente compatível com HTML.')
+    msg.add_alternative(draft.get('html', '') or '', subtype='html')
+    return bytes(msg)
+
+
+def build_drafts_download(drafts, sender_email=None):
+    """Package drafts for the browser to download.
+
+    Returns (filename, mimetype, data_bytes). A single draft → one .eml; several
+    → a .zip of .eml files. Returns (None, None, None) when there are no drafts.
+    """
+    if not drafts:
+        return None, None, None
+    if len(drafts) == 1:
+        d = drafts[0]
+        fname = _safe_filename(d.get('subject', 'draft')) + '.eml'
+        return fname, 'message/rfc822', build_eml_bytes(d, sender_email)
+
+    buf = io.BytesIO()
+    seen = {}
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         for d in drafts:
-            mail = outlook.CreateItem(0)
-            mail.To = d.get('to', '') or ''
-            mail.CC = d.get('cc', '') or ''
-            mail.Subject = d.get('subject', '')
-            mail.HTMLBody = d.get('html', '')
-            mail.Display()
-            opened += 1
-    except Exception as exc:
-        return opened, str(exc)
-    return opened, None
+            base = _safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            zf.writestr(entry + '.eml', build_eml_bytes(d, sender_email))
+    return 'otc_email_drafts.zip', 'application/zip', buf.getvalue()

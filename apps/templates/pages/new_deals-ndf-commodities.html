@@ -1870,33 +1870,48 @@ $(document).ready(function() {
                     var prevHtml = btn.innerHTML;
                     btn.style.pointerEvents = 'none';
                     btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
+                    var _reset = function () { btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml; };
                     fetch('/api/new-deals/ndf-commodities/economic-affirmation', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deals: _collectAllNdfDeals() })
                     })
-                    .then(function (r) { return r.json(); })
-                    .then(function (res) {
-                        btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml;
-                        if (res.ok && (res.count || 0) === 0) {
-                            Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'),
-                                text: t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'),
-                                icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
-                            return;
+                    .then(function (r) {
+                        // JSON body = nothing to generate / error; file body = download
+                        // the .eml/.zip so it opens in the user's own Outlook.
+                        var ct = (r.headers.get('Content-Type') || '');
+                        if (ct.indexOf('application/json') !== -1) {
+                            return r.json().then(function (res) {
+                                if (res.ok && (res.count || 0) === 0) {
+                                    Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'),
+                                        text: t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'),
+                                        icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                                    return;
+                                }
+                                Swal.fire({ title: t('swal-err-title', 'Error'),
+                                    text: res.error || t('swal-request-failed', 'Request failed:'),
+                                    icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                            });
                         }
-                        if (!res.ok || res.error) {
-                            Swal.fire({ title: t('swal-err-title', 'Error'),
-                                text: res.error || t('swal-request-failed', 'Request failed:'),
-                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
-                            return;
-                        }
-                        Swal.fire({ title: t('swal-email-ok-title', 'Drafts Opened'),
-                            text: (res.opened || res.count) + ' ' + t('swal-email-ok-text', 'e-mail draft(s) opened in Outlook for review.'),
-                            icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc',
-                            timer: 3000, timerProgressBar: true });
+                        var count = r.headers.get('X-Draft-Count') || '';
+                        var cd = r.headers.get('Content-Disposition') || '';
+                        var m = /filename="?([^"]+)"?/.exec(cd);
+                        var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
+                        return r.blob().then(function (blob) {
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url; a.download = fname;
+                            document.body.appendChild(a); a.click(); a.remove();
+                            setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+                            Swal.fire({ title: t('swal-email-ok-title', 'Drafts Downloaded'),
+                                text: count + ' ' + t('swal-email-ok-text', 'e-mail draft(s) downloaded. Open the file to edit in your Outlook.'),
+                                icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc',
+                                timer: 4000, timerProgressBar: true });
+                        });
                     })
+                    .then(function () { _reset(); })
                     .catch(function (err) {
-                        btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml;
+                        _reset();
                         Swal.fire({ title: t('swal-err-title', 'Error'),
                             text: t('swal-request-failed', 'Request failed:') + ' ' + err.message,
                             icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });

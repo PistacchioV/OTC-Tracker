@@ -186,6 +186,26 @@
     }
     [data-bs-theme="dark"] .cp-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
 
+    /* banking accounts (maker/checker) */
+    .cp-acc-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        border: 1px solid rgba(0,0,0,0.07); border-radius: 10px; padding: 7px 10px; margin-bottom: 6px;
+        background: rgba(255,255,255,0.4);
+    }
+    [data-bs-theme="dark"] .cp-acc-row { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
+    .cp-acc-main { font-size: 0.84rem; min-width: 0; }
+    .cp-acc-main .badge { margin-left: 6px; vertical-align: middle; }
+    .cp-acc-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+    .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px; }
+    .cp-glass .btn-xs:active { transform: scale(0.94); }
+    .cp-def-pend { outline: 2px dashed rgba(255,193,7,0.8); outline-offset: 1px; }
+    .cp-def-banner {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        font-size: 0.75rem; padding: 6px 10px; margin-bottom: 6px; border-radius: 8px;
+        background: rgba(255,193,7,0.14); border: 1px solid rgba(255,193,7,0.35);
+    }
+    .cp-acc-add { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) auto auto; gap: 6px; align-items: center; margin-top: 8px; }
+
     /* edit-mode rows */
     .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
     .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px 32px; }
@@ -914,13 +934,93 @@ $(document).ready(function () {
             '<div class="text-end mt-1"><button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div></div>';
     }
 
+    /* ════════ BANKING ACCOUNTS (maker/checker) ════════ */
+    function _uid() { return Math.random().toString(36).slice(2, 10); }
+    function _normBank(cp) {
+        cp = cp || {};
+        var bk = (cp.BANKING && typeof cp.BANKING === 'object') ? cp.BANKING : {};
+        var accounts = Array.isArray(bk.ACCOUNTS) ? bk.ACCOUNTS.slice() : [];
+        if (!accounts.length && (Array.isArray(bk.PAY) || Array.isArray(bk.RECEIVE))) {
+            var seen = {};
+            ['PAY', 'RECEIVE'].forEach(function(k){
+                (bk[k] || []).forEach(function(b){
+                    b = b || {};
+                    var key = (b.bank||'') + '|' + (b.agency||'') + '|' + (b.account||'');
+                    if ((b.bank||b.agency||b.account) && !seen[key]) {
+                        seen[key] = 1;
+                        accounts.push({ id:_uid(), bank:b.bank||'', agency:b.agency||'', account:b.account||'', status:'Active', maker:'IMPORT', checker:'IMPORT' });
+                    }
+                });
+            });
+        }
+        accounts = accounts.map(function(a){ a = a||{}; return {
+            id:a.id||_uid(), bank:a.bank||'', agency:a.agency||'', account:a.account||'',
+            status:a.status||'Active', maker:a.maker||'', checker:a.checker||'' }; });
+        function slot(s){ s = s||{}; return { current:s.current||null, pending:s.pending||null, maker:s.maker||'', checker:s.checker||'' }; }
+        return { ACCOUNTS:accounts, DEFAULT_PAY:slot(bk.DEFAULT_PAY), DEFAULT_RECEIVE:slot(bk.DEFAULT_RECEIVE) };
+    }
+    function _accBadge(status){
+        var active = String(status).toLowerCase() === 'active';
+        return '<span class="badge ' + (active ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning') +
+            '" data-lang="' + (active ? 'rd-cp-acc-active' : 'rd-cp-acc-pending') + '">' + (active ? 'Active' : 'Pending') + '</span>';
+    }
+    function _accLabel(a){
+        var head = a.bank ? '<strong>' + _esc(a.bank) + '</strong>' : '—';
+        var sub = [];
+        if (a.agency)  sub.push(t('rd-cp-agency','Agency') + ' ' + _esc(a.agency));
+        if (a.account) sub.push(t('rd-cp-account','Account') + ' ' + _esc(a.account));
+        return head + (sub.length ? '<div class="cp-spn">' + sub.join(' · ') + '</div>' : '');
+    }
+    function _renderBankZone(bk){
+        var ownTitle = t('rd-swal-own-changes','Cannot approve your own changes');
+        var rows = bk.ACCOUNTS.map(function(a){
+            var active  = String(a.status).toLowerCase() === 'active';
+            var payDef  = bk.DEFAULT_PAY.current === a.id,     payPend = bk.DEFAULT_PAY.pending === a.id;
+            var recDef  = bk.DEFAULT_RECEIVE.current === a.id, recPend = bk.DEFAULT_RECEIVE.pending === a.id;
+            var payBtn = '<button type="button" class="btn btn-xs ' + (payDef ? 'btn-primary' : 'btn-outline-primary') + (payPend ? ' cp-def-pend' : '') +
+                '" data-defset="PAY" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (payDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'PAY</button>';
+            var recBtn = '<button type="button" class="btn btn-xs ' + (recDef ? 'btn-info' : 'btn-outline-info') + (recPend ? ' cp-def-pend' : '') +
+                '" data-defset="RECEIVE" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (recDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'RECEIVE</button>';
+            var ops = '';
+            if (!active) {
+                var own = a.maker && a.maker === CURRENT_USER;
+                ops += '<button type="button" class="btn btn-xs btn-success cp-acc-approve" data-id="' + a.id + '"' + (own ? ' disabled title="' + _attr(ownTitle) + '"' : '') + '><i class="ti ti-check"></i></button>';
+            }
+            ops += '<button type="button" class="btn btn-xs btn-outline-danger cp-acc-del" data-id="' + a.id + '"><i class="ti ti-trash"></i></button>';
+            return '<div class="cp-acc-row"><div class="cp-acc-main">' + _accLabel(a) + ' ' + _accBadge(a.status) + '</div>' +
+                   '<div class="cp-acc-actions">' + payBtn + recBtn + ops + '</div></div>';
+        }).join('');
+        if (!bk.ACCOUNTS.length) rows = '<div class="cp-empty" data-lang="cp-none">—</div>';
+        function banner(kind, slot){
+            if (!slot.pending) return '';
+            var acc = bk.ACCOUNTS.filter(function(a){ return a.id === slot.pending; })[0];
+            if (!acc) return '';
+            var own = slot.maker && slot.maker === CURRENT_USER;
+            return '<div class="cp-def-banner"><span>' + t('rd-cp-pending-default','Pending default') + ' ' + kind + ': ' + _esc(acc.bank || acc.account || acc.id) + '</span>' +
+                '<button type="button" class="btn btn-xs btn-success cp-def-approve" data-kind="' + kind + '"' + (own ? ' disabled title="' + _attr(ownTitle) + '"' : '') + '><i class="ti ti-check"></i> ' + t('rd-swal-approve-btn','Approve') + '</button></div>';
+        }
+        var bankOpts = '<option value=""></option>' + CP_BANKS.map(function(o){ return '<option value="' + _attr(o) + '">' + _esc(o) + '</option>'; }).join('');
+        var addForm = '<div class="cp-acc-add" style="display:none;">' +
+            '<select class="form-select form-select-sm cp-add-bank">' + bankOpts + '</select>' +
+            '<input type="text" class="form-control form-control-sm cp-add-agency" placeholder="' + t('rd-cp-agency','Agency') + '">' +
+            '<input type="text" class="form-control form-control-sm cp-add-account" placeholder="' + t('rd-cp-account','Account') + '">' +
+            '<button type="button" class="btn btn-xs btn-primary cp-add-submit"><i class="ti ti-check"></i></button>' +
+            '<button type="button" class="btn btn-xs btn-outline-secondary cp-add-cancel"><i class="ti ti-x"></i></button></div>';
+        return '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-zone-bank">Banking Data</span>' +
+                '<button type="button" class="cp-addbtn" data-bankadd><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
+               banner('PAY', bk.DEFAULT_PAY) + banner('RECEIVE', bk.DEFAULT_RECEIVE) +
+               '<div class="cp-acc-list">' + rows + '</div>' + addForm;
+    }
+
     /* ── Double-click a row → glass dialog (view ↔ edit) ──────────────── */
     $('#ref-data-table tbody').on('dblclick', 'tr', function() {
         var rowData = dt.row(this).data();
         if (!rowData) return;
         var spn  = _txt(rowData[9]).toUpperCase();
         var name = _txt(rowData[3]) || spn || '—';
+        if (!_CPDETAILS[spn]) _CPDETAILS[spn] = { SPN: spn, COUNTERPARTY: name };
         var model = _normCp(_CPDETAILS[spn]);
+        var bankState = _normBank(_CPDETAILS[spn]);
         var mode = 'view';
 
         function renderHead() {
@@ -948,18 +1048,8 @@ $(document).ready(function () {
                     '<div class="cp-view-only">' + _viewCgd(model) + '</div>' +
                     '<div class="cp-edit-only" id="cp-cgd-list"></div>' +
                 '</div>' +
-                /* Banking */
-                '<div class="cp-zone">' +
-                    '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-zone-bank">Banking Data</span></div>' +
-                    '<div class="cp-subzone-title" data-lang="rd-cp-pay">PAY</div>' +
-                    '<div class="cp-view-only">' + _viewBankList(model.BANKING.PAY) + '</div>' +
-                    '<div class="cp-edit-only" id="cp-pay-list"></div>' +
-                    '<div class="cp-edit-only text-end"><button type="button" class="cp-addbtn" data-add="pay"><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
-                    '<div class="cp-subzone-title" data-lang="rd-cp-receive">RECEIVE</div>' +
-                    '<div class="cp-view-only">' + _viewBankList(model.BANKING.RECEIVE) + '</div>' +
-                    '<div class="cp-edit-only" id="cp-receive-list"></div>' +
-                    '<div class="cp-edit-only text-end"><button type="button" class="cp-addbtn" data-add="receive"><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
-                '</div>' +
+                /* Banking accounts — own maker/checker actions, not gated by edit mode */
+                '<div class="cp-zone" id="cp-bank-zone">' + _renderBankZone(bankState) + '</div>' +
                 /* Contacts */
                 '<div class="cp-zone">' + zoneHead('rd-cp-contacts', 'Contacts', 'contact') +
                     '<div class="cp-view-only">' + _viewContacts(model) + '</div>' +
@@ -1003,10 +1093,6 @@ $(document).ready(function () {
             var $p = $(popup);
             var $cgd = $p.find('#cp-cgd-list').empty();
             (model.CGD.length ? model.CGD : ['']).forEach(function(v){ $cgd.append(_cgdRow(v)); });
-            var $pay = $p.find('#cp-pay-list').empty();
-            (model.BANKING.PAY.length ? model.BANKING.PAY : [{}]).forEach(function(b){ $pay.append(_bankRow(b)); });
-            var $rec = $p.find('#cp-receive-list').empty();
-            (model.BANKING.RECEIVE.length ? model.BANKING.RECEIVE : [{}]).forEach(function(b){ $rec.append(_bankRow(b)); });
             var $ct = $p.find('#cp-contact-list').empty();
             (model.CONTACTS.length ? model.CONTACTS : [{}]).forEach(function(c){ $ct.append(_contactCard(c)); });
             initCpSelect2($p, popup);
@@ -1016,16 +1102,6 @@ $(document).ready(function () {
             var $p = $(popup);
             var cgd = [];
             $p.find('.cp-cgd-input').each(function(){ var v = this.value.trim(); if (v) cgd.push(v); });
-            function banks(sel){
-                var out = [];
-                $p.find(sel + ' .cp-bank-row').each(function(){
-                    var bank = $(this).find('.cp-bank-select').val() || '';
-                    var ag   = $(this).find('.cp-bank-agency').val().trim();
-                    var ac   = $(this).find('.cp-bank-account').val().trim();
-                    if (bank || ag || ac) out.push({ bank: bank, agency: ag, account: ac });
-                });
-                return out;
-            }
             var contacts = [];
             $p.find('#cp-contact-list .cp-contact-card').each(function(){
                 var nm = $(this).find('.cp-c-name').val().trim();
@@ -1035,16 +1111,42 @@ $(document).ready(function () {
                 var st = $(this).find('.cp-c-status').val() || 'Active';
                 if (nm || ph || em || rl.length) contacts.push({ name: nm, phone: ph, email: em, rules: rl, status: st });
             });
-            return { CGD: cgd, BANKING: { PAY: banks('#cp-pay-list'), RECEIVE: banks('#cp-receive-list') }, CONTACTS: contacts };
+            // BANKING is managed by its own endpoints (not part of this bulk save).
+            return { CGD: cgd, BANKING: { PAY: [], RECEIVE: [] }, CONTACTS: contacts };
         }
 
         function rerenderView(popup) {
             var $p = $(popup);
-            $p.find('.cp-zone').eq(0).find('.cp-view-only').html(_viewCgd(model));
-            $p.find('.cp-zone').eq(1).find('.cp-view-only').eq(0).html(_viewBankList(model.BANKING.PAY));
-            $p.find('.cp-zone').eq(1).find('.cp-view-only').eq(1).html(_viewBankList(model.BANKING.RECEIVE));
-            $p.find('.cp-zone').eq(2).find('.cp-view-only').html(_viewContacts(model));
+            $p.find('#cp-cgd-list').closest('.cp-zone').find('.cp-view-only').html(_viewCgd(model));
+            $p.find('#cp-contact-list').closest('.cp-zone').find('.cp-view-only').html(_viewContacts(model));
             $p.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
+        }
+
+        /* Re-render only the banking zone from bankState (after a maker/checker action). */
+        function refreshBankZone(popup) {
+            var $z = $(popup).find('#cp-bank-zone');
+            $z.html(_renderBankZone(bankState));
+            $z.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
+        }
+
+        /* POST a banking action; on success run onOk(res), else flash the error. */
+        function bankFetch(url, body, popup, onOk) {
+            flashSaved(popup, t('rd-cp-saving', 'Saving…'), 'pending');
+            fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
+                .then(function(res){
+                    if (res.j && res.j.ok) {
+                        if (onOk) onOk(res.j);
+                        flashSaved(popup, t('rd-cp-saved', 'Saved'), 'ok');
+                    } else {
+                        var err = res.j && res.j.error;
+                        var msg = err === 'same_user' ? t('rd-swal-own-changes-text','Another user must approve records you modified.')
+                                : err === 'not_active' ? t('rd-cp-acc-need-active','Only an approved (Active) account can be set as Default.')
+                                : (err || t('rd-cp-save-error','Save failed'));
+                        flashSaved(popup, msg, 'error');
+                    }
+                })
+                .catch(function(){ flashSaved(popup, t('rd-cp-save-error','Save failed'), 'error'); });
         }
 
         function flashSaved(popup, text, type) {
@@ -1085,7 +1187,7 @@ $(document).ready(function () {
                     refreshButtons(popup);
                 } else {
                     model = _normCp(collect(popup));
-                    _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, model);
+                    _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, model, { BANKING: bankState });
                     mode = 'view';
                     popup.setAttribute('data-mode', 'view');
                     rerenderView(popup);
@@ -1109,8 +1211,6 @@ $(document).ready(function () {
             $p.on('click', '[data-add]', function(){
                 var which = this.getAttribute('data-add');
                 if (which === 'cgd') { $p.find('#cp-cgd-list').append(_cgdRow('')); }
-                else if (which === 'pay') { var $r=$(_bankRow({})); $p.find('#cp-pay-list').append($r); initCpSelect2($r, popup); }
-                else if (which === 'receive') { var $r2=$(_bankRow({})); $p.find('#cp-receive-list').append($r2); initCpSelect2($r2, popup); }
                 else if (which === 'contact') { var $c=$(_contactCard({})); $p.find('#cp-contact-list').append($c); initCpSelect2($c, popup); }
             });
             /* Remove row */
@@ -1121,6 +1221,77 @@ $(document).ready(function () {
             $p.on('change', '.cp-cgd-picker', function(){
                 var br = _ymdToBr(this.value);
                 if (br) $(this).closest('.cp-cgd-row').find('.cp-cgd-input').val(br);
+            });
+
+            /* ── Banking: toggle add form ── */
+            $p.on('click', '[data-bankadd]', function(){
+                var $f = $p.find('.cp-acc-add');
+                var show = $f.css('display') === 'none';
+                $f.css('display', show ? 'grid' : 'none');
+                if (show) {
+                    var $sel = $f.find('.cp-add-bank');
+                    if (!$sel.data('select2')) $sel.select2({ width:'100%', dropdownParent:$(popup), placeholder:t('rd-cp-bank','Bank'), allowClear:true });
+                }
+            });
+            $p.on('click', '.cp-add-cancel', function(){
+                $p.find('.cp-acc-add').css('display','none');
+                $p.find('.cp-add-bank').val('').trigger('change'); $p.find('.cp-add-agency,.cp-add-account').val('');
+            });
+            $p.on('click', '.cp-add-submit', function(){
+                var bank = $p.find('.cp-add-bank').val() || '';
+                var ag   = $p.find('.cp-add-agency').val().trim();
+                var ac   = $p.find('.cp-add-account').val().trim();
+                if (!(bank || ag || ac)) return;
+                bankFetch('/api/counterparty-details/banking/account/add', { SPN:spn, bank:bank, agency:ag, account:ac }, popup, function(res){
+                    bankState.ACCOUNTS.push(res.account);
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
+            });
+            /* ── Banking: approve pending account (checker ≠ maker) ── */
+            $p.on('click', '.cp-acc-approve', function(){
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/banking/account/approve', { SPN:spn, id:id }, popup, function(){
+                    var a = bankState.ACCOUNTS.filter(function(x){ return x.id===id; })[0];
+                    if (a) { a.status='Active'; a.checker=CURRENT_USER; }
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
+            });
+            /* ── Banking: delete account ── */
+            $p.on('click', '.cp-acc-del', function(){
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/banking/account/delete', { SPN:spn, id:id }, popup, function(){
+                    bankState.ACCOUNTS = bankState.ACCOUNTS.filter(function(x){ return x.id!==id; });
+                    ['DEFAULT_PAY','DEFAULT_RECEIVE'].forEach(function(k){
+                        if (bankState[k].current===id) bankState[k].current=null;
+                        if (bankState[k].pending===id) bankState[k].pending=null;
+                    });
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
+            });
+            /* ── Banking: propose Default PAY/RECEIVE (maker → pending) ── */
+            $p.on('click', '.cp-def-btn', function(){
+                if (this.disabled) return;
+                var kind = this.getAttribute('data-defset');
+                var id   = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/banking/default/set', { SPN:spn, kind:kind, id:id }, popup, function(){
+                    bankState['DEFAULT_'+kind].pending = id;
+                    bankState['DEFAULT_'+kind].maker   = CURRENT_USER;
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
+            });
+            /* ── Banking: approve Default change (checker ≠ maker) ── */
+            $p.on('click', '.cp-def-approve', function(){
+                var kind = this.getAttribute('data-kind');
+                bankFetch('/api/counterparty-details/banking/default/approve', { SPN:spn, kind:kind }, popup, function(){
+                    var s = bankState['DEFAULT_'+kind];
+                    s.current = s.pending; s.pending = null; s.checker = CURRENT_USER;
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
             });
         }
     });

@@ -7,6 +7,8 @@ import smtplib
 import json
 import threading
 import traceback
+import uuid
+import shutil
 import logging
 import time
 import duckdb
@@ -18,7 +20,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 from flask import (
     render_template, request, redirect,
-    url_for, session, flash, jsonify
+    url_for, session, flash, jsonify, make_response
 )
 from jinja2 import TemplateNotFound
 
@@ -3588,6 +3590,19 @@ def api_mapping_b3():
 # Builds the HTML drafts in apps/pages/otc_emails.py and opens them in Outlook
 # for manual review (win32com — Windows/JPM only; degrades gracefully elsewhere).
 # ==============================================================================
+def _email_drafts_response(drafts):
+    """Return the drafts as a downloadable .eml / .zip so the file opens in the
+    ACTING user's Outlook (server-side Outlook automation would only ever open on
+    the server). From = the logged-in user's e-mail (resolved from their SID)."""
+    from apps.pages import otc_emails
+    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'))
+    resp = make_response(data)
+    resp.headers['Content-Type'] = mime
+    resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
+    resp.headers['X-Draft-Count'] = str(len(drafts))
+    return resp
+
+
 @blueprint.route('/api/new-deals/opt-commodities/premium-email', methods=['POST'])
 def api_opt_premium_email():
     if not session.get('authenticated'):
@@ -3598,11 +3613,7 @@ def api_opt_premium_email():
     drafts = otc_emails.build_premium_emails(deals)
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
-
-    opened, err = otc_emails.open_outlook_drafts(drafts)
-    if err and opened == 0:
-        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
-    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+    return _email_drafts_response(drafts)
 
 
 @blueprint.route('/api/new-deals/opt-commodities/economic-affirmation', methods=['POST'])
@@ -3615,11 +3626,7 @@ def api_opt_economic_affirmation_email():
     drafts = otc_emails.build_economic_affirmation_emails(deals, asset_label='Opção Mercadoria')
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
-
-    opened, err = otc_emails.open_outlook_drafts(drafts)
-    if err and opened == 0:
-        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
-    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+    return _email_drafts_response(drafts)
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/economic-affirmation', methods=['POST'])
@@ -3632,11 +3639,7 @@ def api_ndf_economic_affirmation_email():
     drafts = otc_emails.build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria')
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
-
-    opened, err = otc_emails.open_outlook_drafts(drafts)
-    if err and opened == 0:
-        return jsonify({'ok': False, 'count': len(drafts), 'opened': opened, 'error': err}), 200
-    return jsonify({'ok': True, 'count': len(drafts), 'opened': opened, 'error': err})
+    return _email_drafts_response(drafts)
 
 
 # ==============================================================================
@@ -3655,41 +3658,241 @@ def api_counterparty_details_save():
     if not spn:
         return jsonify({'ok': False, 'error': 'missing_spn'}), 400
 
-    record = {
-        'SPN':          spn,
-        'COUNTERPARTY': payload.get('COUNTERPARTY', '') or '',
-        'CGD':          payload.get('CGD', []) or [],
-        'BANKING':      payload.get('BANKING', {}) or {'PAY': [], 'RECEIVE': []},
-        'CONTACTS':     payload.get('CONTACTS', []) or [],
-    }
+    data = _cpd_load()
+    rec = _cpd_find(data, spn)
+    created = rec is None
+    if rec is None:
+        rec = {'SPN': spn, 'COUNTERPARTY': '', 'CGD': [],
+               'BANKING': _bank_norm({}), 'CONTACTS': []}
+        data.append(rec)
 
-    path = os.path.join(_B3_DATA_DIR, 'CounterpartyDetails.json')
-    try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
-        if not isinstance(data, list):
-            data = []
-    except (json.JSONDecodeError, IOError, FileNotFoundError):
-        data = []
-
-    found = False
-    for i, c in enumerate(data):
-        if str(c.get('SPN', '') or '').strip() == spn:
-            if not record['COUNTERPARTY']:
-                record['COUNTERPARTY'] = c.get('COUNTERPARTY', '')
-            data[i] = record
-            found = True
-            break
-    if not found:
-        data.append(record)
+    # CGD / CONTACTS / COUNTERPARTY are owned by this editor; BANKING is managed
+    # by the dedicated maker/checker endpoints below, so it is left untouched.
+    if payload.get('COUNTERPARTY'):
+        rec['COUNTERPARTY'] = payload.get('COUNTERPARTY')
+    rec['CGD'] = payload.get('CGD', []) or []
+    rec['CONTACTS'] = payload.get('CONTACTS', []) or []
+    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
 
     try:
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+        _cpd_save_list(data)
     except IOError as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+    return jsonify({'ok': True, 'created': created})
 
-    return jsonify({'ok': True, 'created': not found})
+
+# ──────────────────────────────────────────────────────────────────────────
+# Banking accounts — maker/checker (Pending → Active) + Default PAY/RECEIVE
+# Model in CounterpartyDetails.json:
+#   BANKING: { ACCOUNTS:[{id,bank,agency,account,status,maker,checker}],
+#              DEFAULT_PAY:{current,pending,maker,checker},
+#              DEFAULT_RECEIVE:{...} }
+# ⚠️ SPN matching ignores leading zeros on both sides.
+# ──────────────────────────────────────────────────────────────────────────
+def _cpd_path():
+    return os.path.join(_B3_DATA_DIR, 'CounterpartyDetails.json')
+
+
+def _cpd_load():
+    try:
+        with open(_cpd_path(), encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, IOError, FileNotFoundError):
+        return []
+
+
+def _cpd_save_list(data):
+    path = _cpd_path()
+    try:
+        shutil.copy2(path, path + '.bak')
+    except (IOError, OSError):
+        pass
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _norm_spn(value):
+    s = str(value or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    s = s.lstrip('0')
+    return s or ('0' if value not in (None, '') else '')
+
+
+def _cpd_find(data, spn):
+    target = _norm_spn(spn)
+    for rec in data:
+        if _norm_spn(rec.get('SPN', '')) == target:
+            return rec
+    return None
+
+
+def _default_slot(existing=None):
+    existing = existing or {}
+    return {
+        'current': existing.get('current') or None,
+        'pending': existing.get('pending') or None,
+        'maker':   existing.get('maker', '') or '',
+        'checker': existing.get('checker', '') or '',
+    }
+
+
+def _bank_norm(bank):
+    """Coerce any stored BANKING shape into the ACCOUNTS + defaults model."""
+    if not isinstance(bank, dict):
+        bank = {}
+    accounts = bank.get('ACCOUNTS')
+    if not isinstance(accounts, list):
+        accounts = []
+        legacy = []
+        for key in ('PAY', 'RECEIVE'):
+            for b in (bank.get(key) or []):
+                legacy.append({'bank': b.get('bank', ''), 'agency': b.get('agency', ''),
+                               'account': b.get('account', '')})
+        seen = set()
+        for a in legacy:
+            k = (a['bank'], a['agency'], a['account'])
+            if any(a.values()) and k not in seen:
+                seen.add(k)
+                accounts.append({'id': uuid.uuid4().hex[:8], 'bank': a['bank'],
+                                 'agency': a['agency'], 'account': a['account'],
+                                 'status': 'Active', 'maker': 'IMPORT', 'checker': 'IMPORT'})
+    out = []
+    for a in accounts:
+        a = a or {}
+        out.append({
+            'id':      a.get('id') or uuid.uuid4().hex[:8],
+            'bank':    a.get('bank', ''), 'agency': a.get('agency', ''),
+            'account': a.get('account', ''),
+            'status':  a.get('status', 'Active') or 'Active',
+            'maker':   a.get('maker', '') or '', 'checker': a.get('checker', '') or '',
+        })
+    return {'ACCOUNTS': out,
+            'DEFAULT_PAY': _default_slot(bank.get('DEFAULT_PAY')),
+            'DEFAULT_RECEIVE': _default_slot(bank.get('DEFAULT_RECEIVE'))}
+
+
+def _bank_get_record(spn):
+    """Return (data, rec, banking) for an SPN, creating the record if needed."""
+    data = _cpd_load()
+    rec = _cpd_find(data, spn)
+    if rec is None:
+        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
+               'BANKING': _bank_norm({}), 'CONTACTS': []}
+        data.append(rec)
+    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
+    return data, rec, rec['BANKING']
+
+
+@blueprint.route('/api/counterparty-details/banking/account/add', methods=['POST'])
+def api_cp_banking_account_add():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+    bank = str(p.get('bank', '') or '').strip()
+    agency = str(p.get('agency', '') or '').strip()
+    account = str(p.get('account', '') or '').strip()
+    if not (bank or agency or account):
+        return jsonify({'ok': False, 'error': 'empty_account'}), 400
+
+    sid = session.get('user_sid', '') or ''
+    data, rec, banking = _bank_get_record(spn)
+    acc = {'id': uuid.uuid4().hex[:8], 'bank': bank, 'agency': agency,
+           'account': account, 'status': 'Pending', 'maker': sid, 'checker': ''}
+    banking['ACCOUNTS'].append(acc)
+    _cpd_save_list(data)
+    return jsonify({'ok': True, 'account': acc})
+
+
+@blueprint.route('/api/counterparty-details/banking/account/approve', methods=['POST'])
+def api_cp_banking_account_approve():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    acc_id = str(p.get('id', '') or '').strip()
+    sid = session.get('user_sid', '') or ''
+    data, rec, banking = _bank_get_record(spn)
+    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
+    if acc is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    if acc.get('maker') and acc['maker'] == sid:
+        return jsonify({'ok': False, 'error': 'same_user'}), 403
+    acc['status'] = 'Active'
+    acc['checker'] = sid
+    _cpd_save_list(data)
+    return jsonify({'ok': True, 'account': acc})
+
+
+@blueprint.route('/api/counterparty-details/banking/account/delete', methods=['POST'])
+def api_cp_banking_account_delete():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    acc_id = str(p.get('id', '') or '').strip()
+    data, rec, banking = _bank_get_record(spn)
+    banking['ACCOUNTS'] = [a for a in banking['ACCOUNTS'] if a['id'] != acc_id]
+    for slot in ('DEFAULT_PAY', 'DEFAULT_RECEIVE'):
+        d = banking[slot]
+        if d.get('current') == acc_id:
+            d['current'] = None
+        if d.get('pending') == acc_id:
+            d['pending'] = None
+    _cpd_save_list(data)
+    return jsonify({'ok': True})
+
+
+@blueprint.route('/api/counterparty-details/banking/default/set', methods=['POST'])
+def api_cp_banking_default_set():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    kind = str(p.get('kind', '') or '').upper()
+    acc_id = str(p.get('id', '') or '').strip()
+    if kind not in ('PAY', 'RECEIVE'):
+        return jsonify({'ok': False, 'error': 'bad_kind'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec, banking = _bank_get_record(spn)
+    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
+    if acc is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    if str(acc.get('status', '')).lower() != 'active':
+        return jsonify({'ok': False, 'error': 'not_active'}), 400
+    slot = banking['DEFAULT_' + kind]
+    slot['pending'] = acc_id
+    slot['maker'] = sid
+    slot['checker'] = ''
+    _cpd_save_list(data)
+    return jsonify({'ok': True, 'slot': slot})
+
+
+@blueprint.route('/api/counterparty-details/banking/default/approve', methods=['POST'])
+def api_cp_banking_default_approve():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    kind = str(p.get('kind', '') or '').upper()
+    if kind not in ('PAY', 'RECEIVE'):
+        return jsonify({'ok': False, 'error': 'bad_kind'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec, banking = _bank_get_record(spn)
+    slot = banking['DEFAULT_' + kind]
+    if not slot.get('pending'):
+        return jsonify({'ok': False, 'error': 'no_pending'}), 400
+    if slot.get('maker') and slot['maker'] == sid:
+        return jsonify({'ok': False, 'error': 'same_user'}), 403
+    slot['current'] = slot['pending']
+    slot['pending'] = None
+    slot['checker'] = sid
+    _cpd_save_list(data)
+    return jsonify({'ok': True, 'slot': slot})
 
 
 # ==============================================================================

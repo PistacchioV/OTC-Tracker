@@ -1070,3 +1070,94 @@ scripts/import_client_contacts.py               ← NOVO import da planilha
 - Popular `CounterpartyDetails.json` (rodar o script com a planilha real no Downloads).
 - Confirmar semântica PAY/RECEIVE vs sinal do resultado se surgir caso de `final > 0` com banco da CP.
 
+---
+
+## 21. Sessão 2026-06-23 — E-mail .eml (cross-machine), contas bancárias maker/checker + Default PAY/RECEIVE
+
+### 21.0 ⚠️ REGRA GLOBAL: SPN ignora zeros à esquerda
+**Sempre** que casar SPN entre planilha e `CounterpartyDetails.json` (ou qualquer lookup de SPN),
+**desconsiderar zeros à esquerda nos dois lados**: `000123` e `123` são a mesma contraparte.
+Helper canônico: `norm_spn()` nos scripts; `_norm_spn()` em `routes.py`. (pandas lê `123` como `'123.0'` →
+o helper também tira o `.0`.)
+
+### 21.1 Geração de e-mail Premium/EA agora é download .eml (não win32com)
+- **Causa:** `win32com.Dispatch('Outlook.Application')` roda **no servidor** (Flask/Gunicorn), então só
+  abria o Outlook **na máquina do servidor** — nunca na do usuário remoto. Não há como acionar o Outlook
+  local do usuário a partir do servidor num app web.
+- **Fix:** `otc_emails.build_drafts_download(drafts, sender_email)` gera **`.eml`** (1 draft) ou **`.zip`**
+  de `.eml` (vários), com header **`X-Unsent: 1`** (faz o Outlook abrir como **rascunho editável**) e
+  `From` = e-mail do SID logado (`session['user_email']`). As 3 rotas
+  (`premium-email`, `opt/ndf economic-affirmation`) retornam o arquivo via `_email_drafts_response()`
+  (helper em routes) com `Content-Disposition: attachment` + header `X-Draft-Count`; quando não há nada a
+  gerar, retornam JSON `{ok:true,count:0}`.
+- **Frontend:** `_handleEmailResponse` (opt) e bloco inline (ndf) ramificam por `Content-Type`: JSON →
+  "nada a gerar"/erro; binário → baixam o blob (cria `<a download>`), Swal "Drafts Downloaded". i18n
+  `swal-email-ok-*` atualizado.
+- `open_outlook_drafts` foi **removido**. Não é mais 100% automático: o usuário baixa e abre o arquivo
+  (limitação de segurança do browser; pode marcar "sempre abrir .eml" no Chrome/Edge p/ abrir sozinho).
+- **Formatação Premium:** `<br>` entre o bloco de valores (Apurado/IR/Final) e o bloco bancário; labels
+  bancários (Nome/banco, Agência, Conta-corrente, CNPJ) agora também em **negrito**. Conta JPM corrigida
+  p/ `5116003`.
+
+### 21.2 Novo modelo de contas bancárias (`BANKING.ACCOUNTS` + defaults)
+Substitui o `BANKING.PAY/RECEIVE` plano. Por registro em `CounterpartyDetails.json`:
+```
+BANKING: {
+  ACCOUNTS: [ {id, bank, agency, account, status:'Active'|'Pending', maker, checker} ],
+  DEFAULT_PAY:     {current, pending, maker, checker},
+  DEFAULT_RECEIVE: {current, pending, maker, checker}
+}
+```
+- `_first_bank(cp, prefer)` em `otc_emails.py` agora usa `DEFAULT_<prefer>.current` (conta **aprovada**)
+  → primeira ativa → legado PAY/RECEIVE → flat. **Só o `current` (default aprovado) entra nos e-mails**;
+  `pending` não afeta nada até ser aprovado.
+- Migração automática: `_bank_norm()` (routes) e `_normBank()` (JS) convertem PAY/RECEIVE/flat legados em
+  ACCOUNTS na leitura — sem migration destrutivo.
+
+### 21.3 Maker/checker das contas + Default
+- **Cadastrar conta** (UI) → `POST .../banking/account/add` → status **Pending**, `maker=SID`.
+- **Aprovar conta** → `.../account/approve` → **403 se maker==checker**; vira **Active**, grava `checker`.
+- **Excluir** → `.../account/delete` (limpa refs de default).
+- **Definir Default PAY/RECEIVE** (decisão do usuário: **também passa por maker/checker**) →
+  `.../default/set` (só conta Active) grava `slot.pending` + `maker`; `.../default/approve`
+  (**403 se maker==checker**) move `pending→current`, grava `checker`.
+- **Import = Active** (decisão do usuário): a planilha oficial é seed confiável; só contas cadastradas
+  manualmente na página passam pelo fluxo Pending→Active.
+- Endpoints todos em `routes.py` (após `/api/counterparty-details/save`, que agora **preserva** BANKING e
+  só grava CGD/CONTACTS/COUNTERPARTY). `_cpd_save_list` faz `.bak` antes de gravar.
+
+### 21.4 UI reference-data (editor glass)
+A zona **Banking Data** virou interativa (fora do view/edit gate): lista de contas com badge
+Active/Pending, botões **PAY**/**RECEIVE** (★ = default atual; tracejado = default pending),
+**Approve** (✓, só em Pending, desabilitado p/ próprio maker), **Excluir**, e form **Add** (select2 Bank +
+Agency + Account). Banner de "Pending default" com Approve. Tudo via `bankFetch()` → atualiza
+`bankState` + `_CPDETAILS[spn].BANKING` + `refreshBankZone()`. Funções: `_normBank`, `_renderBankZone`,
+`_accBadge`, `_accLabel`. i18n novos: `rd-cp-acc-active/-pending`, `rd-cp-pending-default`,
+`rd-cp-acc-need-active`.
+
+### 21.5 Scripts de import (zeros à esquerda)
+- `scripts/import_cgd_bank.py` (sessão anterior): `CGD_Bank.xlsx` H=SPN, N=CGD, O/P/Q=Bank/Agency/CC →
+  espelha em PAY/RECEIVE (modelo antigo).
+- `scripts/import_dados_bancarios.py` (**NOVO**): `dados_bancarios.xlsx` A=SPN, C=Bank, D=Agency, E=CC.
+  1+ contas por SPN → `BANKING.ACCOUNTS` (Active, maker/checker='IMPORT'); **idempotente** (dedup por
+  bank+agency+account, preserva ids/defaults/CGD/CONTACTS); se a CP ficar com **1 conta** e sem default,
+  vira default de PAY e RECEIVE. `--dry-run` + path arg. Roda:
+  `python3 scripts/import_dados_bancarios.py [--dry-run]`.
+
+### Arquivos (seção 21)
+```
+apps/pages/otc_emails.py                         ← .eml builders (X-Unsent/From), _first_bank usa defaults, formatação Premium
+apps/pages/routes.py                             ← _email_drafts_response; modelo BANKING + 5 endpoints maker/checker; save preserva BANKING
+apps/templates/pages/new_deals-opt-commodities.html ← download blob (_handleEmailResponse)
+apps/templates/pages/new_deals-ndf-commodities.html ← download blob (inline)
+apps/templates/pages/reference-data.html         ← zona Banking maker/checker + Default (CSS+JS) 
+apps/static/data/translations/{en,br,es}.json    ← swal-email-ok-*, rd-cp-acc-*
+scripts/import_dados_bancarios.py                ← NOVO import de contas (ACCOUNTS model)
+```
+
+### Pendências (seção 21)
+- Rodar `import_dados_bancarios.py` com a planilha real no Downloads.
+- Testar o fluxo maker/checker no app rodando (2 SIDs) — gating de Default e self-approval.
+- `_build_cpdetails_index` (otc_emails) ainda casa SPN por string upper, **não** normaliza zeros à
+  esquerda — alinhar com a regra 21.0 se aparecer mismatch nos e-mails.
+
