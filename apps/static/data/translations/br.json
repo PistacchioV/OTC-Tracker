@@ -463,6 +463,7 @@
   "rd-cp-set-pay": "Definir como Default PAY",
   "rd-cp-set-receive": "Definir como Default RECEIVE",
   "rd-cp-pending-short": "pendente",
+  "rd-cp-own-approve-text": "Esta alteração foi feita por você. A aprovação precisa ser feita por um SID diferente (maker e checker não podem ser o mesmo).",
   "rd-cp-save-error": "Falha ao salvar",
   "rd-cp-c-name": "Nome",
   "rd-cp-c-phone": "Telefone",

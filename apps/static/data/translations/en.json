@@ -463,6 +463,7 @@
   "rd-cp-set-pay": "Set as Default PAY",
   "rd-cp-set-receive": "Set as Default RECEIVE",
   "rd-cp-pending-short": "pending",
+  "rd-cp-own-approve-text": "This change was made by you. Approval must be done by a different SID (maker must differ from checker).",
   "rd-cp-save-error": "Save failed",
   "rd-cp-c-name": "Name",
   "rd-cp-c-phone": "Phone",
