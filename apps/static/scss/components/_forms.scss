@@ -133,12 +133,15 @@ input::-webkit-inner-spin-button {
 }
 
 // In dark mode a dark border vanishes against the dark surface — flip to a
-// light, sufficiently opaque hairline instead.
+// light, sufficiently opaque hairline AND a faint fill so the empty box reads
+// on its own (a low-opacity border alone was almost invisible).
 [data-bs-theme="dark"] .form-check-input-light {
-    border-color: rgba(var(--#{$prefix}light-rgb), 0.45);
+    background-color: rgba(var(--#{$prefix}light-rgb), 0.12);
+    border-color: rgba(var(--#{$prefix}light-rgb), 0.7);
 
     &:not(:checked):hover {
-        border-color: rgba(var(--#{$prefix}light-rgb), 0.65);
+        background-color: rgba(var(--#{$prefix}light-rgb), 0.2);
+        border-color: rgba(var(--#{$prefix}light-rgb), 0.9);
     }
 }
 
@@ -157,9 +160,11 @@ input::-webkit-inner-spin-button {
 }
 
 [data-bs-theme="dark"] .form-check-input:not(:checked) {
-    border-color: rgba(var(--#{$prefix}light-rgb), 0.45);
+    background-color: rgba(var(--#{$prefix}light-rgb), 0.12);
+    border-color: rgba(var(--#{$prefix}light-rgb), 0.7);
 
     &:hover {
-        border-color: rgba(var(--#{$prefix}light-rgb), 0.65);
+        background-color: rgba(var(--#{$prefix}light-rgb), 0.2);
+        border-color: rgba(var(--#{$prefix}light-rgb), 0.9);
     }
 }
