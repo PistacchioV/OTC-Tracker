@@ -27,6 +27,7 @@ import os
 import io
 import json
 import zipfile
+import unicodedata
 from datetime import datetime
 from email.header import Header
 
@@ -551,6 +552,34 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
 # Outlook. The `X-Unsent: 1` header is what makes Outlook open it in compose
 # (draft) mode rather than as a received message. The From is the acting user's
 # e-mail (looked up from their SID at login → session['user_email']).
+# Outlook distribution-list display names → recipients Outlook can resolve from
+# an .eml. A bare/accented DL display name does NOT resolve when Outlook opens an
+# .eml (it shows mojibake or unresolved text), so we substitute the actual SMTP
+# addresses / GAL aliases. Keys are matched accent-insensitively, lower-cased.
+# NOTE: keys must be ASCII-folded + lower-case (that's how lookups are normalized).
+_RECIPIENT_ALIASES = {
+    'liquidacao':        'BRSP_Settlement_Ops; brsp_financial_control; brazil_otc_settlements@jpmorgan.com; joao.hira@jpmorgan.com; latam.mumbai.acc@jpmorgan.com',
+    'brazil comm sales': 'Brazil_Comm_Sales',
+}
+
+
+def _fold_ascii(s):
+    """NFKD + drop combining marks → ASCII (keeps letters, loses accents)."""
+    return unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
+
+
+def _resolve_recipients(value):
+    """Expand known DL display names in a ';'-separated recipient string to the
+    SMTP addresses / aliases Outlook resolves; pass real addresses through."""
+    out = []
+    for tok in str(value or '').replace('\r', ' ').replace('\n', ' ').split(';'):
+        t = tok.strip()
+        if not t:
+            continue
+        out.append(_RECIPIENT_ALIASES.get(_fold_ascii(t).strip().lower(), t))
+    return '; '.join(out)
+
+
 def _safe_filename(s):
     out = []
     for ch in str(s or ''):
@@ -564,9 +593,10 @@ def build_eml_bytes(draft, sender_email=None):
 
     Built by hand for full control of the encoding:
     - Subject is RFC-2047 encoded (Outlook decodes it reliably).
-    - To/Cc are kept as RAW UTF-8 so Outlook resolves accented display names /
-      nicknames (e.g. the "Liquidação" CC) against the address book — a
-      MIME-encoded word there shows up unresolved/wrong.
+    - To/Cc are run through _resolve_recipients: distribution-list display names
+      (e.g. "Liquidação", "Brazil Comm Sales") become the real SMTP addresses /
+      aliases Outlook resolves; everything ends up ASCII, so no mojibake and no
+      unresolved MIME words.
     - Body is single-part text/html, Content-Transfer-Encoding: 8bit, so the
       HTML is byte-for-byte intact (quoted-printable would mangle the tables).
     """
@@ -577,11 +607,13 @@ def build_eml_bytes(draft, sender_email=None):
     lines = ['MIME-Version: 1.0']
     lines.append('Subject: ' + (Header(subj, 'utf-8').encode() if subj else ''))
     if sender_email:
-        lines.append('From: ' + _clean(sender_email))
-    if draft.get('to'):
-        lines.append('To: ' + _clean(draft.get('to')))
-    if draft.get('cc'):
-        lines.append('Cc: ' + _clean(draft.get('cc')))
+        lines.append('From: ' + _fold_ascii(_clean(sender_email)))
+    to = _resolve_recipients(draft.get('to'))
+    if to:
+        lines.append('To: ' + to)
+    cc = _resolve_recipients(draft.get('cc'))
+    if cc:
+        lines.append('Cc: ' + cc)
     lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
     lines.append('Content-Type: text/html; charset=utf-8')
     lines.append('Content-Transfer-Encoding: 8bit')
