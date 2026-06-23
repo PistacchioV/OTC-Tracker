@@ -323,7 +323,7 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
         body += (
             '<tr><td>Nome e nº do banco:</td><td style="font-weight:bold;">BANCO JP MORGAN S/A - 376</td></tr>'
             '<tr><td>Nº e nome da agência:</td><td style="font-weight:bold;">0011</td></tr>'
-            '<tr><td>Conta–corrente nº:</td><td style="font-weight:bold;">985116003</td></tr>'
+            '<tr><td>Conta–corrente nº:</td><td style="font-weight:bold;">5116003</td></tr>'
             '<tr><td>CNPJ/MF nº:</td><td style="font-weight:bold;">33.172.537/0001-98</td></tr>'
         )
     body += '</table>'
