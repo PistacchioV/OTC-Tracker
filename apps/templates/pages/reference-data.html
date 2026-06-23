@@ -204,7 +204,18 @@
     [data-bs-theme="dark"] .cp-chip-pay  { color: #6ea8fe; }
     [data-bs-theme="dark"] .cp-chip-rec  { color: #3dd5f3; }
     [data-bs-theme="dark"] .cp-chip-pend { color: #ffda6a; }
-    .cp-acc-row.is-default { border-color: rgba(13,110,253,0.45); box-shadow: inset 2px 0 0 #0d6efd; }
+    .cp-acc-row.is-default { border-color: rgba(13,110,253,0.45); box-shadow: inset 3px 0 0 #0d6efd; }
+    /* PAY/RECEIVE default toggles — always solid + white text for visibility;
+       colour = selected default (blue PAY / teal RECEIVE), grey = not selected,
+       amber = pending approval. */
+    .cp-glass .cp-defbtn { color: #fff !important; border: none !important; font-weight: 700; letter-spacing: 0.02em; }
+    .cp-glass .cp-defbtn i { color: #fff !important; }
+    .cp-glass .cp-defbtn-off     { background: #6b7280 !important; }
+    .cp-glass .cp-defbtn-off:hover { background: #565e6b !important; }
+    .cp-glass .cp-defbtn-pay-on  { background: #0d6efd !important; box-shadow: 0 0 0 2px rgba(13,110,253,0.35); }
+    .cp-glass .cp-defbtn-rec-on  { background: #0aa2c0 !important; box-shadow: 0 0 0 2px rgba(10,162,192,0.35); }
+    .cp-glass .cp-defbtn-pend    { background: #d39e00 !important; }
+    .cp-glass .cp-defbtn:disabled { opacity: 0.5; }
     .cp-acc-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
     .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px; }
     .cp-glass .btn-xs:active { transform: scale(0.94); }
@@ -990,9 +1001,11 @@ $(document).ready(function () {
             var recDef  = bk.DEFAULT_RECEIVE.current === a.id, recPend = bk.DEFAULT_RECEIVE.pending === a.id;
             var payTip = _attr(t('rd-cp-set-pay','Set as Default PAY'));
             var recTip = _attr(t('rd-cp-set-receive','Set as Default RECEIVE'));
-            var payBtn = '<button type="button" title="' + payTip + '" class="btn btn-xs ' + (payDef ? 'btn-primary' : 'btn-outline-primary') + (payPend ? ' cp-def-pend' : '') +
+            var payCls = payDef ? 'cp-defbtn-pay-on' : (payPend ? 'cp-defbtn-pend' : 'cp-defbtn-off');
+            var recCls = recDef ? 'cp-defbtn-rec-on' : (recPend ? 'cp-defbtn-pend' : 'cp-defbtn-off');
+            var payBtn = '<button type="button" title="' + payTip + '" class="btn btn-xs cp-defbtn ' + payCls +
                 '" data-defset="PAY" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (payDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'PAY</button>';
-            var recBtn = '<button type="button" title="' + recTip + '" class="btn btn-xs ' + (recDef ? 'btn-info' : 'btn-outline-info') + (recPend ? ' cp-def-pend' : '') +
+            var recBtn = '<button type="button" title="' + recTip + '" class="btn btn-xs cp-defbtn ' + recCls +
                 '" data-defset="RECEIVE" data-id="' + a.id + '"' + (active ? '' : ' disabled') + '>' + (recDef ? '<i class="ti ti-star-filled"></i> ' : '') + 'RECEIVE</button>';
             var ops = '';
             if (!active) {
@@ -1293,7 +1306,7 @@ $(document).ready(function () {
                 });
             });
             /* ── Banking: propose Default PAY/RECEIVE (maker → pending) ── */
-            $p.on('click', '.cp-def-btn', function(){
+            $p.on('click', '[data-defset]', function(){
                 if (this.disabled) return;
                 var kind = this.getAttribute('data-defset');
                 var id   = this.getAttribute('data-id');
