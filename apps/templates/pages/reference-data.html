@@ -38,16 +38,23 @@
     .dataTables_scrollHeadInner table,
     .dt-scroll-body > table,
     .dataTables_scrollBody > table { table-layout: fixed !important; }
-    #ref-data-table th, #ref-data-table td,
-    .dt-scroll-head thead th, .dataTables_scrollHead thead th {
+    /* Ellipsis só nas colunas de dados (a partir da 3ª). Checkbox (1) e Actions (2)
+       ficam de fora — text-overflow:ellipsis sobre um <input>/botões renderiza um
+       "…" indesejado e cortaria os botões. */
+    #ref-data-table th:nth-child(n+3), #ref-data-table td:nth-child(n+3),
+    .dt-scroll-head thead th:nth-child(n+3), .dataTables_scrollHead thead th:nth-child(n+3) {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Colunas de controle: conteúdo centralizado, sem clip/ellipsis. */
+    #ref-data-table th:nth-child(-n+2), #ref-data-table td:nth-child(-n+2) {
+        text-align: center; overflow: visible; text-overflow: clip;
     }
     /* Colunas específicas com larguras adequadas — um bloco por coluna */
     /* nth-child(1)=checkbox (2)=Actions (3)=Status (4..15)=dados */
     #ref-data-table th:nth-child(1),  #ref-data-table td:nth-child(1),
     .dt-scroll-head thead th:nth-child(1),  .dataTables_scrollHead thead th:nth-child(1)  { width:36px;  min-width:36px;  }
     #ref-data-table th:nth-child(2),  #ref-data-table td:nth-child(2),
-    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:90px;  min-width:90px;  } /* Actions */
+    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:140px; min-width:140px; } /* Actions (ajuste o px aqui) */
     #ref-data-table th:nth-child(3),  #ref-data-table td:nth-child(3),
     .dt-scroll-head thead th:nth-child(3),  .dataTables_scrollHead thead th:nth-child(3)  { width:110px; min-width:110px; } /* Status */
     #ref-data-table th:nth-child(4),  #ref-data-table td:nth-child(4),
@@ -389,10 +396,10 @@
                                id="ref-data-table">
                             <thead>
                                 <tr class="text-uppercase fs-xxs">
-                                    <th class="ps-2" style="width:36px;">
+                                    <th class="ps-2">
                                         <input class="form-check-input" type="checkbox" id="rd-select-all" title="Select all visible rows">
                                     </th>
-                                    <th style="width:90px;">Actions</th>
+                                    <th>Actions</th>
                                     <th data-lang="rd-col-status">Status</th>
                                     <th data-lang="rd-col-counterparty">Counterparty</th>
                                     <th data-lang="rd-col-economic-group">Economic Group</th>
