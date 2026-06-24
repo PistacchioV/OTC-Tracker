@@ -3651,11 +3651,21 @@ def api_b3_add():
     fields['CHECKER'] = None
     records.append(fields)
     _b3_save(path, records)
-    _create_notification(
-        user, session.get('user_name', ''),
-        'New Item', 'Index B3',
-        table + ': ' + str(fields.get('TICKER', fields.get('CODE', fields.get('NAME', ''))))
-    )
+
+    # Reference Data shares this endpoint but is its own page — name it correctly
+    # and carry SPN + counterparty so the bell deep-links to /reference-data?spn=.
+    if table == 'refdata':
+        page = 'Reference Data'
+        spn  = str(fields.get('SPN', '') or '').strip()
+        name = str(fields.get('COUNTERPARTY', '') or '').strip()
+        detail = ('SPN ' + spn) if spn else 'SPN —'
+        if name:
+            detail += ' · ' + name
+        detail += ' (Pending approval)'
+    else:
+        page = 'Index B3'
+        detail = table + ': ' + str(fields.get('TICKER', fields.get('CODE', fields.get('NAME', ''))))
+    _create_notification(user, session.get('user_name', ''), 'New Item', page, detail)
     return jsonify({'ok': True, 'idx': len(records) - 1})
 
 
