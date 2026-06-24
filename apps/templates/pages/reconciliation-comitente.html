@@ -779,8 +779,13 @@ function runAuto() {
                                    (m.where ? ' <code>' + m.where + '</code>' : '') + '</li>';
                         }).join('');
                     } else {
-                        missList = '<li>' + (res.detail ? String(res.detail).replace(/</g,'&lt;') : t('rc-swal-notfound-p','No files were found automatically.')) + '</li>';
+                        // Backend didn't specify which one — list all sources, fully
+                        // translated (never the raw backend `detail`, which is hardcoded).
+                        missList =
+                            '<li><strong>' + MISS_META.b3_cgd.label + '</strong> / <strong>' + MISS_META.party.label + '</strong> — ' + MISS_META.b3_cgd.src + ' <code>brazil.otc.ops@jpmorgan.com</code></li>' +
+                            '<li><strong>' + MISS_META.dcad.label + '</strong> — ' + MISS_META.dcad.src + ' <code>I:\\</code></li>';
                     }
+                    if (res.detail) console.warn('[recon not_found]', res.detail);
                     Swal.fire({
                         icon: 'warning',
                         title: t('rc-swal-notfound-title', 'Files not found'),
