@@ -182,6 +182,19 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
     });
 }
 
+// Per-product colors — aligned with the Deal Distribution / Flow charts
+function _productColor(p) {
+    switch (p) {
+        case 'NDF Commodities':     return ins('chart-primary');
+        case 'Option Commodities':  return ins('chart-secondary');
+        case 'Option FXO':          return '#10b981';
+        case 'NDF FWD Start':       return ins('chart-dark');
+        case 'NDF Other Publisher': return ins('chart-gray');
+        default:                    return null;   // pulled from fallback palette
+    }
+}
+const PRODUCT_FALLBACK = ['#0ea5e9', '#14b8a6', '#f59e0b', '#f43f5e', '#a855f7'];
+
 function buildClientsChart(top5) {
     const ctx = document.getElementById('top5-clients-chart');
     if (!ctx) return;
@@ -190,16 +203,34 @@ function buildClientsChart(top5) {
         ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
         return;
     }
+    // Distinct products across the top-5 clients → one stacked dataset each
+    const products = [];
+    top5.forEach(c => Object.keys(c.by_product || {}).forEach(p => { if (products.indexOf(p) === -1) products.push(p); }));
+    const stacked = products.length > 0;
+    let fb = 0;
+    const datasets = stacked
+        ? products.map(p => {
+            const base = _productColor(p) || PRODUCT_FALLBACK[fb++ % PRODUCT_FALLBACK.length];
+            return { label: p, data: top5.map(c => (c.by_product && c.by_product[p]) || 0),
+                     backgroundColor: hGradient(base, 0.55, 1), borderRadius: 4, barThickness: 22, stack: 'clients' };
+        })
+        : [{ label: 'Deals', data: top5.map(c => c.count), backgroundColor: hGradient(ins('chart-primary'), 0.55, 1), borderRadius: 6, barThickness: 22 }];
+
     clientsChart = new Chart(ctx, {
         type: 'bar',
-        data: { labels: top5.map(d => d.label), datasets: [{ label: 'Deals', data: top5.map(d => d.count), backgroundColor: hGradient(ins('chart-primary'), 0.55, 1), borderRadius: 6, barThickness: 22 }] },
+        data: { labels: top5.map(d => d.label), datasets: datasets },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             animation: { duration: 700, easing: 'easeOutQuart' },
-            plugins: { legend: { display: false }, tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x} deal${ctx.parsed.x !== 1 ? 's' : ''}` } }) },
+            plugins: {
+                legend: stacked
+                    ? { position: 'bottom', labels: { font: { family: bodyFont, size: 10 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 10 } }
+                    : { display: false },
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.x} deal${ctx.parsed.x !== 1 ? 's' : ''}` } })
+            },
             scales: {
-                x: { ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color') }, border: { display: false } },
-                y: { ticks: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), callback(val) { const l = this.getLabelForValue(val); return l.length > 22 ? l.slice(0, 21) + '…' : l; } }, grid: { display: false }, border: { display: false } }
+                x: { stacked: stacked, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color') }, border: { display: false } },
+                y: { stacked: stacked, ticks: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), callback(val) { const l = this.getLabelForValue(val); return l.length > 22 ? l.slice(0, 21) + '…' : l; } }, grid: { display: false }, border: { display: false } }
             }
         }
     });

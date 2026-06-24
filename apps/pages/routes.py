@@ -1233,7 +1233,12 @@ def api_dashboard_stats():
         for d in client_deals
         if (d.get('Client') or '').strip()
     )
-    top5_clients = [{'label': c, 'count': n} for c, n in client_counts.most_common(5)]
+    top5_clients = []
+    for c, n in client_counts.most_common(5):
+        by_product = Counter(
+            d['_product'] for d in client_deals if (d.get('Client') or '').strip() == c
+        )
+        top5_clients.append({'label': c, 'count': n, 'by_product': dict(by_product)})
 
     product_counts = Counter(d['_product'] for d in lawton_deals)
     top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
