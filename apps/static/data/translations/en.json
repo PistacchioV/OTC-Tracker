@@ -803,7 +803,7 @@
   "recon-file1": "1. Base B3 & CGD Consolidated (.xlsx)",
   "recon-file2": "2. DCADCOMITENTES B3 (.txt)",
   "recon-file3": "3. Party Central Report (.xlsx)",
-  "recon-click-select": "Click to select",
+  "recon-click-select": "Click or drag a file",
   "recon-processing": "Processing files...",
   "recon-btn-manual": "Manual Upload",
   "recon-btn-cancel": "Cancel",
