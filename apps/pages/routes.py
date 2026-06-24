@@ -2292,6 +2292,294 @@ def api_fxo_import_xlsx():
     return jsonify({'success': True, 'imported': saved, 'deals': deals, 'errors': errors})
 
 
+@blueprint.route('/api/new-deals/opt-fxo/send-conecta', methods=['POST'])
+def api_fxo_send_conecta():
+    """B3 Conecta file for FXO. Same layout as opt-commodities with the FXO tweaks:
+    Tipo Indicador (f[2])='4', Tipo de Cotação (f[17])='2',
+    'Data de fixing do ativo subjacente' (f[19]) = last fixing date when VANILLA (blank ASIAN),
+    'Data de fixing da moeda do ativo subjacente' (f[20]) always blank.
+    Asian fixing-date count uses the ANBIMA calendar (FXHolidaySchedule)."""
+    from decimal import Decimal
+    import datetime as _dt
+    import json as _json
+
+    data  = request.get_json(silent=True) or {}
+    deals = data.get('deals', [])
+    if not deals:
+        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+
+    today = _dt.datetime.today().strftime('%Y%m%d')
+
+    def _sh(v):
+        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
+
+    def _date(val):
+        val = _sh(val)
+        if not val:
+            return ''
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                return _dt.datetime.strptime(val, fmt).strftime('%Y%m%d')
+            except ValueError:
+                continue
+        return ''
+
+    def _num(val, div100=False):
+        val = _sh(str(val or ''))
+        if not val:
+            return ''
+        clean = val.replace(',', '')
+        try:
+            d = Decimal(clean)
+            if div100:
+                d = d / Decimal('100')
+            return format(d.normalize(), 'f').replace('.', ',')
+        except Exception:
+            return clean.replace('.', ',')
+
+    def _qty(val):
+        v = _sh(str(val or ''))
+        if not v:
+            return ''
+        try:
+            return str(int(round(float(v.replace(',', ''))))) + ',00'
+        except Exception:
+            return v
+
+    def _cli(client):
+        c = client.upper()
+        if 'LAWTON' in c:
+            return '73760009'
+        if 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c:
+            return '00041007'
+        return '73760009'
+
+    def _cpty(client):
+        c = client.upper()
+        if 'LAWTON' in c:
+            return '00041007'
+        if 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c:
+            return '73760009'
+        return '73760102'
+
+    def _taxid(client, taxid):
+        c = client.upper()
+        if 'LAWTON' in c or 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c:
+            return ''
+        return re.sub(r'[.\-/]', '', _sh(taxid))
+
+    deal_count = 0
+    all_lines  = []
+
+    for deal in deals:
+        client     = _sh(deal.get('Client', ''))
+        taxid      = _sh(deal.get('TaxID', ''))
+        instrument = _sh(deal.get('Instrument', ''))
+        direction  = _sh(deal.get('Direction', ''))
+        trade_type       = _sh(deal.get('TradeType', ''))
+        strike_ccy       = _sh(deal.get('StrikeCurrency', ''))
+        fx_holiday_sched = _sh(deal.get('FXHolidaySchedule', '')) or 'anbima'
+        vanilla          = trade_type.upper() == 'VANILLA'
+        asian            = trade_type.upper() == 'ASIAN'
+        brl              = strike_ccy.upper() == 'BRL'
+
+        opt = 'P' if 'PUT' in instrument.upper() else ('C' if 'CALL' in instrument.upper() else '')
+        dir_code  = '2' if direction.upper() == 'SELL' else '1'
+        fix_start = _date(deal.get('FixingStartDate', ''))
+        fix_end   = _date(deal.get('FixingEndDate', ''))
+
+        # ANBIMA calendar (file name is case-insensitive on the FS we run on)
+        _deal_holidays = set()
+        if not vanilla and fx_holiday_sched:
+            _sched_file = fx_holiday_sched.replace('-', '_').lower()
+            holiday_path = os.path.join(_B3_DATA_DIR, '{}.json'.format(_sched_file))
+            try:
+                with open(holiday_path, encoding='utf-8') as _hf:
+                    _raw = _json.load(_hf)
+                _deal_holidays = set(item['date'] if isinstance(item, dict) else item for item in _raw)
+            except Exception:
+                pass
+
+        _biz = 0
+        if not vanilla and fix_start and fix_end:
+            try:
+                _s = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
+                _e = _dt.datetime.strptime(fix_end, '%Y%m%d').date()
+                _cur = _s
+                while _cur <= _e:
+                    if _cur.weekday() < 5 and _cur.strftime('%Y-%m-%d') not in _deal_holidays:
+                        _biz += 1
+                    _cur += _dt.timedelta(days=1)
+            except Exception:
+                pass
+
+        f = [''] * 63
+        f[0]  = 'OPC  00002'
+        f[1]  = '1'
+        f[2]  = '4'                                   # FXO: Tipo Indicador
+        f[3]  = _cli(client)
+        f[4]  = dir_code
+        f[6]  = _cpty(client)
+        f[7]  = _taxid(client, taxid)
+        f[8]  = opt
+        f[9]  = _date(deal.get('TradeDate', ''))
+        f[10] = _date(deal.get('SettlementDate', ''))
+        f[11] = _sh(deal.get('UnderlyingAsset', ''))
+        f[12] = _qty(deal.get('TotalNotional', ''))
+        f[13] = _num(deal.get('Strike', ''))
+        f[14] = '1'
+        f[16] = '2'
+        f[17] = '2'                                   # FXO: Tipo de Cotação
+        f[18] = 'S' if brl else ''
+        f[19] = fix_end if vanilla else ''            # FXO: data fixing ativo subjacente = last fixing (VANILLA)
+        f[20] = ''                                    # FXO: data fixing moeda sempre em branco
+        f[23] = str(random.randint(1000000000, 9999999999))
+        f[24] = _sh(deal.get('Deal', ''))
+        f[26] = _num(deal.get('PremiumPerUnit', ''))
+        _spot_date = _date(deal.get('SpotDate', ''))
+        _is_bank_or_lawton = ('LAWTON' in client.upper() or 'BANCO J.P MORGAN' in client.upper()
+                              or 'JP MORGAN' in client.upper())
+        if _is_bank_or_lawton:
+            f[28] = '2' if f[9] == _spot_date else '3'
+        else:
+            f[28] = '1'
+        f[32] = _spot_date
+
+        if vanilla:
+            f[47] = ''
+            f[48] = '0'
+        else:
+            f[47] = '1'
+            f[48] = str(_biz) if _biz else ''
+
+        deal_count += 1
+        all_lines.append(';'.join(f))
+
+        # Asian — one fixing line (line type 2) per business day in the window
+        if asian and fix_start and fix_end:
+            try:
+                _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
+                _e2 = _dt.datetime.strptime(fix_end, '%Y%m%d').date()
+                _cur2 = _s2
+                while _cur2 <= _e2:
+                    if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
+                        _d = _cur2.strftime('%Y%m%d')
+                        all_lines.append('OPC  00002;2;{};;;'.format(_d))
+                    _cur2 += _dt.timedelta(days=1)
+            except Exception:
+                pass
+
+    header  = 'OPC  00002;0;JPMORGANBM;{};00002;'.format(today)
+    content = '\n'.join([header] + all_lines)
+
+    try:
+        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+        filepath = _unique_filepath(CONECTA_NEW_PATH, 'FXO_Banco.txt')
+        with open(filepath, 'w', encoding='utf-8') as fh:
+            fh.write(content)
+        if deal_count > 0:
+            _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                 'Sent to B3', 'Opt FXO',
+                                 str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
+        return jsonify({'ok': True, 'filename': os.path.basename(filepath), 'count': deal_count})
+    except Exception as exc:                          # noqa: BLE001
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@blueprint.route('/api/new-deals/opt-fxo/mapping-b3', methods=['POST'])
+def api_fxo_mapping_b3():
+    """Same B3-ID mapping as opt-commodities (Conecta return files carry 'OPC'
+    option lines), but resolves deals in the _optfxo.json cache."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    data = request.get_json(silent=True) or {}
+    sent_deals = data.get('deals', [])
+    if not sent_deals:
+        return jsonify({'ok': True, 'results': []})
+
+    mapping = {}
+    files_to_delete = []
+    try:
+        if not os.path.isdir(RETURN_PATH):
+            return jsonify({'ok': False, 'error': 'Return folder not found: {}'.format(RETURN_PATH)}), 400
+        for fname in os.listdir(RETURN_PATH):
+            fpath = os.path.join(RETURN_PATH, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, encoding='utf-8', errors='replace') as fh:
+                    lines = fh.readlines()
+                file_has_opc = False
+                for line in lines[1:]:
+                    line = line.strip()
+                    if not line or line[56:59] != 'OPC':
+                        continue
+                    file_has_opc = True
+                    parts = line.split(';')
+                    if len(parts) < 5:
+                        continue
+                    b3_id       = parts[1].strip()
+                    status_text = parts[3].strip()
+                    pipe_parts  = parts[4].strip().split('|')
+                    if len(pipe_parts) < 25 or pipe_parts[1].strip() != '1':
+                        continue
+                    deal_text = pipe_parts[24].strip()
+                    if not deal_text:
+                        continue
+                    is_ok = (status_text == 'EXECUCAO OK')
+                    if deal_text not in mapping or (is_ok and not mapping[deal_text]['ok']):
+                        mapping[deal_text] = {'b3_id': b3_id, 'ok': is_ok}
+                if file_has_opc:
+                    files_to_delete.append(fpath)
+            except Exception:
+                continue
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+    results = []
+    for sent in sent_deals:
+        deal_text   = sent.get('Deal', '')
+        client_name = sent.get('Client', '')
+        if not deal_text or deal_text not in mapping:
+            continue
+        info       = mapping[deal_text]
+        new_status = 'Success' if info['ok'] else 'Error'
+        updates    = {'Status': new_status}
+        if info['ok']:
+            updates['B3_ID'] = info['b3_id']
+
+        file_path, idx = _find_fxo(deal_text, client_name)
+        if file_path is not None:
+            with _cache_lock:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as fh:
+                        deals_list = json.load(fh)
+                    deals_list[idx].update(updates)
+                    _atomic_write_json(file_path, deals_list)
+                except Exception:
+                    pass
+
+        results.append({
+            'id':     deal_text,
+            'deal':   deal_text,
+            'b3_id':  info['b3_id'] if info['ok'] else '',
+            'status': new_status,
+        })
+
+    for fpath in files_to_delete:
+        try:
+            os.remove(fpath)
+        except Exception:
+            pass
+
+    if results:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'B3 Mapped', 'Opt FXO',
+                             str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+    return jsonify({'ok': True, 'results': results})
+
+
 # ==============================================================================
 # API — NDF COMMODITIES CACHE (mesma lógica que opt-commodities, arquivo _ndfcomm.json)
 # ==============================================================================
@@ -4099,11 +4387,20 @@ def api_b3_update():
         new_status     = 'PENDING'
 
     _b3_save(path, records)
-    _create_notification(
-        user, session.get('user_name', ''),
-        'Item Updated', 'Index B3',
-        table + ' — ' + action + ' → ' + new_status
-    )
+    # Reference Data shares this endpoint but is its own page — name it correctly
+    # and carry SPN + counterparty so the bell deep-links to /reference-data?spn=.
+    if table == 'refdata':
+        page = 'Reference Data'
+        spn  = str(rec.get('SPN', '') or '').strip()
+        name = str(rec.get('COUNTERPARTY', '') or '').strip()
+        detail = ('SPN ' + spn) if spn else 'SPN —'
+        if name:
+            detail += ' · ' + name
+        detail += ' — ' + action + ' → ' + new_status
+    else:
+        page = 'Index B3'
+        detail = table + ' — ' + action + ' → ' + new_status
+    _create_notification(user, session.get('user_name', ''), 'Item Updated', page, detail)
     return jsonify({'ok': True, 'new_status': new_status})
 
 
@@ -4120,12 +4417,20 @@ def api_b3_delete():
     if not (0 <= int(idx) < len(records)):
         return jsonify({'ok': False, 'error': 'bad_index'}), 400
 
-    records.pop(int(idx))
+    removed = records.pop(int(idx))
     _b3_save(path, records)
-    _create_notification(
-        session.get('user_sid', ''), session.get('user_name', ''),
-        'Item Deleted', 'Index B3', table
-    )
+    if table == 'refdata':
+        page = 'Reference Data'
+        spn  = str((removed or {}).get('SPN', '') or '').strip()
+        name = str((removed or {}).get('COUNTERPARTY', '') or '').strip()
+        detail = ('SPN ' + spn) if spn else 'SPN —'
+        if name:
+            detail += ' · ' + name
+    else:
+        page = 'Index B3'
+        detail = table
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Item Deleted', page, detail)
     return jsonify({'ok': True})
 
 

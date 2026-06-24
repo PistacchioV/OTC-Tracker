@@ -2849,7 +2849,7 @@ $(document).ready(function() {
                     selectedRowIds.clear();
                     toggleActionButtons(false);
                     table.draw(false);
-                    var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'OPC_Banco.txt';
+                    var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'FXO_Banco.txt';
                                     Swal.fire({ title: t('swal-sent-title', 'Sent'), text: res.count + ' ' + t('swal-deals-written', 'deal(s) written to') + ' ' + _opcFnames + '.', icon: 'success', timer: 2500, showConfirmButton: false });
                 } else {
                     Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: res.error || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
@@ -3950,12 +3950,12 @@ $(document).ready(function() {
                         (instrument.toUpperCase().indexOf('CALL') !== -1 ? 'C' : '');
         var dirCode   = direction.toUpperCase() === 'SELL' ? '2' : '1';
         var fixStart  = _date(deal.FixingStartDate || '');
-        var fxconv    = _date(deal.FXConvDate || '');
+        var fixEnd    = _date(deal.FixingEndDate || '');
 
         var f = new Array(63).fill('');
         f[0]  = 'OPC  00002';
         f[1]  = '1';
-        f[2]  = '3';
+        f[2]  = '4';
         f[3]  = _cli(client);
         f[4]  = dirCode;
         f[6]  = _cpty(client);
@@ -3968,10 +3968,12 @@ $(document).ready(function() {
         f[13] = _num(deal.Strike || '', qic);
         f[14] = '1';
         f[16] = '2';
-        f[17] = '5';
+        f[17] = '2';
         f[18] = brl ? 'S' : '';
-        f[19] = vanilla ? fixStart : '';
-        f[20] = (!brl || vanilla) ? fxconv : '';
+        // FXO: data de fixing do ativo subjacente = last fixing date (VANILLA); blank (ASIAN).
+        //      data de fixing da moeda do ativo subjacente sempre em branco.
+        f[19] = vanilla ? fixEnd : '';
+        f[20] = '';
         f[23] = String(Math.floor(Math.random() * 9000000000) + 1000000000);
         f[24] = _sh(deal.Deal || '');
         f[26] = _num(deal.PremiumPerUnit || '', qic);
@@ -4153,7 +4155,7 @@ $(document).ready(function() {
                                 '<span class="badge badge-label text-bg-info rounded-pill">Sent</span>'
                             );
                             table.draw(false);
-                            var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'OPC_Banco.txt';
+                            var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'FXO_Banco.txt';
                                     Swal.fire({ title: t('swal-sent-title', 'Sent'), text: res.count + ' ' + t('swal-deals-written', 'deal(s) written to') + ' ' + _opcFnames + '.', icon: 'success', timer: 2500, showConfirmButton: false });
                         } else {
                             Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: res.error || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
@@ -4202,7 +4204,7 @@ $(document).ready(function() {
             };
             if (isAsian && bizList.length > 0) {
                 var fixingRows = bizList.map(function(d) {
-                    return { fixDate: d, fxDate: isBrl ? d : '' };
+                    return { fixDate: d, fxDate: '' };  // FXO: no currency fixing date
                 });
                 showPreview(cnt, fixingRows, calInfo);
             } else {
@@ -4210,7 +4212,7 @@ $(document).ready(function() {
             }
         }
         if (!isVanilla && fxSched && deal.FixingStartDate && deal.FixingEndDate) {
-            fetch('{{ config.ASSETS_ROOT }}/data/' + encodeURIComponent(fxSched) + '.json')
+            fetch('{{ config.ASSETS_ROOT }}/data/' + encodeURIComponent(fxSched.toLowerCase()) + '.json')
                 .then(function(r) {
                     return r.ok
                         ? r.json().then(function(d) { return { status: true, data: d }; })
