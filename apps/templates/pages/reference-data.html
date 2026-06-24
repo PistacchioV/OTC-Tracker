@@ -28,6 +28,52 @@
         text-align: center !important;
         vertical-align: middle !important;
     }
+
+    /* ── FIX alinhamento scrollX: header clone × corpo ──
+       table-layout:fixed torna a largura do <col> autoritativa nas duas tabelas
+       (header + corpo), imune à diferença de padding/conteúdo. Cada largura é
+       definida 1× cobrindo #ref-data-table E o clone do header (.dt-scroll-head/
+       .dataTables_scrollHead) — o DataTables remove o id da tabela clonada. */
+    .dt-scroll-headInner table,
+    .dataTables_scrollHeadInner table,
+    .dt-scroll-body > table,
+    .dataTables_scrollBody > table { table-layout: fixed !important; }
+    #ref-data-table th, #ref-data-table td,
+    .dt-scroll-head thead th, .dataTables_scrollHead thead th {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Colunas específicas com larguras adequadas — um bloco por coluna */
+    /* nth-child(1)=checkbox (2)=Actions (3)=Status (4..15)=dados */
+    #ref-data-table th:nth-child(1),  #ref-data-table td:nth-child(1),
+    .dt-scroll-head thead th:nth-child(1),  .dataTables_scrollHead thead th:nth-child(1)  { width:36px;  min-width:36px;  }
+    #ref-data-table th:nth-child(2),  #ref-data-table td:nth-child(2),
+    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:90px;  min-width:90px;  } /* Actions */
+    #ref-data-table th:nth-child(3),  #ref-data-table td:nth-child(3),
+    .dt-scroll-head thead th:nth-child(3),  .dataTables_scrollHead thead th:nth-child(3)  { width:110px; min-width:110px; } /* Status */
+    #ref-data-table th:nth-child(4),  #ref-data-table td:nth-child(4),
+    .dt-scroll-head thead th:nth-child(4),  .dataTables_scrollHead thead th:nth-child(4)  { width:230px; min-width:230px; } /* Counterparty */
+    #ref-data-table th:nth-child(5),  #ref-data-table td:nth-child(5),
+    .dt-scroll-head thead th:nth-child(5),  .dataTables_scrollHead thead th:nth-child(5)  { width:150px; min-width:150px; } /* Economic Group */
+    #ref-data-table th:nth-child(6),  #ref-data-table td:nth-child(6),
+    .dt-scroll-head thead th:nth-child(6),  .dataTables_scrollHead thead th:nth-child(6)  { width:220px; min-width:220px; } /* Banker */
+    #ref-data-table th:nth-child(7),  #ref-data-table td:nth-child(7),
+    .dt-scroll-head thead th:nth-child(7),  .dataTables_scrollHead thead th:nth-child(7)  { width:120px; min-width:120px; } /* Signature Type */
+    #ref-data-table th:nth-child(8),  #ref-data-table td:nth-child(8),
+    .dt-scroll-head thead th:nth-child(8),  .dataTables_scrollHead thead th:nth-child(8)  { width:140px; min-width:140px; } /* Tax ID */
+    #ref-data-table th:nth-child(9),  #ref-data-table td:nth-child(9),
+    .dt-scroll-head thead th:nth-child(9),  .dataTables_scrollHead thead th:nth-child(9)  { width:95px;  min-width:95px;  } /* ECI */
+    #ref-data-table th:nth-child(10), #ref-data-table td:nth-child(10),
+    .dt-scroll-head thead th:nth-child(10), .dataTables_scrollHead thead th:nth-child(10) { width:90px;  min-width:90px;  } /* SPN */
+    #ref-data-table th:nth-child(11), #ref-data-table td:nth-child(11),
+    .dt-scroll-head thead th:nth-child(11), .dataTables_scrollHead thead th:nth-child(11) { width:110px; min-width:110px; } /* CASID */
+    #ref-data-table th:nth-child(12), #ref-data-table td:nth-child(12),
+    .dt-scroll-head thead th:nth-child(12), .dataTables_scrollHead thead th:nth-child(12) { width:130px; min-width:130px; } /* UCN */
+    #ref-data-table th:nth-child(13), #ref-data-table td:nth-child(13),
+    .dt-scroll-head thead th:nth-child(13), .dataTables_scrollHead thead th:nth-child(13) { width:110px; min-width:110px; } /* B3 Account */
+    #ref-data-table th:nth-child(14), #ref-data-table td:nth-child(14),
+    .dt-scroll-head thead th:nth-child(14), .dataTables_scrollHead thead th:nth-child(14) { width:170px; min-width:170px; } /* Commodities Acronym */
+    #ref-data-table th:nth-child(15), #ref-data-table td:nth-child(15),
+    .dt-scroll-head thead th:nth-child(15), .dataTables_scrollHead thead th:nth-child(15) { width:150px; min-width:150px; } /* FX Cash Acronym */
     /* Export collection dropdown — fundo sólido e texto legível */
     .dt-button-collection {
         background: #fff !important;
@@ -811,6 +857,8 @@ $(document).ready(function () {
         .then(function(data) {
             data.forEach(function(r,i){ r._idx = i; });
             dt.clear().rows.add(buildRows(data)).draw();
+            // scrollX clones the header into a separate table; resync widths after load.
+            setTimeout(function(){ dt.columns.adjust(); }, 100);
         })
         .catch(function(e){ console.error('RefData load error:', e); });
 
