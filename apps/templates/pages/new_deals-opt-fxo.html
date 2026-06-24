@@ -959,24 +959,24 @@
             <label class="form-label form-label-sm mb-1">Settlement Date</label>
             <input type="date" class="form-control form-control-sm" id="ar-settledate">
           </div>
-          <div class="col-md-2">
-            <label class="form-label form-label-sm mb-1">SPN <small class="text-muted">(auto)</small></label>
-            <input type="text" class="form-control form-control-sm bg-light" id="ar-spn" disabled>
-          </div>
           <div class="col-md-3">
-            <label class="form-label form-label-sm mb-1">Accronym</label>
+            <label class="form-label form-label-sm mb-1">SPN</label>
             <div class="position-relative">
-              <input type="text" class="form-control form-control-sm" id="ar-acronym" autocomplete="off" placeholder="Type to search…">
-              <div id="ar-acronym-drop" class="ar-ac-drop" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9200;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 6px rgba(0,0,0,.12)"></div>
+              <input type="text" class="form-control form-control-sm" id="ar-spn" autocomplete="off" placeholder="Type to search SPN…">
+              <div id="ar-spn-drop" class="ar-ac-drop" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9200;max-height:180px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 6px rgba(0,0,0,.12)"></div>
             </div>
           </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm mb-1">Accronym <small class="text-muted">(auto)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="ar-acronym" disabled>
+          </div>
           <div class="col-md-3">
-            <label class="form-label form-label-sm mb-1">Client <small class="text-muted">(auto from Accronym)</small></label>
+            <label class="form-label form-label-sm mb-1">Client <small class="text-muted">(auto from SPN)</small></label>
             <input type="text" class="form-control form-control-sm bg-light" id="ar-client" disabled>
           </div>
 
           <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">Tax ID <small class="text-muted">(auto from Accronym)</small></label>
+            <label class="form-label form-label-sm mb-1">Tax ID <small class="text-muted">(auto from SPN)</small></label>
             <input type="text" class="form-control form-control-sm bg-light" id="ar-taxid" disabled>
           </div>
           <div class="col-md-2">
@@ -1181,6 +1181,8 @@ function t(key, fallback) { return _TRANS_CACHE[key] || fallback || key; }
 // ── Reference data for inline dropdowns ─────────────────────────────────────
 var _REFDATA             = [];   // full RefData array
 var _ACRONYM_OPTIONS     = [];   // unique COMMODITIES ACCRONYM values
+var _SPN_OPTIONS         = [];   // unique SPN values (FXO lookup reference)
+function _normSpn(s) { s = String(s == null ? '' : s).trim(); if (s.slice(-2) === '.0') s = s.slice(0, -2); s = s.replace(/^0+/, ''); return s; }
 var _ASSET_OPTIONS       = [];   // unique Underlying Asset codes (COMM OPC)
 var _SUBJACENTE_MAP      = {};   // asset code → Commodity name
 var _SUBJACENTE_FATOR    = {};   // asset code → Fator Conversao (all entries)
@@ -1191,12 +1193,15 @@ var _FX_HOLIDAY_OPTIONS  = [];   // available FX holiday schedule names
         .then(function (r) { return r.json(); })
         .then(function (d) {
             _REFDATA = d;
-            var seen = {};
+            var seen = {}, seenSpn = {};
             d.forEach(function (x) {
                 var acc = x['COMMODITIES ACCRONYM'];
                 if (acc && !seen[acc]) { seen[acc] = true; _ACRONYM_OPTIONS.push(acc); }
+                var spn = String(x['SPN'] == null ? '' : x['SPN']).trim();
+                if (spn && !seenSpn[spn]) { seenSpn[spn] = true; _SPN_OPTIONS.push(spn); }
             });
             _ACRONYM_OPTIONS.sort();
+            _SPN_OPTIONS.sort();
         })
         .catch(function () {});
 
@@ -4420,13 +4425,32 @@ $(document).ready(function() {
             }
         });
 
-        // Acronym autocomplete
-        $(document).on('focus click', '#ar-acronym', function (e) {
+        // FXO reference is the SPN: fill Accronym (FX) / Client / Tax ID from RefData
+        // (matching by SPN ignoring leading zeros).
+        function _fxoFillFromSpn(spnRaw) {
+            var key = _normSpn(spnRaw), match = null;
+            if (key) {
+                for (var i = 0; i < _REFDATA.length; i++) {
+                    if (_normSpn(_REFDATA[i]['SPN']) === key) { match = _REFDATA[i]; break; }
+                }
+            }
+            if (match) {
+                $('#ar-acronym').val(match['FX CASH ACCRONYM'] || '');
+                $('#ar-client').val(match['COUNTERPARTY'] || '');
+                $('#ar-taxid').val(match['TAX ID'] || '');
+            } else {
+                $('#ar-acronym,#ar-client,#ar-taxid').val('');
+            }
+        }
+
+        // SPN autocomplete
+        $(document).on('focus click', '#ar-spn', function (e) {
             e.stopPropagation();
-            arBuildDrop($('#ar-acronym-drop'), _ACRONYM_OPTIONS, this.value);
+            arBuildDrop($('#ar-spn-drop'), _SPN_OPTIONS, this.value);
         });
-        $(document).on('input', '#ar-acronym', function () {
-            arBuildDrop($('#ar-acronym-drop'), _ACRONYM_OPTIONS, this.value);
+        $(document).on('input', '#ar-spn', function () {
+            arBuildDrop($('#ar-spn-drop'), _SPN_OPTIONS, this.value);
+            _fxoFillFromSpn(this.value);
         });
 
         // Autocomplete item select
@@ -4436,25 +4460,15 @@ $(document).ready(function() {
             var dropId = $(this).closest('.ar-ac-drop').attr('id');
             $(this).closest('.ar-ac-drop').hide();
 
-            if (dropId === 'ar-acronym-drop') {
-                $('#ar-acronym').val(val);
-                var match = null;
-                for (var i = 0; i < _REFDATA.length; i++) {
-                    if (_REFDATA[i]['COMMODITIES ACCRONYM'] === val) { match = _REFDATA[i]; break; }
-                }
-                if (match) {
-                    $('#ar-spn').val(match['SPN'] || '');
-                    $('#ar-client').val(match['COUNTERPARTY'] || '');
-                    $('#ar-taxid').val(match['TAX ID'] || '');
-                } else {
-                    $('#ar-spn,#ar-client,#ar-taxid').val('');
-                }
+            if (dropId === 'ar-spn-drop') {
+                $('#ar-spn').val(val);
+                _fxoFillFromSpn(val);
             }
         });
 
         // Close dropdowns on outside click
         $(document).on('click', function (e) {
-            if (!$(e.target).closest('#ar-acronym,#ar-acronym-drop').length) {
+            if (!$(e.target).closest('#ar-spn,#ar-spn-drop').length) {
                 $('.ar-ac-drop').hide();
             }
         });

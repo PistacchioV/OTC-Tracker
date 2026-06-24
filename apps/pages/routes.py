@@ -2267,10 +2267,12 @@ def api_fxo_import_xlsx():
         for r in it:
             if r is None:
                 continue
-            # Rules 1 & 2 — drop rows with empty End Counterparty / Description
+            # Drop rows with empty End Counterparty (P) / Description (Q) / SPN (O)
             if str(g(r, 'END COUNTERPARTY') or '').strip() == '':
                 continue
             if str(g(r, 'END COUNTERPARTY DESCRIPTION') or '').strip() == '':
+                continue
+            if str(g(r, 'SPN') or '').strip() == '':
                 continue
 
             deal_name = str(g(r, 'DEAL NAME') or '').strip()
