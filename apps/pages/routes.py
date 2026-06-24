@@ -1209,8 +1209,13 @@ def api_dashboard_stats():
     lawton_deals = [d for d in all_deals if _is_lawton(d)]
     client_deals = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
 
-    ndf_lawton = [d for d in lawton_deals if d['_type'] == 'NDF']
-    opt_lawton  = [d for d in lawton_deals if d['_type'] == 'OPT']
+    def _fam(d):
+        # FXO is split out of the OPT bucket so the dashboard can show it apart
+        return 'FXO' if 'fxo' in (d.get('_product') or '').lower() else d['_type']
+    ndf_lawton     = [d for d in lawton_deals if _fam(d) == 'NDF']
+    optcomm_lawton = [d for d in lawton_deals if _fam(d) == 'OPT']
+    fxo_lawton     = [d for d in lawton_deals if _fam(d) == 'FXO']
+    opt_lawton     = optcomm_lawton + fxo_lawton  # all options (stat card)
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
     pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
 
@@ -1228,16 +1233,19 @@ def api_dashboard_stats():
     product_counts = Counter(d['_product'] for d in lawton_deals)
     top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
 
-    commodity_counts = Counter(
-        (d.get('Commodities') or d.get('Commodity') or '').strip()
-        for d in lawton_deals
-        if (d.get('Commodities') or d.get('Commodity') or '').strip()
+    # Top 5 Underlying Assets — commodities show the Commodity name; FXO (no
+    # Commodity) falls back to UnderlyingAsset (the currency).
+    def _underlying_label(d):
+        return (d.get('Commodities') or d.get('Commodity') or d.get('UnderlyingAsset') or '').strip()
+    underlying_counts = Counter(
+        _underlying_label(d) for d in lawton_deals if _underlying_label(d)
     )
-    top5_commodities = [{'label': c, 'count': n} for c, n in commodity_counts.most_common(5)]
+    top5_underlying = [{'label': c, 'count': n} for c, n in underlying_counts.most_common(5)]
 
     # Monthly counts for current year (always full year, ignores period filter)
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
+    monthly_fxo = [0] * 12
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
         for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in files:
@@ -1251,8 +1259,12 @@ def api_dashboard_stats():
                     continue
                 fp = os.path.join(root, fname)
                 product = _product_from_path(fp)
-                deal_type = _type_from_product(product)
-                target = monthly_opt if deal_type == 'OPT' else monthly_ndf
+                if 'fxo' in product.lower():
+                    target = monthly_fxo
+                elif _type_from_product(product) == 'OPT':
+                    target = monthly_opt
+                else:
+                    target = monthly_ndf
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
@@ -1288,9 +1300,13 @@ def api_dashboard_stats():
         'total_deals':   len(lawton_deals),
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
-        'top5_commodities': top5_commodities,
+        'top5_underlying': top5_underlying,
+        'dist_ndf':      len(ndf_lawton),
+        'dist_opt':      len(optcomm_lawton),
+        'dist_fxo':      len(fxo_lawton),
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
+        'monthly_fxo':   monthly_fxo,
         'recent_deals':  recent_deals,
     })
 
@@ -2434,7 +2450,7 @@ def api_fxo_send_conecta():
         f[13] = _num(deal.get('Strike', ''))
         f[14] = '1'
         f[16] = '2'
-        f[17] = '2'                                   # FXO: Tipo de Cotação
+        f[17] = '1'                                   # FXO: Tipo de Cotação
         f[18] = 'S' if brl else ''
         f[19] = fix_end if vanilla else ''            # FXO: data fixing ativo subjacente = last fixing (VANILLA)
         f[20] = ''                                    # FXO: data fixing moeda sempre em branco

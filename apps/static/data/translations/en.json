@@ -913,5 +913,6 @@
   "swal-imported": "Imported",
   "swal-deals-imported": "deal(s) imported.",
   "about-feat-fxo-title": "FXO Options",
-  "about-feat-fxo-desc": "FX options: XLSX blotter import, automatic currency conversion, premium-per-unit calculation and submission to Conecta B3 (ANBIMA calendar)."
+  "about-feat-fxo-desc": "FX options: XLSX blotter import, automatic currency conversion, premium-per-unit calculation and submission to Conecta B3 (ANBIMA calendar).",
+  "dash-top5-underlying": "Top 5 Underlying Assets"
 }

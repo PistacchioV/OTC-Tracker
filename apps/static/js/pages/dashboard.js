@@ -124,17 +124,17 @@ function hexToRgba(hex, a) {
 
 let pieChart = null, flowChart = null, clientsChart = null, productsChart = null, commoditiesChart = null;
 
-function buildPieChart(ndf, opt) {
+function buildPieChart(ndf, opt, fxo) {
     const ctx = document.getElementById('multi-pie-chart');
     if (!ctx) return;
     if (pieChart) pieChart.destroy();
     pieChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['NDF Commodities', 'Option Commodities'],
+            labels: ['NDF Commodities', 'Option Commodities', 'Option FXO'],
             datasets: [{
-                data: [ndf, opt],
-                backgroundColor: doughnutGradient([ins('chart-primary'), ins('chart-secondary')], 1, 0.55),
+                data: [ndf, opt, fxo || 0],
+                backgroundColor: doughnutGradient([ins('chart-primary'), ins('chart-secondary'), '#10b981'], 1, 0.55),
                 borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
                 borderWidth: 2,
                 hoverOffset: 8,
@@ -152,7 +152,7 @@ function buildPieChart(ndf, opt) {
     });
 }
 
-function buildFlowChart(monthlyNdf, monthlyOpt) {
+function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
     const ctx = document.getElementById('sales-analytics-chart');
     if (!ctx) return;
     if (flowChart) flowChart.destroy();
@@ -163,6 +163,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt) {
             datasets: [
                 { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
                 { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
+                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
             ]
         },
         options: {
@@ -341,11 +342,11 @@ async function loadDashboard(period) {
         setText('dash-total-count', data.total_deals);
 
         updatePeriodBadges(period);
-        buildPieChart(data.ndf_total, data.opt_total);
-        buildFlowChart(data.monthly_ndf, data.monthly_opt);
+        buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo);
+        buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo);
         buildClientsChart(data.top5_clients);
         buildProductsChart(data.top5_products);
-        buildCommoditiesChart(data.top5_commodities);
+        buildCommoditiesChart(data.top5_underlying);
 
         _allRecentDeals = data.recent_deals || [];
         _activeProduct  = 'all';
@@ -368,11 +369,11 @@ async function loadDashboard(period) {
 /** Rebuild every chart from the cached data using the current theme's tokens. */
 function rerenderCharts() {
     if (!_lastData) return;
-    buildPieChart(_lastData.ndf_total, _lastData.opt_total);
-    buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt);
+    buildPieChart(_lastData.dist_ndf, _lastData.dist_opt, _lastData.dist_fxo);
+    buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt, _lastData.monthly_fxo);
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
-    buildCommoditiesChart(_lastData.top5_commodities);
+    buildCommoditiesChart(_lastData.top5_underlying);
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────

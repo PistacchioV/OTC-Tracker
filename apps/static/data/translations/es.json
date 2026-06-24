@@ -912,5 +912,6 @@
   "swal-imported": "Importado",
   "swal-deals-imported": "operación(es) importada(s).",
   "about-feat-fxo-title": "Opciones FXO",
-  "about-feat-fxo-desc": "Opciones de cambio (FX Options): importación del blotter XLSX, conversión automática de monedas, cálculo de prima por unidad y envío a Conecta B3 (calendario ANBIMA)."
+  "about-feat-fxo-desc": "Opciones de cambio (FX Options): importación del blotter XLSX, conversión automática de monedas, cálculo de prima por unidad y envío a Conecta B3 (calendario ANBIMA).",
+  "dash-top5-underlying": "Top 5 Activos Subyacentes"
 }
