@@ -4086,21 +4086,13 @@ def api_counterparty_details_save():
     if not spn:
         return jsonify({'ok': False, 'error': 'missing_spn'}), 400
 
-    data = _cpd_load()
-    rec = _cpd_find(data, spn)
-    created = rec is None
-    if rec is None:
-        rec = {'SPN': spn, 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _bank_norm({}), 'CONTACTS': []}
-        data.append(rec)
+    created = _cpd_find(_cpd_load(), spn) is None
+    data, rec = _cpd_get_record(spn)
 
-    # CGD / CONTACTS / COUNTERPARTY are owned by this editor; BANKING is managed
-    # by the dedicated maker/checker endpoints below, so it is left untouched.
+    # COUNTERPARTY name can still be set here; CGD / CONTACTS / BANKING are each
+    # managed by their dedicated maker/checker endpoints below and are left untouched.
     if payload.get('COUNTERPARTY'):
         rec['COUNTERPARTY'] = payload.get('COUNTERPARTY')
-    rec['CGD'] = payload.get('CGD', []) or []
-    rec['CONTACTS'] = payload.get('CONTACTS', []) or []
-    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
 
     try:
         _cpd_save_list(data)
@@ -4211,6 +4203,76 @@ def _bank_get_record(spn):
         data.append(rec)
     rec['BANKING'] = _bank_norm(rec.get('BANKING'))
     return data, rec, rec['BANKING']
+
+
+def _cgd_norm(cgd):
+    """Coerce stored CGD into a list of maker/checker items.
+    Legacy shapes (string / list-of-strings) become Active items imported."""
+    items = []
+    raw = cgd if isinstance(cgd, list) else ([cgd] if cgd not in (None, '') else [])
+    for x in raw:
+        if isinstance(x, dict):
+            val = str(x.get('value', '') or '').strip()
+            if not val:
+                continue
+            items.append({
+                'id':      x.get('id') or uuid.uuid4().hex[:8],
+                'value':   val,
+                'status':  x.get('status', 'Active') or 'Active',
+                'maker':   x.get('maker', '') or '',
+                'checker': x.get('checker', '') or '',
+            })
+        else:
+            val = str(x).strip()
+            if val:
+                items.append({'id': uuid.uuid4().hex[:8], 'value': val,
+                              'status': 'Active', 'maker': 'IMPORT', 'checker': 'IMPORT'})
+    return items
+
+
+def _contacts_norm(contacts):
+    """Coerce stored CONTACTS into maker/checker items. `status` keeps the business
+    Active/Inactive value; approval state lives in `appr` (Pending/Active) + maker/checker.
+    Legacy contacts (no appr/maker keys) are imported as already approved."""
+    out = []
+    for c in (contacts or []):
+        c = c or {}
+        legacy = ('appr' not in c) and ('maker' not in c)
+        rules = c.get('rules')
+        if not isinstance(rules, list):
+            rules = c.get('RULES') if isinstance(c.get('RULES'), list) else []
+        out.append({
+            'id':      c.get('id') or uuid.uuid4().hex[:8],
+            'name':    c.get('name')  or c.get('NAME')  or '',
+            'phone':   c.get('phone') or c.get('PHONE') or '',
+            'email':   c.get('email') or c.get('EMAIL') or '',
+            'rules':   rules,
+            'status':  c.get('status') or c.get('STATUS') or 'Active',
+            'appr':    c.get('appr') or ('Active' if legacy else 'Pending'),
+            'maker':   c.get('maker', '') or ('IMPORT' if legacy else ''),
+            'checker': c.get('checker', '') or ('IMPORT' if legacy else ''),
+        })
+    return out
+
+
+def _cpd_get_record(spn):
+    """Return (data, rec) for an SPN with CGD/CONTACTS/BANKING normalized; create if missing."""
+    data = _cpd_load()
+    rec = _cpd_find(data, spn)
+    if rec is None:
+        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
+               'BANKING': _bank_norm({}), 'CONTACTS': []}
+        data.append(rec)
+    rec['CGD'] = _cgd_norm(rec.get('CGD'))
+    rec['CONTACTS'] = _contacts_norm(rec.get('CONTACTS'))
+    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
+    return data, rec
+
+
+def _contact_disp(c):
+    if not c:
+        return ''
+    return (c.get('name') or c.get('email') or c.get('id') or '').strip()
 
 
 def _acc_disp(acc):
@@ -4348,6 +4410,188 @@ def api_cp_banking_default_approve():
     _acc = next((a for a in banking['ACCOUNTS'] if a['id'] == slot['current']), None)
     _notify_bank('Bank Default Approved', _bank_detail(spn, rec, '{} → {}'.format(kind, _acc_disp(_acc))))
     return jsonify({'ok': True, 'slot': slot})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# CGD — maker/checker (Pending → Active). Item: {id,value,status,maker,checker}
+# ──────────────────────────────────────────────────────────────────────────
+@blueprint.route('/api/counterparty-details/cgd/add', methods=['POST'])
+def api_cp_cgd_add():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+    value = str(p.get('value', '') or '').strip()
+    if not value:
+        return jsonify({'ok': False, 'error': 'empty_value'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = {'id': uuid.uuid4().hex[:8], 'value': value,
+            'status': 'Pending', 'maker': sid, 'checker': ''}
+    rec['CGD'].append(item)
+    _cpd_save_list(data)
+    _notify_bank('CGD Added', _bank_detail(spn, rec, value + ' (Pending approval)'))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/cgd/edit', methods=['POST'])
+def api_cp_cgd_edit():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    value = str(p.get('value', '') or '').strip()
+    if not value:
+        return jsonify({'ok': False, 'error': 'empty_value'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = next((x for x in rec['CGD'] if x['id'] == iid), None)
+    if item is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    item['value'] = value
+    item['status'] = 'Pending'
+    item['maker'] = sid
+    item['checker'] = ''
+    _cpd_save_list(data)
+    _notify_bank('CGD Edited', _bank_detail(spn, rec, value + ' (Pending approval)'))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/cgd/approve', methods=['POST'])
+def api_cp_cgd_approve():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = next((x for x in rec['CGD'] if x['id'] == iid), None)
+    if item is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    if item.get('maker') and item['maker'] == sid:
+        return jsonify({'ok': False, 'error': 'same_user'}), 403
+    item['status'] = 'Active'
+    item['checker'] = sid
+    _cpd_save_list(data)
+    _notify_bank('CGD Approved', _bank_detail(spn, rec, item['value']))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/cgd/delete', methods=['POST'])
+def api_cp_cgd_delete():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    data, rec = _cpd_get_record(spn)
+    removed = next((x for x in rec['CGD'] if x['id'] == iid), None)
+    rec['CGD'] = [x for x in rec['CGD'] if x['id'] != iid]
+    _cpd_save_list(data)
+    _notify_bank('CGD Deleted', _bank_detail(spn, rec, (removed or {}).get('value', '')))
+    return jsonify({'ok': True})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# CONTACTS — maker/checker (Pending → Active). Approval lives in `appr`;
+# `status` stays the business Active/Inactive value.
+# Item: {id,name,phone,email,rules,status,appr,maker,checker}
+# ──────────────────────────────────────────────────────────────────────────
+def _contact_payload(p):
+    rules = p.get('rules')
+    if not isinstance(rules, list):
+        rules = []
+    return {
+        'name':   str(p.get('name', '') or '').strip(),
+        'phone':  str(p.get('phone', '') or '').strip(),
+        'email':  str(p.get('email', '') or '').strip(),
+        'rules':  [str(r).strip() for r in rules if str(r).strip()],
+        'status': str(p.get('status', 'Active') or 'Active').strip() or 'Active',
+    }
+
+
+@blueprint.route('/api/counterparty-details/contact/add', methods=['POST'])
+def api_cp_contact_add():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+    fields = _contact_payload(p)
+    if not (fields['name'] or fields['phone'] or fields['email'] or fields['rules']):
+        return jsonify({'ok': False, 'error': 'empty_contact'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = dict(fields, id=uuid.uuid4().hex[:8], appr='Pending', maker=sid, checker='')
+    rec['CONTACTS'].append(item)
+    _cpd_save_list(data)
+    _notify_bank('Contact Added', _bank_detail(spn, rec, _contact_disp(item) + ' (Pending approval)'))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/contact/edit', methods=['POST'])
+def api_cp_contact_edit():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    fields = _contact_payload(p)
+    if not (fields['name'] or fields['phone'] or fields['email'] or fields['rules']):
+        return jsonify({'ok': False, 'error': 'empty_contact'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
+    if item is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    item.update(fields)
+    item['appr'] = 'Pending'
+    item['maker'] = sid
+    item['checker'] = ''
+    _cpd_save_list(data)
+    _notify_bank('Contact Edited', _bank_detail(spn, rec, _contact_disp(item) + ' (Pending approval)'))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/contact/approve', methods=['POST'])
+def api_cp_contact_approve():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    item = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
+    if item is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    if item.get('maker') and item['maker'] == sid:
+        return jsonify({'ok': False, 'error': 'same_user'}), 403
+    item['appr'] = 'Active'
+    item['checker'] = sid
+    _cpd_save_list(data)
+    _notify_bank('Contact Approved', _bank_detail(spn, rec, _contact_disp(item)))
+    return jsonify({'ok': True, 'item': item})
+
+
+@blueprint.route('/api/counterparty-details/contact/delete', methods=['POST'])
+def api_cp_contact_delete():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    iid = str(p.get('id', '') or '').strip()
+    data, rec = _cpd_get_record(spn)
+    removed = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
+    rec['CONTACTS'] = [x for x in rec['CONTACTS'] if x['id'] != iid]
+    _cpd_save_list(data)
+    _notify_bank('Contact Deleted', _bank_detail(spn, rec, _contact_disp(removed)))
+    return jsonify({'ok': True})
 
 
 # ==============================================================================

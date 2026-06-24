@@ -134,7 +134,7 @@
             0 6px 20px rgba(0,0,0,0.08),
             inset 0 1.5px 0 rgba(255,255,255,0.95),
             inset 1px 0 0 rgba(255,255,255,0.6) !important;
-        overflow: hidden;
+        overflow: visible;   /* let select2 dropdown grow past the popup bottom */
         padding: 0 !important;
     }
     .cp-glass::before {
@@ -168,6 +168,7 @@
         margin: 0 !important;
         max-height: 88vh;
         overflow: hidden;
+        border-radius: 1.125rem;   /* keep content clipped to the rounded glass */
         text-align: left;
         display: flex !important;   /* beat SweetAlert2's inline display */
         flex-direction: column;
@@ -279,6 +280,33 @@
         background: rgba(255,193,7,0.14); border: 1px solid rgba(255,193,7,0.35);
     }
     .cp-acc-add { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) auto auto; gap: 6px; align-items: center; margin-top: 8px; }
+
+    /* inline form confirm (green) / cancel (red) — solid, white centred icon */
+    .cp-glass .cp-okbtn, .cp-glass .cp-cxbtn,
+    .cp-glass .cp-add-submit, .cp-glass .cp-add-cancel {
+        display: inline-flex !important; align-items: center; justify-content: center;
+        width: 30px; height: 30px; padding: 0 !important; border: none !important;
+        border-radius: 7px; color: #fff !important;
+        transition: transform 140ms cubic-bezier(0.23,1,0.32,1), filter 140ms ease;
+    }
+    .cp-glass .cp-okbtn i, .cp-glass .cp-cxbtn i,
+    .cp-glass .cp-add-submit i, .cp-glass .cp-add-cancel i { color: #fff !important; margin: 0; }
+    .cp-glass .cp-okbtn, .cp-glass .cp-add-submit { background: #198754 !important; }
+    .cp-glass .cp-cxbtn, .cp-glass .cp-add-cancel { background: #dc3545 !important; }
+    .cp-glass .cp-okbtn:hover, .cp-glass .cp-add-submit:hover,
+    .cp-glass .cp-cxbtn:hover, .cp-glass .cp-add-cancel:hover { filter: brightness(0.92); }
+    .cp-glass .cp-okbtn:active, .cp-glass .cp-cxbtn:active,
+    .cp-glass .cp-add-submit:active, .cp-glass .cp-add-cancel:active { transform: scale(0.92); }
+
+    /* neutral (blue) edit button on CGD / contact rows */
+    .cp-glass .cp-editbtn { background: #0d6efd !important; border: none !important; color: #fff !important; }
+    .cp-glass .cp-editbtn i { color: #fff !important; }
+    .cp-glass .cp-editbtn:hover { filter: brightness(0.92); }
+
+    /* inline CGD add/edit form */
+    .cp-cgd-form { display: grid; grid-template-columns: 1fr 32px 30px 30px; gap: 6px; align-items: center; margin-bottom: 6px; }
+    /* inline contact form action row */
+    .cp-contact-form .cp-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 
     /* edit-mode rows */
     .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
@@ -898,96 +926,138 @@ $(document).ready(function () {
     function _esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
     function _attr(v) { return _esc(v).replace(/"/g, '&quot;'); }
 
-    /* Normalize a stored counterparty record into the structured shape. */
+    /* Normalize a stored counterparty record. CGD and CONTACTS carry their own
+       maker/checker workflow (mirrors BANKING accounts).
+       CGD item:     {id,value,status,maker,checker}     status ∈ Pending|Active
+       CONTACT item: {id,name,phone,email,rules[],status,appr,maker,checker}
+                     (status = business Active/Inactive; appr = approval state) */
+    function _cpUid() { return Math.random().toString(36).slice(2, 10); }
     function _normCp(cp) {
         cp = cp || {};
-        var out = { CGD: [], BANKING: { PAY: [], RECEIVE: [] }, CONTACTS: [] };
-        // CGD → array of strings
-        if (Array.isArray(cp.CGD)) out.CGD = cp.CGD.map(function(x){ return String(x); }).filter(function(x){ return x.trim() !== ''; });
-        else if (cp.CGD != null && String(cp.CGD).trim() !== '') out.CGD = [String(cp.CGD).trim()];
-        // BANKING → { PAY:[{bank,agency,account}], RECEIVE:[...] }
-        function nb(b){ b = b || {}; return { bank: b.bank || b.BANK || '', agency: b.agency || b.AGENCY || '', account: b.account || b.ACCOUNT || '' }; }
-        if (cp.BANKING && (Array.isArray(cp.BANKING.PAY) || Array.isArray(cp.BANKING.RECEIVE))) {
-            out.BANKING.PAY = (cp.BANKING.PAY || []).map(nb);
-            out.BANKING.RECEIVE = (cp.BANKING.RECEIVE || []).map(nb);
-        } else if (cp.BANK || cp.AGENCY || cp.ACCOUNT) {
-            out.BANKING.PAY = [{ bank: cp.BANK || '', agency: cp.AGENCY || '', account: cp.ACCOUNT || '' }];
-        }
-        // CONTACTS → array of {name,phone,email,rules[],status}
+        var out = { CGD: [], CONTACTS: [] };
+        // CGD → maker/checker items (legacy strings → Active/IMPORT)
+        var rawCgd = Array.isArray(cp.CGD) ? cp.CGD : (cp.CGD != null && String(cp.CGD).trim() !== '' ? [cp.CGD] : []);
+        rawCgd.forEach(function(x){
+            if (x && typeof x === 'object') {
+                var v = String(x.value || '').trim();
+                if (v) out.CGD.push({ id: x.id || _cpUid(), value: v, status: x.status || 'Active', maker: x.maker || '', checker: x.checker || '' });
+            } else {
+                var s = String(x).trim();
+                if (s) out.CGD.push({ id: _cpUid(), value: s, status: 'Active', maker: 'IMPORT', checker: 'IMPORT' });
+            }
+        });
+        // CONTACTS → maker/checker items (legacy contacts → appr Active/IMPORT)
         if (Array.isArray(cp.CONTACTS)) {
             out.CONTACTS = cp.CONTACTS.map(function(c){
                 c = c || {};
+                var legacy = (c.appr == null) && (c.maker == null);
                 return {
-                    name:   c.name   || c.NAME   || '',
-                    phone:  c.phone  || c.PHONE  || '',
-                    email:  c.email  || c.EMAIL  || '',
-                    rules:  Array.isArray(c.rules) ? c.rules : (Array.isArray(c.RULES) ? c.RULES : []),
-                    status: c.status || c.STATUS || 'Active'
+                    id:      c.id || _cpUid(),
+                    name:    c.name   || c.NAME   || '',
+                    phone:   c.phone  || c.PHONE  || '',
+                    email:   c.email  || c.EMAIL  || '',
+                    rules:   Array.isArray(c.rules) ? c.rules : (Array.isArray(c.RULES) ? c.RULES : []),
+                    status:  c.status || c.STATUS || 'Active',
+                    appr:    c.appr || (legacy ? 'Active' : 'Pending'),
+                    maker:   c.maker || (legacy ? 'IMPORT' : ''),
+                    checker: c.checker || (legacy ? 'IMPORT' : '')
                 };
             });
         }
         return out;
     }
 
-    /* ════════ VIEW-MODE builders ════════ */
-    function _viewLine(html) { return '<div class="cp-kv"><span class="cp-v">' + html + '</span></div>'; }
-
-    function _viewCgd(model) {
-        if (!model.CGD.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
-        return model.CGD.map(function(v){ return '<div class="cp-card">' + _esc(v) + '</div>'; }).join('');
-    }
-    function _viewBankList(list) {
-        if (!list.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
-        return list.map(function(b){
-            var parts = [];
-            if (b.bank) parts.push('<strong>' + _esc(b.bank) + '</strong>');
-            var sub = [];
-            if (b.agency)  sub.push(t('rd-cp-agency','Agency') + ' ' + _esc(b.agency));
-            if (b.account) sub.push(t('rd-cp-account','Account') + ' ' + _esc(b.account));
-            return '<div class="cp-card">' + (parts.join('') || '—') + (sub.length ? '<div class="cp-spn">' + sub.join(' · ') + '</div>' : '') + '</div>';
-        }).join('');
-    }
-    function _viewContacts(model) {
-        // Rule → group mapping (substring, case-insensitive):
-        //   Settlement  ← Settlement, Settlement Advice, Repurchase
-        //   Negotiation ← Negotiation, Confirmation (Letter / Contact Confirmation)
-        function hasAny(rules, keywords){
-            return (rules || []).some(function(r){
-                var rl = String(r || '').toLowerCase();
-                return keywords.some(function(k){ return rl.indexOf(k) !== -1; });
-            });
-        }
-        function emailsFor(keywords){
-            var out = [], seen = {};
-            model.CONTACTS.forEach(function(c){
-                if (!hasAny(c.rules, keywords)) return;
-                var v = String(c.email || c.name || '').trim();
-                if (v && !seen[v.toLowerCase()]) { seen[v.toLowerCase()] = 1; out.push(v); }
-            });
-            return out;
-        }
-        var settle = emailsFor(['settlement', 'repurchase']);
-        var nego   = emailsFor(['negotiation', 'confirmation', 'letter']);
-        function line(labelKey, labelTxt, arr){
-            return '<div class="cp-kv"><span class="cp-k" data-lang="' + labelKey + '">' + labelTxt + '</span>' +
-                   '<span class="cp-v">' + (arr.length ? _esc(arr.join('; ')) : '—') + '</span></div>';
-        }
-        if (!model.CONTACTS.length) return '<div class="cp-empty" data-lang="cp-none">—</div>';
-        return line('rule-settlement', 'Settlement', settle) + line('rule-negotiation', 'Negotiation', nego);
-    }
-
-    /* ════════ EDIT-MODE builders ════════ */
+    /* ════════ Date helpers ════════ */
     function _ymdToBr(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
     function _brToYmd(s) { var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
 
-    function _cgdRow(val) {
+    /* approve button shared by CGD/contact pending items (data-own gates self-approval) */
+    function _apprBtn(cls, id, own) {
+        return '<button type="button" title="' + _attr(t('rd-swal-approve-btn','Approve')) + '" class="btn btn-xs btn-success ' + cls +
+            '" data-id="' + id + '" data-own="' + (own ? '1' : '0') + '"><i class="ti ti-check"></i></button>';
+    }
+
+    /* ════════ CGD zone (maker/checker) ════════ */
+    function _cgdFormRow(item) {
+        var val = item ? item.value : '';
         var ymd = _brToYmd(val);
-        return '<div class="cp-edit-row cp-cgd-row">' +
-            '<input type="text" class="form-control form-control-sm cp-cgd-input" placeholder="dd/mm/yyyy" value="' + _attr(val) + '">' +
+        return '<div class="cp-cgd-form">' +
+            '<input type="text" class="form-control form-control-sm cp-cgd-val" placeholder="dd/mm/yyyy" maxlength="10" value="' + _attr(val) + '">' +
             '<span class="cp-date-btn" title="' + t('rd-cp-pickdate', 'Pick date') + '"><i class="ti ti-calendar"></i>' +
                 '<input type="date" class="cp-cgd-picker"' + (ymd ? ' value="' + ymd + '"' : '') + '></span>' +
-            '<button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div>';
+            '<button type="button" class="cp-okbtn ' + (item ? 'cp-cgd-edit-save" data-id="' + item.id : 'cp-cgd-add-save') + '"><i class="ti ti-check"></i></button>' +
+            '<button type="button" class="cp-cxbtn ' + (item ? 'cp-cgd-edit-cancel' : 'cp-cgd-add-cancel') + '"><i class="ti ti-x"></i></button></div>';
     }
+    function _renderCgdZone(model, editId) {
+        var rows = model.CGD.map(function(it){
+            if (editId && it.id === editId) return _cgdFormRow(it);
+            var pend = String(it.status).toLowerCase() !== 'active';
+            var own  = it.maker && it.maker === CURRENT_USER;
+            var ops = '';
+            if (pend) ops += _apprBtn('cp-cgd-approve', it.id, own);
+            ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-cgd-edit" data-id="' + it.id + '"><i class="ti ti-pencil"></i></button>';
+            ops += '<button type="button" class="btn btn-xs btn-danger cp-cgd-del" data-id="' + it.id + '"><i class="ti ti-trash"></i></button>';
+            return '<div class="cp-acc-row"><div class="cp-acc-main">' + _esc(it.value) + ' ' + _accBadge(it.status) + '</div>' +
+                   '<div class="cp-acc-actions">' + ops + '</div></div>';
+        }).join('');
+        if (!model.CGD.length) rows = '<div class="cp-empty" data-lang="cp-none">—</div>';
+        return '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-cgd">CGD</span>' +
+                '<button type="button" class="cp-addbtn" data-cgdadd><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
+               '<div class="cp-cgd-list">' + rows + '</div>' +
+               '<div class="cp-cgd-addform" style="display:none;">' + _cgdFormRow(null) + '</div>';
+    }
+
+    /* ════════ Contacts zone (maker/checker) ════════ */
+    function _contactFormCard(item) {
+        var c = item || {};
+        var ruleOpts = CP_RULES.map(function(r){
+            return '<option value="' + _attr(r) + '"' + ((c.rules||[]).indexOf(r) !== -1 ? ' selected' : '') + '>' + _esc(r) + '</option>';
+        }).join('');
+        var statusOpts = CP_STATUSES.map(function(s){
+            return '<option value="' + _attr(s) + '"' + (c.status === s ? ' selected' : '') + '>' + _esc(s) + '</option>';
+        }).join('');
+        return '<div class="cp-contact-card cp-contact-form"' + (item ? ' data-id="' + item.id + '"' : '') + '>' +
+            '<div class="cp-contact-grid">' +
+                '<input type="text" class="form-control form-control-sm cp-c-name" placeholder="' + t('rd-cp-c-name','Name') + '" value="' + _attr(c.name) + '">' +
+                '<input type="text" class="form-control form-control-sm cp-c-phone" placeholder="' + t('rd-cp-c-phone','Phone') + '" value="' + _attr(c.phone) + '">' +
+                '<input type="text" class="form-control form-control-sm cp-c-email cp-span2" placeholder="' + t('rd-cp-c-email','E-mail') + '" value="' + _attr(c.email) + '">' +
+                '<select class="form-select form-select-sm cp-c-rules" multiple>' + ruleOpts + '</select>' +
+                '<select class="form-select form-select-sm cp-c-status">' + statusOpts + '</select>' +
+            '</div>' +
+            '<div class="cp-form-actions">' +
+                '<button type="button" class="cp-okbtn ' + (item ? 'cp-contact-edit-save' : 'cp-contact-add-save') + '"><i class="ti ti-check"></i></button>' +
+                '<button type="button" class="cp-cxbtn ' + (item ? 'cp-contact-edit-cancel' : 'cp-contact-add-cancel') + '"><i class="ti ti-x"></i></button>' +
+            '</div></div>';
+    }
+    function _renderContactZone(model, editId) {
+        var rows = model.CONTACTS.map(function(it){
+            if (editId && it.id === editId) return _contactFormCard(it);
+            var pend = String(it.appr).toLowerCase() !== 'active';
+            var own  = it.maker && it.maker === CURRENT_USER;
+            var ops = '';
+            if (pend) ops += _apprBtn('cp-contact-approve', it.id, own);
+            ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-contact-edit" data-id="' + it.id + '"><i class="ti ti-pencil"></i></button>';
+            ops += '<button type="button" class="btn btn-xs btn-danger cp-contact-del" data-id="' + it.id + '"><i class="ti ti-trash"></i></button>';
+            var head = it.name ? '<strong>' + _esc(it.name) + '</strong>' : '—';
+            var sub = [];
+            if (it.phone) sub.push(_esc(it.phone));
+            if (it.email) sub.push(_esc(it.email));
+            var chips = (it.rules || []).map(function(r){ return '<span class="cp-def-chip cp-chip-pay">' + _esc(r) + '</span>'; });
+            var inactive = String(it.status).toLowerCase() === 'inactive';
+            chips.push('<span class="cp-def-chip ' + (inactive ? 'cp-chip-pend' : 'cp-chip-rec') + '">' + _esc(it.status || 'Active') + '</span>');
+            return '<div class="cp-acc-row"><div class="cp-acc-main">' + head + ' ' + _accBadge(it.appr) +
+                   (sub.length ? '<div class="cp-spn">' + sub.join(' · ') + '</div>' : '') +
+                   '<div class="cp-acc-chips">' + chips.join('') + '</div></div>' +
+                   '<div class="cp-acc-actions">' + ops + '</div></div>';
+        }).join('');
+        if (!model.CONTACTS.length) rows = '<div class="cp-empty" data-lang="cp-none">—</div>';
+        return '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-contacts">Contacts</span>' +
+                '<button type="button" class="cp-addbtn" data-contactadd><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
+               '<div class="cp-contact-list">' + rows + '</div>' +
+               '<div class="cp-contact-addform" style="display:none;">' + _contactFormCard(null) + '</div>';
+    }
+
+    /* ════════ Banking edit-row builder ════════ */
     function _bankRow(b) {
         b = b || {};
         var opts = '<option value=""></option>' + CP_BANKS.map(function(o){
@@ -1001,25 +1071,6 @@ $(document).ready(function () {
             '<input type="text" class="form-control form-control-sm cp-bank-account" placeholder="' + t('rd-cp-account','Account') + '" value="' + _attr(b.account) + '">' +
             '<button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div>';
     }
-    function _contactCard(c) {
-        c = c || {};
-        var ruleOpts = CP_RULES.map(function(r){
-            return '<option value="' + _attr(r) + '"' + ((c.rules||[]).indexOf(r) !== -1 ? ' selected' : '') + '>' + _esc(r) + '</option>';
-        }).join('');
-        var statusOpts = CP_STATUSES.map(function(s){
-            return '<option value="' + _attr(s) + '"' + (c.status === s ? ' selected' : '') + '>' + _esc(s) + '</option>';
-        }).join('');
-        return '<div class="cp-contact-card">' +
-            '<div class="cp-contact-grid">' +
-                '<input type="text" class="form-control form-control-sm cp-c-name" placeholder="' + t('rd-cp-c-name','Name') + '" value="' + _attr(c.name) + '">' +
-                '<input type="text" class="form-control form-control-sm cp-c-phone" placeholder="' + t('rd-cp-c-phone','Phone') + '" value="' + _attr(c.phone) + '">' +
-                '<input type="text" class="form-control form-control-sm cp-c-email cp-span2" placeholder="' + t('rd-cp-c-email','E-mail') + '" value="' + _attr(c.email) + '">' +
-                '<select class="form-select form-select-sm cp-c-rules" multiple>' + ruleOpts + '</select>' +
-                '<select class="form-select form-select-sm cp-c-status">' + statusOpts + '</select>' +
-            '</div>' +
-            '<div class="text-end mt-1"><button type="button" class="cp-remove" data-rm><i class="ti ti-trash"></i></button></div></div>';
-    }
-
     /* ════════ BANKING ACCOUNTS (maker/checker) ════════ */
     function _uid() { return Math.random().toString(36).slice(2, 10); }
     function _normBank(cp) {
@@ -1117,7 +1168,8 @@ $(document).ready(function () {
         if (!_CPDETAILS[spn]) _CPDETAILS[spn] = { SPN: spn, COUNTERPARTY: name };
         var model = _normCp(_CPDETAILS[spn]);
         var bankState = _normBank(_CPDETAILS[spn]);
-        var mode = 'view';
+        var cgdEditId = null;      // CGD item currently in inline-edit
+        var contactEditId = null;  // Contact item currently in inline-edit
 
         function renderHead() {
             return '<div class="cp-head">' +
@@ -1127,30 +1179,14 @@ $(document).ready(function () {
         }
         function renderFooter() {
             return '<div class="cp-footer">' +
-                '<button type="button" class="cp-iconbtn" data-act="secondary"></button>' +
-                '<button type="button" class="cp-iconbtn" data-act="primary"></button>' +
+                '<button type="button" class="cp-iconbtn is-close" data-act="close" title="' + _attr(t('swal-close','Close')) + '"><i class="ti ti-x"></i></button>' +
             '</div>';
-        }
-        function zoneHead(titleKey, titleTxt, addKey) {
-            return '<div class="cp-zone-head">' +
-                '<span class="cp-zone-title" data-lang="' + titleKey + '">' + titleTxt + '</span>' +
-                '<button type="button" class="cp-addbtn cp-edit-only" data-add="' + addKey + '">' +
-                    '<i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>';
         }
         function renderBody() {
             return '<div class="cp-body">' +
-                /* CGD */
-                '<div class="cp-zone">' + zoneHead('rd-cp-cgd', 'CGD', 'cgd') +
-                    '<div class="cp-view-only">' + _viewCgd(model) + '</div>' +
-                    '<div class="cp-edit-only" id="cp-cgd-list"></div>' +
-                '</div>' +
-                /* Banking accounts — own maker/checker actions, not gated by edit mode */
+                '<div class="cp-zone" id="cp-cgd-zone">' + _renderCgdZone(model, cgdEditId) + '</div>' +
                 '<div class="cp-zone" id="cp-bank-zone">' + _renderBankZone(bankState) + '</div>' +
-                /* Contacts */
-                '<div class="cp-zone">' + zoneHead('rd-cp-contacts', 'Contacts', 'contact') +
-                    '<div class="cp-view-only">' + _viewContacts(model) + '</div>' +
-                    '<div class="cp-edit-only" id="cp-contact-list"></div>' +
-                '</div>' +
+                '<div class="cp-zone" id="cp-contact-zone">' + _renderContactZone(model, contactEditId) + '</div>' +
             '</div>';
         }
 
@@ -1160,19 +1196,21 @@ $(document).ready(function () {
             padding: 0,
             showConfirmButton: false,
             showCloseButton: false,
-            allowOutsideClick: function(){ return mode === 'view'; },
+            allowOutsideClick: true,
             customClass: { popup: 'cp-glass', container: 'cp-glass-bg' },
             showClass: { popup: 'cp-glass swal2-show' },
             hideClass: { popup: 'cp-glass swal2-hide' },
             didOpen: function(popup){
-                popup.setAttribute('data-mode', 'view');
-                $(popup).find('[data-lang]').each(function(){
-                    var k = this.getAttribute('data-lang'); if (_TRANS_CACHE[k]) this.textContent = _TRANS_CACHE[k];
-                });
+                _applyLang(popup);
                 bindButtons(popup);
-                refreshButtons(popup);
             }
         });
+
+        function _applyLang(scope){
+            $(scope).find('[data-lang]').each(function(){
+                var k = this.getAttribute('data-lang'); if (_TRANS_CACHE[k]) this.textContent = _TRANS_CACHE[k];
+            });
+        }
 
         function initCpSelect2($scope, popup) {
             $scope.find('.cp-bank-select').each(function(){
@@ -1185,44 +1223,31 @@ $(document).ready(function () {
             });
         }
 
-        function populateEdit(popup) {
-            var $p = $(popup);
-            var $cgd = $p.find('#cp-cgd-list').empty();
-            (model.CGD.length ? model.CGD : ['']).forEach(function(v){ $cgd.append(_cgdRow(v)); });
-            var $ct = $p.find('#cp-contact-list').empty();
-            (model.CONTACTS.length ? model.CONTACTS : [{}]).forEach(function(c){ $ct.append(_contactCard(c)); });
-            initCpSelect2($p, popup);
+        /* persist the live model back into the SPN cache after any per-item change */
+        function syncCache() {
+            _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, _CPDETAILS[spn],
+                { CGD: model.CGD, CONTACTS: model.CONTACTS, BANKING: bankState });
         }
 
-        function collect(popup) {
-            var $p = $(popup);
-            var cgd = [];
-            $p.find('.cp-cgd-input').each(function(){ var v = this.value.trim(); if (v) cgd.push(v); });
-            var contacts = [];
-            $p.find('#cp-contact-list .cp-contact-card').each(function(){
-                var nm = $(this).find('.cp-c-name').val().trim();
-                var ph = $(this).find('.cp-c-phone').val().trim();
-                var em = $(this).find('.cp-c-email').val().trim();
-                var rl = $(this).find('.cp-c-rules').val() || [];
-                var st = $(this).find('.cp-c-status').val() || 'Active';
-                if (nm || ph || em || rl.length) contacts.push({ name: nm, phone: ph, email: em, rules: rl, status: st });
-            });
-            // BANKING is managed by its own endpoints (not part of this bulk save).
-            return { CGD: cgd, BANKING: { PAY: [], RECEIVE: [] }, CONTACTS: contacts };
+        /* Re-render only the CGD zone from model (after a maker/checker action). */
+        function refreshCgdZone(popup) {
+            var $z = $(popup).find('#cp-cgd-zone');
+            $z.html(_renderCgdZone(model, cgdEditId));
+            _applyLang($z);
         }
-
-        function rerenderView(popup) {
-            var $p = $(popup);
-            $p.find('#cp-cgd-list').closest('.cp-zone').find('.cp-view-only').html(_viewCgd(model));
-            $p.find('#cp-contact-list').closest('.cp-zone').find('.cp-view-only').html(_viewContacts(model));
-            $p.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
+        /* Re-render only the Contacts zone (re-inits select2 on any open form). */
+        function refreshContactZone(popup) {
+            var $z = $(popup).find('#cp-contact-zone');
+            $z.html(_renderContactZone(model, contactEditId));
+            _applyLang($z);
+            initCpSelect2($z, popup);
         }
 
         /* Re-render only the banking zone from bankState (after a maker/checker action). */
         function refreshBankZone(popup) {
             var $z = $(popup).find('#cp-bank-zone');
             $z.html(_renderBankZone(bankState));
-            $z.find('[data-lang]').each(function(){ var k=this.getAttribute('data-lang'); if(_TRANS_CACHE[k]) this.textContent=_TRANS_CACHE[k]; });
+            _applyLang($z);
         }
 
         /* POST a banking action; on success run onOk(res), else flash the error. */
@@ -1273,64 +1298,137 @@ $(document).ready(function () {
             }
         }
 
-        function refreshButtons(popup) {
-            var $primary = $(popup).find('[data-act="primary"]');
-            var $secondary = $(popup).find('[data-act="secondary"]');
-            $primary.removeClass('is-edit is-save is-close');
-            $secondary.removeClass('is-edit is-save is-close');
-            if (mode === 'view') {
-                $primary.addClass('is-edit').attr('title', t('rd-cp-edit','Edit')).html('<i class="ti ti-pencil"></i>');
-                $secondary.addClass('is-close').attr('title', t('swal-close','Close')).html('<i class="ti ti-x"></i>');
-            } else {
-                $primary.addClass('is-save').attr('title', t('rd-cp-save','Save')).html('<i class="ti ti-device-floppy"></i>');
-                $secondary.addClass('is-close').attr('title', t('rd-cp-cancel','Cancel')).html('<i class="ti ti-x"></i>');
-            }
-        }
-
         function bindButtons(popup) {
             var $p = $(popup);
-            $p.on('click', '[data-act="primary"]', function(){
-                if (mode === 'view') {
-                    mode = 'edit';
-                    popup.setAttribute('data-mode', 'edit');
-                    populateEdit(popup);
-                    refreshButtons(popup);
-                } else {
-                    model = _normCp(collect(popup));
-                    _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, model, { BANKING: bankState });
-                    mode = 'view';
-                    popup.setAttribute('data-mode', 'view');
-                    rerenderView(popup);
-                    refreshButtons(popup);
-                    flashSaved(popup, t('rd-cp-saving', 'Saving…'), 'pending');
-                    fetch('/api/counterparty-details/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ SPN: spn, COUNTERPARTY: name, CGD: model.CGD, BANKING: model.BANKING, CONTACTS: model.CONTACTS })
-                    }).then(function(r){ return r.json(); }).then(function(res){
-                        if (res && res.ok) flashSaved(popup, t('rd-cp-saved', 'Saved'), 'ok');
-                        else flashSaved(popup, (res && res.error) || t('rd-cp-save-error', 'Save failed'), 'error');
-                    }).catch(function(){ flashSaved(popup, t('rd-cp-save-error', 'Save failed'), 'error'); });
-                }
-            });
-            $p.on('click', '[data-act="secondary"]', function(){
-                if (mode === 'view') { Swal.close(); }
-                else { mode = 'view'; popup.setAttribute('data-mode','view'); rerenderView(popup); refreshButtons(popup); }
-            });
-            /* Add buttons */
-            $p.on('click', '[data-add]', function(){
-                var which = this.getAttribute('data-add');
-                if (which === 'cgd') { $p.find('#cp-cgd-list').append(_cgdRow('')); }
-                else if (which === 'contact') { var $c=$(_contactCard({})); $p.find('#cp-contact-list').append($c); initCpSelect2($c, popup); }
-            });
-            /* Remove row */
-            $p.on('click', '[data-rm]', function(){
-                $(this).closest('.cp-edit-row, .cp-contact-card').remove();
-            });
-            /* CGD date picker → write dd/mm/yyyy into the text field */
+            /* Close */
+            $p.on('click', '[data-act="close"]', function(){ Swal.close(); });
+
+            /* ── CGD date picker → write dd/mm/yyyy into the text field ── */
             $p.on('change', '.cp-cgd-picker', function(){
                 var br = _ymdToBr(this.value);
-                if (br) $(this).closest('.cp-cgd-row').find('.cp-cgd-input').val(br);
+                if (br) $(this).closest('.cp-cgd-form').find('.cp-cgd-val').val(br);
+            });
+            /* ── CGD manual typing → dd/mm/yyyy mask (auto-insert slashes) ── */
+            $p.on('input', '.cp-cgd-val', function(){
+                var d = this.value.replace(/\D/g, '').slice(0, 8);
+                var out = d;
+                if (d.length > 4)      out = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4);
+                else if (d.length > 2) out = d.slice(0,2) + '/' + d.slice(2);
+                this.value = out;
+            });
+
+            /* ── CGD: toggle add form ── */
+            $p.on('click', '[data-cgdadd]', function(){
+                var $f = $p.find('.cp-cgd-addform');
+                $f.css('display', $f.css('display') === 'none' ? 'block' : 'none');
+                if ($f.is(':visible')) $f.find('.cp-cgd-val').focus();
+            });
+            $p.on('click', '.cp-cgd-add-cancel', function(){
+                $p.find('.cp-cgd-addform').css('display','none').find('.cp-cgd-val').val('');
+            });
+            $p.on('click', '.cp-cgd-add-save', function(){
+                var val = $p.find('.cp-cgd-addform .cp-cgd-val').val().trim();
+                if (!val) return;
+                bankFetch('/api/counterparty-details/cgd/add', { SPN:spn, value:val }, popup, function(res){
+                    model.CGD.push(res.item); syncCache(); refreshCgdZone(popup);
+                });
+            });
+            /* ── CGD: edit (inline) ── */
+            $p.on('click', '.cp-cgd-edit', function(){
+                cgdEditId = this.getAttribute('data-id'); refreshCgdZone(popup);
+            });
+            $p.on('click', '.cp-cgd-edit-cancel', function(){ cgdEditId = null; refreshCgdZone(popup); });
+            $p.on('click', '.cp-cgd-edit-save', function(){
+                var id = this.getAttribute('data-id');
+                var val = $(this).closest('.cp-cgd-form').find('.cp-cgd-val').val().trim();
+                if (!val) return;
+                bankFetch('/api/counterparty-details/cgd/edit', { SPN:spn, id:id, value:val }, popup, function(res){
+                    var it = model.CGD.filter(function(x){ return x.id===id; })[0];
+                    if (it) { it.value=res.item.value; it.status='Pending'; it.maker=CURRENT_USER; it.checker=''; }
+                    cgdEditId = null; syncCache(); refreshCgdZone(popup);
+                });
+            });
+            /* ── CGD: approve (checker ≠ maker) ── */
+            $p.on('click', '.cp-cgd-approve', function(){
+                if (this.getAttribute('data-own') === '1') { ownApprovalAlert(); return; }
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/cgd/approve', { SPN:spn, id:id }, popup, function(){
+                    var it = model.CGD.filter(function(x){ return x.id===id; })[0];
+                    if (it) { it.status='Active'; it.checker=CURRENT_USER; }
+                    syncCache(); refreshCgdZone(popup);
+                });
+            });
+            /* ── CGD: delete ── */
+            $p.on('click', '.cp-cgd-del', function(){
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/cgd/delete', { SPN:spn, id:id }, popup, function(){
+                    model.CGD = model.CGD.filter(function(x){ return x.id!==id; });
+                    if (cgdEditId === id) cgdEditId = null;
+                    syncCache(); refreshCgdZone(popup);
+                });
+            });
+
+            /* ── Contacts: toggle add form ── */
+            $p.on('click', '[data-contactadd]', function(){
+                var $f = $p.find('.cp-contact-addform');
+                var show = $f.css('display') === 'none';
+                $f.css('display', show ? 'block' : 'none');
+                if (show) initCpSelect2($f, popup);
+            });
+            $p.on('click', '.cp-contact-add-cancel', function(){
+                contactEditId = null; refreshContactZone(popup);
+                $p.find('.cp-contact-addform').css('display','none');
+            });
+            function _collectContact($card){
+                return {
+                    name:  $card.find('.cp-c-name').val().trim(),
+                    phone: $card.find('.cp-c-phone').val().trim(),
+                    email: $card.find('.cp-c-email').val().trim(),
+                    rules: $card.find('.cp-c-rules').val() || [],
+                    status:$card.find('.cp-c-status').val() || 'Active'
+                };
+            }
+            $p.on('click', '.cp-contact-add-save', function(){
+                var c = _collectContact($(this).closest('.cp-contact-form'));
+                if (!(c.name || c.phone || c.email || c.rules.length)) return;
+                bankFetch('/api/counterparty-details/contact/add', $.extend({ SPN:spn }, c), popup, function(res){
+                    model.CONTACTS.push(res.item); syncCache(); refreshContactZone(popup);
+                });
+            });
+            /* ── Contacts: edit (inline) ── */
+            $p.on('click', '.cp-contact-edit', function(){
+                contactEditId = this.getAttribute('data-id'); refreshContactZone(popup);
+            });
+            $p.on('click', '.cp-contact-edit-cancel', function(){ contactEditId = null; refreshContactZone(popup); });
+            $p.on('click', '.cp-contact-edit-save', function(){
+                var $card = $(this).closest('.cp-contact-form');
+                var id = $card.data('id');
+                var c = _collectContact($card);
+                if (!(c.name || c.phone || c.email || c.rules.length)) return;
+                bankFetch('/api/counterparty-details/contact/edit', $.extend({ SPN:spn, id:id }, c), popup, function(res){
+                    var i = model.CONTACTS.map(function(x){ return x.id; }).indexOf(id);
+                    if (i !== -1) model.CONTACTS[i] = res.item;
+                    contactEditId = null; syncCache(); refreshContactZone(popup);
+                });
+            });
+            /* ── Contacts: approve (checker ≠ maker) ── */
+            $p.on('click', '.cp-contact-approve', function(){
+                if (this.getAttribute('data-own') === '1') { ownApprovalAlert(); return; }
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/contact/approve', { SPN:spn, id:id }, popup, function(){
+                    var it = model.CONTACTS.filter(function(x){ return x.id===id; })[0];
+                    if (it) { it.appr='Active'; it.checker=CURRENT_USER; }
+                    syncCache(); refreshContactZone(popup);
+                });
+            });
+            /* ── Contacts: delete ── */
+            $p.on('click', '.cp-contact-del', function(){
+                var id = this.getAttribute('data-id');
+                bankFetch('/api/counterparty-details/contact/delete', { SPN:spn, id:id }, popup, function(){
+                    model.CONTACTS = model.CONTACTS.filter(function(x){ return x.id!==id; });
+                    if (contactEditId === id) contactEditId = null;
+                    syncCache(); refreshContactZone(popup);
+                });
             });
 
             /* ── Banking: toggle add form ── */
