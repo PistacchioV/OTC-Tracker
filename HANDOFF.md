@@ -1296,3 +1296,32 @@ Fix aplicado em `_forms.scss` (`.form-check-input:not(:checked)` / `-light` no d
 - import_dados_bancarios + CGD/bank scripts; .eml delivery + banking maker/checker; dark checkbox; default
   toggles + bell deep-link; SweetAlert own-approval; .eml fixes (QP→8bit, DL aliases); intrag-option pipeline
   + colunas + lifecycle + arquivo; recon drag-drop + missing-files + date icon.
+
+## 24. Sessão 2026-06-24 (cont.) — Footer padrão, header intrag, notificação refdata, alinhamento tabela
+
+### 24.1 Footer padronizado (`© 2026 OTC Tracker by JPMorgan Chase & Co.`)
+- Assinatura uniformizada em todas as páginas (commit `1101b45`). Modelo único de texto/estilo.
+
+### 24.2 Intrag — espaçamento de header + auto-load
+- `intrag-ndf.html` e `intrag-option.html`: `padding-top` acima dos headers (estava "comendo" checkbox/título).
+- `intrag-option`: ao entrar na página carrega automaticamente os dados de **trade date = hoje**
+  (`_todayDmy()` + chip de filtro em Registration Date), paridade com a lógica do intrag-ndf.
+
+### 24.3 Notificação de novo registro Reference Data
+- `api_b3_add`: quando `table=='refdata'`, a notificação usa **page='Reference Data'** (antes saía "Index B3"),
+  detalhe `SPN <n> · <counterparty> (Pending approval)`. Sino faz deep-link `/reference-data?spn=<n>`.
+- `topbar.html`: `PAGE_URL['Reference Data']='/reference-data'` + parsing de `?spn=` para esse page.
+
+### 24.4 Reference Data — alinhamento de tabela (scrollX) e colunas de controle
+- Corpo desalinhado dos headers: causado por `scrollX` sem larguras fixas. Fix = `table-layout:fixed`
+  + bloco de larguras `nth-child` (15 colunas) cobrindo **`#ref-data-table` E `.dt-scroll-head`/`.dataTables_scrollHead`**
+  (o clone do header perde o id da tabela). Bloco no topo do `<style>` da página.
+- **Pontinhos (…) nos checkboxes**: `text-overflow:ellipsis` aplicado às células de controle. Fix = escopar
+  ellipsis às **colunas de dados** (`nth-child(n+3)`); colunas 1–2 (checkbox/Actions) ganham
+  `overflow:visible; text-align:center; text-overflow:clip`.
+- **Coluna Actions não aumentava**: `style="width:..."` inline vencia o CSS por especificidade. Fix =
+  remover inline dos `<th>` de checkbox/Actions; Actions definida em **140px** via CSS.
+
+### Commits (24)
+- `1101b45` footer + recon not-found i18n · `2e5933a` intrag header/auto-load · `e883089` notif refdata
+  deep-link · `1990822` align tabela refdata · `1a05be1` ellipsis/Actions refdata.
