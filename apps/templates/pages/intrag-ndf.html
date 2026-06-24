@@ -11,6 +11,13 @@
 <style>
   .card-body { padding: 5px; }
   .table-responsive { overflow-x: auto; }
+  /* Breathing room above the header row so the scrollX header clone doesn't clip
+     the select-all checkbox / header text at the top edge. */
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  #intrag-ndf-table thead th,
+  .dt-scroll-head thead th,
+  .dataTables_scrollHeadInner thead th,
+  .dataTables_scrollHead thead th { padding-top: 12px !important; vertical-align: middle; }
   /* ── FIX DEFINITIVO alinhamento scrollX ──
      table-layout:fixed torna a largura do <col> autoritativa nas duas tabelas
      (header clone + corpo), imune à diferença de padding th(8px 12px) vs td(8px)

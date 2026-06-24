@@ -638,6 +638,10 @@ $(document).ready(function() {
             '<a class="btn btn-success btn-sm rounded-circle btn-row-approve" href="#" title="Approve"><i class="ti ti-check"></i></a>' +
             '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>';
     }
+    function _todayDmy() {
+        var d = new Date();
+        return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+    }
     function intragOptLoad() {
         fetch('/api/intrag/option')
             .then(function(r){ return r.json(); })
@@ -653,6 +657,12 @@ $(document).ready(function() {
                     });
                 }
                 table.draw();
+                // Default view: Registration Date (= trade date) = today, like Intrag NDF.
+                // Pre-add the chip on first load; user can clear it to see all dates.
+                if (typeof sfAddFilter === 'function' && SF_COLS[3] && !sfActive.length) {
+                    sfAddFilter(SF_COLS[3], _todayDmy());
+                    applyOptFilters();
+                }
                 setTimeout(function(){ table.columns.adjust().draw(false); }, 100);
             })
             .catch(function(err){ console.error('[Intrag OPT] Load error:', err); });
