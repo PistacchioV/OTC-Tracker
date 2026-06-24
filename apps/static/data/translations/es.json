@@ -902,5 +902,7 @@
   "rc-miss-party": "Party Central Report",
   "rc-miss-dcad": "DCADCOMITENTES B3",
   "rc-miss-src-email": "correo",
-  "rc-miss-src-drive": "unidad"
+  "rc-miss-src-drive": "unidad",
+  "nd-fxo-page-title": "Opciones de FXO",
+  "nd-fxo": "FXO"
 }

@@ -1799,6 +1799,275 @@ def api_opt_bulk_patch_deal_cache():
 
 
 # ==============================================================================
+# API — OPT FXO CACHE (mesma lógica que opt-commodities, arquivo _optfxo.json)
+# CRUD + bulk only. mapping-b3 / send-conecta / premium / econ-affirmation e o
+# import do blotter XLSX (Brazil_FXO_Blotter_Extended_*_YYYYMMDD.xlsx) são
+# product-specific e serão implementados quando o mapeamento de colunas chegar.
+# ==============================================================================
+def _find_fxo(deal_name, client_name=None):
+    """Search all YYYYMMDD_optfxo.json files for a deal by Deal + Client.
+    Returns (file_path, list_index) or (None, None)."""
+    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
+        for fname in sorted(files, reverse=True):
+            if not fname.endswith('_optfxo.json'):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+                if not isinstance(deals, list):
+                    deals = [deals]
+                for i, deal in enumerate(deals):
+                    d_name   = (deal.get('Deal')   or '').strip()
+                    d_client = (deal.get('Client') or '').strip()
+                    if deal_name and d_name == deal_name.strip():
+                        want = (client_name or '').strip()
+                        if not want or d_client == want:
+                            return fpath, i
+            except Exception:
+                continue
+    return None, None
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache', methods=['POST'])
+def api_save_fxo_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "message": "No data provided"}), 400
+
+    trade_date_raw = data.get('TradeDate', '')
+    try:
+        ref_date = datetime.strptime(trade_date_raw, '%d/%m/%Y')
+    except (ValueError, TypeError):
+        ref_date = datetime.now()
+
+    dir_path = os.path.join(CACHE_BASE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
+    file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
+
+    with _cache_lock:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+                if not isinstance(deals, list):
+                    deals = [deals]
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+        else:
+            deals = []
+
+        deal_name   = data.get('Deal', '').strip()
+        client_name = data.get('Client', '').strip()
+        data.pop('_client', None)
+        existing_idx = next((i for i, d in enumerate(deals)
+                             if deal_name
+                             and d.get('Deal', '').strip() == deal_name
+                             and d.get('Client', '').strip() == client_name), None)
+        if existing_idx is not None:
+            deals[existing_idx] = data
+        else:
+            deals.append(data)
+        target_idx = existing_idx if existing_idx is not None else len(deals) - 1
+        for _k in ('Maker', 'Checker'):
+            if _k in deals[target_idx]:
+                deals[target_idx][_k] = deals[target_idx].pop(_k)
+        _atomic_write_json(file_path, deals)
+
+    return jsonify({"success": True, "deal": data.get('Deal', '')})
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/search', methods=['POST'])
+def api_search_fxo_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    body = request.get_json(silent=True) or {}
+    filters = body.get('filters', [])
+    matched = []
+    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
+        for fname in sorted(files):
+            if not fname.endswith('_optfxo.json'):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+                if not isinstance(deals, list):
+                    deals = [deals]
+                for deal in deals:
+                    if _deal_matches(deal, filters):
+                        matched.append(deal)
+            except Exception:
+                continue
+    return jsonify({"success": True, "deals": matched})
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/<deal_id>', methods=['PATCH'])
+def api_update_fxo_cache(deal_id):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    client  = request.args.get('client')
+    updates = request.get_json(silent=True)
+    if not updates:
+        return jsonify({"success": False, "message": "No data provided"}), 400
+
+    file_path, _ = _find_fxo(deal_id, client)
+    if file_path is None:
+        return jsonify({"success": False, "message": "Deal not found"}), 404
+
+    with _cache_lock:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                deals = json.load(fh)
+        except (json.JSONDecodeError, ValueError):
+            deals = []
+        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        if idx is None:
+            return jsonify({"success": False, "message": "Deal not found"}), 404
+        updates.pop('_client', None)
+        deals[idx].update(updates)
+        for _k in ('Maker', 'Checker'):
+            if _k in deals[idx]:
+                deals[idx][_k] = deals[idx].pop(_k)
+        _atomic_write_json(file_path, deals)
+
+    _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
+    if _fields:
+        if 'Status' in _fields:
+            if str(_fields.get('Status', '')) != 'Sent':
+                _create_notification(
+                    session.get('user_sid', ''), session.get('user_name', ''),
+                    'Status Updated', 'Opt FXO',
+                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                )
+        else:
+            _create_notification(
+                session.get('user_sid', ''), session.get('user_name', ''),
+                'Deal Updated', 'Opt FXO',
+                deal_id + ' (' + ', '.join(_fields.keys()) + ')'
+            )
+    return jsonify({"success": True})
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/<deal_id>', methods=['DELETE'])
+def api_delete_fxo_cache(deal_id):
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    client = request.args.get('client')
+    file_path, _ = _find_fxo(deal_id, client)
+    if file_path is None:
+        return jsonify({"success": False, "message": "Deal not found"}), 404
+
+    with _cache_lock:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as fh:
+                deals = json.load(fh)
+        except (json.JSONDecodeError, ValueError):
+            deals = []
+        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        if idx is None:
+            return jsonify({"success": False, "message": "Deal not found"}), 404
+        deals.pop(idx)
+        _atomic_write_json(file_path, deals)
+
+    _create_notification(
+        session.get('user_sid', ''), session.get('user_name', ''),
+        'Deal Deleted', 'Opt FXO', deal_id
+    )
+    return jsonify({"success": True})
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/bulk-delete', methods=['POST'])
+def api_bulk_delete_fxo_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    data  = request.get_json(silent=True)
+    pairs = data.get('pairs', []) if data else []
+    if not pairs:
+        return jsonify({"success": False, "message": "No pairs provided"}), 400
+
+    pair_set = {(p.get('deal', ''), p.get('client', '')) for p in pairs}
+    file_pairs = {}
+    for deal_name, client_name in pair_set:
+        fp, _ = _find_fxo(deal_name, client_name)
+        if fp:
+            file_pairs.setdefault(fp, set()).add((deal_name, client_name))
+
+    deleted = 0
+    for fp, pairs_in_file in file_pairs.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            if not isinstance(deals, list):
+                deals = [deals]
+            before = len(deals)
+            deals  = [d for d in deals if (d.get('Deal', ''), d.get('Client', '')) not in pairs_in_file]
+            deleted += before - len(deals)
+            _atomic_write_json(fp, deals)
+
+    not_found = len(pair_set) - deleted
+    if deleted > 0:
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Bulk Delete', 'Opt FXO',
+            str(deleted) + ' deal' + ('s' if deleted != 1 else '') + ' deleted'
+        )
+    return jsonify({"success": True, "deleted": deleted, "not_found": not_found})
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/bulk-patch', methods=['POST'])
+def api_fxo_bulk_patch_deal_cache():
+    if not session.get('authenticated'):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    data    = request.get_json(silent=True)
+    patches = data.get('patches', []) if data else []
+    if not patches:
+        return jsonify({"success": False, "message": "No patches provided"}), 400
+
+    file_patches = {}
+    for p in patches:
+        deal_id = p.get('deal_id', '')
+        client  = p.get('client', '')
+        updates = p.get('updates', {})
+        if not deal_id or not updates:
+            continue
+        fp, _ = _find_fxo(deal_id, client)
+        if fp:
+            file_patches.setdefault(fp, []).append((deal_id, client, updates))
+
+    updated = 0
+    for fp, file_ops in file_patches.items():
+        with _cache_lock:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    deals = json.load(fh)
+            except (json.JSONDecodeError, ValueError):
+                deals = []
+            for deal_id, client, updates in file_ops:
+                want_client = (client or '').strip()
+                matching = [i for i, d in enumerate(deals)
+                            if (d.get('Deal') or '').strip() == deal_id.strip()
+                            and (not want_client or (d.get('Client') or '').strip() == want_client)]
+                for idx in matching:
+                    deals[idx].update(updates)
+                    updated += 1
+            _atomic_write_json(fp, deals)
+
+    if updated > 0:
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Bulk Update', 'Opt FXO',
+            str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
+        )
+    return jsonify({"success": True, "updated": updated})
+
+
+# ==============================================================================
 # API — NDF COMMODITIES CACHE (mesma lógica que opt-commodities, arquivo _ndfcomm.json)
 # ==============================================================================
 
