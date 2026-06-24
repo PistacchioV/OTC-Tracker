@@ -914,5 +914,9 @@
   "swal-deals-imported": "deal(s) imported.",
   "about-feat-fxo-title": "FXO Options",
   "about-feat-fxo-desc": "FX options: XLSX blotter import, automatic currency conversion, premium-per-unit calculation and submission to Conecta B3 (ANBIMA calendar).",
-  "dash-top5-underlying": "Top 5 Underlying Assets"
+  "dash-top5-underlying": "Top 5 Underlying Assets",
+  "swal-fxo-dup-title": "Duplicate deals",
+  "swal-fxo-dup-text": "The following Deal + Client already exist in the table. Replace them?",
+  "swal-fxo-dup-replace": "Yes, replace",
+  "swal-fxo-dup-skip": "No, skip duplicates"
 }

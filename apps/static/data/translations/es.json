@@ -913,5 +913,9 @@
   "swal-deals-imported": "operación(es) importada(s).",
   "about-feat-fxo-title": "Opciones FXO",
   "about-feat-fxo-desc": "Opciones de cambio (FX Options): importación del blotter XLSX, conversión automática de monedas, cálculo de prima por unidad y envío a Conecta B3 (calendario ANBIMA).",
-  "dash-top5-underlying": "Top 5 Activos Subyacentes"
+  "dash-top5-underlying": "Top 5 Activos Subyacentes",
+  "swal-fxo-dup-title": "Operaciones duplicadas",
+  "swal-fxo-dup-text": "Las siguientes operaciones (Deal + Client) ya existen en la tabla. ¿Reemplazar?",
+  "swal-fxo-dup-replace": "Sí, reemplazar",
+  "swal-fxo-dup-skip": "No, descartar duplicadas"
 }

@@ -1693,6 +1693,7 @@ $(document).ready(function() {
                     }
                     var fd = new FormData();
                     xlsx.forEach(function(f){ fd.append('files', f); });
+                    fd.append('dry_run', '1');   // parse only — page resolves duplicates first
                     // Same button animation as new_deals-opt-commodities
                     importBtn.disabled = true;
                     importBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
@@ -1700,15 +1701,35 @@ $(document).ready(function() {
                         importBtn.disabled = false;
                         importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                     }
-                    fetch('/api/new-deals/opt-fxo/import-xlsx', { method: 'POST', body: fd })
-                        .then(function(r){ return r.json(); })
-                        .then(function(res){
+                    function _escHtml(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+                    // Map of existing table rows by Deal|Client (so we can replace, not duplicate)
+                    function _existingRowMap() {
+                        var m = {};
+                        table.rows().every(function(){
+                            var d = this.data();
+                            var key = _sh(d[3]) + '|' + _sh(d[10]);
+                            if (_sh(d[3])) m[key] = this;
+                        });
+                        return m;
+                    }
+                    // Persist final deals + render (replace matching rows, add the rest)
+                    function _saveAndRender(finalDeals) {
+                        if (!finalDeals.length) { _restoreImportBtn(); if (dz) dz.removeAllFiles(true); return; }
+                        fetch('/api/new-deals/opt-fxo/cache/batch', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deals: finalDeals })
+                        }).then(function(r){ return r.json(); }).then(function(res){
                             _restoreImportBtn();
                             if (!res || !res.success) {
                                 Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
                                 return;
                             }
-                            (res.deals || []).forEach(function(d){ table.row.add(dealJsonToRow(d)); });
+                            var rowMap = _existingRowMap();
+                            finalDeals.forEach(function(d){
+                                var key = (d.Deal || '') + '|' + (d.Client || '');
+                                if (rowMap[key]) rowMap[key].data(dealJsonToRow(d));   // replace, no duplicate
+                                else table.row.add(dealJsonToRow(d));
+                            });
                             table.draw(false);
                             if (dz) dz.removeAllFiles(true);
                             if (window.fetchNotifications) window.fetchNotifications();
@@ -1718,6 +1739,50 @@ $(document).ready(function() {
                                 timer: 2200, showConfirmButton: false });
                             var dueToday = _countPremiumDueToday();
                             if (dueToday > 0) setTimeout(function(){ _showPremiumDueTodayAlert(dueToday); }, 2300);
+                        }).catch(function(e){ _restoreImportBtn(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+                    }
+                    fetch('/api/new-deals/opt-fxo/import-xlsx?dry_run=1', { method: 'POST', body: fd })
+                        .then(function(r){ return r.json(); })
+                        .then(function(res){
+                            if (!res || !res.success) {
+                                _restoreImportBtn();
+                                Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
+                                return;
+                            }
+                            var parsed = res.deals || [];
+                            if (!parsed.length) { _restoreImportBtn(); Swal.fire({ icon:'info', title: t('swal-imported','Imported'), text: '0 ' + t('swal-deals-imported','deal(s) imported.') }); if (dz) dz.removeAllFiles(true); return; }
+                            var existing = _existingRowMap();
+                            var dups = [], news = [];
+                            parsed.forEach(function(d){
+                                var key = (d.Deal || '') + '|' + (d.Client || '');
+                                (existing[key] ? dups : news).push(d);
+                            });
+                            if (!dups.length) { _saveAndRender(news); return; }
+                            var listHtml = '<div style="max-height:240px;overflow:auto;text-align:left">' +
+                                '<table style="width:100%;font-size:0.82rem;border-collapse:collapse">' +
+                                '<thead><tr style="background:#f1f3f5"><th style="padding:4px 8px;text-align:left">Deal</th><th style="padding:4px 8px;text-align:left">Client</th></tr></thead><tbody>' +
+                                dups.map(function(d){ return '<tr><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Deal) + '</td><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
+                                '</tbody></table></div>';
+                            Swal.fire({
+                                icon: 'warning',
+                                title: t('swal-fxo-dup-title', 'Duplicate deals'),
+                                html: '<p>' + t('swal-fxo-dup-text', 'The following Deal + Client already exist in the table. Replace them?') + '</p>' + listHtml,
+                                width: 620,
+                                showCancelButton: true, showDenyButton: true,
+                                confirmButtonText: t('swal-fxo-dup-replace', 'Yes, replace'),
+                                denyButtonText:    t('swal-fxo-dup-skip', 'No, skip duplicates'),
+                                cancelButtonText:  t('swal-cancel', 'Cancel'),
+                                confirmButtonColor: '#198754', denyButtonColor: '#6c757d', cancelButtonColor: '#dc3545'
+                            }).then(function(result){
+                                if (result.isConfirmed) {
+                                    var replaced = dups.map(function(d){ return $.extend({}, d, { Status: 'Amend' }); });
+                                    _saveAndRender(news.concat(replaced));
+                                } else if (result.isDenied) {
+                                    _saveAndRender(news);   // discard duplicates, import the rest
+                                } else {
+                                    _restoreImportBtn();    // cancel — nothing imported
+                                }
+                            });
                         })
                         .catch(function(e){ _restoreImportBtn(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
                 });

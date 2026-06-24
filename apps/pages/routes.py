@@ -2159,6 +2159,59 @@ def _fxo_refdata_by_spn():
     return out
 
 
+def _fxo_persist_deals(deals):
+    """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count."""
+    by_file = {}
+    for d in deals:
+        try:
+            ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
+        except (ValueError, TypeError):
+            ref_date = datetime.now()
+        dir_path = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+        fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
+        by_file.setdefault(fpath, (dir_path, []))[1].append(d)
+
+    saved = 0
+    with _cache_lock:
+        for fpath, (dir_path, ds) in by_file.items():
+            os.makedirs(dir_path, exist_ok=True)
+            try:
+                with open(fpath, encoding='utf-8') as fh:
+                    existing = json.load(fh)
+                if not isinstance(existing, list):
+                    existing = [existing]
+            except (IOError, json.JSONDecodeError):
+                existing = []
+            for d in ds:
+                idx = next((i for i, e in enumerate(existing)
+                            if (e.get('Deal') or '').strip() == (d.get('Deal') or '').strip()
+                            and (e.get('Client') or '').strip() == (d.get('Client') or '').strip()), None)
+                if idx is not None:
+                    existing[idx] = d
+                else:
+                    existing.append(d)
+                saved += 1
+            _atomic_write_json(fpath, existing)
+    return saved
+
+
+@blueprint.route('/api/new-deals/opt-fxo/cache/batch', methods=['POST'])
+def api_fxo_cache_batch():
+    """Persist a finalized list of FXO deals (after the page resolves duplicates)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    data = request.get_json(silent=True) or {}
+    deals = data.get('deals', [])
+    if not deals:
+        return jsonify({'success': True, 'imported': 0})
+    saved = _fxo_persist_deals(deals)
+    if saved:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'New Deals', 'Opt FXO',
+                             '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
+    return jsonify({'success': True, 'imported': saved})
+
+
 @blueprint.route('/api/new-deals/opt-fxo/import-xlsx', methods=['POST'])
 def api_fxo_import_xlsx():
     if not session.get('authenticated'):
@@ -2273,43 +2326,17 @@ def api_fxo_import_xlsx():
             })
         wb.close()
 
-    # Persist into per-TradeDate _optfxo.json (upsert by Deal + Client)
-    by_file = {}
-    for d in deals:
-        try:
-            ref_date = datetime.strptime(d['TradeDate'], '%d/%m/%Y')
-        except (ValueError, TypeError):
-            ref_date = datetime.now()
-        dir_path = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
-        fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
-        by_file.setdefault(fpath, (dir_path, []))[1].append(d)
-
+    # dry_run=1 → parse only (the page first checks Deal+Client duplicates against
+    # the table and asks the user before persisting via /cache/batch).
+    dry_run = (request.args.get('dry_run') in ('1', 'true', 'yes')
+               or (request.form.get('dry_run') in ('1', 'true', 'yes')))
     saved = 0
-    with _cache_lock:
-        for fpath, (dir_path, ds) in by_file.items():
-            os.makedirs(dir_path, exist_ok=True)
-            try:
-                with open(fpath, encoding='utf-8') as fh:
-                    existing = json.load(fh)
-                if not isinstance(existing, list):
-                    existing = [existing]
-            except (IOError, json.JSONDecodeError):
-                existing = []
-            for d in ds:
-                idx = next((i for i, e in enumerate(existing)
-                            if (e.get('Deal') or '').strip() == d['Deal']
-                            and (e.get('Client') or '').strip() == d['Client']), None)
-                if idx is not None:
-                    existing[idx] = d
-                else:
-                    existing.append(d)
-                saved += 1
-            _atomic_write_json(fpath, existing)
-
-    if saved:
-        _create_notification(sid, session.get('user_name', ''),
-                             'New Deals', 'Opt FXO',
-                             '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
+    if not dry_run:
+        saved = _fxo_persist_deals(deals)
+        if saved:
+            _create_notification(sid, session.get('user_name', ''),
+                                 'New Deals', 'Opt FXO',
+                                 '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
     return jsonify({'success': True, 'imported': saved, 'deals': deals, 'errors': errors})
 
 
