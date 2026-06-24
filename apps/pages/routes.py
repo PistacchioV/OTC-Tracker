@@ -1206,12 +1206,17 @@ def api_dashboard_stats():
                 except Exception:
                     pass
 
-    lawton_deals = [d for d in all_deals if _is_lawton(d)]
+    def _is_fxo(d):
+        return 'fxo' in (d.get('_product') or '').lower()
+    # Commodities/NDF dedupe by the Lawton leg; FXO is one row per deal (count all),
+    # but the Banco J.P. Morgan counterparty leg is never counted.
+    lawton_deals = [d for d in all_deals
+                    if (_is_fxo(d) and not _is_bank(d)) or (not _is_fxo(d) and _is_lawton(d))]
     client_deals = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
 
     def _fam(d):
         # FXO is split out of the OPT bucket so the dashboard can show it apart
-        return 'FXO' if 'fxo' in (d.get('_product') or '').lower() else d['_type']
+        return 'FXO' if _is_fxo(d) else d['_type']
     ndf_lawton     = [d for d in lawton_deals if _fam(d) == 'NDF']
     optcomm_lawton = [d for d in lawton_deals if _fam(d) == 'OPT']
     fxo_lawton     = [d for d in lawton_deals if _fam(d) == 'FXO']
@@ -1259,7 +1264,8 @@ def api_dashboard_stats():
                     continue
                 fp = os.path.join(root, fname)
                 product = _product_from_path(fp)
-                if 'fxo' in product.lower():
+                is_fxo_file = 'fxo' in product.lower()
+                if is_fxo_file:
                     target = monthly_fxo
                 elif _type_from_product(product) == 'OPT':
                     target = monthly_opt
@@ -1268,11 +1274,14 @@ def api_dashboard_stats():
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
+                    # FXO counts every deal except the Banco J.P. Morgan leg;
+                    # Commodities/NDF dedupe by the Lawton leg
                     cnt = sum(
                         1 for d in data
                         if isinstance(d, dict)
                         and (d.get('Deal') or '').strip()
-                        and 'lawton' in (d.get('Client') or '').lower()
+                        and ((is_fxo_file and not _is_bank(d))
+                             or (not is_fxo_file and 'lawton' in (d.get('Client') or '').lower()))
                     )
                     target[fdate.month - 1] += cnt
                 except Exception:

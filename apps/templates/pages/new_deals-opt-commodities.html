@@ -1737,10 +1737,21 @@ $(document).ready(function() {
                 // After a successful import, flag any operations whose premium
                 // payment (Spot Date, col 26) falls on today.
                 importBtn.addEventListener('click', function() {
+                    // Snapshot Deal|Client already in the table so the Premium D0 alert
+                    // only considers deals imported now (not earlier imports same day).
+                    var _preKeys = {};
+                    table.rows().every(function(){ var d = this.data(); if (_sh(d[3])) _preKeys[_sh(d[3]) + '|' + _sh(d[10])] = 1; });
                     OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/opt-commodities/cache', 'opt', ['Cancel', 'Swap'])
                         .then(function(res) {
                             if (!res || res.totalDeals <= 0) return;
-                            var dueToday = _countPremiumDueToday();
+                            var _todayMid = new Date(); _todayMid.setHours(0, 0, 0, 0);
+                            var dueToday = 0;
+                            table.rows().every(function(){
+                                var d = this.data();
+                                if (_preKeys[_sh(d[3]) + '|' + _sh(d[10])]) return;   // already imported earlier
+                                var sd = _parseSpotDate(_sh(d[26]));
+                                if (sd && sd.getTime() === _todayMid.getTime()) dueToday++;
+                            });
                             if (dueToday > 0) _showPremiumDueTodayAlert(dueToday);
                         });
                 });

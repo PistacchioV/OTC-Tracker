@@ -1702,6 +1702,10 @@ $(document).ready(function() {
                         importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                     }
                     function _escHtml(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+                    // Snapshot of Deal|Client already in the table BEFORE this import,
+                    // so the Premium D0 alert ignores deals imported earlier.
+                    var _preKeys = {};
+                    table.rows().every(function(){ var d = this.data(); if (_sh(d[3])) _preKeys[_sh(d[3]) + '|' + _sh(d[10])] = 1; });
                     // Map of existing table rows by Deal|Client (so we can replace, not duplicate)
                     function _existingRowMap() {
                         var m = {};
@@ -1737,7 +1741,14 @@ $(document).ready(function() {
                             Swal.fire({ icon: 'success', title: t('swal-imported', 'Imported'),
                                 text: (res.imported || 0) + ' ' + t('swal-deals-imported', 'deal(s) imported.'),
                                 timer: 2200, showConfirmButton: false });
-                            var dueToday = _countPremiumDueToday();
+                            // Premium D0 alert — only for genuinely new deals in this import
+                            // (skip deals already in the table from a previous import)
+                            var _todayMid = new Date(); _todayMid.setHours(0, 0, 0, 0);
+                            var dueToday = finalDeals.filter(function(d){
+                                if (_preKeys[(d.Deal || '') + '|' + (d.Client || '')]) return false;
+                                var sd = _parseSpotDate(d.SpotDate);
+                                return sd && sd.getTime() === _todayMid.getTime();
+                            }).length;
                             if (dueToday > 0) setTimeout(function(){ _showPremiumDueTodayAlert(dueToday); }, 2300);
                         }).catch(function(e){ _restoreImportBtn(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
                     }
