@@ -705,6 +705,19 @@ def _outlook_download(inbox, subject_filter, tmpdir, exact=True):
     raise FileNotFoundError(f"Email '{subject_filter}' não encontrado na Inbox.")
 
 
+class ReconFilesMissing(FileNotFoundError):
+    """Raised by run_auto when one or more source files weren't found. `missing`
+    lists the codes ('b3_cgd', 'party', 'dcad') so the UI can name each one."""
+    def __init__(self, missing, recon_date_br='', dcad_path=''):
+        self.missing = missing
+        self.recon_date_br = recon_date_br
+        self.dcad_path = dcad_path
+        labels = {'b3_cgd': "e-mail 'Base B3 & CGD Consolidada'",
+                  'party': "e-mail 'Party Central Report'",
+                  'dcad': 'arquivo DCADCOMITENTES no drive I:\\'}
+        super().__init__('Não encontrado(s): ' + ', '.join(labels.get(m, m) for m in missing))
+
+
 def run_auto(recon_date_str: str):
     """
     Modo automático (ambiente JP):
@@ -736,18 +749,27 @@ def run_auto(recon_date_str: str):
             mailbox = outlook.Folders[_MAILBOX]
             inbox   = mailbox.Folders['Inbox']
 
-            path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir, exact=True)
-            path_party  = _outlook_download(inbox, _SUBJECT_PARTY,  tmpdir, exact=False)
+            # Try each source independently so we can report EVERY missing file
+            # (which one: B3&CGD e-mail, Party Central e-mail, or DCAD on drive I:\).
+            missing = []
+            path_b3_cgd = path_party = None
+            try:
+                path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir, exact=True)
+            except FileNotFoundError:
+                missing.append('b3_cgd')
+            try:
+                path_party = _outlook_download(inbox, _SUBJECT_PARTY, tmpdir, exact=False)
+            except FileNotFoundError:
+                missing.append('party')
 
             # ── DCADCOMITENTES via drive de rede ─────────────────────────────
             dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
             path_dcad = os.path.join(_DCAD_BASE, year, month_num, day, dcad_name)
-
             if not os.path.exists(path_dcad):
-                raise FileNotFoundError(
-                    f'Arquivo não encontrado: {path_dcad}\n'
-                    f'Verifique se o drive I:\\ está mapeado e se o arquivo do dia {recon_date.strftime("%d/%m/%Y")} já foi gerado.'
-                )
+                missing.append('dcad')
+
+            if missing:
+                raise ReconFilesMissing(missing, recon_date.strftime('%d/%m/%Y'), path_dcad)
 
             # ── Abre como file objects e chama a lógica comum ────────────────
             with open(path_b3_cgd, 'rb') as f1, \

@@ -897,5 +897,11 @@
   "col-publisher": "Publisher",
   "col-notional": "Notional",
   "col-rate": "Taxa",
-  "col-is-brr-fixed": "BRL Fixado?"
+  "col-is-brr-fixed": "BRL Fixado?",
+  "rc-miss-intro": "O(s) seguinte(s) arquivo(s) não foi(ram) encontrado(s):",
+  "rc-miss-b3": "Base B3 & CGD Consolidada",
+  "rc-miss-party": "Party Central Report",
+  "rc-miss-dcad": "DCADCOMITENTES B3",
+  "rc-miss-src-email": "e-mail",
+  "rc-miss-src-drive": "drive"
 }

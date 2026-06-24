@@ -113,7 +113,14 @@
 .date-wrap input[type=date] {
     position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2;
 }
-.date-wrap input[type=text] { pointer-events:none; }
+.date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
+/* Visible calendar affordance inside the field (the native date input is
+   transparent and overlays the whole wrap, so its own icon is hidden). */
+.date-wrap-icon {
+    position:absolute; right:9px; top:50%; transform:translateY(-50%);
+    z-index:1; pointer-events:none; font-size:15px;
+    color: var(--bs-secondary-color, #6c757d);
+}
 
 /* ── Export/ColVis collection dropdown — fundo sólido e texto legível */
 .dt-button-collection {
@@ -231,6 +238,7 @@
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
                 <div class="date-wrap">
                     <input type="text" id="recon-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
+                    <i class="ti ti-calendar date-wrap-icon"></i>
                     <input type="date" id="recon-date">
                 </div>
             </div>
@@ -550,6 +558,10 @@ $(document).ready(function() {
             $('#recon-date-display').val(p[2] + '/' + p[1] + '/' + p[0]);
         }
     });
+    // Clicking the field (or the calendar icon) opens the native picker.
+    $('#recon-date').on('click', function() {
+        if (this.showPicker) { try { this.showPicker(); } catch (e) {} }
+    });
 
     /* ── 2. Data padrão: último dia útil ─────────────────────────── */
     var ld = new Date();
@@ -753,16 +765,29 @@ function runAuto() {
                 btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i> <span data-lang="recon-btn-run">Run Reconciliation</span>';
                 lucide.createIcons();
                 if (res.not_found) {
+                    // Name exactly which source(s) were missing (e-mail vs drive).
+                    var MISS_META = {
+                        b3_cgd: { label: t('rc-miss-b3','Base B3 & CGD Consolidada'), src: t('rc-miss-src-email','e-mail'), where: 'brazil.otc.ops@jpmorgan.com' },
+                        party:  { label: t('rc-miss-party','Party Central Report'),    src: t('rc-miss-src-email','e-mail'), where: 'brazil.otc.ops@jpmorgan.com' },
+                        dcad:   { label: t('rc-miss-dcad','DCADCOMITENTES B3'),         src: t('rc-miss-src-drive','drive'), where: 'I:\\' }
+                    };
+                    var missList = '';
+                    if (Array.isArray(res.missing) && res.missing.length) {
+                        missList = res.missing.map(function(code){
+                            var m = MISS_META[code] || { label: code, src: '', where: '' };
+                            return '<li><strong>' + m.label + '</strong> — ' + m.src +
+                                   (m.where ? ' <code>' + m.where + '</code>' : '') + '</li>';
+                        }).join('');
+                    } else {
+                        missList = '<li>' + (res.detail ? String(res.detail).replace(/</g,'&lt;') : t('rc-swal-notfound-p','No files were found automatically.')) + '</li>';
+                    }
                     Swal.fire({
                         icon: 'warning',
                         title: t('rc-swal-notfound-title', 'Files not found'),
                         html: `<div class="text-start small">
-                            <p class="mb-2">${t('rc-swal-notfound-p','No files were found automatically:')}</p>
-                            <ul class="mb-0">
-                                <li>${t('rc-swal-notfound-li1','Check the email')} <code>brazil.otc.ops@jpmorgan.com</code></li>
-                                <li>${t('rc-swal-notfound-li2','Confirm that drive')} <code>I:\\</code> ${t('rc-swal-notfound-li2b','is accessible')}</li>
-                                <li>${t('rc-swal-notfound-li3','Try manual upload as an alternative')}</li>
-                            </ul>
+                            <p class="mb-2">${t('rc-miss-intro','The following file(s) were not found:')}</p>
+                            <ul class="mb-2 text-danger">${missList}</ul>
+                            <p class="mb-0 text-muted">${t('rc-swal-notfound-li3','Try manual upload as an alternative')}</p>
                         </div>`,
                         confirmButtonText: t('rc-swal-manual-upload', 'Manual Upload'),
                         showCancelButton: true,

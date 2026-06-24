@@ -4750,7 +4750,7 @@ def reconciliation_comitente_run():
         return jsonify(result)
     except FileNotFoundError as e:
         log.warning('[reconciliation_comitente_run] arquivo não encontrado: %s', e)
-        return jsonify({'not_found': True, 'detail': str(e)})
+        return jsonify({'not_found': True, 'missing': getattr(e, 'missing', None), 'detail': str(e)})
     except Exception as e:
         log.error('[reconciliation_comitente_run] %s', e)
         return jsonify({'error': str(e)}), 500
