@@ -483,6 +483,8 @@
                 }
                 items.forEach(function (n) {
                     var meta     = ACTION_META[n.action] || { icon: 'bell', color: 'bg-secondary' };
+                    // Reference Data badge uses the sidenav icon for the page (database)
+                    var badgeIcon = (n.page === 'Reference Data') ? 'database' : meta.icon;
                     var detail   = n.detail ? ' &mdash; ' + esc(n.detail) : '';
                     var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
                     var initials = getInitials(n.actor_name || n.actor_sid);
@@ -510,7 +512,7 @@
                             '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" ' +
                               'style="display:none;width:40px;height:40px;">' + esc(initials) + '</span>' +
                             '<span class="position-absolute rounded-pill ' + meta.color + ' notification-badge">' +
-                              '<i data-lucide="' + meta.icon + '"></i>' +
+                              '<i data-lucide="' + badgeIcon + '"></i>' +
                             '</span>' +
                           '</span>' +
                           '<span class="flex-grow-1 text-muted">' +

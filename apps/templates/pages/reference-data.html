@@ -54,11 +54,11 @@
     #ref-data-table th:nth-child(1),  #ref-data-table td:nth-child(1),
     .dt-scroll-head thead th:nth-child(1),  .dataTables_scrollHead thead th:nth-child(1)  { width:36px;  min-width:36px;  }
     #ref-data-table th:nth-child(2),  #ref-data-table td:nth-child(2),
-    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:140px; min-width:140px; } /* Actions (ajuste o px aqui) */
+    .dt-scroll-head thead th:nth-child(2),  .dataTables_scrollHead thead th:nth-child(2)  { width:110px; min-width:110px; } /* Actions (ajuste o px aqui) */
     #ref-data-table th:nth-child(3),  #ref-data-table td:nth-child(3),
     .dt-scroll-head thead th:nth-child(3),  .dataTables_scrollHead thead th:nth-child(3)  { width:110px; min-width:110px; } /* Status */
     #ref-data-table th:nth-child(4),  #ref-data-table td:nth-child(4),
-    .dt-scroll-head thead th:nth-child(4),  .dataTables_scrollHead thead th:nth-child(4)  { width:230px; min-width:230px; } /* Counterparty */
+    .dt-scroll-head thead th:nth-child(4),  .dataTables_scrollHead thead th:nth-child(4)  { width:330px; min-width:330px; } /* Counterparty */
     #ref-data-table th:nth-child(5),  #ref-data-table td:nth-child(5),
     .dt-scroll-head thead th:nth-child(5),  .dataTables_scrollHead thead th:nth-child(5)  { width:150px; min-width:150px; } /* Economic Group */
     #ref-data-table th:nth-child(6),  #ref-data-table td:nth-child(6),
@@ -250,6 +250,9 @@
     [data-bs-theme="dark"] .cp-acc-row { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.10); }
     .cp-acc-main { font-size: 0.84rem; min-width: 0; }
     .cp-acc-main .badge { display: inline-block; margin-top: 6px; vertical-align: middle; }
+    /* CGD: date + status badge sit on the same line, vertically centred */
+    .cp-cgd-main { display: flex; align-items: center; gap: 8px; }
+    .cp-cgd-main .badge { margin-top: 0; }
     .cp-acc-chips { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
     .cp-def-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 0.64rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; letter-spacing: 0.02em; }
     .cp-chip-pay  { background: rgba(13,110,253,0.16); color: #0d6efd; }
@@ -997,7 +1000,7 @@ $(document).ready(function () {
             if (pend) ops += _apprBtn('cp-cgd-approve', it.id, own);
             ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-cgd-edit" data-id="' + it.id + '"><i class="ti ti-pencil"></i></button>';
             ops += '<button type="button" class="btn btn-xs btn-danger cp-cgd-del" data-id="' + it.id + '"><i class="ti ti-trash"></i></button>';
-            return '<div class="cp-acc-row"><div class="cp-acc-main">' + _esc(it.value) + ' ' + _accBadge(it.status) + '</div>' +
+            return '<div class="cp-acc-row"><div class="cp-acc-main cp-cgd-main">' + _esc(it.value) + ' ' + _accBadge(it.status) + '</div>' +
                    '<div class="cp-acc-actions">' + ops + '</div></div>';
         }).join('');
         if (!model.CGD.length) rows = '<div class="cp-empty" data-lang="cp-none">—</div>';
