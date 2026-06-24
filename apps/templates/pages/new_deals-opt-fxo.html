@@ -1693,11 +1693,17 @@ $(document).ready(function() {
                     }
                     var fd = new FormData();
                     xlsx.forEach(function(f){ fd.append('files', f); });
-                    Swal.fire({ title: t('swal-importing', 'Importing…'), allowOutsideClick: false,
-                                didOpen: function(){ Swal.showLoading(); } });
+                    // Same button animation as new_deals-opt-commodities
+                    importBtn.disabled = true;
+                    importBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
+                    function _restoreImportBtn() {
+                        importBtn.disabled = false;
+                        importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                    }
                     fetch('/api/new-deals/opt-fxo/import-xlsx', { method: 'POST', body: fd })
                         .then(function(r){ return r.json(); })
                         .then(function(res){
+                            _restoreImportBtn();
                             if (!res || !res.success) {
                                 Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
                                 return;
@@ -1713,7 +1719,7 @@ $(document).ready(function() {
                             var dueToday = _countPremiumDueToday();
                             if (dueToday > 0) setTimeout(function(){ _showPremiumDueTodayAlert(dueToday); }, 2300);
                         })
-                        .catch(function(e){ Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+                        .catch(function(e){ _restoreImportBtn(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
                 });
             }
 

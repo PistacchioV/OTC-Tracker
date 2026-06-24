@@ -112,6 +112,10 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "data", "db", 
 CACHE_BASE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "Commodities"
 ))
+# FXO has its own cache dir so the dashboard labels it "Option FXO" (not Commodities)
+OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "FXO"
+))
 SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
 RETURN_PATH     = os.getenv('RETURN_PATH',     r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\Return')
 CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\New')
@@ -1808,7 +1812,7 @@ def api_opt_bulk_patch_deal_cache():
 def _find_fxo(deal_name, client_name=None):
     """Search all YYYYMMDD_optfxo.json files for a deal by Deal + Client.
     Returns (file_path, list_index) or (None, None)."""
-    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
+    for root, _dirs, files in os.walk(OPT_FXO_CACHE_DIR):
         for fname in sorted(files, reverse=True):
             if not fname.endswith('_optfxo.json'):
                 continue
@@ -1844,7 +1848,7 @@ def api_save_fxo_cache():
     except (ValueError, TypeError):
         ref_date = datetime.now()
 
-    dir_path = os.path.join(CACHE_BASE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+    dir_path = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
     os.makedirs(dir_path, exist_ok=True)
     file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
 
@@ -1887,7 +1891,7 @@ def api_search_fxo_cache():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
     matched = []
-    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
+    for root, _dirs, files in os.walk(OPT_FXO_CACHE_DIR):
         for fname in sorted(files):
             if not fname.endswith('_optfxo.json'):
                 continue
@@ -2260,7 +2264,7 @@ def api_fxo_import_xlsx():
             ref_date = datetime.strptime(d['TradeDate'], '%d/%m/%Y')
         except (ValueError, TypeError):
             ref_date = datetime.now()
-        dir_path = os.path.join(CACHE_BASE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+        dir_path = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
         fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
         by_file.setdefault(fpath, (dir_path, []))[1].append(d)
 
