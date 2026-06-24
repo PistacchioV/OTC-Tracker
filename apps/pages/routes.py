@@ -2163,7 +2163,7 @@ def _save_intrag_opt_entry(deal):
         'contract':               contract,
         'b3_id':                  deal.get('B3_ID', '') or '',
         'my_number':              ''.join(random.choice(string.digits) for _ in range(10)),
-        'trade_type':             '',
+        'trade_type':             '002',
         'seller_account':         seller_account,
         'seller_name':            seller_name,
         'start_date':             fmt_br(td),
@@ -2175,7 +2175,7 @@ def _save_intrag_opt_entry(deal):
         'fx_base_value':          fxbase_str,         # Total Notional
         'prepaid_value':          '',                 # Unwind Amount
         'prepayment_unit_price':  '',                 # Unwind Unit Price
-        'redemption_value':       '',
+        'redemption_value':       '0.00',
         'call_strike_price':      call_strike,
         'put_strike_price':       put_strike,
         'call_unit_premium':      call_premium,
