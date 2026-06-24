@@ -827,10 +827,10 @@
                                 <label class="form-label mb-0" data-lang="b3-show">Show</label>
                                 <select class="form-select form-select-sm" style="width: 80px;"
                                         data-table-set-rows-per-page>
-                                    <option value="15">15</option>
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
+                                    <option value="50" selected>50</option>
                                     <option value="100">100</option>
+                                    <option value="150">150</option>
+                                    <option value="200">200</option>
                                 </select>
                                 <label class="form-label mb-0" data-lang="b3-entries">entries</label>
                             </div>
@@ -1398,7 +1398,7 @@ $(document).ready(function() {
         responsive: false,
         scrollX: true,
         autoWidth: true,
-        pageLength: 15,
+        pageLength: 50,
         select: {
             style: 'os',
             items: 'cell',
