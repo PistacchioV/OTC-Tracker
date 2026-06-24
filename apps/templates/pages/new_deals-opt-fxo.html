@@ -1206,7 +1206,7 @@ var _FX_HOLIDAY_OPTIONS  = [];   // available FX holiday schedule names
             var seen = {};
             d.forEach(function (x) {
                 var code = x['Codigo do Ativo Subjacente'];
-                if (x['Tipo IF'] === 'OPC' && x['Classe'] === 'COMMODITIES' && code) {
+                if (x['Tipo IF'] === 'OPC' && x['Classe'] === 'TAXAS DE CAMBIO' && code) {
                     if (!seen[code]) { seen[code] = true; _ASSET_OPTIONS.push(code); }
                     if (x['Commodity'] && !_SUBJACENTE_MAP[code]) {
                         _SUBJACENTE_MAP[code] = x['Commodity'];
@@ -3237,7 +3237,7 @@ $(document).ready(function() {
                 var seen = {};
                 d.forEach(function(x) {
                     var code = x['Codigo do Ativo Subjacente'];
-                    if (x['Tipo IF'] === 'OPC' && x['Classe'] === 'COMMODITIES' && code) {
+                    if (x['Tipo IF'] === 'OPC' && x['Classe'] === 'TAXAS DE CAMBIO' && code) {
                         if (!seen[code]) { seen[code] = true; _ASSET_OPTIONS.push(code); }
                         if (x['Commodity'] && !_SUBJACENTE_MAP[code]) {
                             _SUBJACENTE_MAP[code] = x['Commodity'];
