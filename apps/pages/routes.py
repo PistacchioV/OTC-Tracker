@@ -1,5 +1,6 @@
 from gettext import install
 import os
+import io
 import re
 import random
 import string
@@ -2065,6 +2066,230 @@ def api_fxo_bulk_patch_deal_cache():
             str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated'
         )
     return jsonify({"success": True, "updated": updated})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPT FXO — XLSX blotter import (Brazil_FXO_Blotter_Extended_*_YYYYMMDD.xlsx)
+# ──────────────────────────────────────────────────────────────────────────
+# Internal 3-letter currency codes (feed) → ISO. Extend as new codes appear.
+_FXO_CCY_MAP = {
+    'BRR': 'BRL', 'USB': 'USD', 'EUB': 'EUR', 'GBB': 'GBP',
+    'CHB': 'CHF', 'NOB': 'NOK', 'COB': 'COP',
+}
+_FXO_MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                  'August', 'September', 'October', 'November', 'December']
+
+
+def _fxo_ccy(code):
+    c = str(code or '').strip().upper()
+    return _FXO_CCY_MAP.get(c, c)
+
+
+def _fxo_num(v):
+    """Parse a blotter number (native float, or BR '1.234,56' / US '1234.56') → float|None."""
+    if v is None or v == '':
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip()
+    if not s:
+        return None
+    neg = s.startswith('-')
+    s = s.lstrip('+-').replace(' ', '')
+    if ',' in s and '.' in s:
+        s = s.replace('.', '').replace(',', '.')   # BR: dot=thousands, comma=decimal
+    elif ',' in s:
+        s = s.replace(',', '.')                     # comma decimal
+    try:
+        val = float(s)
+        return -val if neg else val
+    except ValueError:
+        return None
+
+
+def _fxo_date_dmy(v):
+    """yyyy-mm-dd / datetime / date → dd/mm/yyyy; blank/other → ''."""
+    if v is None or v == '':
+        return ''
+    if hasattr(v, 'strftime'):
+        return v.strftime('%d/%m/%Y')
+    s = str(v).strip().split('T')[0].split(' ')[0]
+    if not s:
+        return ''
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(s, fmt).strftime('%d/%m/%Y')
+        except ValueError:
+            continue
+    return s
+
+
+def _fxo_refdata_by_spn():
+    """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup."""
+    out = {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            data = json.load(fh)
+        for rec in (data if isinstance(data, list) else []):
+            key = _norm_spn(rec.get('SPN', ''))
+            if key:
+                out[key] = rec
+    except (IOError, json.JSONDecodeError):
+        pass
+    return out
+
+
+@blueprint.route('/api/new-deals/opt-fxo/import-xlsx', methods=['POST'])
+def api_fxo_import_xlsx():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    import openpyxl
+
+    files = request.files.getlist('files')
+    if not files and 'file' in request.files:
+        files = [request.files['file']]
+    if not files:
+        return jsonify({'success': False, 'message': 'no_file'}), 400
+
+    sid = session.get('user_sid', '') or ''
+    refmap = _fxo_refdata_by_spn()
+    PUT_CALL = {'PUT': 'Option (Put)', 'CALL': 'Option (Call)'}
+    deals, errors = [], []
+
+    for f in files:
+        if not f or not (f.filename or '').lower().endswith('.xlsx'):
+            continue
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(f.read()), read_only=True, data_only=True)
+        except Exception as e:                       # noqa: BLE001
+            errors.append('{}: {}'.format(f.filename, e))
+            continue
+        ws = wb.active
+        it = ws.iter_rows(values_only=True)
+        try:
+            header = next(it)
+        except StopIteration:
+            wb.close()
+            continue
+
+        col = {}
+        for i, h in enumerate(header):
+            n = re.sub(r'[\s_]+', ' ', str(h or '').strip().upper())
+            if n and n not in col:
+                col[n] = i
+
+        def g(row, name):
+            i = col.get(name)
+            return row[i] if (i is not None and i < len(row)) else None
+
+        for r in it:
+            if r is None:
+                continue
+            # Rules 1 & 2 — drop rows with empty End Counterparty / Description
+            if str(g(r, 'END COUNTERPARTY') or '').strip() == '':
+                continue
+            if str(g(r, 'END COUNTERPARTY DESCRIPTION') or '').strip() == '':
+                continue
+
+            deal_name = str(g(r, 'DEAL NAME') or '').strip()
+            if not deal_name:
+                continue
+
+            spn = str(g(r, 'SPN') or '').strip()
+            if spn.endswith('.0'):
+                spn = spn[:-2]
+            ref = refmap.get(_norm_spn(spn), {})
+
+            strike_v = _fxo_num(g(r, 'STRIKE'))
+            premq_v  = _fxo_num(g(r, 'PREMIUM QUANTITY'))
+            qty_v    = _fxo_num(g(r, 'QUANTITY'))
+            ppu_v    = (premq_v / qty_v) if (premq_v is not None and qty_v not in (None, 0)) else None
+
+            first_fix = g(r, 'FIRST FIXING DATE')
+            last_fix  = g(r, 'LAST FIXING DATE')
+            if str(first_fix or '').strip() and str(last_fix or '').strip():
+                trade_type, fix_start, fix_end = 'ASIAN', _fxo_date_dmy(first_fix), _fxo_date_dmy(last_fix)
+            else:
+                exp = _fxo_date_dmy(g(r, 'EXPIRATION DATE'))
+                trade_type, fix_start, fix_end = 'VANILLA', exp, exp
+
+            trade_date = _fxo_date_dmy(g(r, 'TRADE DATE'))
+            try:
+                month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
+            except ValueError:
+                month = ''
+
+            direction = str(g(r, 'TYPE') or '').strip().upper()
+
+            deals.append({
+                'Status':            'New',
+                'Deal':              deal_name,
+                'B3_ID':             '',
+                'TradeDate':         trade_date,
+                'Month':             month,
+                'SettlementDate':    _fxo_date_dmy(g(r, 'SETTLEMENT DATE')),
+                'SPN':               spn,
+                'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
+                'Client':            ref.get('COUNTERPARTY', '') or '',
+                'TaxID':             ref.get('TAX ID', '') or '',
+                'TradeType':         trade_type,
+                'UnderlyingAsset':   '',
+                'FXHolidaySchedule': 'ANBIMA',
+                'TotalNotional':     ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
+                'Instrument':        PUT_CALL.get(str(g(r, 'OPTION TYPE') or '').strip().upper(), ''),
+                'Strike':            ('{:.6f}'.format(strike_v) if strike_v is not None else ''),
+                'StrikeCurrency':    _fxo_ccy(g(r, 'QUANTITY CURRENCY')),
+                'Direction':         direction,
+                'Premium':           ('{:,.2f}'.format(premq_v) if premq_v is not None else ''),
+                'PremiumPerUnit':    ('{:,.8f}'.format(ppu_v) if ppu_v is not None else ''),
+                'PremiumCCY':        _fxo_ccy(g(r, 'PREMIUM CCY')),
+                'SpotDate':          '',
+                'FixingStartDate':   fix_start,
+                'FixingEndDate':     fix_end,
+                'TradingBook':       str(g(r, 'TRADING BOOK') or '').strip(),
+                'OtherBook':         str(g(r, 'OTHER BOOK') or '').strip(),
+                'Maker':             sid,
+            })
+        wb.close()
+
+    # Persist into per-TradeDate _optfxo.json (upsert by Deal + Client)
+    by_file = {}
+    for d in deals:
+        try:
+            ref_date = datetime.strptime(d['TradeDate'], '%d/%m/%Y')
+        except (ValueError, TypeError):
+            ref_date = datetime.now()
+        dir_path = os.path.join(CACHE_BASE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
+        fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
+        by_file.setdefault(fpath, (dir_path, []))[1].append(d)
+
+    saved = 0
+    with _cache_lock:
+        for fpath, (dir_path, ds) in by_file.items():
+            os.makedirs(dir_path, exist_ok=True)
+            try:
+                with open(fpath, encoding='utf-8') as fh:
+                    existing = json.load(fh)
+                if not isinstance(existing, list):
+                    existing = [existing]
+            except (IOError, json.JSONDecodeError):
+                existing = []
+            for d in ds:
+                idx = next((i for i, e in enumerate(existing)
+                            if (e.get('Deal') or '').strip() == d['Deal']
+                            and (e.get('Client') or '').strip() == d['Client']), None)
+                if idx is not None:
+                    existing[idx] = d
+                else:
+                    existing.append(d)
+                saved += 1
+            _atomic_write_json(fpath, existing)
+
+    if saved:
+        _create_notification(sid, session.get('user_name', ''),
+                             'New Deals', 'Opt FXO',
+                             '{} deal{} imported from XLSX'.format(saved, '' if saved == 1 else 's'))
+    return jsonify({'success': True, 'imported': saved, 'deals': deals, 'errors': errors})
 
 
 # ==============================================================================

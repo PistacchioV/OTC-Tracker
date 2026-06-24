@@ -905,5 +905,11 @@
   "rc-miss-src-email": "e-mail",
   "rc-miss-src-drive": "drive",
   "nd-fxo-page-title": "Opções de FXO",
-  "nd-fxo": "FXO"
+  "nd-fxo": "FXO",
+  "swal-no-xlsx-title": "Nenhum arquivo",
+  "swal-no-xlsx-text": "Solte um arquivo Brazil_FXO_Blotter_Extended …xlsx no dropzone primeiro.",
+  "swal-importing": "Importando…",
+  "swal-import-failed": "Falha na importação",
+  "swal-imported": "Importado",
+  "swal-deals-imported": "operação(ões) importada(s)."
 }

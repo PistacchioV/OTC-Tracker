@@ -1122,52 +1122,65 @@ $(document).ready(function () {
     }
 
     /* ── Init VCP ────────────────────────────────────────────────────── */
-    var dtVCP = $('#tblVCP').DataTable({
-        data: buildVCPRows(vcpDataArr),
-        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
-        dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
-        language: dtLang(),
-        columnDefs: [
-            {targets:[0], orderable:false, searchable:false},
-            {targets:[1], orderable:false},
-            {targets:'_all', defaultContent:''}
-        ],
-        initComplete: function() {
-            var api = this.api();
-            wireColSearch('srVCP', api);
-            wireColToggle(['Status','Qual.ID','Description','Add.Description','Level1 Class.','Product'], api, 1);
-            wireAddRow(api, 'vcp', function(dt){ vcpAddRow(dt); });
-        }
-    });
-    $('#pageLenVCP').on('change', function(){ dtVCP.page.len(+this.value).draw(); });
+    // Lazy init — building a scrollX table inside a hidden tab skips DataTables'
+    // header-sizing pass, leaving the in-body header visible as a duplicate.
+    // Init only when the tab is first shown (and thus visible).
+    var dtVCP = null;
+    function ensureVCP() {
+        if (dtVCP) return dtVCP;
+        dtVCP = $('#tblVCP').DataTable({
+            data: buildVCPRows(vcpDataArr),
+            responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+            dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
+            language: dtLang(),
+            columnDefs: [
+                {targets:[0], orderable:false, searchable:false},
+                {targets:[1], orderable:false},
+                {targets:'_all', defaultContent:''}
+            ],
+            initComplete: function() {
+                var api = this.api();
+                wireColSearch('srVCP', api);
+                wireColToggle(['Status','Qual.ID','Description','Add.Description','Level1 Class.','Product'], api, 1);
+                wireAddRow(api, 'vcp', function(dt){ vcpAddRow(dt); });
+            }
+        });
+        $('#pageLenVCP').on('change', function(){ dtVCP.page.len(+this.value).draw(); });
+        return dtVCP;
+    }
 
     /* ── Init Dominio ────────────────────────────────────────────────── */
-    var dtDom = $('#tblDominio').DataTable({
-        data: buildDomRows(dominioDataArr),
-        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
-        dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
-        language: dtLang(),
-        columnDefs: [
-            {targets:[0], orderable:false, searchable:false},
-            {targets:[1], orderable:false},
-            {targets:'_all', defaultContent:''}
-        ],
-        initComplete: function() {
-            var api = this.api();
-            wireColSearch('srDom', api);
-            wireColToggle(['Status','Group','Subgroup','IF Type Code','Qual.ID','Description','Classification'], api, 1);
-            wireAddRow(api, 'dominio', function(dt){ domAddRow(dt); });
-        }
-    });
-    $('#pageLenDom').on('change', function(){ dtDom.page.len(+this.value).draw(); });
+    var dtDom = null;
+    function ensureDom() {
+        if (dtDom) return dtDom;
+        dtDom = $('#tblDominio').DataTable({
+            data: buildDomRows(dominioDataArr),
+            responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+            dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
+            language: dtLang(),
+            columnDefs: [
+                {targets:[0], orderable:false, searchable:false},
+                {targets:[1], orderable:false},
+                {targets:'_all', defaultContent:''}
+            ],
+            initComplete: function() {
+                var api = this.api();
+                wireColSearch('srDom', api);
+                wireColToggle(['Status','Group','Subgroup','IF Type Code','Qual.ID','Description','Classification'], api, 1);
+                wireAddRow(api, 'dominio', function(dt){ domAddRow(dt); });
+            }
+        });
+        $('#pageLenDom').on('change', function(){ dtDom.page.len(+this.value).draw(); });
+        return dtDom;
+    }
 
     /* ── Tab switch redraw ───────────────────────────────────────────── */
     document.querySelectorAll('#resultTabs button[data-bs-toggle="tab"]').forEach(function(btn) {
         btn.addEventListener('shown.bs.tab', function() {
             var t = btn.getAttribute('data-bs-target');
             if (t==='#tabSubjacente') dtSubj.columns.adjust().draw(false);
-            if (t==='#tabVCP')        dtVCP.columns.adjust().draw(false);
-            if (t==='#tabDominio')    dtDom.columns.adjust().draw(false);
+            if (t==='#tabVCP')        ensureVCP().columns.adjust().draw(false);
+            if (t==='#tabDominio')    ensureDom().columns.adjust().draw(false);
         });
     });
 
