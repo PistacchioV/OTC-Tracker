@@ -1012,8 +1012,8 @@
           </div>
 
           <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">Underlying Asset</label>
-            <input type="text" class="form-control form-control-sm" id="ar-underlying" placeholder="Underlying asset…">
+            <label class="form-label form-label-sm mb-1">Underlying Asset <small class="text-muted">(= Strike CCY)</small></label>
+            <input type="text" class="form-control form-control-sm bg-light" id="ar-underlying" readonly>
           </div>
 
           <div class="col-12"><hr class="my-1"></div>
@@ -4264,6 +4264,8 @@ $(document).ready(function() {
         }
 
         function arRecalc() {
+            // FXO: Underlying Asset mirrors Strike Currency
+            $('#ar-underlying').val(($('#ar-strikeccy').val() || '').trim());
         }
 
         // Auto-set TradeType from fixing dates
@@ -4389,7 +4391,7 @@ $(document).ready(function() {
         $(document).on('change', '#ar-fixstart, #ar-fixend', arAutoTradeType);
 
         // Market / Underlying / TradeType → recalculate auto-fields
-        $(document).on('input change', '#ar-underlying, #ar-tradetype', arRecalc);
+        $(document).on('input change', '#ar-strikeccy, #ar-tradetype', arRecalc);
 
         // Save / Update
         $(document).on('click', '#ar-save-btn', function () {
@@ -4407,7 +4409,7 @@ $(document).ready(function() {
                 Client:            $('#ar-client').val().trim(),
                 TaxID:             $('#ar-taxid').val().trim(),
                 TradeType:         $('#ar-tradetype').val() || '',
-                UnderlyingAsset:   $('#ar-underlying').val().trim(),
+                UnderlyingAsset:   ($('#ar-strikeccy').val() || '').trim(),
                 FXHolidaySchedule: $('#ar-fxholiday').val().trim(),
                 TotalNotional:     $('#ar-notional').val().trim(),
                 Instrument:        $('#ar-instrument').val() || '',

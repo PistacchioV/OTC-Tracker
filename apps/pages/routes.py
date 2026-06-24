@@ -2220,6 +2220,7 @@ def api_fxo_import_xlsx():
                 month = ''
 
             direction = str(g(r, 'TYPE') or '').strip().upper()
+            strike_ccy = _fxo_ccy(g(r, 'QUANTITY CURRENCY'))  # FXO: Underlying Asset == Strike Currency
 
             deals.append({
                 'Status':            'New',
@@ -2233,17 +2234,17 @@ def api_fxo_import_xlsx():
                 'Client':            ref.get('COUNTERPARTY', '') or '',
                 'TaxID':             ref.get('TAX ID', '') or '',
                 'TradeType':         trade_type,
-                'UnderlyingAsset':   '',
+                'UnderlyingAsset':   strike_ccy,
                 'FXHolidaySchedule': 'ANBIMA',
                 'TotalNotional':     ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
                 'Instrument':        PUT_CALL.get(str(g(r, 'OPTION TYPE') or '').strip().upper(), ''),
                 'Strike':            ('{:.6f}'.format(strike_v) if strike_v is not None else ''),
-                'StrikeCurrency':    _fxo_ccy(g(r, 'QUANTITY CURRENCY')),
+                'StrikeCurrency':    strike_ccy,
                 'Direction':         direction,
                 'Premium':           ('{:,.2f}'.format(premq_v) if premq_v is not None else ''),
                 'PremiumPerUnit':    ('{:,.8f}'.format(ppu_v) if ppu_v is not None else ''),
                 'PremiumCCY':        _fxo_ccy(g(r, 'PREMIUM CCY')),
-                'SpotDate':          '',
+                'SpotDate':          _fxo_date_dmy(g(r, 'PREMIUM DATE')),
                 'FixingStartDate':   fix_start,
                 'FixingEndDate':     fix_end,
                 'TradingBook':       str(g(r, 'TRADING BOOK') or '').strip(),
