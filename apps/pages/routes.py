@@ -1644,6 +1644,12 @@ def api_update_deal_cache(deal_id):
             if _k in deals[idx]:
                 deals[idx][_k] = deals[idx].pop(_k)
         _atomic_write_json(file_path, deals)
+        updated_deal = deals[idx].copy()
+
+    # Mirror NDF: push to Intrag Option when Status→Success and the counterparty
+    # is Banco J.P. Morgan (intragroup).
+    if str(updates.get('Status', '')) == 'Success':
+        _maybe_save_intrag_opt(updated_deal)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -1806,6 +1812,9 @@ NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
 
 INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "NDF"
+))
+INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Option"
 ))
 
 # Network share where generated Intrag NDF .txt files are written. Hardcoded
@@ -2040,6 +2049,197 @@ def _save_intrag_ndf_entry(deal):
     log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
 
 
+# Intra-group accounts: 73760.00-9 = Banco J.P. Morgan, 00041.00-7 = Lawton.
+_INTRAG_OPT_JPM_ACC    = '73760.00-9'
+_INTRAG_OPT_LAWTON_ACC = '00041.00-7'
+_INTRAG_OPT_JPM_NAME    = 'BANCO J.P MORGAN S.A'
+_INTRAG_OPT_LAWTON_NAME = 'LAWTON MULTIMERCADO-FI'
+
+
+def _intrag_opt_name_for(acc):
+    if acc == _INTRAG_OPT_JPM_ACC:
+        return _INTRAG_OPT_JPM_NAME
+    if acc == _INTRAG_OPT_LAWTON_ACC:
+        return _INTRAG_OPT_LAWTON_NAME
+    return ''
+
+
+def _save_intrag_opt_entry(deal):
+    """Compute the Intrag Option fields from a New Deals Opt-Comm deal and
+    append/update the daily JSON. Only the columns specified so far are filled;
+    the rest are placeholders to be wired later. Random my_number / cetip_number
+    are generated once and preserved on re-save (like the lifecycle state)."""
+    td = _parse_deal_date(deal.get('TradeDate', '') or '')
+    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
+    fmt_br = lambda d: d.strftime('%d/%m/%Y') if d else ''
+
+    direction = (deal.get('Direction', '') or '').upper()
+    if direction == 'BUY':
+        buyer_account = _INTRAG_OPT_LAWTON_ACC
+    elif direction == 'SELL':
+        buyer_account = _INTRAG_OPT_JPM_ACC
+    else:
+        buyer_account = ''
+    buyer_name = _intrag_opt_name_for(buyer_account)
+    # Seller is the inverse account/name of the buyer.
+    if buyer_account == _INTRAG_OPT_JPM_ACC:
+        seller_account = _INTRAG_OPT_LAWTON_ACC
+    elif buyer_account == _INTRAG_OPT_LAWTON_ACC:
+        seller_account = _INTRAG_OPT_JPM_ACC
+    else:
+        seller_account = ''
+    seller_name = _intrag_opt_name_for(seller_account)
+
+    instrument = (deal.get('Instrument', '') or '').upper()
+    if 'PUT' in instrument:
+        contract = 'OFVC'
+    elif 'CALL' in instrument:
+        contract = 'OFCC'
+    else:
+        contract = ''
+
+    currency_symbol = (deal.get('Commodities', '') or '').strip()[:3].upper()
+
+    # ── numeric columns ──────────────────────────────────────────────────
+    def _f(v):
+        try:
+            return float(str(v if v is not None else '').replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            return 0.0
+
+    def _has(key):
+        return str(deal.get(key, '') or '').strip() != ''
+
+    qic        = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
+    strike_ccy = (deal.get('StrikeCurrency', '') or '').strip().upper()
+    is_brl     = strike_ccy == 'BRL'
+    # Non-BRL quoted-in-cents prices are normalized /100; BRL never divides.
+    _cents = lambda v: (v / 100.0) if (qic and not is_brl) else v
+
+    is_call = 'CALL' in instrument
+    is_put  = 'PUT' in instrument
+
+    premium_val  = _f(deal.get('Premium'))
+    notional_val = _f(deal.get('TotalNotional'))
+    strike_adj   = _cents(_f(deal.get('Strike')))
+    ppu_adj      = _cents(_f(deal.get('PremiumPerUnit')))
+
+    premium_str    = '{:.2f}'.format(premium_val)  if _has('Premium')       else ''
+    fxbase_str     = '{:.2f}'.format(notional_val) if _has('TotalNotional') else ''
+    quantity_str   = '{:.2f}'.format(notional_val) if _has('TotalNotional') else ''
+    call_strike    = '{:.8f}'.format(strike_adj)   if (is_call and _has('Strike')) else ''
+    put_strike     = '{:.8f}'.format(strike_adj)   if (is_put  and _has('Strike')) else ''
+    call_premium   = '{:.8f}'.format(ppu_adj)      if (is_call and _has('PremiumPerUnit')) else ''
+    put_premium    = '{:.8f}'.format(ppu_adj)      if (is_put  and _has('PremiumPerUnit')) else ''
+
+    # Fixing = weekday biz-days (no calendar) between FixingEndDate and SettlementDate.
+    fe = _parse_deal_date(deal.get('FixingEndDate', '') or '')
+    fixing_days = ''
+    if fe and sd:
+        lo, hi = (fe, sd) if fe < sd else (sd, fe)
+        fixing_days = str(_weekday_bizdays_between(lo, hi))
+    fixing_desc = ('D-' + fixing_days) if fixing_days != '' else ''
+
+    underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
+    subj = _SUBJACENTE_BY_CODE.get(underlying_asset.upper(), {})
+    exchange = (subj.get('Bolsa de Negociacao') or '').strip()
+
+    spot = _parse_deal_date(deal.get('SpotDate', '') or '')
+    trade_type = (deal.get('TradeType', '') or '').upper()
+    if 'ASIAN' in trade_type:
+        asian_label = 'APLICÁVEL'
+    elif 'VANILLA' in trade_type:
+        asian_label = 'NÃO APLICÁVEL'
+    else:
+        asian_label = ''
+
+    entry = {
+        'portfolio':              'INTRAGJP552',
+        'system_id':              'OPCAO',
+        'line_type_id':           '1',
+        'registration_date':      fmt_br(td),
+        'buyer_account':          buyer_account,
+        'buyer_name':             buyer_name,
+        'contract':               contract,
+        'b3_id':                  deal.get('B3_ID', '') or '',
+        'my_number':              ''.join(random.choice(string.digits) for _ in range(10)),
+        'trade_type':             '',
+        'seller_account':         seller_account,
+        'seller_name':            seller_name,
+        'start_date':             fmt_br(td),
+        'maturity_date':          fmt_br(sd),
+        'cetip_number':           ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16)),
+        'sisbacen_currency_code': 'COM',
+        'currency_symbol':        currency_symbol,
+        'investment_amount':      premium_str,        # Premium
+        'fx_base_value':          fxbase_str,         # Total Notional
+        'prepaid_value':          '',                 # Unwind Amount
+        'prepayment_unit_price':  '',                 # Unwind Unit Price
+        'redemption_value':       '',
+        'call_strike_price':      call_strike,
+        'put_strike_price':       put_strike,
+        'call_unit_premium':      call_premium,
+        'put_unit_premium':       put_premium,
+        'barrier_rate':           '',
+        'exercise_type':          'EUROPEIA',
+        'information_source':      'COMMODITIES',
+        'bulletin':               '9',
+        'bulletin_time':          '',
+        'maturity_rate':          fixing_days,        # Fixing (biz-day count)
+        'maturity_rate_desc':     fixing_desc,        # Fixing Description (D-n)
+        'query_source':           exchange,           # Exchange (Bolsa de Negociacao)
+        'ticker':                 underlying_asset,
+        'quantity':               quantity_str,
+        'premium_payment_date':   spot.strftime('%d/%m/%Y') if spot else '',
+        'asian_option_average':   asian_label,
+        '_deal':   deal.get('Deal', '') or '',
+        '_client': deal.get('Client', '') or '',
+        'status':  'New',
+        'maker':   '',
+        'checker': '',
+    }
+
+    ref = td or datetime.now()
+    dir_path = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
+    fname = ref.strftime('%Y%m%d') + '_intrag_opt.json'
+    file_path = os.path.join(dir_path, fname)
+
+    with _cache_lock:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    entries = json.load(fh)
+                if not isinstance(entries, list):
+                    entries = []
+            except (json.JSONDecodeError, ValueError):
+                entries = []
+        else:
+            entries = []
+        deal_id = entry['_deal']
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            # Preserve lifecycle + the once-generated random numbers on re-save.
+            for k in ('status', 'maker', 'checker', 'my_number', 'cetip_number'):
+                if entries[idx].get(k):
+                    entry[k] = entries[idx][k]
+            entries[idx] = entry
+        else:
+            entries.append(entry)
+        _atomic_write_json(file_path, entries)
+    log.info('[INTRAG OPT] Saved entry deal=%r → %s', deal_id, file_path)
+
+
+def _maybe_save_intrag_opt(deal):
+    """Save to Intrag Option when the counterparty is Banco J.P. Morgan (intragroup)."""
+    cl = (deal.get('Client', '') or '').lower()
+    if 'banco' in cl and 'morgan' in cl:
+        try:
+            _save_intrag_opt_entry(deal)
+        except Exception as exc:
+            log.error('[INTRAG OPT] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
+
+
 def _find_intrag_ndf_entry(deal_id, trade_date):
     """Locate an Intrag NDF entry by deal id (+ optional trade date to narrow the
     daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
@@ -2131,6 +2331,219 @@ def api_intrag_ndf():
                     except Exception as exc:
                         log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
     return jsonify({'success': True, 'entries': entries})
+
+
+@blueprint.route('/api/intrag/option')
+def api_intrag_option():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    date_str  = request.args.get('date', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to   = request.args.get('date_to', '').strip()
+    suffix = '_intrag_opt.json'
+    entries = []
+    if date_from or date_to:
+        d_from = _parse_date_any(date_from)
+        d_to   = _parse_date_any(date_to)
+        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith(suffix):
+                        continue
+                    fdate = _parse_date_any(fname[:8])
+                    if fdate is None:
+                        continue
+                    if d_from and fdate < d_from:
+                        continue
+                    if d_to and fdate > d_to:
+                        continue
+                    try:
+                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+    elif date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                              ref.strftime('%Y%m%d') + suffix)
+            if os.path.isfile(fp):
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    entries = json.load(fh)
+                if not isinstance(entries, list):
+                    entries = []
+        except Exception as exc:
+            log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
+    else:
+        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith(suffix):
+                        continue
+                    try:
+                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+    return jsonify({'success': True, 'entries': entries})
+
+
+def _find_intrag_opt_entry(deal_id, trade_date):
+    """Locate an Intrag Option entry by deal id (+ optional trade date)."""
+    if not deal_id:
+        return None, None, None
+    ref = _parse_date_any(trade_date) if trade_date else None
+    candidate_files = []
+    if ref is not None:
+        fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                          ref.strftime('%Y%m%d') + '_intrag_opt.json')
+        if os.path.isfile(fp):
+            candidate_files.append(fp)
+    if not candidate_files and os.path.isdir(INTRAG_OPT_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
+            for fname in files:
+                if fname.endswith('_intrag_opt.json'):
+                    candidate_files.append(os.path.join(root, fname))
+    for fp in candidate_files:
+        try:
+            with open(fp, 'r', encoding='utf-8') as fh:
+                entries = json.load(fh)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None
+
+
+@blueprint.route('/api/intrag/option/send-file', methods=['POST'])
+def api_intrag_option_send_file():
+    """Generate the Intrag Option .txt file(s) from the selected rows and flip
+    New/Approved → Sent. Same standard folder as NDF; file Intrag-Option-YYYYMMDD.txt.
+
+    Body: { "items": [ { "deal_id": str, "cells": [...38...] } ] }. Rows are
+    grouped by Registration Date (data col index 3) — one file per date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items')
+    if not isinstance(items, list) or not items:
+        rows = payload.get('rows')
+        if not isinstance(rows, list) or not rows:
+            return jsonify({'success': False, 'message': 'No rows provided'}), 400
+        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
+
+    REG_DATE_IDX = 3   # Registration Date within the 38 data columns
+    SENDABLE = {'New', 'Approved'}
+
+    groups = {}
+    sent_ids = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
+        if not cells:
+            continue
+        td_raw = cells[REG_DATE_IDX] if len(cells) > REG_DATE_IDX else ''
+        ref = _parse_date_any(td_raw) or datetime.now()
+        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
+        if it.get('deal_id'):
+            sent_ids.append((it['deal_id'], td_raw))
+
+    if not groups:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _cache_lock:
+            for key, grp in groups.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                os.makedirs(dir_path, exist_ok=True)
+                base = 'Intrag-Option-' + key
+                candidate = base + '.txt'
+                n = 0
+                while os.path.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ').txt'
+                file_path = os.path.join(dir_path, candidate)
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
+                written.append(file_path)
+                log.info('[INTRAG OPT] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
+
+            for deal_id, td_raw in sent_ids:
+                fp, entries, idx = _find_intrag_opt_entry(deal_id, td_raw)
+                if idx is None:
+                    continue
+                if (entries[idx].get('status') or 'New') in SENDABLE:
+                    entries[idx]['status'] = 'Sent'
+                    _atomic_write_json(fp, entries)
+    except Exception as exc:
+        log.error('[INTRAG OPT] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    return jsonify({'success': True, 'files': written, 'count': len(items)})
+
+
+@blueprint.route('/api/intrag/option/edit', methods=['POST'])
+def api_intrag_option_edit():
+    """Row-level edit on an Intrag Option entry → status 'Pending', records maker."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    fields     = payload.get('fields') or {}
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    with _cache_lock:
+        fp, entries, idx = _find_intrag_opt_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if isinstance(fields, dict):
+            for k, v in fields.items():
+                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
+                    entries[idx][k] = v
+        entries[idx]['status']  = 'Pending'
+        entries[idx]['maker']   = session.get('user_sid', '')
+        entries[idx]['checker'] = ''
+        _atomic_write_json(fp, entries)
+    return jsonify({'success': True, 'status': 'Pending'})
+
+
+@blueprint.route('/api/intrag/option/approve', methods=['POST'])
+def api_intrag_option_approve():
+    """Move an Intrag Option entry Pending → Approved (maker ≠ checker)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    user_sid = session.get('user_sid', '')
+    with _cache_lock:
+        fp, entries, idx = _find_intrag_opt_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if (entries[idx].get('status') or '') != 'Pending':
+            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
+        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+            return jsonify({'success': False,
+                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
+        entries[idx]['status']  = 'Approved'
+        entries[idx]['checker'] = user_sid
+        _atomic_write_json(fp, entries)
+    return jsonify({'success': True, 'status': 'Approved'})
 
 
 @blueprint.route('/api/intrag/ndf/send-file', methods=['POST'])
@@ -3556,6 +3969,7 @@ def api_mapping_b3():
         if deal_text:
             file_path, idx = _find_deal_in_cache(deal_text, client_name)
             if file_path is not None:
+                intrag_candidate = None
                 with _cache_lock:
                     try:
                         with open(file_path, 'r', encoding='utf-8') as fh:
@@ -3563,8 +3977,12 @@ def api_mapping_b3():
                         deals_list[idx].update(updates)
                         with open(file_path, 'w', encoding='utf-8') as fh:
                             json.dump(deals_list, fh, ensure_ascii=False, indent=2)
+                        if new_status == 'Success':
+                            intrag_candidate = deals_list[idx].copy()
                     except Exception:
                         pass
+                if intrag_candidate is not None:
+                    _maybe_save_intrag_opt(intrag_candidate)
 
         results.append({
             'id':     deal_text,

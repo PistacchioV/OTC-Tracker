@@ -1173,3 +1173,77 @@ scripts/import_dados_bancarios.py                ← NOVO import de contas (ACCO
 - `_build_cpdetails_index` (otc_emails) ainda casa SPN por string upper, **não** normaliza zeros à
   esquerda — alinhar com a regra 21.0 se aparecer mismatch nos e-mails.
 
+
+---
+
+## 22. Sessão 2026-06-23 (cont.) — Intrag Option: pipeline New Deals Opt → JSON + página
+
+### Pipeline (espelha o Intrag NDF)
+Quando um deal de **New Deals Opt Comm** vira **Status=Success** e a contraparte é **Banco J.P. Morgan**
+(intragrupo), grava um entry no JSON diário `*_intrag_opt.json` com `status='New'`.
+- **Backend** (`routes.py`): `INTRAG_OPT_CACHE_DIR` (`.../cache/new deals/Intrag/Option/YYYY/MM/`),
+  `_save_intrag_opt_entry(deal)` + `_maybe_save_intrag_opt(deal)` (filtro JPM). GET `/api/intrag/option`
+  (mesma assinatura do `/api/intrag/ndf`: `date`/`date_from`/`date_to` → `{success, entries}`).
+- **Gatilhos**: `api_update_deal_cache` (opt PATCH, Status→Success) e `api_mapping_b3` (opt, Success).
+- **Re-save preserva** `status/maker/checker` **e** `my_number/cetip_number` (gerados 1×).
+
+### Mapeamento de colunas (parcial — restante o usuário define depois)
+| Coluna intrag-opt | Origem / regra |
+|---|---|
+| Portfolio | fixo `INTRAGJP552` |
+| System ID | fixo `OPCAO` |
+| Line Type ID | fixo `1` |
+| Registration Date | TradeDate `dd/mm/yyyy` |
+| **Buyer Account** (era Holder) | Direction BUY→`00041.00-7`, SELL→`73760.00-9` |
+| **Buyer Name** (era Holder) | `73760.00-9`→`BANCO J.P MORGAN S.A`, `00041.00-7`→`LAWTON MULTIMERCADO-FI` |
+| Contract | Instrument Put→`OFVC`, Call→`OFCC` |
+| **B3 ID** (era CETIP Contract) | `B3_ID` |
+| My Number | aleatório 10 dígitos |
+| **Seller Account** (era Writer) | inverso do Buyer Account |
+| **Seller Name** (era Writer) | inverso do Buyer Name |
+| Start Date | TradeDate `dd/mm/yyyy` |
+| Maturity Date | SettlementDate `dd/mm/yyyy` |
+| CETIP Number | aleatório 16 chars (alfanum) |
+| SISBACEN Currency Code | fixo `COM` |
+| Currency Symbol | 3 primeiras letras de Commodities |
+
+Contas intragrupo: `73760.00-9`=JPM, `00041.00-7`=Lawton.
+
+### Frontend (`intrag-option.html`)
+- **Fix de espaçamento** acima dos headers (scrollX clone cortava o checkbox): `padding-top` no
+  `.dt-scroll-head`/`thead th`.
+- Renames nos `<th>` + `OPT_COLS` + i18n (`intrag-opt-col-4/5/7/10/11`): Holder→Buyer, Writer→Seller,
+  CETIP Contract→B3 ID.
+- `OPT_ENTRY_FIELDS` (38 chaves = ordem de OPT_COLS) + `intragOptLoad()` (fetch `/api/intrag/option`,
+  monta linhas `[checkbox, actions, status, …38 dados, _deal]`) chamado no load. Convive com o Add manual.
+
+### Pendências (seção 22)
+- **Colunas restantes** (17–37: Investment Amount … Asian Option Average + Trade Type col 9) — o usuário
+  enviará o mapeamento; já existem como placeholders vazios em `_save_intrag_opt_entry`/`OPT_ENTRY_FIELDS`.
+- Intrag Option **ainda sem lifecycle backend** (send/approve/edit) como o NDF — status é só badge; o load
+  popula do JSON. Quando precisar, espelhar `/api/intrag/ndf/{send-file,edit,approve}`.
+
+### 22.1 Colunas restantes + lifecycle + geração de arquivo (cont.)
+**Colunas 17–37** (`_save_intrag_opt_entry`): Premium (`investment_amount`, `.2f`), FX Base
+(`fx_base_value`=TotalNotional `.2f`), Unwind Amount/Unit Price (`prepaid_value`/`prepayment_unit_price`,
+vazios), Call/Put Strike (`.8f`, strike×cents só se ccy≠BRL e QuotedInCents=YES; por instrument),
+Call/Put Unit Premium (idem com PremiumPerUnit), Exercise=`EUROPEIA`, Info Source=`COMMODITIES`,
+Bulletin=`9`, **Fixing** (`maturity_rate`=dias úteis weekday entre FixingEndDate e SettlementDate, sem
+calendário), **Fixing Description** (`maturity_rate_desc`=`D-<n>`), **Exchange** (`query_source`=Bolsa de
+Negociacao do Subjacente por UnderlyingAsset), Ticker=UnderlyingAsset, Quantity=TotalNotional `.2f`,
+Premium Payment Date=SpotDate dd/mm/yyyy, Asian Option Average=`APLICÁVEL`/`NÃO APLICÁVEL`.
+Renames i18n: col-17 Premium, 19 Unwind Amount, 20 Unwind Unit Price, 31 Fixing, 32 Fixing Description,
+33 Exchange.
+
+**Lifecycle (espelha NDF)**: `_find_intrag_opt_entry` + `/api/intrag/option/{send-file,edit,approve}`.
+- edit→`Pending` (maker); approve `Pending`→`Approved` (**403 maker==checker**); send `New/Approved`→`Sent`.
+- **Arquivo**: `Intrag-Option-YYYYMMDD.txt` na **mesma pasta padrão do NDF** (`INTRAG_NDF_SEND_DIR\YYYY\mm. Mmmm\dd`),
+  linhas = 38 colunas separadas por `;`, agrupado por Registration Date (col data idx 3). Sufixo ` (n)` se já existir.
+- **Frontend** (`intrag-option.html`): botões row Approve (só em Pending, via drawCallback) + Send + Send em
+  lote (`btnSendOpt`), `_intragRowData`=`slice(3,41)` (38 cols), `_itemFromRow`, edit do modal → POST edit →
+  Pending. Validado e2e.
+
+### Pendências (atualizado seção 22)
+- Colunas 17–37 e lifecycle: **feitos**. Falta só `Trade Type` (col 9) e `Redemption Value`/`Barrier Rate`/
+  `Bulletin Time` (sem regra definida) — placeholders vazios.
+- `INTRAG_NDF_SEND_DIR` é caminho Windows (`I:\...`) — geração de arquivo só funciona no ambiente JPM.
