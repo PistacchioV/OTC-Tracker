@@ -1413,13 +1413,13 @@ _CETIP_RULES = [
     {'label': 'Option Position (OPC DPOSICAO)',
      'match': lambda n: 'opc_' in n and '_dposicao.txt' in n,
      'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
-     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r),
+     'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
      'extra_dest': CETIP_OPTIONS_SHARE},
     {'label': 'Option Movement (OPC DMOVIMENTO)',
      'match': lambda n: ('opc_' in n and '_dmovimento.txt' in n
                          and '_15h00.txt' not in n and '_18h30.txt' not in n),
      'date_start': 4,                  # OPC_YYMMDD_DMOVIMENTO.TXT → date at index 4
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r)},
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPC'.format(r)},
     {'label': 'Term Movement (DMOVIMENTO C21)',
      'match': lambda n: '_dmovimento_c21.txt' in n,
      'date_start': 8,
@@ -1576,7 +1576,8 @@ def api_cp_cetip_settlement():
     # Make sure the destination day folder exists before saving anything.
     os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
-    attach_paths = []   # files to e-mail to Sales Support (DPOSCONTRATOSIC)
+    attach_paths = []   # file paths to e-mail to Sales Support (DPOSCONTRATOSIC)
+    attach_saved = []   # their saved-entry dicts (for the Sales Support table)
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
     # files land in the single per-day destination folder, renamed.
@@ -1594,9 +1595,11 @@ def api_cp_cetip_settlement():
             src_path  = os.path.join(src_dir, name)
             try:
                 _cetip_save_file(src_path, dest_path)
-                saved.append({'src': name, 'dest': dest_name, 'type': rule['label']})
+                entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
+                saved.append(entry)
                 if rule.get('attach_sales_support'):
                     attach_paths.append(dest_path)
+                    attach_saved.append(entry)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -1630,10 +1633,11 @@ def api_cp_cetip_settlement():
         ss_msg = ('Segue em anexo o arquivo de posição de contratos (DPOSCONTRATOSIC), '
                   'conforme solicitado.' if attach_paths else
                   'Não foi encontrado o arquivo DPOSCONTRATOSIC para a data de referência.')
+        ss_subject = 'Consolidado Cetip - Corporate - {}'.format(ref.strftime('%y%m%d'))
         mail_ss = _send_cetip_email(
-            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], 'Arquivos CETIP salvos!',
+            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
             'Bom dia, Sales Support.', ss_msg,
-            ref_fmt, [], attachments=attach_paths)   # no file list for Sales Support
+            ref_fmt, attach_saved, attachments=attach_paths)   # table = just the attached file
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
