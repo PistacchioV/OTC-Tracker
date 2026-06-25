@@ -244,12 +244,28 @@
 </div>
 <!-- end offcanvas-->
 
+<style>
+  /* Red check badge for the active Color Scheme card — independent of the radio
+     :checked state (the theme JS resets it), driven by the .scheme-checked class. */
+  #theme .card-radio.scheme-checked .form-check-label::before {
+      content: "\f746";
+      font-family: tabler-icons;
+      color: var(--ins-danger);
+      font-size: 28px;
+      line-height: 1;
+      position: absolute;
+      bottom: 2px;
+      right: 6px;
+      z-index: 3;
+  }
+</style>
 <script>
-// Mark the active "Color Scheme" radio as checked so its red check badge shows
-// (mirrors the Select Theme behaviour). The active scheme is derived from the
-// saved config, or from the html attributes (System = light body + dark topbar).
+// Show the red check badge on the active "Color Scheme" card (mirrors Select Theme).
+// The active scheme is derived from the saved config or the html attributes
+// (System = light body + dark topbar). Uses a class so it survives the theme JS
+// re-rendering / un-checking the radios.
 (function () {
-    function markActiveScheme() {
+    function activeTheme() {
         var theme;
         try { theme = (JSON.parse(localStorage.getItem('__OTCTRACKER_CONFIG__') || '{}') || {}).theme; } catch (e) {}
         if (!theme) {
@@ -258,13 +274,26 @@
             var tb = html.getAttribute('data-topbar-color');
             theme = (t === 'dark') ? 'dark' : (tb === 'dark' ? 'system' : 'light');
         }
-        var el = document.querySelector('input[name="data-bs-theme"][value="' + theme + '"]');
-        if (el) el.checked = true;
+        return theme;
     }
-    function run() { setTimeout(markActiveScheme, 350); }
+    function markActiveScheme() {
+        var section = document.getElementById('theme');
+        if (!section) return;
+        section.querySelectorAll('.card-radio').forEach(function (c) { c.classList.remove('scheme-checked'); });
+        var el = document.querySelector('input[name="data-bs-theme"][value="' + activeTheme() + '"]');
+        if (el) {
+            el.checked = true;
+            var card = el.closest('.card-radio');
+            if (card) card.classList.add('scheme-checked');
+        }
+    }
+    function run() { markActiveScheme(); [150, 500, 1200].forEach(function (d) { setTimeout(markActiveScheme, d); }); }
     if (document.readyState !== 'loading') run();
     else document.addEventListener('DOMContentLoaded', run);
-    // Re-mark when the customizer is opened (in case the theme JS re-rendered it).
+    // Update on user changes + when the customizer opens.
+    document.querySelectorAll('input[name="data-bs-theme"]').forEach(function (r) {
+        r.addEventListener('change', function () { setTimeout(markActiveScheme, 50); });
+    });
     var oc = document.getElementById('theme-settings-offcanvas');
     if (oc) oc.addEventListener('shown.bs.offcanvas', markActiveScheme);
 })();
