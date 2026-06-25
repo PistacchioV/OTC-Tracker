@@ -243,3 +243,29 @@
     </div>
 </div>
 <!-- end offcanvas-->
+
+<script>
+// Mark the active "Color Scheme" radio as checked so its red check badge shows
+// (mirrors the Select Theme behaviour). The active scheme is derived from the
+// saved config, or from the html attributes (System = light body + dark topbar).
+(function () {
+    function markActiveScheme() {
+        var theme;
+        try { theme = (JSON.parse(localStorage.getItem('__OTCTRACKER_CONFIG__') || '{}') || {}).theme; } catch (e) {}
+        if (!theme) {
+            var html = document.documentElement;
+            var t  = html.getAttribute('data-bs-theme');
+            var tb = html.getAttribute('data-topbar-color');
+            theme = (t === 'dark') ? 'dark' : (tb === 'dark' ? 'system' : 'light');
+        }
+        var el = document.querySelector('input[name="data-bs-theme"][value="' + theme + '"]');
+        if (el) el.checked = true;
+    }
+    function run() { setTimeout(markActiveScheme, 350); }
+    if (document.readyState !== 'loading') run();
+    else document.addEventListener('DOMContentLoaded', run);
+    // Re-mark when the customizer is opened (in case the theme JS re-rendered it).
+    var oc = document.getElementById('theme-settings-offcanvas');
+    if (oc) oc.addEventListener('shown.bs.offcanvas', markActiveScheme);
+})();
+</script>

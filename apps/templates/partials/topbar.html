@@ -1,8 +1,8 @@
 <style>
-  /* Light mode: topbar white (theme default is the gray #f5f5f7 canvas tone,
-     set via html[data-topbar-color=light] which outranks a :root override).
-     Target .app-topbar directly, scoped to non-dark; dark theme keeps its bg. */
-  html:not([data-bs-theme="dark"]) .app-topbar { background-color: #ffffff !important; }
+  /* Topbar white ONLY when the chosen Topbar Color is "light" (theme default for
+     that is the gray #f5f5f7 canvas tone). Gray / dark / gradient and the System
+     scheme (which sets data-topbar-color=dark) keep their own colours. */
+  html[data-topbar-color="light"]:not([data-bs-theme="dark"]) { --ins-topbar-bg: #ffffff !important; }
 
   .notification-item .notification-badge {
     display: flex !important;
