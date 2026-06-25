@@ -1476,7 +1476,7 @@ _CETIP_RULES = [
 #   Option → OPC files          (DPOSICAO.OPC)         — file has its own header
 #   Swap   → SWAP position/flow/premium agenda          — HEADERLESS: column names
 #            come from _B3_SWAP_HEADERS (stored standard, keyed per file type)
-B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'B3 Files')
+B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'b3 files')
 
 # Standard column headers for the HEADERLESS SWAP-family files (';'-delimited),
 # in file order. These are the authoritative field names (the SWAP files ship with

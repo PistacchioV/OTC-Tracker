@@ -49,4 +49,4 @@ apps/templates/pages/alteryx_flow.py
 _chart_preview/
 
 # Generated B3 JSON data (daily) — keep folders, ignore the data files
-apps/static/data/B3 Files/**/*.json
+apps/static/data/cache/b3 files/**/*.json
