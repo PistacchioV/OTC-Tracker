@@ -318,10 +318,14 @@ document.addEventListener('click', function (e) {
 (function () {
     var wrap = document.getElementById('cpDateWrap');
     if (!wrap || typeof flatpickr === 'undefined') return;
+    // Parse the ISO default (YYYY-MM-DD) into a local Date so flatpickr (dateFormat
+    // d/m/Y) doesn't misparse the ISO string into a wrong day.
+    var _iso = '{{ cetip_default_date }}'.split('-');
+    var _def = _iso.length === 3 ? new Date(+_iso[0], +_iso[1] - 1, +_iso[2]) : null;
     flatpickr(wrap, {
         wrap: true,                 // <input data-input> + <a data-toggle> (the icon)
         dateFormat: 'd/m/Y',        // visible/stored value as dd/mm/yyyy
-        defaultDate: '{{ cetip_default_date }}',   // ISO Y-m-d accepted by flatpickr
+        defaultDate: _def,          // local Date — no timezone shift
         allowInput: false,
         disableMobile: true
     });
