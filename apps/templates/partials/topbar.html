@@ -1,4 +1,8 @@
 <style>
+  /* Light mode: topbar is white (theme default is the gray #f5f5f7 canvas tone,
+     which blends with the page background). Dark/gray topbar themes keep theirs. */
+  :root, [data-bs-theme="light"] { --ins-topbar-bg: #ffffff; }
+
   .notification-item .notification-badge {
     display: flex !important;
     align-items: center !important;

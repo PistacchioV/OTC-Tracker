@@ -1350,67 +1350,63 @@ def control_panel():
 #
 #  It reads the raw CETIP files B3 drops in the daily download folder, filters
 #  them by type, renames each to the standard `73760_{YYMMDD}_{TYPE}` convention
-#  and saves them into the year/month destination folders the KPI process reads.
-#  A confirmation e-mail is then sent (best-effort, JPM SMTP relay).
+#  and saves them into a single per-day destination folder the KPI process reads.
+#  Two HTML e-mails are then sent from the OTC Tracker mailbox (best-effort):
+#  one to Brazil OTC Ops and one to Brazil Sales Support MO (cc Ops).
 #
-#  Source folder (per run):  CETIP_SOURCE_ROOT\{YYYY}\{MM}\{DD}
-#  Destination folder:       CETIP_DEST_ROOT\{sub...}\20{YY}\{MM}   (YY/MM from
-#                            the date embedded in the source filename, not today)
+#  Source folder (per run):  CETIP_SOURCE_ROOT\{YYYY}\{mm. Month}\{DD}
+#  Destination folder:       CETIP_DEST_ROOT\{YYYY}\{mm. Month}\{DD}
+#  (both keyed on the reference date; the file date in the rename still comes
+#   from the source filename via Substring)
 # ----------------------------------------------------------------------------
-CETIP_SOURCE_ROOT  = os.getenv('CETIP_SOURCE_ROOT',
-                               r'I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP')
-CETIP_DEST_ROOT    = os.getenv('CETIP_DEST_ROOT',
-                               r'I:\Confirmation\Derivativos\Vernacci\ARQUIVOS CETIP')
-CETIP_NOTIFY_EMAIL = os.getenv('CETIP_NOTIFY_EMAIL', 'brazil.otc.ops@jpmchase.com')
+CETIP_SOURCE_ROOT = os.getenv('CETIP_SOURCE_ROOT',
+                              r'I:\Confirmation\Derivativos\OTC Tracker\Alteryx\Posição B3\ARQUIVOS CETIP')
+CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
+                              r'I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files')
+CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmchase.com')
+CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 
 # Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
 #   match      : predicate on the source FileName (mirrors the Filter expression)
 #   date_start : 0-based offset of the YYMMDD date inside the FileName (Alteryx
 #                Substring) — 6 for OPCAO_* files, 8 for the CETIP21 ones
 #   dest_name  : builds the renamed output FileName from the YYMMDD ref
-#   dest_sub   : destination subfolder parts under CETIP_DEST_ROOT
+# Destination is a single per-day folder (CETIP_DEST_ROOT\YYYY\mm. Month\dd),
+# so the per-type subfolders of the original Alteryx flow are not used here.
 _CETIP_RULES = [
     {'label': 'NDF Position (DPOSICAO C21)',
      'match': lambda n: 'DPOSICAO_C21.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DPOSICAO.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Posiçao']},
+     'dest_name': lambda r: '73760_{}_DPOSICAO.CETIP21'.format(r)},
     {'label': 'SWAP Position (DPOSICAO-SWAP)',
      'match': lambda n: 'DPOSICAO-SWAP.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Posiçao']},
+     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r)},
     {'label': 'Option Position (OPCAO DPOSICAO)',
      'match': lambda n: 'OPCAO_' in n and '_DPOSICAO.txt' in n,
      'date_start': 6,
-     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r),
-     'dest_sub': ['Arquivos Posiçao']},
+     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r)},
     {'label': 'Option Movement (OPCAO DMOVIMENTO)',
      'match': lambda n: ('OPCAO_' in n and '_DMOVIMENTO.txt' in n
                          and '_15H00.txt' not in n and '_18H30.txt' not in n),
      'date_start': 6,
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r),
-     'dest_sub': ['Arquivos Movimento', 'OPÇÃO']},
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r)},
     {'label': 'Term Movement (DMOVIMENTO C21)',
      'match': lambda n: '_DMOVIMENTO_C21.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Movimento', 'TERMO']},
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO.CETIP21'.format(r)},
     {'label': 'SWAP Movement (DMOVIMENTO-SWAP)',
      'match': lambda n: '_DMOVIMENTO-SWAP.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO-SWAP.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Movimento', 'SWAP']},
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO-SWAP.CETIP21'.format(r)},
     {'label': 'SWAP Flow (DFLUXO_SWAP)',
      'match': lambda n: '_DFLUXO_SWAP.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Posiçao']},
+     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r)},
     {'label': 'Operations (DOPERACOES)',
      'match': lambda n: '_DOPERACOES.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r),
-     'dest_sub': ['Arquivos Posiçao']},
+     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r)},
 ]
 
 
@@ -1428,23 +1424,45 @@ def _cetip_save_file(src_path, dest_path):
         f.write(out)
 
 
-def _send_cetip_confirmation(count):
-    """Mirror the Alteryx Email tool — confirmation that the CETIP files were saved."""
+def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
+                      ref_date_fmt, saved, dest_folder=''):
+    """Render the CETIP HTML template and send it FROM the OTC Tracker mailbox
+    (SHARED_MAILBOX) with the embedded logo (cid:otc_logo). Best-effort."""
+    from email.mime.image import MIMEImage
     try:
-        body = ("Prezados,\n\n"
-                "Os arquivos da Cetip necessários para a geração do KPI foram salvos "
-                "com sucesso! ({} arquivo(s))\n\n"
-                "Atenciosamente,\n\nOTC Derivatives".format(count))
-        msg = MIMEText(body, 'plain', 'utf-8')
-        msg['Subject'] = 'Arquivos CETIP salvos!'
-        msg['From'] = CETIP_NOTIFY_EMAIL
-        msg['To'] = CETIP_NOTIFY_EMAIL
+        html = render_template(
+            'pages/email-template-cetip-saved.html',
+            subject=subject, greeting=greeting, message_html=message_html,
+            ref_date_fmt=ref_date_fmt, file_count=len(saved), saved_files=saved,
+            dest_folder=dest_folder, current_year=datetime.now().year)
+
+        msg = MIMEMultipart('related')
+        msg['Subject'] = subject
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('CETIP files saved ({} file(s)).'.format(len(saved)), 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<otc_logo>')
+            img.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(img)
+
+        recipients = list(to_list) + list(cc_list or [])
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.sendmail(CETIP_NOTIFY_EMAIL, [CETIP_NOTIFY_EMAIL], msg.as_string())
-        log.info("[cetip] confirmation e-mail sent to %s", CETIP_NOTIFY_EMAIL)
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info("[cetip] e-mail '%s' sent to %s", subject, recipients)
         return True
     except Exception:
-        log.error("[cetip] confirmation e-mail FAILED:\n%s", traceback.format_exc())
+        log.error("[cetip] e-mail '%s' FAILED:\n%s", subject, traceback.format_exc())
         return False
 
 
@@ -1463,8 +1481,12 @@ def api_cp_cetip_settlement():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
-    src_dir = os.path.join(CETIP_SOURCE_ROOT, ref.strftime('%Y'),
-                           ref.strftime('%m'), ref.strftime('%d'))
+    # Folder pattern: YYYY\mm. Month\dd (e.g. 2026\06. June\24) — same for source
+    # and destination, both keyed on the reference date.
+    month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+    src_dir  = os.path.join(CETIP_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+    dest_dir = os.path.join(CETIP_DEST_ROOT,   ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+
     if not os.path.isdir(src_dir):
         return jsonify({'success': False,
                         'error': 'Source folder not found: {}'.format(src_dir)}), 400
@@ -1472,7 +1494,8 @@ def api_cp_cetip_settlement():
     files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
     saved, errors = [], []
 
-    # One pass per rule (mirrors the independent Alteryx branches).
+    # One pass per rule (mirrors the independent Alteryx branches). All matched
+    # files land in the single per-day destination folder, renamed.
     for rule in _CETIP_RULES:
         for name in files:
             if not rule['match'](name):
@@ -1482,16 +1505,12 @@ def api_cp_cetip_settlement():
                 errors.append({'file': name, 'type': rule['label'],
                                'error': 'Could not parse date from filename.'})
                 continue
-            dest_dir  = os.path.join(CETIP_DEST_ROOT, *rule['dest_sub'],
-                                     '20' + dref[:2], dref[2:4])
             dest_name = rule['dest_name'](dref)
             try:
                 os.makedirs(dest_dir, exist_ok=True)
                 _cetip_save_file(os.path.join(src_dir, name),
                                  os.path.join(dest_dir, dest_name))
-                saved.append({'src': name, 'dest': dest_name,
-                              'folder': os.path.join(*rule['dest_sub']),
-                              'type': rule['label']})
+                saved.append({'src': name, 'dest': dest_name, 'type': rule['label']})
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
 
@@ -1499,18 +1518,36 @@ def api_cp_cetip_settlement():
                          'CETIP Files Saved', 'Control Panel',
                          '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
 
-    mail_ok = _send_cetip_confirmation(len(saved)) if (send_mail and saved) else None
+    # Two HTML e-mails from the OTC Tracker mailbox (best-effort).
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    mail_ops = mail_ss = None
+    if send_mail and saved:
+        mail_ops = _send_cetip_email(
+            [CETIP_OTC_OPS_EMAIL], [], 'Arquivos CETIP salvos!',
+            'Prezados,',
+            'Os arquivos da CETIP necessários para a geração do KPI foram salvos com sucesso.',
+            ref_fmt, saved, dest_folder=dest_dir)
+        mail_ss = _send_cetip_email(
+            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], 'Arquivos CETIP salvos!',
+            'Bom dia, Sales Support.',
+            'Seguem os arquivos da CETIP salvos referentes à data abaixo, conforme solicitado.',
+            ref_fmt, saved, dest_folder=dest_dir)
 
-    msg = '<b>{}</b> file(s) saved to the settlement folders.'.format(len(saved))
+    msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
-    if mail_ok is True:
-        msg += '<br>Confirmation e-mail sent.'
-    elif mail_ok is False:
-        msg += '<br><span class="text-warning">Files saved, but the e-mail could not be sent.</span>'
+    if send_mail and saved:
+        oks = [lbl for lbl, ok in (('OTC Ops', mail_ops), ('Sales Support', mail_ss)) if ok]
+        if len(oks) == 2:
+            msg += '<br>Confirmation e-mails sent (OTC Ops + Sales Support).'
+        elif oks:
+            msg += '<br>E-mail sent to {} only.'.format(oks[0])
+        else:
+            msg += '<br><span class="text-warning">Files saved, but the e-mails could not be sent.</span>'
 
-    return jsonify({'success': True, 'message': msg, 'saved': saved,
-                    'errors': errors, 'source': src_dir, 'email_sent': mail_ok})
+    return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
+                    'source': src_dir, 'destination': dest_dir,
+                    'email_sent': {'otc_ops': mail_ops, 'sales_support': mail_ss}})
 
 
 @blueprint.route('/holidays-calendar')

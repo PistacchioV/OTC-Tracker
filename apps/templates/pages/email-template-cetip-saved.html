@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – CETIP Files Saved</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td { font-family: Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+    <!-- Wrapper -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+           style="background-color:#f4f6f9;padding:40px 0;">
+        <tr>
+            <td align="center">
+
+                <!-- Container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600"
+                       style="max-width:600px;background-color:#ffffff;border-radius:8px;
+                              box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
+
+                    <!-- ── Header ─────────────────────────────────── -->
+                    <tr>
+                        <td bgcolor="#1a2c5e" style="background:#1a2c5e;background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%);
+                                   padding:32px 28px 24px;text-align:center;">
+                            <img src="cid:otc_logo" alt="OTC Tracker" height="72" width="auto"
+                                 style="height:72px;width:auto;display:block;margin:0 auto 14px;border:0;"/>
+                            <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 4px;
+                                      letter-spacing:0.3px;">CETIP Files Saved</p>
+                            <p style="color:rgba(255,255,255,0.78);font-size:13px;margin:0;">
+                                Generated automatically by OTC Tracker
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- ── Date banner ────────────────────────────── -->
+                    <tr>
+                        <td style="background-color:#1a2c5e;padding:12px 28px;text-align:center;">
+                            <p style="color:#ffffff;font-size:13px;font-weight:500;margin:0;letter-spacing:0.5px;">
+                                Reference Date &nbsp;·&nbsp;
+                                <strong style="color:#7eb3ff;">{{ ref_date_fmt }}</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- ── Body ──────────────────────────────────── -->
+                    <tr>
+                        <td style="padding:32px 32px 24px;">
+
+                            <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">
+                                {{ greeting }}
+                            </p>
+                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 24px;">
+                                {{ message_html | safe }}
+                            </p>
+
+                            <!-- Count badge -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="margin-bottom:24px;">
+                                <tr>
+                                    <td align="center" valign="middle"
+                                        style="background-color:#eaf2fe;border-radius:8px;
+                                               padding:18px 6px;border:1px solid #d6e6fb;">
+                                        <p style="font-size:28px;font-weight:700;color:#0066cc;
+                                                  margin:0 0 4px;line-height:1;">{{ file_count }}</p>
+                                        <p style="font-size:10px;font-weight:700;text-transform:uppercase;
+                                                  letter-spacing:0.07em;color:#3a7bd0;margin:0;">File(s) Saved</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            {% if saved_files %}
+                            <!-- Saved files table -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="border-collapse:collapse;margin-bottom:8px;">
+                                <tr>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;
+                                               letter-spacing:0.05em;color:#5a6473;">File</td>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;
+                                               letter-spacing:0.05em;color:#5a6473;">Type</td>
+                                </tr>
+                                {% for f in saved_files %}
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;
+                                               color:#333;font-family:'Courier New',monospace;">{{ f.dest }}</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;
+                                               color:#666;">{{ f.type }}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% endif %}
+
+                            {% if dest_folder %}
+                            <p style="color:#8a929e;font-size:11px;margin:16px 0 0;">
+                                Destination&nbsp;: <span style="font-family:'Courier New',monospace;">{{ dest_folder }}</span>
+                            </p>
+                            {% endif %}
+
+                        </td>
+                    </tr>
+
+                    <!-- ── Footer ────────────────────────────────── -->
+                    <tr>
+                        <td style="background-color:#f3f5f9;padding:18px 28px;text-align:center;border-top:1px solid #e5e9f0;">
+                            <p style="color:#8a929e;font-size:11px;margin:0;line-height:1.5;">
+                                © {{ current_year }} OTC Tracker by JPMorgan Chase &amp; Co.<br/>
+                                This is an automated message — please do not reply.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
