@@ -1363,7 +1363,9 @@ CETIP_SOURCE_ROOT = os.getenv('CETIP_SOURCE_ROOT',
                               r'I:\Confirmation\Derivativos\OTC Tracker\Alteryx\Posição B3\ARQUIVOS CETIP')
 CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
                               r'I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files')
-CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmchase.com')
+# Use the PRIMARY SMTP address (jpmorgan.com) — the jpmchase.com one is a
+# secondary alias and the relay was not delivering to it.
+CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 
 
