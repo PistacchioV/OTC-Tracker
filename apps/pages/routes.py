@@ -10,6 +10,8 @@ import threading
 import traceback
 import uuid
 import shutil
+import tempfile
+import base64
 import logging
 import time
 import duckdb
@@ -1409,12 +1411,14 @@ _CETIP_RULES = [
     {'label': 'SWAP Position (DPOSICAO-SWAP)',
      'match': lambda n: 'dposicao-swap.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r)},
+     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position'}},
     {'label': 'Option Position (OPC DPOSICAO)',
      'match': lambda n: 'opc_' in n and '_dposicao.txt' in n,
      'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
      'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
-     'extra_dest': CETIP_OPTIONS_SHARE},
+     'extra_dest': CETIP_OPTIONS_SHARE,
+     'json': {'category': 'Option', 'has_header': True}},
     {'label': 'Option Movement (OPC DMOVIMENTO)',
      'match': lambda n: ('opc_' in n and '_dmovimento.txt' in n
                          and '_15h00.txt' not in n and '_18h30.txt' not in n),
@@ -1431,7 +1435,13 @@ _CETIP_RULES = [
     {'label': 'SWAP Flow (DFLUXO_SWAP)',
      'match': lambda n: '_dfluxo_swap.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r)},
+     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r),
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo'}},
+    {'label': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
+     'match': lambda n: '_dagendapremios.txt' in n,
+     'date_start': 8,                  # CETIP21_YYMMDD_DAGENDAPREMIOS.TXT → date at index 8
+     'dest_name': lambda r: '73760_{}_DAGENDAPREMIOS.CETIP21'.format(r),
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio'}},
     {'label': 'Operations (DOPERACOES)',
      'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
@@ -1448,13 +1458,142 @@ _CETIP_RULES = [
      'match': lambda n: '_dposicao-ter.txt' in n,
      'date_start': 4,
      'dest_name': lambda r: '73760_{}_DPOSICAO-TER.TER'.format(r),
-     'extra_dest': CETIP_NDF_SHARE},
+     'extra_dest': CETIP_NDF_SHARE,
+     'json': {'category': 'NDF', 'has_header': True}},
     {'label': 'SIC Contract Position (DPOSCONTRATOSIC)',
      'match': lambda n: '_dposcontratosic.txt' in n,
      'date_start': 4,
      'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r),
      'attach_sales_support': True},   # this file is e-mailed to Sales Support
 ]
+
+
+# ── B3 JSON export (feeds the Settlement Forecast) ────────────────────────────
+# While saving the CETIP files, the relevant position files are ALSO parsed into
+# tidy JSON under static/data/B3 Files/<category>/, so downstream routines (the
+# Settlement Forecast) read named fields instead of guessing column positions.
+#   NDF    → TER files          (DPOSICAO-TER)         — file has its own header
+#   Option → OPC files          (DPOSICAO.OPC)         — file has its own header
+#   Swap   → SWAP position/flow/premium agenda          — HEADERLESS: column names
+#            come from _B3_SWAP_HEADERS (stored standard, keyed per file type)
+B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'B3 Files')
+
+# Standard column headers for the HEADERLESS SWAP-family files (';'-delimited),
+# in file order. These are the authoritative field names (the SWAP files ship with
+# no header row). Stored as raw ';' strings and split on load. NOTE: the SWAP
+# position layout repeats several column names (e.g. "Percentual", "Data de
+# Cotação"); _b3_export_json de-duplicates repeats by appending _2, _3, …
+_B3_SWAP_HEADERS_RAW = {
+    # 73760_*_DPOSICAO-SWAP.CETIP21
+    'swap_position': (
+        "Tipo de Contrato;Data;Contrato;Participante;CPF/CNPJ Cliente Parte;Cesta Garantias Parte;"
+        "Comissão Parte;Contraparte;CPF/CNPJ Cliente Contraparte;Cesta Garantias Contraparte;"
+        "Comissão Contraparte;Data início;Data vencimento;Tipo de Adesão;Valor base;"
+        "Valor Base Remanescente;Valor Antecipado;Saldo;Sinal Saldo;Data do Saldo;Funcionalidade;"
+        "Agenda de Prêmio;Reset;Observação;Valor base inicial;Data operação termo;Índice Termo;"
+        "Percentual Termo;PU Inicial;Tipo/Classe;Nome Tipo/Classe;Denominação;Juros a cada;"
+        "Expresso em;Data inicio pagamento juros;Amortização a cada;Expresso em;"
+        "Data inicio pagamento amortização;Tipo de amortização;Percentual;Código índice;TR Escolhida;"
+        "Sinal Taxa;Taxa;Lim. Inferior (Floor);Lim. Superior (Cap);Valor Curva Atualizado;"
+        "Data Correção;Fator Original de Juros;Percentual;Código índice;TR Escolhida;Sinal Taxa;Taxa;"
+        "Lim. Inferior (Floor);Lim. Superior (Cap);Valor Curva Atualizado;Data Correção;"
+        "Fator Original de Juros;Parte/Contraparte;Cupom Limpo;Percentual;Curva;Sinal Taxa;"
+        "Taxa de Juros;Limitador;Pu inicial;Pu atual;Tipo/Classe;Nome Tipo/Classe;Denominação;"
+        "Pu inicial;Pu atual;Tipo/Classe;Nome Tipo/Classe;Denominação;Cupom Limpo;Data de Cotação;"
+        "Cupom Limpo;Data de Cotação;Tipo Libor - moeda;Tipo Libor - período;Data de Cotação;"
+        "Variação Cambial;Tipo Classe;Nome Tipo/Classe;Outros - Cotação;Alíquota - IR;"
+        "Limite inferior (FLOOR) - Perc.;Limite superior (CAP) - Perc.;Tipo Libor - moeda;"
+        "Tipo Libor - período;Data de Cotação;Variação Cambial;Tipo Classe;Nome Tipo/Classe;"
+        "Outros - Cotação;Alíquota - IR;Limite inferior (FLOOR) - Perc.;Limite superior (CAP) - Perc.;"
+        "Taxa Juros;Troca de Fluxo;Variação Cambial;Tipo Classe;Nome Tipo/Classe;Outros - Cotação;"
+        "Alíquota - IR;Limite inferior (FLOOR) - Perc.;Limite superior (CAP) - Perc.;Taxa Juros;"
+        "Troca de Fluxo;Variação Cambial;Tipo Classe;Nome Tipo/Classe;Outros - Cotação;Alíquota - IR;"
+        "Limite inferior (FLOOR) - Perc.;Limite superior (CAP) - Perc.;Parte/Contraparte;"
+        "Fator/Valor/Taxa;Verificação;Data Disparo;Parte/Contraparte;Fator/Valor/Taxa;Verificação;"
+        "Data Disparo;Titular;Prêmio 1;Rebate;Liquidação do Rebate;Dias Úteis após o Trigger Out;"
+        "Prêmio 2;Data Exercício Prêmio 2;Estratégia;Amortiza sem Troca de Diferencial;"
+        "Data da Cotação - Variação Cambial;Data da Cotação - Variação Cambial;Cotação Inicial;"
+        "Código Commodity;Media Asiática Verificação;Data Cotação para Ajuste;Cotação Inicial;"
+        "Código Commodity;Media Asiática Verificação;Data Cotação para Ajuste;Código Identificador;"
+        "Data de Cotação Final – Termo;Tipo de Cotação (Parte);Tipo de Cotação (Contraparte);"
+        "Data Liquidação;Cotação Inicial Moeda Parte;Metodologia de composição da taxa Parte;"
+        "Deslocamento da taxa Parte;Expressão Juros Parte;Alíquota IR (em %) Parte;"
+        "Cotação Inicial Moeda Contraparte;Metodologia de composição da taxa Contraparte;"
+        "Deslocamento da taxa Contraparte;Expressão Juros Contraparte;Alíquota IR (em %) Contraparte;"
+        "Data de Fixing IPCA (Parte);Data de Fixing IPCA (Contraparte);Sinal Spread (Parte);"
+        "Spread (Parte);Sinal Spread (Contraparte);Spread (Contraparte);Variação Cambial;"
+        "Cotação Inicial Moeda;Variação Cambial;Cotação Inicial Moeda"
+    ),
+    # 73760_*_DFLUXO.CETIP21
+    'swap_fluxo': (
+        "Código do contrato;Tipo Sistema;Código Conta Cetip Parte;Nome Simplificado Parte;"
+        "Papel Parte;Código Conta Cetip Contraparte;Nome Simplificado Contraparte;Papel Contraparte;"
+        "Tipo Amortização;Data Pagamento de Juros;Código Identificador;Data de ocorrência do Evento;"
+        "Sinal Juros Parte;Taxa de Juros Parte;Limite Inferior Parte;Limite Superior Parte;"
+        "Taxa Amortização;Sinal Juros Contraparte;Taxa de Juros Contraparte;Limite Inferior Contraparte;"
+        "Limite Superior Contraparte;Taxa Amortização;Data Início Composição da Taxa Parte;"
+        "Data Final Composição da Taxa Parte;Data Fixing Moeda Parte;"
+        "Data Início Composição da Taxa Contraparte"
+    ),
+    # 73760_*_DAGENDAPREMIOS.CETIP21
+    'swap_premio': (
+        "Codigo do Contrato;Data;ID do Sistema;Parte;Nome Simplificado;Data do Evento;"
+        "Operacao;Valor;Titular;Estado"
+    ),
+}
+_B3_SWAP_HEADERS = {k: [h.strip() for h in v.split(';')]
+                    for k, v in _B3_SWAP_HEADERS_RAW.items()}
+
+
+def _b3_export_json(src_path, json_cfg, dest_name):
+    """Parse a saved CETIP file into a list-of-dicts JSON under
+    B3 Files/<category>/<dest_name>.json. Header files use their own first line;
+    headerless SWAP files use the stored standard header (_B3_SWAP_HEADERS).
+    Best-effort — returns the JSON path on success or None on failure."""
+    try:
+        with open(src_path, 'r', encoding='latin-1', newline='') as fh:
+            lines = [ln for ln in fh.read().splitlines() if ln.strip()]
+        if not lines:
+            return None
+
+        if json_cfg.get('has_header'):
+            header = [h.strip() for h in lines[0].split(';')]
+            data_lines = lines[1:]
+        else:
+            header = list(_B3_SWAP_HEADERS.get(json_cfg.get('header_key', ''), []) or [])
+            data_lines = lines
+
+        # De-duplicate repeated header names (SWAP position repeats many) so no
+        # field is silently overwritten: 1st keeps its name, repeats get _2, _3…
+        uniq_header = []
+        if header:
+            seen = {}
+            for h in header:
+                seen[h] = seen.get(h, 0) + 1
+                uniq_header.append(h if seen[h] == 1 else '{}_{}'.format(h, seen[h]))
+
+        rows = []
+        for ln in data_lines:
+            fields = ln.split(';')
+            if uniq_header:
+                row = {}
+                for i, val in enumerate(fields):
+                    key = uniq_header[i] if i < len(uniq_header) else 'Field_{}'.format(i + 1)
+                    row[key] = val.strip()
+            else:                              # no stored header → positional names
+                row = {'Field_{}'.format(i + 1): v.strip() for i, v in enumerate(fields)}
+            rows.append(row)
+
+        out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'])
+        os.makedirs(out_dir, exist_ok=True)
+        json_name = os.path.splitext(dest_name)[0] + '.json'
+        json_path = os.path.join(out_dir, json_name)
+        with open(json_path, 'w', encoding='utf-8') as fh:
+            json.dump(rows, fh, ensure_ascii=False)
+        return json_path
+    except Exception:
+        log.warning("[b3-json] export failed for %s:\n%s", src_path, traceback.format_exc())
+        return None
 
 
 def _cetip_save_file(src_path, dest_path):
@@ -1600,6 +1739,9 @@ def api_cp_cetip_settlement():
                 if rule.get('attach_sales_support'):
                     attach_paths.append(dest_path)
                     attach_saved.append(entry)
+                # Also emit a tidy JSON for the forecast (NDF / Option / Swap).
+                if rule.get('json'):
+                    _b3_export_json(dest_path, rule['json'], dest_name)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -1654,6 +1796,349 @@ def api_cp_cetip_settlement():
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'source': src_dir, 'destination': dest_dir,
                     'email_sent': {'otc_ops': mail_ops, 'sales_support': mail_ss}})
+
+
+# ============================================================================
+#  SETTLEMENT FORECAST  (Alteryx "Settlement Forecast v2" → Python)
+# ----------------------------------------------------------------------------
+#  Reads the tidy JSON emitted by the File-Saving routine (B3 Files/<category>/),
+#  projects the upcoming settlements per business day broken down by product and
+#  by entity, and returns the data to the page. The page renders dashboard-style
+#  ApexCharts and (on Run) exports them to PNG, which the e-mail endpoint embeds
+#  into the report sent to Brazil OTC Ops.
+# ============================================================================
+
+FORECAST_HORIZON_DAYS = 20            # calendar-day look-ahead (Alteryx GenerateRows today..+19)
+
+# Entity code → name. Keys are normalised (digits only) at lookup, so dotted
+# variants (00041.00-7) match too. Anything unmapped is dropped from the by-entity
+# breakdown (mirrors the Alteryx !Contains([Entity],"0") filter).
+_FCST_ENTITY_MAP = {
+    '00041007': 'LAWTON',
+    '04880006': 'MGT',
+    '85398005': 'ATACAMA',
+}
+_FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
+_FCST_PRODUCT_ORDER = ['NDF Moeda', 'OPÇÃO Moeda', 'OPÇÃO Commodities',
+                       'OPÇÃO Equities', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+
+# One entry per JSON source. Field resolution is by NAME token (case-insensitive
+# "contains", first match wins) so it survives small header differences.
+#   date    : tokens to find the settlement/maturity/event date column
+#   entity  : tokens to find the entity/counterparty column
+#   product : ('fixed', label)        → constant product label
+#             ('sisbacen', tokens)    → option product by Código SISBACEN
+#             ('lob', tokens)         → SWAP CEM/EDG/CEMHYB from "Código Identificador"
+_FORECAST_SOURCES = [
+    {'key': 'ndf', 'label': 'NDF Moeda (TER)', 'category': 'NDF',
+     'file': lambda r: '73760_{}_DPOSICAO-TER.json'.format(r),
+     'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'parte', 'conta'],
+     'product': ('fixed', 'NDF Moeda')},
+    {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
+     'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
+     'date': ['vencimento'], 'entity': ['titular', 'conta', 'parte'],
+     'product': ('sisbacen', ['sisbacen', 'moeda base'])},
+    {'key': 'swap_pos', 'label': 'SWAP Position', 'category': 'Swap',
+     'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
+     'date': ['data vencimento'], 'entity': ['contraparte'],
+     'product': ('lob', ['código identificador', 'codigo identificador', 'identificador'])},
+    {'key': 'swap_flx', 'label': 'SWAP Flow', 'category': 'Swap',
+     'file': lambda r: '73760_{}_DFLUXO.json'.format(r),
+     'date': ['ocorrência do evento', 'ocorrencia do evento', 'evento'],
+     'entity': ['nome simplificado contraparte', 'nome simplificado'],
+     'product': ('lob', ['código identificador', 'codigo identificador', 'identificador'])},
+    {'key': 'swap_prm', 'label': 'SWAP Premium Agenda', 'category': 'Swap',
+     'file': lambda r: '73760_{}_DAGENDAPREMIOS.json'.format(r),
+     'date': ['data do evento', 'evento'],
+     'entity': ['nome simplificado', 'parte'],
+     'product': ('lob', ['código identificador', 'codigo identificador',
+                         'codigo do contrato', 'identificador'])},
+]
+
+
+def _fcst_parse_date(s):
+    """Parse a CETIP date string (several known layouts) → date, or None."""
+    s = (s or '').strip()
+    if not s:
+        return None
+    s = s.split(' ')[0].split('T')[0]
+    for fmt in ('%Y%m%d', '%d/%m/%Y', '%Y-%m-%d', '%d/%m/%y', '%d.%m.%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _fcst_map_entity(raw):
+    """Map an entity code/name to LAWTON/MGT/ATACAMA, or None if unmapped."""
+    s = (raw or '').strip()
+    if not s:
+        return None
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits in _FCST_ENTITY_MAP:
+        return _FCST_ENTITY_MAP[digits]
+    up = s.upper()
+    for nm in _FCST_ENTITY_ORDER:
+        if nm in up:
+            return nm
+    return None
+
+
+def _fcst_option_product(code):
+    """Map an option's Código SISBACEN da Moeda Base → product (Alteryx Replace)."""
+    c = (code or '').upper()
+    if '220' in c:
+        return 'OPÇÃO Moeda'
+    if 'COM' in c:
+        return 'OPÇÃO Commodities'
+    if 'INI' in c:
+        return 'OPÇÃO Equities'
+    return None
+
+
+def _fcst_lob(identifier):
+    """SWAP line of business from the "Código Identificador" string (Alteryx LOB
+    classification): CEM / EDG, else CEMHYB."""
+    s = (identifier or '').upper()
+    if 'CEM' in s:
+        return 'CEM'
+    if 'EDG' in s:
+        return 'EDG'
+    return 'CEMHYB'
+
+
+def _forecast_spine(anchor):
+    """Upcoming business days (ANBIMA): next FORECAST_HORIZON_DAYS calendar days
+    from `anchor` (inclusive) minus weekends and holidays — the column spine."""
+    _load_anbima()
+    base = anchor.date() if isinstance(anchor, datetime) else anchor
+    days = []
+    for i in range(FORECAST_HORIZON_DAYS):
+        d = base + timedelta(days=i)
+        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
+            days.append(d)
+    return days
+
+
+def _fcst_resolve_key(keys, tokens):
+    """First key whose lower-cased name contains one of the tokens (tokens in
+    priority order)."""
+    low = [(k, k.lower()) for k in keys]
+    for tok in tokens:
+        for k, kl in low:
+            if tok in kl:
+                return k
+    return None
+
+
+def _forecast_collect(dref, spine):
+    """Read every JSON source and tally counts into by_product / by_entity
+    matrices aligned with the business-day spine. Returns (by_product, by_entity,
+    status[])."""
+    spine_index = {d: i for i, d in enumerate(spine)}
+    n = len(spine)
+    by_product, by_entity = {}, {}
+    status = []
+    for src in _FORECAST_SOURCES:
+        path = os.path.join(B3_JSON_ROOT, src['category'], src['file'](dref))
+        st = {'label': src['label'], 'file': os.path.basename(path),
+              'found': False, 'records': 0, 'counted': 0}
+        if not os.path.isfile(path):
+            status.append(st)
+            continue
+        try:
+            with open(path, 'r', encoding='utf-8') as fh:
+                rows = json.load(fh)
+        except Exception:
+            log.warning("[forecast] could not read %s:\n%s", path, traceback.format_exc())
+            status.append(st)
+            continue
+        st['found'] = True
+        st['records'] = len(rows)
+        if not rows:
+            status.append(st)
+            continue
+
+        keys = list(rows[0].keys())
+        date_key = _fcst_resolve_key(keys, src['date'])
+        ent_key = _fcst_resolve_key(keys, src['entity'])
+        pmode, pspec = src['product']
+        prod_key = _fcst_resolve_key(keys, pspec) if pmode in ('sisbacen', 'lob') else None
+
+        counted = 0
+        for row in rows:
+            d = _fcst_parse_date(row.get(date_key, '')) if date_key else None
+            if d is None or d not in spine_index:
+                continue
+            di = spine_index[d]
+            if pmode == 'fixed':
+                product = pspec
+            elif pmode == 'lob':
+                product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+            else:
+                product = _fcst_option_product(row.get(prod_key, '') if prod_key else '')
+            if product:
+                by_product.setdefault(product, [0] * n)[di] += 1
+            ent = _fcst_map_entity(row.get(ent_key, '')) if ent_key else None
+            if ent:
+                by_entity.setdefault(ent, [0] * n)[di] += 1
+            counted += 1
+        st['counted'] = counted
+        st['date_field'] = date_key
+        st['entity_field'] = ent_key
+        status.append(st)
+    return by_product, by_entity, status
+
+
+def _forecast_matrix(mapping, order):
+    """Ordered list of {label, values[], total} rows (known order first)."""
+    ordered = [k for k in order if k in mapping] + [k for k in mapping if k not in order]
+    return [{'label': k, 'values': mapping[k], 'total': sum(mapping[k])} for k in ordered]
+
+
+def _forecast_payload(ref):
+    """Compute the full forecast payload for a reference date."""
+    dref = ref.strftime('%y%m%d')
+    spine = _forecast_spine(ref)
+    by_product, by_entity, status = _forecast_collect(dref, spine)
+    product_rows = _forecast_matrix(by_product, _FCST_PRODUCT_ORDER)
+    entity_rows = _forecast_matrix(by_entity, _FCST_ENTITY_ORDER)
+    col_tot = [sum(r['values'][i] for r in product_rows) for i in range(len(spine))]
+    return {
+        'ref_date': ref.strftime('%Y-%m-%d'),
+        'ref_date_fmt': ref.strftime('%d/%m/%Y'),
+        'date_labels': [d.strftime('%d/%m') for d in spine],
+        'date_full': [d.strftime('%d/%m/%Y') for d in spine],
+        'products': product_rows,
+        'entities': entity_rows,
+        'col_totals': col_tot,
+        'grand_total': sum(col_tot),
+        'sources': status,
+    }
+
+
+def _decode_data_uri(d):
+    """Decode a 'data:image/png;base64,...' URI into raw bytes (or None)."""
+    if not d:
+        return None
+    try:
+        if ',' in d:
+            d = d.split(',', 1)[1]
+        return base64.b64decode(d)
+    except Exception:
+        return None
+
+
+def _send_forecast_email(payload, images):
+    """Render the Settlement Forecast HTML report and e-mail it to OTC Ops with
+    the chart PNGs embedded (cid). `images` maps cid → raw PNG bytes. Best-effort
+    — returns True on success or an error string."""
+    from email.mime.image import MIMEImage
+    try:
+        html = render_template(
+            'pages/email-template-settlement-forecast.html',
+            ref_date_fmt=payload['ref_date_fmt'],
+            date_labels=payload['date_labels'],
+            products=payload['products'],
+            entities=payload['entities'],
+            col_totals=payload['col_totals'],
+            grand_total=payload['grand_total'],
+            has_chart_product=bool(images.get('fcst_product')),
+            has_chart_entity=bool(images.get('fcst_entity')),
+            has_chart_mix=bool(images.get('fcst_mix')),
+            current_year=datetime.now().year)
+
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = 'Settlement Forecast'
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = CETIP_OTC_OPS_EMAIL
+
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Settlement Forecast — please view in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(limg)
+
+        for cid, data in images.items():
+            if not data:
+                continue
+            cimg = MIMEImage(data)
+            cimg.add_header('Content-ID', '<{}>'.format(cid))
+            cimg.add_header('Content-Disposition', 'inline', filename='{}.png'.format(cid))
+            related.attach(cimg)
+        msg.attach(related)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
+        log.info("[forecast] e-mail sent to %s", CETIP_OTC_OPS_EMAIL)
+        return True
+    except Exception as e:
+        log.error("[forecast] e-mail FAILED:\n%s", traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/control-panel/settlement-forecast/data', methods=['POST'])
+def api_cp_forecast_data():
+    """Compute the forecast for a reference date and return it as JSON for the
+    page to render (ApexCharts + tables)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
+               else _prev_anbima_bizday(datetime.now()))
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
+
+    data = _forecast_payload(ref)
+    if not any(s['found'] for s in data['sources']):
+        return jsonify({'success': False,
+                        'error': 'No B3 JSON files found for {}. Run “Save CETIP Files” first.'
+                        .format(ref.strftime('%d/%m/%Y')),
+                        'sources': data['sources']}), 400
+    return jsonify({'success': True, **data})
+
+
+@blueprint.route('/api/control-panel/settlement-forecast/email', methods=['POST'])
+def api_cp_forecast_email():
+    """Receive the client-rendered chart PNGs (data URIs), rebuild the report
+    tables server-side and e-mail the Settlement Forecast to OTC Ops."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
+               else _prev_anbima_bizday(datetime.now()))
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
+
+    data = _forecast_payload(ref)
+    imgs = payload.get('images') or {}
+    images = {
+        'fcst_product': _decode_data_uri(imgs.get('by_product')),
+        'fcst_entity':  _decode_data_uri(imgs.get('by_entity')),
+        'fcst_mix':     _decode_data_uri(imgs.get('mix')),
+    }
+    result = _send_forecast_email(data, images)
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Settlement Forecast Sent', 'Control Panel',
+                         'Forecast e-mailed to OTC Ops ({})'.format(ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True,
+                    'message': 'Settlement Forecast e-mailed to OTC Ops.'})
 
 
 @blueprint.route('/holidays-calendar')
@@ -6256,4 +6741,3 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
-

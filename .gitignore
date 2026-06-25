@@ -44,3 +44,9 @@ node_modules
 migrations
 
 .idea
+# Alteryx reference flow — local only, used solely as input for the Python translation
+apps/templates/pages/alteryx_flow.py
+_chart_preview/
+
+# Generated B3 JSON data (daily) — keep folders, ignore the data files
+apps/static/data/B3 Files/**/*.json
