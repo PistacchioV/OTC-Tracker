@@ -2566,7 +2566,9 @@ def api_fxo_import_xlsx():
             if str(g(r, 'SPN') or '').strip() == '':
                 continue
 
-            deal_name = str(g(r, 'DEAL NAME') or '').strip()
+            # B3 does not accept underscores in the deal id on file registration —
+            # replace '_' with '-' at the source (applies to Deal, dedup, Conecta).
+            deal_name = str(g(r, 'DEAL NAME') or '').strip().replace('_', '-')
             if not deal_name:
                 continue
 
