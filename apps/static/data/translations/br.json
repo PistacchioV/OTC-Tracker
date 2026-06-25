@@ -319,7 +319,7 @@
   "holidays-calendar": "Calendário de Feriados",
   "electronic-inventory": "Inventário Eletrônico",
   "control-panel": "Painel de Controle",
-  "cp-subtitle": "Central de rotinas operacionais — geração e salvamento de arquivos para os Daily Settlements e demais processos que não exigem uma página dedicada.",
+  "cp-subtitle": "Central de rotinas operacionais",
   "cp-sec-ds-label": "Daily Settlements",
   "cp-sec-ds-title": "Rotinas de Salvamento de Arquivos",
   "cp-sec-ds-desc": "Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.",

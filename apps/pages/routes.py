@@ -1366,6 +1366,23 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmchase.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 
+
+def _ensure_cetip_roots():
+    """At server start, make sure the CETIP source/destination ROOT folders exist;
+    create them if missing. Windows-only (the I:\\ paths are JPM network paths) —
+    skipped elsewhere so dev machines don't create junk dirs from backslash paths."""
+    if os.name != 'nt':
+        return
+    for root in (CETIP_SOURCE_ROOT, CETIP_DEST_ROOT):
+        try:
+            if not os.path.isdir(root):
+                os.makedirs(root, exist_ok=True)
+                log.info("[cetip] created root folder: %s", root)
+        except Exception:
+            log.warning("[cetip] could not create root %s:\n%s", root, traceback.format_exc())
+
+_ensure_cetip_roots()
+
 # Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
 #   match      : predicate on the source FileName (mirrors the Filter expression)
 #   date_start : 0-based offset of the YYMMDD date inside the FileName (Alteryx
@@ -1487,11 +1504,26 @@ def api_cp_cetip_settlement():
     src_dir  = os.path.join(CETIP_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
     dest_dir = os.path.join(CETIP_DEST_ROOT,   ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
+    # Ensure the dated source folder exists (B3 daily drop). On Windows create it
+    # in the standard layout if missing; on dev (POSIX) just error out cleanly.
     if not os.path.isdir(src_dir):
-        return jsonify({'success': False,
-                        'error': 'Source folder not found: {}'.format(src_dir)}), 400
+        if os.name == 'nt':
+            try:
+                os.makedirs(src_dir, exist_ok=True)
+                log.info("[cetip] created source folder: %s", src_dir)
+            except Exception:
+                log.warning("[cetip] could not create source %s:\n%s", src_dir, traceback.format_exc())
+        if not os.path.isdir(src_dir):
+            return jsonify({'success': False,
+                            'error': 'Source folder not found: {}'.format(src_dir)}), 400
 
     files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
+    if not files:
+        return jsonify({'success': False,
+                        'error': 'No files found in the source folder: {}'.format(src_dir)}), 400
+
+    # Make sure the destination day folder exists before saving anything.
+    os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
@@ -1507,7 +1539,6 @@ def api_cp_cetip_settlement():
                 continue
             dest_name = rule['dest_name'](dref)
             try:
-                os.makedirs(dest_dir, exist_ok=True)
                 _cetip_save_file(os.path.join(src_dir, name),
                                  os.path.join(dest_dir, dest_name))
                 saved.append({'src': name, 'dest': dest_name, 'type': rule['label']})

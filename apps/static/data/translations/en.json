@@ -319,7 +319,7 @@
   "holidays-calendar": "Holidays Calendar",
   "electronic-inventory": "Electronic Inventory",
   "control-panel": "Control Panel",
-  "cp-subtitle": "Operational routines hub — generate and save files for the Daily Settlements and other processes that do not require a dedicated page.",
+  "cp-subtitle": "Operational routines hub",
   "cp-sec-ds-label": "Daily Settlements",
   "cp-sec-ds-title": "File-Saving Routines",
   "cp-sec-ds-desc": "Routines that process data sources and save the required files into the settlement folders.",

@@ -20,13 +20,17 @@
     .pending-widgets-row .card {
         flex: 1;
         height: 100%;
+        border: 1px solid var(--ins-border-color);
+        border-radius: 14px;
         transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
-                    box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1);
+                    box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1),
+                    border-color 220ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     @media (hover: hover) and (pointer: fine) {
         .pending-widgets-row .card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 32px rgba(0,0,0,.08);
+            box-shadow: 0 12px 28px rgba(0,0,0,.10);
+            border-color: rgba(0,102,204,.25);
         }
     }
     .pending-widgets-row .card-body {
@@ -143,29 +147,31 @@
         align-items: center;
         gap: 4px;
         border: 1px solid var(--ins-border-color);
-        border-radius: 6px;
+        border-radius: 10px;
         padding: 4px 8px;
         min-height: 38px;
         background: var(--ins-secondary-bg);
         cursor: text;
+        transition: border-color .15s ease, box-shadow .15s ease;
     }
     .smart-filter-wrapper:focus-within {
-        border-color: var(--ins-primary);
-        box-shadow: 0 0 0 0.2rem rgba(var(--ins-primary-rgb), .15);
+        border-color: #0066cc;
+        box-shadow: 0 0 0 3px rgba(0,102,204,.15);
     }
     .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
     .smart-filter-chip {
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        background: #6c757d;
-        color: #fff;
-        border-radius: 4px;
-        padding: 2px 8px;
+        background: rgba(0,102,204,.12);
+        color: #0066cc;
+        border-radius: 50rem;
+        padding: 3px 10px;
         font-size: 10px;
-        font-weight: 500;
+        font-weight: 600;
         white-space: nowrap;
     }
+    [data-bs-theme=dark] .smart-filter-chip { background: rgba(41,151,255,.18); color: #7db4f5; }
     .smart-filter-chip .sf-chip-remove {
         cursor: pointer;
         opacity: .75;
@@ -222,13 +228,15 @@
         opacity: .85;
     }
     .sf-type-text   { background: #6c757d; }
-    .sf-type-date   { background: #0dcaf0; color: #000 !important; }
-    .sf-type-number { background: #ffc107; color: #000 !important; }
+    .sf-type-date   { background: #0284c7; }   /* sky-600 — contraste ~4.5:1 */
+    .sf-type-number { background: #b45309; }   /* amber-700 — contraste ~4.8:1 */
     .btn-search {
         height: 38px;
-        padding: 0 18px;
+        padding: 0 20px;
         font-size: 0.82rem;
+        font-weight: 600;
         white-space: nowrap;
+        border-radius: 10px;
     }
 
     /* Todas as células da tabela devem ter nowrap */
@@ -357,8 +365,8 @@
     [data-bs-theme="dark"] .dt-button-collection .dt-button { color: #dee2e6 !important; }
     .dt-button-collection .dt-button:hover,
     .dt-button-collection .dt-button:focus {
-        background: rgba(13,110,253,.08) !important;
-        color: #0d6efd !important;
+        background: rgba(0,102,204,.08) !important;
+        color: #0066cc !important;
     }
     [data-bs-theme="dark"] .dt-button-collection .dt-button:hover {
         background: rgba(255,255,255,.08) !important;
@@ -821,7 +829,7 @@
                                placeholder="Type a letter for text fields, a number / date for value fields…">
                         <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
                     </div>
-                    <button class="btn btn-secondary bg-gradient btn-search" type="button" id="sfSearchBtn">
+                    <button class="btn btn-primary btn-search" type="button" id="sfSearchBtn">
                         <i class="ti ti-search fs-xl me-1"></i> Search
                     </button>
                 </div>

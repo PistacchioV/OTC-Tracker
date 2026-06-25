@@ -93,13 +93,25 @@
     border-radius: 10px;
     border-color: var(--cp-hairline);
     font-size: .85rem;
-    max-width: 200px;
     transition: border-color 140ms var(--cp-ease), box-shadow 140ms var(--cp-ease);
 }
 .cp-card .form-control:focus {
     border-color: var(--cp-blue);
     box-shadow: 0 0 0 3px rgba(0,102,204,.15);
 }
+/* Date field with calendar icon (flatpickr) */
+.cp-datefield { position: relative; max-width: 200px; }
+.cp-datefield input { padding-right: 36px; cursor: pointer; background-color: #fff; }
+[data-bs-theme="dark"] .cp-datefield input { background-color: var(--ins-secondary-bg); }
+.cp-cal-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 26px; height: 26px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--cp-faint); cursor: pointer; text-decoration: none;
+    transition: background-color 140ms var(--cp-ease), color 140ms var(--cp-ease);
+}
+.cp-cal-btn:hover { background-color: rgba(0,102,204,.10); color: var(--cp-blue); }
+.cp-cal-btn i { font-size: 1rem; }
 
 /* ── Footer / meta / button ─────────────────────────────────── */
 .cp-card__foot {
@@ -116,23 +128,43 @@
 .cp-card__meta i { font-size: .95rem; opacity: .85; }
 
 .cp-run-btn {
-    border: none;
-    border-radius: 9999px;
-    font-size: .82rem; font-weight: 600;
-    padding: .55rem 1.35rem;
-    display: inline-flex; align-items: center; gap: .45rem;
-    background: var(--cp-blue); color: #fff;
-    box-shadow: 0 1px 2px rgba(0,102,204,.25);
+    position: relative;
+    border: none !important;
+    border-radius: 9999px !important;
+    font-size: .85rem !important; font-weight: 600 !important;
+    padding: .58rem 1.5rem !important;
+    display: inline-flex !important; align-items: center; gap: .5rem;
+    background: var(--cp-blue) !important; color: #fff !important;
+    box-shadow: 0 2px 8px rgba(0,102,204,.35);
+    cursor: pointer;
     transition: transform 140ms var(--cp-ease-out),
                 background-color 140ms var(--cp-ease),
                 box-shadow 140ms var(--cp-ease);
 }
-.cp-run-btn:hover  { background: var(--cp-blue-600); color: #fff; box-shadow: 0 4px 14px rgba(0,102,204,.32); }
-.cp-run-btn:active { transform: scale(.97); }
-.cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,102,204,.35); }
-.cp-run-btn:disabled { opacity: .7; cursor: default; }
+.cp-run-btn i, .cp-run-btn span { color: #fff !important; }
+.cp-run-btn:hover  { background: var(--cp-blue-600) !important; box-shadow: 0 6px 18px rgba(0,102,204,.42); transform: translateY(-1px); }
+.cp-run-btn:active { transform: scale(.95); box-shadow: 0 1px 4px rgba(0,102,204,.3); }
+.cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(0,102,204,.35); }
+.cp-run-btn:disabled { opacity: .75; cursor: default; transform: none; }
+
+/* Feedback: expanding ring pulse on press (Emil-style press affordance) */
+.cp-run-btn::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    box-shadow: 0 0 0 0 rgba(0,102,204,.45);
+    transition: box-shadow 150ms var(--cp-ease-out);
+    pointer-events: none;
+}
+.cp-run-btn:active::after {
+    box-shadow: 0 0 0 7px rgba(0,102,204,0);
+    transition: box-shadow 550ms var(--cp-ease-out);
+}
 .cp-run-btn .ti-spin { animation: cp-spin .7s linear infinite; }
 @keyframes cp-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .cp-run-btn, .cp-run-btn::after { transition: none; }
+    .cp-run-btn:hover { transform: none; }
+}
 
 /* ── Entrance reveal (staggered) ────────────────────────────── */
 .cp-reveal { opacity: 0; transform: translateY(14px); animation: cp-up 520ms var(--cp-ease-out) forwards; }
@@ -156,8 +188,7 @@
     {% include 'partials/page-title.html' %}
 
     <p class="cp-subtitle cp-reveal mb-4" data-lang="cp-subtitle">
-        Central de rotinas operacionais — geração e salvamento de arquivos para os Daily Settlements
-        e demais processos que não exigem uma página dedicada.
+        Central de rotinas operacionais
     </p>
 
     <!-- ═══ DAILY SETTLEMENTS ═════════════════════════════════════ -->
@@ -184,14 +215,17 @@
                 </p>
                 <div class="cp-field">
                     <label data-lang="cp-ref-date">Reference date</label>
-                    <input type="date" id="cp-cetip-date" class="form-control form-control-sm"
-                           value="{{ cetip_default_date }}">
+                    <div class="cp-datefield" id="cpDateWrap">
+                        <input type="text" id="cp-cetip-date" data-input readonly
+                               class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                        <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                    </div>
                 </div>
                 <div class="cp-card__foot">
                     <span class="cp-card__meta">
                         <i class="ti ti-folder"></i><span data-lang="cp-cetip-meta">B3 → Settlement folders</span>
                     </span>
-                    <button type="button" class="btn cp-run-btn"
+                    <button type="button" class="cp-run-btn"
                             data-endpoint="/api/control-panel/cetip-settlement"
                             data-date-input="cp-cetip-date">
                         <i class="ti ti-player-play"></i>
@@ -233,11 +267,15 @@ function cpRunRoutine(btn) {
     if (icon) icon.className = 'ti ti-loader-2 ti-spin';
 
     // Optional payload: a card may declare data-date-input pointing at a date field.
+    // The field shows dd/mm/yyyy (flatpickr) — convert to YYYY-MM-DD for the backend.
     var body = {};
     var dateInputId = btn.getAttribute('data-date-input');
     if (dateInputId) {
         var di = document.getElementById(dateInputId);
-        if (di && di.value) body.date = di.value;
+        if (di && di.value) {
+            var m = di.value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            body.date = m ? (m[3] + '-' + m[2] + '-' + m[1]) : di.value;
+        }
     }
 
     fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -275,5 +313,18 @@ document.addEventListener('click', function (e) {
     var btn = e.target.closest('.cp-run-btn');
     if (btn && !btn.disabled && btn.getAttribute('data-endpoint')) cpRunRoutine(btn);
 });
+
+// ── Date picker: dd/mm/yyyy display, calendar icon, default = D-1 ANBIMA ──────
+(function () {
+    var wrap = document.getElementById('cpDateWrap');
+    if (!wrap || typeof flatpickr === 'undefined') return;
+    flatpickr(wrap, {
+        wrap: true,                 // <input data-input> + <a data-toggle> (the icon)
+        dateFormat: 'd/m/Y',        // visible/stored value as dd/mm/yyyy
+        defaultDate: '{{ cetip_default_date }}',   // ISO Y-m-d accepted by flatpickr
+        allowInput: false,
+        disableMobile: true
+    });
+})();
 </script>
 {% endblock extra_javascript %}
