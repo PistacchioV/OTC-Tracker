@@ -280,19 +280,20 @@
         var section = document.getElementById('theme');
         if (!section) return;
         section.querySelectorAll('.card-radio').forEach(function (c) { c.classList.remove('scheme-checked'); });
-        var el = document.querySelector('input[name="data-bs-theme"][value="' + activeTheme() + '"]');
-        if (el) {
-            el.checked = true;
-            var card = el.closest('.card-radio');
-            if (card) card.classList.add('scheme-checked');
-        }
+        // IMPORTANT: scope to #theme. The topbar dropdown has radios with the same
+        // name="data-bs-theme" (same group); querying document-wide grabbed the
+        // wrong one. Use only the class — never touch the radio's checked state.
+        var el = section.querySelector('input[name="data-bs-theme"][value="' + activeTheme() + '"]');
+        var card = el && el.closest('.card-radio');
+        if (card) card.classList.add('scheme-checked');
     }
     function run() { markActiveScheme(); [150, 500, 1200].forEach(function (d) { setTimeout(markActiveScheme, d); }); }
     if (document.readyState !== 'loading') run();
     else document.addEventListener('DOMContentLoaded', run);
-    // Update on user changes + when the customizer opens.
-    document.querySelectorAll('input[name="data-bs-theme"]').forEach(function (r) {
-        r.addEventListener('change', function () { setTimeout(markActiveScheme, 50); });
+    // Update on user changes (scoped to the customizer radios) + when it opens.
+    var section0 = document.getElementById('theme');
+    if (section0) section0.querySelectorAll('input[name="data-bs-theme"]').forEach(function (r) {
+        r.addEventListener('change', function () { [50, 250].forEach(function (d) { setTimeout(markActiveScheme, d); }); });
     });
     var oc = document.getElementById('theme-settings-offcanvas');
     if (oc) oc.addEventListener('shown.bs.offcanvas', markActiveScheme);
