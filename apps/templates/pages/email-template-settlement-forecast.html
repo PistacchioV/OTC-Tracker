@@ -59,108 +59,14 @@
                     {% if has_chart_product %}
                     <tr><td style="padding:8px 24px 0;text-align:center;">
                         <img src="cid:fcst_product" alt="Settlements by Product"
-                             style="width:100%;max-width:700px;height:auto;border:0;display:block;margin:0 auto;"/>
-                    </td></tr>
-                    {% endif %}
-                    {% if has_chart_mix %}
-                    <tr><td style="padding:8px 24px 0;text-align:center;">
-                        <img src="cid:fcst_mix" alt="Product Mix"
-                             style="width:100%;max-width:560px;height:auto;border:0;display:block;margin:0 auto;"/>
+                             style="width:100%;max-width:720px;height:auto;border:0;display:block;margin:0 auto;"/>
                     </td></tr>
                     {% endif %}
                     {% if has_chart_entity %}
-                    <tr><td style="padding:8px 24px 0;text-align:center;">
+                    <tr><td style="padding:14px 24px 4px;text-align:center;">
                         <img src="cid:fcst_entity" alt="Settlements by Entity"
-                             style="width:100%;max-width:700px;height:auto;border:0;display:block;margin:0 auto;"/>
+                             style="width:100%;max-width:720px;height:auto;border:0;display:block;margin:0 auto;"/>
                     </td></tr>
-                    {% endif %}
-
-                    <!-- ── Table: by product ─────────────────────── -->
-                    <tr>
-                        <td style="padding:24px 24px 6px;">
-                            <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-                                      color:#5a6473;margin:0 0 10px;">Settlements by Product</p>
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
-                                   style="border-collapse:collapse;font-size:12px;">
-                                <tr>
-                                    <td style="padding:7px 8px;background:#1a2c5e;color:#fff;font-weight:700;
-                                               border:1px solid #1a2c5e;">Data</td>
-                                    {% for p in products %}
-                                    <td align="center" style="padding:7px 8px;background:#1a2c5e;color:#fff;font-weight:700;
-                                               border:1px solid #1a2c5e;">{{ p.label }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:7px 8px;background:#0d6efd;color:#fff;font-weight:700;
-                                               border:1px solid #0d6efd;">Total</td>
-                                </tr>
-                                {% for d in date_labels %}
-                                {% set i = loop.index0 %}
-                                <tr style="background:{{ '#ffffff' if i % 2 == 0 else '#f6f8fb' }};">
-                                    <td style="padding:6px 8px;border:1px solid #e5e9f0;color:#333;font-weight:600;">{{ d }}</td>
-                                    {% for p in products %}
-                                    <td align="center" style="padding:6px 8px;border:1px solid #e5e9f0;color:#444;">
-                                        {{ p['values'][i] or '-' }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:6px 8px;border:1px solid #e5e9f0;color:#0066cc;font-weight:700;">
-                                        {{ col_totals[i] }}</td>
-                                </tr>
-                                {% endfor %}
-                                <tr style="background:#eaf2fe;">
-                                    <td style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#1a2c5e;">Total</td>
-                                    {% for p in products %}
-                                    <td align="center" style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#1a2c5e;">
-                                        {{ p.total }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#0066cc;">
-                                        {{ grand_total }}</td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                    <!-- ── Table: by entity ──────────────────────── -->
-                    {% if entities %}
-                    <tr>
-                        <td style="padding:18px 24px 6px;">
-                            <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-                                      color:#5a6473;margin:0 0 10px;">Settlements by Entity</p>
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
-                                   style="border-collapse:collapse;font-size:12px;">
-                                <tr>
-                                    <td style="padding:7px 8px;background:#1a2c5e;color:#fff;font-weight:700;
-                                               border:1px solid #1a2c5e;">Data</td>
-                                    {% for e in entities %}
-                                    <td align="center" style="padding:7px 8px;background:#1a2c5e;color:#fff;font-weight:700;
-                                               border:1px solid #1a2c5e;">{{ e.label }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:7px 8px;background:#0d6efd;color:#fff;font-weight:700;
-                                               border:1px solid #0d6efd;">Total</td>
-                                </tr>
-                                {% for d in date_labels %}
-                                {% set i = loop.index0 %}
-                                {% set ns = namespace(t=0) %}
-                                {% for e in entities %}{% set ns.t = ns.t + e['values'][i] %}{% endfor %}
-                                <tr style="background:{{ '#ffffff' if i % 2 == 0 else '#f6f8fb' }};">
-                                    <td style="padding:6px 8px;border:1px solid #e5e9f0;color:#333;font-weight:600;">{{ d }}</td>
-                                    {% for e in entities %}
-                                    <td align="center" style="padding:6px 8px;border:1px solid #e5e9f0;color:#444;">
-                                        {{ e['values'][i] or '-' }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:6px 8px;border:1px solid #e5e9f0;color:#0066cc;font-weight:700;">
-                                        {{ ns.t }}</td>
-                                </tr>
-                                {% endfor %}
-                                <tr style="background:#eaf2fe;">
-                                    <td style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#1a2c5e;">Total</td>
-                                    {% for e in entities %}
-                                    <td align="center" style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#1a2c5e;">
-                                        {{ e.total }}</td>
-                                    {% endfor %}
-                                    <td align="center" style="padding:7px 8px;border:1px solid #d6e6fb;font-weight:700;color:#0066cc;">
-                                        {{ entities | sum(attribute='total') }}</td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
                     {% endif %}
 
                     <tr>

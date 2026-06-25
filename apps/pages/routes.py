@@ -1819,25 +1819,26 @@ _FCST_ENTITY_MAP = {
     '85398005': 'ATACAMA',
 }
 _FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
-_FCST_PRODUCT_ORDER = ['NDF Moeda', 'OPÇÃO Moeda', 'OPÇÃO Commodities',
-                       'OPÇÃO Equities', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+_FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Opt FXO', 'OPT Comm',
+                       'OPT Equities', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
 
 # One entry per JSON source. Field resolution is by NAME token (case-insensitive
 # "contains", first match wins) so it survives small header differences.
 #   date    : tokens to find the settlement/maturity/event date column
 #   entity  : tokens to find the entity/counterparty column
 #   product : ('fixed', label)        → constant product label
+#             ('ndfclass', tokens)    → NDF Moeda / NDF Commodities from class field
 #             ('sisbacen', tokens)    → option product by Código SISBACEN
 #             ('lob', tokens)         → SWAP CEM/EDG/CEMHYB from "Código Identificador"
 _FORECAST_SOURCES = [
-    {'key': 'ndf', 'label': 'NDF Moeda (TER)', 'category': 'NDF',
+    {'key': 'ndf', 'label': 'NDF (TER)', 'category': 'NDF',
      'file': lambda r: '73760_{}_DPOSICAO-TER.json'.format(r),
      'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'parte', 'conta'],
-     'product': ('fixed', 'NDF Moeda')},
+     'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
      'date': ['vencimento'], 'entity': ['titular', 'conta', 'parte'],
-     'product': ('sisbacen', ['sisbacen', 'moeda base'])},
+     'product': ('sisbacen', ['sisbacen', 'moeda base', 'classe', 'mercado'])},
     {'key': 'swap_pos', 'label': 'SWAP Position', 'category': 'Swap',
      'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
      'date': ['data vencimento'], 'entity': ['contraparte'],
@@ -1886,15 +1887,25 @@ def _fcst_map_entity(raw):
 
 
 def _fcst_option_product(code):
-    """Map an option's Código SISBACEN da Moeda Base → product (Alteryx Replace)."""
+    """Map an option's Código SISBACEN da Moeda Base → product (Alteryx Replace).
+    220 → FX (FXO), COM → Commodities, INI → Equities."""
     c = (code or '').upper()
-    if '220' in c:
-        return 'OPÇÃO Moeda'
-    if 'COM' in c:
-        return 'OPÇÃO Commodities'
-    if 'INI' in c:
-        return 'OPÇÃO Equities'
+    if '220' in c or 'CAMB' in c or 'MOEDA' in c or 'FX' in c:
+        return 'Opt FXO'
+    if 'COM' in c or 'MERCAD' in c:
+        return 'OPT Comm'
+    if 'INI' in c or 'EQU' in c or 'ACAO' in c or 'AÇÃO' in c:
+        return 'OPT Equities'
     return None
+
+
+def _fcst_ndf_product(asset_class):
+    """NDF Moeda vs NDF Commodities from the asset-class field (Alteryx Replace:
+    TAXAS DE CAMBIO → Moeda, COMMODITIES → Commodities)."""
+    c = (asset_class or '').upper()
+    if 'COMMOD' in c or 'MERCAD' in c:
+        return 'NDF Commodities'
+    return 'NDF Moeda'
 
 
 def _fcst_lob(identifier):
@@ -1964,7 +1975,8 @@ def _forecast_collect(dref, spine):
         date_key = _fcst_resolve_key(keys, src['date'])
         ent_key = _fcst_resolve_key(keys, src['entity'])
         pmode, pspec = src['product']
-        prod_key = _fcst_resolve_key(keys, pspec) if pmode in ('sisbacen', 'lob') else None
+        prod_key = (_fcst_resolve_key(keys, pspec)
+                    if pmode in ('sisbacen', 'lob', 'ndfclass') else None)
 
         counted = 0
         for row in rows:
@@ -1976,6 +1988,8 @@ def _forecast_collect(dref, spine):
                 product = pspec
             elif pmode == 'lob':
                 product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+            elif pmode == 'ndfclass':
+                product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
             else:
                 product = _fcst_option_product(row.get(prod_key, '') if prod_key else '')
             if product:
@@ -2128,7 +2142,6 @@ def api_cp_forecast_email():
     images = {
         'fcst_product': _decode_data_uri(imgs.get('by_product')),
         'fcst_entity':  _decode_data_uri(imgs.get('by_entity')),
-        'fcst_mix':     _decode_data_uri(imgs.get('mix')),
     }
     result = _send_forecast_email(data, images)
     if result is not True:
