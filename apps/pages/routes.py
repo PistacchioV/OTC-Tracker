@@ -1410,15 +1410,15 @@ _CETIP_RULES = [
      'match': lambda n: 'dposicao-swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r)},
-    {'label': 'Option Position (OPCAO DPOSICAO)',
-     'match': lambda n: 'opcao_' in n and '_dposicao.txt' in n,
-     'date_start': 6,
+    {'label': 'Option Position (OPC DPOSICAO)',
+     'match': lambda n: 'opc_' in n and '_dposicao.txt' in n,
+     'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
      'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r),
      'extra_dest': CETIP_OPTIONS_SHARE},
-    {'label': 'Option Movement (OPCAO DMOVIMENTO)',
-     'match': lambda n: ('opcao_' in n and '_dmovimento.txt' in n
+    {'label': 'Option Movement (OPC DMOVIMENTO)',
+     'match': lambda n: ('opc_' in n and '_dmovimento.txt' in n
                          and '_15h00.txt' not in n and '_18h30.txt' not in n),
-     'date_start': 6,
+     'date_start': 4,                  # OPC_YYMMDD_DMOVIMENTO.TXT → date at index 4
      'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r)},
     {'label': 'Term Movement (DMOVIMENTO C21)',
      'match': lambda n: '_dmovimento_c21.txt' in n,
