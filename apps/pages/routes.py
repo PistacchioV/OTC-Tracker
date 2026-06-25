@@ -1383,47 +1383,74 @@ def _ensure_cetip_roots():
 
 _ensure_cetip_roots()
 
+# Network shares for the secondary (flat) copies of two types, mirroring the
+# Alteryx second outputs (commented date subfolder → flat folder).
+CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE',
+                                r'\\nawest.ad.jpmorganchase.com\lac\BRA\intra\CETIP_OPTIONS')
+CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',
+                                r'\\nawest.ad.jpmorganchase.com\lac\BRA\intra\CETIP_NDF')
+
 # Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
-#   match      : predicate on the source FileName (mirrors the Filter expression)
+#   match      : predicate on the LOWER-CASED source FileName (case-insensitive,
+#                so .TXT / .txt both match — Alteryx Contains was the reference)
 #   date_start : 0-based offset of the YYMMDD date inside the FileName (Alteryx
-#                Substring) — 6 for OPCAO_* files, 8 for the CETIP21 ones
+#                Substring) — 6 for OPCAO_*, 4 for *-TER/*SIC, 8 for the CETIP21
 #   dest_name  : builds the renamed output FileName from the YYMMDD ref
+#   extra_dest : (optional) a flat network-share folder to also copy the file to
 # Destination is a single per-day folder (CETIP_DEST_ROOT\YYYY\mm. Month\dd),
 # so the per-type subfolders of the original Alteryx flow are not used here.
 _CETIP_RULES = [
     {'label': 'NDF Position (DPOSICAO C21)',
-     'match': lambda n: 'DPOSICAO_C21.txt' in n,
+     'match': lambda n: 'dposicao_c21.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DPOSICAO.CETIP21'.format(r)},
     {'label': 'SWAP Position (DPOSICAO-SWAP)',
-     'match': lambda n: 'DPOSICAO-SWAP.txt' in n,
+     'match': lambda n: 'dposicao-swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r)},
     {'label': 'Option Position (OPCAO DPOSICAO)',
-     'match': lambda n: 'OPCAO_' in n and '_DPOSICAO.txt' in n,
+     'match': lambda n: 'opcao_' in n and '_dposicao.txt' in n,
      'date_start': 6,
-     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r)},
+     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r),
+     'extra_dest': CETIP_OPTIONS_SHARE},
     {'label': 'Option Movement (OPCAO DMOVIMENTO)',
-     'match': lambda n: ('OPCAO_' in n and '_DMOVIMENTO.txt' in n
-                         and '_15H00.txt' not in n and '_18H30.txt' not in n),
+     'match': lambda n: ('opcao_' in n and '_dmovimento.txt' in n
+                         and '_15h00.txt' not in n and '_18h30.txt' not in n),
      'date_start': 6,
      'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r)},
     {'label': 'Term Movement (DMOVIMENTO C21)',
-     'match': lambda n: '_DMOVIMENTO_C21.txt' in n,
+     'match': lambda n: '_dmovimento_c21.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DMOVIMENTO.CETIP21'.format(r)},
     {'label': 'SWAP Movement (DMOVIMENTO-SWAP)',
-     'match': lambda n: '_DMOVIMENTO-SWAP.txt' in n,
+     'match': lambda n: '_dmovimento-swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DMOVIMENTO-SWAP.CETIP21'.format(r)},
     {'label': 'SWAP Flow (DFLUXO_SWAP)',
-     'match': lambda n: '_DFLUXO_SWAP.txt' in n,
+     'match': lambda n: '_dfluxo_swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r)},
     {'label': 'Operations (DOPERACOES)',
-     'match': lambda n: '_DOPERACOES.txt' in n,
+     'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r)},
+    {'label': 'COE (DRESUMOEMISSOR-COE)',
+     'match': lambda n: '_dresumoemissor-coe.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: 'CETIP21_{}_SP_DRESUMOEMISSOR-COE.TXT'.format(r)},
+    {'label': 'Accelerator Agent (MID DAGENTEACELERADOR)',
+     'match': lambda n: '_mid_dagenteacelerador.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_MID_DAGENTEACELERADOR.CETIP21'.format(r)},
+    {'label': 'Term Position (DPOSICAO-TER)',
+     'match': lambda n: '_dposicao-ter.txt' in n,
+     'date_start': 4,
+     'dest_name': lambda r: '73760_{}_DPOSICAO-TER.TER'.format(r),
+     'extra_dest': CETIP_NDF_SHARE},
+    {'label': 'SIC Contract Position (DPOSCONTRATOSIC)',
+     'match': lambda n: '_dposcontratosic.txt' in n,
+     'date_start': 4,
+     'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r)},
 ]
 
 
@@ -1474,13 +1501,13 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
             msg.attach(img)
 
         recipients = list(to_list) + list(cc_list or [])
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
             server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
         log.info("[cetip] e-mail '%s' sent to %s", subject, recipients)
         return True
-    except Exception:
+    except Exception as e:
         log.error("[cetip] e-mail '%s' FAILED:\n%s", subject, traceback.format_exc())
-        return False
+        return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 
 @blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
@@ -1530,7 +1557,7 @@ def api_cp_cetip_settlement():
     # files land in the single per-day destination folder, renamed.
     for rule in _CETIP_RULES:
         for name in files:
-            if not rule['match'](name):
+            if not rule['match'](name.lower()):
                 continue
             dref = name[rule['date_start']:rule['date_start'] + 6]
             if len(dref) < 6 or not dref.isdigit():
@@ -1538,12 +1565,22 @@ def api_cp_cetip_settlement():
                                'error': 'Could not parse date from filename.'})
                 continue
             dest_name = rule['dest_name'](dref)
+            src_path  = os.path.join(src_dir, name)
             try:
-                _cetip_save_file(os.path.join(src_dir, name),
-                                 os.path.join(dest_dir, dest_name))
+                _cetip_save_file(src_path, os.path.join(dest_dir, dest_name))
                 saved.append({'src': name, 'dest': dest_name, 'type': rule['label']})
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
+                continue
+            # Optional secondary copy to a flat network share (mirrors Alteryx 2nd output).
+            extra = rule.get('extra_dest')
+            if extra:
+                try:
+                    os.makedirs(extra, exist_ok=True)
+                    _cetip_save_file(src_path, os.path.join(extra, dest_name))
+                except Exception:
+                    log.warning("[cetip] secondary copy failed %s → %s:\n%s",
+                                name, extra, traceback.format_exc())
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Saved', 'Control Panel',
@@ -1568,13 +1605,13 @@ def api_cp_cetip_settlement():
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
     if send_mail and saved:
-        oks = [lbl for lbl, ok in (('OTC Ops', mail_ops), ('Sales Support', mail_ss)) if ok]
-        if len(oks) == 2:
+        # _send_cetip_email returns True on success or an error string on failure.
+        probs = [v for v in (mail_ops, mail_ss) if v is not True]
+        if not probs:
             msg += '<br>Confirmation e-mails sent (OTC Ops + Sales Support).'
-        elif oks:
-            msg += '<br>E-mail sent to {} only.'.format(oks[0])
         else:
-            msg += '<br><span class="text-warning">Files saved, but the e-mails could not be sent.</span>'
+            msg += ('<br><span class="text-warning">Files saved, but e-mail failed: {}</span>'
+                    .format(probs[0]))
 
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'source': src_dir, 'destination': dest_dir,
