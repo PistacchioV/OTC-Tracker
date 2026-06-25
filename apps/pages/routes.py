@@ -1452,7 +1452,8 @@ _CETIP_RULES = [
     {'label': 'SIC Contract Position (DPOSCONTRATOSIC)',
      'match': lambda n: '_dposcontratosic.txt' in n,
      'date_start': 4,
-     'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r)},
+     'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r),
+     'attach_sales_support': True},   # this file is e-mailed to Sales Support
 ]
 
 
@@ -1471,28 +1472,36 @@ def _cetip_save_file(src_path, dest_path):
 
 
 def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
-                      ref_date_fmt, saved, dest_folder=''):
+                      ref_date_fmt, saved, dest_folder='', attachments=None):
     """Render the CETIP HTML template and send it FROM the OTC Tracker mailbox
-    (SHARED_MAILBOX) with the embedded logo (cid:otc_logo). Best-effort."""
+    (SHARED_MAILBOX) with the embedded logo (cid:otc_logo) and optional file
+    attachments. Best-effort — returns True on success or an error string."""
     from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    attachments = attachments or []
     try:
+        attach_names = [os.path.basename(p) for p in attachments]
         html = render_template(
             'pages/email-template-cetip-saved.html',
             subject=subject, greeting=greeting, message_html=message_html,
             ref_date_fmt=ref_date_fmt, file_count=len(saved), saved_files=saved,
-            dest_folder=dest_folder, current_year=datetime.now().year)
+            attachment_names=attach_names, dest_folder=dest_folder,
+            current_year=datetime.now().year)
 
-        msg = MIMEMultipart('related')
+        # mixed > [ related > [ alternative > [plain, html], logo ], attachment... ]
+        msg = MIMEMultipart('mixed')
         msg['Subject'] = subject
         msg['From'] = SHARED_MAILBOX
         msg['To'] = ', '.join(to_list)
         if cc_list:
             msg['Cc'] = ', '.join(cc_list)
 
+        related = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
-        alt.attach(MIMEText('CETIP files saved ({} file(s)).'.format(len(saved)), 'plain', 'utf-8'))
+        alt.attach(MIMEText('CETIP files saved.', 'plain', 'utf-8'))
         alt.attach(MIMEText(html, 'html', 'utf-8'))
-        msg.attach(alt)
+        related.attach(alt)
 
         logo_path = _get_logo_path()
         if logo_path:
@@ -1500,7 +1509,20 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
                 img = MIMEImage(f.read())
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
-            msg.attach(img)
+            related.attach(img)
+        msg.attach(related)
+
+        for path in attachments:
+            try:
+                with open(path, 'rb') as f:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', 'attachment',
+                                filename=os.path.basename(path))
+                msg.attach(part)
+            except Exception:
+                log.warning("[cetip] could not attach %s:\n%s", path, traceback.format_exc())
 
         recipients = list(to_list) + list(cc_list or [])
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
@@ -1554,6 +1576,7 @@ def api_cp_cetip_settlement():
     # Make sure the destination day folder exists before saving anything.
     os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
+    attach_paths = []   # files to e-mail to Sales Support (DPOSCONTRATOSIC)
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
     # files land in the single per-day destination folder, renamed.
@@ -1567,10 +1590,13 @@ def api_cp_cetip_settlement():
                                'error': 'Could not parse date from filename.'})
                 continue
             dest_name = rule['dest_name'](dref)
+            dest_path = os.path.join(dest_dir, dest_name)
             src_path  = os.path.join(src_dir, name)
             try:
-                _cetip_save_file(src_path, os.path.join(dest_dir, dest_name))
+                _cetip_save_file(src_path, dest_path)
                 saved.append({'src': name, 'dest': dest_name, 'type': rule['label']})
+                if rule.get('attach_sales_support'):
+                    attach_paths.append(dest_path)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -1588,20 +1614,26 @@ def api_cp_cetip_settlement():
                          'CETIP Files Saved', 'Control Panel',
                          '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
 
-    # Two HTML e-mails from the OTC Tracker mailbox (best-effort).
+    # Two distinct HTML e-mails from the OTC Tracker mailbox (best-effort):
+    #  1) Brazil OTC Ops only — saved-files notice + the complete list (no attachment).
+    #  2) Sales Support (cc OTC Ops) — the DPOSCONTRATOSIC file attached, no list.
     ref_fmt = ref.strftime('%d/%m/%Y')
     mail_ops = mail_ss = None
     if send_mail and saved:
         mail_ops = _send_cetip_email(
             [CETIP_OTC_OPS_EMAIL], [], 'Arquivos CETIP salvos!',
             'Prezados,',
-            'Os arquivos da CETIP necessários para a geração do KPI foram salvos com sucesso.',
+            'Os arquivos da CETIP necessários para a geração do KPI foram salvos com sucesso. '
+            'Segue abaixo a lista completa.',
             ref_fmt, saved, dest_folder=dest_dir)
+
+        ss_msg = ('Segue em anexo o arquivo de posição de contratos (DPOSCONTRATOSIC), '
+                  'conforme solicitado.' if attach_paths else
+                  'Não foi encontrado o arquivo DPOSCONTRATOSIC para a data de referência.')
         mail_ss = _send_cetip_email(
             [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], 'Arquivos CETIP salvos!',
-            'Bom dia, Sales Support.',
-            'Seguem os arquivos da CETIP salvos referentes à data abaixo, conforme solicitado.',
-            ref_fmt, saved, dest_folder=dest_dir)
+            'Bom dia, Sales Support.', ss_msg,
+            ref_fmt, [], attachments=attach_paths)   # no file list for Sales Support
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:

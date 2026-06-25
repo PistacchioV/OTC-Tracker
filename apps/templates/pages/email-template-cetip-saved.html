@@ -58,6 +58,7 @@
                                 {{ message_html | safe }}
                             </p>
 
+                            {% if file_count %}
                             <!-- Count badge -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
                                    style="margin-bottom:24px;">
@@ -72,6 +73,22 @@
                                     </td>
                                 </tr>
                             </table>
+                            {% endif %}
+
+                            {% if attachment_names %}
+                            <!-- Attachments -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="margin-bottom:8px;">
+                                {% for an in attachment_names %}
+                                <tr>
+                                    <td style="padding:10px 12px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               border-radius:8px;font-size:12px;color:#333;">
+                                        📎 &nbsp;<span style="font-family:'Courier New',monospace;">{{ an }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% endif %}
 
                             {% if saved_files %}
                             <!-- Saved files table -->
