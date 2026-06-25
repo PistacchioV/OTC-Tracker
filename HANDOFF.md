@@ -1429,3 +1429,70 @@ apps/static/data/translations/{en,br,es}.json        ← chaves FXO/import/dedup
 
 ### Commits (26)
 - `0e46359` nova página FXO · `317a98d` remove Quoted in Cents + índices · `1d4d8cf` import XLSX + remove Market/FXConvDate · `d67791f` preview + Conecta + B3 mapping · `1a0aa64` Underlying=Strike Ccy, SpotDate←Premium · `258fc0f` valida Underlying contra 'TAXAS DE CAMBIO' · `41552b6` About + dashboard + animação import · `d55ba83` dashboard FXO + Top5 Underlying + Cotação=1 · `3f88916` dedup Deal+Client (Amend) · `cb99305` FXO conta exceto Banco JP + premio D0 escopado · `99cd7b2` lookup por SPN + filtro col O · `962918c` Top 5 Clients empilhado por produto.
+
+---
+
+## 27. Sessão 2026-06-25 (cont.) — Control Panel (hub de rotinas) + 1ª rotina: Salvar Arquivos CETIP
+
+### O que foi feito
+
+Criada a página **Control Panel** (`/control-panel`) — um *hub extensível* de rotinas operacionais que
+**salvam arquivos para os Daily Settlements** e processos que não exigem página dedicada. A 1ª rotina é a
+tradução do **fluxo Alteryx "Salvar Arquivos"** (CETIP) para Python.
+
+#### Nova página — `apps/templates/pages/control-panel.html`
+- Estilo Apple (cards com hairline border, radius 16px, hover lift). Seção **Daily Settlements** com grid
+  de *routine cards*.
+- **Padrão de card reutilizável:** cada card declara `data-endpoint` (POST) e opcionalmente
+  `data-date-input="<id>"`. Um runner genérico `cpRunRoutine(btn)` (delegação de clique em `.cp-run-btn`)
+  faz o POST, mostra loading (`ti-loader-2 ti-spin`) e o resultado via **SweetAlert** (sucesso/erro).
+  Adicionar rotina futura = só inserir um card novo; o JS já cobre tudo.
+- **Contrato do endpoint:** retorna `{success:true, message:'<html>'}` ou `{success:false, error:'...'}`.
+- i18n: `cp-*` (en/br/es). Swal traduzido via padrão `_TRANS_CACHE` + `t()`.
+- Link no sidenav (seção *Apps*, após Electronic Inventory, ícone `sliders-horizontal`).
+
+#### Rotina 1: Salvar Arquivos CETIP — `apps/pages/routes.py`
+Tradução fiel do `.yxmd` (Directory → Filter → DynamicInput → Formula → Select → DbFileOutput → Email).
+- Endpoint `POST /api/control-panel/cetip-settlement` (body opcional `{date:'YYYY-MM-DD', send_email:bool}`;
+  **default = D-1 ANBIMA** via `_prev_anbima_bizday(now)` — pula fim de semana e feriados ANBIMA). O input
+  da página é pré-preenchido com esse D-1 (passado pelo route via `cetip_default_date`).
+- **Fonte:** `CETIP_SOURCE_ROOT\{YYYY}\{MM}\{DD}` (pasta diária da B3). **Destino:**
+  `CETIP_DEST_ROOT\{sub}\20{YY}\{MM}` — **ano/mês vêm da data embutida no nome do arquivo**, não de hoje.
+- **`_CETIP_RULES`** = 8 regras (1 por branch do Alteryx). Cada regra: `match` (predicado no FileName =
+  expressão do Filter), `date_start` (offset 0-based do YYMMDD no nome: **6** p/ `OPCAO_*`, **8** p/ os
+  `CETIP21`), `dest_name(ref)` (renomeia p/ `73760_{YYMMDD}_{TIPO}`), `dest_sub` (subpasta destino).
+  Tipos: DPOSICAO_C21→`Arquivos Posiçao`, DPOSICAO-SWAP→`Posiçao`, OPCAO DPOSICAO→`Posiçao`,
+  OPCAO DMOVIMENTO→`Movimento\OPÇÃO` (exclui `_15H00`/`_18H30`), DMOVIMENTO_C21→`Movimento\TERMO`,
+  DMOVIMENTO-SWAP→`Movimento\SWAP`, DFLUXO_SWAP→`Posiçao` (vira `_DFLUXO.CETIP21`), DOPERACOES→`Posiçao`.
+  ⚠️ Nomes de pasta acentuados são literais e devem bater 1:1 (`Posiçao`, `OPÇÃO`).
+- **`_cetip_save_file`**: lê o arquivo como Latin-1 (CodePage 28591 do Alteryx) e reescreve com CRLF —
+  Latin-1 é mapa byte-a-byte (conteúdo preservado); só normaliza quebras de linha p/ CRLF (= o que o KPI
+  espera). **Não** escreve BOM (28591 não é Unicode → Alteryx ignora WriteBOM). [decisão consciente]
+- **`_send_cetip_confirmation`**: espelha o tool Email (assunto "Arquivos CETIP salvos!", SMTP relay JPM,
+  best-effort). Notificação `_create_notification('CETIP Files Saved','Control Panel', ...)`.
+- Loop = 1 passada por regra (espelha branches independentes do Alteryx: 1 arquivo pode ir p/ >1 destino).
+
+#### Notificação — `apps/templates/partials/topbar.html`
+- `ACTION_META['CETIP Files Saved']` (ícone `file-export`, `bg-success`) + `PAGE_URL['Control Panel']`.
+
+### Padrões identificados
+- **Control Panel é a casa das "rotinas sem página":** processos batch/file-saving que antes eram Alteryx
+  entram aqui como cards. Reaproveitar `cpRunRoutine` + contrato `{success,message|error}`.
+- **Alteryx → Python:** `Substring(s,start,len)` é 0-based = `s[start:start+len]` (idêntico ao Python).
+  Filtros `Contains` = `in`; `!Contains` = `not in`. CodePage 28591 = Latin-1 (byte-exato).
+- Caminhos `I:\...` (CETIP_SOURCE_ROOT/DEST_ROOT) só funcionam no ambiente JPM, como INTRAG_NDF_SEND_DIR.
+
+### Pendências
+- O XML colado veio **truncado** após o branch DOPERACOES; mapeei 8 tipos. Se o fluxo real tiver tipos
+  adicionais (ex.: variações `_15H00`/`_18H30`, outros DMOVIMENTO), basta acrescentar regras em `_CETIP_RULES`.
+- Confirmar com o usuário o **formato exato do nome dos arquivos-fonte** (validar offsets 6/8) e se o
+  downstream exige BOM no output (hoje não escrevemos BOM).
+
+### Arquivos criados/modificados nesta sessão
+```
+apps/templates/pages/control-panel.html        ← CRIADO (hub + card CETIP + runner genérico)
+apps/pages/routes.py                           ← rota /control-panel + _CETIP_RULES + helpers + endpoint
+apps/templates/partials/sidenav.html           ← link Control Panel (Apps)
+apps/templates/partials/topbar.html            ← ACTION_META + PAGE_URL da notificação CETIP
+apps/static/data/translations/{en,br,es}.json  ← chaves control-panel + cp-*
+```

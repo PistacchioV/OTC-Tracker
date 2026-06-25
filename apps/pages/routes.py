@@ -1332,6 +1332,187 @@ def about():
     return render_template('pages/about.html', segment='about')
 
 
+@blueprint.route('/control-panel')
+def control_panel():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    cetip_default_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/control-panel.html', segment='control-panel',
+                           cetip_default_date=cetip_default_date)
+
+
+# ============================================================================
+#  CONTROL PANEL — Daily Settlement routines
+# ============================================================================
+#
+#  Routine: "Salvar Arquivos CETIP" — Python translation of the Alteryx flow
+#  (Directory → Filter → DynamicInput → Formula → Select → DbFileOutput → Email).
+#
+#  It reads the raw CETIP files B3 drops in the daily download folder, filters
+#  them by type, renames each to the standard `73760_{YYMMDD}_{TYPE}` convention
+#  and saves them into the year/month destination folders the KPI process reads.
+#  A confirmation e-mail is then sent (best-effort, JPM SMTP relay).
+#
+#  Source folder (per run):  CETIP_SOURCE_ROOT\{YYYY}\{MM}\{DD}
+#  Destination folder:       CETIP_DEST_ROOT\{sub...}\20{YY}\{MM}   (YY/MM from
+#                            the date embedded in the source filename, not today)
+# ----------------------------------------------------------------------------
+CETIP_SOURCE_ROOT  = os.getenv('CETIP_SOURCE_ROOT',
+                               r'I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP')
+CETIP_DEST_ROOT    = os.getenv('CETIP_DEST_ROOT',
+                               r'I:\Confirmation\Derivativos\Vernacci\ARQUIVOS CETIP')
+CETIP_NOTIFY_EMAIL = os.getenv('CETIP_NOTIFY_EMAIL', 'brazil.otc.ops@jpmchase.com')
+
+# Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
+#   match      : predicate on the source FileName (mirrors the Filter expression)
+#   date_start : 0-based offset of the YYMMDD date inside the FileName (Alteryx
+#                Substring) — 6 for OPCAO_* files, 8 for the CETIP21 ones
+#   dest_name  : builds the renamed output FileName from the YYMMDD ref
+#   dest_sub   : destination subfolder parts under CETIP_DEST_ROOT
+_CETIP_RULES = [
+    {'label': 'NDF Position (DPOSICAO C21)',
+     'match': lambda n: 'DPOSICAO_C21.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DPOSICAO.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Posiçao']},
+    {'label': 'SWAP Position (DPOSICAO-SWAP)',
+     'match': lambda n: 'DPOSICAO-SWAP.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Posiçao']},
+    {'label': 'Option Position (OPCAO DPOSICAO)',
+     'match': lambda n: 'OPCAO_' in n and '_DPOSICAO.txt' in n,
+     'date_start': 6,
+     'dest_name': lambda r: '73760_{}_DPOSICAO.OPCAO'.format(r),
+     'dest_sub': ['Arquivos Posiçao']},
+    {'label': 'Option Movement (OPCAO DMOVIMENTO)',
+     'match': lambda n: ('OPCAO_' in n and '_DMOVIMENTO.txt' in n
+                         and '_15H00.txt' not in n and '_18H30.txt' not in n),
+     'date_start': 6,
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPCAO'.format(r),
+     'dest_sub': ['Arquivos Movimento', 'OPÇÃO']},
+    {'label': 'Term Movement (DMOVIMENTO C21)',
+     'match': lambda n: '_DMOVIMENTO_C21.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Movimento', 'TERMO']},
+    {'label': 'SWAP Movement (DMOVIMENTO-SWAP)',
+     'match': lambda n: '_DMOVIMENTO-SWAP.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DMOVIMENTO-SWAP.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Movimento', 'SWAP']},
+    {'label': 'SWAP Flow (DFLUXO_SWAP)',
+     'match': lambda n: '_DFLUXO_SWAP.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Posiçao']},
+    {'label': 'Operations (DOPERACOES)',
+     'match': lambda n: '_DOPERACOES.txt' in n,
+     'date_start': 8,
+     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r),
+     'dest_sub': ['Arquivos Posiçao']},
+]
+
+
+def _cetip_save_file(src_path, dest_path):
+    """Replicate the Alteryx DynamicInput→DbFileOutput pass: read the raw file as
+    Latin-1 (CodePage 28591) and rewrite it with CRLF line endings to the new
+    location. Latin-1 is a byte-for-byte mapping, so content is preserved; only
+    line endings are normalised to CRLF — matching what the KPI process expects."""
+    with open(src_path, 'r', encoding='latin-1', newline='') as f:
+        lines = f.read().splitlines()
+    out = '\r\n'.join(lines)
+    if lines:
+        out += '\r\n'
+    with open(dest_path, 'w', encoding='latin-1', newline='') as f:
+        f.write(out)
+
+
+def _send_cetip_confirmation(count):
+    """Mirror the Alteryx Email tool — confirmation that the CETIP files were saved."""
+    try:
+        body = ("Prezados,\n\n"
+                "Os arquivos da Cetip necessários para a geração do KPI foram salvos "
+                "com sucesso! ({} arquivo(s))\n\n"
+                "Atenciosamente,\n\nOTC Derivatives".format(count))
+        msg = MIMEText(body, 'plain', 'utf-8')
+        msg['Subject'] = 'Arquivos CETIP salvos!'
+        msg['From'] = CETIP_NOTIFY_EMAIL
+        msg['To'] = CETIP_NOTIFY_EMAIL
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.sendmail(CETIP_NOTIFY_EMAIL, [CETIP_NOTIFY_EMAIL], msg.as_string())
+        log.info("[cetip] confirmation e-mail sent to %s", CETIP_NOTIFY_EMAIL)
+        return True
+    except Exception:
+        log.error("[cetip] confirmation e-mail FAILED:\n%s", traceback.format_exc())
+        return False
+
+
+@blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
+def api_cp_cetip_settlement():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    payload   = request.get_json(silent=True) or {}
+    date_str  = (payload.get('date') or '').strip()
+    send_mail = payload.get('send_email', True)
+
+    try:
+        ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
+               else _prev_anbima_bizday(datetime.now()))
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
+
+    src_dir = os.path.join(CETIP_SOURCE_ROOT, ref.strftime('%Y'),
+                           ref.strftime('%m'), ref.strftime('%d'))
+    if not os.path.isdir(src_dir):
+        return jsonify({'success': False,
+                        'error': 'Source folder not found: {}'.format(src_dir)}), 400
+
+    files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
+    saved, errors = [], []
+
+    # One pass per rule (mirrors the independent Alteryx branches).
+    for rule in _CETIP_RULES:
+        for name in files:
+            if not rule['match'](name):
+                continue
+            dref = name[rule['date_start']:rule['date_start'] + 6]
+            if len(dref) < 6 or not dref.isdigit():
+                errors.append({'file': name, 'type': rule['label'],
+                               'error': 'Could not parse date from filename.'})
+                continue
+            dest_dir  = os.path.join(CETIP_DEST_ROOT, *rule['dest_sub'],
+                                     '20' + dref[:2], dref[2:4])
+            dest_name = rule['dest_name'](dref)
+            try:
+                os.makedirs(dest_dir, exist_ok=True)
+                _cetip_save_file(os.path.join(src_dir, name),
+                                 os.path.join(dest_dir, dest_name))
+                saved.append({'src': name, 'dest': dest_name,
+                              'folder': os.path.join(*rule['dest_sub']),
+                              'type': rule['label']})
+            except Exception as e:
+                errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'CETIP Files Saved', 'Control Panel',
+                         '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
+
+    mail_ok = _send_cetip_confirmation(len(saved)) if (send_mail and saved) else None
+
+    msg = '<b>{}</b> file(s) saved to the settlement folders.'.format(len(saved))
+    if errors:
+        msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
+    if mail_ok is True:
+        msg += '<br>Confirmation e-mail sent.'
+    elif mail_ok is False:
+        msg += '<br><span class="text-warning">Files saved, but the e-mail could not be sent.</span>'
+
+    return jsonify({'success': True, 'message': msg, 'saved': saved,
+                    'errors': errors, 'source': src_dir, 'email_sent': mail_ok})
+
+
 @blueprint.route('/holidays-calendar')
 def holidays_calendar():
     if not session.get('authenticated'):
@@ -2692,6 +2873,15 @@ def _load_anbima():
         log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
         _ANBIMA_HOLIDAYS = set()
     _anbima_loaded = True
+
+def _prev_anbima_bizday(ref):
+    """Return the previous ANBIMA business day (D-1) before `ref` (date/datetime).
+    Skips weekends and ANBIMA holidays."""
+    _load_anbima()
+    cur = ref - timedelta(days=1)
+    while cur.weekday() >= 5 or cur.strftime('%Y-%m-%d') in _ANBIMA_HOLIDAYS:
+        cur -= timedelta(days=1)
+    return cur
 
 def _anbima_bizdays_between(d1, d2):
     """Count ANBIMA business days from d1 (inclusive) up to d2 - 1 (d2 exclusive).
