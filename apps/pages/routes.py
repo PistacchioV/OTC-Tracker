@@ -3204,7 +3204,7 @@ def _save_intrag_opt_entry(deal):
         'seller_name':            seller_name,
         'start_date':             fmt_br(td),
         'maturity_date':          fmt_br(sd),
-        'cetip_number':           ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16)),
+        'cetip_number':           ''.join(random.choice(string.digits) for _ in range(16)),
         'sisbacen_currency_code': 'COM',
         'currency_symbol':        currency_symbol,
         'investment_amount':      premium_str,        # Premium
@@ -6111,3 +6111,4 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
+

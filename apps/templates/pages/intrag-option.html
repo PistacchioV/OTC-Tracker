@@ -975,9 +975,15 @@ $(document).ready(function() {
         table.columns().search('');
         intragDateRanges={};
         sfActive.forEach(function(f){
-            if(f.col.type==='date'&&(f.mode==='from'||f.mode==='to')){
+            if(f.col.type==='date'){
+                // Route ALL date filters (from/to/exact) through sfToDate so the
+                // match is format-agnostic (data comes as YYYY-MM-DD; the chip may
+                // be DD/MM/YYYY). 'exact' = same calendar day (from = to = that day).
+                var d=sfToDate(f.value);
                 intragDateRanges[f.col.dtCol]=intragDateRanges[f.col.dtCol]||{from:null,to:null};
-                intragDateRanges[f.col.dtCol][f.mode]=sfToDate(f.value);
+                if(f.mode==='from') intragDateRanges[f.col.dtCol].from=d;
+                else if(f.mode==='to') intragDateRanges[f.col.dtCol].to=d;
+                else { intragDateRanges[f.col.dtCol].from=d; intragDateRanges[f.col.dtCol].to=d; }
             } else {
                 table.column(f.col.dtCol).search(f.value);
             }

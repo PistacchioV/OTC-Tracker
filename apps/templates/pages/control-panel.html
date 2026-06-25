@@ -10,66 +10,142 @@
  * ================================================================ */
 :root {
     --cp-ease:      cubic-bezier(0.23, 1, 0.32, 1);
+    --cp-ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
     --cp-blue:      #0066cc;
+    --cp-blue-600:  #0a5bd6;
+    --cp-ink:       #1d1d1f;   /* títulos — ~15:1 */
+    --cp-muted:     #54545a;   /* body      — ~6.7:1 on white */
+    --cp-faint:     #6e6e73;   /* secundário — ~4.7:1 */
     --cp-hairline:  #e6e6ea;
 }
 
+/* ── Section header ─────────────────────────────────────────── */
 .cp-sec-label {
     font-size: .72rem;
     font-weight: 700;
-    letter-spacing: .06em;
+    letter-spacing: .07em;
     text-transform: uppercase;
     color: var(--cp-blue);
-    margin-bottom: .25rem;
+    margin-bottom: .3rem;
 }
-.cp-sec-title { font-size: 1.15rem; font-weight: 700; margin: 0; }
-.cp-sec-desc  { font-size: .82rem; color: #6e6e73; margin: .15rem 0 0; }
+.cp-sec-title { font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; color: var(--cp-ink); margin: 0; }
+.cp-sec-desc  { font-size: .85rem; color: var(--cp-faint); margin: .2rem 0 0; }
+.cp-subtitle  { font-size: .9rem; color: var(--cp-faint); max-width: 760px; }
+[data-bs-theme="dark"] .cp-sec-title { color: #f5f5f7; }
 
 /* ── Routine card ───────────────────────────────────────────── */
 .cp-card {
+    position: relative;
     background: var(--bs-body-bg);
     border: 1px solid var(--cp-hairline);
-    border-radius: 16px;
-    padding: 1.25rem 1.25rem 1.1rem;
+    border-radius: 18px;
+    padding: 1.5rem 1.5rem 1.35rem;
     height: 100%;
+    min-height: 290px;
     display: flex;
     flex-direction: column;
-    transition: transform 220ms var(--cp-ease), box-shadow 220ms var(--cp-ease);
+    transition: transform 240ms var(--cp-ease),
+                box-shadow 240ms var(--cp-ease),
+                border-color 240ms var(--cp-ease);
 }
-@media (hover: hover) {
-    .cp-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+@media (hover: hover) and (pointer: fine) {
+    .cp-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .10);
+        border-color: rgba(0, 102, 204, .28);
+    }
 }
 [data-bs-theme="dark"] .cp-card { border-color: rgba(255,255,255,.10); }
+[data-bs-theme="dark"] .cp-card:hover { box-shadow: 0 12px 32px rgba(0,0,0,.5); }
 
 .cp-card__icon {
-    width: 44px; height: 44px;
-    border-radius: 12px;
+    width: 52px; height: 52px;
+    border-radius: 14px;
     display: inline-flex; align-items: center; justify-content: center;
-    background: rgba(0,102,204,.10);
+    background: linear-gradient(135deg, #e8f1fd 0%, #d6e6fb 100%);
     color: var(--cp-blue);
-    margin-bottom: .85rem;
+    margin-bottom: 1.1rem;
     flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(0,102,204,.10);
 }
-.cp-card__icon i { font-size: 1.4rem; }
-.cp-card__title { font-size: .98rem; font-weight: 700; margin: 0 0 .3rem; }
-.cp-card__desc  { font-size: .8rem; color: #6e6e73; line-height: 1.45; margin: 0; flex-grow: 1; }
-[data-bs-theme="dark"] .cp-card__desc, [data-bs-theme="dark"] .cp-sec-desc { color: #a1a1a6; }
+.cp-card__icon i { font-size: 1.55rem; }
+[data-bs-theme="dark"] .cp-card__icon {
+    background: linear-gradient(135deg, rgba(0,102,204,.28), rgba(0,102,204,.14));
+    color: #7db4f5;
+    box-shadow: inset 0 0 0 1px rgba(125,180,245,.18);
+}
 
+.cp-card__title { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; color: var(--cp-ink); margin: 0 0 .4rem; }
+.cp-card__desc  { font-size: .83rem; color: var(--cp-muted); line-height: 1.5; margin: 0; }
+[data-bs-theme="dark"] .cp-card__title { color: #f5f5f7; }
+[data-bs-theme="dark"] .cp-card__desc  { color: #b0b0b6; }
+
+/* ── Date field ─────────────────────────────────────────────── */
+.cp-field { margin-top: 1.15rem; }
+.cp-field label {
+    display: block;
+    font-size: .7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: var(--cp-faint);
+    margin-bottom: .35rem;
+}
+.cp-card .form-control {
+    border-radius: 10px;
+    border-color: var(--cp-hairline);
+    font-size: .85rem;
+    max-width: 200px;
+    transition: border-color 140ms var(--cp-ease), box-shadow 140ms var(--cp-ease);
+}
+.cp-card .form-control:focus {
+    border-color: var(--cp-blue);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+
+/* ── Footer / meta / button ─────────────────────────────────── */
 .cp-card__foot {
     display: flex; align-items: center; justify-content: space-between;
-    gap: .5rem; margin-top: 1rem;
+    gap: .75rem;
+    margin-top: auto;
+    padding-top: 1.35rem;
 }
-.cp-card__meta { font-size: .7rem; color: #9a9a9f; }
+.cp-card__meta {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .72rem; font-weight: 600;
+    color: var(--cp-faint);
+}
+.cp-card__meta i { font-size: .95rem; opacity: .85; }
 
 .cp-run-btn {
+    border: none;
     border-radius: 9999px;
-    font-size: .78rem;
-    font-weight: 600;
-    padding: .42rem 1.1rem;
-    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .82rem; font-weight: 600;
+    padding: .55rem 1.35rem;
+    display: inline-flex; align-items: center; gap: .45rem;
+    background: var(--cp-blue); color: #fff;
+    box-shadow: 0 1px 2px rgba(0,102,204,.25);
+    transition: transform 140ms var(--cp-ease-out),
+                background-color 140ms var(--cp-ease),
+                box-shadow 140ms var(--cp-ease);
 }
-.cp-run-btn .ti-spin { animation: cp-spin .8s linear infinite; }
+.cp-run-btn:hover  { background: var(--cp-blue-600); color: #fff; box-shadow: 0 4px 14px rgba(0,102,204,.32); }
+.cp-run-btn:active { transform: scale(.97); }
+.cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,102,204,.35); }
+.cp-run-btn:disabled { opacity: .7; cursor: default; }
+.cp-run-btn .ti-spin { animation: cp-spin .7s linear infinite; }
 @keyframes cp-spin { to { transform: rotate(360deg); } }
+
+/* ── Entrance reveal (staggered) ────────────────────────────── */
+.cp-reveal { opacity: 0; transform: translateY(14px); animation: cp-up 520ms var(--cp-ease-out) forwards; }
+.cp-reveal:nth-child(1) { animation-delay:  40ms; }
+.cp-reveal:nth-child(2) { animation-delay: 100ms; }
+.cp-reveal:nth-child(3) { animation-delay: 160ms; }
+.cp-reveal:nth-child(4) { animation-delay: 220ms; }
+@keyframes cp-up { to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .cp-reveal { animation: none; opacity: 1; transform: none; }
+    .cp-card, .cp-run-btn, .cp-card .form-control { transition: none; }
+}
 </style>
 {% endblock extra_css %}
 
@@ -79,14 +155,14 @@
     {% set title='Control Panel' %}
     {% include 'partials/page-title.html' %}
 
-    <p class="text-muted mb-4" style="font-size:.85rem; max-width:760px;" data-lang="cp-subtitle">
+    <p class="cp-subtitle cp-reveal mb-4" data-lang="cp-subtitle">
         Central de rotinas operacionais — geração e salvamento de arquivos para os Daily Settlements
         e demais processos que não exigem uma página dedicada.
     </p>
 
     <!-- ═══ DAILY SETTLEMENTS ═════════════════════════════════════ -->
-    <div class="row mb-2">
-        <div class="col-12">
+    <div class="row mb-3">
+        <div class="col-12 cp-reveal">
             <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
             <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
             <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
@@ -98,7 +174,7 @@
     <div class="row g-3 mb-4" id="cp-routines-ds">
 
         <!-- Rotina 1: Salvar Arquivos CETIP (fluxo Alteryx → Python) -->
-        <div class="col-12 col-md-6 col-xl-4">
+        <div class="col-12 col-md-6 col-xl-4 cp-reveal">
             <div class="cp-card">
                 <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
                 <h3 class="cp-card__title" data-lang="cp-r-cetip-title">Save CETIP Files</h3>
@@ -106,15 +182,16 @@
                     Reads the raw CETIP files from the B3 daily download folder, renames them to the
                     standard convention and saves them into the settlement folders used by the KPI.
                 </p>
-                <div class="mt-3">
-                    <label class="form-label mb-1" style="font-size:.72rem; font-weight:600;"
-                           data-lang="cp-ref-date">Reference date</label>
+                <div class="cp-field">
+                    <label data-lang="cp-ref-date">Reference date</label>
                     <input type="date" id="cp-cetip-date" class="form-control form-control-sm"
-                           style="max-width:200px;" value="{{ cetip_default_date }}">
+                           value="{{ cetip_default_date }}">
                 </div>
                 <div class="cp-card__foot">
-                    <span class="cp-card__meta" data-lang="cp-cetip-meta">B3 → Settlement folders</span>
-                    <button type="button" class="btn btn-primary cp-run-btn"
+                    <span class="cp-card__meta">
+                        <i class="ti ti-folder"></i><span data-lang="cp-cetip-meta">B3 → Settlement folders</span>
+                    </span>
+                    <button type="button" class="btn cp-run-btn"
                             data-endpoint="/api/control-panel/cetip-settlement"
                             data-date-input="cp-cetip-date">
                         <i class="ti ti-player-play"></i>
