@@ -3,7 +3,7 @@
 {% block title %}Control Panel{% endblock title %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
 <style>
 /* ================================================================
  *  CONTROL PANEL — hub de rotinas (Apple Design Language)
@@ -36,7 +36,7 @@
 /* ── Routine card ───────────────────────────────────────────── */
 .cp-card {
     position: relative;
-    background: var(--bs-body-bg);
+    background: var(--ins-secondary-bg, #fff);   /* superfície do card (branca), contrasta com o canvas cinza */
     border: 1px solid var(--cp-hairline);
     border-radius: 18px;
     padding: 1.5rem 1.5rem 1.35rem;
@@ -207,7 +207,7 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 // ── Translation cache & helper ───────────────────────────────────────────────
 var _TRANS_CACHE = {};
