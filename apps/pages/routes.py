@@ -1633,7 +1633,7 @@ def api_cp_cetip_settlement():
         ss_msg = ('Segue em anexo o arquivo de posição de contratos (DPOSCONTRATOSIC), '
                   'conforme solicitado.' if attach_paths else
                   'Não foi encontrado o arquivo DPOSCONTRATOSIC para a data de referência.')
-        ss_subject = 'Consolidado Cetip - Corporate - {}'.format(ref.strftime('%y%m%d'))
+        ss_subject = 'Consolidado CETIP - Corporate - {}'.format(ref.strftime('%y%m%d'))
         mail_ss = _send_cetip_email(
             [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
             'Bom dia, Sales Support.', ss_msg,
