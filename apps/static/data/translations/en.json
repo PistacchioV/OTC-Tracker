@@ -760,6 +760,7 @@
   "dash-chart-title": "Deal Flow Analytics",
   "dash-forecast-title": "Settlement Forecast",
   "dash-forecast-sub": "Next 14 business days, by product",
+  "dash-forecast-asof": "as of",
   "dash-fc-filter-all": "All",
   "dash-tooltip-total": "Total",
   "dash-view-all": "View All",

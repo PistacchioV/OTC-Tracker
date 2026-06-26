@@ -16,7 +16,10 @@ from apps.config import config_dict
 from apps import create_app, db
 
 # WARNING: Don't run with debug turned on in production!
-DEBUG = True
+# Default is dev (True). Override via env to run production config, e.g.:
+#   Windows:  set DEBUG=False
+#   Linux:    DEBUG=False gunicorn --config gunicorn-cfg.py run:app
+DEBUG = os.getenv('DEBUG', 'True').strip().lower() not in ('0', 'false', 'no', 'off')
 
 # The configuration
 get_config_mode = 'Debug' if DEBUG else 'Production'

@@ -2129,6 +2129,28 @@ def _forecast_payload(ref):
     }
 
 
+def _forecast_has_files(ref):
+    """True if at least one source JSON exists for this reference date."""
+    dref = ref.strftime('%y%m%d')
+    for src in _FORECAST_SOURCES:
+        if os.path.isfile(os.path.join(B3_JSON_ROOT, src['category'], src['file'](dref))):
+            return True
+    return False
+
+
+def _forecast_latest_ref(max_back=10):
+    """Walk back from D-1 ANBIMA until a date with saved B3 JSONs is found.
+    Returns that date, or None if none exist within `max_back` business days.
+    Used by the dashboard chart, which should show the latest available data;
+    the Control Panel run instead requires D-1 strictly."""
+    ref = _prev_anbima_bizday(datetime.now())
+    for _ in range(max_back):
+        if _forecast_has_files(ref):
+            return ref
+        ref = _prev_anbima_bizday(ref)
+    return None
+
+
 def _decode_data_uri(d):
     """Decode a 'data:image/png;base64,...' URI into raw bytes (or None)."""
     if not d:
@@ -2204,15 +2226,27 @@ def api_cp_forecast_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
+    mode = (payload.get('mode') or '').strip().lower()
     date_str = (payload.get('date') or '').strip()
     try:
-        ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
-               else _prev_anbima_bizday(datetime.now()))
+        if date_str:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+        elif mode == 'latest':
+            # Dashboard: use the most recent date that actually has saved JSONs
+            # (D-1, else D-2, …). Never blocks just because D-1 isn't saved yet.
+            ref = _forecast_latest_ref()
+            if ref is None:
+                return jsonify({'success': False,
+                                'error': 'No B3 JSON files found in the last 10 business days. '
+                                         'Run “Save CETIP Files” first.'}), 400
+        else:
+            ref = _prev_anbima_bizday(datetime.now())   # strict D-1 (Control Panel run)
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
     data = _forecast_payload(ref)
     if not any(s['found'] for s in data['sources']):
+        # In strict mode this means the mandatory D-1 files are missing.
         return jsonify({'success': False,
                         'error': 'No B3 JSON files found for {}. Run “Save CETIP Files” first.'
                         .format(ref.strftime('%d/%m/%Y')),

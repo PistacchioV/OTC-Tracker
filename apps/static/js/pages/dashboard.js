@@ -214,8 +214,10 @@ async function loadForecastChart() {
     const ctx = document.getElementById('forecast-product-chart');
     if (!ctx) return;
     try {
+        // Dashboard shows the latest available data: D-1, else D-2, … (mode:'latest').
         const res = await fetch('/api/control-panel/settlement-forecast/data', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'latest' })
         });
         const data = await res.json();
         if (!data || data.success === false || !(data.products || []).length) {
@@ -224,6 +226,11 @@ async function loadForecastChart() {
             return;
         }
         _forecastData = data;
+        // Show which position date the chart is based on.
+        const asOf = document.getElementById('forecast-asof');
+        if (asOf && data.ref_date_fmt) {
+            asOf.textContent = `${t('dash-forecast-asof', 'as of')} ${data.ref_date_fmt}`;
+        }
         populateForecastFilter(data);
         buildForecastProductChart(data);
     } catch (err) {
