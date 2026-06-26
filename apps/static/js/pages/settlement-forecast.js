@@ -21,7 +21,8 @@
     'NDF Commodities': '#5e5ce6',   // indigo
     'Opt FXO':         '#5ac8fa',   // cyan
     'OPT Comm':        '#30d158',   // green
-    'OPT Equities':    '#bf5af2',   // purple
+    'OPT EDG':         '#bf5af2',   // purple
+    'OPT Equities':    '#bf5af2',   // purple (alias)
     'SWAP CEM':        '#ff9f0a',   // orange
     'SWAP EDG':        '#ff453a',   // red
     'SWAP CEMHYB':     '#8e8e93',   // gray
@@ -80,8 +81,21 @@
   function stackedBarOptions(data, rows, colorMap, title, subtitle) {
     var base = colorsFor(rows, colorMap);
     var gradTo = base.map(function (c) { return lighten(c, 0.30); });
+
+    // Per-day stacked totals → drive the y-axis cap and the "hide tiny label" rule.
+    var n = data.date_labels.length;
+    var dayTotals = [];
+    for (var i = 0; i < n; i++) {
+      var s = 0;
+      for (var j = 0; j < rows.length; j++) { s += (rows[j].values[i] || 0); }
+      dayTotals.push(s);
+    }
+    var maxTotal = dayTotals.length ? Math.max.apply(null, dayTotals) : 0;
+    var yMax = maxTotal <= 900 ? 900 : Math.ceil(maxTotal / 100) * 100;   // cap at 900, grow if needed
+    var labelMin = Math.max(maxTotal * 0.03, 1);   // hide segment labels smaller than ~3% of max
+
     return {
-      chart: Object.assign({ type: 'bar', stacked: true, height: 460, width: 920 }, BASE_CHART),
+      chart: Object.assign({ type: 'bar', stacked: true, height: 470, width: 940 }, BASE_CHART),
       series: toSeries(rows),
       colors: base,
       fill: {
@@ -92,13 +106,31 @@
           opacityFrom: 1, opacityTo: 1, stops: [0, 100]
         }
       },
-      plotOptions: { bar: { columnWidth: '52%', borderRadius: 6, borderRadiusApplication: 'end' } },
-      // Apple-md style value labels inside each stack segment
+      plotOptions: {
+        bar: {
+          columnWidth: '52%', borderRadius: 6, borderRadiusApplication: 'end',
+          // Stacked total on top of each bar — dark, always readable on white
+          dataLabels: {
+            total: {
+              enabled: true,
+              formatter: function (v) { return v > 0 ? v : ''; },
+              offsetY: -4,
+              style: { fontSize: '12px', fontWeight: 800, color: '#1d1d1f' }
+            }
+          }
+        }
+      },
+      // Apple-md value labels: rounded pill in the segment colour → readable even
+      // when the value overflows the bar height (fixes white-on-white).
       dataLabels: {
         enabled: true,
-        formatter: function (v) { return (v && v > 0) ? v : ''; },
+        formatter: function (v) { return (v && v >= labelMin) ? v : ''; },
         style: { fontSize: '11px', fontWeight: 700, colors: ['#ffffff'] },
-        dropShadow: { enabled: true, top: 0, left: 0, blur: 1.5, opacity: 0.35 }
+        background: {
+          enabled: true, borderRadius: 6, borderWidth: 0, padding: 5,
+          opacity: 0.95, foreColor: '#ffffff',
+          dropShadow: { enabled: true, top: 1, left: 0, blur: 2, opacity: 0.22 }
+        }
       },
       stroke: { show: true, width: 3, colors: ['#fff'] },
       grid: { borderColor: '#eceef2', strokeDashArray: 4, padding: { left: 8, right: 8 } },
@@ -107,9 +139,15 @@
         axisBorder: { show: false }, axisTicks: { show: false },
         labels: { style: { colors: '#54545a', fontSize: '12px', fontWeight: 600 } }
       },
-      yaxis: { labels: { style: { colors: '#54545a', fontSize: '12px' } }, forceNiceScale: true },
-      legend: { position: 'bottom', horizontalAlign: 'center', fontSize: '13px',
-                fontWeight: 600, markers: { radius: 12 }, itemMargin: { horizontal: 10, vertical: 4 } },
+      yaxis: {
+        min: 0, max: yMax, tickAmount: 6, forceNiceScale: false,
+        labels: { style: { colors: '#54545a', fontSize: '12px' } }
+      },
+      legend: {
+        position: 'bottom', horizontalAlign: 'center', fontSize: '13px', fontWeight: 600,
+        markers: { shape: 'circle', size: 7, radius: 12 },
+        itemMargin: { horizontal: 10, vertical: 4 }
+      },
       title: { text: title, align: 'left',
                style: { fontSize: '19px', fontWeight: 800, color: '#1d1d1f' } },
       subtitle: { text: subtitle, align: 'left',

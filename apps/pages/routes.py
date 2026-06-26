@@ -1412,13 +1412,19 @@ _CETIP_RULES = [
      'match': lambda n: 'dposicao-swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position'}},
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position',
+              # de-dup: Conta Parte (coluna D = "Participante")
+              'filter': {'column': ['participante'], 'index': 3,
+                         'allowed': ['73760009', '04880006']}}},
     {'label': 'Option Position (OPC DPOSICAO)',
      'match': lambda n: 'opc_' in n and '_dposicao.txt' in n,
      'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
      'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
      'extra_dest': CETIP_OPTIONS_SHARE,
-     'json': {'category': 'Option', 'has_header': True}},
+     'json': {'category': 'Option', 'has_header': True,
+              # de-dup: keep only our side (Parte/conta = coluna E)
+              'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
+                         'allowed': ['73760009']}}},
     {'label': 'Option Movement (OPC DMOVIMENTO)',
      'match': lambda n: ('opc_' in n and '_dmovimento.txt' in n
                          and '_15h00.txt' not in n and '_18h30.txt' not in n),
@@ -1436,12 +1442,19 @@ _CETIP_RULES = [
      'match': lambda n: '_dfluxo_swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r),
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo'}},
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo',
+              # de-dup: Conta Parte (coluna C = "Código Conta Cetip Parte")
+              'filter': {'column': ['código conta cetip parte', 'codigo conta cetip parte',
+                                    'conta cetip parte'], 'index': 2,
+                         'allowed': ['73760009', '04880006']}}},
     {'label': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
      'match': lambda n: '_dagendapremios.txt' in n,
      'date_start': 8,                  # CETIP21_YYMMDD_DAGENDAPREMIOS.TXT → date at index 8
      'dest_name': lambda r: '73760_{}_DAGENDAPREMIOS.CETIP21'.format(r),
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio'}},
+     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio',
+              # de-dup: Conta da Parte (coluna D = "Parte")
+              'filter': {'column': ['parte'], 'index': 3,
+                         'allowed': ['73760009', '04880006']}}},
     {'label': 'Operations (DOPERACOES)',
      'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
@@ -1459,7 +1472,10 @@ _CETIP_RULES = [
      'date_start': 4,
      'dest_name': lambda r: '73760_{}_DPOSICAO-TER.TER'.format(r),
      'extra_dest': CETIP_NDF_SHARE,
-     'json': {'category': 'NDF', 'has_header': True}},
+     'json': {'category': 'NDF', 'has_header': True,
+              # de-dup: keep only our side (Código da Parte = coluna B)
+              'filter': {'column': ['código da parte', 'codigo da parte'], 'index': 1,
+                         'allowed': ['73760009', '04880006']}}},
     {'label': 'SIC Contract Position (DPOSCONTRATOSIC)',
      'match': lambda n: '_dposcontratosic.txt' in n,
      'date_start': 4,
@@ -1583,6 +1599,33 @@ def _b3_export_json(src_path, json_cfg, dest_name):
             else:                              # no stored header → positional names
                 row = {'Field_{}'.format(i + 1): v.strip() for i, v in enumerate(fields)}
             rows.append(row)
+
+        # Optional de-dup filter: keep only rows whose <column> value is allowed.
+        filt = json_cfg.get('filter')
+        if filt and rows:
+            keys = list(rows[0].keys())
+            col_key = None
+            for tok in filt.get('column', []):
+                for k in keys:
+                    if tok in k.lower():
+                        col_key = k
+                        break
+                if col_key:
+                    break
+            if col_key is None and 'index' in filt:
+                ix = filt['index']
+                col_key = keys[ix] if ix < len(keys) else None
+            def _digits(s):
+                return ''.join(ch for ch in str(s) if ch.isdigit())
+            allowed = set(_digits(a) for a in filt.get('allowed', []))
+            if col_key and allowed:
+                before = len(rows)
+                rows = [r for r in rows if _digits(r.get(col_key, '')) in allowed]
+                log.info("[b3-json] %s filter on %r kept %d/%d rows",
+                         os.path.basename(dest_name), col_key, len(rows), before)
+            elif not col_key:
+                log.warning("[b3-json] %s filter column not found (tokens=%s, index=%s)",
+                            os.path.basename(dest_name), filt.get('column'), filt.get('index'))
 
         out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'])
         os.makedirs(out_dir, exist_ok=True)
@@ -1820,7 +1863,7 @@ _FCST_ENTITY_MAP = {
 }
 _FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
 _FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Opt FXO', 'OPT Comm',
-                       'OPT Equities', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+                       'OPT EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
 
 # One entry per JSON source. Field resolution is by NAME token (case-insensitive
 # "contains", first match wins) so it survives small header differences.
@@ -1837,8 +1880,8 @@ _FORECAST_SOURCES = [
      'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
-     'date': ['vencimento'], 'entity': ['titular', 'conta', 'parte'],
-     'product': ('sisbacen', ['sisbacen', 'moeda base', 'classe', 'mercado'])},
+     'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'conta'],
+     'product': ('optclass', ['classe do ativo', 'ativo subjacente', 'classe'])},
     {'key': 'swap_pos', 'label': 'SWAP Position', 'category': 'Swap',
      'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
      'date': ['data vencimento'], 'entity': ['contraparte'],
@@ -1888,15 +1931,14 @@ def _fcst_map_entity(raw):
 
 def _fcst_option_product(code):
     """Map an option's Código SISBACEN da Moeda Base → product (Alteryx Replace).
-    220 → FX (FXO), COM → Commodities, INI → Equities."""
+    220 → FX (FXO), COM → Commodities, INI → Equities. Falls back to FXO so an
+    option is never dropped just because the classifier column couldn't be read."""
     c = (code or '').upper()
-    if '220' in c or 'CAMB' in c or 'MOEDA' in c or 'FX' in c:
-        return 'Opt FXO'
     if 'COM' in c or 'MERCAD' in c:
         return 'OPT Comm'
     if 'INI' in c or 'EQU' in c or 'ACAO' in c or 'AÇÃO' in c:
         return 'OPT Equities'
-    return None
+    return 'Opt FXO'   # 220 / câmbio / unmapped → FX options (default, never None)
 
 
 def _fcst_ndf_product(asset_class):
@@ -1906,6 +1948,17 @@ def _fcst_ndf_product(asset_class):
     if 'COMMOD' in c or 'MERCAD' in c:
         return 'NDF Commodities'
     return 'NDF Moeda'
+
+
+def _fcst_opt_class_product(asset_class):
+    """Option product from the OPC "Classe do Ativo Subjacente" (coluna N):
+    TAXA DE CAMBIO → FXO, Commodities → Comm, everything else → EDG."""
+    c = (asset_class or '').upper()
+    if 'CAMB' in c or 'MOEDA' in c:
+        return 'Opt FXO'
+    if 'COMMOD' in c or 'MERCAD' in c:
+        return 'OPT Comm'
+    return 'OPT EDG'
 
 
 def _fcst_lob(identifier):
@@ -1976,7 +2029,7 @@ def _forecast_collect(dref, spine):
         ent_key = _fcst_resolve_key(keys, src['entity'])
         pmode, pspec = src['product']
         prod_key = (_fcst_resolve_key(keys, pspec)
-                    if pmode in ('sisbacen', 'lob', 'ndfclass') else None)
+                    if pmode in ('sisbacen', 'lob', 'ndfclass', 'optclass') else None)
 
         counted = 0
         for row in rows:
@@ -1990,6 +2043,8 @@ def _forecast_collect(dref, spine):
                 product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'ndfclass':
                 product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
+            elif pmode == 'optclass':
+                product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
             else:
                 product = _fcst_option_product(row.get(prod_key, '') if prod_key else '')
             if product:
@@ -2001,7 +2056,11 @@ def _forecast_collect(dref, spine):
         st['counted'] = counted
         st['date_field'] = date_key
         st['entity_field'] = ent_key
+        st['product_field'] = prod_key
+        st['columns'] = keys
         status.append(st)
+        log.info("[forecast] %s: %d rows, %d counted | date=%r entity=%r product=%r",
+                 src['label'], len(rows), counted, date_key, ent_key, prod_key)
     return by_product, by_entity, status
 
 
