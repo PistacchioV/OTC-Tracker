@@ -265,60 +265,26 @@
         </div><!-- end col -->
     </div><!-- end row -->
 
-    <!-- Recent Deals table -->
+    <!-- Settlement Forecast (by product) — próximos 14 dias úteis -->
     <div class="row mt-3">
         <div class="col-12">
-            <div class="card dash-fade-in dash-fade-in-4" data-table="" data-table-rows-per-page="7">
-                <div class="card-header justify-content-between align-items-center border-dashed">
-                    <h4 class="card-title mb-0" data-lang="dash-recent-title">Recent Deals</h4>
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dash-product-filter-btn" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="ti ti-filter me-1"></i><span id="dash-product-filter-label" data-lang="dash-filter-all">Todos</span>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" id="dash-product-filter-menu" aria-labelledby="dash-product-filter-btn">
-                                <li><a class="dropdown-item active" href="#" data-product="all" data-lang="dash-filter-all">Todos</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                            </ul>
-                        </div>
-                        <a class="btn btn-sm btn-soft-secondary" href="/new_deals-ndf-commodities">
-                            <i class="ti ti-plus me-1"></i> <span data-lang="dash-new-deal">New Deal</span>
-                        </a>
+            <div class="card dash-fade-in dash-fade-in-4">
+                <div class="card-header justify-content-between align-items-center border-dashed d-flex">
+                    <div>
+                        <h4 class="card-title mb-0" data-lang="dash-forecast-title">Settlement Forecast</h4>
+                        <p class="text-muted fs-xs mb-0 mt-1" data-lang="dash-forecast-sub">Próximos 14 dias úteis, por produto</p>
                     </div>
+                    <a class="link-reset text-decoration-underline fw-semibold link-offset-3" href="/control-panel">
+                        <span data-lang="dash-view-all">View All</span> <i class="ti ti-arrow-right"></i>
+                    </a>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-centered table-custom table-sm table-nowrap table-hover mb-0" id="dash-recent-table">
-                            <thead>
-                                <tr>
-                                    <th data-lang="dash-col-deal">Deal #</th>
-                                    <th data-lang="dash-col-product">Produto</th>
-                                    <th data-lang="dash-col-client">Cliente</th>
-                                    <th data-lang="dash-col-date">Trade Date</th>
-                                    <th data-lang="dash-col-status">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="dash-recent-tbody">
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
-                                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                                        Carregando...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div><!-- end table-responsive-->
-                </div><!-- end card-body-->
-                <div class="card-footer border-0">
-                    <div class="align-items-center justify-content-between row text-center text-sm-start">
-                        <div class="col-sm">
-                            <div data-table-pagination-info="deals"></div>
+                <div class="card-body">
+                    <div dir="ltr">
+                        <div class="mt-1" style="height: 340px;">
+                            <canvas id="forecast-product-chart"></canvas>
                         </div>
-                        <div class="col-sm-auto mt-3 mt-sm-0">
-                            <div data-table-pagination=""></div>
-                        </div><!-- end col-->
-                    </div><!-- end row-->
-                </div><!-- end card-footer-->
+                    </div>
+                </div><!-- end card-body-->
             </div><!-- end card-->
         </div><!-- end col-->
     </div><!-- end row-->

@@ -1,176 +1,233 @@
 /* ============================================================================
- *  Settlement Forecast — dashboard charts (ApexCharts) + Run flow
+ *  Settlement Forecast — dashboard charts (Chart.js, "Deal Flow Analytics" style)
  * ----------------------------------------------------------------------------
  *  Triggered by the "Run" button on the Settlement Forecast card (Control Panel).
  *  Flow:
  *    1. POST the reference date → /settlement-forecast/data  (compute forecast)
- *    2. render the 3 dashboard charts OFF-SCREEN (stacked bar by product, by
- *       entity, donut product-mix)
- *    3. export each chart to a PNG data URI (ApexCharts.dataURI)
+ *    2. render the 2 stacked-bar charts OFF-SCREEN on <canvas> (same Chart.js
+ *       look/colours/format as the dashboard's Deal Flow Analytics, but DAILY:
+ *       the next 14 business days from today)
+ *    3. export each canvas to a PNG data URI (canvas.toDataURL)
  *    4. POST {date, images} → /settlement-forecast/email  (server embeds the
- *       PNGs + tables and e-mails the report to OTC Ops)
- *  This keeps the *real* dashboard chart in the e-mail with no head-less browser.
+ *       PNGs and e-mails the report to OTC Ops)
+ *
+ *  Value labels are drawn ALWAYS-VISIBLE (tooltip-style badge with the bar total
+ *  + per-segment values) by a small custom plugin, so they appear in the e-mail
+ *  image instead of only on hover.
  * ========================================================================== */
 (function () {
   'use strict';
 
-  // ── Cohesive product / entity palettes (match the dashboard look) ──────────
-  // Apple system-color palette (cohesive, modern) — base colour per product.
-  var PRODUCT_COLORS = {
-    'NDF Moeda':       '#0a84ff',   // blue
-    'NDF Commodities': '#5e5ce6',   // indigo
-    'Opt FXO':         '#5ac8fa',   // cyan
-    'OPT Comm':        '#30d158',   // green
-    'OPT EDG':         '#bf5af2',   // purple
-    'OPT Equities':    '#bf5af2',   // purple (alias)
-    'SWAP CEM':        '#ff9f0a',   // orange
-    'SWAP EDG':        '#ff453a',   // red
-    'SWAP CEMHYB':     '#8e8e93',   // gray
-    'SWAP':            '#ff9f0a'
-  };
-  var ENTITY_COLORS = {
-    'LAWTON':  '#0a84ff',
-    'MGT':     '#30d158',
-    'ATACAMA': '#ff9f0a'
-  };
-  var FALLBACK = ['#0a84ff', '#5e5ce6', '#5ac8fa', '#30d158', '#bf5af2', '#ff9f0a', '#ff453a', '#8e8e93'];
+  var bodyFont = getComputedStyle(document.body).fontFamily.trim() || 'sans-serif';
 
-  // Lighten a hex colour toward white (amt 0..1) — used for the bar gradient top.
-  function lighten(hex, amt) {
-    hex = (hex || '#888888').replace('#', '');
-    var r = parseInt(hex.substr(0, 2), 16),
-        g = parseInt(hex.substr(2, 2), 16),
-        b = parseInt(hex.substr(4, 2), 16);
-    r = Math.round(r + (255 - r) * amt);
-    g = Math.round(g + (255 - g) * amt);
-    b = Math.round(b + (255 - b) * amt);
-    return '#' + [r, g, b].map(function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  function cssVar(name, fallback) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue('--ins-' + name).trim();
+    return v || fallback;
+  }
+  function hexToRgba(hex, a) {
+    hex = (hex || '').trim();
+    if (hex.indexOf('rgb') === 0) return hex;
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(h, 16);
+    if (isNaN(n)) return 'rgba(79,70,229,' + a + ')';
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  // Vertical gradient (bottom → top) — identical approach to the dashboard.
+  function vGradient(hex, topAlpha, bottomAlpha) {
+    return function (context) {
+      var ch = context.chart, area = ch.chartArea;
+      if (!area) return hexToRgba(hex, topAlpha);
+      var g = ch.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+      g.addColorStop(0, hexToRgba(hex, bottomAlpha));
+      g.addColorStop(1, hexToRgba(hex, topAlpha));
+      return g;
+    };
   }
 
-  // Minimal i18n (Swal copy) — reads the app language from localStorage.
+  // Base colour per product / entity (theme tokens first, like the dashboard).
+  function productColors() {
+    return {
+      'NDF Moeda':       cssVar('chart-primary', '#4f46e5'),
+      'NDF Commodities': cssVar('chart-secondary', '#818cf8'),
+      'Opt FXO':         '#10b981',
+      'OPT Comm':        '#0ea5e9',
+      'OPT EDG':         '#a855f7',
+      'SWAP CEM':        '#f59e0b',
+      'SWAP EDG':        '#f43f5e',
+      'SWAP CEMHYB':     '#94a3b8',
+      'SWAP':            '#f59e0b'
+    };
+  }
+  function entityColors() {
+    return { 'LAWTON': cssVar('chart-primary', '#4f46e5'), 'MGT': '#10b981', 'ATACAMA': '#f59e0b' };
+  }
+  var FALLBACK = ['#4f46e5', '#0ea5e9', '#10b981', '#a855f7', '#f59e0b', '#f43f5e', '#14b8a6', '#94a3b8'];
+
+  // Minimal i18n (Swal copy).
   var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0, 2);
   var TXT = {
-    en: { running: 'Running…', noData: 'No data', sending: 'Sending e-mail…',
+    en: { running: 'Running…', sending: 'Sending e-mail…', noData: 'No data',
           okTitle: 'Forecast sent', okMsg: 'Settlement Forecast e-mailed to OTC Ops.',
           errTitle: 'Forecast failed', net: 'Network error.' },
-    br: { running: 'Executando…', noData: 'Sem dados', sending: 'Enviando e-mail…',
+    br: { running: 'Executando…', sending: 'Enviando e-mail…', noData: 'Sem dados',
           okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por e-mail para a OTC Ops.',
           errTitle: 'Falha no forecast', net: 'Erro de rede.' },
-    es: { running: 'Ejecutando…', noData: 'Sin datos', sending: 'Enviando correo…',
+    es: { running: 'Ejecutando…', sending: 'Enviando correo…', noData: 'Sin datos',
           okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por correo a OTC Ops.',
           errTitle: 'Error en el forecast', net: 'Error de red.' }
   };
   function tr(k) { return (TXT[LANG] || TXT.en)[k] || TXT.en[k] || k; }
 
-  function colorsFor(rows, map) {
-    return rows.map(function (r, i) { return map[r.label] || FALLBACK[i % FALLBACK.length]; });
-  }
-  function toSeries(rows) {
-    return rows.map(function (r) { return { name: r.label, data: r.values }; });
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
   }
 
-  // ── ApexCharts option builders (dashboard style) ───────────────────────────
-  var BASE_CHART = {
-    fontFamily: 'inherit',
-    background: '#ffffff',
-    toolbar: { show: false },
-    animations: { enabled: false },   // off → dataURI captures the final frame
-    parentHeightOffset: 0
+  // Paint a white background so the exported PNG isn't transparent (→ black) in e-mail.
+  var whiteBg = {
+    id: 'whiteBg',
+    beforeDraw: function (c) {
+      var ctx = c.ctx;
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.restore();
+    }
   };
 
-  function stackedBarOptions(data, rows, colorMap, title, subtitle) {
-    var base = colorsFor(rows, colorMap);
-    var gradTo = base.map(function (c) { return lighten(c, 0.30); });
+  // Always-visible value labels: per-segment value (white, inside the bar) +
+  // a tooltip-style rounded badge with the stack TOTAL on top of each bar.
+  var valueLabels = {
+    id: 'valueLabels',
+    afterDatasetsDraw: function (chart) {
+      var ctx = chart.ctx;
+      var nLabels = chart.data.labels.length;
 
-    // Per-day stacked totals → drive the y-axis cap and the "hide tiny label" rule.
-    var n = data.date_labels.length;
-    var dayTotals = [];
-    for (var i = 0; i < n; i++) {
-      var s = 0;
-      for (var j = 0; j < rows.length; j++) { s += (rows[j].values[i] || 0); }
-      dayTotals.push(s);
-    }
-    var maxTotal = dayTotals.length ? Math.max.apply(null, dayTotals) : 0;
-    var yMax = maxTotal <= 900 ? 900 : Math.ceil(maxTotal / 100) * 100;   // cap at 900, grow if needed
-    var labelMin = Math.max(maxTotal * 0.03, 1);   // hide segment labels smaller than ~3% of max
+      // per-segment values
+      chart.data.datasets.forEach(function (ds, di) {
+        var meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach(function (bar, i) {
+          var v = ds.data[i];
+          if (!v) return;
+          var props = bar.getProps(['x', 'y', 'base'], true);
+          var h = Math.abs(props.base - props.y);
+          if (h < 15) return;                       // segment too short for a label
+          ctx.save();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 11px ' + bodyFont;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(v), props.x, (props.y + props.base) / 2);
+          ctx.restore();
+        });
+      });
 
-    return {
-      chart: Object.assign({ type: 'bar', stacked: true, height: 470, width: 940 }, BASE_CHART),
-      series: toSeries(rows),
-      colors: base,
-      fill: {
-        type: 'gradient',
-        gradient: {
-          shade: 'light', type: 'vertical', shadeIntensity: 0.25,
-          gradientToColors: gradTo, inverseColors: false,
-          opacityFrom: 1, opacityTo: 1, stops: [0, 100]
-        }
-      },
-      plotOptions: {
-        bar: {
-          columnWidth: '52%', borderRadius: 6, borderRadiusApplication: 'end',
-          // Stacked total on top of each bar — dark, always readable on white
-          dataLabels: {
-            total: {
-              enabled: true,
-              formatter: function (v) { return v > 0 ? v : ''; },
-              offsetY: -4,
-              style: { fontSize: '12px', fontWeight: 800, color: '#1d1d1f' }
-            }
+      // tooltip-style total badge on top of each bar
+      for (var i = 0; i < nLabels; i++) {
+        var total = 0, topY = Infinity, x = null;
+        chart.data.datasets.forEach(function (ds, di) {
+          var meta = chart.getDatasetMeta(di);
+          if (meta.hidden) return;
+          var v = ds.data[i] || 0;
+          total += v;
+          if (v > 0) {
+            var bar = meta.data[i];
+            var p = bar.getProps(['x', 'y'], true);
+            if (p.y < topY) topY = p.y;
+            x = p.x;
           }
+        });
+        if (!total || x === null) continue;
+
+        var text = String(total);
+        ctx.save();
+        ctx.font = '800 12px ' + bodyFont;
+        var tw = ctx.measureText(text).width;
+        var padX = 7, bh = 19, bw = tw + padX * 2;
+        var bx = x - bw / 2, by = topY - bh - 7;
+        if (by < 2) by = 2;
+        roundRect(ctx, bx, by, bw, bh, 9);
+        ctx.fillStyle = 'rgba(255,255,255,0.97)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.lineWidth = 1;
+        ctx.shadowColor = 'rgba(15,23,42,0.12)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 2;
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.stroke();
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, by + bh / 2);
+        ctx.restore();
+      }
+    }
+  };
+
+  function stackedConfig(data, rows, colorMap, title, subtitle) {
+    var datasets = rows.map(function (r, idx) {
+      var base = colorMap[r.label] || FALLBACK[idx % FALLBACK.length];
+      return {
+        type: 'bar', label: r.label, data: r.values,
+        backgroundColor: vGradient(base, 1, 0.45),
+        borderColor: 'transparent', stack: 'fc',
+        maxBarThickness: 30, borderRadius: 6
+      };
+    });
+    return {
+      type: 'bar',
+      data: { labels: data.date_labels, datasets: datasets },
+      options: {
+        responsive: false, maintainAspectRatio: false, animation: false,
+        layout: { padding: { top: 26, right: 8, left: 4, bottom: 2 } },
+        plugins: {
+          legend: { display: true, position: 'top',
+                    labels: { font: { family: bodyFont }, color: '#54545a',
+                              usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 14 } },
+          tooltip: { enabled: false },
+          title: { display: true, text: title, align: 'start',
+                   color: '#1d1d1f', font: { family: bodyFont, size: 16, weight: '700' },
+                   padding: { bottom: 2 } },
+          subtitle: { display: true, text: subtitle, align: 'start',
+                      color: '#6e6e73', font: { family: bodyFont, size: 12 },
+                      padding: { bottom: 12 } }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, border: { display: false },
+               ticks: { font: { family: bodyFont }, color: '#54545a' } },
+          y: { stacked: true, beginAtZero: true,
+               grid: { color: '#eceef2', lineWidth: 1 },
+               border: { display: false, dash: [5, 5] },
+               ticks: { precision: 0, font: { family: bodyFont }, color: '#54545a' } }
         }
       },
-      // Apple-md value labels: rounded pill in the segment colour → readable even
-      // when the value overflows the bar height (fixes white-on-white).
-      dataLabels: {
-        enabled: true,
-        formatter: function (v) { return (v && v >= labelMin) ? v : ''; },
-        style: { fontSize: '11px', fontWeight: 700, colors: ['#ffffff'] },
-        background: {
-          enabled: true, borderRadius: 6, borderWidth: 0, padding: 5,
-          opacity: 0.95, foreColor: '#ffffff',
-          dropShadow: { enabled: true, top: 1, left: 0, blur: 2, opacity: 0.22 }
-        }
-      },
-      stroke: { show: true, width: 3, colors: ['#fff'] },
-      grid: { borderColor: '#eceef2', strokeDashArray: 4, padding: { left: 8, right: 8 } },
-      xaxis: {
-        categories: data.date_labels,
-        axisBorder: { show: false }, axisTicks: { show: false },
-        labels: { style: { colors: '#54545a', fontSize: '12px', fontWeight: 600 } }
-      },
-      yaxis: {
-        min: 0, max: yMax, tickAmount: 6, forceNiceScale: false,
-        labels: { style: { colors: '#54545a', fontSize: '12px' } }
-      },
-      legend: {
-        position: 'bottom', horizontalAlign: 'center', fontSize: '13px', fontWeight: 600,
-        markers: { shape: 'circle', size: 7, radius: 12 },
-        itemMargin: { horizontal: 10, vertical: 4 }
-      },
-      title: { text: title, align: 'left',
-               style: { fontSize: '19px', fontWeight: 800, color: '#1d1d1f' } },
-      subtitle: { text: subtitle, align: 'left',
-                  style: { fontSize: '13px', color: '#6e6e73' }, offsetY: 28 }
+      plugins: [whiteBg, valueLabels]
     };
   }
 
-  // Render a chart into the off-screen stage and export it to a PNG data URI.
-  function renderAndExport(elId, options) {
+  // Render a chart on the off-screen canvas, then export it to a PNG data URI.
+  function renderAndExport(canvasId, config) {
     return new Promise(function (resolve) {
-      var el = document.getElementById(elId);
-      if (!el || typeof ApexCharts === 'undefined') { resolve(null); return; }
-      el.innerHTML = '';
-      var chart = new ApexCharts(el, options);
-      chart.render().then(function () {
-        // small delay lets fonts/labels settle before the snapshot
-        setTimeout(function () {
-          chart.dataURI({ scale: 2 }).then(function (out) {
-            resolve(out && out.imgURI ? out.imgURI : null);
-            try { chart.destroy(); } catch (e) {}
-          }).catch(function () { resolve(null); try { chart.destroy(); } catch (e) {} });
-        }, 120);
-      }).catch(function () { resolve(null); });
+      var cv = document.getElementById(canvasId);
+      if (!cv || typeof Chart === 'undefined') { resolve(null); return; }
+      var chart;
+      try { chart = new Chart(cv, config); } catch (e) { resolve(null); return; }
+      // animation:false → drawn synchronously; small delay lets gradients settle.
+      setTimeout(function () {
+        var uri = null;
+        try { uri = cv.toDataURL('image/png', 1.0); } catch (e) {}
+        try { chart.destroy(); } catch (e) {}
+        resolve(uri);
+      }, 80);
     });
   }
 
@@ -181,7 +238,6 @@
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : di.value;
   }
 
-  // ── Run flow ───────────────────────────────────────────────────────────────
   function runForecast(btn) {
     var label = btn.querySelector('span');
     var icon = btn.querySelector('i');
@@ -203,21 +259,18 @@
         }
         var data = res.body;
         if (label) label.textContent = tr('sending');
-        // Render the 2 charts off-screen, then export to PNG.
         return Promise.all([
           renderAndExport('fcstStageProduct',
-            stackedBarOptions(data, data.products, PRODUCT_COLORS,
-              'Settlements by Product', 'Upcoming settlements per business day, by product')),
+            stackedConfig(data, data.products, productColors(),
+              'Settlements by Product', 'Next 14 business days, by product')),
           renderAndExport('fcstStageEntity',
-            stackedBarOptions(data, data.entities, ENTITY_COLORS,
-              'Settlements by Entity', 'Upcoming settlements per business day, by entity'))
+            stackedConfig(data, data.entities, entityColors(),
+              'Settlements by Entity', 'Next 14 business days, by entity'))
         ]).then(function (imgs) {
           return fetch('/api/control-panel/settlement-forecast/email', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              date: data.ref_date,
-              images: { by_product: imgs[0], by_entity: imgs[1] }
-            })
+            body: JSON.stringify({ date: data.ref_date,
+                                   images: { by_product: imgs[0], by_entity: imgs[1] } })
           }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
         });
       })

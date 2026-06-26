@@ -740,6 +740,8 @@
   "dash-distribution-title": "Distribución de Negocios",
   "dash-distribution-sub": "Distribución por tipo de producto",
   "dash-chart-title": "Análisis de Flujo de Negocios",
+  "dash-forecast-title": "Settlement Forecast",
+  "dash-forecast-sub": "Próximos 14 días hábiles, por producto",
   "dash-view-all": "Ver Todos",
   "dash-recent-title": "Negocios Recientes",
   "dash-new-deal": "Nuevo Negocio",

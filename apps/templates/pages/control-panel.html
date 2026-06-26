@@ -191,89 +191,97 @@
         Central de rotinas operacionais
     </p>
 
-    <!-- ═══ DAILY SETTLEMENTS ═════════════════════════════════════ -->
-    <div class="row mb-3">
-        <div class="col-12 cp-reveal">
-            <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
-            <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
-            <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
-                Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
-            </p>
-        </div>
-    </div>
+    <!-- ═══ ROTINAS (2 colunas: File-Saving | Forecasts & Reports) ═══ -->
+    <div class="row g-3 g-xl-4 mb-4">
 
-    <div class="row g-3 mb-4" id="cp-routines-ds">
-
-        <!-- Rotina 1: Salvar Arquivos CETIP (fluxo Alteryx → Python) -->
-        <div class="col-12 col-md-6 col-xl-4 cp-reveal">
-            <div class="cp-card">
-                <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
-                <h3 class="cp-card__title" data-lang="cp-r-cetip-title">Save CETIP Files</h3>
-                <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
-                    Reads the raw CETIP files from the B3 daily download folder, renames them to the
-                    standard convention and saves them into the settlement folders used by the KPI.
+        <!-- ── Coluna esquerda: Daily Settlements / File-Saving ── -->
+        <div class="col-12 col-lg-6 d-flex flex-column">
+            <div class="cp-reveal mb-3">
+                <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
+                <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
+                <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
+                    Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
                 </p>
-                <div class="cp-field">
-                    <label data-lang="cp-ref-date">Reference date</label>
-                    <div class="cp-datefield" id="cpDateWrap">
-                        <input type="text" id="cp-cetip-date" data-input readonly
-                               class="form-control form-control-sm" placeholder="dd/mm/aaaa">
-                        <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+            </div>
+            <div class="cp-reveal flex-grow-1">
+                <div class="cp-card">
+                    <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-cetip-title">Save CETIP Files</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
+                        Reads the raw CETIP files from the B3 daily download folder, renames them to the
+                        standard convention and saves them into the settlement folders used by the KPI.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpDateWrap">
+                            <input type="text" id="cp-cetip-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
                     </div>
-                </div>
-                <div class="cp-card__foot">
-                    <span class="cp-card__meta">
-                        <i class="ti ti-folder"></i><span data-lang="cp-cetip-meta">B3 → Settlement folders</span>
-                    </span>
-                    <button type="button" class="cp-run-btn"
-                            data-endpoint="/api/control-panel/cetip-settlement"
-                            data-date-input="cp-cetip-date">
-                        <i class="ti ti-player-play"></i>
-                        <span data-lang="cp-run">Run</span>
-                    </button>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-folder"></i><span data-lang="cp-cetip-meta">B3 → Settlement folders</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-endpoint="/api/control-panel/cetip-settlement"
+                                data-date-input="cp-cetip-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Rotina 2: Settlement Forecast (fluxo Alteryx → Python) -->
-        <div class="col-12 col-md-6 col-xl-4 cp-reveal">
-            <div class="cp-card">
-                <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
-                <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
-                <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
-                    Reads the CETIP position files, projects the upcoming settlements by business
-                    day and entity, and e-mails the consolidated forecast report to OTC Ops.
+        <!-- ── Coluna direita: Forecasts & Reports / Settlement Forecast ── -->
+        <div class="col-12 col-lg-6 d-flex flex-column">
+            <div class="cp-reveal mb-3">
+                <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
+                <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
+                <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
+                    Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
                 </p>
-                <div class="cp-field">
-                    <label data-lang="cp-ref-date">Reference date</label>
-                    <div class="cp-datefield" id="cpFcstDateWrap">
-                        <input type="text" id="cp-fcst-date" data-input readonly
-                               class="form-control form-control-sm" placeholder="dd/mm/aaaa">
-                        <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+            </div>
+            <div class="cp-reveal flex-grow-1">
+                <div class="cp-card">
+                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
+                        Reads the CETIP position files, projects the upcoming settlements by business
+                        day and entity, and e-mails the consolidated forecast report to OTC Ops.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpFcstDateWrap">
+                            <input type="text" id="cp-fcst-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
                     </div>
-                </div>
-                <div class="cp-card__foot">
-                    <span class="cp-card__meta">
-                        <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
-                    </span>
-                    <button type="button" class="cp-run-btn"
-                            data-forecast-run
-                            data-date-input="cp-fcst-date">
-                        <i class="ti ti-player-play"></i>
-                        <span data-lang="cp-run">Run</span>
-                    </button>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-forecast-run
+                                data-date-input="cp-fcst-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
     </div>
 
-    <!-- Off-screen stage: the Settlement Forecast ApexCharts are rendered here
-         and exported to PNG for the e-mail, without showing on the page. -->
+    <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
+         here and exported to PNG for the e-mail, without showing on the page. -->
     <div aria-hidden="true"
-         style="position:absolute;left:-100000px;top:0;width:900px;pointer-events:none;opacity:0;">
-        <div id="fcstStageProduct"></div>
-        <div id="fcstStageEntity"></div>
+         style="position:absolute;left:-100000px;top:0;pointer-events:none;opacity:0;">
+        <canvas id="fcstStageProduct" width="960" height="430"></canvas>
+        <canvas id="fcstStageEntity" width="960" height="430"></canvas>
     </div>
 
 </div>
@@ -281,7 +289,7 @@
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/plugins/apexcharts/apexcharts.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/settlement-forecast.js"></script>
 <script>
 // ── Translation cache & helper ───────────────────────────────────────────────

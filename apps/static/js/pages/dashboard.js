@@ -182,6 +182,73 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
     });
 }
 
+// ─── Settlement Forecast (by product) — next 14 business days ─────────────────
+let forecastChart = null;
+let _forecastData = null;
+
+const FC_PRODUCT_COLORS = {
+    'NDF Moeda':       () => ins('chart-primary'),
+    'NDF Commodities': () => ins('chart-secondary'),
+    'Opt FXO':         () => '#10b981',
+    'OPT Comm':        () => '#0ea5e9',
+    'OPT EDG':         () => '#a855f7',
+    'SWAP CEM':        () => '#f59e0b',
+    'SWAP EDG':        () => '#f43f5e',
+    'SWAP CEMHYB':     () => '#94a3b8',
+};
+const FC_FALLBACK = ['#4f46e5', '#0ea5e9', '#10b981', '#a855f7', '#f59e0b', '#f43f5e', '#14b8a6', '#94a3b8'];
+
+async function loadForecastChart() {
+    const ctx = document.getElementById('forecast-product-chart');
+    if (!ctx) return;
+    try {
+        const res = await fetch('/api/control-panel/settlement-forecast/data', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+        });
+        const data = await res.json();
+        if (!data || data.success === false || !(data.products || []).length) {
+            const body = ctx.closest('.card-body');
+            if (body) body.innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals', 'Sem dados')}</p>`;
+            return;
+        }
+        _forecastData = data;
+        buildForecastProductChart(data);
+    } catch (err) {
+        console.error('[Dashboard] forecast load failed:', err);
+    }
+}
+
+function buildForecastProductChart(data) {
+    const ctx = document.getElementById('forecast-product-chart');
+    if (!ctx) return;
+    if (forecastChart) forecastChart.destroy();
+    let fb = 0;
+    const datasets = (data.products || []).map(p => {
+        const c = FC_PRODUCT_COLORS[p.label] ? FC_PRODUCT_COLORS[p.label]() : FC_FALLBACK[fb++ % FC_FALLBACK.length];
+        return {
+            type: 'bar', label: p.label, data: p.values,
+            backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
+            stack: 'fc', maxBarThickness: 24, borderRadius: 6
+        };
+    });
+    forecastChart = new Chart(ctx, {
+        data: { labels: data.date_labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            layout: { padding: { top: -10 } },
+            animation: { duration: 700, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
+                tooltip: premiumTooltip({ mode: 'index', intersect: false })
+            },
+            scales: {
+                x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
+                y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
+            }
+        }
+    });
+}
+
 // Per-product colors — aligned with the Deal Distribution / Flow charts
 function _productColor(p) {
     switch (p) {
@@ -405,6 +472,7 @@ function rerenderCharts() {
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
     buildCommoditiesChart(_lastData.top5_underlying);
+    if (_forecastData) buildForecastProductChart(_forecastData);
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -412,6 +480,7 @@ function rerenderCharts() {
 document.addEventListener('DOMContentLoaded', async () => {
     await loadTranslations();
     loadDashboard('month');
+    loadForecastChart();   // independent of the period filter
 
     document.querySelectorAll('#dash-period-filter [data-period]').forEach(item => {
         item.addEventListener('click', (e) => {

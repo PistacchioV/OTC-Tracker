@@ -741,6 +741,8 @@
   "dash-distribution-title": "Deal Distribution",
   "dash-distribution-sub": "Breakdown by product type",
   "dash-chart-title": "Deal Flow Analytics",
+  "dash-forecast-title": "Settlement Forecast",
+  "dash-forecast-sub": "Next 14 business days, by product",
   "dash-view-all": "View All",
   "dash-recent-title": "Recent Deals",
   "dash-new-deal": "New Deal",

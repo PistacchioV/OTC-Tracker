@@ -1851,7 +1851,7 @@ def api_cp_cetip_settlement():
 #  into the report sent to Brazil OTC Ops.
 # ============================================================================
 
-FORECAST_HORIZON_DAYS = 20            # calendar-day look-ahead (Alteryx GenerateRows today..+19)
+FORECAST_BIZDAYS = 14                 # business-day look-ahead window (from today, inclusive)
 
 # Entity code → name. Keys are normalised (digits only) at lookup, so dotted
 # variants (00041.00-7) match too. Anything unmapped is dropped from the by-entity
@@ -1972,16 +1972,16 @@ def _fcst_lob(identifier):
     return 'CEMHYB'
 
 
-def _forecast_spine(anchor):
-    """Upcoming business days (ANBIMA): next FORECAST_HORIZON_DAYS calendar days
-    from `anchor` (inclusive) minus weekends and holidays — the column spine."""
+def _forecast_spine(anchor=None):
+    """The forecast column spine: the next FORECAST_BIZDAYS ANBIMA business days
+    starting TODAY (inclusive), skipping weekends and holidays."""
     _load_anbima()
-    base = anchor.date() if isinstance(anchor, datetime) else anchor
-    days = []
-    for i in range(FORECAST_HORIZON_DAYS):
-        d = base + timedelta(days=i)
+    start = datetime.now().date()
+    days, d = [], start
+    while len(days) < FORECAST_BIZDAYS:
         if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
             days.append(d)
+        d += timedelta(days=1)
     return days
 
 
