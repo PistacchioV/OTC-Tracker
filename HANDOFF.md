@@ -1496,3 +1496,84 @@ apps/templates/partials/sidenav.html           ← link Control Panel (Apps)
 apps/templates/partials/topbar.html            ← ACTION_META + PAGE_URL da notificação CETIP
 apps/static/data/translations/{en,br,es}.json  ← chaves control-panel + cp-*
 ```
+
+## 28. Sessão 2026-06-25 (cont.) — Settlement Forecast (Alteryx→Python) + gráficos Chart.js diários
+
+### O que foi feito
+
+Tradução do fluxo Alteryx **"Settlement Forecast v2"** para Python e novo card **Settlement Forecast** no
+Control Panel (à direita do File-Saving). Projeta as liquidações dos **próximos 14 dias úteis (ANBIMA) a
+partir de hoje**, quebradas por **produto** e por **entidade**, e envia relatório por e-mail à OTC Ops BR.
+
+#### File-Saving agora também gera JSONs tidy — `apps/pages/routes.py`
+- Ao rodar **Salvar Arquivos CETIP**, além de copiar os arquivos, grava JSONs em
+  **`apps/static/data/cache/b3 files/{NDF,Option,Swap}/`** (NDF=TER, Option=OPC, Swap=posição/fluxo/prêmio).
+  Pasta no `.gitignore` (`b3 files/**/*.json`).
+- `_CETIP_RULES` ganhou config `json` em 5 regras + nova regra **DAGENDAPREMIOS** (é de Swap).
+- **TER e OPC têm header na linha 1**; arquivos de **SWAP são headerless** → headers-padrão fixos em
+  `_B3_SWAP_HEADERS_RAW` (swap_position tem nomes duplicados → dedupe p/ `_2`/`_3`).
+- `_b3_export_json(...)`: lê Latin-1, monta list-of-dicts, dedup de header, aplica **filtros de conta**
+  (comparação só-dígitos via `_digits`) p/ não duplicar. Filtros: TER col B *Código da Parte* ∈
+  {73760009, 04880006}; OPC col E *Parte (conta)* = 73760009; SWAP pos col D / Fluxo col C / DAGENDA *Parte*
+  ∈ {73760009, 04880006}. **O que não bate é excluído do JSON.**
+
+#### Taxonomia de produto (8 produtos)
+`NDF Moeda, NDF Commodities, Opt FXO, OPT Comm, OPT EDG, SWAP CEM, SWAP EDG, SWAP CEMHYB`.
+- **NDF**: col M *Classe do Ativo Subjacente* → COMMOD/MERCAD = NDF Commodities, resto = NDF Moeda.
+- **OPC**: col N *Classe do Ativo Subjacente* → TAXA DE CAMBIO/MOEDA = Opt FXO, Commodities = OPT Comm, resto = OPT EDG.
+- **SWAP**: col *Código Identificador* → CEM / EDG / CEMHYB.
+- Entidades: `_FCST_ENTITY_MAP` 00041007→LAWTON, 04880006→MGT, 85398005→ATACAMA.
+
+#### Backend forecast — `apps/pages/routes.py`
+- `_FORECAST_SOURCES` (5 fontes) com tokens de campo resolvidos **por nome** (case-insensitive "contains"),
+  robusto a variação posicional. `_forecast_spine()` = próximos 14 dias úteis ANBIMA a partir de hoje.
+- `_forecast_collect` loga diagnóstico por arquivo: `[forecast] <fonte>: N rows, M counted | date=... entity=... product=...`.
+- Endpoints: `POST /api/control-panel/settlement-forecast/data` (JSON do forecast) e
+  `.../email` (recebe `{date, images:{by_product, by_entity}}`, recalcula e envia).
+- E-mail **To = `brazil.otc.ops@jpmorgan.com`** (`CETIP_OTC_OPS_EMAIL`), assunto "Settlement Forecast".
+
+#### Gráficos (Chart.js, NÃO ApexCharts/matplotlib) — `apps/static/js/pages/settlement-forecast.js`
+- **Mesmo modelo do "Deal Flow Analytics"** do index, porém **diário**. Stacked bar, `vGradient`, cores Apple,
+  `maxBarThickness`, `borderRadius`. Y máx **900**.
+- Plugin `valueLabels`: **labels sempre visíveis** (valor por segmento em branco quando o segmento é grande +
+  **badge estilo tooltip** com o total no topo de cada barra) — aparecem na imagem do e-mail (não por hover).
+- Plugin `whiteBg`: fundo branco no PNG (não sai transparente/preto).
+- **Render→PNG client-side** (path A): a página renderiza em canvas offscreen (`#fcstStageProduct`,
+  `#fcstStageEntity`), exporta `canvas.toDataURL('image/png')` e o backend embute via `cid` no e-mail.
+  Tudo disparado pelo **botão Run** do card (`runForecast`): fetch /data → render→export → POST /email.
+
+#### Dashboard — `apps/static/js/pages/dashboard.js` + `index.html`
+- "Recent Deals" **substituído** pelo gráfico de **forecast por produto** (`#forecast-product-chart`,
+  `loadForecastChart()`/`buildForecastProductChart()`, mesmo estilo Deal Flow com hover tooltip).
+
+#### Control Panel — `apps/templates/pages/control-panel.html`
+- Layout em **2 colunas** (`row g-3 g-xl-4`): esq. = header *Daily Settlements / File-Saving Routines* + card
+  CETIP; dir. = header *Forecasts & Reports / Settlement Reporting* + card Settlement Forecast.
+- E-mail HTML: `email-template-settlement-forecast.html` (header gradiente, banner de data, 2 gráficos via cid;
+  **sem tabelas e sem donut Product Mix**). ⚠️ Jinja: usar `e['values']` (não `e.values` → colide com dict.values).
+
+### Padrões identificados
+- **Gerar JSON tidy no momento do File-Saving** (campos nomeados + filtros de dedup) é mais robusto p/ gráficos
+  do que reparsear TXT/CSV depois. Resolução de campo **por token de nome** evita quebra por mudança de coluna.
+- **Gráfico .js → imagem no e-mail sem headless browser:** renderiza no canvas do cliente e exporta PNG (path A).
+- Reaproveitar helpers de Chart.js do dashboard (`vGradient`, `hexToRgba`, `ins`, `premiumTooltip`).
+
+### Pendências / próxima sessão
+- **Testar no ambiente JPM:** rodar Salvar Arquivos CETIP (regenera JSONs com filtros) → Settlement Forecast.
+- Se algum produto/entidade vier vazio, ajustar tokens em `_FORECAST_SOURCES` / colunas dos filtros em
+  `_CETIP_RULES.json` com base nos logs `[forecast] ...`.
+- `forecast_charts.py` (matplotlib) e deps `matplotlib`/`seaborn` ficaram **não usados** (path A venceu).
+
+### Arquivos criados/modificados nesta sessão
+```
+apps/pages/routes.py                                       ← _b3_export_json + json em _CETIP_RULES + backend forecast + 2 endpoints
+apps/static/js/pages/settlement-forecast.js               ← CRIADO/reescrito p/ Chart.js (stacked diário, valueLabels, export PNG)
+apps/static/js/pages/dashboard.js                         ← gráfico forecast por produto no index
+apps/templates/pages/control-panel.html                   ← layout 2 colunas + card Settlement Forecast + canvas offscreen
+apps/templates/pages/index.html                           ← Recent Deals → card de forecast
+apps/templates/pages/email-template-settlement-forecast.html ← CRIADO (e-mail só com os 2 gráficos)
+apps/pages/forecast_charts.py                             ← CRIADO (matplotlib, fallback não usado)
+apps/static/data/translations/{en,br,es}.json             ← cp-sec-fc-*, cp-r-fcst-*, dash-forecast-*
+.gitignore                                                ← b3 files/**/*.json, alteryx_flow.py, _chart_preview/
+requirements.txt                                          ← matplotlib/seaborn (não usados)
+```
