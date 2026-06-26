@@ -1577,3 +1577,98 @@ apps/static/data/translations/{en,br,es}.json             ← cp-sec-fc-*, cp-r-
 .gitignore                                                ← b3 files/**/*.json, alteryx_flow.py, _chart_preview/
 requirements.txt                                          ← matplotlib/seaborn (não usados)
 ```
+
+---
+
+## 29. Sessão 2026-06-25/26 — Update Contacts, DB lazy init, boot debug/prod, forecast latest, swap dedup, NDF-edit fix, FXO→Intrag, role cards
+
+Bloco de melhorias e correções espalhado por 4 commits: `21acb18`, `0209b70`, `75626df`, `890d9aa`.
+
+### Dashboard / About / E-mails (`21acb18`)
+- **Filtro de produto no Settlement Forecast do index**: dropdown default **All** + uma opção por produto
+  (`_forecastProductFilter`, `populateForecastFilter`, `syncForecastFilterUI`) em `dashboard.js` +
+  `#fc-product-menu` no `index.html`.
+- **Linha "Total" nos tooltips** do index (forecast E deal flow): callback `totalFooter(items)` somando
+  `it.parsed.y`, ligado via `callbacks.footer`; estilo do footer no `premiumTooltip`.
+- **about.html**: 4 novos cards de feature (Control Panel `ti-adjustments-horizontal` — *atenção: `ti-sliders-horizontal`
+  não existe no Tabler*, é nome Lucide; Settlement Forecast, Reference Data, Intrag) + hero generalizado p/
+  "OTC Derivatives" (não só commodities).
+- **Padronização de e-mails**: assinatura única `Regards,\nOTC Tracker — Brazil OTC Operations` + footer
+  automático, **corpo sempre em inglês** (templates `email-template-settlement-forecast.html` e
+  `email-template-cetip-saved.html`).
+- **Card "Update Contacts" no Control Panel** (seção Reference Data): transforma `scripts/import_client_contacts.py`
+  em função nativa `_import_client_contacts(filename, raw_bytes)` + helpers (`_cc_read_rows` openpyxl/csv,
+  `_cc_cell`, `_cc_parse_rules`, `_CONTACT_RULE_MAP`); endpoint `POST /api/control-panel/import-contacts`;
+  handler `cpRunUpload(btn)` (FormData). **Regra de import**: agrupa por SPN, **só importa linhas Ativas**
+  (`_cc_cell(row, _CC_ACTIVE).upper() == 'A'`); SPN que casa → CONTACTS substituídos; SPN só no JSON →
+  intocado; SPN só na planilha → novo registro. Colunas: SPN=1,NAME=2,ACTIVE=3,CONTACT=4,PHONE=5,EMAIL=6,RULE=7;
+  `DATA_START_ROW=5`.
+
+### DB lazy init + lock fix (`0209b70`)
+- **Erro no Windows JPM** (`DuckDB IOException "file used by another process"` + `RuntimeError: release unlocked lock`):
+  o supervisor do reloader abria o DuckDB no import. Corrigido com **init lazy** — `_ensure_db_initialized()`
+  (flags `_db_init_done`/`_db_init_lock`/`_db_init_tls`) chamado no topo de `get_db_connection()` em vez de
+  `init_db()` eager no import. Removido `release()` duplo do lock no branch de retry da IOException.
+
+### Boot debug/prod + flask run (`21acb18` / `75626df`)
+- `run.py`: `DEBUG = os.getenv('DEBUG','True') not in ('0','false','no','off')`.
+- **`start.bat`** (criado): `start.bat` = debug (`python run.py`, 8050); `start.bat prod` = produção
+  (`waitress-serve --host=0.0.0.0 --port=5005 run:app`). **`.flaskenv`** criado (FLASK_APP/HOST/PORT).
+  `waitress==3.0.0` no requirements. **Porta 8050** (5000 bloqueada pelo AirPlay do macOS); `flask run` liga só
+  em 127.0.0.1 → preferir `python run.py` (0.0.0.0).
+
+### Forecast: dashboard "latest" vs Control Panel estrito (`75626df`)
+- **Dashboard** usa o **JSON mais recente disponível** (D-1 → D-2 → …): `_forecast_has_files(ref)`,
+  `_forecast_latest_ref(max_back=10)`; endpoint `/data` aceita `mode:'latest'`. **Control Panel** continua
+  **exigindo D-1** (modo estrito). `index.html` mostra `#forecast-asof` com a data efetiva.
+
+### Settlement Forecast: contagem de swaps por Tipo de Contrato (`890d9aa`)
+- No `swap_pos`, **Tipo de Contrato = 1** (fluxo de caixa) → conta **só pelo arquivo de fluxo**;
+  **Tipo = 2** (bullet/pagamento final) → conta pela **col M (Data vencimento) do arquivo de posição**.
+  Implementado via `'count_where': (['tipo de contrato', ...], {'2'})` na fonte + gate por linha em
+  `_forecast_collect` (normaliza sufixo `.0`) antes do check de data. Evita dupla contagem.
+
+### Reference Data: editar contas bancárias (`890d9aa`)
+- Faltava botão de edição nas contas bancárias do editor de Counterparty. Adicionados `_bankEditForm(a)`
+  (select2 banco + agência + conta), `_renderBankZone(bk, editId)`, botão lápis `cp-acc-edit` e endpoint
+  `POST /api/counterparty-details/banking/account/edit` (reseta status Pending, maker=sid, checker='').
+
+### NDF Comm: persistência/notificação de edição row-level (`890d9aa`)
+- **Bug**: o save da edição inline disparava PATCH e **ignorava a resposta** (só `.catch()`); backend
+  `_find_ndf_deal_in_cache` fazia match exato → **404 fantasma** por diferença de espaço → não persistia nem
+  notificava. **Fix**: (1) backend trim-tolerante (`.strip()` nos dois lados em Deal+Client, 6 lookups);
+  (2) save-edit checa `res.ok` e cai em **`POST /cache?notify=1`** com `rowDataToNdfDeal` no fallback;
+  (3) `notify=1` cria notificação **"Deal Updated / NDF Comm"**; (4) toast de erro se tudo falhar.
+
+### Opt FXO → Intrag Option (`890d9aa`)
+- Deals **Opt-FXO** de **Banco J.P. Morgan** que chegam a **Success** geram entry no **mesmo** `intrag_opt.json`
+  do opt-comm. Reuso de `_save_intrag_opt_entry(deal, is_fxo=True)` — **7 campos sobrescritos p/ FXO**:
+  INFORMATION SOURCE=**SISBACEN**, EXCHANGE(query_source)=**BACEN**, TICKER=**USD**, CURRENCY SYMBOL=**USD**,
+  BULLETIN=**3**, BULLETIN TIME=**18:00**, SISBACEN CURRENCY CODE=**220**; resto = mesma lógica do opt-comm.
+  Gateado por `_maybe_save_intrag_fxo(deal)` e engatado nos **2 caminhos** que põem FXO em Success: PATCH manual
+  (`/api/new-deals/opt-fxo/cache/<id>`) e mapeamento B3 (`api_fxo_mapping_b3`). FXO não tem `QuotedInCents`
+  (default NO → sem /100) nem `Commodities`/Subjacente (campos sobrescritos), então a lógica compartilhada
+  funciona sem ajuste.
+
+### User Roles: animação de feedback nos cards (`890d9aa`)
+- Cards de role com `.role-card`: **hover-lift** (`translateY(-4px)` + sombra, ease-out
+  `cubic-bezier(0.23,1,0.32,1)` 200ms, só `@media (hover:hover)`) + **press feedback Apple** (`:active`
+  `scale(0.97)` 120ms). **Botões "Details" removidos** de cada card (mantido o contador de membros).
+
+### Padrões / lembretes
+- `_save_intrag_opt_entry` agora serve opt-comm e FXO via flag `is_fxo` — FXO e comm compartilham o
+  `intrag_opt.json` e aparecem juntos na página intrag-option (sem mudança de frontend).
+- `scripts/commit-push.sh` remove só o **bloco** `/dev-login`, **não** a linha do allowlist
+  (`pages_blueprint.dev_login` em `_LOCK_ALLOWED_ENDPOINTS`) — ao commitar manualmente, **stripar as duas**.
+
+### Arquivos modificados (commit `890d9aa`)
+```
+apps/pages/routes.py                              ← FXO→Intrag (is_fxo), NDF-edit fix, banking edit, swap dedup
+apps/pages/otc_emails.py                          ← correção de aliases de destinatários
+apps/templates/pages/users-roles.html            ← .role-card (hover+press), remove Details
+apps/templates/pages/new_deals-ndf-commodities.html ← save-edit com res.ok + fallback POST /cache?notify=1
+apps/templates/pages/reference-data.html          ← botão/forms de edição de conta bancária
+apps/templates/partials/topbar.html               ← ACTION_META (Bank Account Edited, etc.)
+apps/templates/pages/intrag-option.html           ← ajuste manual
+apps/static/data/translations/{en,br,es}.json     ← swal-save-failed
+```
