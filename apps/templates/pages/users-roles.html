@@ -11,8 +11,30 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-    font-size: 0.8rem;    
+    font-size: 0.8rem;
     vertical-align: middle;
+}
+
+/* Role summary cards — hover lift + Apple press micro-interaction */
+.role-card {
+    cursor: pointer;
+    transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 200ms ease,
+                border-color 200ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+    .role-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .10);
+        border-color: rgba(0, 102, 204, .28);
+    }
+}
+.role-card:active {
+    transform: scale(0.97);
+    transition-duration: 120ms;
+}
+[data-bs-theme="dark"] .role-card:hover {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
 }
 </style>
 {% endblock extra_css %}
@@ -39,7 +61,7 @@
                 {% if role_groups %}
                 {% for rg in role_groups %}
                 <div class="col-md-6 col-lg-3">
-                    <div class="card h-100">
+                    <div class="card h-100 role-card">
                         <div class="position-absolute top-0 end-0" style="width: 180px;">
                             <svg fill="none" height="560" style="opacity: 0.075; width: 100%; height: auto;"
                                 viewbox="0 0 600 560" width="600" xmlns="http://www.w3.org/2000/svg">
@@ -109,9 +131,8 @@
                                 </div>
                                 {% endif %}
                             </div>
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
                                 <span class="text-muted fs-xs"><i class="ti ti-users me-1"></i>{{ rg.count }} member{{ 's' if rg.count != 1 else '' }}</span>
-                                <a class="btn btn-sm btn-outline-primary rounded-pill" href="#">Details</a>
                             </div>
                         </div>
                     </div>

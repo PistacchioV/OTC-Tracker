@@ -558,8 +558,8 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
 # addresses / GAL aliases. Keys are matched accent-insensitively, lower-cased.
 # NOTE: keys must be ASCII-folded + lower-case (that's how lookups are normalized).
 _RECIPIENT_ALIASES = {
-    'liquidacao':        'BRSP_Settlement_Ops; brsp_financial_control; brazil_otc_settlements@jpmorgan.com; joao.hira@jpmorgan.com; latam.mumbai.acc@jpmorgan.com',
-    'brazil comm sales': 'Brazil_Comm_Sales',
+    'liquidacao':        'BRSP_Settlement_Ops@jpmchase.com; brsp_financial_control@restricted.chase.com; brazil_otc_settlements@jpmorgan.com; joao.hira@jpmorgan.com; latam.mumbai.acc@jpmorgan.com',
+    'brazil comm sales': 'brazil_comm_sales@jpmorgan.com',
 }
 
 

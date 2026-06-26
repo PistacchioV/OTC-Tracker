@@ -3654,11 +3654,37 @@ $(document).ready(function() {
         }
 
         if (rowId) {
+            // Snapshot the row BEFORE invalidate so the 404-fallback can rebuild
+            // the full deal (internal data still holds the original values).
+            var rowArr = table.row(tr[0]).data();
             fetch('/api/new-deals/ndf-commodities/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(origClient), {
                 method:  'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify(changedFields)
-            }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
+            }).then(function(res) {
+                if (res.ok) return;   // PATCH persisted + created the notification
+                // Row missing from cache (404) or other error → upsert the full
+                // deal so the edit isn't lost, and ?notify=1 still rings the bell.
+                var fullDeal = rowDataToNdfDeal(rowArr, rowId, changedFields);
+                return fetch('/api/new-deals/ndf-commodities/cache?notify=1', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(fullDeal)
+                }).then(function(r2) {
+                    if (!r2.ok && typeof Swal !== 'undefined') {
+                        Swal.fire({ icon: 'error', toast: true, position: 'top-end',
+                            timer: 3000, showConfirmButton: false,
+                            title: t('swal-save-failed', 'Could not save the edit.') });
+                    }
+                });
+            }).catch(function(err) {
+                console.warn('Cache save failed:', err);
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ icon: 'error', toast: true, position: 'top-end',
+                        timer: 3000, showConfirmButton: false,
+                        title: t('swal-save-failed', 'Could not save the edit.') });
+                }
+            });
         }
 
         tr.removeAttr('data-editing');

@@ -962,5 +962,6 @@
   "swal-fxo-dup-title": "Operaciones duplicadas",
   "swal-fxo-dup-text": "Las siguientes operaciones (Deal + Client) ya existen en la tabla. ¿Reemplazar?",
   "swal-fxo-dup-replace": "Sí, reemplazar",
-  "swal-fxo-dup-skip": "No, descartar duplicadas"
+  "swal-fxo-dup-skip": "No, descartar duplicadas",
+  "swal-save-failed": "No se pudo guardar la edición."
 }

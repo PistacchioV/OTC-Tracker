@@ -315,6 +315,8 @@
     .cp-edit-row { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
     .cp-edit-row.cp-cgd-row  { grid-template-columns: 1fr 32px 32px; }
     .cp-edit-row.cp-bank-row { grid-template-columns: minmax(0,1.6fr) minmax(0,0.7fr) minmax(0,1fr) 32px; }
+    /* inline edit form for a banking account: bank / agency / account / save / cancel */
+    .cp-bank-editform { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,0.7fr) minmax(0,1fr) 30px 30px; gap: 6px; align-items: center; width: 100%; }
 
     /* CGD date field: text shows dd/mm/yyyy; calendar button overlays a native date input */
     .cp-date-btn {
@@ -1111,8 +1113,23 @@ $(document).ready(function () {
         if (a.account) sub.push(t('rd-cp-account','Account') + ' ' + _esc(a.account));
         return head + (sub.length ? '<div class="cp-spn">' + sub.join(' · ') + '</div>' : '');
     }
-    function _renderBankZone(bk){
+    /* Inline edit form for one banking account (bank / agency / account + save/cancel). */
+    function _bankEditForm(a){
+        var opts = '<option value=""></option>' + CP_BANKS.map(function(o){
+            return '<option value="' + _attr(o) + '"' + (a.bank === o ? ' selected' : '') + '>' + _esc(o) + '</option>';
+        }).join('');
+        if (a.bank && CP_BANKS.indexOf(a.bank) === -1) opts += '<option value="' + _attr(a.bank) + '" selected>' + _esc(a.bank) + '</option>';
+        return '<div class="cp-acc-row cp-acc-editing"><div class="cp-bank-editform">' +
+            '<select class="form-select form-select-sm cp-bank-edit-select">' + opts + '</select>' +
+            '<input type="text" class="form-control form-control-sm cp-bank-edit-agency" placeholder="' + t('rd-cp-agency','Agency') + '" value="' + _attr(a.agency) + '">' +
+            '<input type="text" class="form-control form-control-sm cp-bank-edit-account" placeholder="' + t('rd-cp-account','Account') + '" value="' + _attr(a.account) + '">' +
+            '<button type="button" class="cp-okbtn cp-acc-edit-save" data-id="' + _attr(a.id) + '"><i class="ti ti-check"></i></button>' +
+            '<button type="button" class="cp-cxbtn cp-acc-edit-cancel"><i class="ti ti-x"></i></button>' +
+        '</div></div>';
+    }
+    function _renderBankZone(bk, editId){
         var rows = bk.ACCOUNTS.map(function(a){
+            if (editId && a.id === editId) return _bankEditForm(a);
             var active  = String(a.status).toLowerCase() === 'active';
             var payDef  = bk.DEFAULT_PAY.current === a.id,     payPend = bk.DEFAULT_PAY.pending === a.id;
             var recDef  = bk.DEFAULT_RECEIVE.current === a.id, recPend = bk.DEFAULT_RECEIVE.pending === a.id;
@@ -1129,6 +1146,7 @@ $(document).ready(function () {
                 var own = a.maker && a.maker === CURRENT_USER;
                 ops += '<button type="button" title="' + _attr(t('rd-swal-approve-btn','Approve')) + '" class="btn btn-xs btn-success cp-acc-approve" data-id="' + a.id + '" data-own="' + (own ? '1' : '0') + '"><i class="ti ti-check"></i></button>';
             }
+            ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-acc-edit" data-id="' + a.id + '"><i class="ti ti-pencil"></i></button>';
             ops += '<button type="button" class="btn btn-xs btn-danger cp-acc-del" data-id="' + a.id + '"><i class="ti ti-trash"></i></button>';
             // explicit default chips on the account itself (clearer than the toggle state alone)
             var chips = '';
@@ -1173,6 +1191,7 @@ $(document).ready(function () {
         var bankState = _normBank(_CPDETAILS[spn]);
         var cgdEditId = null;      // CGD item currently in inline-edit
         var contactEditId = null;  // Contact item currently in inline-edit
+        var bankEditId = null;     // banking account currently in inline-edit
 
         function renderHead() {
             return '<div class="cp-head">' +
@@ -1188,7 +1207,7 @@ $(document).ready(function () {
         function renderBody() {
             return '<div class="cp-body">' +
                 '<div class="cp-zone" id="cp-cgd-zone">' + _renderCgdZone(model, cgdEditId) + '</div>' +
-                '<div class="cp-zone" id="cp-bank-zone">' + _renderBankZone(bankState) + '</div>' +
+                '<div class="cp-zone" id="cp-bank-zone">' + _renderBankZone(bankState, bankEditId) + '</div>' +
                 '<div class="cp-zone" id="cp-contact-zone">' + _renderContactZone(model, contactEditId) + '</div>' +
             '</div>';
         }
@@ -1249,8 +1268,13 @@ $(document).ready(function () {
         /* Re-render only the banking zone from bankState (after a maker/checker action). */
         function refreshBankZone(popup) {
             var $z = $(popup).find('#cp-bank-zone');
-            $z.html(_renderBankZone(bankState));
+            $z.html(_renderBankZone(bankState, bankEditId));
             _applyLang($z);
+            // init select2 on the bank picker of any open edit form
+            $z.find('.cp-bank-edit-select').each(function(){
+                if ($(this).data('select2')) return;
+                $(this).select2({ width:'100%', dropdownParent:$(popup), placeholder:t('rd-cp-bank','Bank'), allowClear:true });
+            });
         }
 
         /* POST a banking action; on success run onOk(res), else flash the error. */
@@ -1470,11 +1494,34 @@ $(document).ready(function () {
                     refreshBankZone(popup);
                 });
             });
+            /* ── Banking: edit account (inline) ── */
+            $p.on('click', '.cp-acc-edit', function(){
+                bankEditId = this.getAttribute('data-id'); refreshBankZone(popup);
+            });
+            $p.on('click', '.cp-acc-edit-cancel', function(){
+                bankEditId = null; refreshBankZone(popup);
+            });
+            $p.on('click', '.cp-acc-edit-save', function(){
+                var id   = this.getAttribute('data-id');
+                var $row = $(this).closest('.cp-acc-editing');
+                var bank = $row.find('.cp-bank-edit-select').val() || '';
+                var ag   = ($row.find('.cp-bank-edit-agency').val() || '').trim();
+                var ac   = ($row.find('.cp-bank-edit-account').val() || '').trim();
+                if (!(bank || ag || ac)) return;
+                bankFetch('/api/counterparty-details/banking/account/edit', { SPN:spn, id:id, bank:bank, agency:ag, account:ac }, popup, function(res){
+                    var i = bankState.ACCOUNTS.map(function(x){ return x.id; }).indexOf(id);
+                    if (i !== -1) bankState.ACCOUNTS[i] = res.account;
+                    bankEditId = null;
+                    _CPDETAILS[spn].BANKING = bankState;
+                    refreshBankZone(popup);
+                });
+            });
             /* ── Banking: delete account ── */
             $p.on('click', '.cp-acc-del', function(){
                 var id = this.getAttribute('data-id');
                 bankFetch('/api/counterparty-details/banking/account/delete', { SPN:spn, id:id }, popup, function(){
                     bankState.ACCOUNTS = bankState.ACCOUNTS.filter(function(x){ return x.id!==id; });
+                    if (bankEditId === id) bankEditId = null;
                     ['DEFAULT_PAY','DEFAULT_RECEIVE'].forEach(function(k){
                         if (bankState[k].current===id) bankState[k].current=null;
                         if (bankState[k].pending===id) bankState[k].pending=null;

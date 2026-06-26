@@ -1923,7 +1923,11 @@ _FORECAST_SOURCES = [
     {'key': 'swap_pos', 'label': 'SWAP Position', 'category': 'Swap',
      'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
      'date': ['data vencimento'], 'entity': ['contraparte'],
-     'product': ('lob', ['código identificador', 'codigo identificador', 'identificador'])},
+     'product': ('lob', ['código identificador', 'codigo identificador', 'identificador']),
+     # "Tipo de Contrato" (1st col): 1 = cash-flow swap → counted via the FLUXO
+     # file only (counting both would double it); 2 = bullet/final payment →
+     # counted here by maturity (col M). So the Position file counts ONLY tipo 2.
+     'count_where': (['tipo de contrato', 'tipo do contrato', 'tipo contrato', 'tipo de contr'], {'2'})},
     {'key': 'swap_flx', 'label': 'SWAP Flow', 'category': 'Swap',
      'file': lambda r: '73760_{}_DFLUXO.json'.format(r),
      'date': ['ocorrência do evento', 'ocorrencia do evento', 'evento'],
@@ -2069,8 +2073,23 @@ def _forecast_collect(dref, spine):
         prod_key = (_fcst_resolve_key(keys, pspec)
                     if pmode in ('sisbacen', 'lob', 'ndfclass', 'optclass') else None)
 
+        # Optional row gate: only count rows whose value in a given column is in
+        # an allowed set (e.g. SWAP Position counts only "Tipo de Contrato" = 2).
+        cw = src.get('count_where')
+        cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
+        cw_allowed = cw[1] if cw else None
+        if cw and cw_key is None:
+            log.warning("[forecast] %s: count_where column %r not found; counting all rows",
+                        src['label'], cw[0])
+
         counted = 0
         for row in rows:
+            if cw_key is not None:
+                cwv = str(row.get(cw_key, '') or '').strip()
+                if cwv.endswith('.0'):       # numeric read as 2.0 → '2'
+                    cwv = cwv[:-2]
+                if cwv not in cw_allowed:
+                    continue
             d = _fcst_parse_date(row.get(date_key, '')) if date_key else None
             if d is None or d not in spine_index:
                 continue
@@ -2096,9 +2115,11 @@ def _forecast_collect(dref, spine):
         st['entity_field'] = ent_key
         st['product_field'] = prod_key
         st['columns'] = keys
+        st['count_where_field'] = cw_key
         status.append(st)
-        log.info("[forecast] %s: %d rows, %d counted | date=%r entity=%r product=%r",
-                 src['label'], len(rows), counted, date_key, ent_key, prod_key)
+        log.info("[forecast] %s: %d rows, %d counted | date=%r entity=%r product=%r%s",
+                 src['label'], len(rows), counted, date_key, ent_key, prod_key,
+                 (' where=%r in %r' % (cw_key, sorted(cw_allowed))) if cw else '')
     return by_product, by_entity, status
 
 
@@ -2783,7 +2804,9 @@ def api_update_deal_cache(deal_id):
                 deals = json.load(fh)
         except (json.JSONDecodeError, ValueError):
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         updates.pop('_client', None)
@@ -2836,7 +2859,9 @@ def api_delete_deal_cache(deal_id):
                 deals = json.load(fh)
         except (json.JSONDecodeError, ValueError):
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals.pop(idx)
@@ -3071,7 +3096,9 @@ def api_update_fxo_cache(deal_id):
                 deals = json.load(fh)
         except (json.JSONDecodeError, ValueError):
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         updates.pop('_client', None)
@@ -3080,6 +3107,12 @@ def api_update_fxo_cache(deal_id):
             if _k in deals[idx]:
                 deals[idx][_k] = deals[idx].pop(_k)
         _atomic_write_json(file_path, deals)
+        updated_deal = deals[idx].copy()
+
+    # Mirror opt-comm: push to Intrag Option (FXO overrides) when Status→Success
+    # and the counterparty is Banco J.P. Morgan (intragroup).
+    if str(updates.get('Status', '')) == 'Success':
+        _maybe_save_intrag_fxo(updated_deal)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -3114,7 +3147,9 @@ def api_delete_fxo_cache(deal_id):
                 deals = json.load(fh)
         except (json.JSONDecodeError, ValueError):
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals.pop(idx)
@@ -3730,14 +3765,19 @@ def api_fxo_mapping_b3():
 
         file_path, idx = _find_fxo(deal_text, client_name)
         if file_path is not None:
+            intrag_candidate = None
             with _cache_lock:
                 try:
                     with open(file_path, 'r', encoding='utf-8') as fh:
                         deals_list = json.load(fh)
                     deals_list[idx].update(updates)
                     _atomic_write_json(file_path, deals_list)
+                    if new_status == 'Success':
+                        intrag_candidate = deals_list[idx].copy()
                 except Exception:
                     pass
+            if intrag_candidate is not None:
+                _maybe_save_intrag_fxo(intrag_candidate)
 
         results.append({
             'id':     deal_text,
@@ -4034,11 +4074,16 @@ def _intrag_opt_name_for(acc):
     return ''
 
 
-def _save_intrag_opt_entry(deal):
-    """Compute the Intrag Option fields from a New Deals Opt-Comm deal and
-    append/update the daily JSON. Only the columns specified so far are filled;
-    the rest are placeholders to be wired later. Random my_number / cetip_number
-    are generated once and preserved on re-save (like the lifecycle state)."""
+def _save_intrag_opt_entry(deal, is_fxo=False):
+    """Compute the Intrag Option fields from a New Deals Opt-Comm (or Opt-FXO)
+    deal and append/update the daily JSON. Only the columns specified so far are
+    filled; the rest are placeholders to be wired later. Random my_number /
+    cetip_number are generated once and preserved on re-save (like the lifecycle
+    state).
+
+    FXO deals share the same intrag_opt.json file and the same filling logic,
+    but override seven fields (information source, exchange, ticker, currency
+    symbol, bulletin, bulletin time and SISBACEN currency code)."""
     td = _parse_deal_date(deal.get('TradeDate', '') or '')
     sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
     fmt_br = lambda d: d.strftime('%d/%m/%Y') if d else ''
@@ -4123,6 +4168,24 @@ def _save_intrag_opt_entry(deal):
     else:
         asian_label = ''
 
+    # FXO overrides these seven columns; everything else uses the shared logic.
+    if is_fxo:
+        info_source   = 'SISBACEN'
+        exchange_val  = 'BACEN'
+        ticker_val    = 'USD'
+        currency_sym  = 'USD'
+        bulletin_val  = '3'
+        bulletin_time = '18:00'
+        sisbacen_ccy  = '220'
+    else:
+        info_source   = 'COMMODITIES'
+        exchange_val  = exchange
+        ticker_val    = underlying_asset
+        currency_sym  = currency_symbol
+        bulletin_val  = '9'
+        bulletin_time = ''
+        sisbacen_ccy  = 'COM'
+
     entry = {
         'portfolio':              'INTRAGJP552',
         'system_id':              'OPCAO',
@@ -4139,8 +4202,8 @@ def _save_intrag_opt_entry(deal):
         'start_date':             fmt_br(td),
         'maturity_date':          fmt_br(sd),
         'cetip_number':           ''.join(random.choice(string.digits) for _ in range(16)),
-        'sisbacen_currency_code': 'COM',
-        'currency_symbol':        currency_symbol,
+        'sisbacen_currency_code': sisbacen_ccy,
+        'currency_symbol':        currency_sym,
         'investment_amount':      premium_str,        # Premium
         'fx_base_value':          fxbase_str,         # Total Notional
         'prepaid_value':          '',                 # Unwind Amount
@@ -4152,13 +4215,13 @@ def _save_intrag_opt_entry(deal):
         'put_unit_premium':       put_premium,
         'barrier_rate':           '',
         'exercise_type':          'EUROPEIA',
-        'information_source':      'COMMODITIES',
-        'bulletin':               '9',
-        'bulletin_time':          '',
+        'information_source':     info_source,
+        'bulletin':               bulletin_val,
+        'bulletin_time':          bulletin_time,
         'maturity_rate':          fixing_days,        # Fixing (biz-day count)
         'maturity_rate_desc':     fixing_desc,        # Fixing Description (D-n)
-        'query_source':           exchange,           # Exchange (Bolsa de Negociacao)
-        'ticker':                 underlying_asset,
+        'query_source':           exchange_val,       # Exchange (Bolsa de Negociacao)
+        'ticker':                 ticker_val,
         'quantity':               quantity_str,
         'premium_payment_date':   spot.strftime('%d/%m/%Y') if spot else '',
         'asian_option_average':   asian_label,
@@ -4197,7 +4260,7 @@ def _save_intrag_opt_entry(deal):
         else:
             entries.append(entry)
         _atomic_write_json(file_path, entries)
-    log.info('[INTRAG OPT] Saved entry deal=%r → %s', deal_id, file_path)
+    log.info('[INTRAG %s] Saved entry deal=%r → %s', 'FXO' if is_fxo else 'OPT', deal_id, file_path)
 
 
 def _maybe_save_intrag_opt(deal):
@@ -4208,6 +4271,17 @@ def _maybe_save_intrag_opt(deal):
             _save_intrag_opt_entry(deal)
         except Exception as exc:
             log.error('[INTRAG OPT] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
+
+
+def _maybe_save_intrag_fxo(deal):
+    """Save an Opt-FXO deal to Intrag Option (shared file) when the counterparty
+    is Banco J.P. Morgan (intragroup). Same logic as opt-comm with FXO overrides."""
+    cl = (deal.get('Client', '') or '').lower()
+    if 'banco' in cl and 'morgan' in cl:
+        try:
+            _save_intrag_opt_entry(deal, is_fxo=True)
+        except Exception as exc:
+            log.error('[INTRAG FXO] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
 
 
 def _find_intrag_ndf_entry(deal_id, trade_date):
@@ -4714,6 +4788,14 @@ def api_ndf_save_deal_cache():
 
         _atomic_write_json(file_path, deals)
 
+    # When used as the manual-edit fallback (PATCH 404 → upsert), ?notify=1 makes
+    # the row-level edit produce the same bell notification a PATCH would.
+    if request.args.get('notify') and deal_name:
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Deal Updated', 'NDF Comm',
+            deal_name + (' / ' + client_name if client_name else ''))
+
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
 
@@ -4773,8 +4855,10 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
                     d_name   = deal.get('Deal', '')
                     d_client = deal.get('Client', '')
                     all_names_seen.append((fname, d_name, d_client))
-                    if d_name == deal_name:
-                        if client_name is None or d_client == client_name:
+                    # Trim-tolerant match: a stray leading/trailing space in the
+                    # cache or in the request must not cause a phantom 404.
+                    if (d_name or '').strip() == (deal_name or '').strip():
+                        if client_name is None or (d_client or '').strip() == (client_name or '').strip():
                             log.debug("[_find_ndf] FOUND %r client=%r → %s[%d]",
                                       deal_name, client_name, fname, i)
                             return fpath, i
@@ -4858,7 +4942,9 @@ def api_ndf_update_deal_cache(deal_id):
         except (json.JSONDecodeError, ValueError):
             log.error("[NDF PATCH] JSON parse error in file=%s", file_path)
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         log.debug("[NDF PATCH] idx in loaded file=%s", idx)
         if idx is None:
             log.warning("[NDF PATCH] 404 — deal found in file scan but not after reload. deal_id=%r client=%r file=%s", deal_id, client, file_path)
@@ -4916,7 +5002,9 @@ def api_ndf_delete_deal_cache(deal_id):
                 deals = json.load(fh)
         except (json.JSONDecodeError, ValueError):
             deals = []
-        idx = next((i for i, d in enumerate(deals) if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
+        idx = next((i for i, d in enumerate(deals)
+                    if (d.get('Deal') or '').strip() == (deal_id or '').strip()
+                    and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals.pop(idx)
@@ -6303,6 +6391,37 @@ def api_cp_banking_account_add():
     banking['ACCOUNTS'].append(acc)
     _cpd_save_list(data)
     _notify_bank('Bank Account Added', _bank_detail(spn, rec, _acc_disp(acc) + ' (Pending approval)'))
+    return jsonify({'ok': True, 'account': acc})
+
+
+@blueprint.route('/api/counterparty-details/banking/account/edit', methods=['POST'])
+def api_cp_banking_account_edit():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    acc_id = str(p.get('id', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+    bank = str(p.get('bank', '') or '').strip()
+    agency = str(p.get('agency', '') or '').strip()
+    account = str(p.get('account', '') or '').strip()
+    if not (bank or agency or account):
+        return jsonify({'ok': False, 'error': 'empty_account'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec, banking = _bank_get_record(spn)
+    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
+    if acc is None:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    # Editing bank details requires re-approval → back to Pending (maker/checker).
+    acc['bank'] = bank
+    acc['agency'] = agency
+    acc['account'] = account
+    acc['status'] = 'Pending'
+    acc['maker'] = sid
+    acc['checker'] = ''
+    _cpd_save_list(data)
+    _notify_bank('Bank Account Edited', _bank_detail(spn, rec, _acc_disp(acc) + ' (Pending approval)'))
     return jsonify({'ok': True, 'account': acc})
 
 

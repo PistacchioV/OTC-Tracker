@@ -963,5 +963,6 @@
   "swal-fxo-dup-title": "Duplicate deals",
   "swal-fxo-dup-text": "The following Deal + Client already exist in the table. Replace them?",
   "swal-fxo-dup-replace": "Yes, replace",
-  "swal-fxo-dup-skip": "No, skip duplicates"
+  "swal-fxo-dup-skip": "No, skip duplicates",
+  "swal-save-failed": "Could not save the edit."
 }
