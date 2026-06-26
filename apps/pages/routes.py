@@ -197,6 +197,13 @@ ROLE_META = {
 _duckdb_conn = None
 _duckdb_conn_lock = threading.Lock()
 
+# Lazy one-time schema init (see _ensure_db_initialized). Deferred so the
+# Werkzeug auto-reloader's supervisor process never opens the single-writer
+# DuckDB file — only the worker that actually serves requests does.
+_db_init_done = False
+_db_init_lock = threading.RLock()     # re-entrant: init_db() re-enters via get_db_connection()
+_db_init_tls  = threading.local()     # per-thread "currently initializing" flag
+
 
 class _DuckDBHandle:
     """Proxy that holds _duckdb_conn_lock for its lifetime; close() releases it."""
@@ -231,6 +238,7 @@ def _duckdb_open():
 
 def get_db_connection(max_retries=6, retry_delay=0.05):
     global _duckdb_conn
+    _ensure_db_initialized()        # lazy, one-time schema/migrations (no-op after first run)
     last_exc = None
     for attempt in range(max_retries):
         try:
@@ -253,14 +261,15 @@ def get_db_connection(max_retries=6, retry_delay=0.05):
                 raise
             return _DuckDBHandle(_duckdb_conn)
         except duckdb.IOException as e:
+            # The inner handler above already released the lock before re-raising,
+            # so we must NOT release it again here (that caused
+            # "RuntimeError: release unlocked lock" masking the real IOException).
             last_exc = e
             if attempt < max_retries - 1:
                 wait = retry_delay * (2 ** attempt)
                 log.warning("DuckDB locked (attempt %d/%d), retrying in %.0fms…",
                             attempt + 1, max_retries, wait * 1000)
                 time.sleep(wait)
-            else:
-                _duckdb_conn_lock.release()
         except Exception:
             log.error("Failed to open DuckDB:\n%s", traceback.format_exc())
             raise
@@ -818,13 +827,42 @@ def _ensure_duckdb_file():
 
 
 _ensure_duckdb_file()
-try:
-    init_db()
-    _migrate_schema()
-    cleanup_expired_codes()
-    log.info("[startup] Database initialized successfully at %s", os.path.abspath(DB_PATH))
-except Exception:
-    log.error("[startup] Could not initialize database:\n%s", traceback.format_exc())
+
+
+def _ensure_db_initialized():
+    """Run schema creation + migrations exactly once, lazily, in the process
+    that first needs the DB. Deferred (NOT run at import) so the Werkzeug
+    auto-reloader's supervisor process — which imports this module but never
+    serves requests — does not open the single-writer DuckDB file and lock it
+    out from the worker. In production (gunicorn) the first request triggers it.
+
+    Re-entrant safe: init_db()/_migrate_schema() themselves call
+    get_db_connection(), which calls back here. The per-thread `running` flag lets
+    those nested calls fall straight through to open the connection without
+    recursing into init again, while concurrent first-callers from OTHER threads
+    block on the lock until init has fully completed (done set only on success)."""
+    global _db_init_done
+    if _db_init_done:
+        return
+    # Nested call on the SAME thread (from init_db's own get_db_connection):
+    # don't recurse — let it proceed to open the connection.
+    if getattr(_db_init_tls, 'running', False):
+        return
+    with _db_init_lock:
+        if _db_init_done:
+            return
+        _db_init_tls.running = True
+        try:
+            init_db()
+            _migrate_schema()
+            cleanup_expired_codes()
+            _db_init_done = True        # only mark done AFTER schema/migrations succeed
+            log.info("[startup] Database initialized successfully at %s", os.path.abspath(DB_PATH))
+        except Exception:
+            log.error("[startup] Could not initialize database:\n%s", traceback.format_exc())
+            raise
+        finally:
+            _db_init_tls.running = False
 
 
 # ==============================================================================
