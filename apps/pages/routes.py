@@ -1809,19 +1809,19 @@ def api_cp_cetip_settlement():
     mail_ops = mail_ss = None
     if send_mail and saved:
         mail_ops = _send_cetip_email(
-            [CETIP_OTC_OPS_EMAIL], [], 'Arquivos CETIP salvos!',
-            'Prezados,',
-            'Os arquivos da CETIP necessários para a geração do KPI foram salvos com sucesso. '
-            'Segue abaixo a lista completa.',
+            [CETIP_OTC_OPS_EMAIL], [], 'CETIP Files Saved',
+            'Hello,',
+            'The CETIP files required for the KPI generation have been saved successfully. '
+            'The complete list is shown below.',
             ref_fmt, saved, dest_folder=dest_dir)
 
-        ss_msg = ('Segue em anexo o arquivo de posição de contratos (DPOSCONTRATOSIC), '
-                  'conforme solicitado.' if attach_paths else
-                  'Não foi encontrado o arquivo DPOSCONTRATOSIC para a data de referência.')
-        ss_subject = 'Consolidado CETIP - Corporate - {}'.format(ref.strftime('%y%m%d'))
+        ss_msg = ('Please find attached the contract position file (DPOSCONTRATOSIC), '
+                  'as requested.' if attach_paths else
+                  'The DPOSCONTRATOSIC file was not found for the reference date.')
+        ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref.strftime('%y%m%d'))
         mail_ss = _send_cetip_email(
             [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
-            'Bom dia, Sales Support.', ss_msg,
+            'Good morning, Sales Support.', ss_msg,
             ref_fmt, attach_saved, attachments=attach_paths)   # table = just the attached file
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
@@ -2211,6 +2211,166 @@ def api_cp_forecast_email():
                          'Forecast e-mailed to OTC Ops ({})'.format(ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True,
                     'message': 'Settlement Forecast e-mailed to OTC Ops.'})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Update Contacts
+# Native port of scripts/import_client_contacts.py. Imports the "CONTATO DE
+# CLIENTES" spreadsheet into CounterpartyDetails.json: one contact per row,
+# data starting at row 5, grouped by SPN (leading zeros ignored). For a matched
+# SPN the CONTACTS array is replaced; CGD/BANKING are preserved. SPNs missing
+# from the JSON are appended as new records. _cpd_save_list writes a .bak first.
+# ──────────────────────────────────────────────────────────────────────────
+_CONTACTS_DATA_START_ROW = 5    # 1-based; first data row in the sheet
+# 0-based column indices: B,C,D,E,F,G,H
+_CC_SPN, _CC_NAME, _CC_ACTIVE, _CC_CONTACT, _CC_PHONE, _CC_EMAIL, _CC_RULE = 1, 2, 3, 4, 5, 6, 7
+
+# Map spreadsheet rule labels → the canonical rules used by the Reference Data
+# editor. Unknown values are kept verbatim.
+_CONTACT_RULE_MAP = {
+    'NEGOTIATION': 'Negotiation', 'NEGOCIACAO': 'Negotiation', 'NEGOCIAÇÃO': 'Negotiation',
+    'REPURCHASE': 'Repurchase', 'RECOMPRA': 'Repurchase',
+    'SETTLEMENT': 'Settlement', 'LIQUIDACAO': 'Settlement', 'LIQUIDAÇÃO': 'Settlement',
+    'CONFIRMATION LETTER': 'Confirmation Letter', 'CARTA DE CONFIRMACAO': 'Confirmation Letter',
+    'CARTA DE CONFIRMAÇÃO': 'Confirmation Letter',
+    'SETTLEMENT ADVICE': 'Settlement Advice', 'AVISO DE LIQUIDACAO': 'Settlement Advice',
+    'AVISO DE LIQUIDAÇÃO': 'Settlement Advice',
+    'CONTACT CONFIRMATION': 'Contact Confirmation', 'CONFIRMACAO DE CONTATO': 'Contact Confirmation',
+    'IOF': 'IOF',
+}
+
+
+def _cc_cell(row, idx):
+    if idx >= len(row):
+        return ''
+    v = row[idx]
+    if v is None:
+        return ''
+    if isinstance(v, float):
+        if v != v:                 # NaN
+            return ''
+        if v.is_integer():         # 123.0 (numeric SPN) → '123'
+            return str(int(v))
+    return str(v).strip()
+
+
+def _cc_parse_rules(raw):
+    out, seen = [], set()
+    for part in str(raw or '').replace('\n', ';').replace('/', ';').replace(',', ';').split(';'):
+        p = part.strip()
+        if not p:
+            continue
+        canon = _CONTACT_RULE_MAP.get(p.upper(), p)
+        if canon.upper() not in seen:
+            seen.add(canon.upper())
+            out.append(canon)
+    return out
+
+
+def _cc_read_rows(filename, raw_bytes):
+    """Return a list of rows (each a list of cell values) from an uploaded
+    .xlsx/.xlsm or .csv. Raises ValueError on an unsupported type."""
+    name = (filename or '').lower()
+    if name.endswith('.csv'):
+        import csv as _csv
+        text = raw_bytes.decode('utf-8-sig', errors='replace')
+        return [list(r) for r in _csv.reader(io.StringIO(text))]
+    if name.endswith(('.xlsx', '.xlsm')):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
+        ws = wb.active
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    raise ValueError('Unsupported file type. Please upload .xlsx, .xlsm or .csv.')
+
+
+def _import_client_contacts(filename, raw_bytes):
+    """Parse the spreadsheet bytes and merge contacts into CounterpartyDetails.json.
+    Returns a summary dict; raises ValueError on a recoverable input problem."""
+    rows = _cc_read_rows(filename, raw_bytes)
+
+    groups = {}                    # nspn -> {'spn', 'name', 'contacts'[]}
+    rows_seen = 0
+    for i in range(_CONTACTS_DATA_START_ROW - 1, len(rows)):
+        row = rows[i]
+        spn_raw = _cc_cell(row, _CC_SPN)
+        nspn = _norm_spn(spn_raw)
+        if not nspn:
+            continue
+        # Only import contacts flagged Active ("A") in column D — inactive rows
+        # are ignored entirely (an SPN with no active rows is left untouched).
+        if _cc_cell(row, _CC_ACTIVE).upper() != 'A':
+            continue
+        cname = _cc_cell(row, _CC_CONTACT)
+        phone = _cc_cell(row, _CC_PHONE)
+        email = _cc_cell(row, _CC_EMAIL)
+        rule  = _cc_cell(row, _CC_RULE)
+        if not (cname or phone or email or rule):
+            continue               # blank contact line
+        rows_seen += 1
+        g = groups.setdefault(nspn, {'spn': spn_raw.strip(), 'name': '', 'contacts': []})
+        cp_name = _cc_cell(row, _CC_NAME)
+        if cp_name and not g['name']:
+            g['name'] = cp_name
+        g['contacts'].append({
+            'name': cname, 'phone': phone, 'email': email,
+            'rules': _cc_parse_rules(rule), 'status': 'Active',
+        })
+
+    if not groups:
+        raise ValueError('No active contact rows found (data is expected to start at row 5, '
+                         'with the SPN in column B and the Active flag "A" in column D).')
+
+    data = _cpd_load()
+    by_nspn = {}
+    for rec in data:
+        by_nspn.setdefault(_norm_spn(rec.get('SPN', '')), rec)
+
+    matched = created = 0
+    for nspn, g in groups.items():
+        rec = by_nspn.get(nspn)
+        if rec is None:
+            rec = {'SPN': g['spn'], 'COUNTERPARTY': g['name'], 'CGD': [],
+                   'BANKING': {'PAY': [], 'RECEIVE': []}, 'CONTACTS': []}
+            data.append(rec)
+            by_nspn[nspn] = rec
+            created += 1
+        else:
+            matched += 1
+            if g['name'] and not str(rec.get('COUNTERPARTY', '') or '').strip():
+                rec['COUNTERPARTY'] = g['name']
+        rec['CONTACTS'] = g['contacts']     # replace contacts for this SPN
+
+    _cpd_save_list(data)
+    return {
+        'rows': rows_seen, 'spns': len(groups),
+        'contacts': sum(len(g['contacts']) for g in groups.values()),
+        'matched': matched, 'created': created, 'total': len(data),
+    }
+
+
+@blueprint.route('/api/control-panel/import-contacts', methods=['POST'])
+def api_cp_import_contacts():
+    """Update client contacts from the uploaded 'CONTATO DE CLIENTES' spreadsheet."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
+    try:
+        summary = _import_client_contacts(f.filename, f.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[contacts] import failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to process the spreadsheet.'}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Contacts Updated', 'Control Panel',
+                         '{} contacts across {} counterparties'.format(summary['contacts'], summary['spns']))
+    msg = ('<b>{contacts}</b> contacts imported across <b>{spns}</b> counterparties.'
+           '<br>Matched existing: {matched} &middot; New records appended: {created}'
+           '<br>Total counterparties: {total}').format(**summary)
+    return jsonify({'success': True, 'message': msg})
 
 
 @blueprint.route('/holidays-calendar')

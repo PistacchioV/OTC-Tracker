@@ -274,9 +274,19 @@
                         <h4 class="card-title mb-0" data-lang="dash-forecast-title">Settlement Forecast</h4>
                         <p class="text-muted fs-xs mb-0 mt-1" data-lang="dash-forecast-sub">Próximos 14 dias úteis, por produto</p>
                     </div>
-                    <a class="link-reset text-decoration-underline fw-semibold link-offset-3" href="/control-panel">
-                        <span data-lang="dash-view-all">View All</span> <i class="ti ti-arrow-right"></i>
-                    </a>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dropdown" id="fc-product-filter">
+                            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="fc-product-btn" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="ti ti-filter me-1"></i><span id="fc-product-label" data-lang="dash-fc-filter-all">All</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" id="fc-product-menu" aria-labelledby="fc-product-btn">
+                                <li><a class="dropdown-item active" href="#" data-product="__all__" data-lang="dash-fc-filter-all">All</a></li>
+                            </ul>
+                        </div>
+                        <a class="link-reset text-decoration-underline fw-semibold link-offset-3" href="/control-panel">
+                            <span data-lang="dash-view-all">View All</span> <i class="ti ti-arrow-right"></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div dir="ltr">

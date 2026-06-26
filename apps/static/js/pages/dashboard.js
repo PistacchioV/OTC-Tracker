@@ -60,12 +60,23 @@ function premiumTooltip(extra) {
         borderWidth: 1,
         padding: 12,
         cornerRadius: 10,
+        footerColor:     dark ? '#f1f5f9' : '#1e293b',
         titleFont: { family: bodyFont, weight: '600', size: 13 },
         bodyFont:  { family: bodyFont, size: 12 },
+        footerFont:{ family: bodyFont, weight: '600', size: 12 },
+        footerMarginTop: 8,
         usePointStyle: true,
         boxPadding: 6,
         displayColors: true,
     }, extra || {});
+}
+
+/** Tooltip footer callback: appends a "Total" line summing the visible values. */
+function totalFooter(items) {
+    if (!items || !items.length) return '';
+    const sum = items.reduce((acc, it) => acc + (Number(it.parsed.y) || 0), 0);
+    const pretty = Number.isInteger(sum) ? sum.toLocaleString() : sum.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return `${t('dash-tooltip-total', 'Total')}: ${pretty}`;
 }
 
 /** Vertical gradient (bottom → top) for area/bar fills. */
@@ -172,7 +183,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
             animation: { duration: 700, easing: 'easeOutQuart' },
             plugins: {
                 legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
-                tooltip: premiumTooltip({ mode: 'index', intersect: false })
+                tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
             },
             scales: {
                 x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
@@ -185,6 +196,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
 // ─── Settlement Forecast (by product) — next 14 business days ─────────────────
 let forecastChart = null;
 let _forecastData = null;
+let _forecastProductFilter = '__all__';   // '__all__' or a product label
 
 const FC_PRODUCT_COLORS = {
     'NDF Moeda':       () => ins('chart-primary'),
@@ -212,9 +224,59 @@ async function loadForecastChart() {
             return;
         }
         _forecastData = data;
+        populateForecastFilter(data);
         buildForecastProductChart(data);
     } catch (err) {
         console.error('[Dashboard] forecast load failed:', err);
+    }
+}
+
+// Build the product dropdown from the data and wire selection → re-render
+function populateForecastFilter(data) {
+    const menu = document.getElementById('fc-product-menu');
+    if (!menu) return;
+    const products = (data.products || []).map(p => p.label);
+    // Keep "All" (first item), drop any previously-appended product items
+    menu.querySelectorAll('[data-product]:not([data-product="__all__"])').forEach(el => el.closest('li').remove());
+    products.forEach(label => {
+        const li = document.createElement('li');
+        li.innerHTML = `<a class="dropdown-item" href="#" data-product="${label}">${label}</a>`;
+        menu.appendChild(li);
+    });
+    // If the current filter no longer exists in this dataset, reset to All
+    if (_forecastProductFilter !== '__all__' && products.indexOf(_forecastProductFilter) === -1) {
+        _forecastProductFilter = '__all__';
+    }
+    syncForecastFilterUI();
+
+    if (!menu.dataset.bound) {
+        menu.addEventListener('click', (e) => {
+            const a = e.target.closest('[data-product]');
+            if (!a) return;
+            e.preventDefault();
+            _forecastProductFilter = a.getAttribute('data-product');
+            syncForecastFilterUI();
+            if (_forecastData) buildForecastProductChart(_forecastData);
+        });
+        menu.dataset.bound = '1';
+    }
+}
+
+function syncForecastFilterUI() {
+    const menu = document.getElementById('fc-product-menu');
+    const label = document.getElementById('fc-product-label');
+    if (!menu) return;
+    menu.querySelectorAll('[data-product]').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('data-product') === _forecastProductFilter);
+    });
+    if (label) {
+        if (_forecastProductFilter === '__all__') {
+            label.textContent = t('dash-fc-filter-all', 'All');
+            label.setAttribute('data-lang', 'dash-fc-filter-all');
+        } else {
+            label.textContent = _forecastProductFilter;
+            label.removeAttribute('data-lang');
+        }
     }
 }
 
@@ -223,7 +285,11 @@ function buildForecastProductChart(data) {
     if (!ctx) return;
     if (forecastChart) forecastChart.destroy();
     let fb = 0;
-    const datasets = (data.products || []).map(p => {
+    let products = data.products || [];
+    if (_forecastProductFilter !== '__all__') {
+        products = products.filter(p => p.label === _forecastProductFilter);
+    }
+    const datasets = products.map(p => {
         const c = FC_PRODUCT_COLORS[p.label] ? FC_PRODUCT_COLORS[p.label]() : FC_FALLBACK[fb++ % FC_FALLBACK.length];
         return {
             type: 'bar', label: p.label, data: p.values,
@@ -239,7 +305,7 @@ function buildForecastProductChart(data) {
             animation: { duration: 700, easing: 'easeOutQuart' },
             plugins: {
                 legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
-                tooltip: premiumTooltip({ mode: 'index', intersect: false })
+                tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
             },
             scales: {
                 x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },

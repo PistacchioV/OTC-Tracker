@@ -46,12 +46,15 @@
                     <!-- ── Body ──────────────────────────────────── -->
                     <tr>
                         <td style="padding:30px 30px 10px;">
-                            <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 8px;">OTC,</p>
-                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 6px;">
-                                Segue abaixo a prévia de liquidações OTC para os próximos dias úteis.
+                            <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">
+                                Settlement Forecast
+                            </p>
+                            <p style="color:#444;font-size:14px;line-height:1.65;margin:0 0 8px;">
+                                Please find below the OTC settlement forecast for the upcoming business days,
+                                broken down by product and by entity.
                             </p>
                             <p style="color:#0066cc;font-size:13px;font-weight:700;margin:0 0 6px;">
-                                Total de liquidações previstas: {{ grand_total }}
+                                Total forecasted settlements: {{ grand_total }}
                             </p>
                         </td>
                     </tr>
@@ -69,20 +72,24 @@
                     </td></tr>
                     {% endif %}
 
+                    <!-- ── Signature ──────────────────────────────── -->
                     <tr>
                         <td style="padding:18px 30px 28px;">
-                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
-                                Atenciosamente,<br/><strong>Brazil OTC BO</strong> :)
+                            <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                                Regards,<br/>
+                                <strong>OTC Tracker — Brazil OTC Operations</strong>
                             </p>
                         </td>
                     </tr>
 
                     <!-- ── Footer ────────────────────────────────── -->
                     <tr>
-                        <td style="background-color:#f3f5f9;padding:18px 28px;text-align:center;border-top:1px solid #e5e9f0;">
-                            <p style="color:#8a929e;font-size:11px;margin:0;line-height:1.5;">
-                                © {{ current_year }} OTC Tracker by JPMorgan Chase &amp; Co.<br/>
-                                This is an automated message — please do not reply.
+                        <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                            <p style="color:#999999;font-size:11px;margin:0;">
+                                &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.
+                            </p>
+                            <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                                This is an automated notification. Do not reply to this email.
                             </p>
                         </td>
                     </tr>
