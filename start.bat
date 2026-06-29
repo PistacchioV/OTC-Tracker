@@ -12,7 +12,9 @@ REM ============================================================================
 cd /d "%~dp0"
 
 REM Ativa o virtualenv se existir (ajuste o nome da pasta se necessario).
-if exist ".venv311\Scripts\activate.bat" (
+if exist "OTCTracker\Scripts\activate.bat" (
+    call "OTCTracker\Scripts\activate.bat"
+) else if exist ".venv311\Scripts\activate.bat" (
     call ".venv311\Scripts\activate.bat"
 ) else if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
