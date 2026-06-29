@@ -1672,3 +1672,94 @@ apps/templates/partials/topbar.html               ← ACTION_META (Bank Account 
 apps/templates/pages/intrag-option.html           ← ajuste manual
 apps/static/data/translations/{en,br,es}.json     ← swal-save-failed
 ```
+
+---
+
+## 30. Sessão 2026-06-29 — Scripts de boot (.bat) split, ícones de notificação, Forecast (2 datas + rótulos Option), export de usuários, B3 JSON por data + Operations, Settlement Net Type
+
+Conjunto de melhorias/correções. Commits: `882c7c2`, `3d2ebbb`, `0450753`, `a7190d3`, `8b8afd0`,
+`7ca45c8`, `68d54ec`, `b8df645`, `fada183`, `e8ac551`, `944c6ff`, `5d0acc5`.
+
+### Scripts de boot Windows: split debug/prod + robustez (`882c7c2`, `3d2ebbb`, `0450753`)
+- **`start.bat` removido**; substituído por **`start-debug.bat`** (DEBUG, Werkzeug, porta **8050**) e
+  **`start-prod.bat`** (PRODUÇÃO, **waitress**, porta **8050** — antes era 5005; ajustado a pedido).
+- **Detecção de python ancorada em `%~dp0`** (`set "BASE=%~dp0"`): procura `Scripts\python.exe` (venv na raiz do
+  projeto — caso da máquina JP, `C:\Users\E930179\ds\OTCTracker`), depois `OTCTracker\Scripts`, `.venv311`, `.venv`,
+  e por fim `python`/`py` do PATH. **Não depende do `cd`** (perfil em drive de rede do JP quebrava o relativo).
+- **`pip install -r requirements.txt` no boot, best-effort**: `--timeout 10 --retries 1`; se o pypi estiver
+  bloqueado (rede JPM), **avisa e continua** com o que já está no venv. Arg **`noinstall`** pula a instalação.
+- ⚠️ O venv da máquina JP fica na **raiz do projeto** (`<proj>\Scripts\python.exe`), não em subpasta.
+
+### Ícones de notificação (Lucide ≠ Tabler) (`a7190d3`)
+- O map de notificações do `topbar.html` usa nomes **Lucide** (`<i data-lucide=...>`). `CETIP Files Saved` usava
+  `file-export` e `Contacts Updated` usava `address-book` — **inexistentes no Lucide** → só a bolinha colorida, sem
+  ícone. Corrigido p/ **`file-output`** e **`book-user`**. (`chart-bar` do Forecast já era válido.)
+
+### Settlement Forecast: opções contam em 2 datas (`8b8afd0`)
+- A fonte **`opc`** (opções FXO/Comm/EDG) agora conta cada contrato na **Data do Vencimento (col M)** **e** na
+  **Data de Liquidação do Prêmio (col BN)**. Novo `'date2'` na fonte + `'date2_index': 65` (fallback por índice).
+- `_forecast_collect`: junta as datas num `set` de slots (dedup quando caem no mesmo dia útil); conta por produto
+  **e** entidade em cada data. Resolução de coluna virou **insensível a acentos** (`_fcst_norm` via `unicodedata`).
+- Cobre **index e Control Panel** (mesmo backend `_forecast_payload`).
+
+### Forecast: rótulos OPT/Opt → Option (`7ca45c8`, `68d54ec`)
+- `Opt FXO`/`OPT Comm`/`OPT EDG`/`OPT Equities` → **`Option FXO`/`Option Commodities`/`Option EDG`/`Option Equities`**.
+  Alterado em `_FCST_PRODUCT_ORDER`, `_fcst_opt_class_product`, `_fcst_option_product` (routes) + color maps
+  `dashboard.js` e `settlement-forecast.js`. **Não** mexe em `Opt FXO` como **nome de página** (menu/notificações).
+
+### Script export de usuários (`b8df645`)
+- **`scripts/export_users_excel.py`**: extrai a tabela `users` do `Users_OTCTracker.db` (DuckDB) → Excel em
+  `~/Downloads/users_export_<ts>.xlsx` (abas **Users** + **Summary** por Status/Role). Abre **read-only** com
+  **fallback de cópia** (`.db`+`.wal` → temp) se o app estiver segurando o lock do DuckDB.
+
+### Reference Data: alinhamento do badge de contato (`fada183`)
+- Badge **Active** do contato desalinhado (herdava `margin-top:6px` de `.cp-acc-main .badge`). Nome+badge agora num
+  wrapper flex centralizado **`.cp-acc-namebadge`** (mesmo padrão do CGD).
+
+### B3 JSON por ano/mês/dia + export de Operations (`e8ac551`)
+- Os JSONs do cache **`b3 files`** passam a ser gravados em **`<categoria>/YYYY/MM/DD/`** (antes soltos na pasta do
+  produto): helper **`_b3_date_subpath(dref)`** (`YYMMDD → YYYY/MM/DD`). `_b3_export_json` recebe `dref`; leitores
+  do forecast (`_forecast_collect`, `_forecast_has_files`) ajustados.
+- **Operations passou a gerar JSON** no fluxo de file-saving: regra DOPERACOES ganhou `json` config (categoria
+  **Operations**, headerless → header padrão `_B3_SWAP_HEADERS['operations']` com **37 colunas** fornecidas pelo
+  usuário). `Operations/.gitkeep` criado (os `*.json` são gitignored, gerados em runtime).
+- ⚠️ JSONs antigos na estrutura plana deixam de ser lidos; basta rodar **Save CETIP Files** de novo (regerado diário).
+
+### Intrag NDF: largura coluna Trading Unit (`944c6ff`)
+- `#intrag-ndf-table` col 22 (Trading Unit): **120px → 160px** (edição manual do usuário).
+
+### Reference Data: seção **Settlement Net Type** por counterparty (`5d0acc5`)
+- Nova seção no editor de Counterparty (entre CGD e Banking): **Settlement Net Type** ∈ {**Total Net**, **Pay/Rec**,
+  **No Net**}, **padrão Total Net**. Fluxo **maker/checker** idêntico ao CGD: editar → **Pending**; aprovar exige
+  **outro SID** (`same_user` bloqueia) → **Active**.
+- **Backend**: `_net_norm` + `_CP_NET_TYPES`; `NET` normalizado no `_cpd_get_record` (e no novo-registro default);
+  endpoints **`/api/counterparty-details/net/edit`** (valida valor, status=Pending, maker=sid) e
+  **`/net/approve`** (guard same_user, status=Active, checker=sid). Notificações **`Net Type Edited`/`Approved`**.
+- **Frontend** (`reference-data.html`): `_renderNetZone`/`_netFormRow`, `var netEditing`, `refreshNetZone`,
+  handlers `cp-net-edit`/`cp-net-edit-save`/`cp-net-edit-cancel`/`cp-net-approve`, `syncCache` inclui `NET`,
+  normalização em `_normCp` (legacy → Total Net/Active). Modelo em CounterpartyDetails.json:
+  `NET: {value,status,maker,checker}`.
+- **Topbar**: ícones das notificações `arrow-left-right` (Edited/warning) e `badge-check` (Approved/success).
+- **i18n**: `rd-cp-net` em en/br/es. Testado end-to-end (edit→Pending, valor inválido→400, approve self→403
+  same_user, approve outro→Active, persistido).
+
+### Padrões / lembretes
+- **Nomes de ícone de notificação são Lucide** (`data-lucide`), não Tabler — validar contra `lucide.min.js`
+  (PascalCase) antes de usar (ex.: `file-output`, `book-user`, `arrow-left-right`, `badge-check`).
+- Rótulos do Forecast são **compartilhados** entre index/Control Panel/e-mail (vêm do backend `_forecast_payload`).
+- Dev server **sem reloader ativo** (máquina local): após editar `routes.py`, **reiniciar** para registrar rotas
+  novas (durante esta sessão os endpoints `net/*` davam 404 até reiniciar; confirmados no `url_map` de app novo).
+
+### Arquivos modificados (sessão)
+```
+start-debug.bat / start-prod.bat (start.bat removido)  ← boot split + venv %~dp0 + requirements best-effort
+scripts/export_users_excel.py                          ← novo: export Excel de usuários (DuckDB read-only + copy fallback)
+apps/pages/routes.py                                   ← forecast 2 datas + _fcst_norm; rótulos Option; b3 json YYYY/MM/DD + Operations; Settlement Net Type (endpoints + _net_norm)
+apps/templates/pages/reference-data.html               ← badge contato alinhado; seção Settlement Net Type
+apps/templates/pages/intrag-ndf.html                   ← largura Trading Unit 160px
+apps/templates/partials/topbar.html                    ← ícones CETIP/Contacts + Net Type Edited/Approved
+apps/static/js/pages/dashboard.js                      ← color map rótulos Option
+apps/static/js/pages/settlement-forecast.js            ← color map rótulos Option
+apps/static/data/translations/{en,br,es}.json          ← rd-cp-net
+apps/static/data/cache/b3 files/Operations/.gitkeep    ← nova categoria
+```
