@@ -311,6 +311,7 @@
 
     /* inline CGD add/edit form */
     .cp-cgd-form { display: grid; grid-template-columns: 1fr 32px 30px 30px; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .cp-net-form { display: grid; grid-template-columns: 1fr 30px 30px; gap: 6px; align-items: center; margin-bottom: 6px; }
     /* inline contact form action row */
     .cp-contact-form .cp-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 
@@ -930,6 +931,7 @@ $(document).ready(function () {
     ];
     var CP_RULES = ['Negotiation', 'Repurchase', 'Settlement', 'Confirmation Letter', 'Settlement Advice', 'Contact Confirmation', 'IOF'];
     var CP_STATUSES = ['Active', 'Inactive'];
+    var CP_NET_TYPES = ['Total Net', 'Pay/Rec', 'No Net'];
 
     function _esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
     function _attr(v) { return _esc(v).replace(/"/g, '&quot;'); }
@@ -972,6 +974,15 @@ $(document).ready(function () {
                 };
             });
         }
+        // Settlement Net Type → single value w/ maker/checker. Missing → Total Net, Active.
+        var rawNet = (cp.NET && typeof cp.NET === 'object') ? cp.NET : {};
+        var netVal = String(rawNet.value || '').trim();
+        out.NET = {
+            value:   CP_NET_TYPES.indexOf(netVal) !== -1 ? netVal : 'Total Net',
+            status:  rawNet.status || 'Active',
+            maker:   rawNet.maker || '',
+            checker: rawNet.checker || ''
+        };
         return out;
     }
 
@@ -1013,6 +1024,33 @@ $(document).ready(function () {
                 '<button type="button" class="cp-addbtn" data-cgdadd><i class="ti ti-plus"></i><span data-lang="cp-add">Add</span></button></div>' +
                '<div class="cp-cgd-list">' + rows + '</div>' +
                '<div class="cp-cgd-addform" style="display:none;">' + _cgdFormRow(null) + '</div>';
+    }
+
+    /* ════════ Settlement Net Type zone (single value, maker/checker) ════════ */
+    function _netFormRow(net) {
+        var opts = CP_NET_TYPES.map(function(o){
+            return '<option value="' + _attr(o) + '"' + (net.value === o ? ' selected' : '') + '>' + _esc(o) + '</option>';
+        }).join('');
+        return '<div class="cp-net-form">' +
+            '<select class="form-select form-select-sm cp-net-val">' + opts + '</select>' +
+            '<button type="button" class="cp-okbtn cp-net-edit-save"><i class="ti ti-check"></i></button>' +
+            '<button type="button" class="cp-cxbtn cp-net-edit-cancel"><i class="ti ti-x"></i></button></div>';
+    }
+    function _renderNetZone(model, editing) {
+        var net = model.NET || { value: 'Total Net', status: 'Active' };
+        var body;
+        if (editing) {
+            body = _netFormRow(net);
+        } else {
+            var pend = String(net.status).toLowerCase() !== 'active';
+            var own  = net.maker && net.maker === CURRENT_USER;
+            var ops = '';
+            if (pend) ops += _apprBtn('cp-net-approve', 'net', own);
+            ops += '<button type="button" title="' + _attr(t('rd-cp-edit','Edit')) + '" class="btn btn-xs cp-editbtn cp-net-edit"><i class="ti ti-pencil"></i></button>';
+            body = '<div class="cp-acc-row"><div class="cp-acc-main cp-cgd-main">' + _esc(net.value) + ' ' + _accBadge(net.status) + '</div>' +
+                   '<div class="cp-acc-actions">' + ops + '</div></div>';
+        }
+        return '<div class="cp-zone-head"><span class="cp-zone-title" data-lang="rd-cp-net">Settlement Net Type</span></div>' + body;
     }
 
     /* ════════ Contacts zone (maker/checker) ════════ */
@@ -1196,6 +1234,7 @@ $(document).ready(function () {
         var cgdEditId = null;      // CGD item currently in inline-edit
         var contactEditId = null;  // Contact item currently in inline-edit
         var bankEditId = null;     // banking account currently in inline-edit
+        var netEditing = false;    // Settlement Net Type inline-edit open?
 
         function renderHead() {
             return '<div class="cp-head">' +
@@ -1211,6 +1250,7 @@ $(document).ready(function () {
         function renderBody() {
             return '<div class="cp-body">' +
                 '<div class="cp-zone" id="cp-cgd-zone">' + _renderCgdZone(model, cgdEditId) + '</div>' +
+                '<div class="cp-zone" id="cp-net-zone">' + _renderNetZone(model, netEditing) + '</div>' +
                 '<div class="cp-zone" id="cp-bank-zone">' + _renderBankZone(bankState, bankEditId) + '</div>' +
                 '<div class="cp-zone" id="cp-contact-zone">' + _renderContactZone(model, contactEditId) + '</div>' +
             '</div>';
@@ -1252,13 +1292,19 @@ $(document).ready(function () {
         /* persist the live model back into the SPN cache after any per-item change */
         function syncCache() {
             _CPDETAILS[spn] = $.extend({ SPN: spn, COUNTERPARTY: name }, _CPDETAILS[spn],
-                { CGD: model.CGD, CONTACTS: model.CONTACTS, BANKING: bankState });
+                { CGD: model.CGD, CONTACTS: model.CONTACTS, BANKING: bankState, NET: model.NET });
         }
 
         /* Re-render only the CGD zone from model (after a maker/checker action). */
         function refreshCgdZone(popup) {
             var $z = $(popup).find('#cp-cgd-zone');
             $z.html(_renderCgdZone(model, cgdEditId));
+            _applyLang($z);
+        }
+        /* Re-render only the Settlement Net Type zone. */
+        function refreshNetZone(popup) {
+            var $z = $(popup).find('#cp-net-zone');
+            $z.html(_renderNetZone(model, netEditing));
             _applyLang($z);
         }
         /* Re-render only the Contacts zone (re-inits select2 on any open form). */
@@ -1396,6 +1442,25 @@ $(document).ready(function () {
                     model.CGD = model.CGD.filter(function(x){ return x.id!==id; });
                     if (cgdEditId === id) cgdEditId = null;
                     syncCache(); refreshCgdZone(popup);
+                });
+            });
+
+            /* ── Settlement Net Type: edit (inline select) → pending ── */
+            $p.on('click', '.cp-net-edit', function(){ netEditing = true; refreshNetZone(popup); });
+            $p.on('click', '.cp-net-edit-cancel', function(){ netEditing = false; refreshNetZone(popup); });
+            $p.on('click', '.cp-net-edit-save', function(){
+                var val = $(this).closest('.cp-net-form').find('.cp-net-val').val() || 'Total Net';
+                bankFetch('/api/counterparty-details/net/edit', { SPN:spn, value:val }, popup, function(res){
+                    model.NET = res.item;
+                    netEditing = false; syncCache(); refreshNetZone(popup);
+                });
+            });
+            /* ── Settlement Net Type: approve (checker ≠ maker) ── */
+            $p.on('click', '.cp-net-approve', function(){
+                if (this.getAttribute('data-own') === '1') { ownApprovalAlert(); return; }
+                bankFetch('/api/counterparty-details/net/approve', { SPN:spn }, popup, function(res){
+                    model.NET = res.item;
+                    syncCache(); refreshNetZone(popup);
                 });
             });
 

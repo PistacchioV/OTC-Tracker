@@ -6390,17 +6390,37 @@ def _contacts_norm(contacts):
     return out
 
 
+# Settlement Net Type — single value per counterparty with maker/checker.
+# Item: {value ∈ _CP_NET_TYPES, status ∈ Active|Pending, maker, checker}
+_CP_NET_TYPES = ['Total Net', 'Pay/Rec', 'No Net']
+
+
+def _net_norm(net):
+    """Coerce a stored Settlement Net Type into {value,status,maker,checker}.
+    Missing/legacy records default to Total Net, already Active (imported)."""
+    if not isinstance(net, dict):
+        net = {}
+    val = str(net.get('value', '') or '').strip()
+    return {
+        'value':   val if val in _CP_NET_TYPES else 'Total Net',
+        'status':  net.get('status', 'Active') or 'Active',
+        'maker':   net.get('maker', '') or '',
+        'checker': net.get('checker', '') or '',
+    }
+
+
 def _cpd_get_record(spn):
-    """Return (data, rec) for an SPN with CGD/CONTACTS/BANKING normalized; create if missing."""
+    """Return (data, rec) for an SPN with CGD/CONTACTS/BANKING/NET normalized; create if missing."""
     data = _cpd_load()
     rec = _cpd_find(data, spn)
     if rec is None:
         rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _bank_norm({}), 'CONTACTS': []}
+               'BANKING': _bank_norm({}), 'CONTACTS': [], 'NET': _net_norm({})}
         data.append(rec)
     rec['CGD'] = _cgd_norm(rec.get('CGD'))
     rec['CONTACTS'] = _contacts_norm(rec.get('CONTACTS'))
     rec['BANKING'] = _bank_norm(rec.get('BANKING'))
+    rec['NET'] = _net_norm(rec.get('NET'))
     return data, rec
 
 
@@ -6660,6 +6680,47 @@ def api_cp_cgd_delete():
     _cpd_save_list(data)
     _notify_bank('CGD Deleted', _bank_detail(spn, rec, (removed or {}).get('value', '')))
     return jsonify({'ok': True})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SETTLEMENT NET TYPE — single value per counterparty, maker/checker.
+# Editing proposes a change (→ Pending); a different SID approves (→ Active).
+# ──────────────────────────────────────────────────────────────────────────
+@blueprint.route('/api/counterparty-details/net/edit', methods=['POST'])
+def api_cp_net_edit():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    if not spn:
+        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
+    value = str(p.get('value', '') or '').strip()
+    if value not in _CP_NET_TYPES:
+        return jsonify({'ok': False, 'error': 'invalid_value'}), 400
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    rec['NET'] = {'value': value, 'status': 'Pending', 'maker': sid, 'checker': ''}
+    _cpd_save_list(data)
+    _notify_bank('Net Type Edited', _bank_detail(spn, rec, value + ' (Pending approval)'))
+    return jsonify({'ok': True, 'item': rec['NET']})
+
+
+@blueprint.route('/api/counterparty-details/net/approve', methods=['POST'])
+def api_cp_net_approve():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    spn = str(p.get('SPN', '') or '').strip()
+    sid = session.get('user_sid', '') or ''
+    data, rec = _cpd_get_record(spn)
+    net = rec['NET']
+    if net.get('maker') and net['maker'] == sid:
+        return jsonify({'ok': False, 'error': 'same_user'}), 403
+    net['status'] = 'Active'
+    net['checker'] = sid
+    _cpd_save_list(data)
+    _notify_bank('Net Type Approved', _bank_detail(spn, rec, net['value']))
+    return jsonify({'ok': True, 'item': net})
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -486,6 +486,7 @@
   "rd-cp-agency": "Agency",
   "rd-cp-account": "Account",
   "rd-cp-contacts": "Contacts",
+  "rd-cp-net": "Settlement Net Type",
   "rd-cp-zone-bank": "Banking Data",
   "rd-cp-pay": "PAY",
   "rd-cp-receive": "RECEIVE",
