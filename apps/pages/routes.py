@@ -8,6 +8,7 @@ import smtplib
 import json
 import threading
 import traceback
+import unicodedata
 import uuid
 import shutil
 import tempfile
@@ -1919,7 +1920,14 @@ _FORECAST_SOURCES = [
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
      'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'conta'],
-     'product': ('optclass', ['classe do ativo', 'ativo subjacente', 'classe'])},
+     'product': ('optclass', ['classe do ativo', 'ativo subjacente', 'classe']),
+     # Options (FXO/Comm/EDG) are counted on TWO dates: the maturity (col M,
+     # "Data do Vencimento", via 'date') AND the premium settlement (col BN,
+     # "Data de Liquidação do Prêmio", via 'date2'). A single contract therefore
+     # contributes a count on each of those business days within the window.
+     'date2': ['data de liquidacao do premio', 'data liquidacao do premio',
+               'liquidacao do premio'],
+     'date2_index': 65},   # fallback: col BN (1-based 66) if the header name shifts
     {'key': 'swap_pos', 'label': 'SWAP Position', 'category': 'Swap',
      'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
      'date': ['data vencimento'], 'entity': ['contraparte'],
@@ -2027,13 +2035,21 @@ def _forecast_spine(anchor=None):
     return days
 
 
+def _fcst_norm(s):
+    """Lower-case + strip accents, so an ascii token like 'liquidacao do premio'
+    matches a 'Liquidação do Prêmio' column header."""
+    s = unicodedata.normalize('NFKD', (s or '').lower())
+    return ''.join(c for c in s if not unicodedata.combining(c))
+
+
 def _fcst_resolve_key(keys, tokens):
-    """First key whose lower-cased name contains one of the tokens (tokens in
-    priority order)."""
-    low = [(k, k.lower()) for k in keys]
+    """First key whose accent-insensitive lower-cased name contains one of the
+    tokens (tokens in priority order). Tokens are accent-stripped too."""
+    low = [(k, _fcst_norm(k)) for k in keys]
     for tok in tokens:
+        tnorm = _fcst_norm(tok)
         for k, kl in low:
-            if tok in kl:
+            if tnorm in kl:
                 return k
     return None
 
@@ -2068,6 +2084,14 @@ def _forecast_collect(dref, spine):
 
         keys = list(rows[0].keys())
         date_key = _fcst_resolve_key(keys, src['date'])
+        # Optional second date column (e.g. options also count on the premium
+        # settlement date). Resolve by name, then fall back to a fixed column
+        # index if the header name could not be found.
+        date2_key = _fcst_resolve_key(keys, src['date2']) if src.get('date2') else None
+        if date2_key is None and src.get('date2_index') is not None:
+            i2 = src['date2_index']
+            if 0 <= i2 < len(keys):
+                date2_key = keys[i2]
         ent_key = _fcst_resolve_key(keys, src['entity'])
         pmode, pspec = src['product']
         prod_key = (_fcst_resolve_key(keys, pspec)
@@ -2090,10 +2114,20 @@ def _forecast_collect(dref, spine):
                     cwv = cwv[:-2]
                 if cwv not in cw_allowed:
                     continue
+            # Business-day slots this row counts on: the primary date plus an
+            # optional second date (e.g. options count on both maturity AND
+            # premium settlement). Dedup so a single row counts at most once per
+            # day even when both dates land on the same business day.
+            slots = set()
             d = _fcst_parse_date(row.get(date_key, '')) if date_key else None
-            if d is None or d not in spine_index:
+            if d in spine_index:
+                slots.add(spine_index[d])
+            if date2_key is not None:
+                d2 = _fcst_parse_date(row.get(date2_key, ''))
+                if d2 in spine_index:
+                    slots.add(spine_index[d2])
+            if not slots:
                 continue
-            di = spine_index[d]
             if pmode == 'fixed':
                 product = pspec
             elif pmode == 'lob':
@@ -2104,21 +2138,23 @@ def _forecast_collect(dref, spine):
                 product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
             else:
                 product = _fcst_option_product(row.get(prod_key, '') if prod_key else '')
-            if product:
-                by_product.setdefault(product, [0] * n)[di] += 1
             ent = _fcst_map_entity(row.get(ent_key, '')) if ent_key else None
-            if ent:
-                by_entity.setdefault(ent, [0] * n)[di] += 1
+            for di in slots:
+                if product:
+                    by_product.setdefault(product, [0] * n)[di] += 1
+                if ent:
+                    by_entity.setdefault(ent, [0] * n)[di] += 1
             counted += 1
         st['counted'] = counted
         st['date_field'] = date_key
+        st['date2_field'] = date2_key
         st['entity_field'] = ent_key
         st['product_field'] = prod_key
         st['columns'] = keys
         st['count_where_field'] = cw_key
         status.append(st)
-        log.info("[forecast] %s: %d rows, %d counted | date=%r entity=%r product=%r%s",
-                 src['label'], len(rows), counted, date_key, ent_key, prod_key,
+        log.info("[forecast] %s: %d rows, %d counted | date=%r date2=%r entity=%r product=%r%s",
+                 src['label'], len(rows), counted, date_key, date2_key, ent_key, prod_key,
                  (' where=%r in %r' % (cw_key, sorted(cw_allowed))) if cw else '')
     return by_product, by_entity, status
 
