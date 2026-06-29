@@ -1497,7 +1497,8 @@ _CETIP_RULES = [
     {'label': 'Operations (DOPERACOES)',
      'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r)},
+     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r),
+     'json': {'category': 'Operations', 'has_header': False, 'header_key': 'operations'}},
     {'label': 'COE (DRESUMOEMISSOR-COE)',
      'match': lambda n: '_dresumoemissor-coe.txt' in n,
      'date_start': 8,
@@ -1595,16 +1596,38 @@ _B3_SWAP_HEADERS_RAW = {
         "Codigo do Contrato;Data;ID do Sistema;Parte;Nome Simplificado;Data do Evento;"
         "Operacao;Valor;Titular;Estado"
     ),
+    # 73760_*_DOPERACOES.CETIP21
+    'operations': (
+        "Participante (Nome Simpl.);Conta;Liquidante;Cod.Operacao;Tipo Operacao;C/V;"
+        "Tipo Compra/Venda;Titulo;Codigo IF Anterior;Tipo Titulo;Data Emissao;Data Vencimento;"
+        "Quantidade;PU;Valor;Tx Colocacao;Sistema;Modalidade Liquidacao;Status;Numero Operacao;"
+        "Numero Associacao;Data Liquidacao;Data Origem;Instituicao Confirmadora(Conta);"
+        "Instituicao Confirmadora(Papel);Contraparte (Nome Simpl.);Conta Contraparte;"
+        "Data Compromisso;PU/Ida Compromisso;Numero Operacao Original;"
+        "Data da Operacao Original/Data Operacao Original da Antecipacao;PU Op Original;"
+        "Qtd Op Original;ISPB Liq. Contraparte;Nu Op Msg;Num Ctrl Operacao;Programa de Emissao"
+    ),
 }
 _B3_SWAP_HEADERS = {k: [h.strip() for h in v.split(';')]
                     for k, v in _B3_SWAP_HEADERS_RAW.items()}
 
 
-def _b3_export_json(src_path, json_cfg, dest_name):
+def _b3_date_subpath(dref):
+    """YYMMDD ref → 'YYYY/MM/DD' subfolders so the per-day JSON files are split by
+    year/month/day inside each product folder. '' if the ref can't be parsed."""
+    try:
+        d = datetime.strptime(dref, '%y%m%d')
+    except (ValueError, TypeError):
+        return ''
+    return os.path.join(d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'))
+
+
+def _b3_export_json(src_path, json_cfg, dest_name, dref):
     """Parse a saved CETIP file into a list-of-dicts JSON under
-    B3 Files/<category>/<dest_name>.json. Header files use their own first line;
-    headerless SWAP files use the stored standard header (_B3_SWAP_HEADERS).
-    Best-effort — returns the JSON path on success or None on failure."""
+    B3 Files/<category>/YYYY/MM/DD/<dest_name>.json. Header files use their own
+    first line; headerless files use the stored standard header
+    (_B3_SWAP_HEADERS) or positional Field_N names. Best-effort — returns the
+    JSON path on success or None on failure."""
     try:
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
             lines = [ln for ln in fh.read().splitlines() if ln.strip()]
@@ -1666,7 +1689,7 @@ def _b3_export_json(src_path, json_cfg, dest_name):
                 log.warning("[b3-json] %s filter column not found (tokens=%s, index=%s)",
                             os.path.basename(dest_name), filt.get('column'), filt.get('index'))
 
-        out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'])
+        out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'], _b3_date_subpath(dref))
         os.makedirs(out_dir, exist_ok=True)
         json_name = os.path.splitext(dest_name)[0] + '.json'
         json_path = os.path.join(out_dir, json_name)
@@ -1821,9 +1844,10 @@ def api_cp_cetip_settlement():
                 if rule.get('attach_sales_support'):
                     attach_paths.append(dest_path)
                     attach_saved.append(entry)
-                # Also emit a tidy JSON for the forecast (NDF / Option / Swap).
+                # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
+                # into per-day folders (<category>/YYYY/MM/DD/).
                 if rule.get('json'):
-                    _b3_export_json(dest_path, rule['json'], dest_name)
+                    _b3_export_json(dest_path, rule['json'], dest_name, dref)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -2063,7 +2087,7 @@ def _forecast_collect(dref, spine):
     by_product, by_entity = {}, {}
     status = []
     for src in _FORECAST_SOURCES:
-        path = os.path.join(B3_JSON_ROOT, src['category'], src['file'](dref))
+        path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
         st = {'label': src['label'], 'file': os.path.basename(path),
               'found': False, 'records': 0, 'counted': 0}
         if not os.path.isfile(path):
@@ -2190,7 +2214,7 @@ def _forecast_has_files(ref):
     """True if at least one source JSON exists for this reference date."""
     dref = ref.strftime('%y%m%d')
     for src in _FORECAST_SOURCES:
-        if os.path.isfile(os.path.join(B3_JSON_ROOT, src['category'], src['file'](dref))):
+        if os.path.isfile(os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))):
             return True
     return False
 
