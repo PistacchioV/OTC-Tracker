@@ -50,9 +50,9 @@
     return {
       'NDF Moeda':       cssVar('chart-primary', '#4f46e5'),
       'NDF Commodities': cssVar('chart-secondary', '#818cf8'),
-      'Opt FXO':         '#10b981',
-      'OPT Comm':        '#0ea5e9',
-      'OPT EDG':         '#a855f7',
+      'Option FXO':      '#10b981',
+      'Option Comm':     '#0ea5e9',
+      'Option EDG':      '#a855f7',
       'SWAP CEM':        '#f59e0b',
       'SWAP EDG':        '#f43f5e',
       'SWAP CEMHYB':     '#94a3b8',

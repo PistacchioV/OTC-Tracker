@@ -1901,8 +1901,8 @@ _FCST_ENTITY_MAP = {
     '85398005': 'ATACAMA',
 }
 _FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
-_FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Opt FXO', 'OPT Comm',
-                       'OPT EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+_FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Comm',
+                       'Option EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
 
 # One entry per JSON source. Field resolution is by NAME token (case-insensitive
 # "contains", first match wins) so it survives small header differences.
@@ -1985,10 +1985,10 @@ def _fcst_option_product(code):
     option is never dropped just because the classifier column couldn't be read."""
     c = (code or '').upper()
     if 'COM' in c or 'MERCAD' in c:
-        return 'OPT Comm'
+        return 'Option Comm'
     if 'INI' in c or 'EQU' in c or 'ACAO' in c or 'AÇÃO' in c:
-        return 'OPT Equities'
-    return 'Opt FXO'   # 220 / câmbio / unmapped → FX options (default, never None)
+        return 'Option Equities'
+    return 'Option FXO'   # 220 / câmbio / unmapped → FX options (default, never None)
 
 
 def _fcst_ndf_product(asset_class):
@@ -2005,10 +2005,10 @@ def _fcst_opt_class_product(asset_class):
     TAXA DE CAMBIO → FXO, Commodities → Comm, everything else → EDG."""
     c = (asset_class or '').upper()
     if 'CAMB' in c or 'MOEDA' in c:
-        return 'Opt FXO'
+        return 'Option FXO'
     if 'COMMOD' in c or 'MERCAD' in c:
-        return 'OPT Comm'
-    return 'OPT EDG'
+        return 'Option Comm'
+    return 'Option EDG'
 
 
 def _fcst_lob(identifier):
