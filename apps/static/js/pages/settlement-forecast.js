@@ -51,7 +51,7 @@
       'NDF Moeda':       cssVar('chart-primary', '#4f46e5'),
       'NDF Commodities': cssVar('chart-secondary', '#818cf8'),
       'Option FXO':      '#10b981',
-      'Option Comm':     '#0ea5e9',
+      'Option Commodities': '#0ea5e9',
       'Option EDG':      '#a855f7',
       'SWAP CEM':        '#f59e0b',
       'SWAP EDG':        '#f43f5e',

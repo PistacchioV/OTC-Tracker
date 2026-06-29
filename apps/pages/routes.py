@@ -1901,7 +1901,7 @@ _FCST_ENTITY_MAP = {
     '85398005': 'ATACAMA',
 }
 _FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
-_FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Comm',
+_FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Commodities',
                        'Option EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
 
 # One entry per JSON source. Field resolution is by NAME token (case-insensitive
@@ -1985,7 +1985,7 @@ def _fcst_option_product(code):
     option is never dropped just because the classifier column couldn't be read."""
     c = (code or '').upper()
     if 'COM' in c or 'MERCAD' in c:
-        return 'Option Comm'
+        return 'Option Commodities'
     if 'INI' in c or 'EQU' in c or 'ACAO' in c or 'AÇÃO' in c:
         return 'Option Equities'
     return 'Option FXO'   # 220 / câmbio / unmapped → FX options (default, never None)
@@ -2007,7 +2007,7 @@ def _fcst_opt_class_product(asset_class):
     if 'CAMB' in c or 'MOEDA' in c:
         return 'Option FXO'
     if 'COMMOD' in c or 'MERCAD' in c:
-        return 'Option Comm'
+        return 'Option Commodities'
     return 'Option EDG'
 
 
