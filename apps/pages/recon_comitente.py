@@ -563,6 +563,11 @@ def _build_response_from_list(rows):
 # ─── Caminhos de rede (ambiente JP) ──────────────────────────────────────────
 _DCAD_BASE   = r"I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP"
 _OUTPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Comitente"
+# O DCADCOMITENTES agora vem da pasta de DESTINO da rotina "Salvar Arquivos CETIP"
+# (CETIP_DEST_ROOT\YYYY\mm. Month\dd), e não mais do drop bruto da B3. Usa o MESMO
+# env var (CETIP_DEST_ROOT) da rotina CETIP para os dois ficarem sempre alinhados.
+_CETIP_DEST_BASE = os.getenv('CETIP_DEST_ROOT',
+                             r"I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files")
 
 # Caixas Outlook e subjects dos emails
 _MAILBOX         = 'brazil.otc.ops@jpmorgan.com'
@@ -714,7 +719,7 @@ class ReconFilesMissing(FileNotFoundError):
         self.dcad_path = dcad_path
         labels = {'b3_cgd': "e-mail 'Base B3 & CGD Consolidada'",
                   'party': "e-mail 'Party Central Report'",
-                  'dcad': 'arquivo DCADCOMITENTES no drive I:\\'}
+                  'dcad': 'arquivo DCADCOMITENTES na pasta de destino da rotina CETIP'}
         super().__init__('Não encontrado(s): ' + ', '.join(labels.get(m, m) for m in missing))
 
 
@@ -762,9 +767,11 @@ def run_auto(recon_date_str: str):
             except FileNotFoundError:
                 missing.append('party')
 
-            # ── DCADCOMITENTES via drive de rede ─────────────────────────────
+            # ── DCADCOMITENTES da pasta de destino da rotina CETIP ───────────
+            # Salvo por "Salvar Arquivos CETIP" em CETIP_DEST_ROOT\YYYY\mm. Month\dd.
+            month_en  = _MONTH_EN[month_num]
             dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
-            path_dcad = os.path.join(_DCAD_BASE, year, month_num, day, dcad_name)
+            path_dcad = os.path.join(_CETIP_DEST_BASE, year, f'{month_num}. {month_en}', day, dcad_name)
             if not os.path.exists(path_dcad):
                 missing.append('dcad')
 

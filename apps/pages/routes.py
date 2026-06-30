@@ -1519,6 +1519,11 @@ _CETIP_RULES = [
      'date_start': 4,
      'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r),
      'attach_sales_support': True},   # this file is e-mailed to Sales Support
+    {'label': 'Comitente Registry (DCADCOMITENTES)',
+     'match': lambda n: '_dcadcomitentes.txt' in n,
+     'date_start': 4,                 # SIC_YYMMDD_DCADCOMITENTES.TXT → date at index 4
+     # Keep the original SIC name so the Comitente reconciliation finds it unchanged.
+     'dest_name': lambda r: 'SIC_{}_DCADCOMITENTES.txt'.format(r)},
 ]
 
 
