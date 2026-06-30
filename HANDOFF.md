@@ -1948,3 +1948,64 @@ apps/templates/pages/new_deals-*.html          ← (sessão 31) Missing Counterp
 apps/static/data/translations/{en,br,es}.json  ← acc-* (incl. status/actions/date/load), badge-missing-cp
 .gitignore                                     ← cache/accrual/**/*.json
 ```
+
+## 34. Sessão 2026-06-30 (cont.) — Accrual: fatores CEM/EDG/HYB, coluna Comments, import por pasta, notificações; CETIP .TER/.OPC
+
+Continuação do Accrual → Swap (expande seções 32/33) + ajuste no CETIP file-saving. **Testado end-to-end no dev (8050 +
+instância temporária 8051 com `ACCRUAL_SOURCE_ROOT` override)**. Commits: `ff5a6fb` (fatores CEM/EDG/HYB + Missing
+Accrual + CETIP paths), `ba3ddc8` (Comments, import-folder, abs, notificações).
+
+### A) CETIP file-saving — cópias secundárias `.TER`/`.OPC`
+- `CETIP_NDF_SHARE` → **`I:\CETIP_NDF`** (regra `.TER` / DPOSICAO-TER) e `CETIP_OPTIONS_SHARE` → **`I:\CETIP_OPTIONS`**
+  (regra `.OPC` / DPOSICAO.OPC). Mecanismo `extra_dest` já existia (loop em `routes.py` faz `os.makedirs(extra)` +
+  `_cetip_save_file`); só os caminhos mudaram. Override por env (`CETIP_NDF_SHARE`/`CETIP_OPTIONS_SHARE`).
+
+### B) Enriquecimento de Fatores (CEM/EDG/HYB) — tradução do VBA Alteryx
+- **Mesmo dropzone, roteado pelo nome** (`fileKind`): VCP→`/process`; **CEM/EDG/HYB**→`POST /api/accrual-swap/factors`
+  (form `kind`+`date`). Match **Código IF = CETIP ID** (fallback dígitos, `_acc_factor_keys`).
+- **CEM** (visão Banco **LE 228**): Kapital(col B)→LE via aba **'Kapital CETIP'** (col E) do xlsx. LE **228 normal**
+  (`PARTE/VCP=col I`, `CONTRAPARTE/VCP=col J`); só **199 invertido** (`PARTE=J`, `CONTRA=I`); duplicado 228/199 → mantém
+  228; outras visões (123→MGT) ignoradas. **Kapital match sem zero à esquerda** (`lstrip('0')` nas duas abas: `00777`==`777`).
+- **EDG** direto: CETIP=A, Fator Parte=B, Fator Contraparte=C. **HYB** direto: **CETIP=B**, Fator Parte=**L**(idx11),
+  Fator Contraparte=**M**(idx12). Mapa `_ACC_FACTOR_KINDS` (kind→lob+parser).
+- Lado **não-VCP → '-'**; VCP sem fator **ou** sem match → status **'Missing Accrual'** (badge `text-bg-warning`).
+- Fatores formato **americano `#.00000000`** (8 casas, arredondado, **sempre absoluto/`abs`**). `_acc_parse_num` aceita
+  BR (`1.234,56`) e US (`1,234.56`) + milhar.
+- Helpers: `_acc_parse_num/_acc_fmt_factor/_acc_le_norm/_acc_read_sheets/_acc_parse_cem_factors/
+  _acc_parse_direct_factors(cetip_col,parte_col,contra_col)/_acc_apply_factors`.
+
+### C) Coluna Comments + migração de layout
+- **`Comments`** = 12ª coluna fixa (editável, persiste). `_ACC_FIXED_HEADERS`/`ACC_FIXED_HEADERS` e
+  `_ACC_DISPLAY_SRC=[...,None,None,None]`. **Novo layout de linha:** `[12 data..., status, maker, checker, id]` (16 cells).
+- **`_accrual_migrate`** (chamado em `_accrual_load`): JSON antigo (15 cells / 11 data) recebe `''` inserido **antes do
+  bloco meta** → vira 16 (Comments na posição certa); seta `headers` p/ os fixos atuais. Front sempre usa `ACC_FIXED_HEADERS`.
+
+### D) Import direto da pasta (sem dropzone)
+- Card de data agora **full-width** (`max-width:none`) + botão **"Import from folder"** (`folder-input`, outline).
+- `POST /api/accrual-swap/import-folder {date}` → lê de **`ACCRUAL_SOURCE_ROOT\YYYY\MM. Month\DD`** (env, default
+  `I:\Confirmation\Derivativos\OTC Tracker\Regulatory\Accrual`; run = último dia útil ANBIMA do mês). Acha o **VCP** (nome
+  c/ `vcp`/`instrumentofin`) → `_accrual_build_result` → `_accrual_persist(result, vcp, ymd=<data>)`; depois aplica
+  **cada** CEM/EDG/HYB presente (basename `startswith` kind) em sequência, salva, retorna `applied[]`. Erro limpo se a
+  pasta não existe.
+- **Refactor:** VCP processing extraído p/ `_accrual_build_result(rows)` (core, sem I/O) + `_accrual_persist(result,
+  source_file, ymd=None)` (default hoje; ymd = data do run). `/process` e `/import-folder` reusam ambos.
+
+### E) Status sort + Notificações topbar
+- Coluna **Status** com render **type-aware** (idx 2): p/ `sort`/`type` retorna `'0'+status` se Missing Accrual senão
+  `'1'+status` → após import com `missing>0`, `dt.order([2,'asc'])` deixa **Missing Accrual no topo**.
+- **Notificações** (`page='Accrual'`, deep-link `/accrual-swap`): `Accrual Imported` (VCP/folder), `Accrual Mapped`
+  (factors), `Accrual Updated` (edit), `Accrual Sent` (send), `Accrual Deleted` (delete/bulk). `ACTION_META`+`PAGE_URL`
+  em `topbar.html`. `_create_notification` nos 6 endpoints.
+
+### Arquivos (sessão 34)
+```
+apps/pages/routes.py                           ← CETIP paths; fatores CEM/EDG/HYB; Comments+migração; refactor build/persist; import-folder; 6 notif
+apps/templates/pages/accrual-swap.html         ← fileKind routing, factor result, Comments, status sort, card full-width, botão import-folder
+apps/templates/partials/topbar.html            ← ACTION_META + PAGE_URL (Accrual)
+apps/static/data/translations/{en,br,es}.json  ← acc-st-missing accrual, acc-factors-*, acc-import-*
+```
+
+### Pendências / lembretes
+- **Commodities** ainda sem arquivo de fatores (só CEM/EDG/HYB definidos) → adicionar 4ª entrada em `_ACC_FACTOR_KINDS`.
+- Caminhos `I:\...` só resolvem no ambiente JPM; em dev usar env override (`ACCRUAL_SOURCE_ROOT`, `CETIP_*_SHARE`).
+- Para testar import-folder no dev: instância temporária com env override + seed de swap-position JSON (classificação LOB).
