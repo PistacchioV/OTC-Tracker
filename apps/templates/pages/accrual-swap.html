@@ -332,7 +332,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             <input type="text" id="accDate" class="acc-date-input" readonly autocomplete="off">
         </div>
         <button type="button" id="accLoad" class="acc-load-btn">
-            <i data-lucide="download"></i><span data-lang="acc-load">Load</span>
+            <i data-lucide="refresh-cw"></i><span data-lang="acc-load">Load</span>
         </button>
     </div>
 
@@ -386,6 +386,15 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     var selectedByTable = {};
     var currentHeaders = {};
     var currentDate = null;          // YYYY-MM-DD of the dataset currently shown
+
+    // Fixed table columns (always shown, even before any import). Must match the
+    // backend _ACC_FIXED_HEADERS order exactly.
+    var ACC_FIXED_HEADERS = [
+        'Código IF', 'Data Início', 'Data Vencimento',
+        'PARTE / Conta', 'PARTE / Nome Simplificado', 'PARTE / Indexador',
+        'CONTRAPARTE / Conta', 'CONTRAPARTE / Nome Simplificado', 'CONTRAPARTE / Indexador',
+        'Fator Parte', 'Fator Contraparte'
+    ];
 
     // ── count-up animation (Emil: motion conveys the change) ────────────────
     function countTo(el, target) {
@@ -568,22 +577,34 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function syncSelectionUI(lob, tableId) {
         var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
         var dt = dtInst[tableId]; if (!dt) return;
-        var sel = selectedByTable[tableId] || new Set();
+        var sel = selectedByTable[tableId]; if (!sel) { sel = selectedByTable[tableId] = new Set(); }
+        // Prune ids no longer present (after delete / reload) so the count never
+        // over-reports — only rows that still exist can be selected.
+        if (sel.size) {
+            var present = {};
+            dt.rows().every(function () { var d = this.data(); if (d) present[String(d[d.length - 1])] = 1; });
+            Array.prototype.forEach.call(Array.from(sel), function (id) { if (!present[id]) sel.delete(id); });
+        }
+        // Reflect checkbox state for the rows on the current page.
+        var pageIds = {};
         card.querySelectorAll('tbody .acc-row-cb').forEach(function (cb) {
             var tr = cb.closest('tr'); var id = getRowId(dt, tr);
+            pageIds[id] = 1;
             cb.checked = sel.has(id);
-            tr.classList.toggle('acc-row-sel', cb.checked);
+            if (tr) tr.classList.toggle('acc-row-sel', cb.checked);
         });
         var bulk = card.querySelector('.acc-bulk-del');
         if (bulk) {
             bulk.style.display = sel.size > 1 ? '' : 'none';
             var c = bulk.querySelector('.acc-bulk-count'); if (c) c.textContent = sel.size;
         }
+        // Select-all reflects the CURRENT PAGE's coverage.
         var all = card.querySelector('.acc-cb-all');
         if (all) {
-            var total = dt.rows({ search: 'applied' }).count();
-            all.checked = total > 0 && sel.size >= total;
-            all.indeterminate = sel.size > 0 && sel.size < total;
+            var pageTotal = Object.keys(pageIds).length;
+            var pageSel = 0; Object.keys(pageIds).forEach(function (id) { if (sel.has(id)) pageSel++; });
+            all.checked = pageTotal > 0 && pageSel >= pageTotal;
+            all.indeterminate = pageSel > 0 && pageSel < pageTotal;
         }
     }
 
@@ -599,8 +620,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
         $(card).on('change.accrow', '.acc-cb-all', function () {
             var on = this.checked;
-            dt.rows({ search: 'applied' }).every(function () {
+            // Toggle only the rows on the current page → count matches what's visible.
+            dt.rows({ page: 'current', search: 'applied' }).every(function () {
                 var d = this.data(); if (!d) return; var id = String(d[d.length - 1]);
+                if (!id) return;
                 if (on) sel.add(id); else sel.delete(id);
             });
             syncSelectionUI(lob, tableId);
@@ -710,12 +733,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     function applyResult(data) {
-        var headers = data.headers || [];
         var tables  = data.tables  || {};
         var counts  = data.counts  || {};
         if (data.date) { currentDate = data.date; syncPicker(data.date); }
         LOBS.forEach(function (lob) {
-            renderTable(lob, headers, tables[lob.key] || []);
+            renderTable(lob, ACC_FIXED_HEADERS, tables[lob.key] || []);
             countTo(document.getElementById(lob.count), counts[lob.key] || 0);
         });
 
@@ -756,7 +778,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
         if (inst && window.moment) { var m = moment(dateISO, 'YYYY-MM-DD'); inst.setStartDate(m); inst.setEndDate(m); }
     }
-    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, [], []); }); }
+    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, ACC_FIXED_HEADERS, []); }); }
 
     function loadByDate(dateISO) {
         currentDate = dateISO;

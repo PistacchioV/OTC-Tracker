@@ -2553,12 +2553,21 @@ def api_cp_import_contacts():
 #  Each table keeps columns A, F, K, L, N, Q, R, T.
 # ============================================================================
 
-_ACC_KEEP_COLS  = [0, 5, 10, 11, 13, 16, 17, 19]   # A,F,K,L,N,Q,R,T (0-based)
 _ACC_HEADER_ROW = 9                                # 1-based: headers on row 9
+_ACC_ACCOUNT_COL = 10                              # col K — house-account filter
 _ACC_ACCOUNTS   = {'73760009', '04880006'}         # col K house accounts (digits only)
-# Extra computed columns appended to every table — values come from the grab
-# logic (added later); for now they are persisted empty so the UI shows them.
-_ACC_FACTOR_COLS = ['FATOR PARTE', 'FATOR CONTRAPARTE']
+
+# Fixed table columns (always shown, independent of the imported file).
+_ACC_FIXED_HEADERS = [
+    'Código IF', 'Data Início', 'Data Vencimento',
+    'PARTE / Conta', 'PARTE / Nome Simplificado', 'PARTE / Indexador',
+    'CONTRAPARTE / Conta', 'CONTRAPARTE / Nome Simplificado', 'CONTRAPARTE / Indexador',
+    'Fator Parte', 'Fator Contraparte',
+]
+# Source file column (0-based) for each fixed display column; None = placeholder
+# (filled later by the grab logic). 0 = Código IF = col A (with '#' stripped).
+#   A, F, G, K, L, N, Q, R, T, —, —
+_ACC_DISPLAY_SRC = [0, 5, 6, 10, 11, 13, 16, 17, 19, None, None]
 
 
 def _acc_digits(s):
@@ -2649,10 +2658,7 @@ def api_accrual_swap_process():
                         'error': 'File has fewer than {} rows — headers expected on row {}.'
                         .format(_ACC_HEADER_ROW, _ACC_HEADER_ROW)}), 400
 
-    header_row = rows[_ACC_HEADER_ROW - 1]
-    headers = [str(header_row[c]).strip() if c < len(header_row) and header_row[c] is not None else ''
-               for c in _ACC_KEEP_COLS]
-    headers = headers + list(_ACC_FACTOR_COLS)        # + FATOR PARTE / FATOR CONTRAPARTE
+    headers = list(_ACC_FIXED_HEADERS)                  # fixed columns (not from the file)
 
     records, ref_date = _swap_pos_latest_records()
     lob_map = _swap_pos_lob_map(records)
@@ -2662,11 +2668,11 @@ def api_accrual_swap_process():
     for i in range(_ACC_HEADER_ROW, len(rows)):
         row = rows[i]
         a_raw = _cc_cell(row, 0)
-        if not a_raw and not any(_cc_cell(row, c) for c in _ACC_KEEP_COLS):
+        if not a_raw and not any(_cc_cell(row, c) for c in _ACC_DISPLAY_SRC if c is not None):
             continue                                    # fully blank line
         total += 1
         contract = a_raw.replace('#', '').strip()       # col A: drop '#'
-        if _acc_digits(_cc_cell(row, 10)) not in _ACC_ACCOUNTS:
+        if _acc_digits(_cc_cell(row, _ACC_ACCOUNT_COL)) not in _ACC_ACCOUNTS:
             continue                                    # col K: house accounts only
         kept += 1
         ident = lob_map.get(contract.upper())
@@ -2676,16 +2682,18 @@ def api_accrual_swap_process():
         if not lob:
             continue                                    # IF not found / unclassified
         matched += 1
-        buckets[lob].append([contract if c == 0 else _cc_cell(row, c) for c in _ACC_KEEP_COLS])
+        # Build the row aligned to _ACC_FIXED_HEADERS (None src → empty placeholder).
+        cells = []
+        for src in _ACC_DISPLAY_SRC:
+            if src is None:      cells.append('')
+            elif src == 0:       cells.append(contract)         # Código IF (# stripped)
+            else:                cells.append(_cc_cell(row, src))
+        buckets[lob].append(cells)
 
-    # Append, per row: the 2 factor placeholders, then the maker/checker meta
-    # (status, maker, checker) and a stable id as the LAST cell. Row layout:
-    #   [ ...N data cells..., FATOR PARTE, FATOR CONTRAPARTE, status, maker, checker, id ]
-    # where N data cells already includes the 2 factor headers in `headers`, so the
-    # 2 factor VALUES are part of the data block; status/maker/checker/id are meta.
+    # Append, per row, the maker/checker meta and a stable id as the LAST cell.
+    # Row layout: [ ...11 fixed data cells..., status, maker, checker, id ]
     for _lob, _rws in buckets.items():
         for _i, _rw in enumerate(_rws):
-            _rw.extend(['', ''])                       # FATOR PARTE / FATOR CONTRAPARTE (grab later)
             _rw.extend(['New', '', ''])                # status, maker, checker
             _rw.append('{}-{}'.format(_lob, _i))       # stable id (last cell)
 
