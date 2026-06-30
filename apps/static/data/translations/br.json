@@ -1042,5 +1042,7 @@
   "swal-fxo-dup-replace": "Sim, substituir",
   "swal-fxo-dup-skip": "Não, descartar duplicadas",
   "swal-save-failed": "Não foi possível salvar a edição.",
-  "acc-prev-field": "Campo"
+  "acc-prev-field": "Campo",
+  "acc-missing-title": "Missing Accrual — arquivo não gerado",
+  "acc-missing-desc": "Os contratos abaixo estão sem fator atualizado. Resolva antes de gerar o arquivo:"
 }

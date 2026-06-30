@@ -1037,6 +1037,27 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     }
 
+    // Block file generation when any row is 'Missing Accrual' — list them instead.
+    function showMissingAccrual(missing) {
+        var rows = (missing || []).map(function (m) {
+            return '<tr><td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.lob) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.codigo) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.id) + '</td></tr>';
+        }).join('');
+        Swal.fire({
+            icon: 'warning', width: 620,
+            title: t('acc-missing-title', 'Missing Accrual — file not generated'),
+            html: '<p style="font-size:.86em;color:#555;margin:0 0 10px">' +
+                    t('acc-missing-desc', 'The contracts below have no updated factor. Resolve them before generating the file:') + '</p>' +
+                  '<div style="max-height:48vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px">' +
+                  '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#343a40;color:#fff">' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">LOB</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">Código IF</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+            confirmButtonColor: '#0066cc', customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient' }
+        });
+    }
+
     // ── batch send → split by view → ACCRUAL_<VIEW>-<LOB> in the Conecta folder ─
     function sendBatch(lob, btn) {
         Swal.fire({
@@ -1050,7 +1071,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             accBtnBusy(btn, true);
             postJSON('/api/accrual-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
                 accBtnBusy(btn, false);
-                if (!j.success) { errSwal(j.error); return; }
+                if (!j.success) {
+                    if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
+                    errSwal(j.error); return;
+                }
                 var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join(' · ');
                 deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, timerProgressBar: true,
                             icon: 'success', title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0) + (names ? ' · ' + names : '') });
@@ -1072,7 +1096,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             if (btn) { btn.disabled = true; btn.querySelector('span').textContent = t('acc-validation-running', 'Sending…'); }
             postJSON('/api/accrual-swap/validation', { date: dateISO }).then(function (j) {
                 if (btn) { btn.disabled = false; btn.querySelector('span').textContent = t('acc-validation', 'Validation'); }
-                if (!j.success) { errSwal(j.error); return; }
+                if (!j.success) {
+                    if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
+                    errSwal(j.error); return;
+                }
                 var att = (j.attached || []).join('<br>');
                 Swal.fire({
                     icon: (j.mail ? 'success' : 'warning'),

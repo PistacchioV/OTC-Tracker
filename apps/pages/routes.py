@@ -3334,6 +3334,17 @@ def _acc_write_batch_files(data, lob, today):
     return generated
 
 
+def _acc_missing_accrual_rows(data, lobs):
+    """Rows flagged 'Missing Accrual' (no updated factor) across the given LOB books.
+    Their presence blocks file generation. Returns [{id, lob, codigo}]."""
+    out = []
+    for lob in lobs:
+        for r in ((data.get('tables') or {}).get(lob) or []):
+            if r and len(r) >= 15 and str(r[-4] or '') == _ACC_FACTOR_STATUS_MISSING:
+                out.append({'id': str(r[-1]), 'lob': lob, 'codigo': str(r[0] or '')})
+    return out
+
+
 def _send_accrual_validation_email(subject, html, logo_path, attach_paths):
     """SMTP-only e-mail of the EOM accrual validation to OTC Ops, attaching the
     Lawton/Atacama files. The HTML and logo path are resolved by the caller (so this
@@ -3391,6 +3402,9 @@ def api_accrual_send_batch():
     path, data = _accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    missing = _acc_missing_accrual_rows(data, [lob])          # block when any factor is missing
+    if missing:
+        return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
     try:
         generated = _acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'))
     except Exception:
@@ -3416,6 +3430,10 @@ def api_accrual_validation():
     path, data = _accrual_load(p.get('date'))
     if not data or not (data.get('tables')):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    missing = _acc_missing_accrual_rows(data, ['CEM', 'EDG', 'Hybrids', 'Commodities'])   # block across all books
+    if missing:
+        return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
 
     ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     ref = datetime.strptime(ymd, '%Y%m%d')

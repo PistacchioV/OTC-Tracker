@@ -1042,5 +1042,7 @@
   "swal-fxo-dup-replace": "Yes, replace",
   "swal-fxo-dup-skip": "No, skip duplicates",
   "swal-save-failed": "Could not save the edit.",
-  "acc-prev-field": "Field"
+  "acc-prev-field": "Field",
+  "acc-missing-title": "Missing Accrual — file not generated",
+  "acc-missing-desc": "The contracts below have no updated factor. Resolve them before generating the file:"
 }
