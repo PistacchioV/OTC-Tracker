@@ -1532,6 +1532,11 @@ _CETIP_RULES = [
 #            come from _B3_SWAP_HEADERS (stored standard, keyed per file type)
 B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'b3 files')
 ACCRUAL_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'accrual')
+# Network folder the VCP / CEM / EDG / HYB source files are dropped into, per run.
+# Layout: ACCRUAL_SOURCE_ROOT\{YYYY}\{mm. Month}\{DD} (run = last ANBIMA bizday of the
+# month). Only reachable on the JPM environment; override with the env var off-site.
+ACCRUAL_SOURCE_ROOT = os.getenv('ACCRUAL_SOURCE_ROOT',
+                                r'I:\Confirmation\Derivativos\OTC Tracker\Regulatory\Accrual')
 
 # Standard column headers for the HEADERLESS SWAP-family files (';'-delimited),
 # in file order. These are the authoritative field names (the SWAP files ship with
@@ -2560,12 +2565,12 @@ _ACC_FIXED_HEADERS = [
     'Código IF', 'Data Início', 'Data Vencimento',
     'PARTE / Conta', 'PARTE / Nome Simplificado', 'PARTE / Indexador',
     'CONTRAPARTE / Conta', 'CONTRAPARTE / Nome Simplificado', 'CONTRAPARTE / Indexador',
-    'Fator Parte', 'Fator Contraparte',
+    'Fator Parte', 'Fator Contraparte', 'Comments',
 ]
 # Source file column (0-based) for each fixed display column; None = placeholder
-# (filled later by the grab logic). 0 = Código IF = col A (with '#' stripped).
-#   A, F, G, K, L, N, Q, R, T, —, —
-_ACC_DISPLAY_SRC = [0, 5, 6, 10, 11, 13, 16, 17, 19, None, None]
+# (filled later by the grab logic / edited by hand). 0 = Código IF = col A ('#' stripped).
+#   A, F, G, K, L, N, Q, R, T, —(Fator Parte), —(Fator Contra), —(Comments)
+_ACC_DISPLAY_SRC = [0, 5, 6, 10, 11, 13, 16, 17, 19, None, None, None]
 
 
 def _acc_digits(s):
@@ -2635,29 +2640,9 @@ def accrual_swap():
     return render_template('pages/accrual-swap.html', segment='accrual-swap')
 
 
-@blueprint.route('/api/accrual-swap/process', methods=['POST'])
-def api_accrual_swap_process():
-    """Process the VCP spreadsheet → rows split into CEM/EDG/Hybrids/Commodities."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    f = request.files.get('file')
-    if not f or not f.filename:
-        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
-    try:
-        rows = _cc_read_rows(f.filename, f.read())
-    except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
-    except Exception:
-        log.error('[accrual] read failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Failed to read the spreadsheet.'}), 500
-
-    if len(rows) < _ACC_HEADER_ROW:
-        return jsonify({'success': False,
-                        'error': 'File has fewer than {} rows — headers expected on row {}.'
-                        .format(_ACC_HEADER_ROW, _ACC_HEADER_ROW)}), 400
-
-    headers = list(_ACC_FIXED_HEADERS)                  # fixed columns (not from the file)
-
+def _accrual_build_result(rows):
+    """Core VCP→tables logic (no I/O). Splits the rows into the four LOB books and
+    returns the result dict (without 'date'/'saved_at')."""
     records, ref_date = _swap_pos_latest_records()
     lob_map = _swap_pos_lob_map(records)
 
@@ -2689,15 +2674,15 @@ def api_accrual_swap_process():
         buckets[lob].append(cells)
 
     # Append, per row, the maker/checker meta and a stable id as the LAST cell.
-    # Row layout: [ ...11 fixed data cells..., status, maker, checker, id ]
+    # Row layout: [ ...fixed data cells..., status, maker, checker, id ]
     for _lob, _rws in buckets.items():
         for _i, _rw in enumerate(_rws):
             _rw.extend(['New', '', ''])                # status, maker, checker
             _rw.append('{}-{}'.format(_lob, _i))       # stable id (last cell)
 
-    result = {
+    return {
         'success': True,
-        'headers': headers,
+        'headers': list(_ACC_FIXED_HEADERS),
         'tables': buckets,
         'counts': {k: len(v) for k, v in buckets.items()},
         'ref_date': ref_date,
@@ -2705,24 +2690,58 @@ def api_accrual_swap_process():
                         'position_records': len(records)},
     }
 
-    result['date'] = datetime.now().strftime('%Y-%m-%d')
 
-    # Persist the processed result under static/data/cache/accrual/YYYY/MM/DD/
+def _accrual_persist(result, source_file, ymd=None):
+    """Persist a build result under static/data/cache/accrual/YYYY/MM/DD/. Defaults
+    to today; pass ymd ('YYYYMMDD') to store under the run/reference date instead.
+    Returns (path, saved_dict)."""
+    now = datetime.now()
+    ymd = ymd or now.strftime('%Y%m%d')
+    out_dir = os.path.join(ACCRUAL_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8])
+    os.makedirs(out_dir, exist_ok=True)
+    saved = dict(result)
+    saved['date']        = '{}-{}-{}'.format(ymd[:4], ymd[4:6], ymd[6:8])
+    saved['saved_at']    = now.strftime('%Y-%m-%d %H:%M:%S')
+    saved['source_file'] = source_file
+    path = os.path.join(out_dir, 'accrual_swap_{}.json'.format(ymd))
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(saved, fh, ensure_ascii=False, indent=2)
+    log.info('[accrual] saved %s', path)
+    return path, saved
+
+
+@blueprint.route('/api/accrual-swap/process', methods=['POST'])
+def api_accrual_swap_process():
+    """Process the VCP spreadsheet → rows split into CEM/EDG/Hybrids/Commodities."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
     try:
-        now = datetime.now()
-        out_dir = os.path.join(ACCRUAL_JSON_ROOT,
-                               now.strftime('%Y'), now.strftime('%m'), now.strftime('%d'))
-        os.makedirs(out_dir, exist_ok=True)
-        saved = dict(result)
-        saved['saved_at']    = now.strftime('%Y-%m-%d %H:%M:%S')
-        saved['source_file'] = f.filename
-        out_path = os.path.join(out_dir, 'accrual_swap_{}.json'.format(now.strftime('%Y%m%d')))
-        with open(out_path, 'w', encoding='utf-8') as fh:
-            json.dump(saved, fh, ensure_ascii=False, indent=2)
-        log.info('[accrual] saved %s', out_path)
+        rows = _cc_read_rows(f.filename, f.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[accrual] read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the spreadsheet.'}), 500
+
+    if len(rows) < _ACC_HEADER_ROW:
+        return jsonify({'success': False,
+                        'error': 'File has fewer than {} rows — headers expected on row {}.'
+                        .format(_ACC_HEADER_ROW, _ACC_HEADER_ROW)}), 400
+
+    result = _accrual_build_result(rows)
+    try:
+        _, saved = _accrual_persist(result, f.filename)
+        result['date'] = saved['date']
     except Exception:
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
+        result['date'] = datetime.now().strftime('%Y-%m-%d')
 
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Imported', 'Accrual',
+                         'VCP · {} classified'.format(result.get('diagnostics', {}).get('matched', 0)))
     return jsonify(result)
 
 
@@ -2747,10 +2766,25 @@ def _accrual_load(date_str):
         return None, None
     try:
         with open(path, 'r', encoding='utf-8') as fh:
-            return path, json.load(fh)
+            return path, _accrual_migrate(json.load(fh))
     except Exception:
         log.error('[accrual] read failed %s:\n%s', path, traceback.format_exc())
         return None, None
+
+
+def _accrual_migrate(data):
+    """Bring rows saved under an older column layout up to the current fixed set,
+    padding the data block (before the 4 meta cells status/maker/checker/id) so a
+    newly-added column like 'Comments' lands in the right place for old files too."""
+    nfix = len(_ACC_FIXED_HEADERS)
+    for rows in (data.get('tables') or {}).values():
+        for r in rows:
+            ndata = len(r) - 4                       # cells before status/maker/checker/id
+            while 0 <= ndata < nfix:
+                r.insert(ndata, '')                  # append to the data block, push meta right
+                ndata += 1
+    data['headers'] = list(_ACC_FIXED_HEADERS)
+    return data
 
 
 def _accrual_save(path, data):
@@ -2797,9 +2831,10 @@ def _acc_parse_num(s):
 
 
 def _acc_fmt_factor(s):
-    """US format, 8 decimals (rounded). '' when the cell is not a number."""
+    """US format, 8 decimals (rounded), ALWAYS absolute (drop any '-'). '' when the
+    cell is not a number."""
     v = _acc_parse_num(s)
-    return '' if v is None else '{:.8f}'.format(round(v, 8))
+    return '' if v is None else '{:.8f}'.format(round(abs(v), 8))
 
 
 def _acc_le_norm(s):
@@ -2857,10 +2892,14 @@ def _acc_parse_cem_factors(filename, raw_bytes):
     if kap_rows is None:
         raise ValueError("CEM file is missing the 'Kapital CETIP' sheet (Kapital → LE).")
 
-    # Kapital ID (col B) → LE digits (col E).
+    # Kapital ID (col B) → LE digits (col E). Both sides drop the leading zeros so
+    # the lookup is robust to '00123' vs '123' mismatches between the two sheets.
+    def _kap_key(v):
+        return str(v or '').strip().upper().lstrip('0')
+
     kap_le = {}
     for r in kap_rows:
-        kid = _cc_cell(r, 1).strip().upper()
+        kid = _kap_key(_cc_cell(r, 1))
         le  = _acc_le_norm(_cc_cell(r, 4))
         if kid and le:
             kap_le.setdefault(kid, le)
@@ -2871,7 +2910,7 @@ def _acc_parse_cem_factors(filename, raw_bytes):
         cetip = _cc_cell(r, 2).strip()
         if not re.search(r'\d', cetip):                  # skip title/header/blank rows
             continue
-        kid = _cc_cell(r, 1).strip().upper()
+        kid = _kap_key(_cc_cell(r, 1))
         groups.setdefault(cetip, []).append(
             {'le': kap_le.get(kid, ''), 'i': _cc_cell(r, 8), 'j': _cc_cell(r, 9)})
 
@@ -2995,6 +3034,9 @@ def api_accrual_swap_factors():
         return jsonify({'success': False, 'error': 'Failed to save the enriched data.'}), 500
 
     log.info('[accrual] %s factors: %d mapped, %d matched, %d missing', lob, len(fmap), matched, missing)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Mapped', 'Accrual',
+                         '{} · {} matched, {} missing'.format(lob, matched, missing))
     return jsonify({
         'success': True,
         'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
@@ -3003,6 +3045,93 @@ def api_accrual_swap_factors():
         'ref_date': data.get('ref_date'),
         'date': data.get('date'),
         'factors': {'lob': lob, 'matched': matched, 'missing': missing, 'mapped': len(fmap)},
+    })
+
+
+def _accrual_source_dir(ymd):
+    """ACCRUAL_SOURCE_ROOT\\YYYY\\mm. Month\\DD for a 'YYYYMMDD' run date."""
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+    return os.path.join(ACCRUAL_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+
+
+def _accrual_is_vcp_name(n):
+    nl = n.lower()
+    return ('vcp' in nl) or ('instrumentofin' in nl) or ('intrumentofin' in nl)
+
+
+@blueprint.route('/api/accrual-swap/import-folder', methods=['POST'])
+def api_accrual_import_folder():
+    """Run the whole pipeline by reading the run folder directly (no dropzone): pick
+    the VCP file → split into the four books, then apply any CEM/EDG/HYB factor file
+    found alongside it. Persists under the selected date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p   = request.get_json(silent=True) or {}
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    folder = _accrual_source_dir(ymd)
+    if not os.path.isdir(folder):
+        return jsonify({'success': False, 'error': 'Folder not found: {}'.format(folder)}), 400
+
+    files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
+    vcp = next((fn for fn in files if _accrual_is_vcp_name(fn)), None)
+    if not vcp:
+        return jsonify({'success': False,
+                        'error': 'No VCP file found in {}'.format(folder)}), 400
+
+    try:
+        with open(os.path.join(folder, vcp), 'rb') as fh:
+            rows = _cc_read_rows(vcp, fh.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[accrual] folder VCP read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the VCP file.'}), 500
+    if len(rows) < _ACC_HEADER_ROW:
+        return jsonify({'success': False,
+                        'error': 'VCP file has fewer than {} rows.'.format(_ACC_HEADER_ROW)}), 400
+
+    result = _accrual_build_result(rows)
+    path, data = _accrual_persist(result, vcp, ymd=ymd)
+
+    # Apply each factor file present in the folder (CEM / EDG / HYB), in turn.
+    applied = []
+    for kind, spec in _ACC_FACTOR_KINDS.items():
+        fn = next((x for x in files
+                   if os.path.splitext(x)[0].lower().startswith(kind)), None)
+        if not fn:
+            continue
+        try:
+            with open(os.path.join(folder, fn), 'rb') as fh:
+                fmap = spec['parser'](fn, fh.read())
+            m, miss = _acc_apply_factors(data, spec['lob'], fmap)
+            applied.append({'kind': kind, 'lob': spec['lob'], 'file': fn,
+                            'matched': m, 'missing': miss, 'mapped': len(fmap)})
+        except Exception:
+            log.error('[accrual] folder factor (%s) failed:\n%s', kind, traceback.format_exc())
+            applied.append({'kind': kind, 'lob': spec['lob'], 'file': fn, 'error': True})
+
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] folder save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save the imported data.'}), 500
+
+    log.info('[accrual] folder import %s: VCP=%s, factors=%s', folder, vcp,
+             ', '.join('{}:{}'.format(a['kind'], a.get('matched', 'err')) for a in applied))
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Imported', 'Accrual',
+                         'Folder · {} classified · {} factor file(s)'.format(
+                             result.get('diagnostics', {}).get('matched', 0), len(applied)))
+    return jsonify({
+        'success': True,
+        'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
+        'tables':  data.get('tables') or {},
+        'counts':  data.get('counts') or {},
+        'ref_date': data.get('ref_date'),
+        'date': data.get('date'),
+        'diagnostics': result.get('diagnostics', {}),
+        'folder': folder, 'vcp_file': vcp, 'applied': applied,
     })
 
 
@@ -3033,6 +3162,8 @@ def api_accrual_row_delete():
     except Exception:
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Deleted', 'Accrual', '{} · 1 row'.format(lob))
     return jsonify({'success': True, 'counts': data['counts']})
 
 
@@ -3052,6 +3183,8 @@ def api_accrual_rows_delete():
     except Exception:
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Deleted', 'Accrual', '{} · {} rows'.format(lob, len(ids)))
     return jsonify({'success': True, 'counts': data['counts']})
 
 
@@ -3079,6 +3212,8 @@ def api_accrual_row_edit():
     except Exception:
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''),
+                         'Accrual Updated', 'Accrual', '{} · {}'.format(lob, rid))
     return jsonify({'success': True, 'row': target})
 
 
@@ -3106,6 +3241,8 @@ def api_accrual_row_send():
     except Exception:
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''),
+                         'Accrual Sent', 'Accrual', '{} · {}'.format(lob, rid))
     return jsonify({'success': True, 'row': target})
 
 

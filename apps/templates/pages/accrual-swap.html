@@ -187,12 +187,12 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 
 /* ── Date picker card ──────────────────────────────────────────────────── */
 .acc-datecard {
-    max-width: 560px; margin: .9rem auto 0;
+    max-width: none; margin: .9rem 0 0;
     background: var(--acc-surface);
     border: 1px solid var(--acc-hairline);
     border-radius: 14px;
     padding: .7rem .85rem;
-    display: flex; align-items: center; gap: .6rem;
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
 }
 .acc-datecard__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; white-space:nowrap; }
 .acc-date-wrap { position: relative; flex: 1 1 auto; }
@@ -219,6 +219,11 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-load-btn:hover  { background: #0a5bd6; }
 .acc-load-btn:active { transform: scale(0.97); }
 .acc-load-btn svg { width: 16px; height: 16px; }
+.acc-import-btn { background: transparent; color: var(--acc-blue); border: 1px solid var(--acc-blue); }
+.acc-import-btn:hover { background: rgba(0,102,204,.08); }
+.acc-import-btn:disabled { opacity: .55; cursor: default; transform: none; }
+.acc-import-btn .ti-spin { animation: ti-spin 1s linear infinite; }
+@keyframes ti-spin { to { transform: rotate(360deg); } }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
 table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
@@ -330,6 +335,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         <button type="button" id="accLoad" class="acc-load-btn">
             <i data-lucide="refresh-cw"></i><span data-lang="acc-load">Load</span>
         </button>
+        <button type="button" id="accImport" class="acc-load-btn acc-import-btn">
+            <i data-lucide="folder-input"></i><span data-lang="acc-import-folder">Import from folder</span>
+        </button>
     </div>
 
     <!-- LOB tables -->
@@ -389,7 +397,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         'Código IF', 'Data Início', 'Data Vencimento',
         'PARTE / Conta', 'PARTE / Nome Simplificado', 'PARTE / Indexador',
         'CONTRAPARTE / Conta', 'CONTRAPARTE / Nome Simplificado', 'CONTRAPARTE / Indexador',
-        'Fator Parte', 'Fator Contraparte'
+        'Fator Parte', 'Fator Contraparte', 'Comments'
     ];
 
     // ── count-up animation (Emil: motion conveys the change) ────────────────
@@ -499,7 +507,14 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
               render: function () { return '<input type="checkbox" class="acc-row-cb">'; } },
             { data: null, orderable: false, searchable: false, className: 'acc-act-col',
               render: function () { return actionsCell(); } },
-            { data: n, className: 'acc-status-col', render: function (d) { return statusBadge(d); } }
+            { data: n, className: 'acc-status-col', render: function (d, type) {
+                // Sort key: Missing Accrual ranks first, then the rest alphabetically.
+                if (type === 'sort' || type === 'type') {
+                    var k = String(d || '').toLowerCase();
+                    return (k === 'missing accrual' ? '0' : '1') + k;
+                }
+                return statusBadge(d);
+            } }
         ];
         for (var ci = 0; ci < n; ci++) columns.push({ data: ci, defaultContent: '' });
 
@@ -757,6 +772,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         var asof = document.getElementById('accAsOf');
         if (data.factors) {                              // CEM / EDG / HYB enrichment
             var fx = data.factors;
+            if (fx.missing > 0) {                        // unidentified mappings → Missing Accrual first
+                var fdt = dtInst['tbl-' + String(fx.lob).toLowerCase()];
+                if (fdt) fdt.order([2, 'asc']).draw();
+            }
             asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
                 ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
                 ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
@@ -822,6 +841,50 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             .catch(function () { renderEmpty(); });
     }
 
+    // ── import straight from the dated run folder (no dropzone) ──────────────
+    function importFromFolder(dateISO) {
+        var btn = document.getElementById('accImport');
+        if (btn) { btn.disabled = true; btn.querySelector('span').textContent = t('acc-importing', 'Importing…'); }
+        var icon = btn ? btn.querySelector('i') : null;
+        if (icon) { icon.setAttribute('data-lucide', 'loader-2'); if (window.lucide) lucide.createIcons(); var sv = btn.querySelector('svg'); if (sv) sv.classList.add('ti-spin'); }
+        function restore() {
+            if (!btn) return;
+            btn.disabled = false; btn.querySelector('span').textContent = t('acc-import-folder', 'Import from folder');
+            var i = btn.querySelector('i') || btn.querySelector('svg');
+            if (btn.querySelector('svg')) { btn.querySelector('svg').classList.remove('ti-spin'); }
+            btn.innerHTML = '<i data-lucide="folder-input"></i><span data-lang="acc-import-folder">' +
+                            esc(t('acc-import-folder', 'Import from folder')) + '</span>';
+            if (window.lucide) lucide.createIcons();
+        }
+        currentDate = dateISO;
+        fetch('/api/accrual-swap/import-folder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dateISO })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            restore();
+            if (!res.ok || !res.j.success) {
+                Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not import'),
+                            text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
+                return;
+            }
+            applyResult(res.j);                          // renders tables + counts + diagnostics
+            var ap = res.j.applied || [];
+            ap.forEach(function (a) {                     // Missing Accrual first per enriched book
+                if (a && a.missing > 0) {
+                    var d = dtInst['tbl-' + String(a.lob).toLowerCase()];
+                    if (d) d.order([2, 'asc']).draw();
+                }
+            });
+            var summ = ap.filter(function (a) { return a && !a.error; })
+                         .map(function (a) { return a.lob + ' ' + (a.matched || 0) + '/' + (a.missing || 0); }).join(' · ');
+            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
+                        icon: 'success', title: t('acc-import-done', 'Imported from folder') + (summ ? ' · ' + summ : '') });
+        })
+        .catch(function () { restore(); netErr(); });
+    }
+
     function initDatePicker() {
         var $d = $('#accDate');
         if ($d.length && $.fn.daterangepicker) {
@@ -841,6 +904,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         if (window.lucide) lucide.createIcons();
         var load = document.getElementById('accLoad');
         if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO()); });
+        var imp = document.getElementById('accImport');
+        if (imp) imp.addEventListener('click', function () { importFromFolder(pickedDateISO()); });
         loadByDate(todayISO());                          // load today's data (count-up from 0)
     });
 })();
