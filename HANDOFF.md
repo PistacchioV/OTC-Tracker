@@ -1874,3 +1874,77 @@ apps/static/data/translations/{en,br,es}.json  ← nav-accrual + acc-*
 ```
 > ⚠️ Validado por sintaxe (Jinja2 parse, `node --check`, `ast.parse`, JSON). **Não testado em runtime** — precisa do
 > ambiente com sessão autenticada + um JSON de posição swap salvo p/ a classificação por LOB funcionar de fato.
+
+---
+
+## 33. Sessão 2026-06-30 (cont.) — Accrual → Swap: overhaul completo (tabelas CRUD, maker/checker, date picker, colunas fixas)
+
+Evolução grande da página **Accrual → Swap** (atualiza/expande a seção 32). **Testado end-to-end no dev server (8050)**.
+Commits: `c259381`, `699f94d`, `c919d61`, `318fb82`, `cb6112b` (+ os de chart/missing-cp da seção 31).
+
+### Página `/accrual-swap` — estado atual
+- **Sidenav/topbar/horizontal-nav:** o item **"Accrual"** (ícone `calculator`) aponta **direto** p/ `/accrual-swap`
+  (removida a rota inexistente `/regulatory/accrual` que dava 404). Não é mais collapsible.
+- **4 widgets** CEM/EDG/Hybrids/Commodities — count-up **0→valor ao entrar na página** (carrega today via `/data`),
+  + pop de feedback (scale) quando o valor muda.
+- **Dropzone slim** aceita `.xlsx/.xlsm/.csv/.tsv`.
+- **Card date-picker** (entre dropzone e tabelas): `daterangepicker singleDatePicker` **dd/mm/yyyy**, default **hoje**,
+  ícone calendário dentro do campo; botão **Load** (ícone `refresh-cw`) carrega o JSON da data via `/data?date=`.
+- **4 tabelas DataTables** (uma por LOB), **colunas fixas sempre visíveis** (mesmo sem import):
+  - Fixas: **checkbox** (select-all), **Actions** (edit/delete/send), **Status**.
+  - 11 colunas de dados **hardcoded** (`_ACC_FIXED_HEADERS` no backend = `ACC_FIXED_HEADERS` no front, **mesma ordem**):
+    `Código IF, Data Início, Data Vencimento, PARTE / Conta, PARTE / Nome Simplificado, PARTE / Indexador,
+    CONTRAPARTE / Conta, CONTRAPARTE / Nome Simplificado, CONTRAPARTE / Indexador, Fator Parte, Fator Contraparte`.
+  - Filtros por coluna (placeholder = nome da coluna), **25 rows** default, Columns (show/hide), Clear filters.
+  - **Botões/badges = padrão New Deals**: Actions = `btn btn-info/danger/primary btn-sm rounded-circle` + ícones Tabler
+    (`ti-edit`/`ti-trash`/`ti-brand-telegram`; save=`ti-device-floppy`, cancel=`ti-x`). Status badge `badge badge-label
+    {bg-info text-white|text-bg-warning|text-bg-info} rounded-pill` (New/Pending/Sent).
+
+### Backend (`routes.py`)
+- **Mapeamento das colunas** — `_ACC_DISPLAY_SRC = [0,5,6,10,11,13,16,17,19,None,None]` (col 0-based; None=placeholder):
+  Código IF←**A**(0, `#` removido), Data Início←**F**(5), **Data Vencimento←G**(6), PARTE/Conta←**K**(10),
+  PARTE/Nome←**L**(11), PARTE/Indexador←**N**(13), CONTRAPARTE/Conta←**Q**(16), CONTRAPARTE/Nome←**R**(17),
+  CONTRAPARTE/Indexador←**T**(19). **Fator Parte / Fator Contraparte = vazios** (grab depois).
+- **Headers na linha 9**; filtro col **K** (`_ACC_ACCOUNT_COL=10`) só contas-casa `73760.00-9`/`04880.00-6` (por dígitos);
+  join `Código IF` ↔ `Contrato` do **último JSON de posição swap salvo** → `Código Identificador` → LOB
+  (`_accrual_lob`: CEMHYB/HYB→Hybrids, COMM→Commodities, EDG, CEM).
+- **Encoding robusto** (`_cc_read_rows`): tenta utf-8-sig → cp1252 → latin-1, escolhe o 1º **sem U+FFFD** (acentos OK).
+- **Row layout persistida:** `[ ...11 data cells..., status, maker, checker, id ]` — **id é a última célula**;
+  status default `New`. id = `'{lob}-{idx}'`.
+- **JSON salvo** em `static/data/cache/accrual/YYYY/MM/DD/accrual_swap_YYYYMMDD.json` (gitignored) — inclui
+  `headers/tables/counts/diagnostics/date/saved_at/source_file`.
+- **Endpoints** (`date`-aware, default hoje): `GET /api/accrual-swap/data?date=` · `POST /process` ·
+  `/row/delete` · `/rows/delete` (bulk) · `/row/edit` · `/row/send`. Helpers `_accrual_load/_accrual_save/_accrual_find`.
+- **Maker/checker:** edit → status **Pending**, maker = `session.user_sid`, checker reset; send → guard **same_user**
+  (quem alterou não envia → 403 `same_user`), senão status **Sent** + checker. **Persistem no JSON.**
+
+### Frontend (`accrual-swap.html`) — pontos-chave
+- `renderTable` sempre usa `ACC_FIXED_HEADERS` (colunas fixas). Colunas DataTables: `[checkbox, actions, status(data:n),
+  data0..data(n-1)]`; meta (status/maker/checker/id) acessada via `row().data()` (não são colunas). `getRowId = d[d.length-1]`.
+- **Seleção/bulk delete:** `selectedByTable[tableId]` (Set de ids); **select-all opera só na PÁGINA ATUAL**
+  (`{page:'current',search:'applied'}`) e `syncSelectionUI` **poda ids inexistentes** → contagem do bulk = exata.
+  Bulk button aparece com `sel.size > 1`.
+- **Edit inline:** células de dados viram inputs (td 3..3+n-1); save → `POST /row/edit` → `dt.row.data(j.row)`.
+- `currentDate` = data exibida; enviado em todos os edit/delete/send. count-up via `countTo`.
+
+### Padrões / lembretes
+- **Decode de texto:** sempre multi-encoding com guarda de `'�'` (latin-1 nunca falha, é o último recurso).
+- **Status/maker/checker em rows-array:** id SEMPRE a última célula; meta nas 3 anteriores (`r[-4]=status, r[-3]=maker,
+  r[-2]=checker, r[-1]=id`); data = `r[:-4]`. Edit no backend usa `ndata = len(target)-4`.
+- **Colunas fixas data-driven:** quando os headers vêm de arquivo mas precisam ser fixos, hardcodar a lista (back+front
+  na mesma ordem) e mapear dados por `_DISPLAY_SRC` (col-fonte ou None=placeholder).
+- **daterangepicker** (não flatpickr): `singleDatePicker` + `moment` (ambos em `plugins/daterangepicker/`).
+- **Pendência:** Fator Parte/Contraparte vazios (grab a definir). Se mais colunas mudarem de fonte, ajustar só `_ACC_DISPLAY_SRC`.
+
+### Arquivos (sessão)
+```
+apps/templates/pages/accrual-swap.html         ← página completa (tabelas CRUD, date picker, seleção, status, count-up)
+apps/pages/routes.py                           ← _ACC_FIXED_HEADERS/_ACC_DISPLAY_SRC, encoding, endpoints data/edit/delete/send
+apps/templates/partials/{sidenav,topbar,horizontal-nav}.html ← Accrual → /accrual-swap (direto)
+apps/static/js/pages/dashboard.js              ← arredondamento última barra (stackEndRadius numérico + borderSkipped)
+apps/templates/pages/index.html                ← cache-bust dashboard.js (?v=20260630a)
+apps/static/js/missing-counterparty.js         ← (sessão 31) badge Missing Counterparty
+apps/templates/pages/new_deals-*.html          ← (sessão 31) Missing Counterparty nas 5 páginas
+apps/static/data/translations/{en,br,es}.json  ← acc-* (incl. status/actions/date/load), badge-missing-cp
+.gitignore                                     ← cache/accrual/**/*.json
+```
