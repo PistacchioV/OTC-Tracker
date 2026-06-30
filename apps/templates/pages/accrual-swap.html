@@ -278,13 +278,26 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-recon-btn { background: #6f42c1; }
 .acc-recon-btn:hover { background: #5e37a6; }
 .acc-recon-btn:disabled { opacity: .55; cursor: default; transform: none; }
-/* Loading feedback (New Deals model): spinner replaces the icon while busy. */
-.acc-load-btn .acc-spin, .acc-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
-.acc-btn:disabled { opacity: .6; cursor: default; transform: none; }
+/* Loading feedback (New Deals model): pure-CSS spinner replaces the icon while busy. */
+.acc-spinner { display:inline-block; width:14px; height:14px; border:2px solid currentColor;
+    border-right-color: transparent; border-radius:50%; opacity:.9; vertical-align:-2px;
+    animation: accSpin .65s linear infinite; }
+.acc-btn:disabled { opacity: .7; cursor: default; transform: none; }
+.acc-load-btn.is-busy, .acc-btn.is-busy { pointer-events: none; }
+
+/* Hover feedback (New Deals model): subtle lift + shadow; press = scale down. */
+.acc-load-btn, .acc-btn { transition: transform 150ms var(--acc-ease), box-shadow 150ms var(--acc-ease),
+    background-color 160ms var(--acc-ease), border-color 160ms var(--acc-ease), color 160ms var(--acc-ease); }
+.acc-actions .btn { transition: transform 150ms var(--acc-ease), box-shadow 150ms var(--acc-ease), filter 150ms var(--acc-ease); }
+.acc-load-btn:hover:not(:disabled), .acc-btn:hover:not(:disabled) {
+    transform: translateY(-1px); box-shadow: 0 5px 14px rgba(0,0,0,.16); }
+.acc-load-btn:active:not(:disabled), .acc-btn:active:not(:disabled) {
+    transform: translateY(0) scale(.97); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.acc-actions .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.20); filter: brightness(1.06); }
+.acc-actions .btn:active { transform: translateY(0) scale(.9); box-shadow: none; }
 .acc-comment-inp { width: 100%; min-width: 120px; font-size: .76rem; padding: .18rem .4rem;
     border: 1px solid #ffc107; border-radius: 6px; background: var(--acc-surface); color: var(--acc-ink); }
 .acc-comment-inp:focus { outline: none; border-color: var(--acc-blue); }
-.acc-import-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
 table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
@@ -474,16 +487,15 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
     }
 
-    // Button loading feedback (New Deals model): swap the icon for a spinner while
-    // busy and disable it; restore the original markup when done.
+    // Button loading feedback (New Deals model): swap the icon for a pure-CSS spinner
+    // (no lucide dependency) while busy and disable it; restore the markup when done.
     function accBtnBusy(btn, on) {
         if (!btn) return;
         if (on) {
             if (btn.dataset.html === undefined) btn.dataset.html = btn.innerHTML;
             btn.disabled = true; btn.classList.add('is-busy');
             var lbl = btn.querySelector('span');
-            btn.innerHTML = '<i data-lucide="loader-2" class="acc-spin"></i><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
-            if (window.lucide) lucide.createIcons();
+            btn.innerHTML = '<span class="acc-spinner"></span><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
         } else {
             btn.disabled = false; btn.classList.remove('is-busy');
             if (btn.dataset.html !== undefined) { btn.innerHTML = btn.dataset.html; delete btn.dataset.html; if (window.lucide) lucide.createIcons(); }
@@ -1093,9 +1105,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (r) {
             if (!r.isConfirmed) return;
-            if (btn) { btn.disabled = true; btn.querySelector('span').textContent = t('acc-validation-running', 'Sending…'); }
+            accBtnBusy(btn, true);
             postJSON('/api/accrual-swap/validation', { date: dateISO }).then(function (j) {
-                if (btn) { btn.disabled = false; btn.querySelector('span').textContent = t('acc-validation', 'Validation'); }
+                accBtnBusy(btn, false);
                 if (!j.success) {
                     if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
                     errSwal(j.error); return;
@@ -1109,10 +1121,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                           (j.mail ? '' : '<div style="margin-top:10px;color:#dc3545;font-size:.82em">' + esc(t('acc-validation-mailfail', 'Files generated, but the e-mail could not be sent.')) + '</div>'),
                     confirmButtonColor: '#0066cc', customClass: { confirmButton: 'bg-gradient', htmlContainer: 'text-start' }
                 });
-            }).catch(function () {
-                if (btn) { btn.disabled = false; btn.querySelector('span').textContent = t('acc-validation', 'Validation'); }
-                netErr();
-            });
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
         });
     }
 
@@ -1280,20 +1289,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     // ── import straight from the dated run folder (no dropzone) ──────────────
-    // Rebuild the button (lucide turned the original <i> into an <svg> on load, so
-    // querySelector('i') is null — always reset the innerHTML and re-render icons).
-    function setImportBtn(spinning) {
-        var btn = document.getElementById('accImport');
-        if (!btn) return;
-        btn.disabled = !!spinning;
-        btn.innerHTML = spinning
-            ? '<i data-lucide="loader-2" class="acc-spin"></i><span>' + esc(t('acc-importing', 'Importing…')) + '</span>'
-            : '<i data-lucide="folder-input"></i><span data-lang="acc-import-folder">' + esc(t('acc-import-folder', 'Import from folder')) + '</span>';
-        if (window.lucide) lucide.createIcons();
-    }
-
     function importFromFolder(dateISO) {
-        setImportBtn(true);
+        var btn = document.getElementById('accImport');
+        accBtnBusy(btn, true);
         currentDate = dateISO;
         fetch('/api/accrual-swap/import-folder', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1301,7 +1299,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
-            setImportBtn(false);
+            accBtnBusy(btn, false);
             if (!res.ok || !res.j.success) {
                 Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not import'),
                             text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
@@ -1320,7 +1318,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
                         icon: 'success', title: t('acc-import-done', 'Imported from folder') + (summ ? ' · ' + summ : '') });
         })
-        .catch(function () { setImportBtn(false); netErr(); });
+        .catch(function () { accBtnBusy(btn, false); netErr(); });
     }
 
     function initDatePicker() {
