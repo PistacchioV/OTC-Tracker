@@ -619,7 +619,7 @@
   "acc-hybrids": "Hybrids",
   "acc-commodities": "Commodities",
   "acc-drop-title": "Suelte el archivo VCP aquí, o haga clic para seleccionar",
-  "acc-drop-hint": "Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx o .csv",
+  "acc-drop-hint": "Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx, .csv o .tsv",
   "acc-columns": "Columnas",
   "acc-clear": "Limpiar filtros",
   "acc-filter": "Filtrar",

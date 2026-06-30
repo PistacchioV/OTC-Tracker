@@ -1533,6 +1533,7 @@ _CETIP_RULES = [
 #   Swap   → SWAP position/flow/premium agenda          — HEADERLESS: column names
 #            come from _B3_SWAP_HEADERS (stored standard, keyed per file type)
 B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'b3 files')
+ACCRUAL_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'accrual')
 
 # Standard column headers for the HEADERLESS SWAP-family files (';'-delimited),
 # in file order. These are the authoritative field names (the SWAP files ship with
@@ -2422,18 +2423,19 @@ def _cc_parse_rules(raw):
 
 def _cc_read_rows(filename, raw_bytes):
     """Return a list of rows (each a list of cell values) from an uploaded
-    .xlsx/.xlsm or .csv. Raises ValueError on an unsupported type."""
+    .xlsx/.xlsm, .csv or .tsv. Raises ValueError on an unsupported type."""
     name = (filename or '').lower()
-    if name.endswith('.csv'):
+    if name.endswith(('.csv', '.tsv')):
         import csv as _csv
         text = raw_bytes.decode('utf-8-sig', errors='replace')
-        return [list(r) for r in _csv.reader(io.StringIO(text))]
+        delimiter = '\t' if name.endswith('.tsv') else ','
+        return [list(r) for r in _csv.reader(io.StringIO(text), delimiter=delimiter)]
     if name.endswith(('.xlsx', '.xlsm')):
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
         ws = wb.active
         return [list(r) for r in ws.iter_rows(values_only=True)]
-    raise ValueError('Unsupported file type. Please upload .xlsx, .xlsm or .csv.')
+    raise ValueError('Unsupported file type. Please upload .xlsx, .xlsm, .csv or .tsv.')
 
 
 def _import_client_contacts(filename, raw_bytes):
@@ -2658,7 +2660,7 @@ def api_accrual_swap_process():
         matched += 1
         buckets[lob].append([contract if c == 0 else _cc_cell(row, c) for c in _ACC_KEEP_COLS])
 
-    return jsonify({
+    result = {
         'success': True,
         'headers': headers,
         'tables': buckets,
@@ -2666,7 +2668,25 @@ def api_accrual_swap_process():
         'ref_date': ref_date,
         'diagnostics': {'total': total, 'kept': kept, 'matched': matched,
                         'position_records': len(records)},
-    })
+    }
+
+    # Persist the processed result under static/data/cache/accrual/YYYY/MM/DD/
+    try:
+        now = datetime.now()
+        out_dir = os.path.join(ACCRUAL_JSON_ROOT,
+                               now.strftime('%Y'), now.strftime('%m'), now.strftime('%d'))
+        os.makedirs(out_dir, exist_ok=True)
+        saved = dict(result)
+        saved['saved_at']    = now.strftime('%Y-%m-%d %H:%M:%S')
+        saved['source_file'] = f.filename
+        out_path = os.path.join(out_dir, 'accrual_swap_{}.json'.format(now.strftime('%Y%m%d')))
+        with open(out_path, 'w', encoding='utf-8') as fh:
+            json.dump(saved, fh, ensure_ascii=False, indent=2)
+        log.info('[accrual] saved %s', out_path)
+    except Exception:
+        log.error('[accrual] save failed:\n%s', traceback.format_exc())
+
+    return jsonify(result)
 
 
 @blueprint.route('/holidays-calendar')

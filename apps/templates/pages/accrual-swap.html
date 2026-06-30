@@ -66,6 +66,27 @@
 .acc-stat__value.is-bumped { color: var(--acc-blue); }
 [data-bs-theme="dark"] .acc-stat__value.is-bumped { color:#2997ff; }
 
+/* feedback pop when a count updates (Emil: motion conveys the change) */
+.acc-stat.is-pop { animation: accPop 340ms var(--acc-ease); }
+@keyframes accPop {
+    0%   { transform: translateY(0)   scale(1); }
+    38%  { transform: translateY(-3px) scale(1.045); }
+    100% { transform: translateY(0)   scale(1); }
+}
+.acc-stat__icon { transition: transform 280ms var(--acc-ease), background-color 280ms var(--acc-ease); }
+.acc-stat.is-pop .acc-stat__icon { animation: accIconPop 420ms var(--acc-ease); }
+@keyframes accIconPop {
+    0%   { transform: scale(1)    rotate(0); }
+    42%  { transform: scale(1.16) rotate(-5deg); }
+    100% { transform: scale(1)    rotate(0); }
+}
+.acc-stat.is-pop .acc-stat__value { animation: accValuePulse 420ms var(--acc-ease); }
+@keyframes accValuePulse {
+    0%   { transform: scale(1); }
+    42%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
 /* ── Dropzone (slim · minimalist) ──────────────────────────────────────── */
 .acc-drop {
     max-width: 560px; margin: 0 auto;
@@ -168,7 +189,7 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .dataTables_wrapper .dataTables_paginate .paginate_button { font-size:.78rem; }
 
 @media (prefers-reduced-motion: reduce) {
-    .acc-stat { animation: none; opacity:1; transform:none; }
+    .acc-stat, .acc-stat.is-pop, .acc-stat.is-pop .acc-stat__icon, .acc-stat.is-pop .acc-stat__value { animation: none; opacity:1; transform:none; }
     .acc-stat:hover, .acc-drop:active, .acc-btn:active { transform:none; }
 }
 </style>
@@ -232,9 +253,9 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         </div>
         <div>
             <p class="acc-drop__title" data-lang="acc-drop-title">Drop the VCP file here, or click to browse</p>
-            <p class="acc-drop__hint" data-lang="acc-drop-hint">Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx or .csv</p>
+            <p class="acc-drop__hint" data-lang="acc-drop-hint">Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx, .csv or .tsv</p>
         </div>
-        <input type="file" id="accFile" accept=".xlsx,.xlsm,.csv" hidden>
+        <input type="file" id="accFile" accept=".xlsx,.xlsm,.csv,.tsv" hidden>
     </div>
     <div class="acc-asof" id="accAsOf"></div>
 
@@ -289,6 +310,17 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         if (!el) return;
         var from = parseInt(el.textContent.replace(/\D/g, ''), 10) || 0;
         if (from === target) { el.textContent = target; return; }
+        // feedback pop on the widget card (restart animation if re-triggered)
+        var card = el.closest('.acc-stat');
+        if (card) {
+            card.classList.remove('is-pop');
+            void card.offsetWidth;                 // force reflow → restartable
+            card.classList.add('is-pop');
+            card.addEventListener('animationend', function h() {
+                card.classList.remove('is-pop');
+                card.removeEventListener('animationend', h);
+            });
+        }
         var t0 = null, dur = 600;
         el.classList.toggle('is-bumped', target > 0);
         function step(ts) {

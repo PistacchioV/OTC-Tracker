@@ -50,3 +50,6 @@ _chart_preview/
 
 # Generated B3 JSON data (daily) — keep folders, ignore the data files
 apps/static/data/cache/b3 files/**/*.json
+
+# Generated Accrual JSON data (daily)
+apps/static/data/cache/accrual/**/*.json
