@@ -67,13 +67,9 @@
 .acc-stat__value.is-bumped { color: var(--acc-blue); }
 [data-bs-theme="dark"] .acc-stat__value.is-bumped { color:#2997ff; }
 
-/* feedback pop when a count updates (Emil: motion conveys the change) */
-.acc-stat.is-pop { animation: accPop 340ms var(--acc-ease); }
-@keyframes accPop {
-    0%   { transform: translateY(0)   scale(1); }
-    38%  { transform: translateY(-3px) scale(1.045); }
-    100% { transform: translateY(0)   scale(1); }
-}
+/* feedback pop when a count updates (Emil: motion conveys the change).
+   Applied to the icon/value ONLY — never to the card's `animation`, otherwise it
+   would override the entrance `accIn` and re-trigger the fade-in (widget blinks). */
 .acc-stat__icon { transition: transform 280ms var(--acc-ease), background-color 280ms var(--acc-ease); }
 .acc-stat.is-pop .acc-stat__icon { animation: accIconPop 420ms var(--acc-ease); }
 @keyframes accIconPop {
@@ -598,13 +594,13 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             bulk.style.display = sel.size > 1 ? '' : 'none';
             var c = bulk.querySelector('.acc-bulk-count'); if (c) c.textContent = sel.size;
         }
-        // Select-all reflects the CURRENT PAGE's coverage.
+        // Select-all reflects ALL filtered rows (every page), so the count is the
+        // true total selected — not just the current page.
         var all = card.querySelector('.acc-cb-all');
         if (all) {
-            var pageTotal = Object.keys(pageIds).length;
-            var pageSel = 0; Object.keys(pageIds).forEach(function (id) { if (sel.has(id)) pageSel++; });
-            all.checked = pageTotal > 0 && pageSel >= pageTotal;
-            all.indeterminate = pageSel > 0 && pageSel < pageTotal;
+            var total = dt.rows({ search: 'applied' }).count();
+            all.checked = total > 0 && sel.size >= total;
+            all.indeterminate = sel.size > 0 && sel.size < total;
         }
     }
 
@@ -620,8 +616,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
         $(card).on('change.accrow', '.acc-cb-all', function () {
             var on = this.checked;
-            // Toggle only the rows on the current page → count matches what's visible.
-            dt.rows({ page: 'current', search: 'applied' }).every(function () {
+            // Toggle ALL filtered rows across every page (not just the current page).
+            dt.rows({ search: 'applied' }).every(function () {
                 var d = this.data(); if (!d) return; var id = String(d[d.length - 1]);
                 if (!id) return;
                 if (on) sel.add(id); else sel.delete(id);
