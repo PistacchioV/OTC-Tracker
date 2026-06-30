@@ -905,25 +905,33 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                         text: t('acc-prev-none', 'This swap has no VCP leg to update.'), confirmButtonColor: '#0066cc' });
             return;
         }
+        // Vertical layout: one ROW per field, one COLUMN per record.
+        var multi = recs.length > 1;
         var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-            ACC_REC_HEADERS.map(function (h) { return '<th style="padding:5px 8px;text-align:left;font-weight:600;white-space:nowrap;font-size:.78em">' + esc(h) + '</th>'; }).join('') + '</tr>';
-        var tbody = recs.map(function (r, i) {
-            var bg = i % 2 === 0 ? '#f8f9fa' : '#fff';
-            return '<tr style="background:' + bg + '">' + ACC_REC_KEYS.map(function (k) {
-                var raw = r[k];
-                var disp = (k === 'puAtual') ? '<span style="color:#bbb">' + '·'.repeat(22) + '</span>' : esc(raw);
-                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+            '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">' + esc(t('acc-prev-field', 'Field')) + '</th>' +
+            recs.map(function (r, i) {
+                return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
+                    (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
             }).join('') + '</tr>';
+        var tbody = ACC_REC_KEYS.map(function (k, fi) {
+            var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
+            var cells = recs.map(function (r) {
+                var disp = (k === 'puAtual') ? '<span style="color:#bbb">' + '·'.repeat(22) + '</span>' : esc(r[k]);
+                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+            }).join('');
+            return '<tr style="background:' + bg + '">' +
+                '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
+                    (fi + 1) + '. ' + esc(ACC_REC_HEADERS[fi]) + '</td>' + cells + '</tr>';
         }).join('');
         var html =
             '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
                 recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
-            '<div style="overflow:auto;max-height:58vh;border:1px solid #dee2e6;border-radius:4px">' +
-            '<table style="border-collapse:collapse">' +
+            '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
+            '<table style="border-collapse:collapse;width:100%">' +
             '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
         Swal.fire({
             title: '<span style="font-size:1rem">' + t('acc-prev-title', 'PU / Factor preview') + ' — ' + esc(codigoIf) + '</span>',
-            html: html, width: 940, showCloseButton: true,
+            html: html, width: (recs.length > 2 ? 760 : 600), showCloseButton: true,
             showConfirmButton: true, confirmButtonText: '<i class="ti ti-download"></i> ' + t('acc-prev-generate', 'Generate file'),
             confirmButtonColor: '#0066cc',
             customClass: { htmlContainer: 'text-start' }

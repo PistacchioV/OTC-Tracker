@@ -613,7 +613,6 @@
   "swal-missing-cp-html": "This counterparty is not registered in Reference Data. Please register it, then reload.",
   "swal-reload-data": "Reload Data",
   "swal-goto-refdata": "Go to Reference Data",
-  "nav-accrual": "Accrual",
   "acc-label": "Accrual",
   "acc-title": "Swap Accrual by Line of Business",
   "acc-desc": "Import the VCP contract query and we split every swap into its CEM, EDG, Hybrids and Commodities book using the latest saved B3 position.",
@@ -1027,5 +1026,6 @@
   "swal-fxo-dup-text": "The following Deal + Client already exist in the table. Replace them?",
   "swal-fxo-dup-replace": "Yes, replace",
   "swal-fxo-dup-skip": "No, skip duplicates",
-  "swal-save-failed": "Could not save the edit."
+  "swal-save-failed": "Could not save the edit.",
+  "acc-prev-field": "Field"
 }

@@ -612,7 +612,6 @@
   "swal-missing-cp-html": "Esta contraparte no está registrada en Reference Data. Regístrela y luego recargue.",
   "swal-reload-data": "Recargar Datos",
   "swal-goto-refdata": "Ir a Reference Data",
-  "nav-accrual": "Accrual",
   "acc-label": "Accrual",
   "acc-title": "Accrual de Swap por Línea de Negocio",
   "acc-desc": "Importe la consulta de contratos VCP y dividimos cada swap en CEM, EDG, Hybrids y Commodities usando la última posición B3 guardada.",
@@ -1026,5 +1025,6 @@
   "swal-fxo-dup-text": "Las siguientes operaciones (Deal + Client) ya existen en la tabla. ¿Reemplazar?",
   "swal-fxo-dup-replace": "Sí, reemplazar",
   "swal-fxo-dup-skip": "No, descartar duplicadas",
-  "swal-save-failed": "No se pudo guardar la edición."
+  "swal-save-failed": "No se pudo guardar la edición.",
+  "acc-prev-field": "Campo"
 }
