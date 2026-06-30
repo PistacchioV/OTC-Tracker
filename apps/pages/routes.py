@@ -3251,6 +3251,109 @@ def api_accrual_row_send():
     return jsonify({'success': True, 'row': target})
 
 
+# ── CETIP SWAP "Atualização de PU/Fator" — batch file generation ─────────────
+#  One accrual row → 1/2/4 fixed-width records (per updater × VCP leg). Larger
+#  account = role/curve "01", smaller = "00". Updaters = our own group participants
+#  (prefixes below); an external bank counterparty is not an updater (bank view only).
+#  Records are split by VIEW into ACCRUAL_<VIEW>-<LOB>.txt in the Batch Conecta folder.
+_ACC_VIEW_BY_PREFIX = {'73760': 'BANCO', '04880': 'BANCO', '85398': 'ATACAMA', '00041': 'LAWTON'}
+_ACC_VIEW_PART_NAME = {'BANCO': 'JPMORGANBM', 'LAWTON': 'INTRAGLAWTONFDO', 'ATACAMA': 'INTRAGATACAMAFDO'}
+_ACC_LOB_TAG = {'CEM': 'CEM', 'EDG': 'EDG', 'Hybrids': 'HYB', 'Commodities': 'COMM'}
+
+
+def _acc_swap_fator(f):
+    """Factor → 2 integer + 8 decimal digits, no separator, absolute. 1.0 → '0100000000'."""
+    try:
+        n = abs(float(str(f or '').replace(',', '.')))
+    except (ValueError, TypeError):
+        n = 0.0
+    ip, fp = '{:.8f}'.format(n).split('.')
+    return ip[-2:].rjust(2, '0') + fp
+
+
+def _acc_swap_header(view, today):
+    return 'SWAP 00015' + _ACC_VIEW_PART_NAME.get(view, view).ljust(20) + today
+
+
+def _acc_swap_records(row, today):
+    """Return a list of {view, line} for one accrual row (empty when no VCP leg)."""
+    codigo = str(row[0] or '').strip()
+    accP, idxP = row[3], str(row[5] or '').strip().upper()
+    accC, idxC = row[6], str(row[8] or '').strip().upper()
+    fatP, fatC = row[9], row[10]
+    digP = re.sub(r'\D', '', str(accP or '')); digC = re.sub(r'\D', '', str(accC or ''))
+    numP = int(digP or '0'); numC = int(digC or '0')
+    roleP = '01' if numP > numC else '00'
+    roleC = '01' if numC > numP else '00'
+    legs = []                                       # (curva, fator) per VCP leg
+    if idxP == 'VCP': legs.append((roleP, fatP))
+    if idxC == 'VCP': legs.append((roleC, fatC))
+    if not legs:
+        return []
+    prefP, prefC = digP[:5], digC[:5]
+    updaters = [(roleP, prefP)]                      # PARTE (our house entity) always updates
+    if prefC in _ACC_VIEW_BY_PREFIX and prefC != prefP:
+        updaters.append((roleC, prefC))             # group counterparty also submits its view
+    out = []
+    for papel, pref in updaters:
+        view = _ACC_VIEW_BY_PREFIX.get(pref)
+        if not view:
+            continue
+        for curva, fat in legs:
+            meu = ''.join(random.choice('0123456789') for _ in range(10))
+            line = ('SWAP ' + '1' + '0015' + codigo + papel + '00' + curva +
+                    today + meu + (' ' * 22) + _acc_swap_fator(fat))
+            out.append({'view': view, 'line': line})
+    return out
+
+
+@blueprint.route('/api/accrual-swap/send-batch', methods=['POST'])
+def api_accrual_send_batch():
+    """Generate the CETIP PU/Factor batch files for one LOB book, split by view
+    (BANCO / LAWTON / ATACAMA) into the Batch Conecta folder."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob = p.get('lob')
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    today = datetime.now().strftime('%Y%m%d')
+    by_view = {}
+    for r in (data['tables'][lob] or []):
+        if not r or len(r) < 15:
+            continue
+        if str(r[-4] or '') == _ACC_FACTOR_STATUS_MISSING:    # skip rows without a factor
+            continue
+        for rec in _acc_swap_records(r, today):
+            by_view.setdefault(rec['view'], []).append(rec['line'])
+    if not by_view:
+        return jsonify({'success': False, 'error': 'No VCP records to send for this book.'}), 400
+
+    lob_tag = _ACC_LOB_TAG.get(lob, str(lob).upper())
+    generated = []
+    try:
+        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+        for view in ('BANCO', 'LAWTON', 'ATACAMA'):
+            lines = by_view.get(view)
+            if not lines:
+                continue
+            fpath = _unique_filepath(CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
+            with open(fpath, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([_acc_swap_header(view, today)] + lines))
+            generated.append({'filename': os.path.basename(fpath), 'view': view, 'count': len(lines)})
+    except Exception:
+        log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
+
+    total = sum(g['count'] for g in generated)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Sent', 'Accrual',
+                         '{} · {} file(s), {} line(s)'.format(lob, len(generated), total))
+    return jsonify({'success': True, 'files': generated, 'total': total, 'lob': lob})
+
+
 @blueprint.route('/holidays-calendar')
 def holidays_calendar():
     if not session.get('authenticated'):

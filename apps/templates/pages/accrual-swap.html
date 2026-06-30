@@ -156,6 +156,8 @@
 .acc-btn:hover  { border-color:#c9c9cf; color:var(--acc-ink); }
 .acc-btn:active { transform: scale(0.97); }
 .acc-btn svg { width:15px; height:15px; }
+.acc-send-batch { border-color: var(--acc-blue) !important; color: var(--acc-blue) !important; }
+.acc-send-batch:hover { background: rgba(0,102,204,.08); }
 
 /* Export (DataTables Buttons collection — same model as the New Deals pages) */
 .acc-tcard__tools .dt-buttons { display:inline-flex; margin:0; }
@@ -519,8 +521,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function actionsCell() {
         return '<div class="acc-actions">' +
             '<a href="#" class="btn btn-info btn-sm rounded-circle acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i class="ti ti-edit"></i></a>' +
+            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-confirm', 'Confirm')) + '"><i class="ti ti-circle-check"></i></a>' +
             '<a href="#" class="btn btn-danger btn-sm rounded-circle acc-act-del" title="' + esc(t('acc-del', 'Delete')) + '"><i class="ti ti-trash"></i></a>' +
-            '<a href="#" class="btn btn-primary btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-send', 'Send')) + '"><i class="ti ti-brand-telegram"></i></a>' +
             '</div>';
     }
     function getRowId(dt, tr) { var d = dt.row(tr).data(); return d ? String(d[d.length - 1]) : ''; }
@@ -582,6 +584,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                     '</div>' +
                     '<button class="acc-btn" type="button" data-clear="' + tableId + '">' +
                         '<i data-lucide="filter-x"></i><span>' + esc(t('acc-clear', 'Clear filters')) + '</span></button>' +
+                    '<button class="acc-btn acc-send-batch" type="button">' +
+                        '<i data-lucide="send"></i><span>' + esc(t('acc-batch-send', 'Send batch')) + '</span></button>' +
                 '</div>' +
             '</div>';
 
@@ -670,6 +674,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             var d = dtInst[tableId]; if (d) d.columns().search('').draw();
         });
 
+        var sb = card.querySelector('.acc-send-batch');
+        if (sb) sb.addEventListener('click', function () { sendBatch(lob); });
+
         var menu = card.querySelector('#cols-' + tableId);
         if (menu && dt) {
             var html = '';
@@ -752,6 +759,12 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         $(card).on('click.accrow', '.acc-act-send', function (e) { e.preventDefault(); sendRow(lob, tableId, $(this).closest('tr')[0]); });
         $(card).on('click.accrow', '.acc-act-save', function (e) { e.preventDefault(); saveEdit(lob, tableId, $(this).closest('tr')[0]); });
         $(card).on('click.accrow', '.acc-act-cancel', function (e) { e.preventDefault(); dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
+        // Double-click a row → PU/Factor file preview (New Deals model).
+        $(card).on('dblclick.accrow', 'tbody tr', function (e) {
+            if ($(e.target).closest('.acc-cb-col, .acc-act-col, input, a, .btn').length) return;
+            var rd = dt.row(this).data();
+            if (rd) showAccrualPreview(lob, rd);
+        });
     }
 
     function postJSON(url, body) {
@@ -819,6 +832,140 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             }
             if (j.row) dt.row(tr).data(j.row).draw(false);
         }).catch(netErr);
+    }
+
+    // ── PU/Factor update records (CETIP swap "Atualização de PU/Fator") ──────
+    // One swap row → 1/2/4 records depending on the parties and which legs are VCP.
+    // Account-size rule: the LARGER account is role/curve "01", the smaller is "00".
+    // Updaters = our own group participants (prefixes below); an external bank
+    // counterparty is not an updater → only the bank's view is generated.
+    var ACC_BANK_PREFIXES = ['73760', '04880', '85398', '00041'];
+
+    function _accDigits(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+    function _accPrefix(acc) { return _accDigits(acc).slice(0, 5); }
+    function _accRandom10() { var s = ''; for (var i = 0; i < 10; i++) s += Math.floor(Math.random() * 10); return s; }
+    function _accTodayYmd() {
+        var d = new Date();
+        return '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    }
+    // Factor → "2 inteiros + 8 decimais", sem ponto. 1.00000000 → "0100000000".
+    function _accFatorFmt(f) {
+        var n = Math.abs(parseFloat(String(f == null ? '' : f).replace(',', '.')));
+        if (!isFinite(n)) n = 0;
+        var p = n.toFixed(8).split('.');           // ["1","00000000"]
+        var ip = p[0].length < 2 ? ('00' + p[0]).slice(-2) : p[0].slice(-2);
+        return ip + p[1];
+    }
+
+    function buildAccrualRecords(row) {
+        var codigoIf = String(row[0] || '').trim();
+        var accP = row[3], idxP = String(row[5] || '').trim().toUpperCase();
+        var accC = row[6], idxC = String(row[8] || '').trim().toUpperCase();
+        var fatP = row[9],  fatC = row[10];
+        var numP = parseInt(_accDigits(accP) || '0', 10);
+        var numC = parseInt(_accDigits(accC) || '0', 10);
+        // Larger account → "01", smaller → "00" (role == curve id for that leg).
+        var roleP = numP > numC ? '01' : '00';
+        var roleC = numC > numP ? '01' : '00';
+        // VCP legs to update (curve + its factor).
+        var legs = [];
+        if (idxP === 'VCP') legs.push({ curve: roleP, fator: fatP, side: 'P' });
+        if (idxC === 'VCP') legs.push({ curve: roleC, fator: fatC, side: 'C' });
+        // Updaters: PARTE (our house entity) always; CONTRAPARTE only when it's
+        // another of our group participants (prefix in the set, different from PARTE).
+        var prefP = _accPrefix(accP), prefC = _accPrefix(accC);
+        var updaters = [{ papel: roleP }];
+        if (ACC_BANK_PREFIXES.indexOf(prefC) >= 0 && prefC !== prefP) updaters.push({ papel: roleC });
+
+        var today = _accTodayYmd();
+        var recs = [];
+        updaters.forEach(function (u) {
+            legs.forEach(function (lg) {
+                recs.push({
+                    sistema: 'SWAP', tipoLinha: '1', codOper: '0015', codContrato: codigoIf,
+                    papel: u.papel, tipoAtual: '00', curva: lg.curve, dataPuFator: today,
+                    meuNumero: _accRandom10(), puAtual: '                      ' /* 22 spaces */,
+                    fatorAtual: _accFatorFmt(lg.fator)
+                });
+            });
+        });
+        return recs;
+    }
+
+    var ACC_REC_HEADERS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Código do Contrato',
+        'Papel', 'Tipo de Atualização', 'Curva', 'Data PU / Fator', 'Meu Número', 'PU para Atualização', 'Fator para Atualização'];
+    var ACC_REC_KEYS = ['sistema', 'tipoLinha', 'codOper', 'codContrato', 'papel', 'tipoAtual', 'curva',
+        'dataPuFator', 'meuNumero', 'puAtual', 'fatorAtual'];
+
+    function showAccrualPreview(lob, row) {
+        var codigoIf = String(row[0] || '').trim();
+        var recs = buildAccrualRecords(row);
+        if (!recs.length) {
+            Swal.fire({ icon: 'info', title: t('acc-prev-title', 'PU / Factor preview'),
+                        text: t('acc-prev-none', 'This swap has no VCP leg to update.'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+            ACC_REC_HEADERS.map(function (h) { return '<th style="padding:5px 8px;text-align:left;font-weight:600;white-space:nowrap;font-size:.78em">' + esc(h) + '</th>'; }).join('') + '</tr>';
+        var tbody = recs.map(function (r, i) {
+            var bg = i % 2 === 0 ? '#f8f9fa' : '#fff';
+            return '<tr style="background:' + bg + '">' + ACC_REC_KEYS.map(function (k) {
+                var raw = r[k];
+                var disp = (k === 'puAtual') ? '<span style="color:#bbb">' + '·'.repeat(22) + '</span>' : esc(raw);
+                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+            }).join('') + '</tr>';
+        }).join('');
+        var html =
+            '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
+                recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
+            '<div style="overflow:auto;max-height:58vh;border:1px solid #dee2e6;border-radius:4px">' +
+            '<table style="border-collapse:collapse">' +
+            '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
+        Swal.fire({
+            title: '<span style="font-size:1rem">' + t('acc-prev-title', 'PU / Factor preview') + ' — ' + esc(codigoIf) + '</span>',
+            html: html, width: 940, showCloseButton: true,
+            showConfirmButton: true, confirmButtonText: '<i class="ti ti-download"></i> ' + t('acc-prev-generate', 'Generate file'),
+            confirmButtonColor: '#0066cc',
+            customClass: { htmlContainer: 'text-start' }
+        }).then(function (res) {
+            if (res.isConfirmed) downloadAccrualFile(recs, codigoIf);
+        });
+    }
+
+    // Fixed-width record line (matches the batch file the backend writes):
+    // "SWAP "(5) + tipoLinha(1) + codOper(4) + códContrato + papel(2) + tipoAtual(2) +
+    // curva(2) + data(8) + meuNúmero(10) + PU(22 spaces) + fator(10).
+    function accRecordLine(r) {
+        return String(r.sistema).padEnd(5) + r.tipoLinha + r.codOper + r.codContrato +
+               r.papel + r.tipoAtual + r.curva + r.dataPuFator + r.meuNumero + r.puAtual + r.fatorAtual;
+    }
+
+    function downloadAccrualFile(recs, codigoIf) {
+        var content = recs.map(accRecordLine).join('\r\n');
+        var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'SWAP_' + (_accDigits(codigoIf) || codigoIf) + '_' + _accTodayYmd() + '.txt';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // ── batch send → split by view → ACCRUAL_<VIEW>-<LOB> in the Conecta folder ─
+    function sendBatch(lob) {
+        Swal.fire({
+            icon: 'question', title: t('acc-batch-confirm-title', 'Send batch?'),
+            text: lob.name + ' — ' + t('acc-batch-confirm', 'Generates the files in the Batch Conecta folder.'),
+            showCancelButton: true, confirmButtonColor: '#0066cc',
+            confirmButtonText: t('acc-batch-send', 'Send batch'), cancelButtonText: t('swal-cancel', 'Cancel')
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            postJSON('/api/accrual-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
+                if (!j.success) { errSwal(j.error); return; }
+                var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join(' · ');
+                deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, timerProgressBar: true,
+                            icon: 'success', title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0) + (names ? ' · ' + names : '') });
+            }).catch(netErr);
+        });
     }
 
     // ── upload + process ────────────────────────────────────────────────────
