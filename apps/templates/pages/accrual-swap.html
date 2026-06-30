@@ -5,6 +5,7 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet"/>
 <style>
 /* ============================================================================
  *  ACCRUAL — SWAP  (Apple Design Language · Emil-grade motion)
@@ -188,9 +189,84 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .dataTables_wrapper .dataTables_info { font-size:.76rem; color:var(--acc-faint); padding-top:.5rem; }
 .dataTables_wrapper .dataTables_paginate .paginate_button { font-size:.78rem; }
 
+/* ── Date picker card ──────────────────────────────────────────────────── */
+.acc-datecard {
+    max-width: 560px; margin: .9rem auto 0;
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 14px;
+    padding: .7rem .85rem;
+    display: flex; align-items: center; gap: .6rem;
+}
+.acc-datecard__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; white-space:nowrap; }
+.acc-date-wrap { position: relative; flex: 1 1 auto; }
+.acc-date-icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--acc-faint); pointer-events: none; display: grid; place-items: center;
+}
+.acc-date-icon svg { width: 16px; height: 16px; }
+.acc-date-input {
+    width: 100%; height: 38px; padding: 0 .8rem 0 2.1rem;
+    font-size: .85rem; color: var(--acc-ink);
+    border: 1px solid var(--acc-hairline); border-radius: 10px;
+    background: var(--acc-surface); cursor: pointer;
+    transition: border-color 160ms var(--acc-ease);
+}
+.acc-date-input:focus { outline: none; border-color: var(--acc-blue); }
+.acc-load-btn {
+    flex: 0 0 auto; height: 38px; padding: 0 1.1rem;
+    font-size: .82rem; font-weight: 500; color: #fff;
+    background: var(--acc-blue); border: none; border-radius: 9999px;
+    display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+    transition: transform 130ms var(--acc-ease), background-color 160ms var(--acc-ease);
+}
+.acc-load-btn:hover  { background: #0a5bd6; }
+.acc-load-btn:active { transform: scale(0.97); }
+.acc-load-btn svg { width: 16px; height: 16px; }
+
+/* ── Checkbox / Actions / Status columns ───────────────────────────────── */
+table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
+table.dt-acc th.acc-act-th, table.dt-acc td.acc-act-col { width: 104px; min-width: 104px; }
+table.dt-acc th.acc-status-th, table.dt-acc td.acc-status-col { width: 96px; min-width: 96px; }
+.acc-cb-all, .acc-row-cb { cursor: pointer; width: 15px; height: 15px; accent-color: var(--acc-blue); }
+table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !important; }
+
+.acc-actions { display: flex; align-items: center; gap: .25rem; }
+.acc-act {
+    width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--acc-hairline);
+    background: var(--acc-surface); color: var(--acc-faint);
+    display: inline-grid; place-items: center; cursor: pointer;
+    transition: transform 120ms var(--acc-ease), color 140ms var(--acc-ease), border-color 140ms var(--acc-ease), background-color 140ms var(--acc-ease);
+}
+.acc-act:hover  { color: var(--acc-ink); border-color: #c9c9cf; }
+.acc-act:active { transform: scale(0.9); }
+.acc-act svg { width: 14px; height: 14px; }
+.acc-act-edit:hover  { color: #0066cc; border-color: #9ec5fe; }
+.acc-act-del:hover   { color: #dc3545; border-color: #f1aeb5; }
+.acc-act-send:hover  { color: #198754; border-color: #a3cfbb; }
+.acc-act-save { color:#198754; border-color:#a3cfbb; }
+.acc-act-cancel { color:#dc3545; border-color:#f1aeb5; }
+
+.acc-bulk-del { border-color: #f1aeb5 !important; color: #dc3545 !important; }
+.acc-bulk-del:hover { background: rgba(220,53,69,.06); }
+
+.acc-edit-inp {
+    width: 100%; min-width: 90px; font-size: .78rem; padding: .2rem .4rem;
+    border: 1px solid var(--acc-blue); border-radius: 6px;
+    background: var(--acc-surface); color: var(--acc-ink);
+}
+.acc-edit-inp:focus { outline: none; }
+
+/* Status badges */
+.acc-status { font-size:.68rem; font-weight:600; padding:.16rem .5rem; border-radius:9999px; white-space:nowrap; display:inline-block; }
+.acc-st-new     { background: rgba(108,117,125,.14); color:#5c636a; }
+.acc-st-pending { background: rgba(255,193,7,.16);  color:#9a6b00; }
+.acc-st-sent    { background: rgba(25,135,84,.14);  color:#157347; }
+[data-bs-theme="dark"] .acc-st-new { background: rgba(255,255,255,.12); color:#c7c7cc; }
+
 @media (prefers-reduced-motion: reduce) {
     .acc-stat, .acc-stat.is-pop, .acc-stat.is-pop .acc-stat__icon, .acc-stat.is-pop .acc-stat__value { animation: none; opacity:1; transform:none; }
-    .acc-stat:hover, .acc-drop:active, .acc-btn:active { transform:none; }
+    .acc-stat:hover, .acc-drop:active, .acc-btn:active, .acc-act:active, .acc-load-btn:active { transform:none; }
 }
 </style>
 {% endblock extra_css %}
@@ -259,6 +335,18 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
     </div>
     <div class="acc-asof" id="accAsOf"></div>
 
+    <!-- Date picker + Load -->
+    <div class="acc-datecard">
+        <p class="acc-datecard__label" data-lang="acc-date-label">Date</p>
+        <div class="acc-date-wrap">
+            <span class="acc-date-icon"><i data-lucide="calendar"></i></span>
+            <input type="text" id="accDate" class="acc-date-input" readonly autocomplete="off">
+        </div>
+        <button type="button" id="accLoad" class="acc-load-btn">
+            <i data-lucide="download"></i><span data-lang="acc-load">Load</span>
+        </button>
+    </div>
+
     <!-- LOB tables -->
     <div class="row g-3 mt-1" id="accTables">
         <div class="col-12"><div class="acc-tcard" data-lob="CEM"></div></div>
@@ -275,6 +363,8 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <script>
 (function () {
     'use strict';
@@ -304,6 +394,9 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         { key: 'Commodities', name: 'Commodities', card: 'Commodities', count: 'cnt-commodities' }
     ];
     var dtInst = {};
+    var selectedByTable = {};
+    var currentHeaders = {};
+    var currentDate = null;          // YYYY-MM-DD of the dataset currently shown
 
     // ── count-up animation (Emil: motion conveys the change) ────────────────
     function countTo(el, target) {
@@ -334,20 +427,42 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         requestAnimationFrame(step);
     }
 
-    // ── render one LOB table ────────────────────────────────────────────────
+    // ── status badge + actions cell ─────────────────────────────────────────
+    function statusBadge(s) {
+        s = s || 'New';
+        var key = String(s).toLowerCase();
+        var cls = key === 'pending' ? 'acc-st-pending' : (key === 'sent' ? 'acc-st-sent' : 'acc-st-new');
+        return '<span class="acc-status ' + cls + '">' + esc(t('acc-st-' + key, s)) + '</span>';
+    }
+    function actionsCell() {
+        return '<div class="acc-actions">' +
+            '<button class="acc-act acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i data-lucide="pencil"></i></button>' +
+            '<button class="acc-act acc-act-del"  title="' + esc(t('acc-del', 'Delete')) + '"><i data-lucide="trash-2"></i></button>' +
+            '<button class="acc-act acc-act-send" title="' + esc(t('acc-send', 'Send')) + '"><i data-lucide="send"></i></button>' +
+            '</div>';
+    }
+    function getRowId(dt, tr) { var d = dt.row(tr).data(); return d ? String(d[d.length - 1]) : ''; }
+
+    // ── render one LOB table (fixed checkbox / actions / status columns) ─────
     function renderTable(lob, headers, rows) {
         var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
         if (!card) return;
         var tableId = 'tbl-' + lob.card.toLowerCase();
+        headers = headers || []; rows = rows || [];
+        var n = headers.length;
+        currentHeaders[tableId] = headers;
+        selectedByTable[tableId] = new Set();
 
         var head =
             '<div class="acc-tcard__head">' +
                 '<h3 class="acc-tcard__name">' + esc(lob.name) + '</h3>' +
                 '<span class="acc-tcard__badge" id="badge-' + tableId + '">' + rows.length + '</span>' +
                 '<div class="acc-tcard__tools">' +
+                    '<button class="acc-btn acc-bulk-del" type="button" style="display:none;">' +
+                        '<i data-lucide="trash-2"></i><span>' + esc(t('acc-del', 'Delete')) + ' (<span class="acc-bulk-count">0</span>)</span></button>' +
                     '<select class="acc-tool-select" data-entries="' + tableId + '">' +
-                        '<option value="50">50</option><option value="100">100</option>' +
-                        '<option value="150">150</option><option value="200">200</option>' +
+                        '<option value="25">25</option><option value="50">50</option>' +
+                        '<option value="100">100</option><option value="150">150</option>' +
                     '</select>' +
                     '<div class="dropdown">' +
                         '<button class="acc-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">' +
@@ -359,54 +474,65 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
                 '</div>' +
             '</div>';
 
-        if (!rows.length) {
-            card.innerHTML = head +
-                '<div class="acc-tcard__body"><div class="acc-empty">' + esc(t('acc-empty', 'No contracts in this book.')) + '</div></div>';
-            wireToolbar(lob, tableId, null);
-            if (window.lucide) lucide.createIcons();
-            return;
-        }
-
-        var titles  = headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
-        var filters = headers.map(function (h, i) {
-            return '<th><input type="text" class="acc-col-filter" data-col="' + i + '" placeholder="' + esc(t('acc-filter', 'Filter')) + '"></th>';
-        }).join('');
+        // Fixed columns: checkbox (with select-all), actions, status — then data.
+        var titleTh = '<th class="acc-cb-th"><input type="checkbox" class="acc-cb-all" title="' + esc(t('acc-select-all', 'Select all')) + '"></th>' +
+                      '<th class="acc-act-th">' + esc(t('acc-actions', 'Actions')) + '</th>' +
+                      '<th class="acc-status-th">' + esc(t('acc-status', 'Status')) + '</th>' +
+                      headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+        var filterTh = '<th></th><th></th>' +
+                       '<th><input type="text" class="acc-col-filter" data-col="2" placeholder="' + esc(t('acc-status', 'Status')) + '"></th>' +
+                       headers.map(function (h, i) {
+                           return '<th><input type="text" class="acc-col-filter" data-col="' + (i + 3) + '" placeholder="' + esc(h || t('acc-filter', 'Filter')) + '"></th>';
+                       }).join('');
 
         card.innerHTML = head +
             '<div class="acc-tcard__body">' +
                 '<table id="' + tableId + '" class="table table-sm dt-acc w-100">' +
-                    '<thead><tr class="acc-th-title">' + titles + '</tr>' +
-                    '<tr class="acc-th-filter">' + filters + '</tr></thead><tbody></tbody></table>' +
+                    '<thead><tr class="acc-th-title">' + titleTh + '</tr>' +
+                    '<tr class="acc-th-filter">' + filterTh + '</tr></thead><tbody></tbody></table>' +
             '</div>';
 
         if (dtInst[tableId]) { try { dtInst[tableId].destroy(); } catch (e) {} }
+
+        // Row layout: [ d0..d(n-1), status, maker, checker, id ]  (id is last)
+        var columns = [
+            { data: null, orderable: false, searchable: false, className: 'acc-cb-col',
+              render: function () { return '<input type="checkbox" class="acc-row-cb">'; } },
+            { data: null, orderable: false, searchable: false, className: 'acc-act-col',
+              render: function () { return actionsCell(); } },
+            { data: n, className: 'acc-status-col', render: function (d) { return statusBadge(d); } }
+        ];
+        for (var ci = 0; ci < n; ci++) columns.push({ data: ci, defaultContent: '' });
+
         var dt = $('#' + tableId).DataTable({
-            data: rows,
-            orderCellsTop: true,
-            autoWidth: true,
-            scrollX: true,
-            pageLength: 50,
-            lengthChange: false,
+            data: rows, columns: columns,
+            orderCellsTop: true, autoWidth: true, scrollX: true,
+            pageLength: 25, lengthChange: false,
             dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",
             language: {
-                info:       t('acc-dt-info', 'Showing _START_ to _END_ of _TOTAL_'),
-                infoEmpty:  t('acc-dt-empty', 'Showing 0 to 0 of 0'),
+                info:         t('acc-dt-info', 'Showing _START_ to _END_ of _TOTAL_'),
+                infoEmpty:    t('acc-dt-empty', 'Showing 0 to 0 of 0'),
                 infoFiltered: t('acc-dt-filtered', '(filtered from _MAX_)'),
-                zeroRecords: t('acc-dt-zero', 'No matching records'),
+                zeroRecords:  t('acc-dt-zero', 'No matching records'),
+                emptyTable:   t('acc-empty', 'No contracts in this book.'),
                 paginate: { previous: '‹', next: '›' }
             }
         });
         dtInst[tableId] = dt;
+        dt.on('draw.acc', function () {
+            if (window.lucide) lucide.createIcons();
+            syncSelectionUI(lob, tableId);
+        });
 
-        // per-column filters (delegated → survives scrollX header clone).
-        // Namespaced + off() first so re-renders don't stack handlers.
         $(card).off('keyup.acccol change.acccol').on('keyup.acccol change.acccol', '.acc-col-filter', function () {
             var col = +this.getAttribute('data-col');
             if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
         });
 
         wireToolbar(lob, tableId, dt);
+        wireRowActions(lob, tableId, dt);
         if (window.lucide) lucide.createIcons();
+        syncSelectionUI(lob, tableId);
     }
 
     // ── toolbar: show-entries · columns dropdown · clear ────────────────────
@@ -421,8 +547,7 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         var clear = card.querySelector('[data-clear="' + tableId + '"]');
         if (clear) clear.addEventListener('click', function () {
             card.querySelectorAll('.acc-col-filter').forEach(function (i) { i.value = ''; });
-            var d = dtInst[tableId];
-            if (d) d.columns().search('').draw();
+            var d = dtInst[tableId]; if (d) d.columns().search('').draw();
         });
 
         var menu = card.querySelector('#cols-' + tableId);
@@ -430,6 +555,7 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
             var html = '';
             dt.columns().every(function () {
                 var idx = this.index();
+                if (idx < 2) return;                         // skip checkbox + actions
                 var title = $(this.header()).text() || ('Col ' + (idx + 1));
                 html += '<div class="form-check">' +
                     '<input class="form-check-input acc-col-vis" type="checkbox" checked data-col="' + idx + '" id="vis-' + tableId + '-' + idx + '">' +
@@ -443,6 +569,123 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
                 });
             });
         }
+    }
+
+    // ── selection (row checkbox + select-all + bulk delete) ─────────────────
+    function syncSelectionUI(lob, tableId) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        var dt = dtInst[tableId]; if (!dt) return;
+        var sel = selectedByTable[tableId] || new Set();
+        card.querySelectorAll('tbody .acc-row-cb').forEach(function (cb) {
+            var tr = cb.closest('tr'); var id = getRowId(dt, tr);
+            cb.checked = sel.has(id);
+            tr.classList.toggle('acc-row-sel', cb.checked);
+        });
+        var bulk = card.querySelector('.acc-bulk-del');
+        if (bulk) {
+            bulk.style.display = sel.size > 1 ? '' : 'none';
+            var c = bulk.querySelector('.acc-bulk-count'); if (c) c.textContent = sel.size;
+        }
+        var all = card.querySelector('.acc-cb-all');
+        if (all) {
+            var total = dt.rows({ search: 'applied' }).count();
+            all.checked = total > 0 && sel.size >= total;
+            all.indeterminate = sel.size > 0 && sel.size < total;
+        }
+    }
+
+    function wireRowActions(lob, tableId, dt) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        var sel = selectedByTable[tableId];
+        $(card).off('.accrow');
+
+        $(card).on('change.accrow', '.acc-row-cb', function () {
+            var id = getRowId(dt, $(this).closest('tr')[0]);
+            if (this.checked) sel.add(id); else sel.delete(id);
+            syncSelectionUI(lob, tableId);
+        });
+        $(card).on('change.accrow', '.acc-cb-all', function () {
+            var on = this.checked;
+            dt.rows({ search: 'applied' }).every(function () {
+                var d = this.data(); if (!d) return; var id = String(d[d.length - 1]);
+                if (on) sel.add(id); else sel.delete(id);
+            });
+            syncSelectionUI(lob, tableId);
+        });
+        $(card).on('click.accrow', '.acc-bulk-del', function () { confirmDelete(lob, tableId, Array.from(sel)); });
+        $(card).on('click.accrow', '.acc-act-del',  function () { confirmDelete(lob, tableId, [getRowId(dt, $(this).closest('tr')[0])]); });
+        $(card).on('click.accrow', '.acc-act-edit', function () { startEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-send', function () { sendRow(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-save', function () { saveEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-cancel', function () { dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
+    }
+
+    function postJSON(url, body) {
+        return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(function (r) { return r.json(); });
+    }
+    function errSwal(msg) { Swal.fire({ icon: 'error', title: t('acc-err-title', 'Error'), text: msg || '', confirmButtonColor: '#0066cc' }); }
+    function netErr()     { Swal.fire({ icon: 'error', title: t('acc-err-title', 'Error'), text: t('acc-err-net', 'Network error.'), confirmButtonColor: '#0066cc' }); }
+
+    function confirmDelete(lob, tableId, ids) {
+        if (!ids.length) return;
+        var bulk = ids.length > 1;
+        Swal.fire({
+            icon: 'warning', title: t('acc-del-title', 'Delete?'),
+            text: bulk ? (t('acc-del-many', 'Delete the selected rows?') + ' (' + ids.length + ')') : t('acc-del-one', 'Delete this row?'),
+            showCancelButton: true, confirmButtonText: t('acc-del', 'Delete'), cancelButtonText: t('swal-cancel', 'Cancel'),
+            confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            var url  = bulk ? '/api/accrual-swap/rows/delete' : '/api/accrual-swap/row/delete';
+            var body = bulk ? { date: currentDate, lob: lob.key, ids: ids } : { date: currentDate, lob: lob.key, id: ids[0] };
+            postJSON(url, body).then(function (j) {
+                if (!j.success) { errSwal(j.error); return; }
+                var dt = dtInst[tableId]; var del = new Set(ids.map(String));
+                dt.rows(function (idx, d) { return d && del.has(String(d[d.length - 1])); }).remove().draw(false);
+                ids.forEach(function (id) { selectedByTable[tableId].delete(id); });
+                if (j.counts) countTo(document.getElementById(lob.count), j.counts[lob.key] || 0);
+                syncSelectionUI(lob, tableId);
+            }).catch(netErr);
+        });
+    }
+
+    function startEdit(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var rd = dt.row(tr).data(); if (!rd) return;
+        var n = currentHeaders[tableId].length;
+        var $tds = $(tr).children('td');
+        for (var i = 0; i < n; i++) {
+            var v = rd[i] == null ? '' : rd[i];
+            $tds.eq(3 + i).html('<input type="text" class="acc-edit-inp" value="' + esc(v) + '">');
+        }
+        $tds.eq(1).html('<div class="acc-actions">' +
+            '<button class="acc-act acc-act-save"   title="' + esc(t('acc-save', 'Save')) + '"><i data-lucide="check"></i></button>' +
+            '<button class="acc-act acc-act-cancel" title="' + esc(t('swal-cancel', 'Cancel')) + '"><i data-lucide="x"></i></button></div>');
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function saveEdit(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
+        var n = currentHeaders[tableId].length; var cells = [];
+        $(tr).children('td').slice(3, 3 + n).each(function () { cells.push($(this).find('input').val()); });
+        postJSON('/api/accrual-swap/row/edit', { date: currentDate, lob: lob.key, id: id, cells: cells }).then(function (j) {
+            if (!j.success) { errSwal(j.error); return; }
+            if (j.row) dt.row(tr).data(j.row).draw(false);
+        }).catch(netErr);
+    }
+
+    function sendRow(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
+        postJSON('/api/accrual-swap/row/send', { date: currentDate, lob: lob.key, id: id }).then(function (j) {
+            if (!j.success) {
+                if (j.error === 'same_user') {
+                    Swal.fire({ icon: 'warning', title: t('acc-send-block-title', 'Not allowed'),
+                                text: t('acc-send-block', 'A different user must send a row you changed.'), confirmButtonColor: '#0066cc' });
+                } else { errSwal(j.error); }
+                return;
+            }
+            if (j.row) dt.row(tr).data(j.row).draw(false);
+        }).catch(netErr);
     }
 
     // ── upload + process ────────────────────────────────────────────────────
@@ -478,6 +721,7 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         var headers = data.headers || [];
         var tables  = data.tables  || {};
         var counts  = data.counts  || {};
+        if (data.date) { currentDate = data.date; syncPicker(data.date); }
         LOBS.forEach(function (lob) {
             renderTable(lob, headers, tables[lob.key] || []);
             countTo(document.getElementById(lob.count), counts[lob.key] || 0);
@@ -508,10 +752,58 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
         if (f) uploadFile(f);
     });
 
-    // initial empty tables
+    // ── date picker + load-by-date ──────────────────────────────────────────
+    function todayISO() {
+        return (window.moment ? moment() : null) ? moment().format('YYYY-MM-DD') : new Date().toISOString().slice(0, 10);
+    }
+    function pickedDateISO() {
+        var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
+        return (inst && inst.startDate) ? inst.startDate.format('YYYY-MM-DD') : todayISO();
+    }
+    function syncPicker(dateISO) {
+        var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
+        if (inst && window.moment) { var m = moment(dateISO, 'YYYY-MM-DD'); inst.setStartDate(m); inst.setEndDate(m); }
+    }
+    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, [], []); }); }
+
+    function loadByDate(dateISO) {
+        currentDate = dateISO;
+        fetch('/api/accrual-swap/data?date=' + encodeURIComponent(dateISO))
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.success && !j.empty) {
+                    applyResult(j);
+                } else {
+                    renderEmpty();
+                    LOBS.forEach(function (lob) { countTo(document.getElementById(lob.count), 0); });
+                    var asof = document.getElementById('accAsOf');
+                    if (asof) asof.innerHTML = t('acc-none-date', 'No data saved for this date.');
+                }
+                if (window.lucide) lucide.createIcons();
+            })
+            .catch(function () { renderEmpty(); });
+    }
+
+    function initDatePicker() {
+        var $d = $('#accDate');
+        if ($d.length && $.fn.daterangepicker) {
+            $d.daterangepicker({
+                singleDatePicker: true, autoApply: true, showDropdowns: true,
+                locale: { format: 'DD/MM/YYYY', applyLabel: 'OK', cancelLabel: t('swal-cancel', 'Cancel') },
+                startDate: moment(), maxDate: moment()
+            });
+        } else if ($d.length) {
+            $d.val(new Date().toLocaleDateString('pt-BR'));
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
-        LOBS.forEach(function (lob) { renderTable(lob, [], []); });
+        renderEmpty();                                   // fixed columns visible immediately
+        initDatePicker();
         if (window.lucide) lucide.createIcons();
+        var load = document.getElementById('accLoad');
+        if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO()); });
+        loadByDate(todayISO());                          // load today's data (count-up from 0)
     });
 })();
 </script>

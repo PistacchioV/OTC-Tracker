@@ -2427,7 +2427,12 @@ def _cc_read_rows(filename, raw_bytes):
     name = (filename or '').lower()
     if name.endswith(('.csv', '.tsv')):
         import csv as _csv
-        text = raw_bytes.decode('utf-8-sig', errors='replace')
+        # utf-8 first; fall back to cp1252/Latin-1 so accented headers
+        # (Código, Início, …) don't turn into mojibake on Windows-encoded exports.
+        try:
+            text = raw_bytes.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = raw_bytes.decode('cp1252', errors='replace')
         delimiter = '\t' if name.endswith('.tsv') else ','
         return [list(r) for r in _csv.reader(io.StringIO(text), delimiter=delimiter)]
     if name.endswith(('.xlsx', '.xlsm')):
@@ -2542,6 +2547,9 @@ def api_cp_import_contacts():
 _ACC_KEEP_COLS  = [0, 5, 10, 11, 13, 16, 17, 19]   # A,F,K,L,N,Q,R,T (0-based)
 _ACC_HEADER_ROW = 9                                # 1-based: headers on row 9
 _ACC_ACCOUNTS   = {'73760009', '04880006'}         # col K house accounts (digits only)
+# Extra computed columns appended to every table — values come from the grab
+# logic (added later); for now they are persisted empty so the UI shows them.
+_ACC_FACTOR_COLS = ['FATOR PARTE', 'FATOR CONTRAPARTE']
 
 
 def _acc_digits(s):
@@ -2635,6 +2643,7 @@ def api_accrual_swap_process():
     header_row = rows[_ACC_HEADER_ROW - 1]
     headers = [str(header_row[c]).strip() if c < len(header_row) and header_row[c] is not None else ''
                for c in _ACC_KEEP_COLS]
+    headers = headers + list(_ACC_FACTOR_COLS)        # + FATOR PARTE / FATOR CONTRAPARTE
 
     records, ref_date = _swap_pos_latest_records()
     lob_map = _swap_pos_lob_map(records)
@@ -2660,6 +2669,17 @@ def api_accrual_swap_process():
         matched += 1
         buckets[lob].append([contract if c == 0 else _cc_cell(row, c) for c in _ACC_KEEP_COLS])
 
+    # Append, per row: the 2 factor placeholders, then the maker/checker meta
+    # (status, maker, checker) and a stable id as the LAST cell. Row layout:
+    #   [ ...N data cells..., FATOR PARTE, FATOR CONTRAPARTE, status, maker, checker, id ]
+    # where N data cells already includes the 2 factor headers in `headers`, so the
+    # 2 factor VALUES are part of the data block; status/maker/checker/id are meta.
+    for _lob, _rws in buckets.items():
+        for _i, _rw in enumerate(_rws):
+            _rw.extend(['', ''])                       # FATOR PARTE / FATOR CONTRAPARTE (grab later)
+            _rw.extend(['New', '', ''])                # status, maker, checker
+            _rw.append('{}-{}'.format(_lob, _i))       # stable id (last cell)
+
     result = {
         'success': True,
         'headers': headers,
@@ -2669,6 +2689,8 @@ def api_accrual_swap_process():
         'diagnostics': {'total': total, 'kept': kept, 'matched': matched,
                         'position_records': len(records)},
     }
+
+    result['date'] = datetime.now().strftime('%Y-%m-%d')
 
     # Persist the processed result under static/data/cache/accrual/YYYY/MM/DD/
     try:
@@ -2687,6 +2709,149 @@ def api_accrual_swap_process():
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
 
     return jsonify(result)
+
+
+# ── Accrual JSON helpers (load/save a specific day's file) ───────────────────
+# Row layout: [ ...data cells..., status, maker, checker, id ]  (id is last)
+def _accrual_path_for(ymd):
+    return os.path.join(ACCRUAL_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8],
+                        'accrual_swap_{}.json'.format(ymd))
+
+
+def _accrual_parse_date(s):
+    try:
+        return datetime.strptime(str(s)[:10], '%Y-%m-%d').strftime('%Y%m%d')
+    except Exception:
+        return None
+
+
+def _accrual_load(date_str):
+    ymd = _accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
+    path = _accrual_path_for(ymd)
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            return path, json.load(fh)
+    except Exception:
+        log.error('[accrual] read failed %s:\n%s', path, traceback.format_exc())
+        return None, None
+
+
+def _accrual_save(path, data):
+    data['counts'] = {k: len(v) for k, v in (data.get('tables') or {}).items()}
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _accrual_find(data, lob, rid):
+    for r in (data.get('tables') or {}).get(lob, []):
+        if r and str(r[-1]) == str(rid):
+            return r
+    return None
+
+
+@blueprint.route('/api/accrual-swap/data')
+def api_accrual_data():
+    """Return the saved accrual JSON for a given date (?date=YYYY-MM-DD, default today)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    _, data = _accrual_load(request.args.get('date'))
+    if not data:
+        return jsonify({'success': True, 'empty': True})
+    data['success'] = True
+    return jsonify(data)
+
+
+@blueprint.route('/api/accrual-swap/row/delete', methods=['POST'])
+def api_accrual_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob, rid = p.get('lob'), str(p.get('id', ''))
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) == rid)]
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True, 'counts': data['counts']})
+
+
+@blueprint.route('/api/accrual-swap/rows/delete', methods=['POST'])
+def api_accrual_rows_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob = p.get('lob')
+    ids = set(str(x) for x in (p.get('ids') or []))
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) in ids)]
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True, 'counts': data['counts']})
+
+
+@blueprint.route('/api/accrual-swap/row/edit', methods=['POST'])
+def api_accrual_row_edit():
+    """Edit a row's data cells → status Pending, maker = current user (checker reset)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob, rid = p.get('lob'), str(p.get('id', ''))
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    target = _accrual_find(data, lob, rid)
+    if target is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ndata = len(target) - 4                         # cells before status/maker/checker/id
+    for i in range(min(len(cells), ndata)):
+        target[i] = cells[i]
+    target[-4], target[-3], target[-2] = 'Pending', sid, ''   # status, maker, checker
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True, 'row': target})
+
+
+@blueprint.route('/api/accrual-swap/row/send', methods=['POST'])
+def api_accrual_row_send():
+    """Send/approve a row — maker/checker guard: the user who changed it cannot send it."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob, rid = p.get('lob'), str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    target = _accrual_find(data, lob, rid)
+    if target is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(target[-3] or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must send a row you changed.'}), 403
+    target[-4], target[-2] = 'Sent', sid            # status, checker
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True, 'row': target})
 
 
 @blueprint.route('/holidays-calendar')
