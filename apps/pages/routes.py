@@ -1703,7 +1703,7 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref):
         json_name = os.path.splitext(dest_name)[0] + '.json'
         json_path = os.path.join(out_dir, json_name)
         with open(json_path, 'w', encoding='utf-8') as fh:
-            json.dump(rows, fh, ensure_ascii=False)
+            json.dump(rows, fh, ensure_ascii=False, indent=2)
         return json_path
     except Exception:
         log.warning("[b3-json] export failed for %s:\n%s", src_path, traceback.format_exc())
