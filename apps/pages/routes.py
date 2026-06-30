@@ -3334,19 +3334,14 @@ def _acc_write_batch_files(data, lob, today):
     return generated
 
 
-def _send_accrual_validation_email(subject, ref_date_fmt, generated, attach_paths):
-    """E-mail the EOM accrual validation from the OTC Tracker mailbox to OTC Ops,
-    attaching the Lawton/Atacama view files. Best-effort — returns True or an error str."""
+def _send_accrual_validation_email(subject, html, logo_path, attach_paths):
+    """SMTP-only e-mail of the EOM accrual validation to OTC Ops, attaching the
+    Lawton/Atacama files. The HTML and logo path are resolved by the caller (so this
+    can run in a background thread without a Flask app context). Best-effort."""
     from email.mime.image import MIMEImage
     from email.mime.base import MIMEBase
     from email import encoders
     try:
-        attach_names = [os.path.basename(p) for p in attach_paths]
-        html = render_template(
-            'pages/email-template-accrual-validation.html',
-            ref_date_fmt=ref_date_fmt, generated_files=generated,
-            attachment_names=attach_names, current_year=datetime.now().year)
-
         msg = MIMEMultipart('mixed')
         msg['Subject'] = subject
         msg['From'] = SHARED_MAILBOX
@@ -3357,7 +3352,6 @@ def _send_accrual_validation_email(subject, ref_date_fmt, generated, attach_path
         alt.attach(MIMEText('Accrual EOM validation files attached.', 'plain', 'utf-8'))
         alt.attach(MIMEText(html, 'html', 'utf-8'))
         related.attach(alt)
-        logo_path = _get_logo_path()
         if logo_path:
             with open(logo_path, 'rb') as f:
                 img = MIMEImage(f.read())
@@ -3441,19 +3435,33 @@ def api_accrual_validation():
     # Attach ONLY the Lawton / Atacama view files.
     attach = [g['path'] for g in generated if g['view'] in ('LAWTON', 'ATACAMA')]
     subject = 'ACCRUAL EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
-    mail = _send_accrual_validation_email(subject, ref.strftime('%d/%m/%Y'),
-                                          [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated],
-                                          attach)
+    summary = [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated]
+
+    # Render the HTML + resolve the logo HERE (needs the Flask app context), then send
+    # the e-mail in a background thread so a slow/unreachable SMTP host never blocks
+    # (or times out) the HTTP response — the files are already written either way.
+    try:
+        html = render_template(
+            'pages/email-template-accrual-validation.html',
+            ref_date_fmt=ref.strftime('%d/%m/%Y'), generated_files=summary,
+            attachment_names=[os.path.basename(a) for a in attach],
+            current_year=datetime.now().year)
+        logo_path = _get_logo_path()
+        threading.Thread(
+            target=_send_accrual_validation_email,
+            args=(subject, html, logo_path, attach), daemon=True).start()
+    except Exception:
+        log.error('[accrual] validation e-mail prep failed:\n%s', traceback.format_exc())
+
     total = sum(g['count'] for g in generated)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
                          'EOM Validation · {} file(s), {} attached'.format(len(generated), len(attach)))
     return jsonify({
         'success': True,
-        'files': [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated],
+        'files': summary,
         'attached': [os.path.basename(a) for a in attach],
-        'total': total, 'mail': (mail is True),
-        'mail_error': (None if mail is True else mail),
+        'total': total, 'mail': 'queued',
     })
 
 

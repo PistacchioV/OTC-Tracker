@@ -272,8 +272,8 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-import-btn { background: transparent; color: var(--acc-blue); border: 1px solid var(--acc-blue); }
 .acc-import-btn:hover { background: rgba(0,102,204,.08); }
 .acc-import-btn:disabled { opacity: .55; cursor: default; transform: none; }
-.acc-validation-btn { background: #157347; }
-.acc-validation-btn:hover { background: #146c43; }
+.acc-validation-btn { background: #5c636a; }
+.acc-validation-btn:hover { background: #4d5358; }
 .acc-validation-btn:disabled { opacity: .55; cursor: default; transform: none; }
 .acc-import-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
 
@@ -992,7 +992,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             icon: 'question', title: t('acc-validation-title', 'Run EOM Validation?'),
             text: t('acc-validation-confirm', 'Generates all batch files and e-mails the Lawton/Atacama files to OTC Ops.'),
             showCancelButton: true, confirmButtonText: '<i class="ti ti-send"></i>',
-            cancelButtonText: '<i class="ti ti-x"></i>', confirmButtonColor: '#157347', cancelButtonColor: '#dc3545',
+            cancelButtonText: '<i class="ti ti-x"></i>', confirmButtonColor: '#0066cc', cancelButtonColor: '#dc3545',
             customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (r) {
             if (!r.isConfirmed) return;
