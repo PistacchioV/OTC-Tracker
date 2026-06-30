@@ -226,26 +226,15 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
 table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
-table.dt-acc th.acc-act-th, table.dt-acc td.acc-act-col { width: 104px; min-width: 104px; }
+table.dt-acc th.acc-act-th, table.dt-acc td.acc-act-col { width: 120px; min-width: 120px; }
+table.dt-acc td.acc-act-col .btn { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; }
+table.dt-acc td.acc-act-col .btn i { font-size: 14px; }
 table.dt-acc th.acc-status-th, table.dt-acc td.acc-status-col { width: 96px; min-width: 96px; }
 .acc-cb-all, .acc-row-cb { cursor: pointer; width: 15px; height: 15px; accent-color: var(--acc-blue); }
 table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !important; }
 
-.acc-actions { display: flex; align-items: center; gap: .25rem; }
-.acc-act {
-    width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--acc-hairline);
-    background: var(--acc-surface); color: var(--acc-faint);
-    display: inline-grid; place-items: center; cursor: pointer;
-    transition: transform 120ms var(--acc-ease), color 140ms var(--acc-ease), border-color 140ms var(--acc-ease), background-color 140ms var(--acc-ease);
-}
-.acc-act:hover  { color: var(--acc-ink); border-color: #c9c9cf; }
-.acc-act:active { transform: scale(0.9); }
-.acc-act svg { width: 14px; height: 14px; }
-.acc-act-edit:hover  { color: #0066cc; border-color: #9ec5fe; }
-.acc-act-del:hover   { color: #dc3545; border-color: #f1aeb5; }
-.acc-act-send:hover  { color: #198754; border-color: #a3cfbb; }
-.acc-act-save { color:#198754; border-color:#a3cfbb; }
-.acc-act-cancel { color:#dc3545; border-color:#f1aeb5; }
+.acc-actions { display: flex; align-items: center; gap: .3rem; }
+.acc-actions .btn:active { transform: scale(0.9); }      /* Emil press feedback */
 
 .acc-bulk-del { border-color: #f1aeb5 !important; color: #dc3545 !important; }
 .acc-bulk-del:hover { background: rgba(220,53,69,.06); }
@@ -428,17 +417,21 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     // ── status badge + actions cell ─────────────────────────────────────────
+    // Status badge — same palette as the New Deals pages.
+    var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'text-bg-info' };
     function statusBadge(s) {
         s = s || 'New';
         var key = String(s).toLowerCase();
-        var cls = key === 'pending' ? 'acc-st-pending' : (key === 'sent' ? 'acc-st-sent' : 'acc-st-new');
-        return '<span class="acc-status ' + cls + '">' + esc(t('acc-st-' + key, s)) + '</span>';
+        var cls = ACC_STATUS_BADGE[key] || 'text-bg-info';
+        return '<span class="badge badge-label ' + cls + ' rounded-pill">' + esc(t('acc-st-' + key, s)) + '</span>';
     }
+    // Action buttons — same style/colours as the New Deals pages (Bootstrap
+    // solid circular buttons + Tabler icons): edit=info, delete=danger, send=primary.
     function actionsCell() {
         return '<div class="acc-actions">' +
-            '<button class="acc-act acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i data-lucide="pencil"></i></button>' +
-            '<button class="acc-act acc-act-del"  title="' + esc(t('acc-del', 'Delete')) + '"><i data-lucide="trash-2"></i></button>' +
-            '<button class="acc-act acc-act-send" title="' + esc(t('acc-send', 'Send')) + '"><i data-lucide="send"></i></button>' +
+            '<a href="#" class="btn btn-info btn-sm rounded-circle acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i class="ti ti-edit"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle acc-act-del" title="' + esc(t('acc-del', 'Delete')) + '"><i class="ti ti-trash"></i></a>' +
+            '<a href="#" class="btn btn-primary btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-send', 'Send')) + '"><i class="ti ti-brand-telegram"></i></a>' +
             '</div>';
     }
     function getRowId(dt, tr) { var d = dt.row(tr).data(); return d ? String(d[d.length - 1]) : ''; }
@@ -612,12 +605,12 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             });
             syncSelectionUI(lob, tableId);
         });
-        $(card).on('click.accrow', '.acc-bulk-del', function () { confirmDelete(lob, tableId, Array.from(sel)); });
-        $(card).on('click.accrow', '.acc-act-del',  function () { confirmDelete(lob, tableId, [getRowId(dt, $(this).closest('tr')[0])]); });
-        $(card).on('click.accrow', '.acc-act-edit', function () { startEdit(lob, tableId, $(this).closest('tr')[0]); });
-        $(card).on('click.accrow', '.acc-act-send', function () { sendRow(lob, tableId, $(this).closest('tr')[0]); });
-        $(card).on('click.accrow', '.acc-act-save', function () { saveEdit(lob, tableId, $(this).closest('tr')[0]); });
-        $(card).on('click.accrow', '.acc-act-cancel', function () { dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
+        $(card).on('click.accrow', '.acc-bulk-del', function (e) { e.preventDefault(); confirmDelete(lob, tableId, Array.from(sel)); });
+        $(card).on('click.accrow', '.acc-act-del',  function (e) { e.preventDefault(); confirmDelete(lob, tableId, [getRowId(dt, $(this).closest('tr')[0])]); });
+        $(card).on('click.accrow', '.acc-act-edit', function (e) { e.preventDefault(); startEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-send', function (e) { e.preventDefault(); sendRow(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-save', function (e) { e.preventDefault(); saveEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-cancel', function (e) { e.preventDefault(); dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
     }
 
     function postJSON(url, body) {
@@ -659,9 +652,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             $tds.eq(3 + i).html('<input type="text" class="acc-edit-inp" value="' + esc(v) + '">');
         }
         $tds.eq(1).html('<div class="acc-actions">' +
-            '<button class="acc-act acc-act-save"   title="' + esc(t('acc-save', 'Save')) + '"><i data-lucide="check"></i></button>' +
-            '<button class="acc-act acc-act-cancel" title="' + esc(t('swal-cancel', 'Cancel')) + '"><i data-lucide="x"></i></button></div>');
-        if (window.lucide) lucide.createIcons();
+            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-save" title="' + esc(t('acc-save', 'Save')) + '"><i class="ti ti-device-floppy"></i></a>' +
+            '<a href="#" class="btn btn-secondary btn-sm rounded-circle acc-act-cancel" title="' + esc(t('swal-cancel', 'Cancel')) + '"><i class="ti ti-x"></i></a></div>');
     }
 
     function saveEdit(lob, tableId, tr) {

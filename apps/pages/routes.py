@@ -2427,12 +2427,21 @@ def _cc_read_rows(filename, raw_bytes):
     name = (filename or '').lower()
     if name.endswith(('.csv', '.tsv')):
         import csv as _csv
-        # utf-8 first; fall back to cp1252/Latin-1 so accented headers
-        # (Código, Início, …) don't turn into mojibake on Windows-encoded exports.
-        try:
-            text = raw_bytes.decode('utf-8-sig')
-        except UnicodeDecodeError:
-            text = raw_bytes.decode('cp1252', errors='replace')
+        # Pick the first encoding that decodes WITHOUT replacement chars, so accented
+        # headers (Código, Início, …) never turn into mojibake regardless of the
+        # export encoding (utf-8 / Windows-1252 / Latin-1). latin-1 never fails and is
+        # byte-exact for ISO-8859-1, so it is the guaranteed last resort.
+        text = None
+        for enc in ('utf-8-sig', 'cp1252', 'latin-1'):
+            try:
+                cand = raw_bytes.decode(enc)
+            except (UnicodeDecodeError, LookupError):
+                continue
+            if '�' not in cand:
+                text = cand
+                break
+        if text is None:
+            text = raw_bytes.decode('latin-1', errors='replace')
         delimiter = '\t' if name.endswith('.tsv') else ','
         return [list(r) for r in _csv.reader(io.StringIO(text), delimiter=delimiter)]
     if name.endswith(('.xlsx', '.xlsm')):
