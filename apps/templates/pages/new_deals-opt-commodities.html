@@ -1170,6 +1170,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js"></script>
 
 <script>
 // ============================================================================
@@ -1239,6 +1240,7 @@ var _FX_HOLIDAY_OPTIONS  = [];   // available FX holiday schedule names
         .then(function (r) { return r.json(); })
         .then(function (d) {
             _REFDATA = d;
+            if (typeof _cpRefresh === 'function') _cpRefresh();
             var seen = {};
             d.forEach(function (x) {
                 var acc = x['COMMODITIES ACCRONYM'];
@@ -1579,6 +1581,8 @@ $(document).ready(function() {
             // Re-apply Missing Index B3 badges after every draw (pagination/sort/filter
             // rebuilds DOM from data array which doesn't store the badge HTML)
             if (typeof refreshAllMissingBadges === 'function') refreshAllMissingBadges();
+            // Missing Counterparty badges — must run AFTER the B3 refresh.
+            if (typeof _cpRefresh === 'function') _cpRefresh();
         },
         initComplete: function() {
             var api = this.api();
@@ -2467,6 +2471,7 @@ $(document).ready(function() {
             });
             table.draw(false);
             refreshAllMissingBadges();
+            if (typeof _cpRefresh === 'function') _cpRefresh();
             document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                 if (!bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el, { trigger: 'hover' });
             });
@@ -3347,6 +3352,25 @@ $(document).ready(function() {
     }
 
     // ========================================================================
+    // MISSING COUNTERPARTY BADGE (shared helper — coexists with Missing Index B3)
+    // ========================================================================
+    function _cp() {
+        if (!window._cpInst && window.dealsTable && window.MissingCounterparty) {
+            window._cpInst = MissingCounterparty.init({
+                table:      window.dealsTable,
+                getRefData: function () { return _REFDATA; },
+                setRefData: function (d) { _REFDATA = d; },
+                cols:       { status: 2, spn: 8, acr: 9, client: 10, taxid: 11, info: [8, 10, 11] },
+                acrField:   'COMMODITIES ACCRONYM',
+                t:          (typeof t === 'function' ? t : null)
+            });
+        }
+        return window._cpInst || null;
+    }
+    function _cpRefresh() { var i = _cp(); if (i) i.refreshAll(); }
+    window._cpRefresh = _cpRefresh;
+
+    // ========================================================================
     // ROW ACTION BUTTONS: Edit / Confirm / Delete / Send
     // ========================================================================
 
@@ -3607,6 +3631,9 @@ $(document).ready(function() {
         e.preventDefault();
         var tr = $(this).closest('tr');
 
+        // Counterparty not registered → guide to Reference Data before editing.
+        if (_cp() && _cp().rowMissing(tr[0])) { _cp().promptRegister(); return; }
+
         var col14Edit = table.cell(tr[0], 14).node();
         var editAssetCode = col14Edit ? $(col14Edit).clone().find('.missing-b3-badge').remove().end().text().trim() : '';
         if (_isAssetMissing(editAssetCode)) {
@@ -3778,6 +3805,7 @@ $(document).ready(function() {
         }
 
         if (currentStatus === 'Pending') {
+            if (_cp() && _cp().rowMissing(tr[0])) { _cp().promptRegister(); return; }
             var col14ForApprove = table.cell(tr[0], 14).node();
             var approveAssetCode = col14ForApprove ? $(col14ForApprove).clone().find('.missing-b3-badge').remove().end().text().trim() : '';
             if (_isAssetMissing(approveAssetCode)) {

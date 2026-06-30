@@ -172,9 +172,9 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
         data: {
             labels: months,
             datasets: [
-                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
-                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
-                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: 6 },
+                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'vertical'), borderSkipped: false },
+                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'vertical'), borderSkipped: false },
+                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'vertical'), borderSkipped: false },
             ]
         },
         options: {
@@ -287,6 +287,31 @@ function syncForecastFilterUI() {
     }
 }
 
+// Index of the top-most visible dataset that has a value > 0 at bar `i`.
+function _lastVisibleDatasetAt(chart, i) {
+    const ds = chart.data.datasets;
+    let last = -1;
+    for (let d = 0; d < ds.length; d++) {
+        if (!chart.isDatasetVisible(d)) continue;
+        const v = ds[d].data[i];
+        if (v != null && +v > 0) last = d;
+    }
+    return last;
+}
+
+// Scriptable borderRadius for stacked bars: round only the OUTER end of each
+// bar's top-most visible segment, so the whole stack reads as one bar with a
+// single rounded end — regardless of which product happens to be last.
+function stackEndRadius(R, orientation) {
+    return function (c) {
+        if (c.type !== 'data') return 0;
+        if (c.datasetIndex !== _lastVisibleDatasetAt(c.chart, c.dataIndex)) return 0;
+        return orientation === 'horizontal'
+            ? { topLeft: 0, bottomLeft: 0, topRight: R, bottomRight: R }
+            : { bottomLeft: 0, bottomRight: 0, topLeft: R, topRight: R };
+    };
+}
+
 function buildForecastProductChart(data) {
     const ctx = document.getElementById('forecast-product-chart');
     if (!ctx) return;
@@ -301,7 +326,7 @@ function buildForecastProductChart(data) {
         return {
             type: 'bar', label: p.label, data: p.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
-            stack: 'fc', maxBarThickness: 24, borderRadius: 6
+            stack: 'fc', maxBarThickness: 24, borderRadius: stackEndRadius(6, 'vertical'), borderSkipped: false
         };
     });
     forecastChart = new Chart(ctx, {
@@ -352,7 +377,7 @@ function buildClientsChart(top5) {
         ? products.map(p => {
             const base = _productColor(p) || PRODUCT_FALLBACK[fb++ % PRODUCT_FALLBACK.length];
             return { label: p, data: top5.map(c => (c.by_product && c.by_product[p]) || 0),
-                     backgroundColor: hGradient(base, 0.55, 1), borderRadius: 4, barThickness: 22, stack: 'clients' };
+                     backgroundColor: hGradient(base, 0.55, 1), borderRadius: stackEndRadius(6, 'horizontal'), borderSkipped: false, barThickness: 22, stack: 'clients' };
         })
         : [{ label: 'Deals', data: top5.map(c => c.count), backgroundColor: hGradient(ins('chart-primary'), 0.55, 1), borderRadius: 6, barThickness: 22 }];
 

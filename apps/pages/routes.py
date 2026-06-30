@@ -2526,6 +2526,149 @@ def api_cp_import_contacts():
     return jsonify({'success': True, 'message': msg})
 
 
+# ============================================================================
+#  ACCRUAL — SWAP (VCP) classification by line of business
+# ----------------------------------------------------------------------------
+#  Reads the uploaded "Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU"
+#  spreadsheet (headers on row 9), cleans column A (# -> ''), keeps only the two
+#  house accounts in column K, then joins each contract (col A) against the
+#  latest saved SWAP position JSON to read its "Código Identificador" and route
+#  the row to its line-of-business table (CEM / EDG / Hybrids / Commodities).
+#  Each table keeps columns A, F, K, L, N, Q, R, T.
+# ============================================================================
+
+_ACC_KEEP_COLS  = [0, 5, 10, 11, 13, 16, 17, 19]   # A,F,K,L,N,Q,R,T (0-based)
+_ACC_HEADER_ROW = 9                                # 1-based: headers on row 9
+_ACC_ACCOUNTS   = {'73760009', '04880006'}         # col K house accounts (digits only)
+
+
+def _acc_digits(s):
+    return re.sub(r'\D', '', str(s or ''))
+
+
+def _accrual_lob(identifier):
+    """Map a SWAP 'Código Identificador' to one of the four LOB buckets.
+    Order matters: CEMHYB / COMM are tested before the CEM / EDG substrings."""
+    s = (identifier or '').upper()
+    if 'CEMHYB' in s or 'HYB' in s:  return 'Hybrids'
+    if 'COMM' in s:                  return 'Commodities'
+    if 'EDG' in s:                   return 'EDG'
+    if 'CEM' in s:                   return 'CEM'
+    return None
+
+
+def _swap_pos_latest_records(max_back=15):
+    """Latest available SWAP position JSON (list-of-dicts) + its ref date 'YYYY-MM-DD'.
+    Walks back from D-1 ANBIMA until the DPOSICAO-SWAP.json file exists."""
+    ref = _prev_anbima_bizday(datetime.now())
+    for _ in range(max_back):
+        dref = ref.strftime('%y%m%d')
+        path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                            '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+        if os.path.isfile(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as fh:
+                    return json.load(fh), ref.strftime('%Y-%m-%d')
+            except Exception:
+                log.error('[accrual] failed reading %s:\n%s', path, traceback.format_exc())
+                return [], None
+        ref = _prev_anbima_bizday(ref)
+    return [], None
+
+
+def _swap_pos_lob_map(records):
+    """Build {contract -> identifier} from the SWAP position records, keyed by the
+    upper-cased contract AND a digits-only fallback ('#'+digits)."""
+    cmap = {}
+    if not records:
+        return cmap
+    keys = list(records[0].keys())
+    # 'Contrato' must not collide with 'Tipo de Contrato'; prefer the exact key.
+    k_contract = 'Contrato' if 'Contrato' in keys else _fcst_resolve_key(
+        [k for k in keys if _fcst_norm(k) != 'tipo de contrato'], ['contrato'])
+    k_lob = ('Código Identificador' if 'Código Identificador' in keys
+             else _fcst_resolve_key(keys, ['codigo identificador']))
+    if not k_contract or not k_lob:
+        return cmap
+    for rec in records:
+        c = str(rec.get(k_contract, '') or '').strip()
+        if not c:
+            continue
+        ident = str(rec.get(k_lob, '') or '').strip()
+        cmap.setdefault(c.upper(), ident)
+        dg = _acc_digits(c)
+        if dg:
+            cmap.setdefault('#' + dg, ident)
+    return cmap
+
+
+@blueprint.route('/accrual-swap')
+def accrual_swap():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/accrual-swap.html', segment='accrual-swap')
+
+
+@blueprint.route('/api/accrual-swap/process', methods=['POST'])
+def api_accrual_swap_process():
+    """Process the VCP spreadsheet → rows split into CEM/EDG/Hybrids/Commodities."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
+    try:
+        rows = _cc_read_rows(f.filename, f.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[accrual] read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the spreadsheet.'}), 500
+
+    if len(rows) < _ACC_HEADER_ROW:
+        return jsonify({'success': False,
+                        'error': 'File has fewer than {} rows — headers expected on row {}.'
+                        .format(_ACC_HEADER_ROW, _ACC_HEADER_ROW)}), 400
+
+    header_row = rows[_ACC_HEADER_ROW - 1]
+    headers = [str(header_row[c]).strip() if c < len(header_row) and header_row[c] is not None else ''
+               for c in _ACC_KEEP_COLS]
+
+    records, ref_date = _swap_pos_latest_records()
+    lob_map = _swap_pos_lob_map(records)
+
+    buckets = {'CEM': [], 'EDG': [], 'Hybrids': [], 'Commodities': []}
+    total = kept = matched = 0
+    for i in range(_ACC_HEADER_ROW, len(rows)):
+        row = rows[i]
+        a_raw = _cc_cell(row, 0)
+        if not a_raw and not any(_cc_cell(row, c) for c in _ACC_KEEP_COLS):
+            continue                                    # fully blank line
+        total += 1
+        contract = a_raw.replace('#', '').strip()       # col A: drop '#'
+        if _acc_digits(_cc_cell(row, 10)) not in _ACC_ACCOUNTS:
+            continue                                    # col K: house accounts only
+        kept += 1
+        ident = lob_map.get(contract.upper())
+        if ident is None:
+            ident = lob_map.get('#' + _acc_digits(contract))
+        lob = _accrual_lob(ident)
+        if not lob:
+            continue                                    # IF not found / unclassified
+        matched += 1
+        buckets[lob].append([contract if c == 0 else _cc_cell(row, c) for c in _ACC_KEEP_COLS])
+
+    return jsonify({
+        'success': True,
+        'headers': headers,
+        'tables': buckets,
+        'counts': {k: len(v) for k, v in buckets.items()},
+        'ref_date': ref_date,
+        'diagnostics': {'total': total, 'kept': kept, 'matched': matched,
+                        'position_records': len(records)},
+    })
+
+
 @blueprint.route('/holidays-calendar')
 def holidays_calendar():
     if not session.get('authenticated'):
@@ -7285,3 +7428,4 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
+

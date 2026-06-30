@@ -1763,3 +1763,114 @@ apps/static/js/pages/settlement-forecast.js            ← color map rótulos Op
 apps/static/data/translations/{en,br,es}.json          ← rd-cp-net
 apps/static/data/cache/b3 files/Operations/.gitkeep    ← nova categoria
 ```
+
+---
+
+## 31. Sessão 2026-06-30 — Badge "Missing Counterparty" (New Deals) + arredondamento da última barra empilhada (index)
+
+### A) Missing Counterparty nas 5 páginas de New Deals
+Espelha o padrão **Missing Index B3**, mas para contrapartes **não cadastradas em `RefData.json`**. Aparece nas
+páginas: **opt-commodities, ndf-commodities, opt-fxo, ndf-fwdstart, ndf-otherpublisher**.
+
+- **Módulo compartilhado** `apps/static/js/missing-counterparty.js` (`window.MissingCounterparty.init(cfg)`),
+  incluído via `<script>` em cada página. Evita duplicar ~120 linhas com índices diferentes ×5.
+- **Match:** contraparte registrada sse **SPN** (normalizado, zeros à esquerda) **ou Accronym** (COMMODITIES ou
+  FX CASH) casar com algum registro de RefData. Se nenhum casar e houver identificador → **missing**. (comm/ndf
+  enriquecem por Accronym; FXO por SPN — quando não casa, as colunas de contraparte ficam vazias.)
+- **Badge** (`bg-danger rounded-pill`, `data-lang="badge-missing-cp"`) é **DOM-only** (nunca toca `cell.data()`),
+  então **coexiste** com o Missing Index B3 (que faz swap do `data()` do Status). Regra: chamar `_cpRefresh()`
+  **sempre depois** de `refreshAllMissingBadges()` em todos os call sites (drawCallback, data-load, load do RefData).
+- **Onde aparece:** Status (col 2, append) + colunas de contraparte **enriquecidas/vazias** (não a coluna-chave):
+  - opt-comm / ndf-comm: info `[8,10,11]` (SPN, Client, TaxID); chave = Accronym(9).
+  - opt-fxo: info `[9,10,11]` (Accronym, Client, TaxID); chave = SPN(8).
+  - ndf-fwdstart / ndf-otherpublisher: info `[9,11,12]` (SPN, Client, TaxID); chave = Accronym(10).
+- **Registrar + reload:** edit/approve em linha *missing* abre Swal → **Reload Data** (`reloadAndEnrich`: refetch
+  RefData, **re-enriquece** SPN/Client/TaxID/Accronym de cada linha e remove o badge) ou **Go to Reference Data**
+  (`/reference-data`). Guards adicionados no `.btn-row-edit` e no branch `currentStatus==='Pending'` do approve.
+- **i18n:** `badge-missing-cp`, `swal-missing-cp-title`, `swal-missing-cp-html`, `swal-reload-data`,
+  `swal-goto-refdata` em en/br/es.
+- **Wiring por página (6 edições):** include do script; `_cpRefresh()` após o RefData load, no drawCallback e no
+  data-load (depois do B3); bloco `_cp()`/`_cpRefresh()` antes do handler de edit (config de colunas/`acrField`);
+  guards em edit e approve.
+
+### B) index.html — última barra empilhada com ponta arredondada (`dashboard.js`)
+- **Problema:** `borderRadius` estático por dataset só arredonda se o produto for o **último dataset**, não o
+  último **visível** de cada barra (varia por barra conforme produtos com valor 0).
+- **Fix:** helper `stackEndRadius(R, orientation)` (scriptable borderRadius) + `_lastVisibleDatasetAt(chart,i)`
+  (`chart.isDatasetVisible`) — arredonda só a ponta externa do **segmento de topo visível** de cada barra, com
+  `borderSkipped:false`. Aplicado em **Settlement Forecast** (`vertical`, topo) e **Top 5 Clients** (`horizontal`,
+  direita). (Deal Flow Analytics tem o mesmo padrão estático nas linhas 175-177 — não pedido, não alterado.)
+
+### Padrões identificados
+- **Badge cross-cutting coexistente:** quando duas lógicas de badge disputam a mesma célula (Status), manter uma
+  **DOM-only** (append/remove `.missing-cp-badge`) e garantir ordem de execução (a DOM-only roda por último). Evita
+  refatorar o swap de `data()` da lógica existente.
+- **Stacked bar "pill end" no Chart.js:** usar `borderRadius` scriptable + `isDatasetVisible` para arredondar só o
+  topo **visível** por barra; `borderSkipped:false` + objeto de cantos por orientação (vertical=top, horizontal=right).
+
+### Arquivos criados/modificados nesta sessão
+```
+apps/static/js/missing-counterparty.js                 ← CRIADO (módulo compartilhado do badge)
+apps/templates/pages/new_deals-opt-commodities.html    ← include + wiring (6 pontos)
+apps/templates/pages/new_deals-ndf-commodities.html    ← include + wiring (6 pontos)
+apps/templates/pages/new_deals-opt-fxo.html            ← include + wiring (6 pontos)
+apps/templates/pages/new_deals-ndf-fwdstart.html       ← include + wiring (6 pontos)
+apps/templates/pages/new_deals-ndf-otherpublisher.html ← include + wiring (6 pontos)
+apps/static/js/pages/dashboard.js                      ← stackEndRadius/_lastVisibleDatasetAt + 2 charts
+apps/static/data/translations/{en,br,es}.json          ← badge-missing-cp + swal-missing-cp-* + swal-reload-data/goto-refdata
+```
+> ⚠️ Validado por sintaxe (`node --check`, JSON). **Não testado em runtime** (precisa de deal com contraparte
+> realmente fora do RefData para ver o badge, e do index renderizado para o arredondamento).
+
+---
+
+## 32. Sessão 2026-06-30 (cont.) — Página Accrual → Swap (classificação por LOB) + Deal Flow rounding
+
+### A) Deal Flow Analytics — mesmo fix de arredondamento (`dashboard.js`)
+- A pedido do usuário, o `borderRadius` estático das 3 séries do **Deal Flow Analytics** (NDF Comm / Option Comm /
+  Option FXO, `stack:'deals'`) foi trocado por `stackEndRadius(6, 'vertical')` + `borderSkipped:false` (mesmo helper
+  da seção 31). Agora a ponta arredondada fica sempre no topo visível de cada barra.
+
+### B) Nova página **Accrual → Swap** (`/accrual-swap`)
+Página nova (skill **emil-design-eng** + `DESIGN-apple.md`) que importa o **VCP** e separa cada swap por LOB.
+
+- **Template** `apps/templates/pages/accrual-swap.html` (Apple Design Language + motion Emil):
+  - **4 widgets de contagem** (CEM, EDG, Hybrids, Commodities) — hairline 18px, hover-lift gated `@media(hover)`,
+    stagger-in, **count-up** (ease-out cubic) ao atualizar.
+  - **Dropzone slim/minimalista** (HTML5 nativo, max-width 560px, dashed; estados `is-drag`/`is-busy` com spinner) —
+    propositalmente mais enxuto que o Dropzone/Filepond das páginas de New Deals.
+  - **4 tabelas DataTables** (uma por LOB) com **filter row por coluna** (2ª linha do thead + `orderCellsTop`),
+    **Clear filters**, **Columns** (dropdown de show/hide próprio, sem depender de `buttons.colVis`) e
+    **show entries 50/100/150/200** (default 50).
+  - i18n via `data-lang` (estático) + `t()`/`_TRANS` (dinâmico injetado pós-i18n global).
+- **Sidenav** (`partials/sidenav.html`): nova seção colapsável **Accrual** (ícone Lucide `percent`) com sub-item
+  **SWAP → /accrual-swap**, inserida antes de *Live Position*.
+- **Backend** (`routes.py`): rota `GET /accrual-swap` + endpoint `POST /api/accrual-swap/process`. Pipeline:
+  1. Lê o arquivo (`_cc_read_rows`, openpyxl/csv). **Headers na linha 9** (`_ACC_HEADER_ROW`).
+  2. **Coluna A**: remove `#`. **Coluna K**: mantém só as contas-casa `73760.00-9` e `04880.00-6` (compara por dígitos).
+  3. Junta o contrato (col A) ao **último JSON de posição swap salvo** (`_swap_pos_latest_records` → `Swap/YYYY/MM/DD/
+     73760_{YYMMDD}_DPOSICAO-SWAP.json`), lê o campo **`Código Identificador`** e classifica via `_accrual_lob`
+     (CEMHYB/HYB→Hybrids, COMM→Commodities, EDG→EDG, CEM→CEM — **ordem importa**, CEMHYB antes de CEM).
+  4. Cada tabela mantém **colunas A,F,K,L,N,Q,R,T** (`_ACC_KEEP_COLS=[0,5,10,11,13,16,17,19]`); contagem por LOB → widgets.
+  - Join key = `Contrato` do swap_position (resolvido por nome exato, evitando colidir com `Tipo de Contrato`), com
+    fallback por dígitos. Retorna `{headers, tables, counts, ref_date, diagnostics}` (diagnostics = total/kept/matched).
+
+### Padrões / pontos de atenção
+- **Ícones de notificação/menu são Lucide** (`data-lucide`, kebab); o bundle guarda PascalCase — `percent`→`Percent`,
+  `columns-3`→`Columns3`, `filter-x`→`FilterX`, `loader-2`→`Loader2` (todos válidos).
+- **swap_position headers** têm nomes duplicados (dedupe `_2`/`_3` no `_b3_export_json`), mas `Contrato` e
+  `Código Identificador` são únicos → referência por nome exato é segura.
+- **Assunções a validar no ambiente JPM:** (1) col A do VCP = contrato que casa com `Contrato` do swap_position;
+  (2) contas col K corretas; (3) tokens de LOB (inclui **COMM** p/ Commodities, ausente no `_fcst_lob` do forecast).
+  O endpoint retorna `diagnostics` (lidos/mantidos/classificados) p/ calibrar.
+
+### Arquivos criados/modificados nesta sessão
+```
+apps/templates/pages/accrual-swap.html        ← CRIADO (página completa: widgets, dropzone, 4 DataTables)
+apps/pages/routes.py                           ← rota /accrual-swap + endpoint process + helpers (_accrual_lob, _swap_pos_*)
+apps/templates/partials/sidenav.html           ← seção Accrual → SWAP
+apps/static/js/pages/dashboard.js              ← Deal Flow rounding (stackEndRadius)
+apps/static/data/translations/{en,br,es}.json  ← nav-accrual + acc-*
+```
+> ⚠️ Validado por sintaxe (Jinja2 parse, `node --check`, `ast.parse`, JSON). **Não testado em runtime** — precisa do
+> ambiente com sessão autenticada + um JSON de posição swap salvo p/ a classificação por LOB funcionar de fato.

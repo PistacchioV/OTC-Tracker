@@ -1,0 +1,486 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Accrual — Swap{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<style>
+/* ============================================================================
+ *  ACCRUAL — SWAP  (Apple Design Language · Emil-grade motion)
+ * ========================================================================== */
+:root {
+    --acc-ease:      cubic-bezier(0.23, 1, 0.32, 1);   /* strong ease-out */
+    --acc-ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+    --acc-blue:      #0066cc;
+    --acc-ink:       #1d1d1f;
+    --acc-muted:     #54545a;
+    --acc-faint:     #6e6e73;
+    --acc-hairline:  #e6e6ea;
+    --acc-surface:   #ffffff;
+}
+[data-bs-theme="dark"] {
+    --acc-ink:      #f5f5f7;
+    --acc-muted:    #c7c7cc;
+    --acc-faint:    #9a9aa0;
+    --acc-hairline: rgba(255,255,255,.10);
+    --acc-surface:  #1c1c1e;
+}
+
+.acc-sec-label { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--acc-blue); margin-bottom:.25rem; }
+.acc-sec-title { font-size:1.35rem; font-weight:700; letter-spacing:-.015em; color:var(--acc-ink); margin:0; }
+.acc-sec-desc  { font-size:.86rem; color:var(--acc-faint); margin:.25rem 0 0; max-width:760px; }
+
+/* ── Count widgets ─────────────────────────────────────────────────────── */
+.acc-stat {
+    position: relative;
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 18px;
+    padding: 1.15rem 1.25rem;
+    display: flex; align-items: center; gap: .95rem;
+    transition: transform 200ms var(--acc-ease), box-shadow 200ms var(--acc-ease);
+    will-change: transform;
+    /* stagger-in */
+    opacity: 0; transform: translateY(8px);
+    animation: accIn 460ms var(--acc-ease) forwards;
+}
+.acc-stat:nth-child(1) { animation-delay: 40ms; }
+.acc-stat:nth-child(2) { animation-delay: 90ms; }
+.acc-stat:nth-child(3) { animation-delay: 140ms; }
+.acc-stat:nth-child(4) { animation-delay: 190ms; }
+@keyframes accIn { to { opacity:1; transform:translateY(0); } }
+
+@media (hover: hover) and (pointer: fine) {
+    .acc-stat:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.07); }
+}
+.acc-stat__icon {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: rgba(0,102,204,.08); color: var(--acc-blue);
+}
+[data-bs-theme="dark"] .acc-stat__icon { background: rgba(41,151,255,.14); color:#2997ff; }
+.acc-stat__icon svg { width: 20px; height: 20px; }
+.acc-stat__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; }
+.acc-stat__value { font-size:1.85rem; font-weight:700; line-height:1.05; letter-spacing:-.02em; color:var(--acc-ink); font-variant-numeric: tabular-nums; }
+.acc-stat__value.is-bumped { color: var(--acc-blue); }
+[data-bs-theme="dark"] .acc-stat__value.is-bumped { color:#2997ff; }
+
+/* ── Dropzone (slim · minimalist) ──────────────────────────────────────── */
+.acc-drop {
+    max-width: 560px; margin: 0 auto;
+    border: 1.5px dashed var(--acc-hairline);
+    border-radius: 14px;
+    background: var(--acc-surface);
+    padding: 1.05rem 1.25rem;
+    display: flex; align-items: center; gap: .9rem;
+    cursor: pointer; text-align: left;
+    transition: border-color 180ms var(--acc-ease), background-color 180ms var(--acc-ease), transform 120ms var(--acc-ease);
+}
+.acc-drop:hover  { border-color: #c9c9cf; }
+.acc-drop:active { transform: scale(0.99); }
+.acc-drop.is-drag {
+    border-color: var(--acc-blue);
+    background: rgba(0,102,204,.05);
+}
+.acc-drop__icon {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px;
+    display: grid; place-items: center; background: rgba(0,102,204,.08); color: var(--acc-blue);
+    transition: transform 180ms var(--acc-ease);
+}
+.acc-drop.is-drag .acc-drop__icon { transform: translateY(-2px); }
+.acc-drop__icon svg { width: 19px; height: 19px; }
+.acc-drop__title { font-size:.9rem; font-weight:600; color:var(--acc-ink); margin:0; line-height:1.2; }
+.acc-drop__hint  { font-size:.76rem; color:var(--acc-faint); margin:.1rem 0 0; }
+.acc-drop__spin  { display:none; }
+.acc-drop.is-busy { pointer-events:none; opacity:.85; }
+.acc-drop.is-busy .acc-drop__icon-glyph { display:none; }
+.acc-drop.is-busy .acc-drop__spin { display:block; }
+.acc-drop__spin svg { width:19px; height:19px; animation: accSpin .8s linear infinite; }
+@keyframes accSpin { to { transform: rotate(360deg); } }
+
+.acc-asof { font-size:.78rem; color:var(--acc-faint); text-align:center; margin-top:.6rem; min-height:1.1rem; }
+.acc-asof b { color: var(--acc-muted); font-weight:600; }
+
+/* ── LOB table cards ───────────────────────────────────────────────────── */
+.acc-tcard {
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 18px;
+    overflow: hidden;
+}
+.acc-tcard__head {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .85rem 1.1rem; border-bottom: 1px solid var(--acc-hairline);
+}
+.acc-tcard__name { font-size:1rem; font-weight:700; letter-spacing:-.01em; color:var(--acc-ink); margin:0; }
+.acc-tcard__badge {
+    font-size:.72rem; font-weight:600; padding:.18rem .55rem; border-radius:9999px;
+    background: rgba(0,102,204,.10); color: var(--acc-blue);
+    font-variant-numeric: tabular-nums;
+}
+[data-bs-theme="dark"] .acc-tcard__badge { background: rgba(41,151,255,.16); color:#2997ff; }
+.acc-tcard__tools { margin-left:auto; display:flex; align-items:center; gap:.4rem; }
+
+.acc-tool-select {
+    font-size:.78rem; border:1px solid var(--acc-hairline); border-radius:9px;
+    padding:.28rem .55rem; background:var(--acc-surface); color:var(--acc-muted);
+    transition: border-color 160ms var(--acc-ease);
+}
+.acc-tool-select:focus { outline:none; border-color:var(--acc-blue); }
+.acc-btn {
+    font-size:.78rem; font-weight:500; border:1px solid var(--acc-hairline); border-radius:9px;
+    padding:.3rem .7rem; background:var(--acc-surface); color:var(--acc-muted);
+    display:inline-flex; align-items:center; gap:.35rem; cursor:pointer;
+    transition: transform 130ms var(--acc-ease), border-color 160ms var(--acc-ease), color 160ms var(--acc-ease);
+}
+.acc-btn:hover  { border-color:#c9c9cf; color:var(--acc-ink); }
+.acc-btn:active { transform: scale(0.97); }
+.acc-btn svg { width:15px; height:15px; }
+
+/* columns dropdown */
+.acc-cols-menu { min-width: 210px; padding:.4rem; }
+.acc-cols-menu .form-check { margin:0; padding:.3rem .5rem .3rem 2rem; border-radius:8px; transition: background-color 140ms var(--acc-ease); }
+.acc-cols-menu .form-check:hover { background: rgba(0,0,0,.04); }
+[data-bs-theme="dark"] .acc-cols-menu .form-check:hover { background: rgba(255,255,255,.06); }
+.acc-cols-menu .form-check-label { font-size:.82rem; color:var(--acc-muted); cursor:pointer; }
+
+.acc-tcard__body { padding:.4rem .65rem .65rem; }
+.acc-empty { text-align:center; color:var(--acc-faint); font-size:.85rem; padding:2.4rem 1rem; }
+
+/* DataTable look */
+table.dt-acc thead tr.acc-th-title th {
+    font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.02em;
+    color:var(--acc-faint); white-space:nowrap; border-bottom:1px solid var(--acc-hairline);
+    vertical-align:middle; padding:.55rem .6rem; min-width:140px;
+}
+table.dt-acc thead tr.acc-th-filter th { padding:.25rem .45rem .5rem; border-bottom:1px solid var(--acc-hairline); }
+table.dt-acc thead tr.acc-th-filter input {
+    width:100%; font-size:.74rem; padding:.22rem .45rem; border:1px solid var(--acc-hairline);
+    border-radius:7px; background:var(--acc-surface); color:var(--acc-ink);
+    transition: border-color 150ms var(--acc-ease);
+}
+table.dt-acc thead tr.acc-th-filter input:focus { outline:none; border-color:var(--acc-blue); }
+table.dt-acc tbody td { font-size:.8rem; color:var(--acc-ink); white-space:nowrap; padding:.5rem .6rem; vertical-align:middle; }
+table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
+
+.dataTables_wrapper .dataTables_info { font-size:.76rem; color:var(--acc-faint); padding-top:.5rem; }
+.dataTables_wrapper .dataTables_paginate .paginate_button { font-size:.78rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    .acc-stat { animation: none; opacity:1; transform:none; }
+    .acc-stat:hover, .acc-drop:active, .acc-btn:active { transform:none; }
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid py-3">
+
+    <!-- Header -->
+    <div class="mb-3">
+        <p class="acc-sec-label" data-lang="acc-label">Accrual</p>
+        <h1 class="acc-sec-title" data-lang="acc-title">Swap Accrual by Line of Business</h1>
+        <p class="acc-sec-desc" data-lang="acc-desc">Import the VCP contract query and we split every swap into its CEM, EDG, Hybrids and Commodities book using the latest saved B3 position.</p>
+    </div>
+
+    <!-- Count widgets -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="layers"></i></div>
+                <div>
+                    <p class="acc-stat__label">CEM</p>
+                    <div class="acc-stat__value" id="cnt-cem">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="git-branch"></i></div>
+                <div>
+                    <p class="acc-stat__label">EDG</p>
+                    <div class="acc-stat__value" id="cnt-edg">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="combine"></i></div>
+                <div>
+                    <p class="acc-stat__label" data-lang="acc-hybrids">Hybrids</p>
+                    <div class="acc-stat__value" id="cnt-hybrids">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="wheat"></i></div>
+                <div>
+                    <p class="acc-stat__label" data-lang="acc-commodities">Commodities</p>
+                    <div class="acc-stat__value" id="cnt-commodities">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dropzone -->
+    <div class="acc-drop" id="accDrop" role="button" tabindex="0" aria-label="Upload VCP file">
+        <div class="acc-drop__icon">
+            <span class="acc-drop__icon-glyph" style="display:grid;place-items:center;"><i data-lucide="upload"></i></span>
+            <span class="acc-drop__spin"><i data-lucide="loader-2"></i></span>
+        </div>
+        <div>
+            <p class="acc-drop__title" data-lang="acc-drop-title">Drop the VCP file here, or click to browse</p>
+            <p class="acc-drop__hint" data-lang="acc-drop-hint">Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx or .csv</p>
+        </div>
+        <input type="file" id="accFile" accept=".xlsx,.xlsm,.csv" hidden>
+    </div>
+    <div class="acc-asof" id="accAsOf"></div>
+
+    <!-- LOB tables -->
+    <div class="row g-3 mt-1" id="accTables">
+        <div class="col-12"><div class="acc-tcard" data-lob="CEM"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="EDG"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="Hybrids"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="Commodities"></div></div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    // ── i18n helper (dynamic strings) ───────────────────────────────────────
+    var _TRANS = {};
+    (function () {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        fetch('/static/data/translations/' + lang + '.json')
+            .then(function (r) { return r.json(); })
+            .then(function (d) { _TRANS = d || {}; })
+            .catch(function () {});
+    })();
+    function t(k, fb) { return _TRANS[k] || fb || k; }
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LOB → DOM ids
+    var LOBS = [
+        { key: 'CEM',         name: 'CEM',         card: 'CEM',         count: 'cnt-cem' },
+        { key: 'EDG',         name: 'EDG',         card: 'EDG',         count: 'cnt-edg' },
+        { key: 'Hybrids',     name: 'Hybrids',     card: 'Hybrids',     count: 'cnt-hybrids' },
+        { key: 'Commodities', name: 'Commodities', card: 'Commodities', count: 'cnt-commodities' }
+    ];
+    var dtInst = {};
+
+    // ── count-up animation (Emil: motion conveys the change) ────────────────
+    function countTo(el, target) {
+        if (!el) return;
+        var from = parseInt(el.textContent.replace(/\D/g, ''), 10) || 0;
+        if (from === target) { el.textContent = target; return; }
+        var t0 = null, dur = 600;
+        el.classList.toggle('is-bumped', target > 0);
+        function step(ts) {
+            if (t0 === null) t0 = ts;
+            var p = Math.min(1, (ts - t0) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);                 // ease-out cubic
+            el.textContent = Math.round(from + (target - from) * eased);
+            if (p < 1) requestAnimationFrame(step);
+            else el.textContent = target;
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ── render one LOB table ────────────────────────────────────────────────
+    function renderTable(lob, headers, rows) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        if (!card) return;
+        var tableId = 'tbl-' + lob.card.toLowerCase();
+
+        var head =
+            '<div class="acc-tcard__head">' +
+                '<h3 class="acc-tcard__name">' + esc(lob.name) + '</h3>' +
+                '<span class="acc-tcard__badge" id="badge-' + tableId + '">' + rows.length + '</span>' +
+                '<div class="acc-tcard__tools">' +
+                    '<select class="acc-tool-select" data-entries="' + tableId + '">' +
+                        '<option value="50">50</option><option value="100">100</option>' +
+                        '<option value="150">150</option><option value="200">200</option>' +
+                    '</select>' +
+                    '<div class="dropdown">' +
+                        '<button class="acc-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">' +
+                            '<i data-lucide="columns-3"></i><span>' + esc(t('acc-columns', 'Columns')) + '</span></button>' +
+                        '<div class="dropdown-menu dropdown-menu-end acc-cols-menu" id="cols-' + tableId + '"></div>' +
+                    '</div>' +
+                    '<button class="acc-btn" type="button" data-clear="' + tableId + '">' +
+                        '<i data-lucide="filter-x"></i><span>' + esc(t('acc-clear', 'Clear filters')) + '</span></button>' +
+                '</div>' +
+            '</div>';
+
+        if (!rows.length) {
+            card.innerHTML = head +
+                '<div class="acc-tcard__body"><div class="acc-empty">' + esc(t('acc-empty', 'No contracts in this book.')) + '</div></div>';
+            wireToolbar(lob, tableId, null);
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+
+        var titles  = headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+        var filters = headers.map(function (h, i) {
+            return '<th><input type="text" class="acc-col-filter" data-col="' + i + '" placeholder="' + esc(t('acc-filter', 'Filter')) + '"></th>';
+        }).join('');
+
+        card.innerHTML = head +
+            '<div class="acc-tcard__body">' +
+                '<table id="' + tableId + '" class="table table-sm dt-acc w-100">' +
+                    '<thead><tr class="acc-th-title">' + titles + '</tr>' +
+                    '<tr class="acc-th-filter">' + filters + '</tr></thead><tbody></tbody></table>' +
+            '</div>';
+
+        if (dtInst[tableId]) { try { dtInst[tableId].destroy(); } catch (e) {} }
+        var dt = $('#' + tableId).DataTable({
+            data: rows,
+            orderCellsTop: true,
+            autoWidth: true,
+            scrollX: true,
+            pageLength: 50,
+            lengthChange: false,
+            dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",
+            language: {
+                info:       t('acc-dt-info', 'Showing _START_ to _END_ of _TOTAL_'),
+                infoEmpty:  t('acc-dt-empty', 'Showing 0 to 0 of 0'),
+                infoFiltered: t('acc-dt-filtered', '(filtered from _MAX_)'),
+                zeroRecords: t('acc-dt-zero', 'No matching records'),
+                paginate: { previous: '‹', next: '›' }
+            }
+        });
+        dtInst[tableId] = dt;
+
+        // per-column filters (delegated → survives scrollX header clone).
+        // Namespaced + off() first so re-renders don't stack handlers.
+        $(card).off('keyup.acccol change.acccol').on('keyup.acccol change.acccol', '.acc-col-filter', function () {
+            var col = +this.getAttribute('data-col');
+            if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
+        });
+
+        wireToolbar(lob, tableId, dt);
+        if (window.lucide) lucide.createIcons();
+    }
+
+    // ── toolbar: show-entries · columns dropdown · clear ────────────────────
+    function wireToolbar(lob, tableId, dt) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+
+        var sel = card.querySelector('[data-entries="' + tableId + '"]');
+        if (sel) sel.addEventListener('change', function () {
+            var d = dtInst[tableId]; if (d) d.page.len(+this.value).draw();
+        });
+
+        var clear = card.querySelector('[data-clear="' + tableId + '"]');
+        if (clear) clear.addEventListener('click', function () {
+            card.querySelectorAll('.acc-col-filter').forEach(function (i) { i.value = ''; });
+            var d = dtInst[tableId];
+            if (d) d.columns().search('').draw();
+        });
+
+        var menu = card.querySelector('#cols-' + tableId);
+        if (menu && dt) {
+            var html = '';
+            dt.columns().every(function () {
+                var idx = this.index();
+                var title = $(this.header()).text() || ('Col ' + (idx + 1));
+                html += '<div class="form-check">' +
+                    '<input class="form-check-input acc-col-vis" type="checkbox" checked data-col="' + idx + '" id="vis-' + tableId + '-' + idx + '">' +
+                    '<label class="form-check-label" for="vis-' + tableId + '-' + idx + '">' + esc(title) + '</label></div>';
+            });
+            menu.innerHTML = html;
+            menu.querySelectorAll('.acc-col-vis').forEach(function (cb) {
+                cb.addEventListener('change', function () {
+                    var d = dtInst[tableId]; if (!d) return;
+                    d.column(+this.getAttribute('data-col')).visible(this.checked);
+                });
+            });
+        }
+    }
+
+    // ── upload + process ────────────────────────────────────────────────────
+    var drop = document.getElementById('accDrop');
+    var fileInput = document.getElementById('accFile');
+
+    function setBusy(b) { drop.classList.toggle('is-busy', b); }
+
+    function uploadFile(file) {
+        if (!file) return;
+        setBusy(true);
+        var fd = new FormData();
+        fd.append('file', file);
+        fetch('/api/accrual-swap/process', { method: 'POST', body: fd })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                setBusy(false);
+                if (!res.ok || !res.j.success) {
+                    Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not process the file'),
+                                text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                applyResult(res.j);
+            })
+            .catch(function () {
+                setBusy(false);
+                Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not process the file'),
+                            text: t('acc-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+            });
+    }
+
+    function applyResult(data) {
+        var headers = data.headers || [];
+        var tables  = data.tables  || {};
+        var counts  = data.counts  || {};
+        LOBS.forEach(function (lob) {
+            renderTable(lob, headers, tables[lob.key] || []);
+            countTo(document.getElementById(lob.count), counts[lob.key] || 0);
+        });
+
+        var asof = document.getElementById('accAsOf');
+        var dg = data.diagnostics || {};
+        var parts = [];
+        if (data.ref_date) parts.push(t('acc-asof', 'B3 position as of') + ' <b>' + esc(data.ref_date) + '</b>');
+        parts.push((dg.matched || 0) + ' ' + t('acc-classified', 'classified') +
+                   ' · ' + (dg.kept || 0) + ' ' + t('acc-kept', 'kept') +
+                   ' · ' + (dg.total || 0) + ' ' + t('acc-read', 'read'));
+        asof.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+    }
+
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', function () { if (this.files && this.files[0]) uploadFile(this.files[0]); this.value = ''; });
+
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-drag'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('is-drag'); });
+    });
+    drop.addEventListener('drop', function (e) {
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) uploadFile(f);
+    });
+
+    // initial empty tables
+    document.addEventListener('DOMContentLoaded', function () {
+        LOBS.forEach(function (lob) { renderTable(lob, [], []); });
+        if (window.lucide) lucide.createIcons();
+    });
+})();
+</script>
+{% endblock extra_javascript %}
