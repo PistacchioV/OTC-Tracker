@@ -1196,6 +1196,14 @@ var _SUBJACENTE_MAP_NDF      = {};   // asset code → Commodity name
 var _SUBJACENTE_FATOR_NDF    = {};   // asset code → Fator Conversao (all entries)
 var _FX_HOLIDAY_NDF  = [];   // available FX holiday schedule names
 
+// "Quoted in Cents" ⇔ Fator Conversao = 0.01. Tolerant of string/comma values and
+// float noise so a 0.01 factor is never misread as "not cents".
+function _ndfIsCents(f) {
+    if (f === null || f === undefined || f === '') return false;
+    var n = (typeof f === 'string') ? parseFloat(f.replace(',', '.')) : Number(f);
+    return isFinite(n) && Math.abs(n - 0.01) < 1e-9;
+}
+
 ;(function () {
     fetch('/static/data/RefData.json')
         .then(function (r) { return r.json(); })
@@ -1224,9 +1232,15 @@ var _FX_HOLIDAY_NDF  = [];   // available FX holiday schedule names
                     }
                 }
                 // Fator Conversao for all entries (used by Add New Row modal)
-                if (code && !_SUBJACENTE_FATOR_NDF.hasOwnProperty(code)) {
+                if (code) {
                     var fc = x['Fator Conversao'];
-                    _SUBJACENTE_FATOR_NDF[code] = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                    var num = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                    // When an asset appears with conflicting factors, keep the cents
+                    // factor (0.01); also let a defined value replace a null one.
+                    if (!_SUBJACENTE_FATOR_NDF.hasOwnProperty(code) ||
+                        _SUBJACENTE_FATOR_NDF[code] === null || _ndfIsCents(num)) {
+                        _SUBJACENTE_FATOR_NDF[code] = num;
+                    }
                 }
             });
             _ASSET_NDF.sort();
@@ -1313,10 +1327,13 @@ function dealJsonToRow(deal) {
     // corrected without requiring a re-upload.
     var storedQ = deal.QuotedInCents || '';
     var q;
-    if (storedQ && storedQ !== 'MISSING') {
+    // QuotedInCents is an AUTO field — purely a function of the asset's Fator
+    // Conversao. Prefer the LIVE factor whenever the asset is registered so a stale
+    // stored value (e.g. 'NO' saved before the 0.01 factor was registered) is fixed.
+    if (ua && _SUBJACENTE_FATOR_NDF.hasOwnProperty(ua) && _SUBJACENTE_FATOR_NDF[ua] !== null) {
+        q = _ndfIsCents(_SUBJACENTE_FATOR_NDF[ua]) ? 'YES' : 'NO';
+    } else if (storedQ && storedQ !== 'MISSING') {
         q = storedQ;
-    } else if (ua && _SUBJACENTE_FATOR_NDF.hasOwnProperty(ua)) {
-        q = (_SUBJACENTE_FATOR_NDF[ua] === 0.01) ? 'YES' : 'NO';
     } else {
         q = 'MISSING';
     }
@@ -3220,7 +3237,7 @@ $(document).ready(function() {
             if (col28Node && code && _SUBJACENTE_FATOR_NDF.hasOwnProperty(code)) {
                 var td28 = $(col28Node);
                 if (td28.find('.missing-b3-badge').length) {
-                    var restoredBadge = (_SUBJACENTE_FATOR_NDF[code] === 0.01)
+                    var restoredBadge = _ndfIsCents(_SUBJACENTE_FATOR_NDF[code])
                         ? '<span class="badge text-bg-success rounded-pill">YES</span>'
                         : '<span class="badge text-bg-warning rounded-pill">NO</span>';
                     td28.html(restoredBadge);
@@ -3277,9 +3294,13 @@ $(document).ready(function() {
                             _SUBJACENTE_MAP_NDF[code] = x['Commodity'];
                         }
                     }
-                    if (code && !_SUBJACENTE_FATOR_NDF.hasOwnProperty(code)) {
+                    if (code) {
                         var fc = x['Fator Conversao'];
-                        _SUBJACENTE_FATOR_NDF[code] = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                        var num = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                        if (!_SUBJACENTE_FATOR_NDF.hasOwnProperty(code) ||
+                            _SUBJACENTE_FATOR_NDF[code] === null || _ndfIsCents(num)) {
+                            _SUBJACENTE_FATOR_NDF[code] = num;
+                        }
                     }
                 });
                 _ASSET_NDF.sort();
@@ -4418,7 +4439,7 @@ $(document).ready(function() {
             if (!ua || !_SUBJACENTE_FATOR_NDF.hasOwnProperty(ua)) {
                 qVal = 'MISSING';
                 $badge.attr('class', 'badge rounded-pill bg-danger').text('Missing Index B3');
-            } else if (_SUBJACENTE_FATOR_NDF[ua] === 0.01) {
+            } else if (_ndfIsCents(_SUBJACENTE_FATOR_NDF[ua])) {
                 qVal = 'YES';
                 $badge.attr('class', 'badge text-bg-success rounded-pill').text('YES');
             } else {
