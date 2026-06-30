@@ -3307,6 +3307,85 @@ def _acc_swap_records(row, today):
     return out
 
 
+def _acc_write_batch_files(data, lob, today):
+    """Generate + write ACCRUAL_<view>-<lob>.txt for one LOB book, split by view.
+    Returns a list of {filename, path, view, count} (empty when nothing to send)."""
+    by_view = {}
+    for r in ((data.get('tables') or {}).get(lob) or []):
+        if not r or len(r) < 15:
+            continue
+        if str(r[-4] or '') == _ACC_FACTOR_STATUS_MISSING:    # skip rows without a factor
+            continue
+        for rec in _acc_swap_records(r, today):
+            by_view.setdefault(rec['view'], []).append(rec['line'])
+    if not by_view:
+        return []
+    lob_tag = _ACC_LOB_TAG.get(lob, str(lob).upper())
+    os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+    generated = []
+    for view in ('BANCO', 'LAWTON', 'ATACAMA'):
+        lines = by_view.get(view)
+        if not lines:
+            continue
+        fpath = _unique_filepath(CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
+        with open(fpath, 'w', encoding='utf-8') as fh:
+            fh.write('\n'.join([_acc_swap_header(view, today)] + lines))
+        generated.append({'filename': os.path.basename(fpath), 'path': fpath, 'view': view, 'count': len(lines)})
+    return generated
+
+
+def _send_accrual_validation_email(subject, ref_date_fmt, generated, attach_paths):
+    """E-mail the EOM accrual validation from the OTC Tracker mailbox to OTC Ops,
+    attaching the Lawton/Atacama view files. Best-effort — returns True or an error str."""
+    from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    try:
+        attach_names = [os.path.basename(p) for p in attach_paths]
+        html = render_template(
+            'pages/email-template-accrual-validation.html',
+            ref_date_fmt=ref_date_fmt, generated_files=generated,
+            attachment_names=attach_names, current_year=datetime.now().year)
+
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = subject
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = CETIP_OTC_OPS_EMAIL
+
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Accrual EOM validation files attached.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<otc_logo>')
+            img.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(img)
+        msg.attach(related)
+
+        for path in attach_paths:
+            try:
+                with open(path, 'rb') as f:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(path))
+                msg.attach(part)
+            except Exception:
+                log.warning('[accrual] could not attach %s:\n%s', path, traceback.format_exc())
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
+        log.info('[accrual] validation e-mail sent to %s', CETIP_OTC_OPS_EMAIL)
+        return True
+    except Exception as e:
+        log.error('[accrual] validation e-mail FAILED:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
 @blueprint.route('/api/accrual-swap/send-batch', methods=['POST'])
 def api_accrual_send_batch():
     """Generate the CETIP PU/Factor batch files for one LOB book, split by view
@@ -3318,40 +3397,64 @@ def api_accrual_send_batch():
     path, data = _accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-
-    today = datetime.now().strftime('%Y%m%d')
-    by_view = {}
-    for r in (data['tables'][lob] or []):
-        if not r or len(r) < 15:
-            continue
-        if str(r[-4] or '') == _ACC_FACTOR_STATUS_MISSING:    # skip rows without a factor
-            continue
-        for rec in _acc_swap_records(r, today):
-            by_view.setdefault(rec['view'], []).append(rec['line'])
-    if not by_view:
-        return jsonify({'success': False, 'error': 'No VCP records to send for this book.'}), 400
-
-    lob_tag = _ACC_LOB_TAG.get(lob, str(lob).upper())
-    generated = []
     try:
-        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
-        for view in ('BANCO', 'LAWTON', 'ATACAMA'):
-            lines = by_view.get(view)
-            if not lines:
-                continue
-            fpath = _unique_filepath(CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
-            with open(fpath, 'w', encoding='utf-8') as fh:
-                fh.write('\n'.join([_acc_swap_header(view, today)] + lines))
-            generated.append({'filename': os.path.basename(fpath), 'view': view, 'count': len(lines)})
+        generated = _acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'))
     except Exception:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
-
+    if not generated:
+        return jsonify({'success': False, 'error': 'No VCP records to send for this book.'}), 400
     total = sum(g['count'] for g in generated)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
                          '{} · {} file(s), {} line(s)'.format(lob, len(generated), total))
-    return jsonify({'success': True, 'files': generated, 'total': total, 'lob': lob})
+    files = [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated]
+    return jsonify({'success': True, 'files': files, 'total': total, 'lob': lob})
+
+
+@blueprint.route('/api/accrual-swap/validation', methods=['POST'])
+def api_accrual_validation():
+    """EOM Validation: generate the batch files for ALL LOB books, then e-mail the
+    Lawton/Atacama view files to Brazil OTC Ops for validation."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    path, data = _accrual_load(p.get('date'))
+    if not data or not (data.get('tables')):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    today = datetime.now().strftime('%Y%m%d')
+
+    generated = []
+    try:
+        for lob in ('CEM', 'EDG', 'Hybrids', 'Commodities'):
+            if lob in (data.get('tables') or {}):
+                generated.extend(_acc_write_batch_files(data, lob, today))
+    except Exception:
+        log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
+    if not generated:
+        return jsonify({'success': False, 'error': 'No VCP records to validate.'}), 400
+
+    # Attach ONLY the Lawton / Atacama view files.
+    attach = [g['path'] for g in generated if g['view'] in ('LAWTON', 'ATACAMA')]
+    subject = 'ACCRUAL EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
+    mail = _send_accrual_validation_email(subject, ref.strftime('%d/%m/%Y'),
+                                          [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated],
+                                          attach)
+    total = sum(g['count'] for g in generated)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Sent', 'Accrual',
+                         'EOM Validation · {} file(s), {} attached'.format(len(generated), len(attach)))
+    return jsonify({
+        'success': True,
+        'files': [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated],
+        'attached': [os.path.basename(a) for a in attach],
+        'total': total, 'mail': (mail is True),
+        'mail_error': (None if mail is True else mail),
+    })
 
 
 @blueprint.route('/holidays-calendar')

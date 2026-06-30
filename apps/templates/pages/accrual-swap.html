@@ -272,6 +272,9 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-import-btn { background: transparent; color: var(--acc-blue); border: 1px solid var(--acc-blue); }
 .acc-import-btn:hover { background: rgba(0,102,204,.08); }
 .acc-import-btn:disabled { opacity: .55; cursor: default; transform: none; }
+.acc-validation-btn { background: #157347; }
+.acc-validation-btn:hover { background: #146c43; }
+.acc-validation-btn:disabled { opacity: .55; cursor: default; transform: none; }
 .acc-import-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
@@ -386,6 +389,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         </button>
         <button type="button" id="accImport" class="acc-load-btn acc-import-btn">
             <i data-lucide="folder-input"></i><span data-lang="acc-import-folder">Import from folder</span>
+        </button>
+        <button type="button" id="accValidation" class="acc-load-btn acc-validation-btn">
+            <i data-lucide="mail-check"></i><span data-lang="acc-validation">Validation</span>
         </button>
     </div>
 
@@ -780,8 +786,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         Swal.fire({
             icon: 'warning', title: t('acc-del-title', 'Delete?'),
             text: bulk ? (t('acc-del-many', 'Delete the selected rows?') + ' (' + ids.length + ')') : t('acc-del-one', 'Delete this row?'),
-            showCancelButton: true, confirmButtonText: t('acc-del', 'Delete'), cancelButtonText: t('swal-cancel', 'Cancel'),
-            confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d'
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-trash"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (r) {
             if (!r.isConfirmed) return;
             var url  = bulk ? '/api/accrual-swap/rows/delete' : '/api/accrual-swap/row/delete';
@@ -931,10 +938,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
         Swal.fire({
             title: '<span style="font-size:1rem">' + t('acc-prev-title', 'PU / Factor preview') + ' — ' + esc(codigoIf) + '</span>',
-            html: html, width: (recs.length > 2 ? 760 : 600), showCloseButton: true,
-            showConfirmButton: true, confirmButtonText: '<i class="ti ti-download"></i> ' + t('acc-prev-generate', 'Generate file'),
-            confirmButtonColor: '#0066cc',
-            customClass: { htmlContainer: 'text-start' }
+            html: html, width: (recs.length > 2 ? 760 : 600),
+            showConfirmButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', confirmButtonColor: '#0066cc',
+            showCancelButton: true, cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
+            focusConfirm: false,
+            customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (res) {
             if (res.isConfirmed) downloadAccrualFile(recs, codigoIf);
         });
@@ -963,8 +971,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         Swal.fire({
             icon: 'question', title: t('acc-batch-confirm-title', 'Send batch?'),
             text: lob.name + ' — ' + t('acc-batch-confirm', 'Generates the files in the Batch Conecta folder.'),
-            showCancelButton: true, confirmButtonColor: '#0066cc',
-            confirmButtonText: t('acc-batch-send', 'Send batch'), cancelButtonText: t('swal-cancel', 'Cancel')
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-send"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#0066cc', cancelButtonColor: '#dc3545', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (r) {
             if (!r.isConfirmed) return;
             postJSON('/api/accrual-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
@@ -973,6 +982,37 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                 deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, timerProgressBar: true,
                             icon: 'success', title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0) + (names ? ' · ' + names : '') });
             }).catch(netErr);
+        });
+    }
+
+    // ── EOM Validation → generate all LOB batch files + e-mail Lawton/Atacama ─
+    function runValidation(dateISO) {
+        var btn = document.getElementById('accValidation');
+        Swal.fire({
+            icon: 'question', title: t('acc-validation-title', 'Run EOM Validation?'),
+            text: t('acc-validation-confirm', 'Generates all batch files and e-mails the Lawton/Atacama files to OTC Ops.'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-send"></i>',
+            cancelButtonText: '<i class="ti ti-x"></i>', confirmButtonColor: '#157347', cancelButtonColor: '#dc3545',
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            if (btn) { btn.disabled = true; btn.querySelector('span').textContent = t('acc-validation-running', 'Sending…'); }
+            postJSON('/api/accrual-swap/validation', { date: dateISO }).then(function (j) {
+                if (btn) { btn.disabled = false; btn.querySelector('span').textContent = t('acc-validation', 'Validation'); }
+                if (!j.success) { errSwal(j.error); return; }
+                var att = (j.attached || []).join('<br>');
+                Swal.fire({
+                    icon: (j.mail ? 'success' : 'warning'),
+                    title: t('acc-validation-done', 'Validation generated'),
+                    html: (j.total || 0) + ' ' + t('acc-prev-records', 'record(s)') + ' · ' + (j.files || []).length + ' file(s)' +
+                          (att ? '<div style="margin-top:10px;font-size:.85em;text-align:left"><b>' + esc(t('acc-validation-attached', 'Attached to e-mail')) + ':</b><br><span style="font-family:monospace">' + att + '</span></div>' : '') +
+                          (j.mail ? '' : '<div style="margin-top:10px;color:#dc3545;font-size:.82em">' + esc(t('acc-validation-mailfail', 'Files generated, but the e-mail could not be sent.')) + '</div>'),
+                    confirmButtonColor: '#0066cc', customClass: { confirmButton: 'bg-gradient', htmlContainer: 'text-start' }
+                });
+            }).catch(function () {
+                if (btn) { btn.disabled = false; btn.querySelector('span').textContent = t('acc-validation', 'Validation'); }
+                netErr();
+            });
         });
     }
 
@@ -1167,6 +1207,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO()); });
         var imp = document.getElementById('accImport');
         if (imp) imp.addEventListener('click', function () { importFromFolder(pickedDateISO()); });
+        var val = document.getElementById('accValidation');
+        if (val) val.addEventListener('click', function () { runValidation(pickedDateISO()); });
         loadByDate(todayISO());                          // load today's data (count-up from 0)
     });
 })();
