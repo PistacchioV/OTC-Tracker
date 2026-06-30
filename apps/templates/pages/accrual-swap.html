@@ -314,7 +314,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         </div>
         <div>
             <p class="acc-drop__title" data-lang="acc-drop-title">Drop the VCP file here, or click to browse</p>
-            <p class="acc-drop__hint" data-lang="acc-drop-hint">Swap-IntrumentoFincaneiro-ConsultaContratoVCPSemPU · .xlsx, .csv or .tsv</p>
+            <p class="acc-drop__hint" data-lang="acc-drop-hint">VCP file to split · CEM / EDG / HYB to fill factors · .xlsx, .csv or .tsv</p>
         </div>
         <input type="file" id="accFile" accept=".xlsx,.xlsm,.csv,.tsv" hidden>
     </div>
@@ -423,7 +423,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 
     // ── status badge + actions cell ─────────────────────────────────────────
     // Status badge — same palette as the New Deals pages.
-    var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'text-bg-info' };
+    var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'text-bg-info',
+                             'missing accrual': 'text-bg-warning' };
     function statusBadge(s) {
         s = s || 'New';
         var key = String(s).toLowerCase();
@@ -705,12 +706,28 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 
     function setBusy(b) { drop.classList.toggle('is-busy', b); }
 
+    // CEM/EDG/HYB → factor enrichment of the saved day; anything else → VCP process.
+    function fileKind(file) {
+        var base = String(file.name || '').replace(/\.[^.]+$/, '').trim().toLowerCase();
+        if (base.indexOf('cem') === 0) return 'cem';
+        if (base.indexOf('edg') === 0) return 'edg';
+        if (base.indexOf('hyb') === 0) return 'hyb';
+        return 'vcp';
+    }
+
     function uploadFile(file) {
         if (!file) return;
         setBusy(true);
+        var kind = fileKind(file);
         var fd = new FormData();
         fd.append('file', file);
-        fetch('/api/accrual-swap/process', { method: 'POST', body: fd })
+        var url = '/api/accrual-swap/process';
+        if (kind !== 'vcp') {
+            url = '/api/accrual-swap/factors';
+            fd.append('kind', kind);
+            fd.append('date', currentDate || pickedDateISO());
+        }
+        fetch(url, { method: 'POST', body: fd })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
             .then(function (res) {
                 setBusy(false);
@@ -738,6 +755,17 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
 
         var asof = document.getElementById('accAsOf');
+        if (data.factors) {                              // CEM / EDG / HYB enrichment
+            var fx = data.factors;
+            asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
+                ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
+                ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
+            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2800,
+                        timerProgressBar: true, icon: (fx.missing ? 'warning' : 'success'),
+                        title: esc(fx.lob) + ' · ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
+                               (fx.missing ? ' · ' + fx.missing + ' ' + t('acc-factors-missing', 'missing accrual') : '') });
+            return;
+        }
         var dg = data.diagnostics || {};
         var parts = [];
         if (data.ref_date) parts.push(t('acc-asof', 'B3 position as of') + ' <b>' + esc(data.ref_date) + '</b>');

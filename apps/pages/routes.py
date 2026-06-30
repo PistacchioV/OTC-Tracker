@@ -1428,10 +1428,8 @@ _ensure_cetip_roots()
 
 # Network shares for the secondary (flat) copies of two types, mirroring the
 # Alteryx second outputs (commented date subfolder → flat folder).
-CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE',
-                                r'\\nawest.ad.jpmorganchase.com\lac\BRA\intra\CETIP_OPTIONS')
-CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',
-                                r'\\nawest.ad.jpmorganchase.com\lac\BRA\intra\CETIP_NDF')
+CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE', r'I:\CETIP_OPTIONS')
+CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',     r'I:\CETIP_NDF')
 
 # Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
 #   match      : predicate on the LOWER-CASED source FileName (case-insensitive,
@@ -2766,6 +2764,246 @@ def _accrual_find(data, lob, rid):
         if r and str(r[-1]) == str(rid):
             return r
     return None
+
+
+# ── CEM / EDG factor enrichment (translated & hardened from the Alteryx VBA) ──
+#  The bank's view is LE 228. For every CETIP ID (= the accrual "Código IF") we
+#  decide which factor feeds the PARTE and the CONTRAPARTE side, then fill the two
+#  factor columns ONLY when that side's indexer is VCP (otherwise '-'). A contract
+#  that sits in the table but has no factor for a VCP side is flagged 'Missing
+#  Accrual'. CEM derives the LE from the workbook's 'Kapital CETIP' sheet
+#  (Kapital → LE); EDG already ships A=CETIP / B=Fator Parte / C=Fator Contraparte.
+_ACC_FACTOR_STATUS_MISSING = 'Missing Accrual'
+
+
+def _acc_parse_num(s):
+    """Parse a number that may be BR (1.234,56) or US (1,234.56) formatted."""
+    t = str('' if s is None else s).strip().replace('%', '').replace(' ', '')
+    if not t or not re.search(r'\d', t):
+        return None
+    neg = t.startswith('-')
+    t = t.lstrip('+-')
+    has_c, has_d = ',' in t, '.' in t
+    if has_c and has_d:                                  # decimal = whichever comes last
+        dec = ',' if t.rfind(',') > t.rfind('.') else '.'
+        t = t.replace('.' if dec == ',' else ',', '').replace(dec, '.')
+    elif has_c:
+        t = t.replace(',', '.')
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    return -v if neg else v
+
+
+def _acc_fmt_factor(s):
+    """US format, 8 decimals (rounded). '' when the cell is not a number."""
+    v = _acc_parse_num(s)
+    return '' if v is None else '{:.8f}'.format(round(v, 8))
+
+
+def _acc_le_norm(s):
+    """Normalise an LE/view to bare digits without leading zeros (0228 → 228)."""
+    return re.sub(r'\D', '', str(s or '')).lstrip('0')
+
+
+def _acc_read_sheets(filename, raw_bytes):
+    """{sheet_name: rows} for .xlsx/.xlsm; one '__main__' sheet for csv/tsv."""
+    name = (filename or '').lower()
+    if name.endswith(('.xlsx', '.xlsm')):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
+        return {sn: [list(r) for r in wb[sn].iter_rows(values_only=True)] for sn in wb.sheetnames}
+    return {'__main__': _cc_read_rows(filename, raw_bytes)}
+
+
+def _acc_factor_keys(code):
+    """Lookup keys for a CETIP ID / Código IF: upper-cased and digits-only ('#'+d)."""
+    code = str(code or '').strip()
+    keys = [code.upper()]
+    dg = re.sub(r'\D', '', code)
+    if dg:
+        keys.append('#' + dg)
+    return keys
+
+
+def _acc_fmap_put(fmap, cetip, parte_factor, contra_factor):
+    for k in _acc_factor_keys(cetip):
+        fmap.setdefault(k, (parte_factor, contra_factor))
+
+
+def _acc_fmap_get(fmap, code):
+    for k in _acc_factor_keys(code):
+        if k in fmap:
+            return fmap[k]
+    return None
+
+
+def _acc_parse_cem_factors(filename, raw_bytes):
+    """{cetip -> (parte_factor, contra_factor)} from the CEM workbook.
+    LE comes from the 'Kapital CETIP' sheet (col B Kapital → col E LE). When a CETIP
+    ID carries view 228 it is the bank view → normal (Parte = col I, Contraparte =
+    col J). When it only carries view 199 the factors are inverted (Parte = col J,
+    Contraparte = col I). Duplicated 228/199 → keep the 228 row."""
+    sheets = _acc_read_sheets(filename, raw_bytes)
+    kap_rows = main_rows = None
+    for sn, rws in sheets.items():
+        if 'kapital' in re.sub(r'\s+', '', str(sn).lower()):
+            kap_rows = rws
+        elif main_rows is None:
+            main_rows = rws
+    if main_rows is None:
+        main_rows = next(iter(sheets.values()), [])
+    if kap_rows is None:
+        raise ValueError("CEM file is missing the 'Kapital CETIP' sheet (Kapital → LE).")
+
+    # Kapital ID (col B) → LE digits (col E).
+    kap_le = {}
+    for r in kap_rows:
+        kid = _cc_cell(r, 1).strip().upper()
+        le  = _acc_le_norm(_cc_cell(r, 4))
+        if kid and le:
+            kap_le.setdefault(kid, le)
+
+    # Group every data row by CETIP ID (col C), tagging its LE via the Kapital map.
+    groups = {}
+    for r in main_rows:
+        cetip = _cc_cell(r, 2).strip()
+        if not re.search(r'\d', cetip):                  # skip title/header/blank rows
+            continue
+        kid = _cc_cell(r, 1).strip().upper()
+        groups.setdefault(cetip, []).append(
+            {'le': kap_le.get(kid, ''), 'i': _cc_cell(r, 8), 'j': _cc_cell(r, 9)})
+
+    fmap = {}
+    for cetip, items in groups.items():
+        v228 = next((it for it in items if it['le'] == '228'), None)
+        v199 = next((it for it in items if it['le'] == '199'), None)
+        if v228:                                         # bank view → normal mapping
+            pf, cf = _acc_fmt_factor(v228['i']), _acc_fmt_factor(v228['j'])
+        elif v199:                                       # only 199 → inverted mapping
+            pf, cf = _acc_fmt_factor(v199['j']), _acc_fmt_factor(v199['i'])
+        else:
+            continue                                     # other view (e.g. 123) → not the bank view
+        _acc_fmap_put(fmap, cetip, pf, cf)
+    return fmap
+
+
+def _acc_parse_direct_factors(filename, raw_bytes, cetip_col=0, parte_col=1, contra_col=2):
+    """{cetip -> (parte_factor, contra_factor)} from a direct file (no LE / no
+    inversion). Column indices are 0-based:
+        EDG → CETIP=A(0), Fator Parte=B(1),  Fator Contraparte=C(2)
+        HYB → CETIP=B(1), Fator Parte=L(11), Fator Contraparte=M(12)"""
+    sheets = _acc_read_sheets(filename, raw_bytes)
+    main_rows = next(iter(sheets.values()), [])
+    fmap = {}
+    for r in main_rows:
+        cetip = _cc_cell(r, cetip_col).strip()
+        if not re.search(r'\d', cetip):
+            continue
+        _acc_fmap_put(fmap, cetip,
+                      _acc_fmt_factor(_cc_cell(r, parte_col)), _acc_fmt_factor(_cc_cell(r, contra_col)))
+    return fmap
+
+
+def _acc_apply_factors(data, lob, fmap):
+    """Fill Fator Parte/Contraparte for the rows of one LOB table. A side keyed by a
+    non-VCP indexer gets '-'; a VCP side with no factor flags the row 'Missing
+    Accrual'. Row layout: [ ...11 data..., status, maker, checker, id ]."""
+    rows = (data.get('tables') or {}).get(lob, [])
+    matched = missing = 0
+    for row in rows:
+        if not row or len(row) < 15:
+            continue
+        parte_idx  = str(row[5] or '').strip().upper()
+        contra_idx = str(row[8] or '').strip().upper()
+        entry = _acc_fmap_get(fmap, row[0])
+        if entry:
+            matched += 1
+        pf, cf = entry if entry else ('', '')
+        row_missing = False
+        if parte_idx == 'VCP':
+            if pf:
+                row[9] = pf
+            else:
+                row[9] = ''
+                row_missing = True
+        else:
+            row[9] = '-'
+        if contra_idx == 'VCP':
+            if cf:
+                row[10] = cf
+            else:
+                row[10] = ''
+                row_missing = True
+        else:
+            row[10] = '-'
+        if row_missing:
+            row[-4] = _ACC_FACTOR_STATUS_MISSING
+            missing += 1
+    return matched, missing
+
+
+# Factor file kind → (LOB table, parser). HYB ships its factors in cols L/M.
+_ACC_FACTOR_KINDS = {
+    'cem': {'lob': 'CEM',     'parser': lambda fn, raw: _acc_parse_cem_factors(fn, raw)},
+    'edg': {'lob': 'EDG',     'parser': lambda fn, raw: _acc_parse_direct_factors(fn, raw)},
+    'hyb': {'lob': 'Hybrids', 'parser': lambda fn, raw: _acc_parse_direct_factors(
+                                            fn, raw, cetip_col=1, parte_col=11, contra_col=12)},
+}
+
+
+@blueprint.route('/api/accrual-swap/factors', methods=['POST'])
+def api_accrual_swap_factors():
+    """Enrich a saved accrual day with a CEM / EDG / HYB factor file (Fator Parte/Contraparte)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
+
+    kind = (request.form.get('kind') or '').strip().lower()
+    if kind not in _ACC_FACTOR_KINDS:
+        base = os.path.splitext(os.path.basename(f.filename))[0].lower()
+        kind = ('cem' if base.startswith('cem') else 'edg' if base.startswith('edg')
+                else 'hyb' if base.startswith('hyb') else '')
+    if kind not in _ACC_FACTOR_KINDS:
+        return jsonify({'success': False,
+                        'error': 'Unrecognised factor file (expected a CEM, EDG or HYB file).'}), 400
+
+    path, data = _accrual_load(request.form.get('date'))
+    if not data or not data.get('tables'):
+        return jsonify({'success': False,
+                        'error': 'No accrual data for this date — process the VCP file first.'}), 400
+
+    spec = _ACC_FACTOR_KINDS[kind]
+    lob  = spec['lob']
+    try:
+        raw  = f.read()
+        fmap = spec['parser'](f.filename, raw)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[accrual] factor read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the factor file.'}), 500
+
+    matched, missing = _acc_apply_factors(data, lob, fmap)
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] factor save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save the enriched data.'}), 500
+
+    log.info('[accrual] %s factors: %d mapped, %d matched, %d missing', lob, len(fmap), matched, missing)
+    return jsonify({
+        'success': True,
+        'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
+        'tables':  data.get('tables') or {},
+        'counts':  data.get('counts') or {},
+        'ref_date': data.get('ref_date'),
+        'date': data.get('date'),
+        'factors': {'lob': lob, 'matched': matched, 'missing': missing, 'mapped': len(fmap)},
+    })
 
 
 @blueprint.route('/api/accrual-swap/data')
