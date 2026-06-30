@@ -161,9 +161,46 @@
 .acc-tcard__tools .dt-buttons { display:inline-flex; margin:0; }
 .acc-export-btn { padding:.3rem .7rem !important; font-size:.78rem !important; border-radius:9px !important; }
 .acc-export-btn i { font-size:14px; }
-.dt-button-collection { z-index:2000; }
-.dt-button-collection.dropdown-menu .dropdown-item { display:flex; align-items:center; font-size:.84rem; }
-[data-bs-theme="dark"] .dt-button-collection.dropdown-menu { background:var(--acc-surface); }
+/* Export collection dropdown — solid background + readable text (same as New Deals) */
+.dt-button-collection {
+    z-index: 2000;
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: .375rem !important;
+    padding: .25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button,
+.dt-button-collection .dropdown-item {
+    display: flex; align-items: center;
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: .4rem 1rem !important;
+    font-size: .84rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus,
+.dt-button-collection .dropdown-item:hover,
+.dt-button-collection .dropdown-item:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
 
 /* columns dropdown */
 .acc-cols-menu { min-width: 210px; padding:.4rem; }
@@ -233,8 +270,7 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-import-btn { background: transparent; color: var(--acc-blue); border: 1px solid var(--acc-blue); }
 .acc-import-btn:hover { background: rgba(0,102,204,.08); }
 .acc-import-btn:disabled { opacity: .55; cursor: default; transform: none; }
-.acc-import-btn .ti-spin { animation: ti-spin 1s linear infinite; }
-@keyframes ti-spin { to { transform: rotate(360deg); } }
+.acc-import-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
 table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
@@ -408,6 +444,14 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         return String(v == null ? '' : v)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Fire a SweetAlert toast AFTER the heavy table reflow settles (double rAF), so
+    // its animation/timer bar never freezes mid-way on a blocked main thread.
+    function deferToast(opts) {
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () { Swal.fire(opts); });
+        });
     }
 
     // LOB → DOM ids
@@ -841,7 +885,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
                 ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
                 ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
-            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2800,
+            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2800,
                         timerProgressBar: true, icon: (fx.missing ? 'warning' : 'success'),
                         title: esc(fx.lob) + ' · ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
                                (fx.missing ? ' · ' + fx.missing + ' ' + t('acc-factors-missing', 'missing accrual') : '') });
@@ -904,20 +948,20 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     // ── import straight from the dated run folder (no dropzone) ──────────────
-    function importFromFolder(dateISO) {
+    // Rebuild the button (lucide turned the original <i> into an <svg> on load, so
+    // querySelector('i') is null — always reset the innerHTML and re-render icons).
+    function setImportBtn(spinning) {
         var btn = document.getElementById('accImport');
-        if (btn) { btn.disabled = true; btn.querySelector('span').textContent = t('acc-importing', 'Importing…'); }
-        var icon = btn ? btn.querySelector('i') : null;
-        if (icon) { icon.setAttribute('data-lucide', 'loader-2'); if (window.lucide) lucide.createIcons(); var sv = btn.querySelector('svg'); if (sv) sv.classList.add('ti-spin'); }
-        function restore() {
-            if (!btn) return;
-            btn.disabled = false; btn.querySelector('span').textContent = t('acc-import-folder', 'Import from folder');
-            var i = btn.querySelector('i') || btn.querySelector('svg');
-            if (btn.querySelector('svg')) { btn.querySelector('svg').classList.remove('ti-spin'); }
-            btn.innerHTML = '<i data-lucide="folder-input"></i><span data-lang="acc-import-folder">' +
-                            esc(t('acc-import-folder', 'Import from folder')) + '</span>';
-            if (window.lucide) lucide.createIcons();
-        }
+        if (!btn) return;
+        btn.disabled = !!spinning;
+        btn.innerHTML = spinning
+            ? '<i data-lucide="loader-2" class="acc-spin"></i><span>' + esc(t('acc-importing', 'Importing…')) + '</span>'
+            : '<i data-lucide="folder-input"></i><span data-lang="acc-import-folder">' + esc(t('acc-import-folder', 'Import from folder')) + '</span>';
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function importFromFolder(dateISO) {
+        setImportBtn(true);
         currentDate = dateISO;
         fetch('/api/accrual-swap/import-folder', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -925,7 +969,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
-            restore();
+            setImportBtn(false);
             if (!res.ok || !res.j.success) {
                 Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not import'),
                             text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
@@ -941,10 +985,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             });
             var summ = ap.filter(function (a) { return a && !a.error; })
                          .map(function (a) { return a.lob + ' ' + (a.matched || 0) + '/' + (a.missing || 0); }).join(' · ');
-            Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
+            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
                         icon: 'success', title: t('acc-import-done', 'Imported from folder') + (summ ? ' · ' + summ : '') });
         })
-        .catch(function () { restore(); netErr(); });
+        .catch(function () { setImportBtn(false); netErr(); });
     }
 
     function initDatePicker() {
