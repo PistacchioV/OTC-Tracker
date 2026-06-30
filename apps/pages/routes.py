@@ -3465,6 +3465,168 @@ def api_accrual_validation():
     })
 
 
+# ── Recon: match the 'operacoes' return file against the saved accrual factors ──
+#  operacoes layout: headers on row 5, data from row 6. Filter col B (account) to the
+#  two house accounts AND col E == 'REGISTRO DE PU/FATOR'. Per row: col F = ponta
+#  (1→curve 00 / 2→curve 01), col H = título (= Código IF), col P = registered factor
+#  (BR decimal comma). Compare each VCP leg's factor; mark Success / Check per row.
+_ACC_RECON_ACCOUNTS = {'04880006', '73760009'}
+_ACC_RECON_MARKER = 'REGISTRO DE PU/FATOR'
+_ACC_RECON_HEADER_ROW = 5                  # 1-based → data starts at index 5
+
+
+def _acc_ponta_to_curve(v):
+    s = re.sub(r'\D', '', str(v or ''))
+    if s in ('1', '0', '00'):  return '00'    # ponta 1 → curve 00
+    if s in ('2', '01'):       return '01'    # ponta 2 → curve 01
+    return None
+
+
+def _acc_run_recon(data, rows):
+    """Build {(codigo_if, curve): registered_factor} from the operacoes rows, then
+    compare against each VCP leg. Mutates data (recon map + status). Returns summary."""
+    recon_map = {}
+    for i in range(_ACC_RECON_HEADER_ROW, len(rows)):     # data from row 6 (index 5)
+        row = rows[i]
+        if _acc_digits(_cc_cell(row, 1)) not in _ACC_RECON_ACCOUNTS:        # col B account
+            continue
+        if _cc_cell(row, 4).strip().upper() != _ACC_RECON_MARKER:          # col E marker
+            continue
+        cif = _cc_cell(row, 7).strip()                                     # col H título
+        curve = _acc_ponta_to_curve(_cc_cell(row, 5))                      # col F ponta
+        fac = _acc_parse_num(_cc_cell(row, 15))                            # col P factor (comma→dot)
+        if not cif or not curve:
+            continue
+        for k in _acc_factor_keys(cif):
+            recon_map.setdefault((k, curve), fac)
+
+    def _lookup(cif, curve):
+        for k in _acc_factor_keys(cif):
+            if (k, curve) in recon_map:
+                return recon_map[(k, curve)]
+        return None
+
+    recon_out, ok_rows, check_rows = {}, 0, 0
+    for table in (data.get('tables') or {}).values():
+        for r in table:
+            if not r or len(r) < 15:
+                continue
+            cif = str(r[0] or '').strip()
+            idxP = str(r[5] or '').strip().upper()
+            idxC = str(r[8] or '').strip().upper()
+            numP = int(re.sub(r'\D', '', str(r[3] or '')) or '0')
+            numC = int(re.sub(r'\D', '', str(r[6] or '')) or '0')
+            roleP = '01' if numP > numC else '00'
+            roleC = '01' if numC > numP else '00'
+            legs = []                                       # (tag, curve, accrual_factor)
+            if idxP == 'VCP': legs.append(('p', roleP, r[9]))
+            if idxC == 'VCP': legs.append(('c', roleC, r[10]))
+            if not legs:
+                continue
+            entry, all_ok = {}, True
+            for tag, curve, acc_fac in legs:
+                reg = _lookup(cif, curve)
+                accv = _acc_parse_num(acc_fac)
+                ok = (reg is not None and accv is not None and round(reg, 8) == round(accv, 8))
+                if not ok:
+                    all_ok = False
+                entry[tag] = {'ok': ok, 'reg': ('' if reg is None else '{:.8f}'.format(reg))}
+            recon_out[str(r[-1])] = entry
+            r[-4] = 'Success' if all_ok else 'Check'        # status
+            if all_ok: ok_rows += 1
+            else:      check_rows += 1
+    data['recon'] = recon_out
+    return {'success_rows': ok_rows, 'check_rows': check_rows, 'map_entries': len(recon_map)}
+
+
+def _acc_find_operacoes(folder):
+    if not os.path.isdir(folder):
+        return None
+    for fn in os.listdir(folder):
+        if not os.path.isfile(os.path.join(folder, fn)):
+            continue
+        base = os.path.splitext(fn)[0].lower()
+        base = (base.replace('ç', 'c').replace('õ', 'o').replace('ã', 'a')
+                    .replace('é', 'e').replace('ô', 'o'))
+        if base.startswith('operac'):
+            return os.path.join(folder, fn)
+    return None
+
+
+@blueprint.route('/api/accrual-swap/recon', methods=['POST'])
+def api_accrual_recon():
+    """Reconcile the saved accrual factors against the operacoes return file (uploaded
+    via the dropzone, or read from the run folder when from_folder=1)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    date_arg = request.form.get('date')
+    path, data = _accrual_load(date_arg)
+    if not data or not data.get('tables'):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    try:
+        if f and f.filename:
+            rows = _cc_read_rows(f.filename, f.read())
+        else:
+            ymd = _accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
+            folder = _accrual_source_dir(ymd)
+            op = _acc_find_operacoes(folder)
+            if not op:
+                return jsonify({'success': False,
+                                'error': 'operacoes file not found in {}'.format(folder)}), 400
+            with open(op, 'rb') as fh:
+                rows = _cc_read_rows(os.path.basename(op), fh.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[accrual] recon read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the operacoes file.'}), 500
+
+    summary = _acc_run_recon(data, rows)
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] recon save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Mapped', 'Accrual',
+                         'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']))
+    return jsonify({
+        'success': True,
+        'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
+        'tables': data.get('tables') or {},
+        'counts': data.get('counts') or {},
+        'recon': data.get('recon') or {},
+        'ref_date': data.get('ref_date'), 'date': data.get('date'),
+        'summary': summary,
+    })
+
+
+@blueprint.route('/api/accrual-swap/row/comment', methods=['POST'])
+def api_accrual_row_comment():
+    """Update only the Comments cell (no status change) — used by the inline comment
+    field that the recon enables on Check rows."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob, rid = p.get('lob'), str(p.get('id', ''))
+    path, data = _accrual_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    target = _accrual_find(data, lob, rid)
+    if target is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    target[-5] = str(p.get('comment', ''))                # Comments = last data cell
+    try:
+        _accrual_save(path, data)
+    except Exception:
+        log.error('[accrual] comment save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True})
+
+
 @blueprint.route('/holidays-calendar')
 def holidays_calendar():
     if not session.get('authenticated'):

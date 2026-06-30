@@ -275,6 +275,15 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-validation-btn { background: #5c636a; }
 .acc-validation-btn:hover { background: #4d5358; }
 .acc-validation-btn:disabled { opacity: .55; cursor: default; transform: none; }
+.acc-recon-btn { background: #6f42c1; }
+.acc-recon-btn:hover { background: #5e37a6; }
+.acc-recon-btn:disabled { opacity: .55; cursor: default; transform: none; }
+/* Loading feedback (New Deals model): spinner replaces the icon while busy. */
+.acc-load-btn .acc-spin, .acc-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
+.acc-btn:disabled { opacity: .6; cursor: default; transform: none; }
+.acc-comment-inp { width: 100%; min-width: 120px; font-size: .76rem; padding: .18rem .4rem;
+    border: 1px solid #ffc107; border-radius: 6px; background: var(--acc-surface); color: var(--acc-ink); }
+.acc-comment-inp:focus { outline: none; border-color: var(--acc-blue); }
 .acc-import-btn .acc-spin { animation: accSpin .8s linear infinite; transform-origin: center; transform-box: fill-box; }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
@@ -393,6 +402,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         <button type="button" id="accValidation" class="acc-load-btn acc-validation-btn">
             <i data-lucide="mail-check"></i><span data-lang="acc-validation">Validation</span>
         </button>
+        <button type="button" id="accRecon" class="acc-load-btn acc-recon-btn">
+            <i data-lucide="git-compare"></i><span data-lang="acc-recon">Recon</span>
+        </button>
     </div>
 
     <!-- LOB tables -->
@@ -462,6 +474,25 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
     }
 
+    // Button loading feedback (New Deals model): swap the icon for a spinner while
+    // busy and disable it; restore the original markup when done.
+    function accBtnBusy(btn, on) {
+        if (!btn) return;
+        if (on) {
+            if (btn.dataset.html === undefined) btn.dataset.html = btn.innerHTML;
+            btn.disabled = true; btn.classList.add('is-busy');
+            var lbl = btn.querySelector('span');
+            btn.innerHTML = '<i data-lucide="loader-2" class="acc-spin"></i><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
+            if (window.lucide) lucide.createIcons();
+        } else {
+            btn.disabled = false; btn.classList.remove('is-busy');
+            if (btn.dataset.html !== undefined) { btn.innerHTML = btn.dataset.html; delete btn.dataset.html; if (window.lucide) lucide.createIcons(); }
+        }
+    }
+
+    // Recon result map {rowId: {p:{ok,reg}, c:{ok,reg}}} — drives the factor badges.
+    var accRecon = {};
+
     // LOB → DOM ids
     var LOBS = [
         { key: 'CEM',         name: 'CEM',         card: 'CEM',         count: 'cnt-cem' },
@@ -515,7 +546,37 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     // ── status badge + actions cell ─────────────────────────────────────────
     // Status badge — same palette as the New Deals pages.
     var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'text-bg-info',
-                             'missing accrual': 'text-bg-warning' };
+                             'missing accrual': 'text-bg-warning', 'success': 'text-bg-success', 'check': 'text-bg-warning' };
+
+    // Factor cell (cols 9/10) render → recon badge: green=match, red=divergence (tooltip
+    // shows the registered factor). Plain text when no recon for that leg.
+    function factorRender(ci) {
+        var leg = ci === 9 ? 'p' : 'c';
+        return function (d, type, row) {
+            var v = (d == null ? '' : d);
+            if (type !== 'display') return v;
+            var id = row ? String(row[row.length - 1]) : '';
+            var rc = accRecon[id];
+            if (rc && rc[leg]) {
+                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success">' + esc(v) + '</span>';
+                var reg = rc[leg].reg || '—';
+                return '<span class="badge rounded-pill text-bg-danger" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
+            }
+            return esc(v);
+        };
+    }
+    // Comments cell (col 11) → inline editable input on Check rows (recon enables it).
+    function commentsRender(d, type, row) {
+        var v = (d == null ? '' : d);
+        if (type !== 'display') return v;
+        var status = row ? String(row[row.length - 4] || '').toLowerCase() : '';
+        if (status === 'check') {
+            var id = row ? String(row[row.length - 1]) : '';
+            return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
+                   '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
+        }
+        return esc(v);
+    }
     function statusBadge(s) {
         s = s || 'New';
         var key = String(s).toLowerCase();
@@ -631,7 +692,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                 return statusBadge(d);
             } }
         ];
-        for (var ci = 0; ci < n; ci++) columns.push({ data: ci, defaultContent: '' });
+        for (var ci = 0; ci < n; ci++) {
+            if (ci === 9 || ci === 10) columns.push({ data: ci, defaultContent: '', render: factorRender(ci) });
+            else if (ci === 11)        columns.push({ data: ci, defaultContent: '', render: commentsRender });
+            else                       columns.push({ data: ci, defaultContent: '' });
+        }
 
         var dt = $('#' + tableId).DataTable({
             data: rows, columns: columns,
@@ -681,7 +746,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
 
         var sb = card.querySelector('.acc-send-batch');
-        if (sb) sb.addEventListener('click', function () { sendBatch(lob); });
+        if (sb) sb.addEventListener('click', function () { sendBatch(lob, this); });
 
         var menu = card.querySelector('#cols-' + tableId);
         if (menu && dt) {
@@ -765,6 +830,12 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         $(card).on('click.accrow', '.acc-act-send', function (e) { e.preventDefault(); sendRow(lob, tableId, $(this).closest('tr')[0]); });
         $(card).on('click.accrow', '.acc-act-save', function (e) { e.preventDefault(); saveEdit(lob, tableId, $(this).closest('tr')[0]); });
         $(card).on('click.accrow', '.acc-act-cancel', function (e) { e.preventDefault(); dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
+        // Inline Comments (recon-enabled on Check rows) → save without changing status.
+        $(card).on('change.accrow blur.accrow', '.acc-comment-inp', function () {
+            var id = this.getAttribute('data-id'); if (!id) return;
+            postJSON('/api/accrual-swap/row/comment', { date: currentDate, lob: lob.key, id: id, comment: this.value })
+                .catch(function () {});
+        });
         // Double-click a row → PU/Factor file preview (New Deals model).
         $(card).on('dblclick.accrow', 'tbody tr', function (e) {
             if ($(e.target).closest('.acc-cb-col, .acc-act-col, input, a, .btn').length) return;
@@ -967,7 +1038,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     // ── batch send → split by view → ACCRUAL_<VIEW>-<LOB> in the Conecta folder ─
-    function sendBatch(lob) {
+    function sendBatch(lob, btn) {
         Swal.fire({
             icon: 'question', title: t('acc-batch-confirm-title', 'Send batch?'),
             text: lob.name + ' — ' + t('acc-batch-confirm', 'Generates the files in the Batch Conecta folder.'),
@@ -976,12 +1047,14 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
         }).then(function (r) {
             if (!r.isConfirmed) return;
+            accBtnBusy(btn, true);
             postJSON('/api/accrual-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
+                accBtnBusy(btn, false);
                 if (!j.success) { errSwal(j.error); return; }
                 var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join(' · ');
                 deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, timerProgressBar: true,
                             icon: 'success', title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0) + (names ? ' · ' + names : '') });
-            }).catch(netErr);
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
         });
     }
 
@@ -1016,15 +1089,34 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
     }
 
+    // ── Recon → reads operacoes.* from the run folder, matches the saved factors ─
+    function runRecon(dateISO) {
+        var btn = document.getElementById('accRecon');
+        accBtnBusy(btn, true);
+        currentDate = dateISO;
+        var fd = new FormData();
+        fd.append('date', dateISO);
+        fetch('/api/accrual-swap/recon', { method: 'POST', body: fd })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                accBtnBusy(btn, false);
+                if (!res.ok || !res.j.success) { errSwal((res.j && res.j.error) || 'Error'); return; }
+                applyResult(res.j);
+            })
+            .catch(function () { accBtnBusy(btn, false); netErr(); });
+    }
+
     // ── upload + process ────────────────────────────────────────────────────
     var drop = document.getElementById('accDrop');
     var fileInput = document.getElementById('accFile');
 
     function setBusy(b) { drop.classList.toggle('is-busy', b); }
 
-    // CEM/EDG/HYB → factor enrichment of the saved day; anything else → VCP process.
+    // operacoes → recon; CEM/EDG/HYB → factor enrichment; anything else → VCP process.
     function fileKind(file) {
-        var base = String(file.name || '').replace(/\.[^.]+$/, '').trim().toLowerCase();
+        var base = String(file.name || '').replace(/\.[^.]+$/, '').trim().toLowerCase()
+                       .normalize('NFD').replace(/[̀-ͯ]/g, '');   // strip accents
+        if (base.indexOf('operac') === 0) return 'operacoes';
         if (base.indexOf('cem') === 0) return 'cem';
         if (base.indexOf('edg') === 0) return 'edg';
         if (base.indexOf('hyb') === 0) return 'hyb';
@@ -1038,7 +1130,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         var fd = new FormData();
         fd.append('file', file);
         var url = '/api/accrual-swap/process';
-        if (kind !== 'vcp') {
+        if (kind === 'operacoes') {
+            url = '/api/accrual-swap/recon';
+            fd.append('date', currentDate || pickedDateISO());
+        } else if (kind !== 'vcp') {
             url = '/api/accrual-swap/factors';
             fd.append('kind', kind);
             fd.append('date', currentDate || pickedDateISO());
@@ -1064,6 +1159,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function applyResult(data) {
         var tables  = data.tables  || {};
         var counts  = data.counts  || {};
+        accRecon = data.recon || {};                     // drives factor badges + Check comments
         if (data.date) { currentDate = data.date; syncPicker(data.date); }
         LOBS.forEach(function (lob) {
             renderTable(lob, ACC_FIXED_HEADERS, tables[lob.key] || []);
@@ -1071,6 +1167,17 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
 
         var asof = document.getElementById('accAsOf');
+        if (data.summary && data.recon !== undefined && data.summary.map_entries !== undefined) {  // recon result
+            var s = data.summary;
+            asof.innerHTML = '<b>' + esc(t('acc-recon', 'Recon')) + '</b> &nbsp;·&nbsp; ' +
+                (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') + ' &nbsp;·&nbsp; ' +
+                (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check');
+            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
+                        icon: (s.check_rows ? 'warning' : 'success'),
+                        title: t('acc-recon-done', 'Recon done') + ' · ' + (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') +
+                               ' · ' + (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check') });
+            return;
+        }
         if (data.factors) {                              // CEM / EDG / HYB enrichment
             var fx = data.factors;
             if (fx.missing > 0) {                        // unidentified mappings → Missing Accrual first
@@ -1124,14 +1231,17 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
     function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, ACC_FIXED_HEADERS, []); }); }
 
-    function loadByDate(dateISO) {
+    function loadByDate(dateISO, btn) {
         currentDate = dateISO;
+        accBtnBusy(btn, true);
         fetch('/api/accrual-swap/data?date=' + encodeURIComponent(dateISO))
             .then(function (r) { return r.json(); })
             .then(function (j) {
+                accBtnBusy(btn, false);
                 if (j && j.success && !j.empty) {
                     applyResult(j);
                 } else {
+                    accRecon = {};
                     renderEmpty();
                     LOBS.forEach(function (lob) { countTo(document.getElementById(lob.count), 0); });
                     var asof = document.getElementById('accAsOf');
@@ -1139,7 +1249,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                 }
                 if (window.lucide) lucide.createIcons();
             })
-            .catch(function () { renderEmpty(); });
+            .catch(function () { accBtnBusy(btn, false); renderEmpty(); });
     }
 
     // ── import straight from the dated run folder (no dropzone) ──────────────
@@ -1204,11 +1314,13 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         initDatePicker();
         if (window.lucide) lucide.createIcons();
         var load = document.getElementById('accLoad');
-        if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO()); });
+        if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO(), this); });
         var imp = document.getElementById('accImport');
         if (imp) imp.addEventListener('click', function () { importFromFolder(pickedDateISO()); });
         var val = document.getElementById('accValidation');
         if (val) val.addEventListener('click', function () { runValidation(pickedDateISO()); });
+        var rec = document.getElementById('accRecon');
+        if (rec) rec.addEventListener('click', function () { runRecon(pickedDateISO()); });
         loadByDate(todayISO());                          // load today's data (count-up from 0)
     });
 })();
