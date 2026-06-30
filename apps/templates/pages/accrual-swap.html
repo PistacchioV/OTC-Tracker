@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet"/>
 <style>
@@ -156,6 +157,14 @@
 .acc-btn:active { transform: scale(0.97); }
 .acc-btn svg { width:15px; height:15px; }
 
+/* Export (DataTables Buttons collection — same model as the New Deals pages) */
+.acc-tcard__tools .dt-buttons { display:inline-flex; margin:0; }
+.acc-export-btn { padding:.3rem .7rem !important; font-size:.78rem !important; border-radius:9px !important; }
+.acc-export-btn i { font-size:14px; }
+.dt-button-collection { z-index:2000; }
+.dt-button-collection.dropdown-menu .dropdown-item { display:flex; align-items:center; font-size:.84rem; }
+[data-bs-theme="dark"] .dt-button-collection.dropdown-menu { background:var(--acc-surface); }
+
 /* columns dropdown */
 .acc-cols-menu { min-width: 210px; padding:.4rem; }
 .acc-cols-menu .form-check { margin:0; padding:.3rem .5rem .3rem 2rem; border-radius:8px; transition: background-color 140ms var(--acc-ease); }
@@ -195,7 +204,9 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
     display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
 }
 .acc-datecard__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; white-space:nowrap; }
-.acc-date-wrap { position: relative; flex: 1 1 auto; }
+/* Compact: just wide enough for the calendar icon + dd/mm/yyyy. Keeps the row's
+   buttons aligned left (no flex-grow pushing them to the far edge). */
+.acc-date-wrap { position: relative; flex: 0 0 auto; width: 158px; }
 .acc-date-icon {
     position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
     color: var(--acc-faint); pointer-events: none; display: grid; place-items: center;
@@ -358,6 +369,26 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<!-- DataTables Buttons (export model from the New Deals pages) -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Register JSZip with DataTables Buttons (needed for the Excel export).
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (window.jQuery && $.fn.dataTable && $.fn.dataTable.Buttons &&
+        typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
 <script>
 (function () {
     'use strict';
@@ -450,6 +481,35 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
     function getRowId(dt, tr) { var d = dt.row(tr).data(); return d ? String(d[d.length - 1]) : ''; }
 
+    // ── Export (same model as the New Deals pages: Copy/CSV/Excel/Print/PDF) ──
+    function buildExport(card, dt, lob, n) {
+        if (!($.fn.dataTable && $.fn.dataTable.Buttons)) return;
+        var tools = card.querySelector('.acc-tcard__tools');
+        if (!tools) return;
+        var cols = [];
+        for (var c = 2; c <= n + 2; c++) cols.push(c);        // Status + all data columns (skip checkbox/actions)
+        var xopts = { columns: cols, modifier: { page: 'all' }, orthogonal: 'export' };
+        var xtitle = 'Accrual ' + lob.name + (currentDate ? ' ' + currentDate : '');
+        try {
+            new $.fn.dataTable.Buttons(dt, {
+                buttons: [{
+                    extend: 'collection',
+                    text: '<i class="ti ti-download me-1"></i> ' + t('acc-export', 'Export'),
+                    className: 'btn btn-sm btn-info bg-gradient dropdown-toggle acc-export-btn',
+                    autoClose: true,
+                    buttons: [
+                        { extend: 'copy',  text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',            className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',     className: 'dropdown-item', bom: true, exportOptions: xopts, title: xtitle },
+                        { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel', className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'print', text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',         className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'pdf',   text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',          className: 'dropdown-item', exportOptions: xopts, title: xtitle }
+                    ]
+                }]
+            });
+            $(dt.buttons().container()).prependTo(tools);     // Export sits first in the toolbar
+        } catch (e) {}
+    }
+
     // ── render one LOB table (fixed checkbox / actions / status columns) ─────
     function renderTable(lob, headers, rows) {
         var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
@@ -513,6 +573,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                     var k = String(d || '').toLowerCase();
                     return (k === 'missing accrual' ? '0' : '1') + k;
                 }
+                if (type === 'export') return String(d || '');   // export plain status text
                 return statusBadge(d);
             } }
         ];
@@ -533,6 +594,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             }
         });
         dtInst[tableId] = dt;
+        buildExport(card, dt, lob, n);
         dt.on('draw.acc', function () {
             if (window.lucide) lucide.createIcons();
             syncSelectionUI(lob, tableId);

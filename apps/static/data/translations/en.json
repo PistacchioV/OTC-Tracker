@@ -622,6 +622,7 @@
   "acc-drop-title": "Drop the VCP file here, or click to browse",
   "acc-drop-hint": "VCP file to split · CEM / EDG / HYB to fill factors · .xlsx, .csv or .tsv",
   "acc-columns": "Columns",
+  "acc-export": "Export",
   "acc-clear": "Clear filters",
   "acc-filter": "Filter",
   "acc-empty": "No contracts in this book.",

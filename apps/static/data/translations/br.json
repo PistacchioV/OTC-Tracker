@@ -622,6 +622,7 @@
   "acc-drop-title": "Solte o arquivo VCP aqui, ou clique para selecionar",
   "acc-drop-hint": "Arquivo VCP para separar · CEM / EDG / HYB para preencher fatores · .xlsx, .csv ou .tsv",
   "acc-columns": "Colunas",
+  "acc-export": "Exportar",
   "acc-clear": "Limpar filtros",
   "acc-filter": "Filtrar",
   "acc-empty": "Nenhum contrato nesta carteira.",
