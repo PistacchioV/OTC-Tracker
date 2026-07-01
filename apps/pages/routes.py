@@ -80,6 +80,7 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
+    'pages_blueprint.dev_login',          # DEV BYPASS — reachable while locked (strip before commit)
 }
 
 
@@ -122,6 +123,47 @@ OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
 SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
 RETURN_PATH     = os.getenv('RETURN_PATH',     r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\Return')
 CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\New')
+# Electronic Inventory: one folder per counterparty with Confirmations /
+# Transactional / SSI subfolders. Created here on Reference Data checker approval
+# and in bulk by scripts/create_counterparty_folders.py (kept in sync).
+ELECTRONIC_INVENTORY_ROOT = os.getenv(
+    'ELECTRONIC_INVENTORY_ROOT',
+    r'I:\Confirmation\Derivativos\OTC Tracker\Electronic Inventory')
+EI_SUBFOLDERS = ('Confirmations', 'Transactional', 'SSI')
+_EI_ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _ei_sanitize(name):
+    """Windows-safe counterparty folder name (drop illegal chars incl. '/',
+    collapse whitespace, trim trailing dots/spaces). Mirrors
+    scripts/create_counterparty_folders.sanitize_folder_name."""
+    s = _EI_ILLEGAL.sub('', name or '')
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s.rstrip('. ')
+
+
+def _ensure_counterparty_folders(company):
+    """Create ELECTRONIC_INVENTORY_ROOT\\<company>\\{Confirmations,Transactional,SSI}
+    if missing. Tolerant existence match (case/whitespace/illegal-char insensitive)
+    so a folder created earlier under a slightly different name is reused, not
+    duplicated. Best-effort: never raises (the share may be offline in dev)."""
+    folder = _ei_sanitize(company)
+    if not folder:
+        return
+    try:
+        root = ELECTRONIC_INVENTORY_ROOT
+        key = folder.upper()
+        actual = folder
+        if os.path.isdir(root):
+            for entry in os.listdir(root):
+                if os.path.isdir(os.path.join(root, entry)) and _ei_sanitize(entry).upper() == key:
+                    actual = entry
+                    break
+        parent = os.path.join(root, actual)
+        for sub in EI_SUBFOLDERS:
+            os.makedirs(os.path.join(parent, sub), exist_ok=True)
+    except Exception as exc:
+        log.warning('Electronic Inventory folder creation failed for %r: %s', company, exc)
 _cache_lock = threading.Lock()
 
 
@@ -6952,6 +6994,10 @@ def api_b3_update():
         new_status     = 'PENDING'
 
     _b3_save(path, records)
+    # On checker approval of a Reference Data counterparty (→ ACTIVE), make sure
+    # its Electronic Inventory folder tree exists. Best-effort, never blocks.
+    if table == 'refdata' and action == 'approve' and new_status == 'ACTIVE':
+        _ensure_counterparty_folders(rec.get('COUNTERPARTY', ''))
     # Reference Data shares this endpoint but is its own page — name it correctly
     # and carry SPN + counterparty so the bell deep-links to /reference-data?spn=.
     if table == 'refdata':
