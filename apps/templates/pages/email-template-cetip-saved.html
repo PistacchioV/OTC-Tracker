@@ -63,8 +63,11 @@
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
                                    style="margin-bottom:24px;">
                                 <tr>
-                                    <td valign="middle" width="{% if missing_count %}50%{% else %}100%{% endif %}"
-                                        style="{% if missing_count %}padding-right:6px;{% endif %}">
+                                    {% if missing_count %}
+                                    <td valign="middle" width="50%" style="padding-right:6px;">
+                                    {% else %}
+                                    <td valign="middle" width="100%">
+                                    {% endif %}
                                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                             <tr>
                                                 <td align="center" valign="middle"
