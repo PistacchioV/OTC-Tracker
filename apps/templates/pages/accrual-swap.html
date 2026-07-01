@@ -252,35 +252,36 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 }
 .acc-date-icon svg { width: 16px; height: 16px; }
 .acc-date-input {
-    width: 100%; height: 38px; padding: 0 .8rem 0 2.1rem;
-    font-size: .85rem; color: var(--acc-ink);
-    border: 1px solid var(--acc-hairline); border-radius: 10px;
+    width: 100%; height: 32px; padding: 0 .7rem 0 2rem;
+    font-size: .8rem; color: var(--acc-ink);
+    border: 1px solid var(--acc-hairline); border-radius: 9999px;
     background: var(--acc-surface); cursor: pointer;
     transition: border-color 160ms var(--acc-ease);
 }
 .acc-date-input:focus { outline: none; border-color: var(--acc-blue); }
+.acc-date-icon { left: 10px; }
+.acc-date-icon svg { width: 14px; height: 14px; }
+
+/* Buttons — single accent (Action Blue). Filled = primary/terminal (Load, End
+   Process); ghost = secondary utilities (Import, Validation, Recon). Compact pill. */
 .acc-load-btn {
-    flex: 0 0 auto; height: 38px; padding: 0 1.1rem;
-    font-size: .82rem; font-weight: 500; color: #fff;
-    background: var(--acc-blue); border: none; border-radius: 9999px;
-    display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
-    transition: transform 130ms var(--acc-ease), background-color 160ms var(--acc-ease);
+    flex: 0 0 auto; height: 32px; padding: 0 .9rem;
+    font-size: .77rem; font-weight: 500; color: #fff; white-space: nowrap;
+    background: var(--acc-blue); border: 1px solid var(--acc-blue); border-radius: 9999px;
+    display: inline-flex; align-items: center; gap: .35rem; cursor: pointer;
+    transition: transform 130ms var(--acc-ease), background-color 160ms var(--acc-ease),
+        border-color 160ms var(--acc-ease), color 160ms var(--acc-ease);
 }
-.acc-load-btn:hover  { background: #0a5bd6; }
+.acc-load-btn:hover  { background: #0a5bd6; border-color: #0a5bd6; }
 .acc-load-btn:active { transform: scale(0.97); }
-.acc-load-btn svg { width: 16px; height: 16px; }
-.acc-import-btn { background: transparent; color: var(--acc-blue); border: 1px solid var(--acc-blue); }
-.acc-import-btn:hover { background: rgba(0,102,204,.08); }
-.acc-import-btn:disabled { opacity: .55; cursor: default; transform: none; }
-.acc-validation-btn { background: #5c636a; }
-.acc-validation-btn:hover { background: #4d5358; }
-.acc-validation-btn:disabled { opacity: .55; cursor: default; transform: none; }
-.acc-recon-btn { background: #6f42c1; }
-.acc-recon-btn:hover { background: #5e37a6; }
-.acc-recon-btn:disabled { opacity: .55; cursor: default; transform: none; }
-.acc-endproc-btn { background: #157347; }
-.acc-endproc-btn:hover { background: #146c43; }
-.acc-endproc-btn:disabled { opacity: .55; cursor: default; transform: none; }
+.acc-load-btn:disabled { opacity: .5; cursor: default; transform: none; }
+.acc-load-btn svg { width: 14px; height: 14px; }
+.acc-import-btn, .acc-validation-btn, .acc-recon-btn {
+    background: transparent; color: var(--acc-blue); border-color: var(--acc-blue);
+}
+.acc-import-btn:hover, .acc-validation-btn:hover, .acc-recon-btn:hover { background: rgba(0,102,204,.08); }
+.acc-endproc-btn { background: var(--acc-blue); color: #fff; border-color: var(--acc-blue); }
+.acc-endproc-btn:hover { background: #0a5bd6; border-color: #0a5bd6; }
 /* Loading feedback (New Deals model): pure-CSS spinner replaces the icon while busy. */
 .acc-spinner { display:inline-block; width:14px; height:14px; border:2px solid currentColor;
     border-right-color: transparent; border-radius:50%; opacity:.9; vertical-align:-2px;
@@ -293,10 +294,10 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
     background-color 160ms var(--acc-ease), border-color 160ms var(--acc-ease), color 160ms var(--acc-ease); }
 .acc-actions .btn { transition: transform 150ms var(--acc-ease), box-shadow 150ms var(--acc-ease), filter 150ms var(--acc-ease); }
 .acc-load-btn:hover:not(:disabled), .acc-btn:hover:not(:disabled) {
-    transform: translateY(-1px); box-shadow: 0 5px 14px rgba(0,0,0,.16); }
+    transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.10); }
 .acc-load-btn:active:not(:disabled), .acc-btn:active:not(:disabled) {
-    transform: translateY(0) scale(.97); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-.acc-actions .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.20); filter: brightness(1.06); }
+    transform: translateY(0) scale(.97); box-shadow: none; }
+.acc-actions .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
 .acc-actions .btn:active { transform: translateY(0) scale(.9); box-shadow: none; }
 .acc-comment-inp { width: 100%; min-width: 120px; font-size: .76rem; padding: .18rem .4rem;
     border: 1px solid #ffc107; border-radius: 6px; background: var(--acc-surface); color: var(--acc-ink); }
