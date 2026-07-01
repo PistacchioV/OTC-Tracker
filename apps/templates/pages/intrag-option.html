@@ -59,7 +59,7 @@
   #intrag-opt-table th:nth-child(2),
   #intrag-opt-table td:nth-child(2),
   .dt-scroll-head thead th:nth-child(2),
-  .dataTables_scrollHead thead th:nth-child(2) { width: 110px;  min-width: 110px;  } /* Actions */
+  .dataTables_scrollHead thead th:nth-child(2) { width: 140px;  min-width: 140px;  } /* Actions */
 
   #intrag-opt-table th:nth-child(3),
   #intrag-opt-table td:nth-child(3),
@@ -584,7 +584,7 @@ $(document).ready(function() {
                     $(node).find('.btn-row-approve').toggleClass('d-none', (d?d[2]:'')!=='Pending');
                 }
             });
-            var total=api.rows().count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('#selectAll');
             if($sa.length) {
                 if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
                 else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
@@ -702,8 +702,9 @@ $(document).ready(function() {
 
     $('#selectAll').on('click',function() {
         selectedRowIds.clear();
-        if(this.checked) { table.rows().every(function(){ var d=this.data(),id=d?d[41]:null; if(id) selectedRowIds.add(id); }); }
-        $('input[type="checkbox"]',table.rows().nodes()).prop('checked',this.checked);
+        // Only the rows matching the current filter/search — never the whole dataset.
+        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[41]:null; if(id) selectedRowIds.add(id); }); }
+        $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
         console.log('[OPT-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
     });
@@ -711,7 +712,7 @@ $(document).ready(function() {
     $('#intrag-opt-table tbody').on('change','input[type="checkbox"]',function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[41]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
-        var total=table.rows().count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
+        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
         if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
         toggleDelBtn(sel>=2);
     });
@@ -719,7 +720,7 @@ $(document).ready(function() {
     $(document).on('click','[data-del-selected]',function(e) {
         e.preventDefault(); if(selectedRowIds.size===0) return;
         var toDelete=[];
-        table.rows().every(function(){
+        table.rows({ search: 'applied' }).every(function(){
             var d=this.data(), id=d?d[41]:null;
             if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
         });
@@ -802,7 +803,7 @@ $(document).ready(function() {
     document.getElementById('btnSendOpt').addEventListener('click',function() {
         if(selectedRowIds.size<2) return;
         var items=[];
-        table.rows().every(function(){ var d=this.data(), id=d?d[41]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
+        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[41]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
         sendIntragOptItems(items);
     });
 
