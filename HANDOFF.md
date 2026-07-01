@@ -2491,3 +2491,33 @@ Commit: `33c43c4`. **Testado no dev via /process (round-trip): valor 2dp com sin
 apps/pages/routes.py   ← _cc_read_rows .txt; _mtm_is_cem_value_name/_mtm_parse_num/_mtm_apply_cem_values;
                          integra no import-folder e /process
 ```
+
+---
+
+## 45. Sessão 2026-07-01 (cont.) — MtM: Valor formato #,##0.00 + match tolerante; EDG/COE via Stream; sidenav limpo
+
+Commits: `7ca5940` (formato+match CEM), `0df98bc` (EDG/COE Stream), `d59b5c3` (sidenav).
+
+### MtM — valores
+- **Formato `#,##0.00`** (`{:,.2f}`) no Valor MTM (ex. `-1,802,855.65`).
+- **CEM (VCP_CETIP_MTM):** match da contraparte agora tolerante via `_mtm_norm_party` (remove aspas+acentos+TODOS os
+  espaços, lowercase) — robusto a espaçamento/acentos no nome `Bco J.P. Morgan S.A. 2768 - GEM BR - RATES`.
+- **EDG/COE (Stream_level_MTM — assumido):** `_mtm_apply_edg_values` — col A=ID, col B=valor. **IDs começando com `JP`
+  → tabela COE** (match Código do COE, idx 4/5); **demais → EDG** (match Código IF, idx 7/8). `#,##0.00` com sinal;
+  zero → `0.00` + comentário `Valor MtM não poder ser ZERO`. Integrado no import-folder e /process. `.txt` suportado no
+  `_cc_read_rows` (auto-detecta delimitador). **Confirmar com o usuário:** nome do arquivo (assumido `Stream_level_MTM`)
+  e semântica de "ir para COE" (implementado = mapear valor em linha COE já existente, por match de ID; não cria/move linha).
+
+### Sidenav (`d59b5c3`)
+- Removidos: subitem **Email** (Data Base) e as seções demo **Custom Pages** (Pages/FAQ/Pricing/Empty/Timeline/Sitemap/
+  Search/Coming Soon/Terms) e **Layouts** (Layout Options/Sidebars/Topbar) inteiras. Components e demais intactos.
+
+### Nota recorrente
+- O IDE/macOS voltou a duplicar `routes.py`→`routes 2.py` durante edições; restaurado (routes 2.py = HEAD + DEV BYPASS).
+  Se acontecer no ambiente do usuário, apagar `routes 2.py` e garantir `routes.py` real + restart.
+
+### Arquivos (sessão 45)
+```
+apps/pages/routes.py                    ← formato #,##0.00; _mtm_norm_party; _mtm_apply_edg_values (+ .txt no _cc_read_rows)
+apps/templates/partials/sidenav.html    ← remove Email, Custom Pages, Layouts
+```
