@@ -602,7 +602,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         s = s || 'New';
         var key = String(s).toLowerCase();
         var cls = ACC_STATUS_BADGE[key] || 'text-bg-info';
-        return '<span class="badge badge-label ' + cls + ' rounded-pill">' + esc(t('acc-st-' + key, s)) + '</span>';
+        return '<span class="badge ' + cls + ' bg-gradient">' + esc(t('acc-st-' + key, s)) + '</span>';
     }
     // Action buttons — same style/colours as the New Deals pages (Bootstrap
     // solid circular buttons + Tabler icons): edit=info, delete=danger, send=primary.
