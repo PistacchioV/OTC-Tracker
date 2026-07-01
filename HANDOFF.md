@@ -2009,3 +2009,108 @@ apps/static/data/translations/{en,br,es}.json  ← acc-st-missing accrual, acc-f
 - **Commodities** ainda sem arquivo de fatores (só CEM/EDG/HYB definidos) → adicionar 4ª entrada em `_ACC_FACTOR_KINDS`.
 - Caminhos `I:\...` só resolvem no ambiente JPM; em dev usar env override (`ACCRUAL_SOURCE_ROOT`, `CETIP_*_SHARE`).
 - Para testar import-folder no dev: instância temporária com env override + seed de swap-position JSON (classificação LOB).
+
+## 35. Sessão 2026-06-30/07-01 — Accrual: geração de arquivos SWAP, preview, Confirm, Validation, Recon, End Process; polish Apple
+
+Fechamento do fluxo EOM do Accrual → Swap (expande 32/33/34). **Testado end-to-end no dev (8050 via `/dev-login` SID
+A000000 + instâncias temporárias 8051-8055 com env overrides `CONECTA_NEW_PATH`, `ACCRUAL_SOURCE_ROOT`, `SMTP_HOST`→porta
+morta p/ falha rápida)**. Commits de `6df1b96` até `4b174ec`. **E-mails sempre em inglês.**
+
+### A) Export por tabela + date picker compacto (`6df1b96`)
+- Cada tabela ganhou botões de export (modelo New Deals: Excel JSZip / CSV bom / Copy) + dropdown de export legível
+  (`b3baa11`, corrige contraste do menu). Date picker do card compactado.
+
+### B) Geração de arquivos SWAP em lote — "Send batch" (`d66cc3a`)
+- Botão **Send batch** por tabela → `POST /api/accrual-swap/send-batch {lob, date}`. Gera `ACCRUAL_<VIEW>-<LOB>.txt`
+  **quebrado por view** na pasta **Batch Conecta** (`CONECTA_NEW_PATH`) **e** (best-effort) na pasta de evidência
+  (`110c64b`, ver F).
+- **Header** por view: `_acc_swap_header(view,today) = 'SWAP 00015' + name.ljust(20) + today`. Mapas:
+  `_ACC_VIEW_BY_PREFIX={'73760':'BANCO','04880':'BANCO','85398':'ATACAMA','00041':'LAWTON'}`,
+  `_ACC_VIEW_PART_NAME={'BANCO':'JPMORGANBM','LAWTON':'INTRAGLAWTONFDO','ATACAMA':'INTRAGATACAMAFDO'}`.
+- **Linha de registro** (`_acc_swap_records`): `'SWAP '+'1'+'0015'+codigo+papel+'00'+curva+today+meu+' '*22+fator`.
+- `_acc_write_batch_files(data, lob, today, evidence_dir=None)` — escreve nos dois destinos com o mesmo basename.
+
+### C) Preview PU/Fator (duplo-clique) — vertical + Confirm (`d66cc3a`, `cba1c13`)
+- **Duplo-clique** numa linha abre modal (modelo New Deals) com os registros SWAP daquela operação.
+- Banco×Lawton → **2 colunas**; VCP×VCP → **4 colunas**; `73760.10-2` (só uma ponta VCP) → **2 colunas**.
+- **Preview na vertical** (`cba1c13`): campos viram linhas, cada registro é uma coluna. Ações do modal: só ícones **Send**
+  e **Close** (X vermelho / X branco), sem "Generate file".
+- **Confirm** (maker/checker) nas colunas de Action p/ aprovar mudanças de fator.
+
+### D) Validation (EOM) — e-mail OTC Ops (`d0e19c3`, `f539334`, `fa46b67`)
+- Botão **Validation** no card de data → gera **todos** os batch files (geral, todas as LOBs) + envia e-mail
+  **`Accrual EOM - DD/MM/YYYY - Validation`** (título "Accrual", não "ACCRUAL" — `fa46b67`) de `otc.tracker@` p/
+  `brazil.otc.ops@`. **Anexa só os arquivos Lawton e Atacama** (não Banco).
+- **E-mail em background thread** (`f539334`): SMTP síncrono travava a resposta ("network error"). Fix: `render_template`
+  + `_get_logo_path` rodam no request context; a thread só faz SMTP. Template
+  `email-template-accrual-validation.html`. Cor do botão neutralizada (depois virou ghost azul em I).
+
+### E) Recon (`operacoes`) — match por fator (`66be733`, `96be733→b171be0`)
+- Botão **Recon** lê `operacoes.*` da pasta **ou** do dropzone (`fileKind`). **Lógica final SIMPLES** (2 tentativas
+  erradas descartadas — ver adiante): col **F** já traz a ponta; basta checar se **Fator Parte/Contraparte** aparece
+  entre os fatores registrados (col **P**) daquele **Código IF**.
+- `_acc_run_recon(data, rows)`: monta `by_cif` (cif_key→[floats arredondados] de col P, filtrando marker
+  `_ACC_RECON_MARKER='REGISTRO DE PU/FATOR'`, header na linha 5, contas `_ACC_RECON_ACCOUNTS={'04880006','73760009'}`);
+  por perna VCP `ok = round(accv,8) in regset`. Status **Success** (todas OK) ou **Check**. `factorRender` desenha badge
+  **verde** (matched) / **vermelho + tooltip** (divergência). Check habilita **Comments** inline.
+- Endpoints `/api/accrual-swap/recon` e `/row/comment` (seta `target[-5]`).
+
+### F) End Process — e-mail Final Status (`ed53965`, `e08d162`, `110c64b`)
+- Botão **End Process** (ao lado de Recon). **Gate:** todas as linhas com status **Check** precisam estar comentadas;
+  se não, sweet alert lista as pendentes.
+- E-mail **`Accrual Swap - EOM - Final Status - DD/MM/YYYY`** de `otc.tracker@` p/ `brazil.otc.ops@`, **CC**
+  `_ACC_ENDPROC_CC=['renato.montoza@jpmorgan.com','danilo.camposfonseca@jpmchase.com']` (são **OTC Ops**, não Middle
+  Office — menção "cc Middle Office" removida do sweet alert em `e08d162`).
+  - **Com Check** → tabela LOB/Código IF/Status/Comment. **Sem Check** → bloco "No divergences found" + caminho da pasta.
+  - Template `email-template-accrual-endprocess.html` (vars `has_check`/`checks`/`folder`). Background thread.
+- **Evidência** (`110c64b`): arquivos de accrual gravados **também** em
+  `ACCRUAL_SOURCE_ROOT\YYYY\MM. Month\DD` (além da pasta Batch Conecta); o e-mail aponta p/ essa pasta (`folder`).
+
+### G) Bloqueio Missing Accrual (`d5c5f10`)
+- **Send batch** e **Validation** não geram nada se qualquer linha (da tabela respectiva p/ send-batch, geral p/
+  validation) estiver com status **Missing Accrual**. `_acc_missing_accrual_rows(data, lobs)` → retorna
+  `error:'missing_accrual'`; front mostra sweet alert com a lista (`showMissingAccrual`).
+
+### H) Polish (Apple / DESIGN-apple.md)
+- **Sweet alerts centralizados** (`1c96974`, `ecbaf84`, `b171be0`): todos os resultados (factor, recon, import via
+  dropzone, send-batch, import-folder) convertidos de **toast lateral** → **modal centralizado** com backdrop
+  desfocado (`.swal2-backdrop-show { background: rgba(0,0,0,.25); backdrop-filter: blur(4px); }`). `deferToast` faz
+  double-rAF antes do `Swal.fire`. **Modelo dos New Deals.**
+- **Spinner/hover confiável** (`1c96974`): lucide **não** preserva `class` no SVG gerado → spinner puro-CSS
+  `.acc-spinner` (border + `currentColor`). `accBtnBusy(btn,on)` salva/restaura innerHTML. Feedback de hover em todos os
+  botões (tabela + card).
+- **Botões no accent único** (`4b174ec`): removidos roxo (Recon #6f42c1), verde (End Process #157347), cinza
+  (Validation) — fora da paleta. **Load + End Process** = pill **preenchido** Action Blue; **Import / Validation /
+  Recon** = pill **ghost** (transparente, texto/borda azul). Menores (altura 38→32px, fonte .82→.77rem, ícones 16→14px,
+  pill radius). Sombra de hover suavizada (`0 2px 6px rgba(0,0,0,.10)`). Date input 32px + pill.
+
+### CETIP / B3 (correções desta sessão)
+- **DCADCOMITENTES** (`761b77d`): rotina CETIP salva o `dcadcomitentes` no destino + lista no e-mail; recon comitente
+  (`recon_comitente.py`) lê de `os.path.join(_CETIP_DEST_BASE, year, 'MM. Month', day, 'SIC_<data>_DCADCOMITENTES.txt')`.
+- **NDF-comm Quoted in Cents** (`9d1231a`): commodity com Fator Conversão `0.01` era exibido como **não**-cents (valor
+  stored obsoleto + colisão de mapa HOH7). Fix: re-derivar do fator vivo, mapa preferindo `0.01`, helper `_ndfIsCents`.
+- **B3 JSON com indentação** (`58ca137`): `json.dump(..., indent=2)` (estavam numa linha só).
+
+### Erros corrigidos (histórico p/ não repetir)
+- **Recon errado 2×**: (1) matching por tamanho de conta ponta→curva; (2) versão col-B/col-AC — ambos descartados.
+  Usuário: "esquece essa logica esta errada" → col F já dá a ponta, é só **membership de fator na col P**.
+- **Validation "network error"**: SMTP síncrono → background thread (renderizar HTML+logo no request, thread só SMTP).
+- **Spinner estático**: lucide não preserva class no SVG → CSS `.acc-spinner`.
+- **Swal virando barra lateral**: reportado 2×; converter **todos** `toast:true/position:'top-end'` → centralizado.
+
+### Arquivos (sessão 35)
+```
+apps/pages/routes.py                                   ← send-batch/preview/validation/recon/end-process/comment; _acc_swap_*, _acc_write_batch_files, _acc_run_recon, _acc_missing_accrual_rows, _ACC_ENDPROC_CC; bloqueio Missing Accrual; DCADCOMITENTES; b3 indent
+apps/pages/recon_comitente.py                          ← lê DCADCOMITENTES do destino CETIP (_CETIP_DEST_BASE)
+apps/templates/pages/accrual-swap.html                 ← Send batch, preview vertical, Confirm, Validation, Recon, End Process; sweet alerts centralizados; .acc-spinner; botões accent único (Apple)
+apps/templates/pages/email-template-accrual-validation.html   ← (novo) e-mail Validation EOM
+apps/templates/pages/email-template-accrual-endprocess.html   ← (novo) e-mail Final Status (has_check/checks/folder)
+apps/static/js/pages/new_deals-ndf-comm.js (ou template)      ← _ndfIsCents (Quoted in Cents 0.01)
+apps/static/data/translations/{en,br,es}.json          ← acc-prev-*, acc-confirm, acc-batch-*, acc-validation-*, acc-recon-*, acc-comment-ph, acc-st-success/check, acc-missing-*, acc-endproc-*
+```
+
+### Pendências / lembretes
+- **Commodities** ainda sem arquivo de fatores (herdado da seção 34).
+- Recon depende de `operacoes.*` com header na linha 5, contas `04880006`/`73760009`, marker `REGISTRO DE PU/FATOR`.
+- CC do End Process (`renato.montoza`, `danilo.camposfonseca`) são **OTC Ops** — nunca rotular como Middle Office.
+- **Emails em inglês.** Caminhos `I:\...` só no ambiente JPM (env override em dev).
