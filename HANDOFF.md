@@ -2174,3 +2174,61 @@ apps/pages/routes.py                           ← missing[] no loop CETIP; _sen
 apps/templates/pages/email-template-cetip-saved.html  ← coluna Status (Saved/Not found), badge Not Found, sem Jinja em style
 scripts/create_cetip_folders.py                ← (novo) cria pastas ano/mês/dia p/ dias úteis ANBIMA
 ```
+
+---
+
+## 37. Sessão 2026-07-01 (cont.) — Electronic Inventory (pastas de contraparte) + B3 ID no modal New Deals → Success/Intrag
+
+Commits: `01b588e` (Electronic Inventory), `20bdd4d` (B3 ID modal). **Não testado em runtime** (paths de rede
+`I:\...` só existem no ambiente JPM; helpers validados isoladamente + sintaxe/JSON OK).
+
+### A) Electronic Inventory — árvore de pastas por contraparte (`01b588e`)
+- **`scripts/create_counterparty_folders.py`** (novo, stdlib pura — mesmo estilo de `create_cetip_folders.py`): lê
+  `apps/static/data/RefData.json` (553 registros) e cria `ELECTRONIC_INVENTORY_ROOT\<Contraparte>\{Confirmations,
+  Transactional, SSI}`. Flags: `--root` (senão `$ELECTRONIC_INVENTORY_ROOT` ou o default do routes.py), `--active-only`,
+  `--dry-run`. Idempotente.
+- **Sanitização Windows:** remove chars ilegais `<>:"/\|?*` + controle, colapsa espaços, tira dot/espaço final →
+  `BUNGE ALIMENTOS S/A` vira pasta `BUNGE ALIMENTOS SA` (regra pedida: `/` → "").
+- **Detecção tolerante de já-existentes:** compara por **chave normalizada** (`norm_key` = sanitizado + upper). Uma pasta
+  criada antes com sanitização diferente é **reusada**, não duplicada; só as subpastas faltantes são criadas.
+- **`routes.py`:** const `ELECTRONIC_INVENTORY_ROOT` (env-overridable, default `I:\Confirmation\Derivativos\OTC Tracker\
+  Electronic Inventory`) + `EI_SUBFOLDERS` + helpers `_ei_sanitize` / `_ensure_counterparty_folders` (mesma lógica do
+  script — manter em sync). Best-effort: nunca levanta exceção (share pode estar offline em dev; loga `log.warning`).
+- **Hook automático:** em `api_b3_update`, quando o **checker aprova** um registro de Reference Data (`action=='approve'`
+  + `table=='refdata'` → `ACTIVE`), chama `_ensure_counterparty_folders(rec['COUNTERPARTY'])`.
+
+### B) B3 ID no modal de edição das 5 páginas New Deals → flip Sent/Error para Success + Intrag (`20bdd4d`)
+- Modal de edição (`arOpenEditModal` + `#ar-save-btn`) das 5 páginas ganhou campo **`#ar-b3id`** (prefill da coluna B3 ID
+  da linha). Ao salvar com **B3 ID preenchido** E status atual **`Sent` ou `Error`** → `Status='Success'` (senão mantém
+  `Pending`/`New`). Backend já dispara o pipeline Intrag em `Status→Success` (gate intragrupo Banco J.P. Morgan).
+- **Leitura do status atual no front:** o status vem como HTML badge em `d[STATUS_COL_INDEX]` (=2 em todas); extraído via
+  `div.innerHTML → textContent`.
+- **Índices por página:** opt-comm/opt-fxo/ndf-comm → Deal `d[3]`, B3_ID `d[4]`; ndf-fwdstart/otherpublisher → Deal
+  `d[4]`, B3_ID `d[5]`. fwdstart/otherpublisher constroem o payload via `arBuildDeal()` (promoção feita no save handler,
+  fora do build).
+- **Bug corrigido:** páginas NDF apagavam o B3 ID no edit (`B3_ID: ''` hardcoded no payload); agora enviam o valor do campo.
+- **routes.py:** o **PATCH genérico** `/api/new-deals/<product>/cache/<deal_id>` (fwd-start/other-publishers) **não**
+  disparava o Intrag — adicionado `_save_intrag_ndf_entry` em `Status→Success` + Banco JPM (paridade com o endpoint
+  dedicado da ndf-commodities). opt-comm/opt-fxo/ndf-comm já disparavam.
+- **i18n:** `nd-b3id-hint`, `swal-b3-confirmed-title`, `swal-b3-confirmed-text` (en/br/es).
+
+### Padrões identificados
+- **Pipeline New Deals→Intrag é sempre gated por Client = Banco J.P. Morgan** (`_maybe_save_intrag_*` / checagem `'banco'
+  in cl and 'morgan' in cl`). Deals de outras contrapartes vão a Success sem entrada no Intrag — comportamento correto.
+- **Sanitização de nome de diretório Windows:** helper compartilhado entre script standalone e routes.py; comparar por
+  chave normalizada para reaproveitar pastas pré-existentes em vez de duplicar.
+- **Modal de edição New Deals:** o botão Edit abre o modal `arOpenEditModal` (não a edição inline `btn-row-save-edit`,
+  que é caminho legado); qualquer novo campo de edição vai no modal + prefill + payload do `#ar-save-btn`.
+
+### Arquivos (sessão 37)
+```
+scripts/create_counterparty_folders.py         ← (novo) árvore de pastas Electronic Inventory por contraparte
+apps/pages/routes.py                            ← ELECTRONIC_INVENTORY_ROOT + _ei_sanitize/_ensure_counterparty_folders +
+                                                  hook approve refdata; Intrag NDF no PATCH genérico
+apps/templates/pages/new_deals-opt-commodities.html   ← campo B3 ID + flip Sent/Error→Success
+apps/templates/pages/new_deals-opt-fxo.html           ← idem
+apps/templates/pages/new_deals-ndf-commodities.html   ← idem (+ fix B3_ID:'')
+apps/templates/pages/new_deals-ndf-fwdstart.html      ← idem (arBuildDeal)
+apps/templates/pages/new_deals-ndf-otherpublisher.html← idem (arBuildDeal)
+apps/static/data/translations/{en,br,es}.json         ← nd-b3id-hint, swal-b3-confirmed-title/text
+```
