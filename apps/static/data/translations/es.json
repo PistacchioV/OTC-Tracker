@@ -1046,11 +1046,11 @@
   "acc-missing-desc": "Los contratos siguientes no tienen factor actualizado. Resuélvalos antes de generar el archivo:",
   "acc-endproc": "Finalizar",
   "acc-endproc-title": "¿Finalizar el proceso EOM?",
-  "acc-endproc-confirm": "Envía el correo de estado final a OTC Ops (cc Middle Office).",
+  "acc-endproc-confirm": "Envía el correo de estado final a OTC Ops.",
   "acc-endproc-pending-title": "Comentario requerido",
   "acc-endproc-pending-desc": "Los contratos siguientes están en Check sin comentario. Coméntelos antes de finalizar el proceso:",
   "acc-endproc-done": "Proceso finalizado",
   "acc-endproc-checks": "fila(s) en check reportada(s)",
   "acc-endproc-nodiv": "No se identificaron divergencias.",
-  "acc-endproc-mail": "Correo de estado final enviado a OTC Ops (cc Middle Office)."
+  "acc-endproc-mail": "Correo de estado final enviado a OTC Ops."
 }

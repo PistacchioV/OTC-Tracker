@@ -1047,11 +1047,11 @@
   "acc-missing-desc": "The contracts below have no updated factor. Resolve them before generating the file:",
   "acc-endproc": "End Process",
   "acc-endproc-title": "End the EOM process?",
-  "acc-endproc-confirm": "Sends the final status e-mail to OTC Ops (cc Middle Office).",
+  "acc-endproc-confirm": "Sends the final status e-mail to OTC Ops.",
   "acc-endproc-pending-title": "Comment required",
   "acc-endproc-pending-desc": "The contracts below are in Check status without a comment. Comment them before ending the process:",
   "acc-endproc-done": "Process finalized",
   "acc-endproc-checks": "check row(s) reported",
   "acc-endproc-nodiv": "No divergences identified.",
-  "acc-endproc-mail": "Final status e-mail sent to OTC Ops (cc Middle Office)."
+  "acc-endproc-mail": "Final status e-mail sent to OTC Ops."
 }
