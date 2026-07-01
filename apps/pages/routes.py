@@ -3484,44 +3484,62 @@ def api_accrual_validation():
 
 
 # ── Recon: match the 'operacoes' return file against the saved accrual factors ──
-#  operacoes layout: headers on row 5, data from row 6. Filter col B (account) to the
-#  two house accounts AND col E == 'REGISTRO DE PU/FATOR'. Per row: col F = ponta
-#  (1→curve 00 / 2→curve 01), col H = título (= Código IF), col P = registered factor
-#  (BR decimal comma). Compare each VCP leg's factor; mark Success / Check per row.
+#  operacoes layout: headers on row 5, data from row 6. col B (index 1) = the house
+#  account (submitter = Banco, filtered to the two house accounts); col AC (index 28)
+#  = the COUNTERPARTY account; col E = 'REGISTRO DE PU/FATOR'; col F = ponta
+#  (1 = smaller-account leg, 2 = larger-account leg); col H = título (= Código IF);
+#  col P = registered factor (BR decimal comma).
+#  The accrual page view is always Banco (PARTE) x Contraparte, so we resolve each
+#  ponta to the Banco ('p') or the Contraparte ('c') leg by comparing col B vs col AC,
+#  then compare against Fator Parte (Banco) / Fator Contraparte respectively.
 _ACC_RECON_ACCOUNTS = {'04880006', '73760009'}
 _ACC_RECON_MARKER = 'REGISTRO DE PU/FATOR'
 _ACC_RECON_HEADER_ROW = 5                  # 1-based → data starts at index 5
+_ACC_RECON_CONTRA_COL = 28                 # col AC — counterparty account
 
 
-def _acc_ponta_to_curve(v):
+def _acc_ponta_num(v):
+    """Ponta number from col F: 1 (smaller-account leg) or 2 (larger-account leg)."""
     s = re.sub(r'\D', '', str(v or ''))
-    if s in ('1', '0', '00'):  return '00'    # ponta 1 → curve 00
-    if s in ('2', '01'):       return '01'    # ponta 2 → curve 01
+    if s in ('1', '0', '00'):  return 1
+    if s in ('2', '01'):       return 2
     return None
 
 
 def _acc_run_recon(data, rows):
-    """Build {(codigo_if, curve): registered_factor} from the operacoes rows, then
-    compare against each VCP leg. Mutates data (recon map + status). Returns summary."""
+    """Build {(codigo_if, leg): registered_factor} — leg 'p'=Banco, 'c'=Contraparte —
+    from the operacoes rows, then compare against each VCP leg. Mutates data
+    (recon map + status). Returns a summary dict."""
     recon_map = {}
     for i in range(_ACC_RECON_HEADER_ROW, len(rows)):     # data from row 6 (index 5)
         row = rows[i]
-        if _acc_digits(_cc_cell(row, 1)) not in _ACC_RECON_ACCOUNTS:        # col B account
+        banco = _acc_digits(_cc_cell(row, 1))                              # col B house account
+        if banco not in _ACC_RECON_ACCOUNTS:
             continue
         if _cc_cell(row, 4).strip().upper() != _ACC_RECON_MARKER:          # col E marker
             continue
         cif = _cc_cell(row, 7).strip()                                     # col H título
-        curve = _acc_ponta_to_curve(_cc_cell(row, 5))                      # col F ponta
+        ponta = _acc_ponta_num(_cc_cell(row, 5))                           # col F ponta (1/2)
         fac = _acc_parse_num(_cc_cell(row, 15))                            # col P factor (comma→dot)
-        if not cif or not curve:
+        contra = _acc_digits(_cc_cell(row, _ACC_RECON_CONTRA_COL))         # col AC counterparty
+        if not cif or not ponta:
             continue
+        # ponta 2 = larger-account leg, ponta 1 = smaller. Resolve to Banco/Contraparte
+        # by comparing the two accounts (col B = Banco, col AC = counterparty).
+        try:
+            banco_is_larger = int(banco or '0') > int(contra or '0')
+        except ValueError:
+            banco_is_larger = True
+        larger_leg = 'p' if banco_is_larger else 'c'
+        smaller_leg = 'c' if banco_is_larger else 'p'
+        leg = larger_leg if ponta == 2 else smaller_leg
         for k in _acc_factor_keys(cif):
-            recon_map.setdefault((k, curve), fac)
+            recon_map.setdefault((k, leg), fac)
 
-    def _lookup(cif, curve):
+    def _lookup(cif, leg):
         for k in _acc_factor_keys(cif):
-            if (k, curve) in recon_map:
-                return recon_map[(k, curve)]
+            if (k, leg) in recon_map:
+                return recon_map[(k, leg)]
         return None
 
     recon_out, ok_rows, check_rows = {}, 0, 0
@@ -3532,18 +3550,14 @@ def _acc_run_recon(data, rows):
             cif = str(r[0] or '').strip()
             idxP = str(r[5] or '').strip().upper()
             idxC = str(r[8] or '').strip().upper()
-            numP = int(re.sub(r'\D', '', str(r[3] or '')) or '0')
-            numC = int(re.sub(r'\D', '', str(r[6] or '')) or '0')
-            roleP = '01' if numP > numC else '00'
-            roleC = '01' if numC > numP else '00'
-            legs = []                                       # (tag, curve, accrual_factor)
-            if idxP == 'VCP': legs.append(('p', roleP, r[9]))
-            if idxC == 'VCP': legs.append(('c', roleC, r[10]))
+            legs = []                                       # (tag, accrual_factor); p=Banco, c=Contra
+            if idxP == 'VCP': legs.append(('p', r[9]))
+            if idxC == 'VCP': legs.append(('c', r[10]))
             if not legs:
                 continue
             entry, all_ok = {}, True
-            for tag, curve, acc_fac in legs:
-                reg = _lookup(cif, curve)
+            for tag, acc_fac in legs:
+                reg = _lookup(cif, tag)
                 accv = _acc_parse_num(acc_fac)
                 ok = (reg is not None and accv is not None and round(reg, 8) == round(accv, 8))
                 if not ok:
