@@ -1408,7 +1408,22 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         if (rec) rec.addEventListener('click', function () { runRecon(pickedDateISO()); });
         var endp = document.getElementById('accEndProcess');
         if (endp) endp.addEventListener('click', function () { runEndProcess(pickedDateISO()); });
-        loadByDate(todayISO());                          // load today's data (count-up from 0)
+        // Initial load: honor ?date= (deep-link from a bell notification), else
+        // land on the most recent saved dataset instead of an empty "today".
+        var _urlDate = new URLSearchParams(window.location.search).get('date');
+        if (_urlDate && /^\d{4}-\d{2}-\d{2}$/.test(_urlDate)) {
+            syncPicker(_urlDate);
+            loadByDate(_urlDate);
+        } else {
+            fetch('/api/accrual-swap/latest')
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    var d = (j && j.success && j.date) ? j.date : todayISO();
+                    syncPicker(d);
+                    loadByDate(d);
+                })
+                .catch(function () { loadByDate(todayISO()); });
+        }
     });
 })();
 </script>

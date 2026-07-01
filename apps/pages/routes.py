@@ -473,6 +473,28 @@ def _create_notification(actor_sid, actor_name, action, page, detail='', target_
         log.error("[_create_notification] FAILED:\n%s", traceback.format_exc())
 
 
+def _nd_token(value):
+    """Return a ' [ND:YYYY-MM-DD]' suffix for a notification detail so the bell can
+    deep-link to that date (Accrual → ?date=, New Deals → ?tradedate=). Accepts a
+    date, YYYYMMDD, YYYY-MM-DD or dd/mm/yyyy string; returns '' when unparseable.
+    The topbar strips the token before displaying the detail."""
+    if not value:
+        return ''
+    s = str(value).strip()
+    d = None
+    if re.match(r'^\d{8}$', s):
+        try:
+            d = datetime.strptime(s, '%Y%m%d')
+        except Exception:
+            d = None
+    if d is None:
+        try:
+            d = _parse_date_any(s)
+        except Exception:
+            d = None
+    return ' [ND:{}]'.format(d.strftime('%Y-%m-%d')) if d else ''
+
+
 def get_user_by_sid(sid):
     log.debug("[get_user_by_sid] Looking up SID=%s", sid)
     conn = get_db_connection()
@@ -2805,7 +2827,7 @@ def api_accrual_swap_process():
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Imported', 'Accrual',
-                         'VCP · {} classified'.format(result.get('diagnostics', {}).get('matched', 0)))
+                         'VCP · {} classified'.format(result.get('diagnostics', {}).get('matched', 0)) + _nd_token(result.get('date')))
     return jsonify(result)
 
 
@@ -2814,6 +2836,22 @@ def api_accrual_swap_process():
 def _accrual_path_for(ymd):
     return os.path.join(ACCRUAL_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8],
                         'accrual_swap_{}.json'.format(ymd))
+
+
+def _accrual_latest_ymd():
+    """Newest saved accrual date as 'YYYY-MM-DD' (scans accrual_swap_*.json under
+    ACCRUAL_JSON_ROOT), or None if nothing saved yet. Lets the page land on the
+    most recent dataset when no explicit date is requested (e.g. from a bell
+    notification), instead of an empty 'today'."""
+    latest = None
+    if not os.path.isdir(ACCRUAL_JSON_ROOT):
+        return None
+    for _root, _dirs, files in os.walk(ACCRUAL_JSON_ROOT):
+        for fn in files:
+            m = re.match(r'accrual_swap_(\d{8})\.json$', fn)
+            if m and (latest is None or m.group(1) > latest):
+                latest = m.group(1)
+    return '{}-{}-{}'.format(latest[:4], latest[4:6], latest[6:8]) if latest else None
 
 
 def _accrual_parse_date(s):
@@ -3100,7 +3138,7 @@ def api_accrual_swap_factors():
     log.info('[accrual] %s factors: %d mapped, %d matched, %d missing', lob, len(fmap), matched, missing)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Mapped', 'Accrual',
-                         '{} · {} matched, {} missing'.format(lob, matched, missing))
+                         '{} · {} matched, {} missing'.format(lob, matched, missing) + _nd_token(data.get('date')))
     return jsonify({
         'success': True,
         'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
@@ -3186,7 +3224,7 @@ def api_accrual_import_folder():
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Imported', 'Accrual',
                          'Folder · {} classified · {} factor file(s)'.format(
-                             result.get('diagnostics', {}).get('matched', 0), len(applied)))
+                             result.get('diagnostics', {}).get('matched', 0), len(applied)) + _nd_token(ymd))
     return jsonify({
         'success': True,
         'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
@@ -3211,6 +3249,15 @@ def api_accrual_data():
     return jsonify(data)
 
 
+@blueprint.route('/api/accrual-swap/latest')
+def api_accrual_latest():
+    """Most recent saved accrual date (YYYY-MM-DD) so the page can land on real
+    data by default — e.g. when opened from a bell notification."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, 'date': _accrual_latest_ymd()})
+
+
 @blueprint.route('/api/accrual-swap/row/delete', methods=['POST'])
 def api_accrual_row_delete():
     if not session.get('authenticated'):
@@ -3227,7 +3274,7 @@ def api_accrual_row_delete():
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Accrual Deleted', 'Accrual', '{} · 1 row'.format(lob))
+                         'Accrual Deleted', 'Accrual', '{} · 1 row'.format(lob) + _nd_token(data.get('date')))
     return jsonify({'success': True, 'counts': data['counts']})
 
 
@@ -3248,7 +3295,7 @@ def api_accrual_rows_delete():
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Accrual Deleted', 'Accrual', '{} · {} rows'.format(lob, len(ids)))
+                         'Accrual Deleted', 'Accrual', '{} · {} rows'.format(lob, len(ids)) + _nd_token(data.get('date')))
     return jsonify({'success': True, 'counts': data['counts']})
 
 
@@ -3277,7 +3324,7 @@ def api_accrual_row_edit():
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''),
-                         'Accrual Updated', 'Accrual', '{} · {}'.format(lob, rid))
+                         'Accrual Updated', 'Accrual', '{} · {}'.format(lob, rid) + _nd_token(data.get('date')))
     return jsonify({'success': True, 'row': target})
 
 
@@ -3306,7 +3353,7 @@ def api_accrual_row_send():
         log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''),
-                         'Accrual Sent', 'Accrual', '{} · {}'.format(lob, rid))
+                         'Accrual Sent', 'Accrual', '{} · {}'.format(lob, rid) + _nd_token(data.get('date')))
     return jsonify({'success': True, 'row': target})
 
 
@@ -3490,7 +3537,7 @@ def api_accrual_send_batch():
     total = sum(g['count'] for g in generated)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
-                         '{} · {} file(s), {} line(s)'.format(lob, len(generated), total))
+                         '{} · {} file(s), {} line(s)'.format(lob, len(generated), total) + _nd_token(ymd))
     files = [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated]
     return jsonify({'success': True, 'files': files, 'total': total, 'lob': lob})
 
@@ -3550,7 +3597,7 @@ def api_accrual_validation():
     total = sum(g['count'] for g in generated)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
-                         'EOM Validation · {} file(s), {} attached'.format(len(generated), len(attach)))
+                         'EOM Validation · {} file(s), {} attached'.format(len(generated), len(attach)) + _nd_token(ymd))
     return jsonify({
         'success': True,
         'files': summary,
@@ -3676,7 +3723,7 @@ def api_accrual_recon():
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Mapped', 'Accrual',
-                         'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']))
+                         'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _nd_token(ymd))
     return jsonify({
         'success': True,
         'headers': data.get('headers') or list(_ACC_FIXED_HEADERS),
@@ -3793,7 +3840,7 @@ def api_accrual_end_process():
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Sent', 'Accrual',
-                         'End Process · {} check row(s)'.format(len(checks)))
+                         'End Process · {} check row(s)'.format(len(checks)) + _nd_token(ymd))
     return jsonify({'success': True, 'checks': len(checks)})
 
 
@@ -4163,13 +4210,13 @@ def api_update_deal_cache(deal_id):
                 _create_notification(
                     session.get('user_sid', ''), session.get('user_name', ''),
                     'Status Updated', 'Opt Comm',
-                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                    deal_id + ' → ' + str(_fields.get('Status', '')) + _nd_token(updated_deal.get('TradeDate'))
                 )
         else:
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
                 'Deal Updated', 'Opt Comm',
-                deal_id + ' (' + ', '.join(_fields.keys()) + ')'
+                deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _nd_token(updated_deal.get('TradeDate'))
             )
     return jsonify({"success": True})
 
@@ -4195,12 +4242,12 @@ def api_delete_deal_cache(deal_id):
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
-        deals.pop(idx)
+        removed = deals.pop(idx)
         _atomic_write_json(file_path, deals)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
-        'Deal Deleted', 'Opt Comm', deal_id
+        'Deal Deleted', 'Opt Comm', deal_id + _nd_token((removed or {}).get('TradeDate'))
     )
     return jsonify({"success": True})
 
@@ -4452,13 +4499,13 @@ def api_update_fxo_cache(deal_id):
                 _create_notification(
                     session.get('user_sid', ''), session.get('user_name', ''),
                     'Status Updated', 'Opt FXO',
-                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                    deal_id + ' → ' + str(_fields.get('Status', '')) + _nd_token(updated_deal.get('TradeDate'))
                 )
         else:
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
                 'Deal Updated', 'Opt FXO',
-                deal_id + ' (' + ', '.join(_fields.keys()) + ')'
+                deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _nd_token(updated_deal.get('TradeDate'))
             )
     return jsonify({"success": True})
 
@@ -4483,12 +4530,12 @@ def api_delete_fxo_cache(deal_id):
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
-        deals.pop(idx)
+        removed = deals.pop(idx)
         _atomic_write_json(file_path, deals)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
-        'Deal Deleted', 'Opt FXO', deal_id
+        'Deal Deleted', 'Opt FXO', deal_id + _nd_token((removed or {}).get('TradeDate'))
     )
     return jsonify({"success": True})
 
@@ -6125,7 +6172,7 @@ def api_ndf_save_deal_cache():
         _create_notification(
             session.get('user_sid', ''), session.get('user_name', ''),
             'Deal Updated', 'NDF Comm',
-            deal_name + (' / ' + client_name if client_name else ''))
+            deal_name + (' / ' + client_name if client_name else '') + _nd_token(data.get('TradeDate')))
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
@@ -6306,13 +6353,13 @@ def api_ndf_update_deal_cache(deal_id):
                 _create_notification(
                     session.get('user_sid', ''), session.get('user_name', ''),
                     'Status Updated', 'NDF Comm',
-                    deal_id + ' → ' + str(_fields.get('Status', ''))
+                    deal_id + ' → ' + str(_fields.get('Status', '')) + _nd_token(updated_deal.get('TradeDate'))
                 )
         else:
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
                 'Deal Updated', 'NDF Comm',
-                deal_id + ' (' + ', '.join(_fields.keys()) + ')'
+                deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _nd_token(updated_deal.get('TradeDate'))
             )
     return jsonify({"success": True})
 
@@ -6338,12 +6385,12 @@ def api_ndf_delete_deal_cache(deal_id):
                     and (client is None or (d.get('Client', '') or '').strip() == (client or '').strip())), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
-        deals.pop(idx)
+        removed = deals.pop(idx)
         _atomic_write_json(file_path, deals)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
-        'Deal Deleted', 'NDF Comm', deal_id
+        'Deal Deleted', 'NDF Comm', deal_id + _nd_token((removed or {}).get('TradeDate'))
     )
     return jsonify({"success": True})
 
@@ -8269,10 +8316,10 @@ def api_generic_nd_update_cache(product, deal_id):
             # 'Status Updated' entry so the bell shows a single item per send.
             if str(_fields.get('Status', '')) != 'Sent':
                 _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                                     'Status Updated', cfg['label'], deal_id + ' → ' + str(_fields.get('Status', '')))
+                                     'Status Updated', cfg['label'], deal_id + ' → ' + str(_fields.get('Status', '')) + _nd_token(updated_deal.get('TradeDate')))
         else:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                                 'Deal Updated', cfg['label'], deal_id + ' (' + ', '.join(_fields.keys()) + ')')
+                                 'Deal Updated', cfg['label'], deal_id + ' (' + ', '.join(_fields.keys()) + ')' + _nd_token(updated_deal.get('TradeDate')))
     return jsonify({"success": True})
 
 
@@ -8299,11 +8346,11 @@ def api_generic_nd_delete_cache(product, deal_id):
                     if d.get('Deal') == deal_id and (client is None or d.get('Client', '') == client)), None)
         if idx is None:
             return jsonify({"success": False, "message": "Deal not found"}), 404
-        deals.pop(idx)
+        removed = deals.pop(idx)
         _atomic_write_json(file_path, deals)
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Deleted', cfg['label'], deal_id)
+                         'Deal Deleted', cfg['label'], deal_id + _nd_token((removed or {}).get('TradeDate')))
     return jsonify({"success": True})
 
 

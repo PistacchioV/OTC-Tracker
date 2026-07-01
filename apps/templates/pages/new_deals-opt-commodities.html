@@ -2540,16 +2540,24 @@ $(document).ready(function() {
 
     sfWrapper.addEventListener('click', function() { sfInput.focus(); });
 
-    // Default filter: Trade Date = today (dd/mm/yyyy) — auto-search on page load
+    // Default filter: Trade Date = ?tradedate= (deep-link from a bell notification)
+    // else today (dd/mm/yyyy) — auto-search on page load
     (function() {
-        var now = new Date();
-        var dd  = String(now.getDate()).padStart(2, '0');
-        var mm  = String(now.getMonth() + 1).padStart(2, '0');
-        var yyyy = now.getFullYear();
-        var today = dd + '/' + mm + '/' + yyyy;
+        var qsTd = new URLSearchParams(window.location.search).get('tradedate');
+        var target;
+        if (qsTd && /^\d{4}-\d{2}-\d{2}$/.test(qsTd)) {
+            var pp = qsTd.split('-');
+            target = pp[2] + '/' + pp[1] + '/' + pp[0];   // ISO → dd/mm/yyyy
+        } else {
+            var now = new Date();
+            var dd  = String(now.getDate()).padStart(2, '0');
+            var mm  = String(now.getMonth() + 1).padStart(2, '0');
+            var yyyy = now.getFullYear();
+            target = dd + '/' + mm + '/' + yyyy;
+        }
         var tradeDateCol = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
         if (tradeDateCol) {
-            sfActive.push({ col: tradeDateCol, value: today, mode: 'exact', key: sfFilterKey(tradeDateCol, 'exact') });
+            sfActive.push({ col: tradeDateCol, value: target, mode: 'exact', key: sfFilterKey(tradeDateCol, 'exact') });
             sfRenderChips();
             sfApply();
         }

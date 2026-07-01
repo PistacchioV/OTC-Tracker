@@ -480,6 +480,11 @@
                 'Control Panel':       '/control-panel',
                 'Accrual':             '/accrual-swap'
             };
+            // New Deals pages whose Trade Date filter accepts a ?tradedate= deep-link.
+            var NEW_DEALS_PAGES = {
+                'NDF Comm': 1, 'Opt Comm': 1, 'Opt FXO': 1,
+                'NDF FWD Start': 1, 'NDF Other Publisher': 1
+            };
 
             function esc(s) {
                 return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -504,7 +509,13 @@
                     var meta     = ACTION_META[n.action] || { icon: 'bell', color: 'bg-secondary' };
                     // Reference Data badge uses the sidenav icon for the page (database)
                     var badgeIcon = (n.page === 'Reference Data') ? 'database' : meta.icon;
-                    var detail   = n.detail ? ' &mdash; ' + esc(n.detail) : '';
+                    // A trailing [ND:YYYY-MM-DD] token carries the deal/accrual date so the
+                    // click can deep-link to it — parse it out and strip it from the text.
+                    var rawDetail = n.detail || '';
+                    var ndMatch   = /\s*\[ND:(\d{4}-\d{2}-\d{2})\]/.exec(rawDetail);
+                    var navDate   = ndMatch ? ndMatch[1] : null;
+                    if (ndMatch) rawDetail = rawDetail.replace(ndMatch[0], '');
+                    var detail   = rawDetail ? ' &mdash; ' + esc(rawDetail) : '';
                     var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
                     var initials = getInitials(n.actor_name || n.actor_sid);
                     var pageUrl  = PAGE_URL[n.page] || null;
@@ -513,6 +524,15 @@
                     if (pageUrl && n.page === 'Reference Data') {
                         var mSpn = /SPN\s+(\S+)/.exec(n.detail || '');
                         if (mSpn) pageUrl += '?spn=' + encodeURIComponent(mSpn[1]);
+                    }
+                    // Date deep-link: Accrual → ?date=, New Deals pages → ?tradedate=
+                    // (falls back to the page's own default — today — when absent).
+                    if (pageUrl && navDate) {
+                        if (n.page === 'Accrual') {
+                            pageUrl += '?date=' + encodeURIComponent(navDate);
+                        } else if (NEW_DEALS_PAGES[n.page]) {
+                            pageUrl += '?tradedate=' + encodeURIComponent(navDate);
+                        }
                     }
                     var el       = document.createElement(pageUrl ? 'a' : 'div');
                     el.className = 'dropdown-item notification-item py-2 text-wrap' + (isRead(n.id) ? '' : ' notif-unread');
