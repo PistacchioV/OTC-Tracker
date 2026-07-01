@@ -2512,9 +2512,9 @@ def _cc_parse_rules(raw):
 
 def _cc_read_rows(filename, raw_bytes):
     """Return a list of rows (each a list of cell values) from an uploaded
-    .xlsx/.xlsm, .csv or .tsv. Raises ValueError on an unsupported type."""
+    .xlsx/.xlsm, .csv, .tsv or .txt. Raises ValueError on an unsupported type."""
     name = (filename or '').lower()
-    if name.endswith(('.csv', '.tsv')):
+    if name.endswith(('.csv', '.tsv', '.txt')):
         import csv as _csv
         # Pick the first encoding that decodes WITHOUT replacement chars, so accented
         # headers (Código, Início, …) never turn into mojibake regardless of the
@@ -2531,7 +2531,15 @@ def _cc_read_rows(filename, raw_bytes):
                 break
         if text is None:
             text = raw_bytes.decode('latin-1', errors='replace')
-        delimiter = '\t' if name.endswith('.tsv') else ','
+        if name.endswith('.tsv'):
+            delimiter = '\t'
+        elif name.endswith('.txt'):
+            # Auto-detect: financial exports use tab/';' so the comma thousand
+            # separators inside numbers ("-1,802,855.64") don't split columns.
+            first = next((ln for ln in text.splitlines() if ln.strip()), '')
+            delimiter = '\t' if '\t' in first else (';' if ';' in first else ',')
+        else:
+            delimiter = ','
         return [list(r) for r in _csv.reader(io.StringIO(text), delimiter=delimiter)]
     if name.endswith(('.xlsx', '.xlsm')):
         import openpyxl
@@ -2765,6 +2773,61 @@ _MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emiss
 _MTM_COE_SRC      = [0, 1, 2, 3, None, None]  # A,B,C,D (A '#' stripped) + Valor MTM (blank) + Comments (manual)
 _MTM_COE_REFDATE_COL = 6                       # col G reference date
 
+# Position of 'Valor MTM' / 'Comments' within a swap-book data row.
+_MTM_VALOR_IDX    = _MTM_FIXED_HEADERS.index('Valor MTM')    # 7
+_MTM_COMMENT_IDX  = _MTM_FIXED_HEADERS.index('Comments')     # 8
+
+# CEM MtM values file "VCP_CETIP_MTM": A=Trade Name, B=Counterparty Name,
+# C=CETIP ID, D=MTM in BRL. Keep rows where B <> our own GEM-Rates side, join
+# C (CETIP ID) to the CEM book's Código IF, D → rounded 2dp (signed).
+_MTM_CEM_SELF_PARTY = 'bco j.p. morgan s.a. 2768 - gem br - rates'
+_MTM_ZERO_COMMENT   = 'Valor MtM não poder ser ZERO'
+
+
+def _mtm_is_cem_value_name(n):
+    nl = (n or '').lower()
+    return 'vcp_cetip_mtm' in nl and not nl.endswith('.msg')
+
+
+def _mtm_parse_num(s):
+    """Parse a BRL amount like "-1,802,855.646864" (comma thousands, dot decimal,
+    optional surrounding quotes) → float, or None."""
+    s = str(s or '').strip().strip("'").strip('"').replace(',', '').strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _mtm_apply_cem_values(cem_rows, file_rows):
+    """Fill each CEM row's 'Valor MTM' (rounded 2dp, signed) from VCP_CETIP_MTM,
+    matching col C (CETIP ID) to Código IF. Zero → keep 0.00 + zero comment.
+    cem_rows are raw data lists (pre-meta). Returns (matched, zeros)."""
+    vmap = {}
+    for r in file_rows:
+        b = str(_cc_cell(r, 1) or '').strip().strip("'").strip('"')
+        if not b or b.lower() == _MTM_CEM_SELF_PARTY:
+            continue                                     # keep B <> our GEM-Rates side
+        cid = str(_cc_cell(r, 2) or '').strip().strip("'").strip('"')
+        num = _mtm_parse_num(_cc_cell(r, 3))
+        if not cid or num is None:
+            continue                                     # header row skipped here too
+        vmap.setdefault(cid.upper(), num)
+    matched = zeros = 0
+    for row in cem_rows:
+        cid = str(row[0] or '').strip().upper()
+        if cid not in vmap:
+            continue
+        v = round(vmap[cid], 2)
+        row[_MTM_VALOR_IDX] = '{:.2f}'.format(v)
+        if v == 0:
+            row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+            zeros += 1
+        matched += 1
+    return matched, zeros
+
 
 def _mtm_path_for(ymd):
     return os.path.join(MTM_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8], 'mtm_swap_{}.json'.format(ymd))
@@ -2879,12 +2942,21 @@ def _mtm_build_from_folder(folder):
         with open(os.path.join(folder, coe_fn), 'rb') as fh:
             rows = _cc_read_rows(coe_fn, fh.read())
         buckets['COE'], coe_ref = _mtm_build_coe(rows)
+    # CEM MtM values (VCP_CETIP_MTM) — applied to the CEM book before finalize.
+    cem_val_fn = next((fn for fn in files if _mtm_is_cem_value_name(fn)), None)
+    cem_matched = cem_zeros = 0
+    if cem_val_fn and buckets.get('CEM'):
+        with open(os.path.join(folder, cem_val_fn), 'rb') as fh:
+            vrows = _cc_read_rows(cem_val_fn, fh.read())
+        cem_matched, cem_zeros = _mtm_apply_cem_values(buckets['CEM'], vrows)
     counts = _mtm_finalize(buckets)
     return {
         'success': True, 'tables': buckets, 'counts': counts,
         'ref_date': ref_date, 'coe_ref_date': coe_ref,
         'diagnostics': {'kept': kept, 'matched': matched,
-                        'swap_file': swap_fn, 'coe_file': coe_fn},
+                        'swap_file': swap_fn, 'coe_file': coe_fn,
+                        'cem_value_file': cem_val_fn,
+                        'cem_matched': cem_matched, 'cem_zeros': cem_zeros},
     }, (swap_fn, coe_fn)
 
 
@@ -3118,7 +3190,15 @@ def api_mtm_process():
                 'date': datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')}
         data['tables']['COE'] = []
 
-    if _mtm_is_coe_name(f.filename):
+    if _mtm_is_cem_value_name(f.filename):
+        cem_rows = (data.get('tables') or {}).get('CEM', [])
+        if not cem_rows:
+            return jsonify({'success': False,
+                            'error': 'No CEM contracts loaded for this date — import the swap file first.'}), 400
+        m, z = _mtm_apply_cem_values(cem_rows, rows)   # fills Valor MTM on existing CEM rows
+        data['diagnostics'] = dict(data.get('diagnostics') or {},
+                                   cem_value_file=f.filename, cem_matched=m, cem_zeros=z)
+    elif _mtm_is_coe_name(f.filename):
         coe_rows, coe_ref = _mtm_build_coe(rows)
         for i, rw in enumerate(coe_rows):
             rw.extend(['New', '', ''])
@@ -3136,7 +3216,7 @@ def api_mtm_process():
         data['ref_date'] = ref_date
     else:
         return jsonify({'success': False,
-                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID) or the COE (…ConsultaMTMCOE) file.'}), 400
+                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID), COE (…ConsultaMTMCOE) or CEM values (VCP_CETIP_MTM) file.'}), 400
 
     data['counts'] = {k: len(v) for k, v in data['tables'].items()}
     try:
