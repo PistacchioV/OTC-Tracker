@@ -2290,3 +2290,36 @@ apps/templates/pages/new_deals-ndf-fwdstart.html      ← idem
 apps/templates/pages/new_deals-ndf-otherpublisher.html← idem
 ```
 
+---
+
+## 39. Sessão 2026-07-01 (cont.) — Intrag: Send/Delete/Select-All respeitam o filtro (bug "N rows not sendable")
+
+Commit: `8c2c3fc`. **Páginas carregam 200 no dev.**
+
+### Sintoma / causa raiz
+- Com o filtro `Registration Date = 30/06/2026` mostrando 3 de 46 linhas, o **Send** falhava com *"Cannot send — 43
+  row(s) are not in a sendable state — only New or Approved can be sent."* (46 − 3 = 43).
+- Causa: o **Select All** (e Send/Delete) usavam **`table.rows()`**, que retorna **todo o dataset** (46), ignorando o
+  filtro. Marcar o select-all selecionava as 46; o Send então avaliava linhas fora do filtro (statuses variados) e
+  bloqueava.
+
+### Fix
+- Todas as operações passam a usar **`table.rows({ search: 'applied' })`** (só as linhas que casam com o filtro/busca):
+  select-all (add + set de checkboxes), Send (toolbar `btnSend*`), Delete (`data-del-selected`) e a **contagem `total`**
+  que define o estado checked/indeterminate do header checkbox.
+- Aplicado em **`intrag-option.html`** (id col `d[41]`) e **`intrag-ndf.html`** (id col `d[33]`) — paridade.
+- Mantidas (inofensivas): `api.rows().every` do `drawCallback` (só seta checkbox/approve nas linhas renderizadas) e o
+  `table.rows().every` do sucesso do Send (atualiza status→Sent por `id` das linhas enviadas).
+
+### Padrão identificado
+- **DataTables + seleção/ações em massa:** sempre iterar `table.rows({ search: 'applied' })`, nunca `table.rows()`, ao
+  traduzir seleção → operação (send/delete/approve) e ao contar o total para o estado do "select all". `table.rows()`
+  ignora o filtro e opera no dataset inteiro. Vale para as toolbars de New Deals e Intrag.
+
+### Arquivos (sessão 39)
+```
+apps/templates/pages/intrag-option.html  ← select-all/send/delete/contagem com {search:'applied'}
+apps/templates/pages/intrag-ndf.html     ← idem (paridade)
+```
+
+
