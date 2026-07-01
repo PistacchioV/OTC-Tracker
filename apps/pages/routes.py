@@ -2726,6 +2726,13 @@ def accrual_swap():
     return render_template('pages/accrual-swap.html', segment='accrual-swap')
 
 
+@blueprint.route('/mtm-swap')
+def mtm_swap():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/mtm-swap.html', segment='mtm-swap')
+
+
 def _accrual_build_result(rows):
     """Core VCP→tables logic (no I/O). Splits the rows into the four LOB books and
     returns the result dict (without 'date'/'saved_at')."""

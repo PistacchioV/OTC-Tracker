@@ -1,0 +1,1452 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Accrual — Swap{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet"/>
+<style>
+/* ============================================================================
+ *  ACCRUAL — SWAP  (Apple Design Language · Emil-grade motion)
+ * ========================================================================== */
+:root {
+    --acc-ease:      cubic-bezier(0.23, 1, 0.32, 1);   /* strong ease-out */
+    --acc-ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+    --acc-blue:      #0066cc;
+    --acc-ink:       #1d1d1f;
+    --acc-muted:     #54545a;
+    --acc-faint:     #6e6e73;
+    --acc-hairline:  #e6e6ea;
+    --acc-surface:   #ffffff;
+}
+[data-bs-theme="dark"] {
+    --acc-ink:      #f5f5f7;
+    --acc-muted:    #c7c7cc;
+    --acc-faint:    #9a9aa0;
+    --acc-hairline: rgba(255,255,255,.10);
+    --acc-surface:  #1c1c1e;
+}
+
+.acc-sec-label { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--acc-blue); margin-bottom:.25rem; }
+.acc-sec-title { font-size:1.35rem; font-weight:700; letter-spacing:-.015em; color:var(--acc-ink); margin:0; }
+.acc-sec-desc  { font-size:.86rem; color:var(--acc-faint); margin:.25rem 0 0; max-width:760px; }
+
+/* ── Count widgets ─────────────────────────────────────────────────────── */
+.acc-stat {
+    position: relative;
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 18px;
+    padding: 1.15rem 1.25rem;
+    display: flex; align-items: center; gap: .95rem;
+    transition: transform 200ms var(--acc-ease), box-shadow 200ms var(--acc-ease);
+    will-change: transform;
+    /* stagger-in */
+    opacity: 0; transform: translateY(8px);
+    animation: accIn 460ms var(--acc-ease) forwards;
+}
+.acc-stat:nth-child(1) { animation-delay: 40ms; }
+.acc-stat:nth-child(2) { animation-delay: 90ms; }
+.acc-stat:nth-child(3) { animation-delay: 140ms; }
+.acc-stat:nth-child(4) { animation-delay: 190ms; }
+@keyframes accIn { to { opacity:1; transform:translateY(0); } }
+
+@media (hover: hover) and (pointer: fine) {
+    .acc-stat:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.07); }
+}
+.acc-stat__icon {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: rgba(0,102,204,.08); color: var(--acc-blue);
+}
+[data-bs-theme="dark"] .acc-stat__icon { background: rgba(41,151,255,.14); color:#2997ff; }
+.acc-stat__icon svg { width: 20px; height: 20px; }
+.acc-stat__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; }
+.acc-stat__value { font-size:1.85rem; font-weight:700; line-height:1.05; letter-spacing:-.02em; color:var(--acc-ink); font-variant-numeric: tabular-nums; }
+.acc-stat__value.is-bumped { color: var(--acc-blue); }
+[data-bs-theme="dark"] .acc-stat__value.is-bumped { color:#2997ff; }
+
+/* feedback pop when a count updates (Emil: motion conveys the change).
+   Applied to the icon/value ONLY — never to the card's `animation`, otherwise it
+   would override the entrance `accIn` and re-trigger the fade-in (widget blinks). */
+.acc-stat__icon { transition: transform 280ms var(--acc-ease), background-color 280ms var(--acc-ease); }
+.acc-stat.is-pop .acc-stat__icon { animation: accIconPop 420ms var(--acc-ease); }
+@keyframes accIconPop {
+    0%   { transform: scale(1)    rotate(0); }
+    42%  { transform: scale(1.16) rotate(-5deg); }
+    100% { transform: scale(1)    rotate(0); }
+}
+.acc-stat.is-pop .acc-stat__value { animation: accValuePulse 420ms var(--acc-ease); }
+@keyframes accValuePulse {
+    0%   { transform: scale(1); }
+    42%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
+/* ── Dropzone (slim · minimalist) ──────────────────────────────────────── */
+.acc-drop {
+    max-width: 560px; margin: 0 auto;
+    border: 1.5px dashed var(--acc-hairline);
+    border-radius: 14px;
+    background: var(--acc-surface);
+    padding: 1.05rem 1.25rem;
+    display: flex; align-items: center; gap: .9rem;
+    cursor: pointer; text-align: left;
+    transition: border-color 180ms var(--acc-ease), background-color 180ms var(--acc-ease), transform 120ms var(--acc-ease);
+}
+.acc-drop:hover  { border-color: #c9c9cf; }
+.acc-drop:active { transform: scale(0.99); }
+.acc-drop.is-drag {
+    border-color: var(--acc-blue);
+    background: rgba(0,102,204,.05);
+}
+.acc-drop__icon {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px;
+    display: grid; place-items: center; background: rgba(0,102,204,.08); color: var(--acc-blue);
+    transition: transform 180ms var(--acc-ease);
+}
+.acc-drop.is-drag .acc-drop__icon { transform: translateY(-2px); }
+.acc-drop__icon svg { width: 19px; height: 19px; }
+.acc-drop__title { font-size:.9rem; font-weight:600; color:var(--acc-ink); margin:0; line-height:1.2; }
+.acc-drop__hint  { font-size:.76rem; color:var(--acc-faint); margin:.1rem 0 0; }
+.acc-drop__spin  { display:none; }
+.acc-drop.is-busy { pointer-events:none; opacity:.85; }
+.acc-drop.is-busy .acc-drop__icon-glyph { display:none; }
+.acc-drop.is-busy .acc-drop__spin { display:block; }
+.acc-drop__spin svg { width:19px; height:19px; animation: accSpin .8s linear infinite; }
+@keyframes accSpin { to { transform: rotate(360deg); } }
+
+.acc-asof { font-size:.78rem; color:var(--acc-faint); text-align:center; margin-top:.6rem; min-height:1.1rem; }
+.acc-asof b { color: var(--acc-muted); font-weight:600; }
+
+/* ── LOB table cards ───────────────────────────────────────────────────── */
+.acc-tcard {
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 18px;
+    overflow: hidden;
+}
+.acc-tcard__head {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .85rem 1.1rem; border-bottom: 1px solid var(--acc-hairline);
+}
+.acc-tcard__name { font-size:1rem; font-weight:700; letter-spacing:-.01em; color:var(--acc-ink); margin:0; }
+.acc-tcard__badge {
+    font-size:.72rem; font-weight:600; padding:.18rem .55rem; border-radius:9999px;
+    background: rgba(0,102,204,.10); color: var(--acc-blue);
+    font-variant-numeric: tabular-nums;
+}
+[data-bs-theme="dark"] .acc-tcard__badge { background: rgba(41,151,255,.16); color:#2997ff; }
+.acc-tcard__tools { margin-left:auto; display:flex; align-items:center; gap:.4rem; }
+
+.acc-tool-select {
+    font-size:.78rem; border:1px solid var(--acc-hairline); border-radius:9px;
+    padding:.28rem .55rem; background:var(--acc-surface); color:var(--acc-muted);
+    transition: border-color 160ms var(--acc-ease);
+}
+.acc-tool-select:focus { outline:none; border-color:var(--acc-blue); }
+.acc-btn {
+    font-size:.78rem; font-weight:500; border:1px solid var(--acc-hairline); border-radius:9px;
+    padding:.3rem .7rem; background:var(--acc-surface); color:var(--acc-muted);
+    display:inline-flex; align-items:center; gap:.35rem; cursor:pointer;
+    transition: transform 130ms var(--acc-ease), border-color 160ms var(--acc-ease), color 160ms var(--acc-ease);
+}
+.acc-btn:hover  { border-color:#c9c9cf; color:var(--acc-ink); }
+.acc-btn:active { transform: scale(0.97); }
+.acc-btn svg { width:15px; height:15px; }
+.acc-send-batch { border-color: var(--acc-blue) !important; color: var(--acc-blue) !important; }
+.acc-send-batch:hover { background: rgba(0,102,204,.08); }
+
+/* Export (DataTables Buttons collection — same model as the New Deals pages) */
+.acc-tcard__tools .dt-buttons { display:inline-flex; margin:0; }
+.acc-export-btn { padding:.3rem .7rem !important; font-size:.78rem !important; border-radius:9px !important; }
+.acc-export-btn i { font-size:14px; }
+/* Export collection dropdown — solid background + readable text (same as New Deals) */
+.dt-button-collection {
+    z-index: 2000;
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: .375rem !important;
+    padding: .25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button,
+.dt-button-collection .dropdown-item {
+    display: flex; align-items: center;
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: .4rem 1rem !important;
+    font-size: .84rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus,
+.dt-button-collection .dropdown-item:hover,
+.dt-button-collection .dropdown-item:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
+
+/* columns dropdown */
+.acc-cols-menu { min-width: 210px; padding:.4rem; }
+.acc-cols-menu .form-check { margin:0; padding:.3rem .5rem .3rem 2rem; border-radius:8px; transition: background-color 140ms var(--acc-ease); }
+.acc-cols-menu .form-check:hover { background: rgba(0,0,0,.04); }
+[data-bs-theme="dark"] .acc-cols-menu .form-check:hover { background: rgba(255,255,255,.06); }
+.acc-cols-menu .form-check-label { font-size:.82rem; color:var(--acc-muted); cursor:pointer; }
+
+.acc-tcard__body { padding:.4rem .65rem .65rem; }
+.acc-empty { text-align:center; color:var(--acc-faint); font-size:.85rem; padding:2.4rem 1rem; }
+
+/* DataTable look */
+table.dt-acc thead tr.acc-th-title th {
+    font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.02em;
+    color:var(--acc-faint); white-space:nowrap; border-bottom:1px solid var(--acc-hairline);
+    vertical-align:middle; padding:.55rem .6rem; min-width:140px;
+}
+table.dt-acc thead tr.acc-th-filter th { padding:.25rem .45rem .5rem; border-bottom:1px solid var(--acc-hairline); }
+table.dt-acc thead tr.acc-th-filter input {
+    width:100%; font-size:.74rem; padding:.22rem .45rem; border:1px solid var(--acc-hairline);
+    border-radius:7px; background:var(--acc-surface); color:var(--acc-ink);
+    transition: border-color 150ms var(--acc-ease);
+}
+table.dt-acc thead tr.acc-th-filter input:focus { outline:none; border-color:var(--acc-blue); }
+table.dt-acc tbody td { font-size:.8rem; color:var(--acc-ink); white-space:nowrap; padding:.5rem .6rem; vertical-align:middle; }
+table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
+
+.dataTables_wrapper .dataTables_info { font-size:.76rem; color:var(--acc-faint); padding-top:.5rem; }
+.dataTables_wrapper .dataTables_paginate .paginate_button { font-size:.78rem; }
+
+/* ── Date picker card ──────────────────────────────────────────────────── */
+.acc-datecard {
+    max-width: none; margin: .9rem 0 0;
+    background: var(--acc-surface);
+    border: 1px solid var(--acc-hairline);
+    border-radius: 14px;
+    padding: .7rem .85rem;
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+}
+.acc-datecard__label { font-size:.74rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--acc-faint); margin:0; white-space:nowrap; }
+/* Compact: just wide enough for the calendar icon + dd/mm/yyyy. Keeps the row's
+   buttons aligned left (no flex-grow pushing them to the far edge). */
+.acc-date-wrap { position: relative; flex: 0 0 auto; width: 158px; }
+.acc-date-icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--acc-faint); pointer-events: none; display: grid; place-items: center;
+}
+.acc-date-icon svg { width: 16px; height: 16px; }
+.acc-date-input {
+    width: 100%; height: 32px; padding: 0 .7rem 0 2rem;
+    font-size: .8rem; color: var(--acc-ink);
+    border: 1px solid var(--acc-hairline); border-radius: 9999px;
+    background: var(--acc-surface); cursor: pointer;
+    transition: border-color 160ms var(--acc-ease);
+}
+.acc-date-input:focus { outline: none; border-color: var(--acc-blue); }
+.acc-date-icon { left: 10px; }
+.acc-date-icon svg { width: 14px; height: 14px; }
+
+/* Buttons — single accent (Action Blue). Filled = primary/terminal (Load, End
+   Process); ghost = secondary utilities (Import, Validation, Recon). Compact pill. */
+.acc-load-btn {
+    flex: 0 0 auto; height: 32px; padding: 0 .9rem;
+    font-size: .77rem; font-weight: 500; color: #fff; white-space: nowrap;
+    background: var(--acc-blue); border: 1px solid var(--acc-blue); border-radius: 9999px;
+    display: inline-flex; align-items: center; gap: .35rem; cursor: pointer;
+    transition: transform 130ms var(--acc-ease), background-color 160ms var(--acc-ease),
+        border-color 160ms var(--acc-ease), color 160ms var(--acc-ease);
+}
+.acc-load-btn:hover  { background: #0a5bd6; border-color: #0a5bd6; }
+.acc-load-btn:active { transform: scale(0.97); }
+.acc-load-btn:disabled { opacity: .5; cursor: default; transform: none; }
+.acc-load-btn svg { width: 14px; height: 14px; }
+.acc-import-btn, .acc-validation-btn, .acc-recon-btn {
+    background: transparent; color: var(--acc-blue); border-color: var(--acc-blue);
+}
+.acc-import-btn:hover, .acc-validation-btn:hover, .acc-recon-btn:hover { background: rgba(0,102,204,.08); }
+.acc-endproc-btn { background: var(--acc-blue); color: #fff; border-color: var(--acc-blue); }
+.acc-endproc-btn:hover { background: #0a5bd6; border-color: #0a5bd6; }
+/* Loading feedback (New Deals model): pure-CSS spinner replaces the icon while busy. */
+.acc-spinner { display:inline-block; width:14px; height:14px; border:2px solid currentColor;
+    border-right-color: transparent; border-radius:50%; opacity:.9; vertical-align:-2px;
+    animation: accSpin .65s linear infinite; }
+.acc-btn:disabled { opacity: .7; cursor: default; transform: none; }
+.acc-load-btn.is-busy, .acc-btn.is-busy { pointer-events: none; }
+
+/* Hover feedback (New Deals model): subtle lift + shadow; press = scale down. */
+.acc-load-btn, .acc-btn { transition: transform 150ms var(--acc-ease), box-shadow 150ms var(--acc-ease),
+    background-color 160ms var(--acc-ease), border-color 160ms var(--acc-ease), color 160ms var(--acc-ease); }
+.acc-actions .btn { transition: transform 150ms var(--acc-ease), box-shadow 150ms var(--acc-ease), filter 150ms var(--acc-ease); }
+.acc-load-btn:hover:not(:disabled), .acc-btn:hover:not(:disabled) {
+    transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.10); }
+.acc-load-btn:active:not(:disabled), .acc-btn:active:not(:disabled) {
+    transform: translateY(0) scale(.97); box-shadow: none; }
+.acc-actions .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.acc-actions .btn:active { transform: translateY(0) scale(.9); box-shadow: none; }
+.acc-comment-inp { width: 100%; min-width: 120px; font-size: .76rem; padding: .18rem .4rem;
+    border: 1px solid #ffc107; border-radius: 6px; background: var(--acc-surface); color: var(--acc-ink); }
+.acc-comment-inp:focus { outline: none; border-color: var(--acc-blue); }
+/* Centered SweetAlert modals with a blurred page behind (New Deals feel). */
+.swal2-container.swal2-backdrop-show { background: rgba(0,0,0,.25); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+
+/* ── Checkbox / Actions / Status columns ───────────────────────────────── */
+table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
+table.dt-acc th.acc-act-th, table.dt-acc td.acc-act-col { width: 120px; min-width: 120px; }
+table.dt-acc td.acc-act-col .btn { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; }
+table.dt-acc td.acc-act-col .btn i { font-size: 14px; }
+table.dt-acc th.acc-status-th, table.dt-acc td.acc-status-col { width: 96px; min-width: 96px; }
+.acc-cb-all, .acc-row-cb { cursor: pointer; width: 15px; height: 15px; accent-color: var(--acc-blue); }
+table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !important; }
+
+.acc-actions { display: flex; align-items: center; gap: .3rem; }
+.acc-actions .btn:active { transform: scale(0.9); }      /* Emil press feedback */
+
+.acc-bulk-del { border-color: #f1aeb5 !important; color: #dc3545 !important; }
+.acc-bulk-del:hover { background: rgba(220,53,69,.06); }
+
+.acc-edit-inp {
+    width: 100%; min-width: 90px; font-size: .78rem; padding: .2rem .4rem;
+    border: 1px solid var(--acc-blue); border-radius: 6px;
+    background: var(--acc-surface); color: var(--acc-ink);
+}
+.acc-edit-inp:focus { outline: none; }
+
+/* Status badges */
+.acc-status { font-size:.68rem; font-weight:600; padding:.16rem .5rem; border-radius:9999px; white-space:nowrap; display:inline-block; }
+.acc-st-new     { background: rgba(108,117,125,.14); color:#5c636a; }
+.acc-st-pending { background: rgba(255,193,7,.16);  color:#9a6b00; }
+.acc-st-sent    { background: rgba(25,135,84,.14);  color:#157347; }
+[data-bs-theme="dark"] .acc-st-new { background: rgba(255,255,255,.12); color:#c7c7cc; }
+
+@media (prefers-reduced-motion: reduce) {
+    .acc-stat, .acc-stat.is-pop, .acc-stat.is-pop .acc-stat__icon, .acc-stat.is-pop .acc-stat__value { animation: none; opacity:1; transform:none; }
+    .acc-stat:hover, .acc-drop:active, .acc-btn:active, .acc-act:active, .acc-load-btn:active { transform:none; }
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid py-3">
+
+    <!-- Header -->
+    <div class="mb-3">
+        <p class="acc-sec-label" data-lang="mtm-label">MtM</p>
+        <h1 class="acc-sec-title" data-lang="mtm-title">Swap Mark-to-Market by Line of Business</h1>
+        <p class="acc-sec-desc" data-lang="mtm-desc">Load the mark-to-market position for each book (COE, CEM, EDG, Hybrids and Commodities) from the regulatory MTM folder.</p>
+    </div>
+
+    <!-- Count widgets -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="box"></i></div>
+                <div>
+                    <p class="acc-stat__label">COE</p>
+                    <div class="acc-stat__value" id="cnt-coe">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="layers"></i></div>
+                <div>
+                    <p class="acc-stat__label">CEM</p>
+                    <div class="acc-stat__value" id="cnt-cem">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="git-branch"></i></div>
+                <div>
+                    <p class="acc-stat__label">EDG</p>
+                    <div class="acc-stat__value" id="cnt-edg">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="combine"></i></div>
+                <div>
+                    <p class="acc-stat__label" data-lang="acc-hybrids">Hybrids</p>
+                    <div class="acc-stat__value" id="cnt-hybrids">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="acc-stat">
+                <div class="acc-stat__icon"><i data-lucide="wheat"></i></div>
+                <div>
+                    <p class="acc-stat__label" data-lang="acc-commodities">Commodities</p>
+                    <div class="acc-stat__value" id="cnt-commodities">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dropzone -->
+    <div class="acc-drop" id="accDrop" role="button" tabindex="0" aria-label="Upload MTM file">
+        <div class="acc-drop__icon">
+            <span class="acc-drop__icon-glyph" style="display:grid;place-items:center;"><i data-lucide="upload"></i></span>
+            <span class="acc-drop__spin"><i data-lucide="loader-2"></i></span>
+        </div>
+        <div>
+            <p class="acc-drop__title" data-lang="mtm-drop-title">Drop the MTM file here, or click to browse</p>
+            <p class="acc-drop__hint" data-lang="mtm-drop-hint">Or use “Import from folder” to pull the regulatory MTM files · .xlsx, .csv or .tsv</p>
+        </div>
+        <input type="file" id="accFile" accept=".xlsx,.xlsm,.csv,.tsv" hidden>
+    </div>
+    <div class="acc-asof" id="accAsOf"></div>
+
+    <!-- Date picker + Load -->
+    <div class="acc-datecard">
+        <p class="acc-datecard__label" data-lang="acc-date-label">Date</p>
+        <div class="acc-date-wrap">
+            <span class="acc-date-icon"><i data-lucide="calendar"></i></span>
+            <input type="text" id="accDate" class="acc-date-input" readonly autocomplete="off">
+        </div>
+        <button type="button" id="accLoad" class="acc-load-btn">
+            <i data-lucide="refresh-cw"></i><span data-lang="acc-load">Load</span>
+        </button>
+        <button type="button" id="accImport" class="acc-load-btn acc-import-btn">
+            <i data-lucide="folder-input"></i><span data-lang="acc-import-folder">Import from folder</span>
+        </button>
+        <button type="button" id="accValidation" class="acc-load-btn acc-validation-btn">
+            <i data-lucide="mail-check"></i><span data-lang="acc-validation">Validation</span>
+        </button>
+        <button type="button" id="accRecon" class="acc-load-btn acc-recon-btn">
+            <i data-lucide="git-compare"></i><span data-lang="acc-recon">Recon</span>
+        </button>
+        <button type="button" id="accEndProcess" class="acc-load-btn acc-endproc-btn">
+            <i data-lucide="flag"></i><span data-lang="acc-endproc">End Process</span>
+        </button>
+    </div>
+
+    <!-- LOB tables -->
+    <div class="row g-3 mt-1" id="accTables">
+        <div class="col-12"><div class="acc-tcard" data-lob="CEM"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="EDG"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="Hybrids"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="Commodities"></div></div>
+        <div class="col-12"><div class="acc-tcard" data-lob="COE"></div></div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<!-- DataTables Buttons (export model from the New Deals pages) -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Register JSZip with DataTables Buttons (needed for the Excel export).
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (window.jQuery && $.fn.dataTable && $.fn.dataTable.Buttons &&
+        typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script>
+(function () {
+    'use strict';
+
+    // ── i18n helper (dynamic strings) ───────────────────────────────────────
+    var _TRANS = {};
+    (function () {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        fetch('/static/data/translations/' + lang + '.json')
+            .then(function (r) { return r.json(); })
+            .then(function (d) { _TRANS = d || {}; })
+            .catch(function () {});
+    })();
+    function t(k, fb) { return _TRANS[k] || fb || k; }
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Fire a SweetAlert toast AFTER the heavy table reflow settles (double rAF), so
+    // its animation/timer bar never freezes mid-way on a blocked main thread.
+    function deferToast(opts) {
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () { Swal.fire(opts); });
+        });
+    }
+
+    // Button loading feedback (New Deals model): swap the icon for a pure-CSS spinner
+    // (no lucide dependency) while busy and disable it; restore the markup when done.
+    function accBtnBusy(btn, on) {
+        if (!btn) return;
+        if (on) {
+            if (btn.dataset.html === undefined) btn.dataset.html = btn.innerHTML;
+            btn.disabled = true; btn.classList.add('is-busy');
+            var lbl = btn.querySelector('span');
+            btn.innerHTML = '<span class="acc-spinner"></span><span>' + esc(lbl ? lbl.textContent : '') + '</span>';
+        } else {
+            btn.disabled = false; btn.classList.remove('is-busy');
+            if (btn.dataset.html !== undefined) { btn.innerHTML = btn.dataset.html; delete btn.dataset.html; if (window.lucide) lucide.createIcons(); }
+        }
+    }
+
+    // Recon result map {rowId: {p:{ok,reg}, c:{ok,reg}}} — drives the factor badges.
+    var accRecon = {};
+
+    // LOB → DOM ids (COE first widget, COE table last — same key set)
+    var LOBS = [
+        { key: 'CEM',         name: 'CEM',         card: 'CEM',         count: 'cnt-cem' },
+        { key: 'EDG',         name: 'EDG',         card: 'EDG',         count: 'cnt-edg' },
+        { key: 'Hybrids',     name: 'Hybrids',     card: 'Hybrids',     count: 'cnt-hybrids' },
+        { key: 'Commodities', name: 'Commodities', card: 'Commodities', count: 'cnt-commodities' },
+        { key: 'COE',         name: 'COE',         card: 'COE',         count: 'cnt-coe' }
+    ];
+    var dtInst = {};
+    var selectedByTable = {};
+    var currentHeaders = {};
+    var currentDate = null;          // YYYY-MM-DD of the dataset currently shown
+
+    // Fixed table columns (always shown, even before any import). Must match the
+    // backend _MTM_FIXED_HEADERS order exactly. Comments must stay LAST.
+    var ACC_FIXED_HEADERS = [
+        'Código IF', 'Data Início',
+        'PARTE / Conta', 'Nome Simplificado Parte',
+        'CONTRAPARTE / Conta', 'Nome Simplificado Contraparte',
+        'Data Vencimento', 'Valor MTM', 'Comments'
+    ];
+
+    // ── count-up animation (Emil: motion conveys the change) ────────────────
+    function countTo(el, target) {
+        if (!el) return;
+        var from = parseInt(el.textContent.replace(/\D/g, ''), 10) || 0;
+        if (from === target) { el.textContent = target; return; }
+        // feedback pop on the widget card (restart animation if re-triggered)
+        var card = el.closest('.acc-stat');
+        if (card) {
+            card.classList.remove('is-pop');
+            void card.offsetWidth;                 // force reflow → restartable
+            card.classList.add('is-pop');
+            card.addEventListener('animationend', function h() {
+                card.classList.remove('is-pop');
+                card.removeEventListener('animationend', h);
+            });
+        }
+        var t0 = null, dur = 600;
+        el.classList.toggle('is-bumped', target > 0);
+        function step(ts) {
+            if (t0 === null) t0 = ts;
+            var p = Math.min(1, (ts - t0) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);                 // ease-out cubic
+            el.textContent = Math.round(from + (target - from) * eased);
+            if (p < 1) requestAnimationFrame(step);
+            else el.textContent = target;
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ── status badge + actions cell ─────────────────────────────────────────
+    // Status badge — same palette as the New Deals pages.
+    var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'text-bg-info',
+                             'missing accrual': 'text-bg-warning', 'success': 'text-bg-success', 'check': 'text-bg-warning' };
+
+    // Factor cell (cols 9/10) render → recon badge: green=match, red=divergence (tooltip
+    // shows the registered factor). Plain text when no recon for that leg.
+    function factorRender(ci) {
+        var leg = ci === 9 ? 'p' : 'c';
+        return function (d, type, row) {
+            var v = (d == null ? '' : d);
+            if (type !== 'display') return v;
+            var id = row ? String(row[row.length - 1]) : '';
+            var rc = accRecon[id];
+            if (rc && rc[leg]) {
+                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success">' + esc(v) + '</span>';
+                var reg = rc[leg].reg || '—';
+                return '<span class="badge rounded-pill text-bg-danger" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
+            }
+            return esc(v);
+        };
+    }
+    // Comments cell (col 11) → inline editable input on Check rows (recon enables it).
+    function commentsRender(d, type, row) {
+        var v = (d == null ? '' : d);
+        if (type !== 'display') return v;
+        var status = row ? String(row[row.length - 4] || '').toLowerCase() : '';
+        if (status === 'check') {
+            var id = row ? String(row[row.length - 1]) : '';
+            return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
+                   '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
+        }
+        return esc(v);
+    }
+    function statusBadge(s) {
+        s = s || 'New';
+        var key = String(s).toLowerCase();
+        var cls = ACC_STATUS_BADGE[key] || 'text-bg-info';
+        return '<span class="badge badge-label ' + cls + ' rounded-pill">' + esc(t('acc-st-' + key, s)) + '</span>';
+    }
+    // Action buttons — same style/colours as the New Deals pages (Bootstrap
+    // solid circular buttons + Tabler icons): edit=info, delete=danger, send=primary.
+    function actionsCell() {
+        return '<div class="acc-actions">' +
+            '<a href="#" class="btn btn-info btn-sm rounded-circle acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i class="ti ti-edit"></i></a>' +
+            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-confirm', 'Confirm')) + '"><i class="ti ti-circle-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle acc-act-del" title="' + esc(t('acc-del', 'Delete')) + '"><i class="ti ti-trash"></i></a>' +
+            '</div>';
+    }
+    function getRowId(dt, tr) { var d = dt.row(tr).data(); return d ? String(d[d.length - 1]) : ''; }
+
+    // ── Export (same model as the New Deals pages: Copy/CSV/Excel/Print/PDF) ──
+    function buildExport(card, dt, lob, n) {
+        if (!($.fn.dataTable && $.fn.dataTable.Buttons)) return;
+        var tools = card.querySelector('.acc-tcard__tools');
+        if (!tools) return;
+        var cols = [];
+        for (var c = 2; c <= n + 2; c++) cols.push(c);        // Status + all data columns (skip checkbox/actions)
+        var xopts = { columns: cols, modifier: { page: 'all' }, orthogonal: 'export' };
+        var xtitle = 'MTM ' + lob.name + (currentDate ? ' ' + currentDate : '');
+        try {
+            new $.fn.dataTable.Buttons(dt, {
+                buttons: [{
+                    extend: 'collection',
+                    text: '<i class="ti ti-download me-1"></i> ' + t('acc-export', 'Export'),
+                    className: 'btn btn-sm btn-info bg-gradient dropdown-toggle acc-export-btn',
+                    autoClose: true,
+                    buttons: [
+                        { extend: 'copy',  text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',            className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',     className: 'dropdown-item', bom: true, exportOptions: xopts, title: xtitle },
+                        { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel', className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'print', text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',         className: 'dropdown-item', exportOptions: xopts, title: xtitle },
+                        { extend: 'pdf',   text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',          className: 'dropdown-item', exportOptions: xopts, title: xtitle }
+                    ]
+                }]
+            });
+            $(dt.buttons().container()).prependTo(tools);     // Export sits first in the toolbar
+        } catch (e) {}
+    }
+
+    // ── render one LOB table (fixed checkbox / actions / status columns) ─────
+    function renderTable(lob, headers, rows) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        if (!card) return;
+        var tableId = 'tbl-' + lob.card.toLowerCase();
+        headers = headers || []; rows = rows || [];
+        var n = headers.length;
+        currentHeaders[tableId] = headers;
+        selectedByTable[tableId] = new Set();
+
+        var head =
+            '<div class="acc-tcard__head">' +
+                '<h3 class="acc-tcard__name">' + esc(lob.name) + '</h3>' +
+                '<span class="acc-tcard__badge" id="badge-' + tableId + '">' + rows.length + '</span>' +
+                '<div class="acc-tcard__tools">' +
+                    '<button class="acc-btn acc-bulk-del" type="button" style="display:none;">' +
+                        '<i data-lucide="trash-2"></i><span>' + esc(t('acc-del', 'Delete')) + ' (<span class="acc-bulk-count">0</span>)</span></button>' +
+                    '<select class="acc-tool-select" data-entries="' + tableId + '">' +
+                        '<option value="25">25</option><option value="50">50</option>' +
+                        '<option value="100">100</option><option value="150">150</option>' +
+                    '</select>' +
+                    '<div class="dropdown">' +
+                        '<button class="acc-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">' +
+                            '<i data-lucide="columns-3"></i><span>' + esc(t('acc-columns', 'Columns')) + '</span></button>' +
+                        '<div class="dropdown-menu dropdown-menu-end acc-cols-menu" id="cols-' + tableId + '"></div>' +
+                    '</div>' +
+                    '<button class="acc-btn" type="button" data-clear="' + tableId + '">' +
+                        '<i data-lucide="filter-x"></i><span>' + esc(t('acc-clear', 'Clear filters')) + '</span></button>' +
+                    '<button class="acc-btn acc-send-batch" type="button">' +
+                        '<i data-lucide="send"></i><span>' + esc(t('acc-batch-send', 'Send batch')) + '</span></button>' +
+                '</div>' +
+            '</div>';
+
+        // Fixed columns: checkbox (with select-all), actions, status — then data.
+        var titleTh = '<th class="acc-cb-th"><input type="checkbox" class="acc-cb-all" title="' + esc(t('acc-select-all', 'Select all')) + '"></th>' +
+                      '<th class="acc-act-th">' + esc(t('acc-actions', 'Actions')) + '</th>' +
+                      '<th class="acc-status-th">' + esc(t('acc-status', 'Status')) + '</th>' +
+                      headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+        var filterTh = '<th></th><th></th>' +
+                       '<th><input type="text" class="acc-col-filter" data-col="2" placeholder="' + esc(t('acc-status', 'Status')) + '"></th>' +
+                       headers.map(function (h, i) {
+                           return '<th><input type="text" class="acc-col-filter" data-col="' + (i + 3) + '" placeholder="' + esc(h || t('acc-filter', 'Filter')) + '"></th>';
+                       }).join('');
+
+        card.innerHTML = head +
+            '<div class="acc-tcard__body">' +
+                '<table id="' + tableId + '" class="table table-sm dt-acc w-100">' +
+                    '<thead><tr class="acc-th-title">' + titleTh + '</tr>' +
+                    '<tr class="acc-th-filter">' + filterTh + '</tr></thead><tbody></tbody></table>' +
+            '</div>';
+
+        if (dtInst[tableId]) { try { dtInst[tableId].destroy(); } catch (e) {} }
+
+        // Row layout: [ d0..d(n-1), status, maker, checker, id ]  (id is last)
+        var columns = [
+            { data: null, orderable: false, searchable: false, className: 'acc-cb-col',
+              render: function () { return '<input type="checkbox" class="acc-row-cb">'; } },
+            { data: null, orderable: false, searchable: false, className: 'acc-act-col',
+              render: function () { return actionsCell(); } },
+            { data: n, className: 'acc-status-col', render: function (d, type) {
+                // Sort key: Missing Accrual ranks first, then the rest alphabetically.
+                if (type === 'sort' || type === 'type') {
+                    var k = String(d || '').toLowerCase();
+                    return (k === 'missing accrual' ? '0' : '1') + k;
+                }
+                if (type === 'export') return String(d || '');   // export plain status text
+                return statusBadge(d);
+            } }
+        ];
+        for (var ci = 0; ci < n; ci++) {
+            if (headers[ci] === 'Comments') columns.push({ data: ci, defaultContent: '', render: commentsRender });
+            else                            columns.push({ data: ci, defaultContent: '' });
+        }
+
+        var dt = $('#' + tableId).DataTable({
+            data: rows, columns: columns,
+            orderCellsTop: true, autoWidth: true, scrollX: true,
+            pageLength: 25, lengthChange: false,
+            dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",
+            language: {
+                info:         t('acc-dt-info', 'Showing _START_ to _END_ of _TOTAL_'),
+                infoEmpty:    t('acc-dt-empty', 'Showing 0 to 0 of 0'),
+                infoFiltered: t('acc-dt-filtered', '(filtered from _MAX_)'),
+                zeroRecords:  t('acc-dt-zero', 'No matching records'),
+                emptyTable:   t('acc-empty', 'No contracts in this book.'),
+                paginate: { previous: '‹', next: '›' }
+            }
+        });
+        dtInst[tableId] = dt;
+        buildExport(card, dt, lob, n);
+        dt.on('draw.acc', function () {
+            if (window.lucide) lucide.createIcons();
+            syncSelectionUI(lob, tableId);
+        });
+
+        $(card).off('keyup.acccol change.acccol').on('keyup.acccol change.acccol', '.acc-col-filter', function () {
+            var col = +this.getAttribute('data-col');
+            if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
+        });
+
+        wireToolbar(lob, tableId, dt);
+        wireRowActions(lob, tableId, dt);
+        if (window.lucide) lucide.createIcons();
+        syncSelectionUI(lob, tableId);
+    }
+
+    // ── toolbar: show-entries · columns dropdown · clear ────────────────────
+    function wireToolbar(lob, tableId, dt) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+
+        var sel = card.querySelector('[data-entries="' + tableId + '"]');
+        if (sel) sel.addEventListener('change', function () {
+            var d = dtInst[tableId]; if (d) d.page.len(+this.value).draw();
+        });
+
+        var clear = card.querySelector('[data-clear="' + tableId + '"]');
+        if (clear) clear.addEventListener('click', function () {
+            card.querySelectorAll('.acc-col-filter').forEach(function (i) { i.value = ''; });
+            var d = dtInst[tableId]; if (d) d.columns().search('').draw();
+        });
+
+        var sb = card.querySelector('.acc-send-batch');
+        if (sb) sb.addEventListener('click', function () { sendBatch(lob, this); });
+
+        var menu = card.querySelector('#cols-' + tableId);
+        if (menu && dt) {
+            var html = '';
+            dt.columns().every(function () {
+                var idx = this.index();
+                if (idx < 2) return;                         // skip checkbox + actions
+                var title = $(this.header()).text() || ('Col ' + (idx + 1));
+                html += '<div class="form-check">' +
+                    '<input class="form-check-input acc-col-vis" type="checkbox" checked data-col="' + idx + '" id="vis-' + tableId + '-' + idx + '">' +
+                    '<label class="form-check-label" for="vis-' + tableId + '-' + idx + '">' + esc(title) + '</label></div>';
+            });
+            menu.innerHTML = html;
+            menu.querySelectorAll('.acc-col-vis').forEach(function (cb) {
+                cb.addEventListener('change', function () {
+                    var d = dtInst[tableId]; if (!d) return;
+                    d.column(+this.getAttribute('data-col')).visible(this.checked);
+                });
+            });
+        }
+    }
+
+    // ── selection (row checkbox + select-all + bulk delete) ─────────────────
+    function syncSelectionUI(lob, tableId) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        var dt = dtInst[tableId]; if (!dt) return;
+        var sel = selectedByTable[tableId]; if (!sel) { sel = selectedByTable[tableId] = new Set(); }
+        // Prune ids no longer present (after delete / reload) so the count never
+        // over-reports — only rows that still exist can be selected.
+        if (sel.size) {
+            var present = {};
+            dt.rows().every(function () { var d = this.data(); if (d) present[String(d[d.length - 1])] = 1; });
+            Array.prototype.forEach.call(Array.from(sel), function (id) { if (!present[id]) sel.delete(id); });
+        }
+        // Reflect checkbox state for the rows on the current page.
+        var pageIds = {};
+        card.querySelectorAll('tbody .acc-row-cb').forEach(function (cb) {
+            var tr = cb.closest('tr'); var id = getRowId(dt, tr);
+            pageIds[id] = 1;
+            cb.checked = sel.has(id);
+            if (tr) tr.classList.toggle('acc-row-sel', cb.checked);
+        });
+        var bulk = card.querySelector('.acc-bulk-del');
+        if (bulk) {
+            bulk.style.display = sel.size > 1 ? '' : 'none';
+            var c = bulk.querySelector('.acc-bulk-count'); if (c) c.textContent = sel.size;
+        }
+        // Select-all reflects ALL filtered rows (every page), so the count is the
+        // true total selected — not just the current page.
+        var all = card.querySelector('.acc-cb-all');
+        if (all) {
+            var total = dt.rows({ search: 'applied' }).count();
+            all.checked = total > 0 && sel.size >= total;
+            all.indeterminate = sel.size > 0 && sel.size < total;
+        }
+    }
+
+    function wireRowActions(lob, tableId, dt) {
+        var card = document.querySelector('.acc-tcard[data-lob="' + lob.card + '"]');
+        var sel = selectedByTable[tableId];
+        $(card).off('.accrow');
+
+        $(card).on('change.accrow', '.acc-row-cb', function () {
+            var id = getRowId(dt, $(this).closest('tr')[0]);
+            if (this.checked) sel.add(id); else sel.delete(id);
+            syncSelectionUI(lob, tableId);
+        });
+        $(card).on('change.accrow', '.acc-cb-all', function () {
+            var on = this.checked;
+            // Toggle ALL filtered rows across every page (not just the current page).
+            dt.rows({ search: 'applied' }).every(function () {
+                var d = this.data(); if (!d) return; var id = String(d[d.length - 1]);
+                if (!id) return;
+                if (on) sel.add(id); else sel.delete(id);
+            });
+            syncSelectionUI(lob, tableId);
+        });
+        $(card).on('click.accrow', '.acc-bulk-del', function (e) { e.preventDefault(); confirmDelete(lob, tableId, Array.from(sel)); });
+        $(card).on('click.accrow', '.acc-act-del',  function (e) { e.preventDefault(); confirmDelete(lob, tableId, [getRowId(dt, $(this).closest('tr')[0])]); });
+        $(card).on('click.accrow', '.acc-act-edit', function (e) { e.preventDefault(); startEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-send', function (e) { e.preventDefault(); sendRow(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-save', function (e) { e.preventDefault(); saveEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-cancel', function (e) { e.preventDefault(); dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
+        // Inline Comments (recon-enabled on Check rows) → save without changing status.
+        $(card).on('change.accrow blur.accrow', '.acc-comment-inp', function () {
+            var id = this.getAttribute('data-id'); if (!id) return;
+            postJSON('/api/mtm-swap/row/comment', { date: currentDate, lob: lob.key, id: id, comment: this.value })
+                .catch(function () {});
+        });
+        // Double-click a row → PU/Factor file preview (New Deals model).
+        $(card).on('dblclick.accrow', 'tbody tr', function (e) {
+            if ($(e.target).closest('.acc-cb-col, .acc-act-col, input, a, .btn').length) return;
+            var rd = dt.row(this).data();
+            if (rd) showAccrualPreview(lob, rd);
+        });
+    }
+
+    function postJSON(url, body) {
+        return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(function (r) { return r.json(); });
+    }
+    function errSwal(msg) { Swal.fire({ icon: 'error', title: t('acc-err-title', 'Error'), text: msg || '', confirmButtonColor: '#0066cc' }); }
+    function netErr()     { Swal.fire({ icon: 'error', title: t('acc-err-title', 'Error'), text: t('acc-err-net', 'Network error.'), confirmButtonColor: '#0066cc' }); }
+
+    function confirmDelete(lob, tableId, ids) {
+        if (!ids.length) return;
+        var bulk = ids.length > 1;
+        Swal.fire({
+            icon: 'warning', title: t('acc-del-title', 'Delete?'),
+            text: bulk ? (t('acc-del-many', 'Delete the selected rows?') + ' (' + ids.length + ')') : t('acc-del-one', 'Delete this row?'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-trash"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            var url  = bulk ? '/api/mtm-swap/rows/delete' : '/api/mtm-swap/row/delete';
+            var body = bulk ? { date: currentDate, lob: lob.key, ids: ids } : { date: currentDate, lob: lob.key, id: ids[0] };
+            postJSON(url, body).then(function (j) {
+                if (!j.success) { errSwal(j.error); return; }
+                var dt = dtInst[tableId]; var del = new Set(ids.map(String));
+                dt.rows(function (idx, d) { return d && del.has(String(d[d.length - 1])); }).remove().draw(false);
+                ids.forEach(function (id) { selectedByTable[tableId].delete(id); });
+                if (j.counts) countTo(document.getElementById(lob.count), j.counts[lob.key] || 0);
+                syncSelectionUI(lob, tableId);
+            }).catch(netErr);
+        });
+    }
+
+    function startEdit(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var rd = dt.row(tr).data(); if (!rd) return;
+        var n = currentHeaders[tableId].length;
+        var $tds = $(tr).children('td');
+        for (var i = 0; i < n; i++) {
+            var v = rd[i] == null ? '' : rd[i];
+            $tds.eq(3 + i).html('<input type="text" class="acc-edit-inp" value="' + esc(v) + '">');
+        }
+        $tds.eq(1).html('<div class="acc-actions">' +
+            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-save" title="' + esc(t('acc-save', 'Save')) + '"><i class="ti ti-device-floppy"></i></a>' +
+            '<a href="#" class="btn btn-secondary btn-sm rounded-circle acc-act-cancel" title="' + esc(t('swal-cancel', 'Cancel')) + '"><i class="ti ti-x"></i></a></div>');
+    }
+
+    function saveEdit(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
+        var n = currentHeaders[tableId].length; var cells = [];
+        $(tr).children('td').slice(3, 3 + n).each(function () { cells.push($(this).find('input').val()); });
+        postJSON('/api/mtm-swap/row/edit', { date: currentDate, lob: lob.key, id: id, cells: cells }).then(function (j) {
+            if (!j.success) { errSwal(j.error); return; }
+            if (j.row) dt.row(tr).data(j.row).draw(false);
+        }).catch(netErr);
+    }
+
+    function sendRow(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
+        postJSON('/api/mtm-swap/row/send', { date: currentDate, lob: lob.key, id: id }).then(function (j) {
+            if (!j.success) {
+                if (j.error === 'same_user') {
+                    Swal.fire({ icon: 'warning', title: t('acc-send-block-title', 'Not allowed'),
+                                text: t('acc-send-block', 'A different user must send a row you changed.'), confirmButtonColor: '#0066cc' });
+                } else { errSwal(j.error); }
+                return;
+            }
+            if (j.row) dt.row(tr).data(j.row).draw(false);
+        }).catch(netErr);
+    }
+
+    // ── PU/Factor update records (CETIP swap "Atualização de PU/Fator") ──────
+    // One swap row → 1/2/4 records depending on the parties and which legs are VCP.
+    // Account-size rule: the LARGER account is role/curve "01", the smaller is "00".
+    // Updaters = our own group participants (prefixes below); an external bank
+    // counterparty is not an updater → only the bank's view is generated.
+    var ACC_BANK_PREFIXES = ['73760', '04880', '85398', '00041'];
+
+    function _accDigits(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+    function _accPrefix(acc) { return _accDigits(acc).slice(0, 5); }
+    function _accRandom10() { var s = ''; for (var i = 0; i < 10; i++) s += Math.floor(Math.random() * 10); return s; }
+    function _accTodayYmd() {
+        var d = new Date();
+        return '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    }
+    // Factor → "2 inteiros + 8 decimais", sem ponto. 1.00000000 → "0100000000".
+    function _accFatorFmt(f) {
+        var n = Math.abs(parseFloat(String(f == null ? '' : f).replace(',', '.')));
+        if (!isFinite(n)) n = 0;
+        var p = n.toFixed(8).split('.');           // ["1","00000000"]
+        var ip = p[0].length < 2 ? ('00' + p[0]).slice(-2) : p[0].slice(-2);
+        return ip + p[1];
+    }
+
+    function buildAccrualRecords(row) {
+        var codigoIf = String(row[0] || '').trim();
+        var accP = row[3], idxP = String(row[5] || '').trim().toUpperCase();
+        var accC = row[6], idxC = String(row[8] || '').trim().toUpperCase();
+        var fatP = row[9],  fatC = row[10];
+        var numP = parseInt(_accDigits(accP) || '0', 10);
+        var numC = parseInt(_accDigits(accC) || '0', 10);
+        // Larger account → "01", smaller → "00" (role == curve id for that leg).
+        var roleP = numP > numC ? '01' : '00';
+        var roleC = numC > numP ? '01' : '00';
+        // VCP legs to update (curve + its factor).
+        var legs = [];
+        if (idxP === 'VCP') legs.push({ curve: roleP, fator: fatP, side: 'P' });
+        if (idxC === 'VCP') legs.push({ curve: roleC, fator: fatC, side: 'C' });
+        // Updaters: PARTE (our house entity) always; CONTRAPARTE only when it's
+        // another of our group participants (prefix in the set, different from PARTE).
+        var prefP = _accPrefix(accP), prefC = _accPrefix(accC);
+        var updaters = [{ papel: roleP }];
+        if (ACC_BANK_PREFIXES.indexOf(prefC) >= 0 && prefC !== prefP) updaters.push({ papel: roleC });
+
+        var today = _accTodayYmd();
+        var recs = [];
+        updaters.forEach(function (u) {
+            legs.forEach(function (lg) {
+                recs.push({
+                    sistema: 'SWAP', tipoLinha: '1', codOper: '0015', codContrato: codigoIf,
+                    papel: u.papel, tipoAtual: '00', curva: lg.curve, dataPuFator: today,
+                    meuNumero: _accRandom10(), puAtual: '                      ' /* 22 spaces */,
+                    fatorAtual: _accFatorFmt(lg.fator)
+                });
+            });
+        });
+        return recs;
+    }
+
+    var ACC_REC_HEADERS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Código do Contrato',
+        'Papel', 'Tipo de Atualização', 'Curva', 'Data PU / Fator', 'Meu Número', 'PU para Atualização', 'Fator para Atualização'];
+    var ACC_REC_KEYS = ['sistema', 'tipoLinha', 'codOper', 'codContrato', 'papel', 'tipoAtual', 'curva',
+        'dataPuFator', 'meuNumero', 'puAtual', 'fatorAtual'];
+
+    function showAccrualPreview(lob, row) {
+        var codigoIf = String(row[0] || '').trim();
+        var recs = buildAccrualRecords(row);
+        if (!recs.length) {
+            Swal.fire({ icon: 'info', title: t('acc-prev-title', 'PU / Factor preview'),
+                        text: t('acc-prev-none', 'This swap has no VCP leg to update.'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        // Vertical layout: one ROW per field, one COLUMN per record.
+        var multi = recs.length > 1;
+        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+            '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">' + esc(t('acc-prev-field', 'Field')) + '</th>' +
+            recs.map(function (r, i) {
+                return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
+                    (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
+            }).join('') + '</tr>';
+        var tbody = ACC_REC_KEYS.map(function (k, fi) {
+            var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
+            var cells = recs.map(function (r) {
+                var disp = (k === 'puAtual') ? '<span style="color:#bbb">' + '·'.repeat(22) + '</span>' : esc(r[k]);
+                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+            }).join('');
+            return '<tr style="background:' + bg + '">' +
+                '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
+                    (fi + 1) + '. ' + esc(ACC_REC_HEADERS[fi]) + '</td>' + cells + '</tr>';
+        }).join('');
+        var html =
+            '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
+                recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
+            '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
+            '<table style="border-collapse:collapse;width:100%">' +
+            '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
+        Swal.fire({
+            title: '<span style="font-size:1rem">' + t('acc-prev-title', 'PU / Factor preview') + ' — ' + esc(codigoIf) + '</span>',
+            html: html, width: (recs.length > 2 ? 760 : 600),
+            showConfirmButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', confirmButtonColor: '#0066cc',
+            showCancelButton: true, cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
+            focusConfirm: false,
+            customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (res) {
+            if (res.isConfirmed) downloadAccrualFile(recs, codigoIf);
+        });
+    }
+
+    // Fixed-width record line (matches the batch file the backend writes):
+    // "SWAP "(5) + tipoLinha(1) + codOper(4) + códContrato + papel(2) + tipoAtual(2) +
+    // curva(2) + data(8) + meuNúmero(10) + PU(22 spaces) + fator(10).
+    function accRecordLine(r) {
+        return String(r.sistema).padEnd(5) + r.tipoLinha + r.codOper + r.codContrato +
+               r.papel + r.tipoAtual + r.curva + r.dataPuFator + r.meuNumero + r.puAtual + r.fatorAtual;
+    }
+
+    function downloadAccrualFile(recs, codigoIf) {
+        var content = recs.map(accRecordLine).join('\r\n');
+        var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'SWAP_' + (_accDigits(codigoIf) || codigoIf) + '_' + _accTodayYmd() + '.txt';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // Block file generation when any row is 'Missing Accrual' — list them instead.
+    function showMissingAccrual(missing) {
+        var rows = (missing || []).map(function (m) {
+            return '<tr><td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.lob) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.codigo) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.id) + '</td></tr>';
+        }).join('');
+        Swal.fire({
+            icon: 'warning', width: 620,
+            title: t('acc-missing-title', 'Missing Accrual — file not generated'),
+            html: '<p style="font-size:.86em;color:#555;margin:0 0 10px">' +
+                    t('acc-missing-desc', 'The contracts below have no updated factor. Resolve them before generating the file:') + '</p>' +
+                  '<div style="max-height:48vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px">' +
+                  '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#343a40;color:#fff">' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">LOB</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">Código IF</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+            confirmButtonColor: '#0066cc', customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient' }
+        });
+    }
+
+    // ── batch send → split by view → ACCRUAL_<VIEW>-<LOB> in the Conecta folder ─
+    function sendBatch(lob, btn) {
+        Swal.fire({
+            icon: 'question', title: t('acc-batch-confirm-title', 'Send batch?'),
+            text: lob.name + ' — ' + t('acc-batch-confirm', 'Generates the files in the Batch Conecta folder.'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-send"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#0066cc', cancelButtonColor: '#dc3545', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            accBtnBusy(btn, true);
+            postJSON('/api/mtm-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
+                accBtnBusy(btn, false);
+                if (!j.success) {
+                    if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
+                    errSwal(j.error); return;
+                }
+                var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join('<br>');
+                deferToast({ icon: 'success', backdrop: true, timer: 4000, timerProgressBar: true, showConfirmButton: false,
+                            title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0),
+                            html: names ? '<div style="font-family:monospace;font-size:.82em">' + names + '</div>' : undefined });
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
+        });
+    }
+
+    // ── EOM Validation → generate all LOB batch files + e-mail Lawton/Atacama ─
+    function runValidation(dateISO) {
+        var btn = document.getElementById('accValidation');
+        Swal.fire({
+            icon: 'question', title: t('acc-validation-title', 'Run EOM Validation?'),
+            text: t('acc-validation-confirm', 'Generates all batch files and e-mails the Lawton/Atacama files to OTC Ops.'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-send"></i>',
+            cancelButtonText: '<i class="ti ti-x"></i>', confirmButtonColor: '#0066cc', cancelButtonColor: '#dc3545',
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            accBtnBusy(btn, true);
+            postJSON('/api/mtm-swap/validation', { date: dateISO }).then(function (j) {
+                accBtnBusy(btn, false);
+                if (!j.success) {
+                    if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
+                    errSwal(j.error); return;
+                }
+                var att = (j.attached || []).join('<br>');
+                Swal.fire({
+                    icon: (j.mail ? 'success' : 'warning'),
+                    title: t('acc-validation-done', 'Validation generated'),
+                    html: (j.total || 0) + ' ' + t('acc-prev-records', 'record(s)') + ' · ' + (j.files || []).length + ' file(s)' +
+                          (att ? '<div style="margin-top:10px;font-size:.85em;text-align:left"><b>' + esc(t('acc-validation-attached', 'Attached to e-mail')) + ':</b><br><span style="font-family:monospace">' + att + '</span></div>' : '') +
+                          (j.mail ? '' : '<div style="margin-top:10px;color:#dc3545;font-size:.82em">' + esc(t('acc-validation-mailfail', 'Files generated, but the e-mail could not be sent.')) + '</div>'),
+                    confirmButtonColor: '#0066cc', customClass: { confirmButton: 'bg-gradient', htmlContainer: 'text-start' }
+                });
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
+        });
+    }
+
+    // ── Recon → reads operacoes.* from the run folder, matches the saved factors ─
+    function runRecon(dateISO) {
+        var btn = document.getElementById('accRecon');
+        accBtnBusy(btn, true);
+        currentDate = dateISO;
+        var fd = new FormData();
+        fd.append('date', dateISO);
+        fetch('/api/mtm-swap/recon', { method: 'POST', body: fd })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                accBtnBusy(btn, false);
+                if (!res.ok || !res.j.success) { errSwal((res.j && res.j.error) || 'Error'); return; }
+                applyResult(res.j);
+            })
+            .catch(function () { accBtnBusy(btn, false); netErr(); });
+    }
+
+    // ── End Process → all Check rows must be commented, then final-status e-mail ─
+    function showUncommented(pending) {
+        var rows = (pending || []).map(function (m) {
+            return '<tr><td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.lob) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.codigo) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.id) + '</td></tr>';
+        }).join('');
+        Swal.fire({
+            icon: 'warning', width: 620, backdrop: true,
+            title: t('acc-endproc-pending-title', 'Comment required'),
+            html: '<p style="font-size:.86em;color:#555;margin:0 0 10px">' +
+                    t('acc-endproc-pending-desc', 'The contracts below are in Check status without a comment. Comment them before ending the process:') + '</p>' +
+                  '<div style="max-height:48vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px">' +
+                  '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#343a40;color:#fff">' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">LOB</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">Código IF</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+            confirmButtonColor: '#0066cc', customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient' }
+        });
+    }
+
+    function runEndProcess(dateISO) {
+        var btn = document.getElementById('accEndProcess');
+        Swal.fire({
+            icon: 'question', backdrop: true, title: t('acc-endproc-title', 'End the EOM process?'),
+            text: t('acc-endproc-confirm', 'Sends the final status e-mail to OTC Ops.'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-flag"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#157347', cancelButtonColor: '#dc3545', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            accBtnBusy(btn, true);
+            postJSON('/api/mtm-swap/end-process', { date: dateISO }).then(function (j) {
+                accBtnBusy(btn, false);
+                if (!j.success) {
+                    if (j.error === 'uncommented') { showUncommented(j.pending); return; }
+                    errSwal(j.error); return;
+                }
+                Swal.fire({
+                    icon: 'success', backdrop: true, title: t('acc-endproc-done', 'Process finalized'),
+                    html: (j.checks ? (j.checks + ' ' + t('acc-endproc-checks', 'check row(s) reported')) :
+                                      t('acc-endproc-nodiv', 'No divergences identified.')) +
+                          '<div style="margin-top:8px;font-size:.85em;color:#555">' + esc(t('acc-endproc-mail', 'Final status e-mail sent to OTC Ops.')) + '</div>',
+                    confirmButtonColor: '#0066cc', customClass: { confirmButton: 'bg-gradient' }
+                });
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
+        });
+    }
+
+    // ── upload + process ────────────────────────────────────────────────────
+    var drop = document.getElementById('accDrop');
+    var fileInput = document.getElementById('accFile');
+
+    function setBusy(b) { drop.classList.toggle('is-busy', b); }
+
+    // operacoes → recon; CEM/EDG/HYB → factor enrichment; anything else → VCP process.
+    function fileKind(file) {
+        var base = String(file.name || '').replace(/\.[^.]+$/, '').trim().toLowerCase()
+                       .normalize('NFD').replace(/[̀-ͯ]/g, '');   // strip accents
+        if (base.indexOf('operac') === 0) return 'operacoes';
+        if (base.indexOf('cem') === 0) return 'cem';
+        if (base.indexOf('edg') === 0) return 'edg';
+        if (base.indexOf('hyb') === 0) return 'hyb';
+        return 'vcp';
+    }
+
+    function uploadFile(file) {
+        if (!file) return;
+        setBusy(true);
+        var kind = fileKind(file);
+        var fd = new FormData();
+        fd.append('file', file);
+        var url = '/api/mtm-swap/process';
+        if (kind === 'operacoes') {
+            url = '/api/mtm-swap/recon';
+            fd.append('date', currentDate || pickedDateISO());
+        } else if (kind !== 'vcp') {
+            url = '/api/mtm-swap/factors';
+            fd.append('kind', kind);
+            fd.append('date', currentDate || pickedDateISO());
+        }
+        fetch(url, { method: 'POST', body: fd })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                setBusy(false);
+                if (!res.ok || !res.j.success) {
+                    Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not process the file'),
+                                text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                applyResult(res.j);
+            })
+            .catch(function () {
+                setBusy(false);
+                Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not process the file'),
+                            text: t('acc-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+            });
+    }
+
+    function applyResult(data) {
+        var tables  = data.tables  || {};
+        var counts  = data.counts  || {};
+        accRecon = data.recon || {};                     // drives factor badges + Check comments
+        if (data.date) { currentDate = data.date; syncPicker(data.date); }
+        LOBS.forEach(function (lob) {
+            renderTable(lob, ACC_FIXED_HEADERS, tables[lob.key] || []);
+            countTo(document.getElementById(lob.count), counts[lob.key] || 0);
+        });
+
+        var asof = document.getElementById('accAsOf');
+        if (data.summary && data.recon !== undefined && data.summary.map_entries !== undefined) {  // recon result
+            var s = data.summary;
+            asof.innerHTML = '<b>' + esc(t('acc-recon', 'Recon')) + '</b> &nbsp;·&nbsp; ' +
+                (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') + ' &nbsp;·&nbsp; ' +
+                (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check');
+            deferToast({ icon: (s.check_rows ? 'warning' : 'success'), timer: 3200, timerProgressBar: true,
+                        showConfirmButton: false, backdrop: true,
+                        title: t('acc-recon-done', 'Recon done'),
+                        text: (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') + ' · ' +
+                              (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check') });
+            return;
+        }
+        if (data.factors) {                              // CEM / EDG / HYB enrichment
+            var fx = data.factors;
+            if (fx.missing > 0) {                        // unidentified mappings → Missing Accrual first
+                var fdt = dtInst['tbl-' + String(fx.lob).toLowerCase()];
+                if (fdt) fdt.order([2, 'asc']).draw();
+            }
+            asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
+                ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
+                ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
+            deferToast({ icon: (fx.missing ? 'warning' : 'success'), timer: 2800, timerProgressBar: true,
+                        showConfirmButton: false, backdrop: true,
+                        title: esc(fx.lob) + ' · ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
+                               (fx.missing ? ' · ' + fx.missing + ' ' + t('acc-factors-missing', 'missing accrual') : '') });
+            return;
+        }
+        var dg = data.diagnostics || {};
+        var parts = [];
+        if (data.ref_date) parts.push(t('acc-asof', 'B3 position as of') + ' <b>' + esc(data.ref_date) + '</b>');
+        parts.push((dg.matched || 0) + ' ' + t('acc-classified', 'classified') +
+                   ' · ' + (dg.kept || 0) + ' ' + t('acc-kept', 'kept') +
+                   ' · ' + (dg.total || 0) + ' ' + t('acc-read', 'read'));
+        asof.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+    }
+
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', function () { if (this.files && this.files[0]) uploadFile(this.files[0]); this.value = ''; });
+
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-drag'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('is-drag'); });
+    });
+    drop.addEventListener('drop', function (e) {
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) uploadFile(f);
+    });
+
+    // ── date picker + load-by-date ──────────────────────────────────────────
+    function todayISO() {
+        return (window.moment ? moment() : null) ? moment().format('YYYY-MM-DD') : new Date().toISOString().slice(0, 10);
+    }
+    function pickedDateISO() {
+        var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
+        return (inst && inst.startDate) ? inst.startDate.format('YYYY-MM-DD') : todayISO();
+    }
+    function syncPicker(dateISO) {
+        var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
+        if (inst && window.moment) { var m = moment(dateISO, 'YYYY-MM-DD'); inst.setStartDate(m); inst.setEndDate(m); }
+    }
+    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, ACC_FIXED_HEADERS, []); }); }
+
+    function loadByDate(dateISO, btn) {
+        currentDate = dateISO;
+        accBtnBusy(btn, true);
+        fetch('/api/mtm-swap/data?date=' + encodeURIComponent(dateISO))
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                accBtnBusy(btn, false);
+                if (j && j.success && !j.empty) {
+                    applyResult(j);
+                } else {
+                    accRecon = {};
+                    renderEmpty();
+                    LOBS.forEach(function (lob) { countTo(document.getElementById(lob.count), 0); });
+                    var asof = document.getElementById('accAsOf');
+                    if (asof) asof.innerHTML = t('acc-none-date', 'No data saved for this date.');
+                }
+                if (window.lucide) lucide.createIcons();
+            })
+            .catch(function () { accBtnBusy(btn, false); renderEmpty(); });
+    }
+
+    // ── import straight from the dated run folder (no dropzone) ──────────────
+    function importFromFolder(dateISO) {
+        var btn = document.getElementById('accImport');
+        accBtnBusy(btn, true);
+        currentDate = dateISO;
+        fetch('/api/mtm-swap/import-folder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dateISO })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            accBtnBusy(btn, false);
+            if (!res.ok || !res.j.success) {
+                Swal.fire({ icon: 'error', title: t('acc-err-title', 'Could not import'),
+                            text: (res.j && res.j.error) || 'Error', confirmButtonColor: '#0066cc' });
+                return;
+            }
+            applyResult(res.j);                          // renders tables + counts + diagnostics
+            var ap = res.j.applied || [];
+            ap.forEach(function (a) {                     // Missing Accrual first per enriched book
+                if (a && a.missing > 0) {
+                    var d = dtInst['tbl-' + String(a.lob).toLowerCase()];
+                    if (d) d.order([2, 'asc']).draw();
+                }
+            });
+            var summ = ap.filter(function (a) { return a && !a.error; })
+                         .map(function (a) { return a.lob + ' ' + (a.matched || 0) + '/' + (a.missing || 0); }).join(' · ');
+            deferToast({ icon: 'success', backdrop: true, timer: 3200, timerProgressBar: true, showConfirmButton: false,
+                        title: t('acc-import-done', 'Imported from folder'), text: (summ || undefined) });
+        })
+        .catch(function () { accBtnBusy(btn, false); netErr(); });
+    }
+
+    // ── ANBIMA calendar → default date = last business day of the PREVIOUS month ──
+    var _anbimaHol = null;                               // Set of 'YYYY-MM-DD' holidays
+    function loadAnbima() {
+        return fetch('{{ config.ASSETS_ROOT }}/data/anbima.json')
+            .then(function (r) { return r.json(); })
+            .then(function (arr) { _anbimaHol = new Set((arr || []).map(function (h) { return h.date; })); })
+            .catch(function () { _anbimaHol = new Set(); });
+    }
+    function isBizDay(m) {
+        var wd = m.day();                                // 0=Sun … 6=Sat
+        if (wd === 0 || wd === 6) return false;
+        return !(_anbimaHol && _anbimaHol.has(m.format('YYYY-MM-DD')));
+    }
+    function lastBizDayPrevMonth() {
+        var m = moment().startOf('month').subtract(1, 'day');   // last calendar day of prev month
+        while (!isBizDay(m)) m.subtract(1, 'day');
+        return m;
+    }
+    function defaultDateISO() { return lastBizDayPrevMonth().format('YYYY-MM-DD'); }
+
+    function initDatePicker() {
+        var $d = $('#accDate');
+        if ($d.length && $.fn.daterangepicker) {
+            $d.daterangepicker({
+                singleDatePicker: true, autoApply: true, showDropdowns: true,
+                locale: { format: 'DD/MM/YYYY', applyLabel: 'OK', cancelLabel: t('swal-cancel', 'Cancel') },
+                startDate: moment(), maxDate: moment()
+            });
+        } else if ($d.length) {
+            $d.val(new Date().toLocaleDateString('pt-BR'));
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        renderEmpty();                                   // fixed columns visible immediately
+        initDatePicker();
+        if (window.lucide) lucide.createIcons();
+        var load = document.getElementById('accLoad');
+        if (load) load.addEventListener('click', function () { loadByDate(pickedDateISO(), this); });
+        var imp = document.getElementById('accImport');
+        if (imp) imp.addEventListener('click', function () { importFromFolder(pickedDateISO()); });
+        var val = document.getElementById('accValidation');
+        if (val) val.addEventListener('click', function () { runValidation(pickedDateISO()); });
+        var rec = document.getElementById('accRecon');
+        if (rec) rec.addEventListener('click', function () { runRecon(pickedDateISO()); });
+        var endp = document.getElementById('accEndProcess');
+        if (endp) endp.addEventListener('click', function () { runEndProcess(pickedDateISO()); });
+        // Initial date = ?date= deep-link, else the last ANBIMA business day of the
+        // previous month (MtM reference). Needs the ANBIMA calendar loaded first.
+        loadAnbima().then(function () {
+            var _urlDate = new URLSearchParams(window.location.search).get('date');
+            var d = (_urlDate && /^\d{4}-\d{2}-\d{2}$/.test(_urlDate)) ? _urlDate : defaultDateISO();
+            syncPicker(d);
+            loadByDate(d);
+        });
+    });
+})();
+</script>
+{% endblock extra_javascript %}
