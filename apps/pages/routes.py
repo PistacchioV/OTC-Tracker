@@ -8250,6 +8250,16 @@ def api_generic_nd_update_cache(product, deal_id):
             return jsonify({"success": False, "message": "Deal not found"}), 404
         deals[idx].update(updates)
         _atomic_write_json(file_path, deals)
+        updated_deal = deals[idx].copy()
+
+    # Save to Intrag NDF when Status→Success and client is BANCO JP MORGAN
+    # (fwd-start / other-publishers share this generic endpoint).
+    cl_lower = (updated_deal.get('Client', '') or '').lower()
+    if str(updates.get('Status', '')) == 'Success' and 'banco' in cl_lower and 'morgan' in cl_lower:
+        try:
+            _save_intrag_ndf_entry(updated_deal)
+        except Exception as exc:
+            log.error('[NDF GENERIC PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:

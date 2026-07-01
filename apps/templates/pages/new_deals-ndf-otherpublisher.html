@@ -932,6 +932,10 @@
             <label class="form-label form-label-sm mb-1">Deal</label>
             <input type="text" class="form-control form-control-sm" id="ar-deal">
           </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">B3 ID <small class="text-muted" data-lang="nd-b3id-hint">(fill to confirm Sent/Error → Success)</small></label>
+            <input type="text" class="form-control form-control-sm" id="ar-b3id" placeholder="B3 ID">
+          </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Trade Date</label>
             <input type="date" class="form-control form-control-sm" id="ar-tradedate">
@@ -4169,6 +4173,7 @@ $(document).ready(function() {
             arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Deal &mdash; NDF Other Publisher';
             $('#ar-le').val(_sh(d[3]));
             $('#ar-deal').val(_sh(d[4]));
+            $('#ar-b3id').val(_sh(d[5]));
             $('#ar-tradedate').val(dmy2isoLocal(_sh(d[6])));
             $('#ar-month').val(_sh(d[7]));
             $('#ar-settledate').val(dmy2isoLocal(_sh(d[8])));
@@ -4250,7 +4255,7 @@ $(document).ready(function() {
                 Status:           editRowId ? 'Pending' : 'New',
                 LE:               $('#ar-le').val().trim(),
                 Deal:             $('#ar-deal').val().trim(),
-                B3_ID:            '',
+                B3_ID:            $('#ar-b3id').val().trim(),
                 TradeDate:        isoToDmy($('#ar-tradedate').val()),
                 Month:            $('#ar-month').val().trim(),
                 SettlementDate:   isoToDmy($('#ar-settledate').val()),
@@ -4285,6 +4290,20 @@ $(document).ready(function() {
                 return;
             }
 
+            // A B3 ID filled in on a deal that is Sent or Error confirms it at B3:
+            // promote to Success and let the PATCH handler push it into Intrag NDF.
+            var promoteToSuccess = false;
+            if (editRowId && editTr && deal.B3_ID) {
+                var _curData = table.row(editTr).data();
+                var _stTmp = document.createElement('div');
+                _stTmp.innerHTML = String((_curData && _curData[STATUS_COL_INDEX]) || '');
+                var curStatus = (_stTmp.textContent || '').trim();
+                if (curStatus === 'Sent' || curStatus === 'Error') {
+                    promoteToSuccess = true;
+                    deal.Status = 'Success';
+                }
+            }
+
             if (editRowId) {
                 var editClient = $('#ar-client').val().trim();
                 fetch('/api/new-deals/other-publishers/cache/' + encodeURIComponent(editRowId) + '?client=' + encodeURIComponent(editClient), {
@@ -4297,7 +4316,12 @@ $(document).ready(function() {
                     if (editTr) table.row(editTr).data(dealJsonToRow(deal)).draw(false);
                     bootstrap.Modal.getInstance(arModalEl).hide();
                     $(arModalEl).removeData('editRowId').removeData('editTr');
-                    Swal.fire({ title: 'Saved', text: 'Deal updated.', icon: 'success', timer: 1800, showConfirmButton: false });
+                    if (promoteToSuccess) {
+                        Swal.fire({ title: t('swal-b3-confirmed-title', 'Confirmed'), text: t('swal-b3-confirmed-text', 'B3 ID saved — status set to Success and sent to Intrag.'), icon: 'success', timer: 2200, showConfirmButton: false });
+                        if (typeof window.fetchNotifications === 'function') window.fetchNotifications();
+                    } else {
+                        Swal.fire({ title: 'Saved', text: 'Deal updated.', icon: 'success', timer: 1800, showConfirmButton: false });
+                    }
                 })
                 .catch(function (err) {
                     Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK' });
