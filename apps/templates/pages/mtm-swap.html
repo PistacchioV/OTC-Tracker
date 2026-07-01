@@ -427,15 +427,6 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         <button type="button" id="accImport" class="acc-load-btn acc-import-btn">
             <i data-lucide="folder-input"></i><span data-lang="acc-import-folder">Import from folder</span>
         </button>
-        <button type="button" id="accValidation" class="acc-load-btn acc-validation-btn">
-            <i data-lucide="mail-check"></i><span data-lang="acc-validation">Validation</span>
-        </button>
-        <button type="button" id="accRecon" class="acc-load-btn acc-recon-btn">
-            <i data-lucide="git-compare"></i><span data-lang="acc-recon">Recon</span>
-        </button>
-        <button type="button" id="accEndProcess" class="acc-load-btn acc-endproc-btn">
-            <i data-lucide="flag"></i><span data-lang="acc-endproc">End Process</span>
-        </button>
     </div>
 
     <!-- LOB tables -->
@@ -545,6 +536,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         'CONTRAPARTE / Conta', 'Nome Simplificado Contraparte',
         'Data Vencimento', 'Valor MTM', 'Comments'
     ];
+    // COE book has its own columns (from the COE file). Comments stays last.
+    var MTM_COE_HEADERS = [
+        'Código do COE', 'Nome Simplificado Emissor', 'Conta Emissor', 'Nome Figura', 'Comments'
+    ];
+    function headersFor(lob) { return (lob && lob.key === 'COE') ? MTM_COE_HEADERS : ACC_FIXED_HEADERS; }
 
     // ── count-up animation (Emil: motion conveys the change) ────────────────
     function countTo(el, target) {
@@ -601,13 +597,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function commentsRender(d, type, row) {
         var v = (d == null ? '' : d);
         if (type !== 'display') return v;
-        var status = row ? String(row[row.length - 4] || '').toLowerCase() : '';
-        if (status === 'check') {
-            var id = row ? String(row[row.length - 1]) : '';
-            return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
-                   '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
-        }
-        return esc(v);
+        // MtM: Comments are always editable inline (no 'check' gate like Accrual).
+        var id = row ? String(row[row.length - 1]) : '';
+        return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
+               '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
     }
     function statusBadge(s) {
         s = s || 'New';
@@ -683,8 +676,6 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                     '</div>' +
                     '<button class="acc-btn" type="button" data-clear="' + tableId + '">' +
                         '<i data-lucide="filter-x"></i><span>' + esc(t('acc-clear', 'Clear filters')) + '</span></button>' +
-                    '<button class="acc-btn acc-send-batch" type="button">' +
-                        '<i data-lucide="send"></i><span>' + esc(t('acc-batch-send', 'Send batch')) + '</span></button>' +
                 '</div>' +
             '</div>';
 
@@ -1231,18 +1222,12 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function uploadFile(file) {
         if (!file) return;
         setBusy(true);
-        var kind = fileKind(file);
+        // MtM: a single endpoint detects swap vs COE by filename and merges into
+        // the selected date (no recon/factors branching like Accrual).
         var fd = new FormData();
         fd.append('file', file);
+        fd.append('date', currentDate || pickedDateISO());
         var url = '/api/mtm-swap/process';
-        if (kind === 'operacoes') {
-            url = '/api/mtm-swap/recon';
-            fd.append('date', currentDate || pickedDateISO());
-        } else if (kind !== 'vcp') {
-            url = '/api/mtm-swap/factors';
-            fd.append('kind', kind);
-            fd.append('date', currentDate || pickedDateISO());
-        }
         fetch(url, { method: 'POST', body: fd })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
             .then(function (res) {
@@ -1267,7 +1252,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         accRecon = data.recon || {};                     // drives factor badges + Check comments
         if (data.date) { currentDate = data.date; syncPicker(data.date); }
         LOBS.forEach(function (lob) {
-            renderTable(lob, ACC_FIXED_HEADERS, tables[lob.key] || []);
+            renderTable(lob, headersFor(lob), tables[lob.key] || []);
             countTo(document.getElementById(lob.count), counts[lob.key] || 0);
         });
 
@@ -1335,7 +1320,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
         if (inst && window.moment) { var m = moment(dateISO, 'YYYY-MM-DD'); inst.setStartDate(m); inst.setEndDate(m); }
     }
-    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, ACC_FIXED_HEADERS, []); }); }
+    function renderEmpty() { LOBS.forEach(function (lob) { renderTable(lob, headersFor(lob), []); }); }
 
     function loadByDate(dateISO, btn) {
         currentDate = dateISO;

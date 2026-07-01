@@ -464,7 +464,11 @@
                 'Accrual Mapped':    { icon: 'git-merge',    color: 'bg-primary' },
                 'Accrual Updated':   { icon: 'pencil',       color: 'bg-info'    },
                 'Accrual Sent':      { icon: 'send',         color: 'bg-success' },
-                'Accrual Deleted':   { icon: 'trash-2',      color: 'bg-danger'  }
+                'Accrual Deleted':   { icon: 'trash-2',      color: 'bg-danger'  },
+                'MTM Imported':      { icon: 'folder-input', color: 'bg-success' },
+                'MTM Updated':       { icon: 'pencil',       color: 'bg-info'    },
+                'MTM Sent':          { icon: 'send',         color: 'bg-success' },
+                'MTM Deleted':       { icon: 'trash-2',      color: 'bg-danger'  }
             };
 
             var PAGE_URL = {
@@ -478,7 +482,8 @@
                 'Recon Comitente':     '/reconciliation-comitente',
                 'Reference Data':      '/reference-data',
                 'Control Panel':       '/control-panel',
-                'Accrual':             '/accrual-swap'
+                'Accrual':             '/accrual-swap',
+                'MtM':                 '/mtm-swap'
             };
             // New Deals pages whose Trade Date filter accepts a ?tradedate= deep-link.
             var NEW_DEALS_PAGES = {
@@ -528,7 +533,7 @@
                     // Date deep-link: Accrual → ?date=, New Deals pages → ?tradedate=
                     // (falls back to the page's own default — today — when absent).
                     if (pageUrl && navDate) {
-                        if (n.page === 'Accrual') {
+                        if (n.page === 'Accrual' || n.page === 'MtM') {
                             pageUrl += '?date=' + encodeURIComponent(navDate);
                         } else if (NEW_DEALS_PAGES[n.page]) {
                             pageUrl += '?tradedate=' + encodeURIComponent(navDate);

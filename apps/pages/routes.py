@@ -2733,6 +2733,416 @@ def mtm_swap():
     return render_template('pages/mtm-swap.html', segment='mtm-swap')
 
 
+# ============================================================================
+#  MtM — Swap Mark-to-Market by line of business (+ COE)
+#  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /
+#             Commodities. Cols A,C,D,E,F,H,K; house account 73760.00-9 in col D;
+#             classified via the latest SWAP position (same join as Accrual).
+#             The file lists contracts PENDING MtM update, so 'Valor MTM' has no
+#             source column and starts blank (K → 'Data Vencimento').
+#  COE  file  "Swap-COE-ConsultaMTMCOE" → COE table. Cols A,B,C,D; col G reference
+#             date must equal the last ANBIMA business day of the PENULTIMATE month.
+#  Disk : MTM_JSON_ROOT/YYYY/MM/DD/mtm_swap_YYYYMMDD.json
+#  Source folder: MTM_SOURCE_ROOT\YYYY\mm. Month\DD
+# ============================================================================
+MTM_SOURCE_ROOT = os.getenv('MTM_SOURCE_ROOT',
+                            r'I:\Confirmation\Derivativos\OTC Tracker\Regulatory\MTM')
+MTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'mtm')
+
+_MTM_ACCOUNT      = '73760009'               # col D house account (73760.00-9), digits only
+_MTM_FILTER_COL   = 3                         # col D
+_MTM_SWAP_BOOKS   = ('CEM', 'EDG', 'Hybrids', 'Commodities')
+_MTM_FIXED_HEADERS = [
+    'Código IF', 'Data Início', 'PARTE / Conta', 'Nome Simplificado Parte',
+    'CONTRAPARTE / Conta', 'Nome Simplificado Contraparte',
+    'Data Vencimento', 'Valor MTM', 'Comments',
+]
+# Source column (0-based) per fixed header: A=0, C=2, D=3, E=4, F=5, H=7, K=10.
+# 'Valor MTM' (pending → blank) and 'Comments' (manual) have no source.
+_MTM_DISPLAY_SRC  = [0, 2, 3, 4, 5, 7, 10, None, None]
+
+_MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emissor', 'Nome Figura', 'Comments']
+_MTM_COE_SRC      = [0, 1, 2, 3, None]        # A,B,C,D (A '#' stripped) + Comments (manual)
+_MTM_COE_REFDATE_COL = 6                       # col G reference date
+
+
+def _mtm_path_for(ymd):
+    return os.path.join(MTM_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8], 'mtm_swap_{}.json'.format(ymd))
+
+
+def _mtm_source_dir(ymd):
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+    return os.path.join(MTM_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+
+
+def _mtm_is_swap_name(n):
+    return 'sematualmid' in (n or '').lower()
+
+
+def _mtm_is_coe_name(n):
+    nl = (n or '').lower()
+    return 'coe' in nl and ('consultamtmcoe' in nl or 'swap-coe' in nl)
+
+
+def _last_anbima_bizday_of_month(year, month):
+    """Last ANBIMA business day of the given year/month (datetime)."""
+    _load_anbima()
+    nm = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+    cur = nm - timedelta(days=1)
+    while cur.weekday() >= 5 or cur.strftime('%Y-%m-%d') in _ANBIMA_HOLIDAYS:
+        cur -= timedelta(days=1)
+    return cur
+
+
+def _mtm_coe_refdate():
+    """Last ANBIMA business day of the PENULTIMATE month vs. today (e.g. Jul → May)."""
+    now = datetime.now()
+    y, m = now.year, now.month - 2
+    while m <= 0:
+        m += 12
+        y -= 1
+    return _last_anbima_bizday_of_month(y, m).date()
+
+
+def _mtm_build_swap(rows):
+    """Split swap rows into the four LOB books via the latest SWAP position join."""
+    records, ref_date = _swap_pos_latest_records()
+    lob_map = _swap_pos_lob_map(records)
+    buckets = {k: [] for k in _MTM_SWAP_BOOKS}
+    kept = matched = 0
+    for row in rows:
+        a_raw = _cc_cell(row, 0)
+        if not a_raw and not any(_cc_cell(row, c) for c in _MTM_DISPLAY_SRC if c is not None):
+            continue                                     # blank line
+        if _acc_digits(_cc_cell(row, _MTM_FILTER_COL)) != _MTM_ACCOUNT:
+            continue                                     # col D: house account only
+        kept += 1
+        contract = a_raw.replace('#', '').strip()        # col A: drop '#'
+        ident = lob_map.get(contract.upper()) or lob_map.get('#' + _acc_digits(contract))
+        lob = _accrual_lob(ident)
+        if not lob:
+            continue                                     # IF not found / unclassified
+        matched += 1
+        cells = []
+        for src in _MTM_DISPLAY_SRC:
+            if src is None:  cells.append('')
+            elif src == 0:   cells.append(contract)
+            else:            cells.append(_cc_cell(row, src))
+        buckets[lob].append(cells)
+    return buckets, ref_date, kept, matched
+
+
+def _mtm_build_coe(rows):
+    """COE rows whose col G reference date == last ANBIMA bizday of the penultimate month."""
+    tgt = _mtm_coe_refdate()
+    out = []
+    for row in rows:
+        a_raw = _cc_cell(row, 0)
+        if not a_raw and not any(_cc_cell(row, c) for c in _MTM_COE_SRC if c is not None):
+            continue
+        g = _parse_date_any(_cc_cell(row, _MTM_COE_REFDATE_COL))
+        if g is None or g != tgt:
+            continue
+        cells = []
+        for src in _MTM_COE_SRC:
+            if src is None:  cells.append('')
+            elif src == 0:   cells.append(a_raw.replace('#', '').strip())
+            else:            cells.append(_cc_cell(row, src))
+        out.append(cells)
+    return out, tgt.strftime('%Y-%m-%d')
+
+
+def _mtm_finalize(buckets):
+    """Append [status, maker, checker, id] to each row; return per-book counts."""
+    for lob, rws in buckets.items():
+        for i, rw in enumerate(rws):
+            rw.extend(['New', '', ''])
+            rw.append('{}-{}'.format(lob, i))
+    return {k: len(v) for k, v in buckets.items()}
+
+
+def _mtm_build_from_folder(folder):
+    files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
+    swap_fn = next((fn for fn in files if _mtm_is_swap_name(fn)), None)
+    coe_fn  = next((fn for fn in files if _mtm_is_coe_name(fn)), None)
+    buckets = {k: [] for k in _MTM_SWAP_BOOKS}
+    buckets['COE'] = []
+    ref_date = coe_ref = None
+    kept = matched = 0
+    if swap_fn:
+        with open(os.path.join(folder, swap_fn), 'rb') as fh:
+            rows = _cc_read_rows(swap_fn, fh.read())
+        sb, ref_date, kept, matched = _mtm_build_swap(rows)
+        buckets.update(sb)
+    if coe_fn:
+        with open(os.path.join(folder, coe_fn), 'rb') as fh:
+            rows = _cc_read_rows(coe_fn, fh.read())
+        buckets['COE'], coe_ref = _mtm_build_coe(rows)
+    counts = _mtm_finalize(buckets)
+    return {
+        'success': True, 'tables': buckets, 'counts': counts,
+        'ref_date': ref_date, 'coe_ref_date': coe_ref,
+        'diagnostics': {'kept': kept, 'matched': matched,
+                        'swap_file': swap_fn, 'coe_file': coe_fn},
+    }, (swap_fn, coe_fn)
+
+
+def _mtm_load(date_str):
+    ymd = _accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
+    path = _mtm_path_for(ymd)
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return path, json.load(fh)
+    except Exception:
+        log.error('[mtm] read failed %s:\n%s', path, traceback.format_exc())
+        return None, None
+
+
+def _mtm_latest_ymd():
+    latest = None
+    if not os.path.isdir(MTM_JSON_ROOT):
+        return None
+    for _root, _dirs, files in os.walk(MTM_JSON_ROOT):
+        for fn in files:
+            m = re.match(r'mtm_swap_(\d{8})\.json$', fn)
+            if m and (latest is None or m.group(1) > latest):
+                latest = m.group(1)
+    return '{}-{}-{}'.format(latest[:4], latest[4:6], latest[6:8]) if latest else None
+
+
+def _mtm_find_row(data, lob, rid):
+    for r in (data.get('tables') or {}).get(lob, []) or []:
+        if r and str(r[-1]) == str(rid):
+            return r
+    return None
+
+
+@blueprint.route('/api/mtm-swap/data')
+def api_mtm_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    _, data = _mtm_load(request.args.get('date'))
+    if not data:
+        return jsonify({'success': True, 'empty': True})
+    data['success'] = True
+    return jsonify(data)
+
+
+@blueprint.route('/api/mtm-swap/latest')
+def api_mtm_latest():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, 'date': _mtm_latest_ymd()})
+
+
+@blueprint.route('/api/mtm-swap/import-folder', methods=['POST'])
+def api_mtm_import_folder():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p   = request.get_json(silent=True) or {}
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    folder = _mtm_source_dir(ymd)
+    if not os.path.isdir(folder):
+        return jsonify({'success': False, 'error': 'Folder not found: {}'.format(folder)}), 400
+    try:
+        result, (swap_fn, coe_fn) = _mtm_build_from_folder(folder)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[mtm] import-folder failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the MTM files.'}), 500
+    if not swap_fn and not coe_fn:
+        return jsonify({'success': False, 'error': 'No MTM files found in {}'.format(folder)}), 400
+
+    result['date'] = datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')
+    try:
+        _atomic_write_json(_mtm_path_for(ymd), result)
+    except Exception:
+        log.error('[mtm] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save the imported data.'}), 500
+
+    swap_n = sum(result['counts'].get(k, 0) for k in _MTM_SWAP_BOOKS)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Imported', 'MtM',
+                         '{} swap · {} COE'.format(swap_n, result['counts'].get('COE', 0)) + _nd_token(ymd))
+    return jsonify(result)
+
+
+@blueprint.route('/api/mtm-swap/row/comment', methods=['POST'])
+def api_mtm_row_comment():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    path, data = _mtm_load(p.get('date'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+    if not r:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    r[len(r) - 5] = str(p.get('comment', ''))            # Comments = last data cell
+    try:
+        _atomic_write_json(path, data)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/mtm-swap/row/edit', methods=['POST'])
+def api_mtm_row_edit():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    sid = session.get('user_sid', '')
+    path, data = _mtm_load(p.get('date'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+    if not r:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    cells = p.get('cells', [])
+    for i, v in enumerate(cells):
+        if i < len(r) - 4:
+            r[i] = v
+    r[-4], r[-3], r[-2] = 'Pending', sid, ''             # status, maker, checker (reset)
+    try:
+        _atomic_write_json(path, data)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'MTM Updated', 'MtM',
+                         '{} · {}'.format(p.get('lob', ''), p.get('id', '')) + _nd_token(p.get('date')))
+    return jsonify({'success': True, 'row': r})
+
+
+@blueprint.route('/api/mtm-swap/row/send', methods=['POST'])
+def api_mtm_row_send():
+    """Confirm a row (New/Pending → Sent). Maker/checker guard: whoever last changed
+    the row cannot confirm it — a different user must."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    sid = session.get('user_sid', '')
+    path, data = _mtm_load(p.get('date'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+    if not r:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    if str(r[-3] or '') == sid:                          # maker == current user → blocked
+        return jsonify({'success': False, 'error': 'same_user'}), 403
+    r[-4], r[-2] = 'Sent', sid                           # status, checker
+    try:
+        _atomic_write_json(path, data)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'MTM Sent', 'MtM',
+                         '{} · {}'.format(p.get('lob', ''), p.get('id', '')) + _nd_token(p.get('date')))
+    return jsonify({'success': True, 'row': r})
+
+
+@blueprint.route('/api/mtm-swap/row/delete', methods=['POST'])
+def api_mtm_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob, rid = p.get('lob', ''), str(p.get('id', ''))
+    path, data = _mtm_load(p.get('date'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    rows = (data.get('tables') or {}).get(lob)
+    if rows is None:
+        return jsonify({'success': False, 'error': 'Book not found.'}), 404
+    data['tables'][lob] = [r for r in rows if not (r and str(r[-1]) == rid)]
+    data['counts'][lob] = len(data['tables'][lob])
+    try:
+        _atomic_write_json(path, data)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Deleted', 'MtM', '{} · 1 row'.format(lob) + _nd_token(p.get('date')))
+    return jsonify({'success': True, 'counts': data['counts']})
+
+
+@blueprint.route('/api/mtm-swap/rows/delete', methods=['POST'])
+def api_mtm_rows_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob = p.get('lob', '')
+    ids = {str(x) for x in (p.get('ids') or [])}
+    path, data = _mtm_load(p.get('date'))
+    if not data or lob not in (data.get('tables') or {}):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) in ids)]
+    data['counts'][lob] = len(data['tables'][lob])
+    try:
+        _atomic_write_json(path, data)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Deleted', 'MtM', '{} · {} rows'.format(lob, len(ids)) + _nd_token(p.get('date')))
+    return jsonify({'success': True, 'counts': data['counts']})
+
+
+@blueprint.route('/api/mtm-swap/process', methods=['POST'])
+def api_mtm_process():
+    """Dropzone upload: detect swap vs COE by filename, build that portion and merge
+    it into the selected date's saved dataset (the other portion is preserved)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'error': 'No file provided.'}), 400
+    ymd = _accrual_parse_date(request.form.get('date')) or datetime.now().strftime('%Y%m%d')
+    try:
+        rows = _cc_read_rows(f.filename, f.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[mtm] process read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the file.'}), 500
+
+    # Load existing dataset for the date (or start a fresh skeleton).
+    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    if not data:
+        data = {'success': True, 'tables': {k: [] for k in _MTM_SWAP_BOOKS},
+                'counts': {}, 'ref_date': None, 'coe_ref_date': None,
+                'date': datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')}
+        data['tables']['COE'] = []
+
+    if _mtm_is_coe_name(f.filename):
+        coe_rows, coe_ref = _mtm_build_coe(rows)
+        for i, rw in enumerate(coe_rows):
+            rw.extend(['New', '', ''])
+            rw.append('COE-{}'.format(i))
+        data['tables']['COE'] = coe_rows
+        data['coe_ref_date'] = coe_ref
+    elif _mtm_is_swap_name(f.filename):
+        buckets, ref_date, _kept, _matched = _mtm_build_swap(rows)
+        for lob in _MTM_SWAP_BOOKS:
+            rws = buckets.get(lob, [])
+            for i, rw in enumerate(rws):
+                rw.extend(['New', '', ''])
+                rw.append('{}-{}'.format(lob, i))
+            data['tables'][lob] = rws
+        data['ref_date'] = ref_date
+    else:
+        return jsonify({'success': False,
+                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID) or the COE (…ConsultaMTMCOE) file.'}), 400
+
+    data['counts'] = {k: len(v) for k, v in data['tables'].items()}
+    try:
+        _atomic_write_json(_mtm_path_for(ymd), data)
+    except Exception:
+        log.error('[mtm] process save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save.'}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Imported', 'MtM', f.filename + _nd_token(ymd))
+    return jsonify(data)
+
+
 def _accrual_build_result(rows):
     """Core VCP→tables logic (no I/O). Splits the rows into the four LOB books and
     returns the result dict (without 'date'/'saved_at')."""
