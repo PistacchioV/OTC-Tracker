@@ -3307,6 +3307,161 @@ def api_mtm_process():
     return jsonify(data)
 
 
+# ---------------------------------------------------------------------------
+#  MtM — fixed-width Conecta file generation (Send batch / Validation)
+#  Header (control) line: tipo-linha '0'; data lines: tipo-linha '1'.
+#  Rows use the datepicker date; headers use TODAY (system date).
+#  Files saved to CONECTA_NEW_PATH and the day's MTM source folder.
+# ---------------------------------------------------------------------------
+_MTM_GEN_LAWTON_ACCT  = '00041007'
+_MTM_GEN_ATACAMA_ACCT = {'83985005', '04880006'}
+_MTM_GEN_PARTY = {                                   # Nome Simplificado Parte (20 chars)
+    'BANCO':   'JPMORGANBM'       + ' ' * 10,
+    'LAWTON':  'INTRAGLAWTONFDO'  + ' ' * 5,
+    'ATACAMA': 'INTRAGATACAMAFDO' + ' ' * 4,
+}
+_MTM_GEN_BOOK_SUFFIX = {'EDG': 'EDG', 'CEM': 'CEM', 'Hybrids': 'HYB'}
+_MTM_GEN_SWAP_COLS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Meu Número',
+                      'Código do Contrato', 'Nome Simplificado Parte', 'Código Conta Parte',
+                      'Sinal Valor MTM', 'Valor MTM', 'Notional Mínimo', 'Notional Máximo',
+                      'Data de Referência MTM']
+_MTM_GEN_COE_COLS  = ['Tipo IF', 'Tipo de Linha', 'Código operação', 'Código do Instrumento Financeiro',
+                      'Conta do Emissor', 'Data Referência', 'Valor MTM', 'Débito/Crédito']
+
+
+def _mtm_valor_fixed(v, int_digits):
+    """Absolute value as (int_digits + 2) zero-padded digits (implicit 2 decimals)."""
+    return str(int(round(abs(v or 0.0) * 100))).zfill(int_digits + 2)
+
+
+def _mtm_rand_meunum():
+    return ''.join(random.choice('0123456789') for _ in range(10))
+
+
+def _mtm_cpty_of(row):
+    """Lawton / Atacama / None from the book row's CONTRAPARTE / Conta (idx 4)."""
+    acct = _acc_digits(row[4] if len(row) > 4 else '')
+    if acct == _MTM_GEN_LAWTON_ACCT:
+        return 'LAWTON'
+    if acct in _MTM_GEN_ATACAMA_ACCT:
+        return 'ATACAMA'
+    return None
+
+
+def _mtm_swap_fields(cid, party_key, sinal, v, ymd):
+    return {
+        'ID do Sistema': 'MID  ', 'ID Tipo de Linha': '1', 'Código da Operação': '0848',
+        'Meu Número': _mtm_rand_meunum(), 'Código do Contrato': str(cid or ''),
+        'Nome Simplificado Parte': _MTM_GEN_PARTY[party_key], 'Código Conta Parte': '73760009',
+        'Sinal Valor MTM': sinal, 'Valor MTM': _mtm_valor_fixed(v, 10),
+        'Notional Mínimo': ' ' * 6, 'Notional Máximo': ' ' * 6, 'Data de Referência MTM': ymd,
+    }
+
+
+def _mtm_swap_header(party_key, today):
+    return 'MID' + '  ' + '0' + '0848' + _MTM_GEN_PARTY[party_key] + today
+
+
+def _mtm_coe_header(today):
+    return 'COE' + '  ' + '0' + '0475' + _MTM_GEN_PARTY['BANCO'] + today
+
+
+def _mtm_generate_book(book_key, rows, ymd):
+    """Files for one swap book: MtM_BANCO-<suffix> always; MtM_LAWTON/ATACAMA-<suffix>
+    when those counterparties appear (mirror row, opposite sign)."""
+    suffix = _MTM_GEN_BOOK_SUFFIX.get(book_key)
+    if not suffix:
+        return {}
+    today = datetime.now().strftime('%Y%m%d')
+    banco = 'MtM_BANCO-' + suffix
+    files = {banco: {'view': 'BANCO', 'cols': _MTM_GEN_SWAP_COLS,
+                     'header': _mtm_swap_header('BANCO', today), 'rows': []}}
+    for row in rows:
+        v = _mtm_parse_num(row[7]) or 0.0            # Valor MTM (display) → float
+        cid = row[0]
+        sinal = '00' if v >= 0 else '01'
+        files[banco]['rows'].append(_mtm_swap_fields(cid, 'BANCO', sinal, v, ymd))
+        cpty = _mtm_cpty_of(row)
+        if cpty:
+            fn = 'MtM_' + cpty + '-' + suffix
+            files.setdefault(fn, {'view': cpty, 'cols': _MTM_GEN_SWAP_COLS,
+                                  'header': _mtm_swap_header(cpty, today), 'rows': []})
+            files[fn]['rows'].append(_mtm_swap_fields(cid, cpty, '01' if v >= 0 else '00', v, ymd))
+    return files
+
+
+def _mtm_generate_coe(rows, ymd):
+    today = datetime.now().strftime('%Y%m%d')
+    f = {'view': 'BANCO', 'cols': _MTM_GEN_COE_COLS, 'header': _mtm_coe_header(today), 'rows': []}
+    for row in rows:
+        v = _mtm_parse_num(row[_MTM_COE_VALOR_IDX]) or 0.0
+        f['rows'].append({
+            'Tipo IF': 'COE  ', 'Tipo de Linha': '1', 'Código operação': '0475',
+            'Código do Instrumento Financeiro': str(row[0] or ''), 'Conta do Emissor': '73760401',
+            'Data Referência': ymd, 'Valor MTM': _mtm_valor_fixed(v, 16),
+            'Débito/Crédito': '+' if v >= 0 else '-',
+        })
+    return {'MtM_BANCO-COE': f}
+
+
+def _mtm_file_lines(fdata):
+    return [fdata['header']] + [''.join(r[c] for c in fdata['cols']) for r in fdata['rows']]
+
+
+def _mtm_write_gen_files(files, ymd):
+    """Write each file (.txt, Latin-1, CRLF) to CONECTA_NEW_PATH and the day's MTM
+    source folder. Returns list of written paths (best-effort)."""
+    dests = [CONECTA_NEW_PATH, _mtm_source_dir(ymd)]
+    written = []
+    for fname, fdata in files.items():
+        content = '\r\n'.join(_mtm_file_lines(fdata)) + '\r\n'
+        for d in dests:
+            try:
+                os.makedirs(d, exist_ok=True)
+                path = os.path.join(d, fname + '.txt')
+                with open(path, 'w', encoding='latin-1', newline='') as fh:
+                    fh.write(content)
+                written.append(path)
+            except Exception:
+                log.error('[mtm] write %s → %s failed:\n%s', fname, d, traceback.format_exc())
+    return written
+
+
+def _mtm_gen_preview(files):
+    """Preview payload: per file, the parsed columns/rows for the modal table."""
+    return [{'filename': fn + '.txt', 'view': fd['view'], 'cols': fd['cols'],
+             'header': fd['header'], 'rows': [[r[c] for c in fd['cols']] for r in fd['rows']]}
+            for fn, fd in files.items()]
+
+
+@blueprint.route('/api/mtm-swap/send-batch', methods=['POST'])
+def api_mtm_send_batch():
+    """Generate the fixed-width Conecta file(s) for ONE book (Send batch)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob = p.get('lob', '')
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    rows = (data.get('tables') or {}).get(lob) or []
+    if not rows:
+        return jsonify({'success': False, 'error': 'No rows in this book to generate.'}), 400
+    try:
+        files = _mtm_generate_coe(rows, ymd) if lob == 'COE' else _mtm_generate_book(lob, rows, ymd)
+    except Exception:
+        log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Generation failed.'}), 500
+    if not files:
+        return jsonify({'success': False, 'error': 'Nothing to generate for this book.'}), 400
+    written = _mtm_write_gen_files(files, ymd)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Sent', 'MtM',
+                         '{} · {} file(s)'.format(lob, len(files)) + _nd_token(ymd))
+    return jsonify({'success': True, 'files': _mtm_gen_preview(files), 'written': len(written)})
+
+
 def _accrual_build_result(rows):
     """Core VCP→tables logic (no I/O). Splits the rows into the four LOB books and
     returns the result dict (without 'date'/'saved_at')."""

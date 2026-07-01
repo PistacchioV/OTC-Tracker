@@ -1107,14 +1107,27 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             accBtnBusy(btn, true);
             postJSON('/api/mtm-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
                 accBtnBusy(btn, false);
-                if (!j.success) {
-                    if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
-                    errSwal(j.error); return;
-                }
-                var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join('<br>');
-                deferToast({ icon: 'success', backdrop: true, timer: 4000, timerProgressBar: true, showConfirmButton: false,
-                            title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0),
-                            html: names ? '<div style="font-family:monospace;font-size:.82em">' + names + '</div>' : undefined });
+                if (!j.success) { errSwal(j.error); return; }
+                // Preview modal: one table per generated file (columns per the spec).
+                var html = (j.files || []).map(function (f) {
+                    var head = '<thead><tr>' + f.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead>';
+                    var body = '<tbody>' + f.rows.map(function (row) {
+                        return '<tr>' + row.map(function (cell) { return '<td>' + esc(cell) + '</td>'; }).join('') + '</tr>';
+                    }).join('') + '</tbody>';
+                    return '<div class="mb-3 text-start">' +
+                        '<div class="fw-bold mb-1">' + esc(f.filename) +
+                        ' <span class="badge badge-sent bg-gradient">' + esc(f.view) + '</span>' +
+                        ' <span class="text-muted fw-normal">· ' + f.rows.length + ' row(s)</span></div>' +
+                        '<div style="overflow:auto;max-height:38vh"><table class="table table-sm table-bordered mb-0" ' +
+                        'style="font-family:monospace;font-size:.7rem;white-space:nowrap">' + head + body + '</table></div></div>';
+                }).join('');
+                Swal.fire({
+                    title: t('mtm-preview-title', 'Batch preview') + ' · ' + lob.name,
+                    html: html || t('acc-empty', 'No rows.'),
+                    width: '92%', confirmButtonText: 'OK', confirmButtonColor: '#0066cc',
+                    customClass: { confirmButton: 'bg-gradient' }
+                });
+                if (typeof window.fetchNotifications === 'function') window.fetchNotifications();
             }).catch(function () { accBtnBusy(btn, false); netErr(); });
         });
     }
