@@ -172,9 +172,9 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
         data: {
             labels: months,
             datasets: [
-                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6), borderSkipped: 'bottom' },
-                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6), borderSkipped: 'bottom' },
-                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6), borderSkipped: 'bottom' },
+                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
             ]
         },
         options: {
@@ -299,16 +299,22 @@ function _lastVisibleDatasetAt(chart, i) {
     return last;
 }
 
-// Scriptable borderRadius for stacked bars: apply the radius ONLY to the
-// top-most visible segment of each bar (0 for the rest). Pair this with
-// `borderSkipped` set to the baseline edge ('bottom' for vertical bars, 'left'
-// for horizontal) so only the OUTER end rounds — the whole stack then reads as
-// a single bar with one rounded tip, regardless of which product is last.
-// Returns a NUMBER (most reliably honored by Chart.js v4 in stacked charts).
-function stackEndRadius(R) {
+// Scriptable borderRadius for stacked bars: round ONLY the two corners at the
+// OUTER end of the top-most visible segment (flat everywhere else) so the whole
+// stack reads as a single bar with one rounded tip, regardless of which product
+// is last. Returns a per-corner OBJECT and must be paired with
+// `borderSkipped: false` — that combo is the one Chart.js v4 honours reliably in
+// stacked charts (a plain number + `borderSkipped: 'bottom'` gets dropped on the
+// top segment). `edge` is the growth direction: 'bottom' → vertical bars grow up
+// (round top corners); 'left' → horizontal bars grow right (round right corners).
+function stackEndRadius(R, edge) {
+    var end = (edge === 'left')
+        ? { topLeft: 0, bottomLeft: 0, topRight: R, bottomRight: R }   // horizontal → grows right
+        : { bottomLeft: 0, bottomRight: 0, topLeft: R, topRight: R };  // vertical   → grows up
+    var flat = { topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0 };
     return function (c) {
-        if (!c || c.type !== 'data') return 0;
-        return c.datasetIndex === _lastVisibleDatasetAt(c.chart, c.dataIndex) ? R : 0;
+        if (!c || c.type !== 'data') return flat;
+        return c.datasetIndex === _lastVisibleDatasetAt(c.chart, c.dataIndex) ? end : flat;
     };
 }
 
@@ -326,7 +332,7 @@ function buildForecastProductChart(data) {
         return {
             type: 'bar', label: p.label, data: p.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
-            stack: 'fc', maxBarThickness: 24, borderRadius: stackEndRadius(6), borderSkipped: 'bottom'
+            stack: 'fc', maxBarThickness: 24, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false
         };
     });
     forecastChart = new Chart(ctx, {
@@ -360,14 +366,37 @@ function _productColor(p) {
 }
 const PRODUCT_FALLBACK = ['#0ea5e9', '#14b8a6', '#f59e0b', '#f43f5e', '#a855f7'];
 
+// Toggle a card's canvas ↔ empty-state message WITHOUT removing the canvas from
+// the DOM. Replacing card-body.innerHTML (the old approach) deleted the <canvas>,
+// so once a period returned no deals the element was gone and no later period —
+// even one WITH deals — could ever re-render (getElementById returned null).
+// Returns true when the empty state was applied (caller should bail).
+function _setChartEmpty(canvas, isEmpty) {
+    const body = canvas.closest('.card-body');
+    const wrap = canvas.parentElement;              // fixed-height chart wrapper
+    if (!body) return isEmpty;
+    let msg = body.querySelector('.dash-empty-msg');
+    if (isEmpty) {
+        if (!msg) {
+            msg = document.createElement('p');
+            msg.className = 'dash-empty-msg text-muted text-center py-5 mb-0';
+            body.appendChild(msg);
+        }
+        msg.textContent = t('dash-no-deals');
+        msg.style.display = '';
+        if (wrap) wrap.style.display = 'none';
+    } else {
+        if (msg) msg.style.display = 'none';
+        if (wrap) wrap.style.display = '';
+    }
+    return isEmpty;
+}
+
 function buildClientsChart(top5) {
     const ctx = document.getElementById('top5-clients-chart');
     if (!ctx) return;
     if (clientsChart) clientsChart.destroy();
-    if (!top5.length) {
-        ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
-        return;
-    }
+    if (_setChartEmpty(ctx, !top5.length)) return;
     // Distinct products across the top-5 clients → one stacked dataset each
     const products = [];
     top5.forEach(c => Object.keys(c.by_product || {}).forEach(p => { if (products.indexOf(p) === -1) products.push(p); }));
@@ -377,7 +406,7 @@ function buildClientsChart(top5) {
         ? products.map(p => {
             const base = _productColor(p) || PRODUCT_FALLBACK[fb++ % PRODUCT_FALLBACK.length];
             return { label: p, data: top5.map(c => (c.by_product && c.by_product[p]) || 0),
-                     backgroundColor: hGradient(base, 0.55, 1), borderRadius: stackEndRadius(6), borderSkipped: 'left', barThickness: 22, stack: 'clients' };
+                     backgroundColor: hGradient(base, 0.55, 1), borderRadius: stackEndRadius(6, 'left'), borderSkipped: false, barThickness: 22, stack: 'clients' };
         })
         : [{ label: 'Deals', data: top5.map(c => c.count), backgroundColor: hGradient(ins('chart-primary'), 0.55, 1), borderRadius: 6, barThickness: 22 }];
 
@@ -405,10 +434,7 @@ function buildProductsChart(top5) {
     const ctx = document.getElementById('top5-products-chart');
     if (!ctx) return;
     if (productsChart) productsChart.destroy();
-    if (!top5.length) {
-        ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
-        return;
-    }
+    if (_setChartEmpty(ctx, !top5.length)) return;
     const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary')];
     productsChart = new Chart(ctx, {
         type: 'doughnut',
@@ -432,10 +458,7 @@ function buildCommoditiesChart(top5) {
     const ctx = document.getElementById('top5-commodities-chart');
     if (!ctx) return;
     if (commoditiesChart) commoditiesChart.destroy();
-    if (!top5 || !top5.length) {
-        ctx.closest('.card-body').innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals')}</p>`;
-        return;
-    }
+    if (_setChartEmpty(ctx, !top5 || !top5.length)) return;
     commoditiesChart = new Chart(ctx, {
         type: 'doughnut',
         data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
