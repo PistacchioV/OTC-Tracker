@@ -3452,7 +3452,7 @@ def api_accrual_validation():
 
     # Attach ONLY the Lawton / Atacama view files.
     attach = [g['path'] for g in generated if g['view'] in ('LAWTON', 'ATACAMA')]
-    subject = 'ACCRUAL EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
+    subject = 'Accrual EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
     summary = [{'filename': g['filename'], 'view': g['view'], 'count': g['count']} for g in generated]
 
     # Render the HTML + resolve the logo HERE (needs the Flask app context), then send
