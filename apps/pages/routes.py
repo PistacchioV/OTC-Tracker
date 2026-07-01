@@ -3484,91 +3484,67 @@ def api_accrual_validation():
 
 
 # ── Recon: match the 'operacoes' return file against the saved accrual factors ──
-#  operacoes layout: headers on row 5, data from row 6. col B (index 1) = the house
-#  account (submitter = Banco, filtered to the two house accounts); col AC (index 28)
-#  = the COUNTERPARTY account; col E = 'REGISTRO DE PU/FATOR'; col F = ponta
-#  (1 = smaller-account leg, 2 = larger-account leg); col H = título (= Código IF);
-#  col P = registered factor (BR decimal comma).
-#  The accrual page view is always Banco (PARTE) x Contraparte, so we resolve each
-#  ponta to the Banco ('p') or the Contraparte ('c') leg by comparing col B vs col AC,
-#  then compare against Fator Parte (Banco) / Fator Contraparte respectively.
+#  operacoes layout: headers on row 5, data from row 6. Filter col B (index 1) to the
+#  two house accounts AND col E == 'REGISTRO DE PU/FATOR'. col H (index 7) = título
+#  (= Código IF), col P (index 15) = registered factor (BR decimal comma).
+#  Simple match: gather all registered factors per Código IF; a VCP leg's factor
+#  (Fator Parte / Fator Contraparte) is OK when it appears among them — else Check.
 _ACC_RECON_ACCOUNTS = {'04880006', '73760009'}
 _ACC_RECON_MARKER = 'REGISTRO DE PU/FATOR'
 _ACC_RECON_HEADER_ROW = 5                  # 1-based → data starts at index 5
-_ACC_RECON_CONTRA_COL = 28                 # col AC — counterparty account
-
-
-def _acc_ponta_num(v):
-    """Ponta number from col F: 1 (smaller-account leg) or 2 (larger-account leg)."""
-    s = re.sub(r'\D', '', str(v or ''))
-    if s in ('1', '0', '00'):  return 1
-    if s in ('2', '01'):       return 2
-    return None
 
 
 def _acc_run_recon(data, rows):
-    """Build {(codigo_if, leg): registered_factor} — leg 'p'=Banco, 'c'=Contraparte —
-    from the operacoes rows, then compare against each VCP leg. Mutates data
-    (recon map + status). Returns a summary dict."""
-    recon_map = {}
+    """Gather registered factors per Código IF from the operacoes rows, then flag each
+    VCP leg OK/Check by simple factor membership. Mutates data (recon + status)."""
+    by_cif = {}                                           # cif_key -> [rounded floats]
     for i in range(_ACC_RECON_HEADER_ROW, len(rows)):     # data from row 6 (index 5)
         row = rows[i]
-        banco = _acc_digits(_cc_cell(row, 1))                              # col B house account
-        if banco not in _ACC_RECON_ACCOUNTS:
+        if _acc_digits(_cc_cell(row, 1)) not in _ACC_RECON_ACCOUNTS:       # col B house account
             continue
         if _cc_cell(row, 4).strip().upper() != _ACC_RECON_MARKER:          # col E marker
             continue
         cif = _cc_cell(row, 7).strip()                                     # col H título
-        ponta = _acc_ponta_num(_cc_cell(row, 5))                           # col F ponta (1/2)
         fac = _acc_parse_num(_cc_cell(row, 15))                            # col P factor (comma→dot)
-        contra = _acc_digits(_cc_cell(row, _ACC_RECON_CONTRA_COL))         # col AC counterparty
-        if not cif or not ponta:
+        if not cif or fac is None:
             continue
-        # ponta 2 = larger-account leg, ponta 1 = smaller. Resolve to Banco/Contraparte
-        # by comparing the two accounts (col B = Banco, col AC = counterparty).
-        try:
-            banco_is_larger = int(banco or '0') > int(contra or '0')
-        except ValueError:
-            banco_is_larger = True
-        larger_leg = 'p' if banco_is_larger else 'c'
-        smaller_leg = 'c' if banco_is_larger else 'p'
-        leg = larger_leg if ponta == 2 else smaller_leg
         for k in _acc_factor_keys(cif):
-            recon_map.setdefault((k, leg), fac)
+            by_cif.setdefault(k, []).append(round(fac, 8))
 
-    def _lookup(cif, leg):
+    def _regs(cif):
         for k in _acc_factor_keys(cif):
-            if (k, leg) in recon_map:
-                return recon_map[(k, leg)]
-        return None
+            if k in by_cif:
+                return by_cif[k]
+        return []
 
     recon_out, ok_rows, check_rows = {}, 0, 0
     for table in (data.get('tables') or {}).values():
         for r in table:
             if not r or len(r) < 15:
                 continue
-            cif = str(r[0] or '').strip()
             idxP = str(r[5] or '').strip().upper()
             idxC = str(r[8] or '').strip().upper()
-            legs = []                                       # (tag, accrual_factor); p=Banco, c=Contra
+            legs = []                                       # (tag, accrual_factor); p=Parte, c=Contra
             if idxP == 'VCP': legs.append(('p', r[9]))
             if idxC == 'VCP': legs.append(('c', r[10]))
             if not legs:
                 continue
+            regs = _regs(str(r[0] or '').strip())
+            regset = set(regs)
+            regdisp = ', '.join('{:.8f}'.format(x) for x in regs)
             entry, all_ok = {}, True
             for tag, acc_fac in legs:
-                reg = _lookup(cif, tag)
                 accv = _acc_parse_num(acc_fac)
-                ok = (reg is not None and accv is not None and round(reg, 8) == round(accv, 8))
+                ok = (accv is not None and round(accv, 8) in regset)
                 if not ok:
                     all_ok = False
-                entry[tag] = {'ok': ok, 'reg': ('' if reg is None else '{:.8f}'.format(reg))}
+                entry[tag] = {'ok': ok, 'reg': regdisp}
             recon_out[str(r[-1])] = entry
             r[-4] = 'Success' if all_ok else 'Check'        # status
             if all_ok: ok_rows += 1
             else:      check_rows += 1
     data['recon'] = recon_out
-    return {'success_rows': ok_rows, 'check_rows': check_rows, 'map_entries': len(recon_map)}
+    return {'success_rows': ok_rows, 'check_rows': check_rows, 'map_entries': len(by_cif)}
 
 
 def _acc_find_operacoes(folder):

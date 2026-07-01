@@ -298,6 +298,8 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-comment-inp { width: 100%; min-width: 120px; font-size: .76rem; padding: .18rem .4rem;
     border: 1px solid #ffc107; border-radius: 6px; background: var(--acc-surface); color: var(--acc-ink); }
 .acc-comment-inp:focus { outline: none; border-color: var(--acc-blue); }
+/* Centered SweetAlert modals with a blurred page behind (New Deals feel). */
+.swal2-container.swal2-backdrop-show { background: rgba(0,0,0,.25); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 
 /* ── Checkbox / Actions / Status columns ───────────────────────────────── */
 table.dt-acc th.acc-cb-th, table.dt-acc td.acc-cb-col { width: 38px; min-width: 38px; text-align: center; }
@@ -1208,10 +1210,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             asof.innerHTML = '<b>' + esc(t('acc-recon', 'Recon')) + '</b> &nbsp;·&nbsp; ' +
                 (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') + ' &nbsp;·&nbsp; ' +
                 (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check');
-            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
-                        icon: (s.check_rows ? 'warning' : 'success'),
-                        title: t('acc-recon-done', 'Recon done') + ' · ' + (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') +
-                               ' · ' + (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check') });
+            deferToast({ icon: (s.check_rows ? 'warning' : 'success'), timer: 3200, timerProgressBar: true,
+                        showConfirmButton: false, backdrop: true,
+                        title: t('acc-recon-done', 'Recon done'),
+                        text: (s.success_rows || 0) + ' ' + t('acc-recon-ok', 'OK') + ' · ' +
+                              (s.check_rows || 0) + ' ' + t('acc-recon-check', 'check') });
             return;
         }
         if (data.factors) {                              // CEM / EDG / HYB enrichment
@@ -1223,8 +1226,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
                 ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
                 ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
-            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2800,
-                        timerProgressBar: true, icon: (fx.missing ? 'warning' : 'success'),
+            deferToast({ icon: (fx.missing ? 'warning' : 'success'), timer: 2800, timerProgressBar: true,
+                        showConfirmButton: false, backdrop: true,
                         title: esc(fx.lob) + ' · ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
                                (fx.missing ? ' · ' + fx.missing + ' ' + t('acc-factors-missing', 'missing accrual') : '') });
             return;
