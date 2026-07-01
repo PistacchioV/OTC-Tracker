@@ -1725,7 +1725,7 @@ def _cetip_save_file(src_path, dest_path):
 
 
 def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
-                      ref_date_fmt, saved, dest_folder='', attachments=None):
+                      ref_date_fmt, saved, dest_folder='', attachments=None, missing=None):
     """Render the CETIP HTML template and send it FROM the OTC Tracker mailbox
     (SHARED_MAILBOX) with the embedded logo (cid:otc_logo) and optional file
     attachments. Best-effort — returns True on success or an error string."""
@@ -1733,12 +1733,14 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
     from email.mime.base import MIMEBase
     from email import encoders
     attachments = attachments or []
+    missing = missing or []
     try:
         attach_names = [os.path.basename(p) for p in attachments]
         html = render_template(
             'pages/email-template-cetip-saved.html',
             subject=subject, greeting=greeting, message_html=message_html,
             ref_date_fmt=ref_date_fmt, file_count=len(saved), saved_files=saved,
+            missing_files=missing, missing_count=len(missing),
             attachment_names=attach_names, dest_folder=dest_folder,
             current_year=datetime.now().year)
 
@@ -1833,11 +1835,17 @@ def api_cp_cetip_settlement():
     attach_saved = []   # their saved-entry dicts (for the Sales Support table)
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
-    # files land in the single per-day destination folder, renamed.
+    # files land in the single per-day destination folder, renamed. Rules with no
+    # matching source file are collected in `missing` so the e-mail can flag the
+    # expected-but-absent files (expected name derived from the reference date).
+    ref_yymmdd = ref.strftime('%y%m%d')
+    missing = []
     for rule in _CETIP_RULES:
+        rule_matched = False
         for name in files:
             if not rule['match'](name.lower()):
                 continue
+            rule_matched = True
             dref = name[rule['date_start']:rule['date_start'] + 6]
             if len(dref) < 6 or not dref.isdigit():
                 errors.append({'file': name, 'type': rule['label'],
@@ -1869,6 +1877,12 @@ def api_cp_cetip_settlement():
                 except Exception:
                     log.warning("[cetip] secondary copy failed %s → %s:\n%s",
                                 name, extra, traceback.format_exc())
+        if not rule_matched:
+            try:
+                exp = rule['dest_name'](ref_yymmdd)
+            except Exception:
+                exp = ''
+            missing.append({'dest': exp, 'type': rule['label']})
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Saved', 'Control Panel',
@@ -1880,12 +1894,15 @@ def api_cp_cetip_settlement():
     ref_fmt = ref.strftime('%d/%m/%Y')
     mail_ops = mail_ss = None
     if send_mail and saved:
+        ops_msg = ('The CETIP files required for the KPI generation have been saved successfully. '
+                   'The complete list is shown below.')
+        if missing:
+            ops_msg += (' <b>{}</b> expected file(s) were <b>not found</b> in the source folder '
+                        'and are flagged as <i>Not found</i> in the table.'.format(len(missing)))
         mail_ops = _send_cetip_email(
             [CETIP_OTC_OPS_EMAIL], [], 'CETIP Files Saved',
-            'Hello,',
-            'The CETIP files required for the KPI generation have been saved successfully. '
-            'The complete list is shown below.',
-            ref_fmt, saved, dest_folder=dest_dir)
+            'Hello,', ops_msg,
+            ref_fmt, saved, dest_folder=dest_dir, missing=missing)
 
         ss_msg = ('Please find attached the contract position file (DPOSCONTRATOSIC), '
                   'as requested.' if attach_paths else
@@ -8497,4 +8514,3 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
-
