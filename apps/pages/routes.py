@@ -2888,6 +2888,12 @@ def _mtm_build_from_folder(folder):
     }, (swap_fn, coe_fn)
 
 
+def _mtm_save(path, data):
+    """Persist the MtM dataset, creating the YYYY/MM/DD dir first (mkstemp needs it)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _atomic_write_json(path, data)
+
+
 def _mtm_load(date_str):
     ymd = _accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
     path = _mtm_path_for(ymd)
@@ -2959,7 +2965,7 @@ def api_mtm_import_folder():
 
     result['date'] = datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')
     try:
-        _atomic_write_json(_mtm_path_for(ymd), result)
+        _mtm_save(_mtm_path_for(ymd), result)
     except Exception:
         log.error('[mtm] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the imported data.'}), 500
@@ -3134,7 +3140,7 @@ def api_mtm_process():
 
     data['counts'] = {k: len(v) for k, v in data['tables'].items()}
     try:
-        _atomic_write_json(_mtm_path_for(ymd), data)
+        _mtm_save(_mtm_path_for(ymd), data)
     except Exception:
         log.error('[mtm] process save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save.'}), 500
