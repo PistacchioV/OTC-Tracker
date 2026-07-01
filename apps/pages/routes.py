@@ -2780,8 +2780,20 @@ _MTM_COMMENT_IDX  = _MTM_FIXED_HEADERS.index('Comments')     # 8
 # CEM MtM values file "VCP_CETIP_MTM": A=Trade Name, B=Counterparty Name,
 # C=CETIP ID, D=MTM in BRL. Keep rows where B <> our own GEM-Rates side, join
 # C (CETIP ID) to the CEM book's Código IF, D → rounded 2dp (signed).
-_MTM_CEM_SELF_PARTY = 'bco j.p. morgan s.a. 2768 - gem br - rates'
 _MTM_ZERO_COMMENT   = 'Valor MtM não poder ser ZERO'
+
+
+def _mtm_norm_party(s):
+    """Normalize a counterparty label for a lenient match: strip quotes + accents,
+    drop ALL whitespace, lowercase. Robust to leading/trailing/inner spacing
+    variations and accents (e.g. 'Bco J.P. Morgan … RATES ' with a trailing space)."""
+    s = str(s or '').strip().strip("'").strip('"')
+    s = ''.join(ch for ch in unicodedata.normalize('NFKD', s) if not unicodedata.combining(ch))
+    return re.sub(r'\s+', '', s).lower()
+
+
+# Our own GEM-Rates side (normalized) — these rows are excluded from the CEM join.
+_MTM_CEM_SELF_PARTY = _mtm_norm_party('Bco J.P. Morgan S.A. 2768 - GEM BR - RATES')
 
 
 def _mtm_is_cem_value_name(n):
@@ -2807,8 +2819,8 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
     cem_rows are raw data lists (pre-meta). Returns (matched, zeros)."""
     vmap = {}
     for r in file_rows:
-        b = str(_cc_cell(r, 1) or '').strip().strip("'").strip('"')
-        if not b or b.lower() == _MTM_CEM_SELF_PARTY:
+        b = _mtm_norm_party(_cc_cell(r, 1))
+        if not b or b == _MTM_CEM_SELF_PARTY:
             continue                                     # keep B <> our GEM-Rates side
         cid = str(_cc_cell(r, 2) or '').strip().strip("'").strip('"')
         num = _mtm_parse_num(_cc_cell(r, 3))
@@ -2821,7 +2833,7 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
         if cid not in vmap:
             continue
         v = round(vmap[cid], 2)
-        row[_MTM_VALOR_IDX] = '{:.2f}'.format(v)
+        row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)          # #,##0.00 (comma thousands)
         if v == 0:
             row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
             zeros += 1
