@@ -707,10 +707,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             { data: null, orderable: false, searchable: false, className: 'acc-act-col',
               render: function () { return actionsCell(); } },
             { data: n, className: 'acc-status-col', render: function (d, type) {
-                // Sort key: Missing Accrual ranks first, then the rest alphabetically.
+                // Sort key: any 'Missing …' status ranks first, then the rest.
                 if (type === 'sort' || type === 'type') {
                     var k = String(d || '').toLowerCase();
-                    return (k === 'missing accrual' ? '0' : '1') + k;
+                    return (k.indexOf('missing') === 0 ? '0' : '1') + k;
                 }
                 if (type === 'export') return String(d || '');   // export plain status text
                 return statusBadge(d);
@@ -724,6 +724,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 
         var dt = $('#' + tableId).DataTable({
             data: rows, columns: columns,
+            order: [[2, 'asc']],                             // permanent: Missing status first
             orderCellsTop: true, autoWidth: true, scrollX: true,
             pageLength: 25, lengthChange: false,
             dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",

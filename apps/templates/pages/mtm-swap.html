@@ -586,7 +586,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     // ── status badge + actions cell ─────────────────────────────────────────
     // Status badge — same palette as the New Deals pages.
     var ACC_STATUS_BADGE = { 'new': 'bg-info text-white', 'pending': 'text-bg-warning', 'sent': 'badge-sent',
-                             'missing accrual': 'text-bg-warning', 'success': 'text-bg-success', 'check': 'text-bg-warning' };
+                             'missing accrual': 'text-bg-warning', 'missing mtm': 'text-bg-warning',
+                             'success': 'text-bg-success', 'check': 'text-bg-warning' };
 
     // Factor cell (cols 9/10) render → recon badge: green=match, red=divergence (tooltip
     // shows the registered factor). Plain text when no recon for that leg.
@@ -605,14 +606,18 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             return esc(v);
         };
     }
-    // Comments cell (col 11) → inline editable input on Check rows (recon enables it).
+    // Comments → editable inline ONLY on 'Check' rows (enabled by the Recon step,
+    // not yet implemented for MtM). Locked (plain text) in every other status.
     function commentsRender(d, type, row) {
         var v = (d == null ? '' : d);
         if (type !== 'display') return v;
-        // MtM: Comments are always editable inline (no 'check' gate like Accrual).
-        var id = row ? String(row[row.length - 1]) : '';
-        return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
-               '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
+        var status = row ? String(row[row.length - 4] || '').toLowerCase() : '';
+        if (status === 'check') {
+            var id = row ? String(row[row.length - 1]) : '';
+            return '<input type="text" class="acc-comment-inp" data-id="' + esc(id) + '" value="' + esc(v) +
+                   '" placeholder="' + esc(t('acc-comment-ph', 'Comment…')) + '">';
+        }
+        return esc(v);
     }
     function statusBadge(s) {
         s = s || 'New';
@@ -720,10 +725,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             { data: null, orderable: false, searchable: false, className: 'acc-act-col',
               render: function () { return actionsCell(); } },
             { data: n, className: 'acc-status-col', render: function (d, type) {
-                // Sort key: Missing Accrual ranks first, then the rest alphabetically.
+                // Sort key: any 'Missing …' status ranks first, then the rest.
                 if (type === 'sort' || type === 'type') {
                     var k = String(d || '').toLowerCase();
-                    return (k === 'missing accrual' ? '0' : '1') + k;
+                    return (k.indexOf('missing') === 0 ? '0' : '1') + k;
                 }
                 if (type === 'export') return String(d || '');   // export plain status text
                 return statusBadge(d);
@@ -736,6 +741,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 
         var dt = $('#' + tableId).DataTable({
             data: rows, columns: columns,
+            order: [[2, 'asc']],                             // permanent: Missing status first
             orderCellsTop: true, autoWidth: true, scrollX: true,
             pageLength: 25, lengthChange: false,
             dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",

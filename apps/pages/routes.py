@@ -2784,6 +2784,7 @@ _MTM_COE_COMMENT_IDX = _MTM_COE_HEADERS.index('Comments')    # 5
 # C=CETIP ID, D=MTM in BRL. Keep rows where B <> our own GEM-Rates side, join
 # C (CETIP ID) to the CEM book's Código IF, D → rounded 2dp (signed).
 _MTM_ZERO_COMMENT   = 'Valor MtM não poder ser ZERO'
+_MTM_STATUS_MISSING = 'Missing MtM'                   # rows with no matching MtM value
 
 
 def _mtm_norm_party(s):
@@ -2819,7 +2820,8 @@ def _mtm_parse_num(s):
 def _mtm_apply_cem_values(cem_rows, file_rows):
     """Fill each CEM row's 'Valor MTM' (rounded 2dp, signed) from VCP_CETIP_MTM,
     matching col C (CETIP ID) to Código IF. Zero → keep 0.00 + zero comment.
-    cem_rows are raw data lists (pre-meta). Returns (matched, zeros)."""
+    Rows with NO matching value → status 'Missing MtM'. cem_rows are FINALIZED
+    (status at index -4). Returns (matched, zeros, missing)."""
     vmap = {}
     for r in file_rows:
         b = _mtm_norm_party(_cc_cell(r, 1))
@@ -2830,18 +2832,20 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
         if not cid or num is None:
             continue                                     # header row skipped here too
         vmap.setdefault(cid.upper(), num)
-    matched = zeros = 0
+    matched = zeros = missing = 0
     for row in cem_rows:
         cid = str(row[0] or '').strip().upper()
-        if cid not in vmap:
-            continue
-        v = round(vmap[cid], 2)
-        row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)          # #,##0.00 (comma thousands)
-        if v == 0:
-            row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
-            zeros += 1
-        matched += 1
-    return matched, zeros
+        if cid in vmap:
+            v = round(vmap[cid], 2)
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)      # #,##0.00 (comma thousands)
+            if v == 0:
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                zeros += 1
+            matched += 1
+        else:
+            row[-4] = _MTM_STATUS_MISSING                  # no MtM value → Missing MtM
+            missing += 1
+    return matched, zeros, missing
 
 
 def _mtm_is_edg_value_name(n):
@@ -2850,45 +2854,43 @@ def _mtm_is_edg_value_name(n):
 
 
 def _mtm_apply_edg_values(data, file_rows):
-    """Stream MtM file: col A = contract ID, col B = MtM value. IDs starting with
-    'JP' map to the COE table (by Código do COE); the rest to the EDG table (by
-    Código IF). Value → #,##0.00 (signed); zero → 0.00 + zero comment. Rows are
-    matched onto the already-loaded tables. Returns (edg_matched, coe_matched, zeros)."""
+    """EDG file: col A = contract ID, col B = MtM value (IDs 'JP*' are COE, the rest
+    EDG). Match by ID onto the EDG and COE tables; set 'Valor MTM' (#,##0.00 signed,
+    zero → 0.00 + zero comment). Rows with NO matching value → status 'Missing MtM'.
+    Rows are FINALIZED (status at -4). Returns (edg_matched, coe_matched, zeros, missing)."""
     tables = data.get('tables') or {}
-    def _index(rows):
-        idx = {}
-        for row in rows or []:
-            k = str((row[0] if row else '') or '').strip().upper()
-            if k:
-                idx.setdefault(k, row)
-        return idx
-    edg_by = _index(tables.get('EDG'))
-    coe_by = _index(tables.get('COE'))
-    edg_m = coe_m = zeros = 0
+    fmap = {}
     for r in file_rows:
         cid = str(_cc_cell(r, 0) or '').strip().strip("'").strip('"')
         num = _mtm_parse_num(_cc_cell(r, 1))
-        if not cid or num is None:
-            continue                                     # header row skipped too
-        v = round(num, 2)
-        txt = '{:,.2f}'.format(v)
-        if cid.upper().startswith('JP'):
-            row = coe_by.get(cid.upper())
-            if row is not None:
-                row[_MTM_COE_VALOR_IDX] = txt
-                if v == 0:
-                    row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT
-                    zeros += 1
-                coe_m += 1
+        if cid and num is not None:
+            fmap.setdefault(cid.upper(), num)              # header row skipped (value not numeric)
+    edg_m = coe_m = zeros = missing = 0
+    for row in tables.get('EDG', []) or []:
+        cid = str(row[0] or '').strip().upper()
+        if cid in fmap:
+            v = round(fmap[cid], 2)
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
+            if v == 0:
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                zeros += 1
+            edg_m += 1
         else:
-            row = edg_by.get(cid.upper())
-            if row is not None:
-                row[_MTM_VALOR_IDX] = txt
-                if v == 0:
-                    row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
-                    zeros += 1
-                edg_m += 1
-    return edg_m, coe_m, zeros
+            row[-4] = _MTM_STATUS_MISSING
+            missing += 1
+    for row in tables.get('COE', []) or []:
+        cid = str(row[0] or '').strip().upper()
+        if cid in fmap:
+            v = round(fmap[cid], 2)
+            row[_MTM_COE_VALOR_IDX] = '{:,.2f}'.format(v)
+            if v == 0:
+                row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                zeros += 1
+            coe_m += 1
+        else:
+            row[-4] = _MTM_STATUS_MISSING
+            missing += 1
+    return edg_m, coe_m, zeros, missing
 
 
 def _mtm_path_for(ymd):
@@ -3005,29 +3007,30 @@ def _mtm_build_from_folder(folder):
             rows = _cc_read_rows(coe_fn, fh.read())
         buckets['COE'], coe_ref = _mtm_build_coe(rows)
     # CEM MtM values (VCP_CETIP_MTM) — applied to the CEM book before finalize.
+    # Finalize FIRST (adds status/meta) so the value files can set 'Missing MtM'.
+    counts = _mtm_finalize(buckets)
     cem_val_fn = next((fn for fn in files if _mtm_is_cem_value_name(fn)), None)
-    cem_matched = cem_zeros = 0
+    cem_matched = cem_zeros = cem_missing = 0
     if cem_val_fn and buckets.get('CEM'):
         with open(os.path.join(folder, cem_val_fn), 'rb') as fh:
             vrows = _cc_read_rows(cem_val_fn, fh.read())
-        cem_matched, cem_zeros = _mtm_apply_cem_values(buckets['CEM'], vrows)
-    # EDG/COE MtM values (Stream_level_MTM) — JP* → COE, else EDG. Before finalize.
+        cem_matched, cem_zeros, cem_missing = _mtm_apply_cem_values(buckets['CEM'], vrows)
     edg_val_fn = next((fn for fn in files if _mtm_is_edg_value_name(fn)), None)
-    edg_matched = edg_coe_matched = 0
+    edg_matched = edg_coe_matched = edg_missing = 0
     if edg_val_fn:
         with open(os.path.join(folder, edg_val_fn), 'rb') as fh:
             erows = _cc_read_rows(edg_val_fn, fh.read())
-        edg_matched, edg_coe_matched, _ez = _mtm_apply_edg_values({'tables': buckets}, erows)
-    counts = _mtm_finalize(buckets)
+        edg_matched, edg_coe_matched, _ez, edg_missing = _mtm_apply_edg_values({'tables': buckets}, erows)
     return {
         'success': True, 'tables': buckets, 'counts': counts,
         'ref_date': ref_date, 'coe_ref_date': coe_ref,
         'diagnostics': {'kept': kept, 'matched': matched,
                         'swap_file': swap_fn, 'coe_file': coe_fn,
                         'cem_value_file': cem_val_fn,
-                        'cem_matched': cem_matched, 'cem_zeros': cem_zeros,
+                        'cem_matched': cem_matched, 'cem_zeros': cem_zeros, 'cem_missing': cem_missing,
                         'edg_value_file': edg_val_fn,
-                        'edg_matched': edg_matched, 'edg_coe_matched': edg_coe_matched},
+                        'edg_matched': edg_matched, 'edg_coe_matched': edg_coe_matched,
+                        'edg_missing': edg_missing},
     }, (swap_fn, coe_fn)
 
 
@@ -3266,16 +3269,17 @@ def api_mtm_process():
         if not cem_rows:
             return jsonify({'success': False,
                             'error': 'No CEM contracts loaded for this date — import the swap file first.'}), 400
-        m, z = _mtm_apply_cem_values(cem_rows, rows)   # fills Valor MTM on existing CEM rows
+        m, z, miss = _mtm_apply_cem_values(cem_rows, rows)   # Valor MTM + Missing MtM on CEM
         data['diagnostics'] = dict(data.get('diagnostics') or {},
-                                   cem_value_file=f.filename, cem_matched=m, cem_zeros=z)
+                                   cem_value_file=f.filename, cem_matched=m, cem_zeros=z, cem_missing=miss)
     elif _mtm_is_edg_value_name(f.filename):
         if not (data.get('tables') or {}).get('EDG') and not (data.get('tables') or {}).get('COE'):
             return jsonify({'success': False,
                             'error': 'No EDG/COE rows loaded for this date — import the swap/COE files first.'}), 400
-        em, cm, z = _mtm_apply_edg_values(data, rows)  # JP* → COE, else EDG
+        em, cm, z, miss = _mtm_apply_edg_values(data, rows)  # JP* → COE, else EDG; + Missing MtM
         data['diagnostics'] = dict(data.get('diagnostics') or {},
-                                   edg_value_file=f.filename, edg_matched=em, edg_coe_matched=cm, edg_zeros=z)
+                                   edg_value_file=f.filename, edg_matched=em, edg_coe_matched=cm,
+                                   edg_zeros=z, edg_missing=miss)
     elif _mtm_is_coe_name(f.filename):
         coe_rows, coe_ref = _mtm_build_coe(rows)
         for i, rw in enumerate(coe_rows):
