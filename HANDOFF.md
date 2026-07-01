@@ -2582,3 +2582,42 @@ apps/pages/routes.py                  ← _MTM_STATUS_MISSING; apply c/ Missing 
 apps/templates/pages/mtm-swap.html    ← Comments só em Check; badge missing mtm; sort genérico; order [[2,asc]]
 apps/templates/pages/accrual-swap.html← sort genérico; order [[2,asc]] (Missing primeiro permanente)
 ```
+
+---
+
+## 48. Sessão 2026-07-01 (cont.) — MtM: Código Conta Parte por visão + contraparte fixa por book
+
+Commits: `8396790` (Conta Parte por visão), `427873b` (contraparte fixa por book).
+
+### Código Conta Parte por visão (`8396790`)
+- Na geração dos arquivos Conecta, o campo **Código Conta Parte** deixa de ser fixo `73760009` e passa a variar
+  conforme a visão do arquivo (`_MTM_GEN_PARTY_ACCT`):
+  - **Banco** → `73760009`
+  - **Lawton** → `00041007`
+  - **Atacama** → `85398005`
+- `_mtm_swap_fields(cid, party_key, sinal, v, ymd)` usa `_MTM_GEN_PARTY_ACCT[party_key]`.
+
+### Contraparte fixa por book (`427873b`)
+- Cada book espelha **somente** as linhas cuja contraparte casa com o lado fixo do book (`_MTM_GEN_BOOK_CPTY`):
+  - **EDG → Atacama** (`MtM_ATACAMA-EDG`)
+  - **CEM → Lawton** (`MtM_LAWTON-CEM`)
+  - **Hybrids → Lawton** (`MtM_LAWTON-HYB`)
+- `_mtm_generate_book`: só espelha row (sinal invertido) quando `_mtm_cpty_of(row) == book_cpty`; usa `book_cpty`
+  (não a cpty por linha) para nome/party/conta do arquivo. Evita combinações fora da lista (ex.: linha Lawton dentro
+  de EDG entra só no `MtM_BANCO-EDG`, **não** cria `MtM_LAWTON-EDG`).
+- Testado: EDG → `MtM_BANCO-EDG` + `MtM_ATACAMA-EDG` (conta 85398005); CEM → `MtM_BANCO-CEM` + `MtM_LAWTON-CEM`
+  (conta 00041007).
+
+### Pendências MtM (abertas)
+- **Botão Validation**: gerar TODOS os arquivos + e-mail (criar template MTM) anexando Lawton/Atacama.
+- **Recon MtM**: produzir status `Check` que habilita edição de Comments (ainda não implementado).
+- **Arquivos de valor Hybrids/Commodities**: aguardando layout/spec do usuário.
+
+### Nota recorrente
+- Novos episódios de `routes 2.py` (IDE/macOS) durante os commits; recuperado antes de cada edição
+  (`routes 2.py = HEAD + DEV BYPASS ✓`, `mv` de volta, syntax OK). Commits saíram limpos (`strip==HEAD`, sem DEV BYPASS).
+
+### Arquivos (sessão 48)
+```
+apps/pages/routes.py   ← _MTM_GEN_PARTY_ACCT (Conta Parte por visão); _MTM_GEN_BOOK_CPTY + _mtm_generate_book (cpty fixa/book)
+```
