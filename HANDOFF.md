@@ -2114,3 +2114,63 @@ apps/static/data/translations/{en,br,es}.json          ← acc-prev-*, acc-confi
 - Recon depende de `operacoes.*` com header na linha 5, contas `04880006`/`73760009`, marker `REGISTRO DE PU/FATOR`.
 - CC do End Process (`renato.montoza`, `danilo.camposfonseca`) são **OTC Ops** — nunca rotular como Middle Office.
 - **Emails em inglês.** Caminhos `I:\...` só no ambiente JPM (env override em dev).
+
+## 36. Sessão 2026-07-01 — Dashboard (Top 5 por período + cantos arredondados), CETIP e-mail "Not found", script de pastas
+
+Commits: `c3b4603`, `12becdf`, `c7d38c8`, `8bf05ff`, `2b679c7`. **Testado no dev (8050 via `/dev-login`)**; template
+CETIP renderizado standalone com Jinja.
+
+### A) Dashboard — Top 5 cards seguem o filtro Month/Year/All (`c3b4603`)
+- **Bug:** o estado vazio fazia `card-body.innerHTML = '<p>No deals found</p>'`, **apagando o `<canvas>`**. Na carga
+  inicial (`month` = mês corrente, muitas vezes vazio) os 3 canvases eram removidos; ao trocar p/ Year/All,
+  `getElementById(...)` retornava **null** e a função saía cedo (`if (!ctx) return;`) → mensagem presa p/ sempre. O
+  backend `/api/dashboard-stats?period=` **já filtrava certo** (`_file_in_period`) — o defeito era 100% front.
+- **Fix:** helper **`_setChartEmpty(canvas, isEmpty)`** em `dashboard.js` — esconde o wrapper (`canvas.parentElement`) +
+  mostra um `<p class="dash-empty-msg">` reutilizável, **sem remover o canvas**. Ao voltar a ter dados, restaura o
+  wrapper. Aplicado em `buildClientsChart`/`buildProductsChart`/`buildCommoditiesChart` (`if (_setChartEmpty(ctx,
+  !top5.length)) return;`). Agora alterna em qualquer direção (vazio↔dados). Badges de período já eram atualizados por
+  `updatePeriodBadges`.
+
+### B) Dashboard — cantos arredondados das barras empilhadas (`c3b4603`, `12becdf`)
+- **`stackEndRadius`** reescrito: retorna **objeto por-canto** (`{topLeft,topRight,bottomLeft,bottomRight}`) +
+  `borderSkipped:false` — o combo que o **Chart.js v4 honra** no segmento do topo (número + `borderSkipped:'bottom'` era
+  descartado). Assinatura `stackEndRadius(R, edge)`: `'bottom'`→vertical (arredonda topo), `'left'`→horizontal (arredonda
+  direita). Aplicado em Deal Flow (`buildFlowChart`), Top Clients (`buildClientsChart`) e Monthly.
+- **Settlement Forecast — plugin de clip (`12becdf`):** o approach por-segmento só arredonda o **segmento do topo**, que
+  no forecast costuma ser um sliver fino de SWAP/Option → o Chart.js clampa o raio à altura minúscula e a ponta fica
+  reta. Plugin **`roundedStackTopClip`** (registrado só no chart do forecast via `plugins:[...]`) recorta cada coluna num
+  retângulo de **topo arredondado da pilha inteira** antes das barras desenharem (`beforeDatasetsDraw` calcula topo/base
+  por categoria, `ctx.clip(path)`; `afterDatasetsDraw` faz `restore`), garantindo a ponta arredondada **independente da
+  espessura** do produto do topo (gradientes intactos). Forecast passou a `borderRadius:0` (o plugin arredonda).
+- **Cache-bust** `dashboard.js` em `index.html`: `20260630a`→`20260701b`.
+
+### C) CETIP e-mail — arquivos "Not found" na tabela (`c7d38c8`, `2b679c7`)
+- No loop de `_CETIP_RULES` (`api_cp_cetip_settlement`), rastreio **`rule_matched`**; regras sem arquivo correspondente
+  na pasta origem viram lista **`missing`** com o **nome esperado** derivado da data (`rule['dest_name'](ref.strftime(
+  '%y%m%d'))`). Passado só ao e-mail do **OTC Ops** (Sales Support fica intacto).
+- `_send_cetip_email(..., missing=None)` → template `email-template-cetip-saved.html`: nova **coluna Status** (pill verde
+  **Saved** / âmbar **Not found**, nome esperado em cinza ou `—`) + **badge de contagem "Not Found"** (âmbar) ao lado do
+  "File(s) Saved" (aparece só quando há faltantes) + frase na intro. Loop `missing_files` após `saved_files`.
+- **Linter CSS (`2b679c7`):** VSCode acusava erro no `style="{% if %}..."` (parseava o Jinja como CSS). Fix: escolher a
+  **tag `<td>` inteira** via `{% if missing_count %}`/`{% else %}` (50%+padding vs 100%), deixando cada `style` como CSS
+  estático. **Regra geral: nunca colocar `{% %}`/`{{ }}` dentro de um atributo `style`.**
+
+### D) Script — pré-criar pastas da origem CETIP (`8bf05ff`)
+- **`scripts/create_cetip_folders.py`** (stdlib pura, sem deps): cria `CETIP_SOURCE_ROOT\YYYY\MM. Month\DD` (mesma
+  convenção da rotina + `EN_MONTH_NAMES`) **só para dias úteis ANBIMA** (lê `apps/static/data/anbima.json`, weekday<5 e
+  não-feriado — mesma regra de `_prev_anbima_bizday`).
+- Flags: `--year YYYY [YYYY...]` (ano cheio), `--start/--end YYYY-MM-DD` (intervalo), `--root` (senão `$CETIP_SOURCE_ROOT`
+  ou o default do routes.py), **`--dry-run`** (simula, não escreve). **Idempotente** (`os.makedirs(exist_ok=True)`, conta
+  "Already existed"; nunca mexe no conteúdo das pastas).
+- Acha `anbima.json` relativo (sobe 1 nível a partir de `scripts/`) — rodar a cópia dentro do repo.
+- **Nota de ambiente (JPM):** erro `No Python at ...python3.12\latest\python.exe` = venv `OTCTracker` órfão (base Python
+  sumiu), **não é do script**. Como é stdlib pura, rodar com qualquer Python 3: `py ...\scripts\create_cetip_folders.py`.
+
+### Arquivos (sessão 36)
+```
+apps/static/js/pages/dashboard.js              ← _setChartEmpty; stackEndRadius objeto+edge; plugin roundedStackTopClip (forecast)
+apps/templates/pages/index.html                ← cache-bust dashboard.js 20260701b
+apps/pages/routes.py                           ← missing[] no loop CETIP; _send_cetip_email(missing=...)
+apps/templates/pages/email-template-cetip-saved.html  ← coluna Status (Saved/Not found), badge Not Found, sem Jinja em style
+scripts/create_cetip_folders.py                ← (novo) cria pastas ano/mês/dia p/ dias úteis ANBIMA
+```
