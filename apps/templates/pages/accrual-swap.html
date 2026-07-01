@@ -278,6 +278,9 @@ table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 .acc-recon-btn { background: #6f42c1; }
 .acc-recon-btn:hover { background: #5e37a6; }
 .acc-recon-btn:disabled { opacity: .55; cursor: default; transform: none; }
+.acc-endproc-btn { background: #157347; }
+.acc-endproc-btn:hover { background: #146c43; }
+.acc-endproc-btn:disabled { opacity: .55; cursor: default; transform: none; }
 /* Loading feedback (New Deals model): pure-CSS spinner replaces the icon while busy. */
 .acc-spinner { display:inline-block; width:14px; height:14px; border:2px solid currentColor;
     border-right-color: transparent; border-radius:50%; opacity:.9; vertical-align:-2px;
@@ -419,6 +422,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         </button>
         <button type="button" id="accRecon" class="acc-load-btn acc-recon-btn">
             <i data-lucide="git-compare"></i><span data-lang="acc-recon">Recon</span>
+        </button>
+        <button type="button" id="accEndProcess" class="acc-load-btn acc-endproc-btn">
+            <i data-lucide="flag"></i><span data-lang="acc-endproc">End Process</span>
         </button>
     </div>
 
@@ -1144,6 +1150,55 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             .catch(function () { accBtnBusy(btn, false); netErr(); });
     }
 
+    // ── End Process → all Check rows must be commented, then final-status e-mail ─
+    function showUncommented(pending) {
+        var rows = (pending || []).map(function (m) {
+            return '<tr><td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.lob) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.codigo) + '</td>' +
+                   '<td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.id) + '</td></tr>';
+        }).join('');
+        Swal.fire({
+            icon: 'warning', width: 620, backdrop: true,
+            title: t('acc-endproc-pending-title', 'Comment required'),
+            html: '<p style="font-size:.86em;color:#555;margin:0 0 10px">' +
+                    t('acc-endproc-pending-desc', 'The contracts below are in Check status without a comment. Comment them before ending the process:') + '</p>' +
+                  '<div style="max-height:48vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px">' +
+                  '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#343a40;color:#fff">' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">LOB</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">Código IF</th>' +
+                  '<th style="padding:6px 8px;text-align:left;font-size:.78em">ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+            confirmButtonColor: '#0066cc', customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient' }
+        });
+    }
+
+    function runEndProcess(dateISO) {
+        var btn = document.getElementById('accEndProcess');
+        Swal.fire({
+            icon: 'question', backdrop: true, title: t('acc-endproc-title', 'End the EOM process?'),
+            text: t('acc-endproc-confirm', 'Sends the final status e-mail to OTC Ops (cc Middle Office).'),
+            showCancelButton: true, confirmButtonText: '<i class="ti ti-flag"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#157347', cancelButtonColor: '#dc3545', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            accBtnBusy(btn, true);
+            postJSON('/api/accrual-swap/end-process', { date: dateISO }).then(function (j) {
+                accBtnBusy(btn, false);
+                if (!j.success) {
+                    if (j.error === 'uncommented') { showUncommented(j.pending); return; }
+                    errSwal(j.error); return;
+                }
+                Swal.fire({
+                    icon: 'success', backdrop: true, title: t('acc-endproc-done', 'Process finalized'),
+                    html: (j.checks ? (j.checks + ' ' + t('acc-endproc-checks', 'check row(s) reported')) :
+                                      t('acc-endproc-nodiv', 'No divergences identified.')) +
+                          '<div style="margin-top:8px;font-size:.85em;color:#555">' + esc(t('acc-endproc-mail', 'Final status e-mail sent to OTC Ops (cc Middle Office).')) + '</div>',
+                    confirmButtonColor: '#0066cc', customClass: { confirmButton: 'bg-gradient' }
+                });
+            }).catch(function () { accBtnBusy(btn, false); netErr(); });
+        });
+    }
+
     // ── upload + process ────────────────────────────────────────────────────
     var drop = document.getElementById('accDrop');
     var fileInput = document.getElementById('accFile');
@@ -1349,6 +1404,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         if (val) val.addEventListener('click', function () { runValidation(pickedDateISO()); });
         var rec = document.getElementById('accRecon');
         if (rec) rec.addEventListener('click', function () { runRecon(pickedDateISO()); });
+        var endp = document.getElementById('accEndProcess');
+        if (endp) endp.addEventListener('click', function () { runEndProcess(pickedDateISO()); });
         loadByDate(todayISO());                          // load today's data (count-up from 0)
     });
 })();

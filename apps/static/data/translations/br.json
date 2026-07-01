@@ -1044,5 +1044,14 @@
   "swal-save-failed": "Não foi possível salvar a edição.",
   "acc-prev-field": "Campo",
   "acc-missing-title": "Missing Accrual — arquivo não gerado",
-  "acc-missing-desc": "Os contratos abaixo estão sem fator atualizado. Resolva antes de gerar o arquivo:"
+  "acc-missing-desc": "Os contratos abaixo estão sem fator atualizado. Resolva antes de gerar o arquivo:",
+  "acc-endproc": "Encerrar",
+  "acc-endproc-title": "Encerrar o processo EOM?",
+  "acc-endproc-confirm": "Envia o e-mail de status final para OTC Ops (cc Middle Office).",
+  "acc-endproc-pending-title": "Comentário obrigatório",
+  "acc-endproc-pending-desc": "Os contratos abaixo estão em Check sem comentário. Comente-os antes de encerrar o processo:",
+  "acc-endproc-done": "Processo finalizado",
+  "acc-endproc-checks": "linha(s) em check reportada(s)",
+  "acc-endproc-nodiv": "Nenhuma divergência identificada.",
+  "acc-endproc-mail": "E-mail de status final enviado para OTC Ops (cc Middle Office)."
 }

@@ -3635,6 +3635,92 @@ def api_accrual_row_comment():
     return jsonify({'success': True})
 
 
+# ── End Process: final EOM status e-mail to OTC Ops (cc Middle Office) ────────
+_ACC_ENDPROC_CC = ['renato.montoza@jpmorgan.com', 'danilo.camposfonseca@jpmchase.com']
+
+
+def _acc_check_status_rows(data):
+    """Return (all_check_rows, uncommented) — rows whose status is 'Check'."""
+    checks, pending = [], []
+    for lob, table in (data.get('tables') or {}).items():
+        for r in table:
+            if not r or len(r) < 15:
+                continue
+            if str(r[-4] or '').strip().lower() == 'check':
+                comment = str(r[-5] or '').strip()
+                item = {'id': str(r[-1]), 'lob': lob, 'codigo': str(r[0] or ''), 'comment': comment}
+                checks.append(item)
+                if not comment:
+                    pending.append(item)
+    return checks, pending
+
+
+def _send_accrual_endprocess_email(subject, html, logo_path):
+    """SMTP-only final-status e-mail to OTC Ops, cc the Middle Office. Best-effort."""
+    from email.mime.image import MIMEImage
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = subject
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = CETIP_OTC_OPS_EMAIL
+        msg['Cc'] = ', '.join(_ACC_ENDPROC_CC)
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Accrual Swap EOM final status.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<otc_logo>')
+            img.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(img)
+        msg.attach(related)
+        recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[accrual] end-process e-mail sent to %s (cc %s)', CETIP_OTC_OPS_EMAIL, _ACC_ENDPROC_CC)
+        return True
+    except Exception:
+        log.error('[accrual] end-process e-mail FAILED:\n%s', traceback.format_exc())
+        return False
+
+
+@blueprint.route('/api/accrual-swap/end-process', methods=['POST'])
+def api_accrual_end_process():
+    """Finish the EOM Accrual Swap process: every 'Check' row must be commented; then
+    e-mail the final status to OTC Ops (cc Middle Office)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    path, data = _accrual_load(p.get('date'))
+    if not data or not data.get('tables'):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    checks, pending = _acc_check_status_rows(data)
+    if pending:
+        return jsonify({'success': False, 'error': 'uncommented', 'pending': pending}), 400
+
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    subject = 'Accrual Swap - EOM - Final Status - {}'.format(ref.strftime('%d/%m/%Y'))
+    try:
+        html = render_template(
+            'pages/email-template-accrual-endprocess.html',
+            ref_date_fmt=ref.strftime('%d/%m/%Y'), has_check=bool(checks), checks=checks,
+            folder=CONECTA_NEW_PATH, current_year=datetime.now().year)
+        logo_path = _get_logo_path()
+        threading.Thread(target=_send_accrual_endprocess_email,
+                         args=(subject, html, logo_path), daemon=True).start()
+    except Exception:
+        log.error('[accrual] end-process e-mail prep failed:\n%s', traceback.format_exc())
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Accrual Sent', 'Accrual',
+                         'End Process · {} check row(s)'.format(len(checks)))
+    return jsonify({'success': True, 'checks': len(checks)})
+
+
 @blueprint.route('/holidays-calendar')
 def holidays_calendar():
     if not session.get('authenticated'):
