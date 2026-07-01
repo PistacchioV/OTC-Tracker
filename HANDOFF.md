@@ -2465,3 +2465,29 @@ apps/pages/routes.py                    ← _mtm_save (mkdir antes de gravar); i
 apps/templates/partials/head-css.html   ← .badge.badge-sent (#17a2b8) global
 apps/templates/pages/{5 new_deals, intrag-option, intrag-ndf, accrual-swap, mtm-swap}.html ← Sent → badge-sent
 ```
+
+---
+
+## 44. Sessão 2026-07-01 (cont.) — MtM: mapeia Valor MTM do book CEM (VCP_CETIP_MTM)
+
+Commit: `33c43c4`. **Testado no dev via /process (round-trip): valor 2dp com sinal + comentário de zero OK.**
+
+- **`_cc_read_rows` agora aceita `.txt`** (auto-detecta delimitador: tab > `;` > vírgula — assim os separadores de
+  milhar por vírgula dentro dos números não quebram as colunas).
+- **Arquivo CEM `VCP_CETIP_MTM`** (A=Trade Name, B=Counterparty Name, C=CETIP ID, D=MTM in BRL; campos vêm entre aspas
+  simples): `_mtm_apply_cem_values` filtra **B <> `bco j.p. morgan s.a. 2768 - gem br - rates`** (fica o lado da
+  contraparte), casa **C (CETIP ID) → Código IF** do book CEM, e grava **D arredondado a 2 casas (com sinal)** em Valor
+  MTM (idx 7). **Valor 0/0.00 → grava `0.00` + Comments `Valor MtM não poder ser ZERO`** (idx 8). `_mtm_parse_num` tira
+  aspas + separador de milhar e faz `float`.
+- Detecção do arquivo: `_mtm_is_cem_value_name` = nome contém `vcp_cetip_mtm` e não é `.msg` (ignora o e-mail
+  `Brazil_VCP_CETIP_MTM….msg`).
+- Integrado no **import-folder** (lê o arquivo da pasta e aplica ao CEM antes do finalize) e no **dropzone /process**
+  (aplica ao CEM já carregado; exige o swap importado antes). Diagnostics: `cem_value_file/cem_matched/cem_zeros`.
+- **Pendente:** arquivos de valor MTM dos outros books (EDG, Hybrids, Commodities, COE) — mesma mecânica, aguardando
+  spec de cada arquivo/coluna. Formato de exibição do Valor MTM = `{:.2f}` (ex. `-1802855.65`), sem separador de milhar.
+
+### Arquivos (sessão 44)
+```
+apps/pages/routes.py   ← _cc_read_rows .txt; _mtm_is_cem_value_name/_mtm_parse_num/_mtm_apply_cem_values;
+                         integra no import-folder e /process
+```
