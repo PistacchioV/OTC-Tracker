@@ -2432,6 +2432,12 @@ apps/templates/pages/accrual-swap.html  ← statusBadge → bg-gradient
 apps/templates/pages/mtm-swap.html      ← statusBadge → bg-gradient; botões Validation/Recon/End Process/Send batch restaurados
 ```
 
+### Ajuste (commit `11ec336`)
+- **Tabela COE ganhou coluna `Valor MTM` antes de Comments.** COE agora: Código do COE, Nome Simplificado Emissor,
+  Conta Emissor, Nome Figura, **Valor MTM** (vazio — sem fonte no arquivo, igual aos books swap), Comments. Atualizados
+  `MTM_COE_HEADERS` (front) e `_MTM_COE_HEADERS`/`_MTM_COE_SRC=[0,1,2,3,None,None]` (back).
+- Confirmado pelo usuário: caminho **sem** `2026` duplicado (`Regulatory\MTM\YYYY\mm. Month\DD`) está correto.
+
 
 
 
