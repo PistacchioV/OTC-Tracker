@@ -2409,6 +2409,29 @@ apps/templates/partials/topbar.html           ← PAGE_URL['MtM'], ACTION_META M
 apps/static/data/translations/{en,br,es}.json ← chaves mtm-*
 ```
 
+---
+
+## 42. Sessão 2026-07-01 (cont.) — Badge de Status em Accrual/MtM no padrão + botões restaurados na MtM
+
+Commit: `87b9945`.
+
+- **Status badge (accrual-swap + mtm-swap):** `statusBadge()` migrou para o padrão da seção 40 — `badge <cls>
+  bg-gradient` (removidos `badge-label` e `rounded-pill`). O mapa `ACC_STATUS_BADGE` já usava a paleta padrão
+  (New=`bg-info text-white`, Pending=warning, Sent=info, Success=success); acrescenta os status próprios da accrual
+  `missing accrual`/`check` (âmbar).
+- **MtM — botões restaurados** (usuário: "todos os botões serão necessários no MTM também"): Validation/Recon/End Process
+  (date card) e Send batch (por tabela). O **dropzone** continua roteando para `/api/mtm-swap/process` (detecta swap/COE
+  por nome) — NÃO usa o branching accrual `fileKind`→recon/factors (classificaria errado os arquivos MtM).
+- **Pendente:** back-end MtM de `validation`/`recon`/`end-process`/`send-batch`/`factors` — os botões chamam esses
+  endpoints (404 por ora). A semântica no MtM difere da accrual (MtM não tem factors); precisa de spec do usuário sobre o
+  que cada rotina faz no MtM (os arquivos `Stream_level_MTM`, `VCP_CETIP_MTM` da pasta provavelmente entram aqui).
+
+### Arquivos (sessão 42)
+```
+apps/templates/pages/accrual-swap.html  ← statusBadge → bg-gradient
+apps/templates/pages/mtm-swap.html      ← statusBadge → bg-gradient; botões Validation/Recon/End Process/Send batch restaurados
+```
+
 
 
 
