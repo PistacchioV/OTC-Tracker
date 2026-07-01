@@ -2521,3 +2521,41 @@ Commits: `7ca5940` (formato+match CEM), `0df98bc` (EDG/COE Stream), `d59b5c3` (s
 apps/pages/routes.py                    ← formato #,##0.00; _mtm_norm_party; _mtm_apply_edg_values (+ .txt no _cc_read_rows)
 apps/templates/partials/sidenav.html    ← remove Email, Custom Pages, Layouts
 ```
+
+---
+
+## 46. Sessão 2026-07-01 (cont.) — MtM: fix col G, arquivo EDG, geração de arquivos Conecta (Send batch + preview)
+
+Commits: `22651dc` (fixes), `0ecfcff` (geração + preview).
+
+### Fixes (`22651dc`)
+- **Nome Simplificado Contraparte** passa a puxar **col G (6)**, não H (`_MTM_DISPLAY_SRC[5]=6`).
+- Arquivo de valores EDG/COE detectado por nome base **`EDG`** (`_mtm_is_edg_value_name`, qualquer extensão).
+
+### Geração de arquivos (`0ecfcff`)
+- **Backend** (`_mtm_generate_book`/`_mtm_generate_coe`/`_mtm_write_gen_files`): arquivos **fixed-width** por book.
+  - Swap (EDG/CEM/HYB): `MtM_BANCO-<suf>` sempre + `MtM_LAWTON/ATACAMA-<suf>` **dinâmico** quando a contraparte
+    (col CONTRAPARTE/Conta) for Lawton `00041.00-7` / Atacama `83985.00-5`,`04880.00-6` — linha espelho com **sinal
+    invertido**. COE: `MtM_BANCO-COE`.
+  - Campos: `ID Sistema="MID  "`, tipo-linha `1` (header `0`), operação `0848` (COE `0475`), Meu Número=10 aleatórios,
+    Código Contrato/Instrumento = ID **cru** (sem padding), Nome Parte **20ch** (JPMORGANBM+10 / INTRAGATACAMAFDO+4 /
+    INTRAGLAWTONFDO+5), Conta Parte `73760009` (COE Conta Emissor `73760401`), Sinal `00`(>=0)/`01`(<0) [COE Déb/Créd
+    `+`/`-`], Valor **abs** zero-pad (swap 10+2=12 díg; COE 16+2=18), Notional min/max = 6 espaços, Data Ref = **datepicker**
+    (header usa **hoje**).
+  - Salva `.txt` (latin-1, CRLF) em **`CONECTA_NEW_PATH`** (Batch Conecta/New) **e** na **pasta origem MTM do dia**
+    (`_mtm_source_dir`).
+- **Endpoint** `POST /api/mtm-swap/send-batch` (por book) → escreve arquivos e devolve **preview** (colunas+linhas).
+- **Front**: botão Send batch abre **modal de preview** (uma tabela por arquivo, colunas da spec). Testado (BANCO+LAWTON
+  com sinal invertido, valor/formato corretos).
+- **Pendente:** botão **Validation** = gerar TODOS os arquivos + e-mail (criar template MTM) anexando Lawton/Atacama.
+  Confirmar: Conta Parte na visão da contraparte (usei `73760009` fixo conforme spec literal).
+
+### Nota
+- Novo episódio de `routes 2.py` (IDE) durante o commit fez o strip falhar; o commit `0ecfcff` saiu **correto** (geração,
+  sem DEV BYPASS = HEAD). Recuperado: apagado `routes 2.py`, reanexado DEV BYPASS ao working, `strip(working)==HEAD`.
+
+### Arquivos (sessão 46)
+```
+apps/pages/routes.py                 ← col G; EDG filename; geração Conecta + /api/mtm-swap/send-batch
+apps/templates/pages/mtm-swap.html   ← Send batch → modal de preview
+```
