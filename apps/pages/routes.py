@@ -2765,9 +2765,10 @@ _MTM_FIXED_HEADERS = [
     'CONTRAPARTE / Conta', 'Nome Simplificado Contraparte',
     'Data Vencimento', 'Valor MTM', 'Comments',
 ]
-# Source column (0-based) per fixed header: A=0, C=2, D=3, E=4, F=5, H=7, K=10.
-# 'Valor MTM' (pending → blank) and 'Comments' (manual) have no source.
-_MTM_DISPLAY_SRC  = [0, 2, 3, 4, 5, 7, 10, None, None]
+# Source column (0-based) per fixed header: A=0, C=2, D=3, E=4, F=5, G=6, K=10.
+# 'Nome Simplificado Contraparte' comes from col G (6). 'Valor MTM' (pending →
+# blank) and 'Comments' (manual) have no source.
+_MTM_DISPLAY_SRC  = [0, 2, 3, 4, 5, 6, 10, None, None]
 
 _MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emissor', 'Nome Figura', 'Valor MTM', 'Comments']
 _MTM_COE_SRC      = [0, 1, 2, 3, None, None]  # A,B,C,D (A '#' stripped) + Valor MTM (blank) + Comments (manual)
@@ -2844,9 +2845,8 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
 
 
 def _mtm_is_edg_value_name(n):
-    """EDG/COE MtM values file (assumed 'Stream_level_MTM.txt')."""
-    nl = (n or '').lower()
-    return 'stream' in nl and 'mtm' in nl and not nl.endswith('.msg')
+    """EDG/COE MtM values file — named 'EDG.<ext>' (any extension)."""
+    return os.path.splitext(n or '')[0].strip().lower() == 'edg'
 
 
 def _mtm_apply_edg_values(data, file_rows):
