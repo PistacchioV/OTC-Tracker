@@ -3328,6 +3328,9 @@ _MTM_GEN_PARTY_ACCT = {                              # Código Conta Parte per v
     'BANCO': '73760009', 'LAWTON': '00041007', 'ATACAMA': '85398005',
 }
 _MTM_GEN_BOOK_SUFFIX = {'EDG': 'EDG', 'CEM': 'CEM', 'Hybrids': 'HYB'}
+# Fixed counterparty file per book: EDG→Atacama, CEM/Hybrids→Lawton
+# (MtM_ATACAMA-EDG, MtM_LAWTON-CEM, MtM_LAWTON-HYB).
+_MTM_GEN_BOOK_CPTY = {'EDG': 'ATACAMA', 'CEM': 'LAWTON', 'Hybrids': 'LAWTON'}
 _MTM_GEN_SWAP_COLS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Meu Número',
                       'Código do Contrato', 'Nome Simplificado Parte', 'Código Conta Parte',
                       'Sinal Valor MTM', 'Valor MTM', 'Notional Mínimo', 'Notional Máximo',
@@ -3375,11 +3378,13 @@ def _mtm_coe_header(today):
 
 
 def _mtm_generate_book(book_key, rows, ymd):
-    """Files for one swap book: MtM_BANCO-<suffix> always; MtM_LAWTON/ATACAMA-<suffix>
-    when those counterparties appear (mirror row, opposite sign)."""
+    """Files for one swap book: MtM_BANCO-<suffix> always; plus the book's fixed
+    counterparty file (EDG→Atacama, CEM/Hybrids→Lawton) with the mirror rows
+    (opposite sign) for that book's intragroup contracts."""
     suffix = _MTM_GEN_BOOK_SUFFIX.get(book_key)
     if not suffix:
         return {}
+    book_cpty = _MTM_GEN_BOOK_CPTY.get(book_key)     # ATACAMA (EDG) / LAWTON (CEM,HYB)
     today = datetime.now().strftime('%Y%m%d')
     banco = 'MtM_BANCO-' + suffix
     files = {banco: {'view': 'BANCO', 'cols': _MTM_GEN_SWAP_COLS,
@@ -3389,12 +3394,12 @@ def _mtm_generate_book(book_key, rows, ymd):
         cid = row[0]
         sinal = '00' if v >= 0 else '01'
         files[banco]['rows'].append(_mtm_swap_fields(cid, 'BANCO', sinal, v, ymd))
-        cpty = _mtm_cpty_of(row)
-        if cpty:
-            fn = 'MtM_' + cpty + '-' + suffix
-            files.setdefault(fn, {'view': cpty, 'cols': _MTM_GEN_SWAP_COLS,
-                                  'header': _mtm_swap_header(cpty, today), 'rows': []})
-            files[fn]['rows'].append(_mtm_swap_fields(cid, cpty, '01' if v >= 0 else '00', v, ymd))
+        # Mirror only the rows whose counterparty matches the book's fixed side.
+        if book_cpty and _mtm_cpty_of(row) == book_cpty:
+            fn = 'MtM_' + book_cpty + '-' + suffix
+            files.setdefault(fn, {'view': book_cpty, 'cols': _MTM_GEN_SWAP_COLS,
+                                  'header': _mtm_swap_header(book_cpty, today), 'rows': []})
+            files[fn]['rows'].append(_mtm_swap_fields(cid, book_cpty, '01' if v >= 0 else '00', v, ymd))
     return files
 
 
