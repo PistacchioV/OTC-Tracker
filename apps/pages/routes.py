@@ -2761,8 +2761,8 @@ _MTM_FIXED_HEADERS = [
 # 'Valor MTM' (pending → blank) and 'Comments' (manual) have no source.
 _MTM_DISPLAY_SRC  = [0, 2, 3, 4, 5, 7, 10, None, None]
 
-_MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emissor', 'Nome Figura', 'Comments']
-_MTM_COE_SRC      = [0, 1, 2, 3, None]        # A,B,C,D (A '#' stripped) + Comments (manual)
+_MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emissor', 'Nome Figura', 'Valor MTM', 'Comments']
+_MTM_COE_SRC      = [0, 1, 2, 3, None, None]  # A,B,C,D (A '#' stripped) + Valor MTM (blank) + Comments (manual)
 _MTM_COE_REFDATE_COL = 6                       # col G reference date
 
 
