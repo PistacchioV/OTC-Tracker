@@ -2559,3 +2559,26 @@ Commits: `22651dc` (fixes), `0ecfcff` (geração + preview).
 apps/pages/routes.py                 ← col G; EDG filename; geração Conecta + /api/mtm-swap/send-batch
 apps/templates/pages/mtm-swap.html   ← Send batch → modal de preview
 ```
+
+---
+
+## 47. Sessão 2026-07-01 (cont.) — Status "Missing MtM" + Comments só em Check + ordem permanente (Missing primeiro)
+
+Commit: `2fd4e4f`.
+
+- **Status "Missing MtM"** (`_MTM_STATUS_MISSING`): ao aplicar valores, IDs **sem** valor MtM correspondente recebem
+  status `Missing MtM`. CEM (via VCP_CETIP_MTM) e EDG+COE (via `EDG.*`). Os apply passaram a rodar **após o finalize**
+  (linhas já com status em `-4`); `_mtm_apply_cem_values` retorna `(matched,zeros,missing)`, `_mtm_apply_edg_values`
+  retorna `(edg,coe,zeros,missing)`. `_mtm_build_from_folder` finaliza antes de aplicar.
+- **Comments (MtM)** volta a ser **editável só em status `Check`** (habilitado pela Recon — **ainda não implementada no
+  MtM**); travado (texto plano) nos demais. (Correção: não abre em Missing.)
+- **Ordem permanente por status** em **accrual E mtm**: `order: [[2,'asc']]` no DataTable + sort key genérico
+  (`k.indexOf('missing')===0 ? '0' : '1'`) → qualquer status "Missing …" fica **primeiro**. Badge `missing mtm` = âmbar.
+- Testado: CEM com 1 casado (New+valor) e 1 sem match (`Missing MtM`); pages 200.
+
+### Arquivos (sessão 47)
+```
+apps/pages/routes.py                  ← _MTM_STATUS_MISSING; apply c/ Missing MtM (finalize antes); callers
+apps/templates/pages/mtm-swap.html    ← Comments só em Check; badge missing mtm; sort genérico; order [[2,asc]]
+apps/templates/pages/accrual-swap.html← sort genérico; order [[2,asc]] (Missing primeiro permanente)
+```
