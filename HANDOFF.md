@@ -2232,3 +2232,61 @@ apps/templates/pages/new_deals-ndf-fwdstart.html      ← idem (arBuildDeal)
 apps/templates/pages/new_deals-ndf-otherpublisher.html← idem (arBuildDeal)
 apps/static/data/translations/{en,br,es}.json         ← nd-b3id-hint, swal-b3-confirmed-title/text
 ```
+
+---
+
+## 38. Sessão 2026-07-01 (cont.) — Notificações do sino com deep-link por data (Accrual ?date=, New Deals ?tradedate=)
+
+Commit: `86eb12a`. **Páginas carregam 200 com os params no dev**; token e parse validados isoladamente.
+Deep-link de accrual/new deals não testado com dados reais (máquina dev sem cache de accrual/new deals).
+
+### Sintoma / causa raiz
+- Clicar numa notificação de **Accrual** "não fazia nada": a navegação (`PAGE_URL['Accrual']='/accrual-swap'`)
+  **já estava correta**, mas a página **sempre carregava `loadByDate(todayISO())`** — hoje costuma estar vazio, então
+  recarregava a mesma view vazia (percepção de "nada aconteceu"). Idem New Deals: filtro padrão fixo em Trade Date = hoje.
+
+### A) Accrual — landing na data certa
+- **`accrual-swap.html`**: load inicial agora lê **`?date=YYYY-MM-DD`** da URL; senão busca a **última data com dados**
+  e cai nela; senão hoje. (substitui `loadByDate(todayISO())`).
+- **routes.py**: `_accrual_latest_ymd()` (escaneia `accrual_swap_*.json` sob `ACCRUAL_JSON_ROOT`, pega o maior YYYYMMDD)
+  + rota **`GET /api/accrual-swap/latest`** → `{success, date}`.
+
+### B) Token de data nas notificações + deep-link no topbar (mecanismo unificado)
+- **Helper `_nd_token(value)`** (routes.py, após `_create_notification`): retorna sufixo **` [ND:YYYY-MM-DD]`** para o
+  `detail`; aceita `date`/`YYYYMMDD`/`YYYY-MM-DD`/`dd-mm-yyyy`/`dd/mm/yyyy` (usa `_parse_date_any`); `''` se inválido.
+- **Topbar** (`renderNotifications`): faz regex `\[ND:(\d{4}-\d{2}-\d{2})\]` no detalhe, **remove o token do texto
+  exibido**, e monta o URL: página **Accrual → `?date=`**, páginas **New Deals → `?tradedate=`** (mapa
+  `NEW_DEALS_PAGES`). Sem token → cai no default da própria página (hoje). Reaproveita o padrão do deep-link `?spn=` do
+  Reference Data.
+- **Accrual (11 call sites)**: token com `data.get('date')` / `ymd` / `result.get('date')` conforme o que está em escopo.
+- **New Deals (single-deal)**: token com `updated_deal.get('TradeDate')` nos PATCH (Status/Deal Updated de opt-comm,
+  opt-fxo, ndf-comm e genérico fwdstart/otherpub) e nos DELETE (capturado `removed = deals.pop(idx)`), e no upsert
+  `?notify=1` da ndf-comm (`data.get('TradeDate')`).
+
+### C) New Deals — filtro Trade Date honra `?tradedate=`
+- Nas **5 páginas**, o bloco "Default filter: Trade Date = today" passou a: se `?tradedate=YYYY-MM-DD` presente →
+  converte p/ dd/mm/yyyy e usa; senão hoje. **Via sidenav (sem param) = hoje** (comportamento pedido).
+
+### Escopo deliberado (não coberto)
+- Notificações **bulk** (Sent to B3, B3 Mapped, Bulk Delete/Update, import XLSX FXO) **não** recebem token → abrem no
+  default (hoje). Motivo: múltiplos deals podem ter trade dates diferentes; o batch diário normalmente é do dia.
+- Add de deal via **modal não gera notificação** (endpoints save/cache não notificam) — nada a deep-linkar ali.
+
+### Padrões identificados
+- **Deep-link por data via token no detail:** `_nd_token` no backend + parse/strip no topbar é o padrão reutilizável
+  para qualquer página data-driven; o topbar decide o nome do query param por página. Nunca exibir o token cru.
+- **Páginas data-driven não devem forçar "hoje" no load:** honrar query param, senão última data com dados.
+
+### Arquivos (sessão 38)
+```
+apps/pages/routes.py                          ← _accrual_latest_ymd + /api/accrual-swap/latest; _nd_token; tokens nas
+                                                notificações de Accrual (11) e New Deals single-deal (PATCH/DELETE/upsert)
+apps/templates/pages/accrual-swap.html        ← load inicial: ?date= / última data / hoje
+apps/templates/partials/topbar.html           ← NEW_DEALS_PAGES; parse+strip [ND:] → ?date=/?tradedate=
+apps/templates/pages/new_deals-opt-commodities.html   ← filtro Trade Date honra ?tradedate=
+apps/templates/pages/new_deals-opt-fxo.html           ← idem
+apps/templates/pages/new_deals-ndf-commodities.html   ← idem
+apps/templates/pages/new_deals-ndf-fwdstart.html      ← idem
+apps/templates/pages/new_deals-ndf-otherpublisher.html← idem
+```
+
