@@ -530,11 +530,12 @@ var selectedRowIds = new Set();
 function _optId() { return 'o' + Date.now() + Math.random().toString(36).substr(2,4); }
 
 // Status badge (visual only — Intrag Option has no lifecycle backend yet).
+// Standard status palette (aligned with New Deals): New=blue, Approved=gray.
 var OPT_STATUS_META = {
-    'New':      { cls: 'text-bg-secondary', lang: 'intrag-status-new' },
-    'Pending':  { cls: 'text-bg-warning',   lang: 'intrag-status-pending' },
-    'Approved': { cls: 'text-bg-success',   lang: 'intrag-status-approved' },
-    'Sent':     { cls: 'text-bg-info',      lang: 'intrag-status-sent' }
+    'New':      { cls: 'bg-info text-white', lang: 'intrag-status-new' },
+    'Pending':  { cls: 'text-bg-warning',    lang: 'intrag-status-pending' },
+    'Approved': { cls: 'text-bg-secondary',  lang: 'intrag-status-approved' },
+    'Sent':     { cls: 'text-bg-info',       lang: 'intrag-status-sent' }
 };
 function statusBadge(status) {
     var s = status || 'New';

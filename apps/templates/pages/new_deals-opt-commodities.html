@@ -1342,7 +1342,7 @@ function dealJsonToRow(deal) {
         'Error':    'text-bg-danger'
     };
     var st = deal.Status || 'New';
-    var statusHtml = '<span class="badge badge-label ' + (STATUS_BADGE[st] || 'text-bg-info') + ' rounded-pill">' + st + '</span>';
+    var statusHtml = '<span class="badge ' + (STATUS_BADGE[st] || 'text-bg-info') + ' bg-gradient">' + st + '</span>';
 
     var q = deal.QuotedInCents || 'NO';
     var quotedHtml = q === 'YES'
@@ -1890,11 +1890,11 @@ $(document).ready(function() {
                                 if (result.status === 'Success') {
                                     table.cell(node, 4).data(result.b3_id || '');
                                     table.cell(node, 2).data(
-                                        '<span class="badge badge-label text-bg-success rounded-pill">Success</span>'
+                                        '<span class="badge text-bg-success bg-gradient">Success</span>'
                                     );
                                 } else if (result.status === 'Error') {
                                     table.cell(node, 2).data(
-                                        '<span class="badge badge-label text-bg-danger rounded-pill">Error</span>'
+                                        '<span class="badge text-bg-danger bg-gradient">Error</span>'
                                     );
                                 }
                             });
@@ -2936,7 +2936,7 @@ $(document).ready(function() {
                             })(item.data, dealName, sendChanges, capturedCli);
                         }
                         table.cell(item.rowIdx, STATUS_COL_INDEX).data(
-                            '<span class="badge badge-label text-bg-info rounded-pill">Sent</span>'
+                            '<span class="badge text-bg-info bg-gradient">Sent</span>'
                         );
                     });
                     selectedRowIds.clear();
@@ -3048,8 +3048,8 @@ $(document).ready(function() {
                 var newStatus = isStatusCol ? 'Approved' : 'Pending';
                 table.cell(rowIdx, STATUS_COL_INDEX).data(
                     isStatusCol
-                        ? '<span class="badge badge-label text-bg-secondary rounded-pill">Approved</span>'
-                        : '<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>'
+                        ? '<span class="badge text-bg-secondary bg-gradient">Approved</span>'
+                        : '<span class="badge text-bg-warning bg-gradient">Pending</span>'
                 );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
@@ -3738,7 +3738,7 @@ $(document).ready(function() {
         // Status always becomes Pending after an edit
         if (currentStatus !== 'Pending') {
             if (statusNode) {
-                $(statusNode).html('<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>');
+                $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
             }
         }
         changedFields['Status'] = 'Pending';
@@ -3800,7 +3800,7 @@ $(document).ready(function() {
         // New/Amend → Pending (maker submits for approval — same user allowed)
         if (currentStatus === 'New' || currentStatus === 'Amend') {
             if (statusNode) {
-                $(statusNode).html('<span class="badge badge-label text-bg-warning rounded-pill">Pending</span>');
+                $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
             }
             table.cell(tr[0], 33).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 3).data()) || '';
@@ -3842,7 +3842,7 @@ $(document).ready(function() {
                 return;
             }
             if (statusNode) {
-                $(statusNode).html('<span class="badge badge-label text-bg-secondary rounded-pill">Approved</span>');
+                $(statusNode).html('<span class="badge text-bg-secondary bg-gradient">Approved</span>');
             }
             // Approver becomes the new Maker → next step (Send) must be a different user
             table.cell(tr[0], 33).data(CURRENT_USER_SID);
@@ -3947,7 +3947,7 @@ $(document).ready(function() {
                         }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
                     }
                     table.cell(tr[0], STATUS_COL_INDEX).data(
-                        '<span class="badge badge-label text-bg-info rounded-pill">Sent</span>'
+                        '<span class="badge text-bg-info bg-gradient">Sent</span>'
                     );
                     table.draw(false);
                 } else {
@@ -4306,7 +4306,7 @@ $(document).ready(function() {
                                 }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
                             }
                             table.cell(tr, STATUS_COL_INDEX).data(
-                                '<span class="badge badge-label text-bg-info rounded-pill">Sent</span>'
+                                '<span class="badge text-bg-info bg-gradient">Sent</span>'
                             );
                             table.draw(false);
                             var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'OPC_Banco.txt';
