@@ -2773,9 +2773,11 @@ _MTM_COE_HEADERS  = ['Código do COE', 'Nome Simplificado Emissor', 'Conta Emiss
 _MTM_COE_SRC      = [0, 1, 2, 3, None, None]  # A,B,C,D (A '#' stripped) + Valor MTM (blank) + Comments (manual)
 _MTM_COE_REFDATE_COL = 6                       # col G reference date
 
-# Position of 'Valor MTM' / 'Comments' within a swap-book data row.
+# Position of 'Valor MTM' / 'Comments' within a swap-book data row / a COE row.
 _MTM_VALOR_IDX    = _MTM_FIXED_HEADERS.index('Valor MTM')    # 7
 _MTM_COMMENT_IDX  = _MTM_FIXED_HEADERS.index('Comments')     # 8
+_MTM_COE_VALOR_IDX   = _MTM_COE_HEADERS.index('Valor MTM')   # 4
+_MTM_COE_COMMENT_IDX = _MTM_COE_HEADERS.index('Comments')    # 5
 
 # CEM MtM values file "VCP_CETIP_MTM": A=Trade Name, B=Counterparty Name,
 # C=CETIP ID, D=MTM in BRL. Keep rows where B <> our own GEM-Rates side, join
@@ -2839,6 +2841,54 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
             zeros += 1
         matched += 1
     return matched, zeros
+
+
+def _mtm_is_edg_value_name(n):
+    """EDG/COE MtM values file (assumed 'Stream_level_MTM.txt')."""
+    nl = (n or '').lower()
+    return 'stream' in nl and 'mtm' in nl and not nl.endswith('.msg')
+
+
+def _mtm_apply_edg_values(data, file_rows):
+    """Stream MtM file: col A = contract ID, col B = MtM value. IDs starting with
+    'JP' map to the COE table (by Código do COE); the rest to the EDG table (by
+    Código IF). Value → #,##0.00 (signed); zero → 0.00 + zero comment. Rows are
+    matched onto the already-loaded tables. Returns (edg_matched, coe_matched, zeros)."""
+    tables = data.get('tables') or {}
+    def _index(rows):
+        idx = {}
+        for row in rows or []:
+            k = str((row[0] if row else '') or '').strip().upper()
+            if k:
+                idx.setdefault(k, row)
+        return idx
+    edg_by = _index(tables.get('EDG'))
+    coe_by = _index(tables.get('COE'))
+    edg_m = coe_m = zeros = 0
+    for r in file_rows:
+        cid = str(_cc_cell(r, 0) or '').strip().strip("'").strip('"')
+        num = _mtm_parse_num(_cc_cell(r, 1))
+        if not cid or num is None:
+            continue                                     # header row skipped too
+        v = round(num, 2)
+        txt = '{:,.2f}'.format(v)
+        if cid.upper().startswith('JP'):
+            row = coe_by.get(cid.upper())
+            if row is not None:
+                row[_MTM_COE_VALOR_IDX] = txt
+                if v == 0:
+                    row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                    zeros += 1
+                coe_m += 1
+        else:
+            row = edg_by.get(cid.upper())
+            if row is not None:
+                row[_MTM_VALOR_IDX] = txt
+                if v == 0:
+                    row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                    zeros += 1
+                edg_m += 1
+    return edg_m, coe_m, zeros
 
 
 def _mtm_path_for(ymd):
@@ -2961,6 +3011,13 @@ def _mtm_build_from_folder(folder):
         with open(os.path.join(folder, cem_val_fn), 'rb') as fh:
             vrows = _cc_read_rows(cem_val_fn, fh.read())
         cem_matched, cem_zeros = _mtm_apply_cem_values(buckets['CEM'], vrows)
+    # EDG/COE MtM values (Stream_level_MTM) — JP* → COE, else EDG. Before finalize.
+    edg_val_fn = next((fn for fn in files if _mtm_is_edg_value_name(fn)), None)
+    edg_matched = edg_coe_matched = 0
+    if edg_val_fn:
+        with open(os.path.join(folder, edg_val_fn), 'rb') as fh:
+            erows = _cc_read_rows(edg_val_fn, fh.read())
+        edg_matched, edg_coe_matched, _ez = _mtm_apply_edg_values({'tables': buckets}, erows)
     counts = _mtm_finalize(buckets)
     return {
         'success': True, 'tables': buckets, 'counts': counts,
@@ -2968,7 +3025,9 @@ def _mtm_build_from_folder(folder):
         'diagnostics': {'kept': kept, 'matched': matched,
                         'swap_file': swap_fn, 'coe_file': coe_fn,
                         'cem_value_file': cem_val_fn,
-                        'cem_matched': cem_matched, 'cem_zeros': cem_zeros},
+                        'cem_matched': cem_matched, 'cem_zeros': cem_zeros,
+                        'edg_value_file': edg_val_fn,
+                        'edg_matched': edg_matched, 'edg_coe_matched': edg_coe_matched},
     }, (swap_fn, coe_fn)
 
 
@@ -3210,6 +3269,13 @@ def api_mtm_process():
         m, z = _mtm_apply_cem_values(cem_rows, rows)   # fills Valor MTM on existing CEM rows
         data['diagnostics'] = dict(data.get('diagnostics') or {},
                                    cem_value_file=f.filename, cem_matched=m, cem_zeros=z)
+    elif _mtm_is_edg_value_name(f.filename):
+        if not (data.get('tables') or {}).get('EDG') and not (data.get('tables') or {}).get('COE'):
+            return jsonify({'success': False,
+                            'error': 'No EDG/COE rows loaded for this date — import the swap/COE files first.'}), 400
+        em, cm, z = _mtm_apply_edg_values(data, rows)  # JP* → COE, else EDG
+        data['diagnostics'] = dict(data.get('diagnostics') or {},
+                                   edg_value_file=f.filename, edg_matched=em, edg_coe_matched=cm, edg_zeros=z)
     elif _mtm_is_coe_name(f.filename):
         coe_rows, coe_ref = _mtm_build_coe(rows)
         for i, rw in enumerate(coe_rows):
@@ -3228,7 +3294,7 @@ def api_mtm_process():
         data['ref_date'] = ref_date
     else:
         return jsonify({'success': False,
-                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID), COE (…ConsultaMTMCOE) or CEM values (VCP_CETIP_MTM) file.'}), 400
+                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID), COE (…ConsultaMTMCOE), CEM values (VCP_CETIP_MTM) or EDG/COE values (Stream_level_MTM) file.'}), 400
 
     data['counts'] = {k: len(v) for k, v in data['tables'].items()}
     try:
