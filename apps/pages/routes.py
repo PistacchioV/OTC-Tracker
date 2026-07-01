@@ -3324,6 +3324,9 @@ _MTM_GEN_PARTY = {                                   # Nome Simplificado Parte (
     'LAWTON':  'INTRAGLAWTONFDO'  + ' ' * 5,
     'ATACAMA': 'INTRAGATACAMAFDO' + ' ' * 4,
 }
+_MTM_GEN_PARTY_ACCT = {                              # Código Conta Parte per view
+    'BANCO': '73760009', 'LAWTON': '00041007', 'ATACAMA': '85398005',
+}
 _MTM_GEN_BOOK_SUFFIX = {'EDG': 'EDG', 'CEM': 'CEM', 'Hybrids': 'HYB'}
 _MTM_GEN_SWAP_COLS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Meu Número',
                       'Código do Contrato', 'Nome Simplificado Parte', 'Código Conta Parte',
@@ -3356,7 +3359,8 @@ def _mtm_swap_fields(cid, party_key, sinal, v, ymd):
     return {
         'ID do Sistema': 'MID  ', 'ID Tipo de Linha': '1', 'Código da Operação': '0848',
         'Meu Número': _mtm_rand_meunum(), 'Código do Contrato': str(cid or ''),
-        'Nome Simplificado Parte': _MTM_GEN_PARTY[party_key], 'Código Conta Parte': '73760009',
+        'Nome Simplificado Parte': _MTM_GEN_PARTY[party_key],
+        'Código Conta Parte': _MTM_GEN_PARTY_ACCT[party_key],
         'Sinal Valor MTM': sinal, 'Valor MTM': _mtm_valor_fixed(v, 10),
         'Notional Mínimo': ' ' * 6, 'Notional Máximo': ' ' * 6, 'Data de Referência MTM': ymd,
     }
