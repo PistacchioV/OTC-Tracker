@@ -2441,3 +2441,27 @@ apps/templates/pages/mtm-swap.html      ← statusBadge → bg-gradient; botões
 
 
 
+
+---
+
+## 43. Sessão 2026-07-01 (cont.) — Fix save MtM (mkdir) + cor do status Sent (teal)
+
+Commits: `4a9f38c` (fix save), `354f32c` (cor Sent).
+
+- **Bug MtM save (`4a9f38c`):** `import-folder` e `process` retornavam 500 "Failed to save" — `_atomic_write_json` usa
+  `tempfile.mkstemp(dir=…)` que exige o diretório existente, mas o MtM não fazia `os.makedirs`. Novo **`_mtm_save()`**
+  cria `cache/mtm/YYYY/MM/DD` antes de gravar (como a accrual). Ambos endpoints agora usam `_mtm_save`.
+- **Cor do status Sent (`354f32c`):** New e Sent eram ambos ciano (`#0dcaf0`) e ficavam iguais. Nova classe global
+  **`.badge.badge-sent`** (`#17a2b8`, teal, texto branco) em `partials/head-css.html` — mais escuro que o ciano do New,
+  sem ficar cinza como o Approved. Sent trocou de `text-bg-info`→`badge-sent` em **todas** as páginas com coluna Status:
+  New Deals (5, mapa `STATUS_BADGE` + badges inline dos handlers de send), Intrag (2, `*_STATUS_META`), Accrual, MtM.
+  **Passa a integrar o padrão da seção 40:** Sent = `badge-sent` (teal `#17a2b8`).
+- **Nota:** o "Network error" no dropzone do usuário (vs. o JSON 500 no dev) indicava servidor dele com `routes.py`
+  desatualizado/duplicado (`routes 2.py`) — orientado a `git pull` + apagar `routes 2.py` + restart.
+
+### Arquivos (sessão 43)
+```
+apps/pages/routes.py                    ← _mtm_save (mkdir antes de gravar); import-folder/process usam _mtm_save
+apps/templates/partials/head-css.html   ← .badge.badge-sent (#17a2b8) global
+apps/templates/pages/{5 new_deals, intrag-option, intrag-ndf, accrual-swap, mtm-swap}.html ← Sent → badge-sent
+```
