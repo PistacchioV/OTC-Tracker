@@ -2366,5 +2366,49 @@ apps/templates/pages/intrag-option.html               ← OPT_STATUS_META: New=a
 apps/templates/pages/intrag-ndf.html                  ← NDF_STATUS_META: New=azul, Approved=cinza
 ```
 
+---
+
+## 41. Sessão 2026-07-01 (cont.) — Nova página MtM-Swap (front-end + back-end), réplica da Accrual + COE
+
+Commits: `ee31344` (front-end), `eccd111` (back-end). **Front-end validado no dev (200); back-end com round-trip
+de JSON OK; datas ANBIMA conferidas (Jun→30/06/2026, penúltimo Mai→29/05/2026).** Import real depende do share JPM.
+
+### Estrutura (réplica da Accrual-Swap)
+- Página **`/mtm-swap`** (template `mtm-swap.html`, copiado da accrual). Sidenav "MtM" → `/mtm-swap`.
+- **Widgets:** COE (primeiro) + CEM/EDG/Hybrids/Commodities. **Tabelas:** CEM/EDG/Hybrids/Commodities + **COE (última)**.
+- **Books swap** colunas: Código IF, Data Início, PARTE/Conta, Nome Simplificado Parte, CONTRAPARTE/Conta,
+  Nome Simplificado Contraparte, Data Vencimento, Valor MTM, Comments (+ checkbox/actions/status).
+- **Tabela COE** tem colunas PRÓPRIAS: Código do COE, Nome Simplificado Emissor, Conta Emissor, Nome Figura, Comments.
+  Front-end: `MTM_COE_HEADERS` + `headersFor(lob)`. Comments **sempre editável** (MtM não tem status 'check').
+- **Date picker default = último dia útil do MÊS ANTERIOR (ANBIMA)** — calc client-side lendo `anbima.json`.
+
+### Back-end (routes.py, seção "MtM")
+- Consts: `MTM_SOURCE_ROOT` (`I:\…\Regulatory\MTM`, env), `MTM_JSON_ROOT` (cache/mtm), `_MTM_DISPLAY_SRC=[0,2,3,4,5,7,10,
+  None,None]` (A,C,D,E,F,H,K; Valor MTM/Comments sem fonte), `_MTM_COE_SRC=[0,1,2,3,None]`, `_MTM_COE_REFDATE_COL=6`.
+- **Swap** (`…SemAtualMID`): filtra **col D = 73760.00-9**; `Código IF`=col A sem `#`; classifica pelo Código Identificador
+  da **posição swap mais recente** (`_accrual_lob`: CEMHYB/HYB→Hybrids, COMM→Commodities, EDG, CEM). ⚠️ **Valor MTM vazio**
+  (arquivo "sem atualização"); **K→Data Vencimento** (assunção a confirmar).
+- **COE** (`…ConsultaMTMCOE`): filtra **col G = último dia útil do PENÚLTIMO mês** (vs. hoje; jul→29/05); A(sem`#`)/B/C/D.
+- **Sem header row fixa** — itera todas as linhas e filtra por conta/refdate (cabeçalho/preâmbulo descartados).
+- Endpoints `/api/mtm-swap/`: data, latest, import-folder (lê os 2 arquivos de `MTM_SOURCE_ROOT\YYYY\mm. Month\DD`),
+  process (dropzone), row/comment|edit|send(maker≠checker)|delete, rows/delete. Notif `MTM Imported|Updated|Sent|Deleted`
+  (page 'MtM', deep-link `?date=`).
+
+### Assunções a confirmar com o usuário
+1. **K = Data Vencimento** e **Valor MTM vazio** (arquivo é "sem atualização de MID"). Se K for Valor MTM, trocar o mapa.
+2. `MTM_SOURCE_ROOT` = `Regulatory\MTM\YYYY\mm. Month\DD` — a imagem mostrava `MTM\2026\2026\...` (**2026 duplicado**).
+3. Filtro COE (penúltimo mês) relativo a **hoje**, não à data carregada.
+4. `.xls` antigo depende de xlrd (o reader compartilhado cobre xlsx/xlsm/csv/tsv).
+
+### Arquivos (sessão 41)
+```
+apps/templates/pages/mtm-swap.html            ← (novo) página; COE headers próprios, Comments editável, botões podados
+apps/pages/routes.py                          ← rota /mtm-swap + seção MtM (build swap/COE, endpoints, CRUD, datas ANBIMA)
+apps/templates/partials/sidenav.html          ← link MtM → /mtm-swap
+apps/templates/partials/topbar.html           ← PAGE_URL['MtM'], ACTION_META MTM *, deep-link ?date=
+apps/static/data/translations/{en,br,es}.json ← chaves mtm-*
+```
+
+
 
 
