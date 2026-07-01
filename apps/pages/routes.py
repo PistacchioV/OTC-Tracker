@@ -3307,9 +3307,10 @@ def _acc_swap_records(row, today):
     return out
 
 
-def _acc_write_batch_files(data, lob, today):
+def _acc_write_batch_files(data, lob, today, evidence_dir=None):
     """Generate + write ACCRUAL_<view>-<lob>.txt for one LOB book, split by view.
-    Returns a list of {filename, path, view, count} (empty when nothing to send)."""
+    Written to the Batch Conecta folder AND (best-effort) to the evidence folder
+    (Regulatory\\Accrual\\YYYY\\mm. Month\\DD). Returns [{filename, path, view, count}]."""
     by_view = {}
     for r in ((data.get('tables') or {}).get(lob) or []):
         if not r or len(r) < 15:
@@ -3322,14 +3323,27 @@ def _acc_write_batch_files(data, lob, today):
         return []
     lob_tag = _ACC_LOB_TAG.get(lob, str(lob).upper())
     os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+    if evidence_dir:
+        try:
+            os.makedirs(evidence_dir, exist_ok=True)
+        except Exception:
+            log.warning('[accrual] could not create evidence dir %s:\n%s', evidence_dir, traceback.format_exc())
     generated = []
     for view in ('BANCO', 'LAWTON', 'ATACAMA'):
         lines = by_view.get(view)
         if not lines:
             continue
+        content = '\n'.join([_acc_swap_header(view, today)] + lines)
         fpath = _unique_filepath(CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
         with open(fpath, 'w', encoding='utf-8') as fh:
-            fh.write('\n'.join([_acc_swap_header(view, today)] + lines))
+            fh.write(content)
+        # Evidence copy (same base name), best-effort — never blocks the Conecta write.
+        if evidence_dir and os.path.isdir(evidence_dir):
+            try:
+                with open(os.path.join(evidence_dir, os.path.basename(fpath)), 'w', encoding='utf-8') as fh:
+                    fh.write(content)
+            except Exception:
+                log.warning('[accrual] evidence copy failed for %s:\n%s', fpath, traceback.format_exc())
         generated.append({'filename': os.path.basename(fpath), 'path': fpath, 'view': view, 'count': len(lines)})
     return generated
 
@@ -3405,8 +3419,10 @@ def api_accrual_send_batch():
     missing = _acc_missing_accrual_rows(data, [lob])          # block when any factor is missing
     if missing:
         return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     try:
-        generated = _acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'))
+        generated = _acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'),
+                                           evidence_dir=_accrual_source_dir(ymd))
     except Exception:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -3438,12 +3454,13 @@ def api_accrual_validation():
     ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     ref = datetime.strptime(ymd, '%Y%m%d')
     today = datetime.now().strftime('%Y%m%d')
+    evidence_dir = _accrual_source_dir(ymd)
 
     generated = []
     try:
         for lob in ('CEM', 'EDG', 'Hybrids', 'Commodities'):
             if lob in (data.get('tables') or {}):
-                generated.extend(_acc_write_batch_files(data, lob, today))
+                generated.extend(_acc_write_batch_files(data, lob, today, evidence_dir=evidence_dir))
     except Exception:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -3708,7 +3725,7 @@ def api_accrual_end_process():
         html = render_template(
             'pages/email-template-accrual-endprocess.html',
             ref_date_fmt=ref.strftime('%d/%m/%Y'), has_check=bool(checks), checks=checks,
-            folder=CONECTA_NEW_PATH, current_year=datetime.now().year)
+            folder=_accrual_source_dir(ymd), current_year=datetime.now().year)
         logo_path = _get_logo_path()
         threading.Thread(target=_send_accrual_endprocess_email,
                          args=(subject, html, logo_path), daemon=True).start()
