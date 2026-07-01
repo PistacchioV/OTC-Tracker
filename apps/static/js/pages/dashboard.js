@@ -318,6 +318,52 @@ function stackEndRadius(R, edge) {
     };
 }
 
+// Plugin: round the top of the WHOLE stacked column (not the last segment).
+// The per-segment scriptable radius (stackEndRadius) only rounds the top-most
+// segment — which in the forecast is often a 1–3px sliver (a small SWAP/Option
+// product), so Chart.js clamps the radius to that sliver's height and the tip
+// reads as flat. Clipping every column to a rounded-top rectangle before the
+// bars draw guarantees a visible rounded tip regardless of how thin the top
+// product is, while leaving each segment's gradient untouched.
+const roundedStackTopClip = {
+    id: 'roundedStackTopClip',
+    beforeDatasetsDraw(chart, _args, opts) {
+        const R = (opts && opts.radius) || 6;
+        const ctx = chart.ctx;
+        const n = (chart.data.labels || []).length;
+        const path = new Path2D();
+        let drew = false;
+        for (let i = 0; i < n; i++) {
+            let topY = Infinity, botY = -Infinity, cx = null, w = null;
+            chart.data.datasets.forEach((ds, di) => {
+                if (!chart.isDatasetVisible(di)) return;
+                const el = chart.getDatasetMeta(di).data[i];
+                const v = ds.data[i];
+                if (!el || v == null || +v <= 0) return;
+                topY = Math.min(topY, el.y);
+                botY = Math.max(botY, el.base);
+                cx = el.x; w = el.width;
+            });
+            if (cx == null) continue;
+            const left = cx - w / 2, right = cx + w / 2;
+            const r = Math.min(R, w / 2, Math.max(0, (botY - topY) / 2));
+            path.moveTo(left, botY);
+            path.lineTo(left, topY + r);
+            path.arcTo(left, topY, left + r, topY, r);
+            path.lineTo(right - r, topY);
+            path.arcTo(right, topY, right, topY + r, r);
+            path.lineTo(right, botY);
+            path.closePath();
+            drew = true;
+        }
+        ctx.save();
+        if (drew) ctx.clip(path);
+    },
+    afterDatasetsDraw(chart) {
+        chart.ctx.restore();
+    }
+};
+
 function buildForecastProductChart(data) {
     const ctx = document.getElementById('forecast-product-chart');
     if (!ctx) return;
@@ -332,10 +378,11 @@ function buildForecastProductChart(data) {
         return {
             type: 'bar', label: p.label, data: p.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
-            stack: 'fc', maxBarThickness: 24, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false
+            stack: 'fc', maxBarThickness: 24, borderRadius: 0, borderSkipped: false
         };
     });
     forecastChart = new Chart(ctx, {
+        plugins: [roundedStackTopClip],
         data: { labels: data.date_labels, datasets },
         options: {
             responsive: true, maintainAspectRatio: false,
