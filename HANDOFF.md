@@ -2322,4 +2322,49 @@ apps/templates/pages/intrag-option.html  ← select-all/send/delete/contagem com
 apps/templates/pages/intrag-ndf.html     ← idem (paridade)
 ```
 
+---
+
+## 40. Sessão 2026-07-01 (cont.) — Padrão único de badge da coluna Status (forma Intrag + cores New Deals)
+
+Commit: `d14d54f`. **7 páginas carregam 200 no dev.**
+
+### PADRÃO OFICIAL — coluna Status (usar em TODA página nova)
+- **Forma/estilo:** `<span class="badge <cls> bg-gradient">Texto</span>` — o estilo do Intrag (com `bg-gradient`).
+  **Nunca** usar `badge-label` nem `rounded-pill` em badge de status (pílula/plano fica reservado a outros badges,
+  ex.: Quoted YES/NO/Missing).
+- **Cores (paleta New Deals):**
+  | Status | Classe |
+  |---|---|
+  | New | `bg-info text-white` (azul) |
+  | Pending | `text-bg-warning` (âmbar) |
+  | Amend | `text-bg-warning` (âmbar) |
+  | Approved | `text-bg-secondary` (cinza) |
+  | Sent | `text-bg-info` (ciano) |
+  | Success | `text-bg-success` (verde) |
+  | Error | `text-bg-danger` (vermelho) |
+
+### O que mudou
+- **New Deals (5 páginas):** os 11 badges de status por página (mapa `STATUS_BADGE` + `statusHtml` + inlines de
+  transição) migraram de `badge badge-label <cls> rounded-pill` → **`badge <cls> bg-gradient`**. Cores mantidas (já eram
+  o padrão). Badges **Quoted** (YES/NO/Missing) permanecem `rounded-pill` (não são status).
+- **Intrag Option / Intrag NDF:** já usavam a forma `bg-gradient` (via `OPT_STATUS_META`/`NDF_STATUS_META`); **cores
+  alinhadas** à paleta New Deals — **New** `text-bg-secondary`→`bg-info text-white` e **Approved**
+  `text-bg-success`→`text-bg-secondary` (Pending/Sent já iguais). Intrag só tem 4 status (New/Pending/Approved/Sent).
+
+### Padrão identificado
+- **Badge de status = `badge <cls> bg-gradient` + paleta acima.** Documentado como padrão para novas colunas Status.
+  O marcador `badge-label` era o que distinguia status de outros badges nas New Deals; foi removido dos status.
+
+### Arquivos (sessão 40)
+```
+apps/templates/pages/new_deals-opt-commodities.html   ← status badges → bg-gradient (sem badge-label/rounded-pill)
+apps/templates/pages/new_deals-opt-fxo.html           ← idem
+apps/templates/pages/new_deals-ndf-commodities.html   ← idem
+apps/templates/pages/new_deals-ndf-fwdstart.html      ← idem
+apps/templates/pages/new_deals-ndf-otherpublisher.html← idem
+apps/templates/pages/intrag-option.html               ← OPT_STATUS_META: New=azul, Approved=cinza
+apps/templates/pages/intrag-ndf.html                  ← NDF_STATUS_META: New=azul, Approved=cinza
+```
+
+
 
