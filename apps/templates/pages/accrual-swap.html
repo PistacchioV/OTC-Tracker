@@ -1095,9 +1095,10 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                     if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
                     errSwal(j.error); return;
                 }
-                var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join(' · ');
-                deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, timerProgressBar: true,
-                            icon: 'success', title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0) + (names ? ' · ' + names : '') });
+                var names = (j.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join('<br>');
+                deferToast({ icon: 'success', backdrop: true, timer: 4000, timerProgressBar: true, showConfirmButton: false,
+                            title: t('acc-batch-done', 'Batch sent') + ' · ' + (j.total || 0),
+                            html: names ? '<div style="font-family:monospace;font-size:.82em">' + names + '</div>' : undefined });
             }).catch(function () { accBtnBusy(btn, false); netErr(); });
         });
     }
@@ -1373,8 +1374,8 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             });
             var summ = ap.filter(function (a) { return a && !a.error; })
                          .map(function (a) { return a.lob + ' ' + (a.matched || 0) + '/' + (a.missing || 0); }).join(' · ');
-            deferToast({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3200, timerProgressBar: true,
-                        icon: 'success', title: t('acc-import-done', 'Imported from folder') + (summ ? ' · ' + summ : '') });
+            deferToast({ icon: 'success', backdrop: true, timer: 3200, timerProgressBar: true, showConfirmButton: false,
+                        title: t('acc-import-done', 'Imported from folder'), text: (summ || undefined) });
         })
         .catch(function () { accBtnBusy(btn, false); netErr(); });
     }
