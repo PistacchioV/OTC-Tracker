@@ -1231,7 +1231,7 @@ function dealJsonToRow(deal) {
         'Pending':  'text-bg-warning',
         'Amend':    'text-bg-warning',
         'Approved': 'text-bg-secondary',
-        'Sent':     'text-bg-info',
+        'Sent':     'badge-sent',
         'Success':  'text-bg-success',
         'Error':    'text-bg-danger'
     };
@@ -2631,7 +2631,7 @@ $(document).ready(function() {
                             })(item.data, rowId, sendChanges, capturedClient);
                         }
                         table.cell(item.rowIdx, STATUS_COL_INDEX).data(
-                            '<span class="badge text-bg-info bg-gradient">Sent</span>'
+                            '<span class="badge badge-sent bg-gradient">Sent</span>'
                         );
                     });
                     selectedRowIds.clear();
@@ -3662,7 +3662,7 @@ $(document).ready(function() {
                         }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
                     }
                     table.cell(tr[0], STATUS_COL_INDEX).data(
-                        '<span class="badge text-bg-info bg-gradient">Sent</span>'
+                        '<span class="badge badge-sent bg-gradient">Sent</span>'
                     );
                     table.draw(false);
                 } else {
@@ -4056,7 +4056,7 @@ $(document).ready(function() {
                                 }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
                             }
                             table.cell(tr, STATUS_COL_INDEX).data(
-                                '<span class="badge text-bg-info bg-gradient">Sent</span>'
+                                '<span class="badge badge-sent bg-gradient">Sent</span>'
                             );
                             table.draw(false);
                             var _fnames2 = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || '';
