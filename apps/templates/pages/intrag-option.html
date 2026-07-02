@@ -369,6 +369,7 @@
                     <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingOpt" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelOpt" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendOpt"><i class="ti ti-brand-telegram me-1"></i> Send</button>
+                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
                 </div>
 
                 <div class="card-body" style="padding-top:10px;">
@@ -1073,6 +1074,15 @@ $(document).ready(function() {
     sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
     document.getElementById('sfSearchBtn').addEventListener('click',function(){sfDropdown.style.display='none';applyOptFilters();});
+    document.getElementById('btnClearFilters').addEventListener('click',function(){
+        document.querySelectorAll('#column-search-inputs th input').forEach(function(inp){ inp.value=''; });
+        intragDateRanges={};
+        sfActive=[];
+        sfChips.innerHTML='';
+        sfInput.value='';
+        sfDropdown.style.display='none';
+        table.columns().search('').draw();
+    });
     sfInput.addEventListener('keydown',function(e) {
         var items=sfDropdown.querySelectorAll('li');
         var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
