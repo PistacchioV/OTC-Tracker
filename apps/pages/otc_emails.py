@@ -69,13 +69,24 @@ def _build_refdata_index(key='COMMODITIES ACCRONYM'):
     return idx
 
 
+def _norm_spn(value):
+    """SPN match key: drop a trailing '.0' and leading zeros (both sides), matching
+    the project-wide convention so a deal SPN like '0135742' resolves to the
+    CounterpartyDetails record stored as '135742'."""
+    s = str(value or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    s = s.lstrip('0')
+    return s or ('0' if value not in (None, '') else '')
+
+
 def _build_cpdetails_index():
-    """SPN → counterparty banking/contact record."""
+    """SPN (leading-zeros/'.0' stripped) → counterparty banking/contact record."""
     idx = {}
     for c in _load_json('CounterpartyDetails.json'):
-        spn = str(c.get('SPN', '') or '').strip().upper()
+        spn = _norm_spn(c.get('SPN'))
         if spn:
-            idx[spn] = c
+            idx.setdefault(spn, c)
     return idx
 
 
@@ -272,7 +283,7 @@ def _premium_apurado(items):
 
 def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Commodities'):
     apurado, ir, final = _premium_apurado(items)
-    cp = cpd.get(spn, {})
+    cp = cpd.get(_norm_spn(spn), {})
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
 
     rows = ''
