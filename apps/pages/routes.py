@@ -2026,7 +2026,8 @@ def api_cp_cetip_settlement():
 #  into the report sent to Brazil OTC Ops.
 # ============================================================================
 
-FORECAST_BIZDAYS = 14                 # business-day look-ahead window (from today, inclusive)
+FORECAST_BIZDAYS = 15                 # default business-day look-ahead window (from today, inclusive)
+FORECAST_RANGE_CHOICES = (15, 20, 30) # selectable horizons offered on the dashboard
 
 # Entity code → name. Keys are normalised (digits only) at lookup, so dotted
 # variants (00041.00-7) match too. Anything unmapped is dropped from the by-entity
@@ -2158,13 +2159,14 @@ def _fcst_lob(identifier):
     return 'CEMHYB'
 
 
-def _forecast_spine(anchor=None):
-    """The forecast column spine: the next FORECAST_BIZDAYS ANBIMA business days
-    starting TODAY (inclusive), skipping weekends and holidays."""
+def _forecast_spine(anchor=None, count=None):
+    """The forecast column spine: the next `count` (default FORECAST_BIZDAYS)
+    ANBIMA business days starting TODAY (inclusive), skipping weekends/holidays."""
     _load_anbima()
+    count = count or FORECAST_BIZDAYS
     start = datetime.now().date()
     days, d = [], start
-    while len(days) < FORECAST_BIZDAYS:
+    while len(days) < count:
         if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
             days.append(d)
         d += timedelta(days=1)
@@ -2301,10 +2303,10 @@ def _forecast_matrix(mapping, order):
     return [{'label': k, 'values': mapping[k], 'total': sum(mapping[k])} for k in ordered]
 
 
-def _forecast_payload(ref):
+def _forecast_payload(ref, days=None):
     """Compute the full forecast payload for a reference date."""
     dref = ref.strftime('%y%m%d')
-    spine = _forecast_spine(ref)
+    spine = _forecast_spine(ref, count=days)
     by_product, by_entity, status = _forecast_collect(dref, spine)
     product_rows = _forecast_matrix(by_product, _FCST_PRODUCT_ORDER)
     entity_rows = _forecast_matrix(by_entity, _FCST_ENTITY_ORDER)
@@ -2312,6 +2314,7 @@ def _forecast_payload(ref):
     return {
         'ref_date': ref.strftime('%Y-%m-%d'),
         'ref_date_fmt': ref.strftime('%d/%m/%Y'),
+        'days': len(spine),
         'date_labels': [d.strftime('%d/%m') for d in spine],
         'date_full': [d.strftime('%d/%m/%Y') for d in spine],
         'products': product_rows,
@@ -2422,6 +2425,12 @@ def api_cp_forecast_data():
     mode = (payload.get('mode') or '').strip().lower()
     date_str = (payload.get('date') or '').strip()
     try:
+        days = int(payload.get('days') or FORECAST_BIZDAYS)
+    except (TypeError, ValueError):
+        days = FORECAST_BIZDAYS
+    if days not in FORECAST_RANGE_CHOICES:
+        days = FORECAST_BIZDAYS
+    try:
         if date_str:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
         elif mode == 'latest':
@@ -2437,7 +2446,7 @@ def api_cp_forecast_data():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
-    data = _forecast_payload(ref)
+    data = _forecast_payload(ref, days=days)
     if not any(s['found'] for s in data['sources']):
         # In strict mode this means the mandatory D-1 files are missing.
         return jsonify({'success': False,
@@ -9795,4 +9804,3 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
-

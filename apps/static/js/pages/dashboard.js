@@ -197,6 +197,8 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
 let forecastChart = null;
 let _forecastData = null;
 let _forecastProductFilter = '__all__';   // '__all__' or a product label
+let _forecastDays = 15;                    // look-ahead window (15 | 20 | 30 business days)
+let _subTemplate = null;                   // cached "…{n}…" subtitle template (current language)
 
 const FC_PRODUCT_COLORS = {
     'NDF Moeda':       () => ins('chart-primary'),
@@ -217,7 +219,7 @@ async function loadForecastChart() {
         // Dashboard shows the latest available data: D-1, else D-2, … (mode:'latest').
         const res = await fetch('/api/control-panel/settlement-forecast/data', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'latest' })
+            body: JSON.stringify({ mode: 'latest', days: _forecastDays })
         });
         const data = await res.json();
         if (!data || data.success === false || !(data.products || []).length) {
@@ -226,6 +228,8 @@ async function loadForecastChart() {
             return;
         }
         _forecastData = data;
+        if (data.days) _forecastDays = data.days;   // backend is the source of truth (clamps to allowed set)
+        renderForecastSub();
         // Show which position date the chart is based on.
         const asOf = document.getElementById('forecast-asof');
         if (asOf && data.ref_date_fmt) {
@@ -284,6 +288,48 @@ function syncForecastFilterUI() {
             label.textContent = _forecastProductFilter;
             label.removeAttribute('data-lang');
         }
+    }
+}
+
+// Subtitle "Next {n} business days, by product" — {n} tracks the selected range.
+// The template comes from the translation file; we substitute {n} at render time.
+function renderForecastSub() {
+    const el = document.getElementById('forecast-sub');
+    if (!el) return;
+    if (!_subTemplate) _subTemplate = t('dash-forecast-sub', 'Próximos {n} dias úteis, por produto');
+    el.textContent = _subTemplate.replace('{n}', _forecastDays);
+}
+
+// Range dropdown (15 | 20 | 30 business days) → reload the forecast on selection.
+function wireForecastRange() {
+    const menu = document.getElementById('fc-range-menu');
+    const btn  = document.getElementById('fc-range-label');
+    if (!menu) return;
+    menu.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-days]');
+        if (!a) return;
+        e.preventDefault();
+        const days = parseInt(a.getAttribute('data-days'), 10);
+        if (!days || days === _forecastDays) return;
+        _forecastDays = days;
+        menu.querySelectorAll('[data-days]').forEach(x => x.classList.toggle('active', x === a));
+        if (btn) btn.innerHTML = a.innerHTML;
+        renderForecastSub();
+        loadForecastChart();
+    });
+
+    // app.js re-applies data-lang on load/language-switch, restoring the raw
+    // "{n}" template — capture the fresh (correct-language) template and re-fill.
+    const sub = document.getElementById('forecast-sub');
+    if (sub) {
+        if (sub.textContent.indexOf('{n}') !== -1) _subTemplate = sub.textContent;
+        new MutationObserver(() => {
+            if (sub.textContent.indexOf('{n}') !== -1) {
+                _subTemplate = sub.textContent;
+                renderForecastSub();
+            }
+        }).observe(sub, { childList: true, characterData: true, subtree: true });
+        renderForecastSub();
     }
 }
 
@@ -647,7 +693,8 @@ function rerenderCharts() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadTranslations();
-    loadDashboard('month');
+    loadDashboard('year');
+    wireForecastRange();
     loadForecastChart();   // independent of the period filter
 
     document.querySelectorAll('#dash-period-filter [data-period]').forEach(item => {
