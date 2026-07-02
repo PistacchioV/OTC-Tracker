@@ -58,11 +58,12 @@ def _load_json(name):
         return []
 
 
-def _build_refdata_index():
-    """acronym (COMMODITIES ACCRONYM) → ref record."""
+def _build_refdata_index(key='COMMODITIES ACCRONYM'):
+    """acronym → ref record. `key` selects which RefData accronym column to index
+    by: 'COMMODITIES ACCRONYM' (commodities) or 'FX CASH ACCRONYM' (FXO)."""
     idx = {}
     for r in _load_json('RefData.json'):
-        acc = str(r.get('COMMODITIES ACCRONYM', '') or '').strip().upper()
+        acc = str(r.get(key, '') or '').strip().upper()
         if acc and acc not in idx:
             idx[acc] = r
     return idx
@@ -226,16 +227,19 @@ def _group_by_acronym_commodity(deals):
 # ──────────────────────────────────────────────────────────────────────────
 # PREMIUM (D0) — SpotDate == today
 # ──────────────────────────────────────────────────────────────────────────
-def build_premium_emails(deals, asset_label='Commodities'):
+def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES ACCRONYM'):
     """D0 premium settlement notice.
 
     Eligible counterparties: CETIP account (RefData) == 73760.10-2 AND not Lawton,
     restricted to deals whose SpotDate (premium payment date) is today.
 
     `asset_label` is the asset-class token shown in the subject line
-    (e.g. 'Commodities' for opt-commodities, 'Câmbio' for opt-fxo).
+    (e.g. 'Commodities' for opt-commodities, 'Taxas de Câmbio' for opt-fxo).
+    `ref_key` selects the RefData accronym column used to resolve each deal's
+    Acronym → ref record: 'COMMODITIES ACCRONYM' (default) or 'FX CASH ACCRONYM'
+    (FXO deals carry the FX cash accronym, not the commodities one).
     """
-    ref = _build_refdata_index()
+    ref = _build_refdata_index(ref_key)
     cpd = _build_cpdetails_index()
     today = _today_br()
 
