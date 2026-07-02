@@ -695,6 +695,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                         '<i data-lucide="filter-x"></i><span>' + esc(t('acc-clear', 'Clear filters')) + '</span></button>' +
                     '<button class="acc-btn acc-send-batch" type="button">' +
                         '<i data-lucide="send"></i><span>' + esc(t('acc-batch-send', 'Send batch')) + '</span></button>' +
+                    (lob.card === 'Hybrids' ?
+                        '<button class="acc-btn acc-new-mapping" type="button">' +
+                            '<i data-lucide="git-branch-plus"></i><span>' + esc(t('mtm-new-mapping', 'New Mapping')) + '</span></button>' : '') +
                 '</div>' +
             '</div>';
 
@@ -789,6 +792,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
 
         var sb = card.querySelector('.acc-send-batch');
         if (sb) sb.addEventListener('click', function () { sendBatch(lob, this); });
+
+        var nm = card.querySelector('.acc-new-mapping');
+        if (nm) nm.addEventListener('click', function () { newMapping(); });
 
         var menu = card.querySelector('#cols-' + tableId);
         if (menu && dt) {
@@ -1097,6 +1103,44 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                   '<th style="padding:6px 8px;text-align:left;font-size:.78em">Código IF</th>' +
                   '<th style="padding:6px 8px;text-align:left;font-size:.78em">ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
             confirmButtonColor: '#0066cc', customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient' }
+        });
+    }
+
+    // ── New Mapping (Hybrids only): add-row style modal → mapping_swap-hyb.json ─
+    function newMapping() {
+        Swal.fire({
+            title: t('mtm-new-mapping', 'New Mapping'),
+            html:
+                '<div class="text-start">' +
+                    '<label class="form-label fw-semibold mb-1">B3 ID</label>' +
+                    '<input id="nm-b3" class="form-control mb-2" autocomplete="off" placeholder="B3 ID">' +
+                    '<label class="form-label fw-semibold mb-1">Hybrids ID</label>' +
+                    '<input id="nm-hyb" class="form-control mb-2" autocomplete="off" placeholder="Hybrids ID">' +
+                    '<label class="form-label fw-semibold mb-1">Trade Name</label>' +
+                    '<input id="nm-name" class="form-control" autocomplete="off" placeholder="Trade Name">' +
+                '</div>',
+            showCancelButton: true,
+            confirmButtonText: '<i class="ti ti-device-floppy"></i>',
+            cancelButtonText: '<i class="ti ti-x"></i>',
+            confirmButtonColor: '#157347', cancelButtonColor: '#dc3545', focusConfirm: false,
+            customClass: { confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' },
+            preConfirm: function () {
+                var b3   = (document.getElementById('nm-b3').value   || '').trim();
+                var hyb  = (document.getElementById('nm-hyb').value  || '').trim();
+                var name = (document.getElementById('nm-name').value || '').trim();
+                if (!b3 || !hyb || !name) {
+                    Swal.showValidationMessage(t('mtm-nm-required', 'All three fields are required.'));
+                    return false;
+                }
+                return { b3_id: b3, hybrids_id: hyb, trade_name: name };
+            }
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            postJSON('/api/mtm-swap/mapping/add', r.value).then(function (j) {
+                if (!j.success) { errSwal(j.error); return; }
+                Swal.fire({ icon: 'success', title: t('mtm-nm-saved', 'Mapping saved'),
+                            timer: 1400, showConfirmButton: false });
+            }).catch(function () { netErr(); });
         });
     }
 

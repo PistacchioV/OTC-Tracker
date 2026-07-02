@@ -2893,6 +2893,60 @@ def _mtm_apply_edg_values(data, file_rows):
     return edg_m, coe_m, zeros, missing
 
 
+# Hybrids MtM values file "Stream_level_MTM": col A = Trade Name, col E (idx 4) =
+# 'MTM in scaling currency'. SUMIF col E grouped by Trade Name, resolve the
+# mapping_swap-hyb.json B3 ID and set the Hybrids row (Código IF = B3 ID).
+_MTM_HYB_MAP_PATH  = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mapping_swap-hyb.json')
+_MTM_HYB_VALUE_COL = 4                                # col E: MTM in scaling currency
+
+
+def _mtm_is_hyb_value_name(n):
+    return 'stream_level_mtm' in (n or '').lower()
+
+
+def _mtm_load_hyb_mapping():
+    try:
+        with open(_MTM_HYB_MAP_PATH, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _mtm_apply_hyb_values(hyb_rows, file_rows, mapping):
+    """SUMIF col E ('MTM in scaling currency') grouped by Trade Name (col A) in the
+    Stream_level_MTM file; resolve the mapping's B3 ID and set each Hybrids row's
+    'Valor MTM' (Código IF = B3 ID). Rows with NO matching value → 'Missing MtM'.
+    hyb_rows are FINALIZED (status at -4). Returns (matched, zeros, missing)."""
+    sums = {}                                            # normalized Trade Name → Σ col E
+    for r in file_rows:
+        name = _mtm_norm_party(_cc_cell(r, 0))
+        num  = _mtm_parse_num(_cc_cell(r, _MTM_HYB_VALUE_COL))
+        if not name or num is None:
+            continue                                     # header / blank line
+        sums[name] = sums.get(name, 0.0) + num
+    vmap = {}                                            # B3 ID → summed value
+    for m in mapping:
+        key = _mtm_norm_party(m.get('trade_name'))
+        b3  = str(m.get('b3_id') or '').strip().upper()
+        if b3 and key in sums:
+            vmap[b3] = vmap.get(b3, 0.0) + sums[key]
+    matched = zeros = missing = 0
+    for row in hyb_rows:
+        cid = str(row[0] or '').strip().upper()
+        if cid in vmap:
+            v = round(vmap[cid], 2)
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
+            if v == 0:
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+                zeros += 1
+            matched += 1
+        else:
+            row[-4] = _MTM_STATUS_MISSING
+            missing += 1
+    return matched, zeros, missing
+
+
 def _mtm_path_for(ymd):
     return os.path.join(MTM_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8], 'mtm_swap_{}.json'.format(ymd))
 
@@ -3021,6 +3075,14 @@ def _mtm_build_from_folder(folder):
         with open(os.path.join(folder, edg_val_fn), 'rb') as fh:
             erows = _cc_read_rows(edg_val_fn, fh.read())
         edg_matched, edg_coe_matched, _ez, edg_missing = _mtm_apply_edg_values({'tables': buckets}, erows)
+    # Hybrids MtM values (Stream_level_MTM) — SUMIF by Trade Name via mapping_swap-hyb.json.
+    hyb_val_fn = next((fn for fn in files if _mtm_is_hyb_value_name(fn)), None)
+    hyb_matched = hyb_zeros = hyb_missing = 0
+    if hyb_val_fn and buckets.get('Hybrids'):
+        with open(os.path.join(folder, hyb_val_fn), 'rb') as fh:
+            hrows = _cc_read_rows(hyb_val_fn, fh.read())
+        hyb_matched, hyb_zeros, hyb_missing = _mtm_apply_hyb_values(
+            buckets['Hybrids'], hrows, _mtm_load_hyb_mapping())
     return {
         'success': True, 'tables': buckets, 'counts': counts,
         'ref_date': ref_date, 'coe_ref_date': coe_ref,
@@ -3030,7 +3092,10 @@ def _mtm_build_from_folder(folder):
                         'cem_matched': cem_matched, 'cem_zeros': cem_zeros, 'cem_missing': cem_missing,
                         'edg_value_file': edg_val_fn,
                         'edg_matched': edg_matched, 'edg_coe_matched': edg_coe_matched,
-                        'edg_missing': edg_missing},
+                        'edg_missing': edg_missing,
+                        'hyb_value_file': hyb_val_fn,
+                        'hyb_matched': hyb_matched, 'hyb_zeros': hyb_zeros,
+                        'hyb_missing': hyb_missing},
     }, (swap_fn, coe_fn)
 
 
@@ -3088,6 +3153,29 @@ def api_mtm_latest():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     return jsonify({'success': True, 'date': _mtm_latest_ymd()})
+
+
+@blueprint.route('/api/mtm-swap/mapping/add', methods=['POST'])
+def api_mtm_mapping_add():
+    """Append a Hybrids Trade Name mapping (B3 ID / Hybrids ID / Trade Name) to
+    mapping_swap-hyb.json (used by the Hybrids MtM SUMIF)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p    = request.get_json(silent=True) or {}
+    b3   = str(p.get('b3_id') or '').strip()
+    hyb  = str(p.get('hybrids_id') or '').strip()
+    name = str(p.get('trade_name') or '').strip()
+    if not (b3 and hyb and name):
+        return jsonify({'success': False, 'error': 'All three fields are required.'}), 400
+    mapping = _mtm_load_hyb_mapping()
+    mapping.append({'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name})
+    try:
+        _atomic_write_json(_MTM_HYB_MAP_PATH, mapping)
+    except Exception:
+        log.error('[mtm] mapping add failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify({'success': True, 'count': len(mapping),
+                    'entry': {'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name}})
 
 
 @blueprint.route('/api/mtm-swap/import-folder', methods=['POST'])

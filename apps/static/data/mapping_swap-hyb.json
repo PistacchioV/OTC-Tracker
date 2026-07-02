@@ -1,0 +1,15 @@
+[
+  {"b3_id": "18I00270598", "hybrids_id": "7005266810", "trade_name": "BB_7005266810_Raizen Option to KO_Banco vs Client"},
+  {"b3_id": "22K00988026", "hybrids_id": "7005520049", "trade_name": "BB_7005520049_Raizen Option to KO_Banco vs Lawton"},
+  {"b3_id": "23F02369705", "hybrids_id": "7005549258", "trade_name": "BB_7005549258_SOFR SWAP FLOORED 0% DISC ONSHORE BRL BANCO VS OCC"},
+  {"b3_id": "23F02430033", "hybrids_id": "7005549262", "trade_name": "BB_7005549262_SOFR SWAP FLOORED 0% ONSHORE BRL THALASSIUS A016"},
+  {"b3_id": "23F02430278", "hybrids_id": "7005549261", "trade_name": "BB_7005549261_SOFR SWAP FLOORED 0% ONSHORE BRL THALASSIUS A022"},
+  {"b3_id": "23G00926001", "hybrids_id": "7005636471", "trade_name": "BB_7005636471_MRS Logistics SOFR term 0 floor BANCO VS OCC"},
+  {"b3_id": "23G00979009", "hybrids_id": "7005550563", "trade_name": "BB_7005550563_CDI vs 3m SOFR TERM 0 FLOOR MRS LOGISTICA"},
+  {"b3_id": "23H01104712", "hybrids_id": "7005554977", "trade_name": "BB_7005554977_Votorantim Cimentos BRL XCCY SWAP vs TERM SOFR w FLOOR w FX OPTIONS"},
+  {"b3_id": "23H01104713", "hybrids_id": "7005555009", "trade_name": "BB_7005555009_Votorantim Cimentos BRL XCCY SWAP vs TERM SOFR w FLOOR w FX OPTIONS_Banco vs OCC"},
+  {"b3_id": "23I01491818", "hybrids_id": "7005559555", "trade_name": "BB_7005559555_CDI vs 3m TERM SOFR MRS Logistica Second Tranche"},
+  {"b3_id": "23I01451346", "hybrids_id": "7005559568", "trade_name": "BB_7005559568_7005559555_CDI vs 3m TERM SOFR MRS Logistica Second Tranche_Banco_Vs_OCC"},
+  {"b3_id": "25G05727182", "hybrids_id": "7005663700", "trade_name": "BB_7005663700_EUR Swap EURIBOR 6m Plus 95bps w floor vs USD Fixed w strip FXO vs Companhia Brasileira de Aluminio"},
+  {"b3_id": "25G05727242", "hybrids_id": "7005663796", "trade_name": "BB_7005663796_7005663700_Companhia Brasileira de Aluminhio B2B BANCO VS LAWTON"}
+]
