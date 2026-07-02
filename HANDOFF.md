@@ -2621,3 +2621,46 @@ Commits: `8396790` (Conta Parte por visão), `427873b` (contraparte fixa por boo
 ```
 apps/pages/routes.py   ← _MTM_GEN_PARTY_ACCT (Conta Parte por visão); _MTM_GEN_BOOK_CPTY + _mtm_generate_book (cpty fixa/book)
 ```
+
+---
+
+## 49. Sessão 2026-07-01 (cont.) — MtM Hybrids: mapeamento via Stream_level_MTM + botão New Mapping
+
+Commit: `4b3c197`.
+
+### mapping_swap-hyb.json (novo)
+- `apps/static/data/mapping_swap-hyb.json` — lista de objetos `{b3_id, hybrids_id, trade_name}` (13 seeds fornecidos
+  pelo usuário). É a ponte Trade Name (do arquivo de valores) → B3 ID (= Código IF na tabela Hybrids).
+
+### Mapeamento de valor Hybrids (arquivo `Stream_level_MTM`)
+- Layout do arquivo: **col A = Trade Name**, col B = Stream ID, C = MTM in pnl currency, D = PNL Currency,
+  **col E (idx 4) = MTM in scaling currency** (valor usado), F = Scaling Currency, G+ = SPN/LEOU/contraparte.
+- `_mtm_apply_hyb_values(hyb_rows, file_rows, mapping)`: **SUMIF** — soma col E agrupando por Trade Name (normalizado
+  via `_mtm_norm_party`, tolerante a espaços/acentos); para cada entrada do mapping resolve `b3_id → Σ`; casa contra
+  `Código IF` (row[0]) da tabela Hybrids e escreve **Valor MTM** (`#,##0.00` com sinal; zero → `0.00` + comentário).
+  Linha Hybrids sem valor → **status `Missing MtM`** (`row[-4]`). Retorna `(matched, zeros, missing)`.
+- `_mtm_is_hyb_value_name` = basename contém `stream_level_mtm`. `_mtm_load_hyb_mapping()` lê o JSON.
+- Integrado em `_mtm_build_from_folder` **após o finalize** (mesma ordem de CEM/EDG) + diagnostics `hyb_*`.
+  Também roda no `/process` (dropzone) por reusar o mesmo build.
+
+### Botão "New Mapping" (só no card Hybrids)
+- `renderTable`: botão extra na toolbar apenas quando `lob.card === 'Hybrids'`; `wireToolbar` liga `.acc-new-mapping`.
+- `newMapping()`: modal Swal estilo add-row (New Deals) com 3 inputs + headers (B3 ID / Hybrids ID / Trade Name) e dois
+  botões **só-ícone**: save (verde `#157347`, `ti-device-floppy`) e cancel (vermelho `#dc3545`, `ti-x`). `preConfirm`
+  valida os 3 campos e faz `POST /api/mtm-swap/mapping/add`.
+- **Endpoint** `POST /api/mtm-swap/mapping/add` (`api_mtm_mapping_add`): valida os 3 campos, faz append no JSON via
+  `_atomic_write_json(_MTM_HYB_MAP_PATH, ...)`.
+- i18n en/br/es: `mtm-new-mapping`, `mtm-nm-required`, `mtm-nm-saved`.
+
+### Teste
+- SUMIF verificado: CBA (3 linhas, uma com espaços extras) = `254.995.871,52`; MRS (`-1000,50`+`500,25`) = `-500,25`;
+  B3 ID sem match → `Missing MtM`. Rota `/api/mtm-swap/mapping/add` → 401 sem auth (registrada). Servidor 8050 OK.
+
+### Arquivos (sessão 49)
+```
+apps/static/data/mapping_swap-hyb.json   ← novo (seed do mapping Hybrids)
+apps/pages/routes.py                     ← _mtm_apply_hyb_values / _mtm_is_hyb_value_name / _mtm_load_hyb_mapping;
+                                            integração no build; endpoint /api/mtm-swap/mapping/add
+apps/templates/pages/mtm-swap.html       ← botão New Mapping (Hybrids) + modal newMapping()
+apps/static/data/translations/{en,br,es}.json ← chaves mtm-new-mapping / mtm-nm-required / mtm-nm-saved
+```
