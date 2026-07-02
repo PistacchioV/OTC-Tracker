@@ -2664,3 +2664,27 @@ apps/pages/routes.py                     ← _mtm_apply_hyb_values / _mtm_is_hyb
 apps/templates/pages/mtm-swap.html       ← botão New Mapping (Hybrids) + modal newMapping()
 apps/static/data/translations/{en,br,es}.json ← chaves mtm-new-mapping / mtm-nm-required / mtm-nm-saved
 ```
+
+---
+
+## 50. Sessão 2026-07-01 (cont.) — mtm-swap: referências visíveis Accrual → MtM
+
+Commit: `2bf02f2`.
+
+- A página mtm-swap foi copiada da accrual-swap; sobravam textos visíveis "Accrual". Trocados:
+  título da aba (`Accrual — Swap` → `MtM — Swap`), banner CSS, comentários, e os Swal de "Missing".
+- **Chaves i18n compartilhadas**: os Swal usavam `acc-missing-title`/`acc-factors-missing` (também usadas pela
+  accrual-swap). Alterar o VALOR dessas chaves quebraria a página Accrual → criei chaves **MtM-específicas**
+  `mtm-missing-title`, `mtm-missing-desc`, `mtm-factors-missing` (en/br/es) e apontei o template para elas.
+  **Regra:** nunca reusar/alterar chaves `acc-*` para textos exclusivos do MtM; criar `mtm-*`.
+- **Não alterado** (não é visível ao usuário): nomes internos de função JS (`showAccrualPreview`,
+  `buildAccrualRecords`, `downloadAccrualFile`, `showMissingAccrual`) e o código de erro de protocolo
+  do backend `missing_accrual`. A chave de badge-class `'missing accrual'` foi mantida (inofensiva; MtM usa
+  `'missing mtm'`).
+- routes.py NÃO entrou no commit (o M local dele é só o bloco DEV BYPASS).
+
+### Arquivos (sessão 50)
+```
+apps/templates/pages/mtm-swap.html            ← título/banner/comentários + Swal com chaves mtm-*
+apps/static/data/translations/{en,br,es}.json ← mtm-missing-title / mtm-missing-desc / mtm-factors-missing
+```
