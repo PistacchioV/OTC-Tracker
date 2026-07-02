@@ -756,6 +756,7 @@
   "swal-mapping-error-n": "deal(s) retornaram erro da B3.",
   "intrag-btn-send": "Enviar",
   "intrag-col-status": "Status",
+  "intrag-col-intrag-id": "Intrag ID",
   "intrag-status-new": "Novo",
   "intrag-status-pending": "Pendente",
   "intrag-status-approved": "Aprovado",

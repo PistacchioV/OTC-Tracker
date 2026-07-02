@@ -385,6 +385,7 @@
                     <div id="ndfColToggleWrap"></div>
                     <div id="ndfExportWrap"></div>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddNdf">Add Row +</button>
+                    <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingNdf" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelNdf" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendNdf" type="button"><i class="ti ti-brand-telegram me-1"></i> <span data-lang="intrag-btn-send">Send</span></button>
                     <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
@@ -398,6 +399,7 @@
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th><span data-lang="nd-col-actions">Actions</span></th>
                                     <th><span data-lang="intrag-col-status">Status</span></th>
+                                    <th><span data-lang="intrag-col-intrag-id">Intrag ID</span></th>
                                     <th><span data-lang="intrag-ndf-col-0">Contract Type</span></th>
                                     <th><span data-lang="intrag-ndf-col-1">CETIP Contract Code</span></th>
                                     <th><span data-lang="intrag-ndf-col-2">Portfolio Code</span></th>
@@ -434,6 +436,7 @@
                                     <th></th>
                                     <th></th>
                                     <th></th><!-- Status -->
+                                    <th></th><!-- Intrag ID -->
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contract Type"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CETIP Code"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
@@ -495,7 +498,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
-// col index 2 = status, 3-32 = data, col 33 = hidden row ID
+// col index 2 = status, 3 = Intrag ID, 4-33 = data, col 34 = hidden row ID
 var NDF_COLS = [
     'Contract Type','CETIP Contract Code','Portfolio Code','Participant Position',
     'Client Tax ID (Party)','Counterparty','Client Tax ID (Cpty)',
@@ -554,7 +557,7 @@ $(document).ready(function() {
         }
     }
 
-    function exportCols() { var a=[]; for(var i=3;i<=32;i++) a.push(i); return a; }
+    function exportCols() { var a=[]; for(var i=3;i<=33;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
         var inp=$(node).find('input[type!="checkbox"]');
         return inp.length ? (inp.val()||'') : $(node).text().trim();
@@ -567,7 +570,7 @@ $(document).ready(function() {
             { orderable: false, targets: [0, 1] },
             { orderable: true,  targets: '_all' },
             { targets: 2, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
-            { visible: false,   targets: [33] }
+            { visible: false,   targets: [34] }
         ],
         dom: "<'row'<'col-sm-12'tr>>" +
              "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -586,7 +589,7 @@ $(document).ready(function() {
         drawCallback: function() {
             var api = this.api();
             api.rows().every(function() {
-                var d=this.data(), id=d?d[33]:null, node=this.node();
+                var d=this.data(), id=d?d[34]:null, node=this.node();
                 if(node) {
                     $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
                     // Approve only makes sense for Pending rows.
@@ -625,7 +628,7 @@ $(document).ready(function() {
                 var items=NDF_COLS.map(function(lbl,i){
                     return '<li class="dropdown-item"><div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
-                        ' data-column="'+(i+3)+'" id="ndfC'+i+'" checked>' +
+                        ' data-column="'+(i+4)+'" id="ndfC'+i+'" checked>' +
                         '<label class="form-check-label fw-medium" for="ndfC'+i+'">'+lbl+'</label>' +
                         '</div></li>';
                 }).join('');
@@ -660,6 +663,66 @@ $(document).ready(function() {
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
 
+    // ── Mapping Intrag ID (return-folder CSV → fill the Intrag ID column) ─────────
+    // Table cols: [2]=status, [3]=Intrag ID, [5]=B3 ID (CETIP Contract Code), [34]=row id.
+    // Backend reads the single return CSV (no header; NDF rows: col B == "NDF - TERMO
+    // MERCADORIA", col C = B3 ID, col A = Intrag ID), matches on B3 ID, persists the JSON.
+    var _mappingNdfRunning = false;
+    document.getElementById('btnMappingNdf').addEventListener('click', function() {
+        if (_mappingNdfRunning) return;
+        var btn = this;
+        var deals = [];
+        table.rows({ search: 'none', page: 'all' }).every(function() {
+            var d = this.data(); if (!d) return;
+            var rowId = d[34] || '', b3 = (d[5] || '').toString().trim();
+            if (rowId && b3) deals.push({ id: rowId, b3_id: b3 });
+        });
+        if (!deals.length) {
+            Swal.fire({ title: 'Mapping Intrag ID',
+                text: 'No rows with a B3 ID to map.',
+                icon: 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+            return;
+        }
+        _mappingNdfRunning = true;
+        btn.style.pointerEvents = 'none';
+        var _prevHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+        fetch('/api/intrag/ndf/mapping-intrag-id', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deals: deals })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(res) {
+            _mappingNdfRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            if (!res.ok) {
+                Swal.fire({ title: 'Error', text: res.error || 'Failed to read the return file.',
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var mapped = 0;
+            (res.results || []).forEach(function(result) {
+                if (result.status === 'Success') mapped++;
+                table.rows({ search: 'none', page: 'all' }).every(function() {
+                    var d = this.data(); if (!d || (d[34] || '') !== result.id) return;
+                    if (result.status === 'Success' && result.intrag_id != null) {
+                        table.cell(this.node(), 3).data(result.intrag_id);
+                    }
+                });
+            });
+            table.draw(false);
+            Swal.fire({ title: 'Mapping Intrag ID',
+                text: mapped ? (mapped + ' operation(s) mapped.') : 'No matching operations found in the return file.',
+                icon: mapped ? 'success' : 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+        })
+        .catch(function(err) {
+            _mappingNdfRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
     function toggleDelBtn(show) {
         var b=document.getElementById('btnDelNdf'); if(b) b.classList.toggle('d-none',!show);
         var s=document.getElementById('btnSendNdf'); if(s) s.classList.toggle('d-none',!show);
@@ -671,14 +734,14 @@ $(document).ready(function() {
     $('#selectAll').on('click',function() {
         selectedRowIds.clear();
         // Only the rows matching the current filter/search — never the whole dataset.
-        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[33]:null; if(id) selectedRowIds.add(id); }); }
+        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[34]:null; if(id) selectedRowIds.add(id); }); }
         $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
         console.log('[NDF-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
     });
 
     $('#intrag-ndf-table tbody').on('change','input[type="checkbox"]',function() {
-        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[33]:null;
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[34]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
         var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
         if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
@@ -689,7 +752,7 @@ $(document).ready(function() {
         e.preventDefault(); if(selectedRowIds.size===0) return;
         var toDelete=[];
         table.rows({ search: 'applied' }).every(function(){
-            var d=this.data(), id=d?d[33]:null;
+            var d=this.data(), id=d?d[34]:null;
             if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
         });
         console.log('[NDF-INTRAG DELETE] selectedRowIds:', Array.from(selectedRowIds));
@@ -719,13 +782,13 @@ $(document).ready(function() {
     });
 
     // ── Send (generate .txt on the Intrag network folder) ───────────────────────
-    // Row data array: [0]=checkbox, [1]=actions, [2]=status, [3..32]=30 data cols, [33]=id.
-    var TRADE_DATE_COL = 13;             // table col of Trade Date (data idx 10 + 3)
+    // Row data array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID, [4..33]=30 data cols, [34]=id.
+    var TRADE_DATE_COL = 14;             // table col of Trade Date (data idx 10 + 4)
     var SENDABLE_STATUS = { 'New': 1, 'Approved': 1 };
 
-    function _intragRowData(d) { return d ? d.slice(3, 33) : []; }   // 30 data cols
+    function _intragRowData(d) { return d ? d.slice(4, 34) : []; }   // 30 data cols
     function _itemFromRow(d) {
-        return { deal_id: (d[33] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) };
+        return { deal_id: (d[34] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) };
     }
 
     function sendIntragItems(items) {
@@ -754,7 +817,7 @@ $(document).ready(function() {
                     // Reflect the New/Approved → Sent transition in the table.
                     var ids = {}; items.forEach(function(it){ if(it.deal_id) ids[it.deal_id]=1; });
                     table.rows().every(function(){
-                        var d=this.data(); if(d && ids[d[33]]) { d[2]='Sent'; this.data(d); }
+                        var d=this.data(); if(d && ids[d[34]]) { d[2]='Sent'; this.data(d); }
                     });
                     // Clear any ticked checkboxes — drawCallback re-syncs the
                     // checkbox / selectAll / toolbar state from selectedRowIds.
@@ -785,7 +848,7 @@ $(document).ready(function() {
     document.getElementById('btnSendNdf').addEventListener('click',function() {
         if(selectedRowIds.size<2) return;
         var items=[];
-        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[33]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
+        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[34]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
         sendIntragItems(items);
     });
 
@@ -801,7 +864,7 @@ $(document).ready(function() {
             if(!r.isConfirmed) return;
             fetch('/api/intrag/ndf/approve', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ deal_id: d[33]||'', trade_date: d[TRADE_DATE_COL]||'' })
+                body: JSON.stringify({ deal_id: d[34]||'', trade_date: d[TRADE_DATE_COL]||'' })
             }).then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
               .then(function(o){
                 if(o.ok && o.data.success){
@@ -821,7 +884,7 @@ $(document).ready(function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
         var m=document.getElementById('ndfModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag NDF';
-        NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=d[i+3]||''; });
+        NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=d[i+4]||''; });
         $(m).data('editTr',tr);
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
@@ -830,10 +893,11 @@ $(document).ready(function() {
         var m=document.getElementById('ndfModal'), editTr=$(m).data('editTr')||null;
         var vals=[]; NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); vals.push(inp?inp.value.trim():''); });
         var prevData = editTr ? table.row(editTr).data() : null;
-        var id = editTr ? (prevData[33]||_ndfId()) : _ndfId();
+        var id = editTr ? (prevData[34]||_ndfId()) : _ndfId();
+        var intragId = (editTr && prevData) ? (prevData[3]||'') : '';   // Intrag ID preserved on edit
 
         function _applyRow(newStatus) {
-            var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _ndfActions(), newStatus];
+            var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _ndfActions(), newStatus, intragId];
             vals.forEach(function(v){ row.push(v); });
             row.push(id);
             if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
@@ -878,38 +942,39 @@ $(document).ready(function() {
     var SF_COLS = [
         // Trade Date — special: drives the API date param (dtCol:-1 = not a DT column search)
         { label: 'Trade Date',              type: 'date',   dtCol: -1,  isDate: true },
-        // date columns applied via DT column search after load (data cols shifted +1 by Status)
-        { label: 'Registration Date',       type: 'date',   dtCol: 14 },
-        { label: 'Maturity Date',           type: 'date',   dtCol: 15 },
+        // date columns applied via DT column search after load (data cols shifted +2 by Status + Intrag ID)
+        { label: 'Registration Date',       type: 'date',   dtCol: 15 },
+        { label: 'Maturity Date',           type: 'date',   dtCol: 16 },
         // number columns
-        { label: 'Notional Value',          type: 'number', dtCol: 12 },
-        { label: 'Quantity',                type: 'number', dtCol: 20 },
-        { label: 'Trade Price',             type: 'number', dtCol: 22 },
-        { label: 'Settlement Parity',       type: 'number', dtCol: 23 },
-        { label: 'Spot Fixing',             type: 'number', dtCol: 25 },
-        { label: 'Forward Rate (R$/CCY)',   type: 'number', dtCol: 26 },
-        { label: 'Asian Fwd Avg Rate',      type: 'number', dtCol: 27 },
-        { label: 'Comm Fixing',             type: 'number', dtCol: 29 },
-        { label: 'Discount Factor',         type: 'number', dtCol: 32 },
+        { label: 'Notional Value',          type: 'number', dtCol: 13 },
+        { label: 'Quantity',                type: 'number', dtCol: 21 },
+        { label: 'Trade Price',             type: 'number', dtCol: 23 },
+        { label: 'Settlement Parity',       type: 'number', dtCol: 24 },
+        { label: 'Spot Fixing',             type: 'number', dtCol: 26 },
+        { label: 'Forward Rate (R$/CCY)',   type: 'number', dtCol: 27 },
+        { label: 'Asian Fwd Avg Rate',      type: 'number', dtCol: 28 },
+        { label: 'Comm Fixing',             type: 'number', dtCol: 30 },
+        { label: 'Discount Factor',         type: 'number', dtCol: 33 },
         // text columns
-        { label: 'Contract Type',           type: 'text',   dtCol: 3  },
-        { label: 'CETIP Contract Code',     type: 'text',   dtCol: 4  },
-        { label: 'Portfolio Code',          type: 'text',   dtCol: 5  },
-        { label: 'Participant Position',    type: 'text',   dtCol: 6  },
-        { label: 'Client Tax ID (Party)',   type: 'text',   dtCol: 7  },
-        { label: 'Counterparty',            type: 'text',   dtCol: 8  },
-        { label: 'Client Tax ID (Cpty)',    type: 'text',   dtCol: 9  },
-        { label: 'Cpty Collateral Basket',  type: 'text',   dtCol: 10 },
-        { label: 'Party Collateral Basket', type: 'text',   dtCol: 11 },
-        { label: 'Currency',                type: 'text',   dtCol: 16 },
-        { label: 'Reference Exchange',      type: 'text',   dtCol: 17 },
-        { label: 'Commodity',               type: 'text',   dtCol: 18 },
-        { label: 'Type (Form)',             type: 'text',   dtCol: 19 },
-        { label: 'Trading Unit',            type: 'text',   dtCol: 21 },
-        { label: 'Maturity Month/Year',     type: 'text',   dtCol: 24 },
-        { label: 'Information Source',      type: 'text',   dtCol: 28 },
-        { label: 'Adjustment Type',         type: 'text',   dtCol: 30 },
-        { label: 'Observation',             type: 'text',   dtCol: 31 }
+        { label: 'Intrag ID',               type: 'text',   dtCol: 3  },
+        { label: 'Contract Type',           type: 'text',   dtCol: 4  },
+        { label: 'CETIP Contract Code',     type: 'text',   dtCol: 5  },
+        { label: 'Portfolio Code',          type: 'text',   dtCol: 6  },
+        { label: 'Participant Position',    type: 'text',   dtCol: 7  },
+        { label: 'Client Tax ID (Party)',   type: 'text',   dtCol: 8  },
+        { label: 'Counterparty',            type: 'text',   dtCol: 9  },
+        { label: 'Client Tax ID (Cpty)',    type: 'text',   dtCol: 10 },
+        { label: 'Cpty Collateral Basket',  type: 'text',   dtCol: 11 },
+        { label: 'Party Collateral Basket', type: 'text',   dtCol: 12 },
+        { label: 'Currency',                type: 'text',   dtCol: 17 },
+        { label: 'Reference Exchange',      type: 'text',   dtCol: 18 },
+        { label: 'Commodity',               type: 'text',   dtCol: 19 },
+        { label: 'Type (Form)',             type: 'text',   dtCol: 20 },
+        { label: 'Trading Unit',            type: 'text',   dtCol: 22 },
+        { label: 'Maturity Month/Year',     type: 'text',   dtCol: 25 },
+        { label: 'Information Source',      type: 'text',   dtCol: 29 },
+        { label: 'Adjustment Type',         type: 'text',   dtCol: 31 },
+        { label: 'Observation',             type: 'text',   dtCol: 32 }
     ];
 
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -1060,7 +1125,8 @@ $(document).ready(function() {
                 if (data.success && data.entries && data.entries.length) {
                     data.entries.forEach(function(entry) {
                         var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                                 _ndfActions(), entry.status||'New'];
+                                 _ndfActions(), entry.status||'New',
+                                 entry.intrag_id!=null?String(entry.intrag_id):''];
                         ENTRY_FIELDS.forEach(function(f){row.push(entry[f]!=null?String(entry[f]):'');});
                         row.push(entry._deal||_ndfId());
                         table.row.add(row);

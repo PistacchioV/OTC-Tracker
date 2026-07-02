@@ -7342,6 +7342,103 @@ def api_intrag_ndf_approve():
     return jsonify({'success': True, 'status': 'Approved'})
 
 
+# ── Intrag ID mapping (Return-folder export CSV → fill each entry's intrag_id) ──
+# The Return folder holds a single export CSV (export.csv / export(1).csv / …) with
+# ALL operations and NO header — match by row content, not column names:
+#   • Option: col C (idx 2) == 'OPCAO'                → col I (idx 8) = B3 ID, col A (idx 0) = Intrag ID
+#   • NDF:    col B (idx 1) == 'NDF - TERMO MERCADORIA'→ col C (idx 2) = B3 ID, col A (idx 0) = Intrag ID
+def _intrag_b3_key(v):
+    """B3 ID match key — stripped, leading zeros dropped (both sides)."""
+    s = str(v or '').strip()
+    return s.lstrip('0') or s
+
+
+def _intrag_find_export_csv():
+    """Most recent export*.csv in the Return folder, or None."""
+    try:
+        cands = [os.path.join(RETURN_PATH, fn) for fn in os.listdir(RETURN_PATH)
+                 if fn.lower().startswith('export') and fn.lower().endswith('.csv')]
+    except OSError:
+        return None
+    cands = [p for p in cands if os.path.isfile(p)]
+    return max(cands, key=lambda p: os.path.getmtime(p)) if cands else None
+
+
+def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
+    """Parse the export CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
+    `match_col` equals `match_val`."""
+    import csv as _csv
+    out = {}
+    with open(csv_path, 'r', encoding='latin-1', newline='') as fh:
+        sample = fh.read(4096); fh.seek(0)
+        delim = ';' if sample.count(';') > sample.count(',') else ','
+        for row in _csv.reader(fh, delimiter=delim):
+            if len(row) <= max(match_col, b3_col):
+                continue
+            if str(row[match_col]).strip().upper() != match_val:
+                continue
+            b3, intrag_id = _intrag_b3_key(row[b3_col]), str(row[0]).strip()
+            if b3 and intrag_id:
+                out.setdefault(b3, intrag_id)
+    return out
+
+
+def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
+    """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
+    intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
+    csv_path = _intrag_find_export_csv()
+    if not csv_path:
+        return None, 'No export CSV found in the Return folder.'
+    try:
+        b3map = _intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
+    except Exception:
+        log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
+        return None, 'Failed to read the export CSV.'
+    results = []
+    with _cache_lock:
+        for d in (deals or []):
+            did = str(d.get('id') or '').strip()
+            b3  = _intrag_b3_key(d.get('b3_id'))
+            if not did or not b3 or b3 not in b3map:
+                continue
+            intrag_id = b3map[b3]
+            fp, entries, idx = finder(did, None)
+            if idx is None:
+                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
+                continue
+            entries[idx]['intrag_id'] = intrag_id
+            try:
+                _atomic_write_json(fp, entries)
+            except Exception:
+                log.error('[intrag-map] save failed %s:\n%s', fp, traceback.format_exc())
+                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
+                continue
+            results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
+    return results, None
+
+
+@blueprint.route('/api/intrag/ndf/mapping-intrag-id', methods=['POST'])
+def api_intrag_ndf_mapping_intrag_id():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, err = _intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, _find_intrag_ndf_entry)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'results': results})
+
+
+@blueprint.route('/api/intrag/option/mapping-intrag-id', methods=['POST'])
+def api_intrag_option_mapping_intrag_id():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, err = _intrag_run_mapping(deals, 2, 'OPCAO', 8, _find_intrag_opt_entry)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'results': results})
+
+
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])
 def api_ndf_save_deal_cache():
     if not session.get('authenticated'):

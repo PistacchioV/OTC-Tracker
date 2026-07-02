@@ -9,9 +9,6 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
 <style>
-/* Status 'Sent' — teal escurecido (diferencia do New; não tão escuro quanto Approved). */
-.badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
-
   .card-body { padding: 5px; }
   .table-responsive { overflow-x: auto; }
   /* Breathing room above the header row so the scrollX header clone doesn't clip
@@ -365,6 +362,7 @@
                     <div id="optColToggleWrap"></div>
                     <div id="optExportWrap"></div>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddOpt">Add Row +</button>
+                    <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingOpt" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelOpt" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
                     <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendOpt"><i class="ti ti-brand-telegram me-1"></i> Send</button>
                 </div>
@@ -377,6 +375,7 @@
                                     <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
                                     <th data-lang="intrag-col-status">Status</th>
+                                    <th data-lang="intrag-col-intrag-id">Intrag ID</th>
                                     <th data-lang="intrag-opt-col-0">Portfolio</th>
                                     <th data-lang="intrag-opt-col-1">System ID</th>
                                     <th data-lang="intrag-opt-col-2">Line Type ID</th>
@@ -420,6 +419,7 @@
                                 <tr id="column-search-inputs">
                                     <th></th><th></th>
                                     <th></th><!-- Status -->
+                                    <th></th><!-- Intrag ID -->
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="System ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Line Type ID"></th>
@@ -501,7 +501,7 @@
 </script>
 
 <script>
-// col index 2 = status, 3-40 = data, col 41 = hidden row ID
+// col index 2 = status, 3 = Intrag ID, 4-41 = data, col 42 = hidden row ID
 var OPT_COLS = [
     'Portfolio','System ID','Line Type ID','Registration Date','Buyer Account',
     'Buyer Name','Contract','B3 ID','My Number','Trade Type',
@@ -549,7 +549,7 @@ function statusBadge(status) {
 $(document).ready(function() {
     if (typeof JSZip !== 'undefined') window.JSZip = JSZip;
 
-    function exportCols() { var a=[]; for(var i=3;i<=40;i++) a.push(i); return a; }
+    function exportCols() { var a=[]; for(var i=3;i<=41;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
         var inp=$(node).find('input[type!="checkbox"]');
         return inp.length ? (inp.val()||'') : $(node).text().trim();
@@ -562,7 +562,7 @@ $(document).ready(function() {
         columnDefs: [
             { orderable: false, targets: [0,1] },
             { targets: 2, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
-            { visible: false, targets: [41] }
+            { visible: false, targets: [42] }
         ],
         dom: "<'row'<'col-sm-12'tr>>" +
              "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -581,7 +581,7 @@ $(document).ready(function() {
         drawCallback: function() {
             var api = this.api();
             api.rows().every(function() {
-                var d=this.data(), id=d?d[41]:null, node=this.node();
+                var d=this.data(), id=d?d[42]:null, node=this.node();
                 if(node) {
                     $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
                     // Approve only makes sense for Pending rows.
@@ -615,7 +615,7 @@ $(document).ready(function() {
                 var items=OPT_COLS.map(function(lbl,i){
                     return '<li class="dropdown-item"><div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
-                        ' data-column="'+(i+3)+'" id="optC'+i+'" checked>' +
+                        ' data-column="'+(i+4)+'" id="optC'+i+'" checked>' +
                         '<label class="form-check-label fw-medium" for="optC'+i+'">'+lbl+'</label>' +
                         '</div></li>';
                 }).join('');
@@ -654,7 +654,8 @@ $(document).ready(function() {
                 if (data.success && data.entries && data.entries.length) {
                     data.entries.forEach(function(entry){
                         var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                                   _optActionsCell(), entry.status || 'New'];
+                                   _optActionsCell(), entry.status || 'New',
+                                   entry.intrag_id != null ? String(entry.intrag_id) : ''];
                         OPT_ENTRY_FIELDS.forEach(function(f){ row.push(entry[f] != null ? String(entry[f]) : ''); });
                         row.push(entry._deal || _optId());
                         table.row.add(row);
@@ -696,6 +697,65 @@ $(document).ready(function() {
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
 
+    // ── Mapping Intrag ID (return-folder CSV → fill the Intrag ID column) ─────────
+    // Table cols: [2]=status, [3]=Intrag ID, [11]=B3 ID, [42]=row id.
+    // Backend reads the single return CSV (no header; Option rows: col C == "OPCAO",
+    // col I = B3 ID, col A = Intrag ID), matches on B3 ID, persists the JSON.
+    var _mappingOptRunning = false;
+    document.getElementById('btnMappingOpt').addEventListener('click', function() {
+        if (_mappingOptRunning) return;
+        var btn = this;
+        var deals = [];
+        table.rows({ search: 'none', page: 'all' }).every(function() {
+            var d = this.data(); if (!d) return;
+            var rowId = d[42] || '', b3 = (d[11] || '').toString().trim();
+            if (rowId && b3) deals.push({ id: rowId, b3_id: b3 });
+        });
+        if (!deals.length) {
+            Swal.fire({ title: 'Mapping Intrag ID', text: 'No rows with a B3 ID to map.',
+                icon: 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+            return;
+        }
+        _mappingOptRunning = true;
+        btn.style.pointerEvents = 'none';
+        var _prevHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+        fetch('/api/intrag/option/mapping-intrag-id', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deals: deals })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(res) {
+            _mappingOptRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            if (!res.ok) {
+                Swal.fire({ title: 'Error', text: res.error || 'Failed to read the return file.',
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var mapped = 0;
+            (res.results || []).forEach(function(result) {
+                if (result.status === 'Success') mapped++;
+                table.rows({ search: 'none', page: 'all' }).every(function() {
+                    var d = this.data(); if (!d || (d[42] || '') !== result.id) return;
+                    if (result.status === 'Success' && result.intrag_id != null) {
+                        table.cell(this.node(), 3).data(result.intrag_id);
+                    }
+                });
+            });
+            table.draw(false);
+            Swal.fire({ title: 'Mapping Intrag ID',
+                text: mapped ? (mapped + ' operation(s) mapped.') : 'No matching operations found in the return file.',
+                icon: mapped ? 'success' : 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+        })
+        .catch(function(err) {
+            _mappingOptRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
     function toggleDelBtn(show) {
         var b=document.getElementById('btnDelOpt'); if(b) b.classList.toggle('d-none',!show);
         var s=document.getElementById('btnSendOpt'); if(s) s.classList.toggle('d-none',!show);
@@ -707,14 +767,14 @@ $(document).ready(function() {
     $('#selectAll').on('click',function() {
         selectedRowIds.clear();
         // Only the rows matching the current filter/search — never the whole dataset.
-        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[41]:null; if(id) selectedRowIds.add(id); }); }
+        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[42]:null; if(id) selectedRowIds.add(id); }); }
         $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
         console.log('[OPT-INTRAG selectAll] checked:', this.checked, '| selectedRowIds.size:', selectedRowIds.size);
     });
 
     $('#intrag-opt-table tbody').on('change','input[type="checkbox"]',function() {
-        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[41]:null;
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[42]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
         var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
         if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
@@ -725,7 +785,7 @@ $(document).ready(function() {
         e.preventDefault(); if(selectedRowIds.size===0) return;
         var toDelete=[];
         table.rows({ search: 'applied' }).every(function(){
-            var d=this.data(), id=d?d[41]:null;
+            var d=this.data(), id=d?d[42]:null;
             if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
         });
         console.log('[OPT-INTRAG DELETE] selectedRowIds:', Array.from(selectedRowIds));
@@ -755,12 +815,12 @@ $(document).ready(function() {
     });
 
     // ── Send (generate Intrag-Option-YYYYMMDD.txt on the Intrag network folder) ──
-    // Row array: [0]=checkbox, [1]=actions, [2]=status, [3..40]=38 data cols, [41]=id.
-    var OPT_REGDATE_COL = 6;             // table col of Registration Date (data idx 3 + 3)
+    // Row array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID, [4..41]=38 data cols, [42]=id.
+    var OPT_REGDATE_COL = 7;             // table col of Registration Date (data idx 3 + 4)
     var OPT_SENDABLE = { 'New': 1, 'Approved': 1 };
 
-    function _intragRowData(d) { return d ? d.slice(3, 41) : []; }   // 38 data cols
-    function _itemFromRow(d) { return { deal_id: (d[41] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) }; }
+    function _intragRowData(d) { return d ? d.slice(4, 42) : []; }   // 38 data cols
+    function _itemFromRow(d) { return { deal_id: (d[42] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) }; }
 
     function sendIntragOptItems(items) {
         if (!items.length) return;
@@ -783,7 +843,7 @@ $(document).ready(function() {
             }).then(function(resp){ return resp.json(); }).then(function(res) {
                 if (res.success) {
                     var ids = {}; items.forEach(function(it){ if(it.deal_id) ids[it.deal_id]=1; });
-                    table.rows().every(function(){ var d=this.data(); if(d && ids[d[41]]) { d[2]='Sent'; this.data(d); } });
+                    table.rows().every(function(){ var d=this.data(); if(d && ids[d[42]]) { d[2]='Sent'; this.data(d); } });
                     selectedRowIds.clear();
                     table.draw(false);
                     Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).',
@@ -807,7 +867,7 @@ $(document).ready(function() {
     document.getElementById('btnSendOpt').addEventListener('click',function() {
         if(selectedRowIds.size<2) return;
         var items=[];
-        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[41]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
+        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[42]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
         sendIntragOptItems(items);
     });
 
@@ -823,7 +883,7 @@ $(document).ready(function() {
             if(!r.isConfirmed) return;
             fetch('/api/intrag/option/approve', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ deal_id: d[41]||'', trade_date: d[OPT_REGDATE_COL]||'' })
+                body: JSON.stringify({ deal_id: d[42]||'', trade_date: d[OPT_REGDATE_COL]||'' })
             }).then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
               .then(function(o){
                 if(o.ok && o.data.success){
@@ -843,7 +903,7 @@ $(document).ready(function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
         var m=document.getElementById('optModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag Option';
-        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+3]||''; });
+        OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+4]||''; });
         $(m).data('editTr',tr);
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
@@ -852,10 +912,11 @@ $(document).ready(function() {
         var m=document.getElementById('optModal'), editTr=$(m).data('editTr')||null;
         var prevData = editTr ? table.row(editTr).data() : null;
         var vals=[]; OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); vals.push(inp?inp.value.trim():''); });
-        var id = editTr ? (prevData[41]||_optId()) : _optId();
+        var id = editTr ? (prevData[42]||_optId()) : _optId();
+        var intragId = (editTr && prevData) ? (prevData[3]||'') : '';   // Intrag ID preserved on edit
 
         function _applyRow(newStatus) {
-            var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _optActionsCell(), newStatus];
+            var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _optActionsCell(), newStatus, intragId];
             vals.forEach(function(v){ row.push(v); });
             row.push(id);
             if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
@@ -891,7 +952,8 @@ $(document).ready(function() {
         'Redemption Value':'number','Call Strike Price':'number','Put Strike Price':'number','Call Unit Premium':'number',
         'Put Unit Premium':'number','Barrier Rate':'number','Maturity Rate':'number','Quantity':'number','Asian Option Average':'number'
     };
-    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+3,type:(OPT_TYPES[lbl]||'text')};});
+    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+4,type:(OPT_TYPES[lbl]||'text')};});
+    SF_COLS.push({label:'Intrag ID', dtCol:3, type:'text'});   // extra column, searchable
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
     function sfToDate(s){
