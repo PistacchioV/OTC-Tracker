@@ -588,9 +588,15 @@ def _resolve_recipients(value):
 
 
 def _safe_filename(s):
+    # Transliterate accents to ASCII (ê→e, ç→c, ã→a…) so the resulting name is
+    # pure ASCII. A non-ASCII Content-Disposition filename can be dropped or 500
+    # under a strict WSGI server (gunicorn), leaving the browser to download the
+    # error page as a blank .eml under the generic 'otc_email_draft.eml' name.
+    s = unicodedata.normalize('NFKD', str(s or ''))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
     out = []
-    for ch in str(s or ''):
-        out.append(ch if (ch.isalnum() or ch in ' -_().[]') else '_')
+    for ch in s:
+        out.append(ch if (ch.isascii() and (ch.isalnum() or ch in ' -_().[]')) else '_')
     name = ''.join(out).strip()
     return (name[:120] or 'draft')
 
