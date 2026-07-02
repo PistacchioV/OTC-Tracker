@@ -761,6 +761,7 @@
   "intrag-status-pending": "Pendente",
   "intrag-status-approved": "Aprovado",
   "intrag-status-sent": "Enviado",
+  "intrag-status-success": "Success",
   "intrag-btn-approve": "Aprovar",
   "intrag-ndf-col-0": "Tipo do Contrato a Termo",
   "intrag-ndf-col-1": "Código Contrato CETIP",

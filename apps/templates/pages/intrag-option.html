@@ -47,7 +47,7 @@
   }
 
   /* Colunas específicas com larguras adequadas — um bloco por coluna */
-  /* nth-child(1)=checkbox  (2)=actions  (3)=Status  (4..41)=dados  (42)=hidden ID
+  /* nth-child(1)=checkbox  (2)=actions  (3)=Status  (4)=Intrag ID  (5..42)=dados  (43)=hidden ID
      IMPORTANTE: cada regra inclui também .dt-scroll-head/.dataTables_scrollHead
      porque o DataTables REMOVE o id da tabela clonada do header (scrollX) — sem
      esses seletores o CSS não alcança o header e ele desalinha. Edite só o px (1×). */
@@ -65,196 +65,200 @@
   #intrag-opt-table td:nth-child(3),
   .dt-scroll-head thead th:nth-child(3),
   .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; } /* Status */
-
   #intrag-opt-table th:nth-child(4),
   #intrag-opt-table td:nth-child(4),
   .dt-scroll-head thead th:nth-child(4),
-  .dataTables_scrollHead thead th:nth-child(4) { width: 110px; min-width: 110px; } /* Portfolio */
+  .dataTables_scrollHead thead th:nth-child(4) { width: 140px; min-width: 140px; } /* Intrag ID */
 
   #intrag-opt-table th:nth-child(5),
   #intrag-opt-table td:nth-child(5),
   .dt-scroll-head thead th:nth-child(5),
-  .dataTables_scrollHead thead th:nth-child(5) { width: 110px; min-width: 110px; } /* System ID */
+  .dataTables_scrollHead thead th:nth-child(5) { width: 110px; min-width: 110px; } /* Portfolio */
 
   #intrag-opt-table th:nth-child(6),
   #intrag-opt-table td:nth-child(6),
   .dt-scroll-head thead th:nth-child(6),
-  .dataTables_scrollHead thead th:nth-child(6) { width: 115px; min-width: 115px; } /* Line Type ID */
+  .dataTables_scrollHead thead th:nth-child(6) { width: 110px; min-width: 110px; } /* System ID */
 
   #intrag-opt-table th:nth-child(7),
   #intrag-opt-table td:nth-child(7),
   .dt-scroll-head thead th:nth-child(7),
-  .dataTables_scrollHead thead th:nth-child(7) { width: 140px; min-width: 140px; } /* Registration Date */
+  .dataTables_scrollHead thead th:nth-child(7) { width: 115px; min-width: 115px; } /* Line Type ID */
 
   #intrag-opt-table th:nth-child(8),
   #intrag-opt-table td:nth-child(8),
   .dt-scroll-head thead th:nth-child(8),
-  .dataTables_scrollHead thead th:nth-child(8) { width: 130px; min-width: 130px; } /* Holder Account */
+  .dataTables_scrollHead thead th:nth-child(8) { width: 140px; min-width: 140px; } /* Registration Date */
 
   #intrag-opt-table th:nth-child(9),
   #intrag-opt-table td:nth-child(9),
   .dt-scroll-head thead th:nth-child(9),
-  .dataTables_scrollHead thead th:nth-child(9) { width: 230px; min-width: 230px; } /* Holder Name */
+  .dataTables_scrollHead thead th:nth-child(9) { width: 130px; min-width: 130px; } /* Holder Account */
 
   #intrag-opt-table th:nth-child(10),
   #intrag-opt-table td:nth-child(10),
   .dt-scroll-head thead th:nth-child(10),
-  .dataTables_scrollHead thead th:nth-child(10) { width: 110px; min-width: 110px; } /* Contract */
+  .dataTables_scrollHead thead th:nth-child(10) { width: 230px; min-width: 230px; } /* Holder Name */
 
   #intrag-opt-table th:nth-child(11),
   #intrag-opt-table td:nth-child(11),
   .dt-scroll-head thead th:nth-child(11),
-  .dataTables_scrollHead thead th:nth-child(11) { width: 140px; min-width: 140px; } /* CETIP Contract */
+  .dataTables_scrollHead thead th:nth-child(11) { width: 110px; min-width: 110px; } /* Contract */
 
   #intrag-opt-table th:nth-child(12),
   #intrag-opt-table td:nth-child(12),
   .dt-scroll-head thead th:nth-child(12),
-  .dataTables_scrollHead thead th:nth-child(12) { width: 120px; min-width: 120px; } /* My Number */
+  .dataTables_scrollHead thead th:nth-child(12) { width: 140px; min-width: 140px; } /* CETIP Contract */
 
   #intrag-opt-table th:nth-child(13),
   #intrag-opt-table td:nth-child(13),
   .dt-scroll-head thead th:nth-child(13),
-  .dataTables_scrollHead thead th:nth-child(13) { width: 110px; min-width: 110px; } /* Trade Type */
+  .dataTables_scrollHead thead th:nth-child(13) { width: 120px; min-width: 120px; } /* My Number */
 
   #intrag-opt-table th:nth-child(14),
   #intrag-opt-table td:nth-child(14),
   .dt-scroll-head thead th:nth-child(14),
-  .dataTables_scrollHead thead th:nth-child(14) { width: 130px; min-width: 130px; } /* Writer Account */
+  .dataTables_scrollHead thead th:nth-child(14) { width: 110px; min-width: 110px; } /* Trade Type */
 
   #intrag-opt-table th:nth-child(15),
   #intrag-opt-table td:nth-child(15),
   .dt-scroll-head thead th:nth-child(15),
-  .dataTables_scrollHead thead th:nth-child(15) { width: 160px; min-width: 160px; } /* Writer Name */
+  .dataTables_scrollHead thead th:nth-child(15) { width: 130px; min-width: 130px; } /* Writer Account */
 
   #intrag-opt-table th:nth-child(16),
   #intrag-opt-table td:nth-child(16),
   .dt-scroll-head thead th:nth-child(16),
-  .dataTables_scrollHead thead th:nth-child(16) { width: 110px; min-width: 110px; } /* Start Date */
+  .dataTables_scrollHead thead th:nth-child(16) { width: 160px; min-width: 160px; } /* Writer Name */
 
   #intrag-opt-table th:nth-child(17),
   #intrag-opt-table td:nth-child(17),
   .dt-scroll-head thead th:nth-child(17),
-  .dataTables_scrollHead thead th:nth-child(17) { width: 120px; min-width: 120px; } /* Maturity Date */
+  .dataTables_scrollHead thead th:nth-child(17) { width: 110px; min-width: 110px; } /* Start Date */
 
   #intrag-opt-table th:nth-child(18),
   #intrag-opt-table td:nth-child(18),
   .dt-scroll-head thead th:nth-child(18),
-  .dataTables_scrollHead thead th:nth-child(18) { width: 130px; min-width: 130px; } /* CETIP Number */
+  .dataTables_scrollHead thead th:nth-child(18) { width: 120px; min-width: 120px; } /* Maturity Date */
 
   #intrag-opt-table th:nth-child(19),
   #intrag-opt-table td:nth-child(19),
   .dt-scroll-head thead th:nth-child(19),
-  .dataTables_scrollHead thead th:nth-child(19) { width: 185px; min-width: 185px; } /* SISBACEN Currency Code */
+  .dataTables_scrollHead thead th:nth-child(19) { width: 130px; min-width: 130px; } /* CETIP Number */
 
   #intrag-opt-table th:nth-child(20),
   #intrag-opt-table td:nth-child(20),
   .dt-scroll-head thead th:nth-child(20),
-  .dataTables_scrollHead thead th:nth-child(20) { width: 130px; min-width: 130px; } /* Currency Symbol */
+  .dataTables_scrollHead thead th:nth-child(20) { width: 185px; min-width: 185px; } /* SISBACEN Currency Code */
 
   #intrag-opt-table th:nth-child(21),
   #intrag-opt-table td:nth-child(21),
   .dt-scroll-head thead th:nth-child(21),
-  .dataTables_scrollHead thead th:nth-child(21) { width: 150px; min-width: 150px; } /* Investment Amount */
+  .dataTables_scrollHead thead th:nth-child(21) { width: 130px; min-width: 130px; } /* Currency Symbol */
 
   #intrag-opt-table th:nth-child(22),
   #intrag-opt-table td:nth-child(22),
   .dt-scroll-head thead th:nth-child(22),
-  .dataTables_scrollHead thead th:nth-child(22) { width: 130px; min-width: 130px; } /* FX Base Value */
+  .dataTables_scrollHead thead th:nth-child(22) { width: 150px; min-width: 150px; } /* Investment Amount */
 
   #intrag-opt-table th:nth-child(23),
   #intrag-opt-table td:nth-child(23),
   .dt-scroll-head thead th:nth-child(23),
-  .dataTables_scrollHead thead th:nth-child(23) { width: 130px; min-width: 130px; } /* Prepaid Value */
+  .dataTables_scrollHead thead th:nth-child(23) { width: 130px; min-width: 130px; } /* FX Base Value */
 
   #intrag-opt-table th:nth-child(24),
   #intrag-opt-table td:nth-child(24),
   .dt-scroll-head thead th:nth-child(24),
-  .dataTables_scrollHead thead th:nth-child(24) { width: 175px; min-width: 175px; } /* Prepayment Unit Price */
+  .dataTables_scrollHead thead th:nth-child(24) { width: 130px; min-width: 130px; } /* Prepaid Value */
 
   #intrag-opt-table th:nth-child(25),
   #intrag-opt-table td:nth-child(25),
   .dt-scroll-head thead th:nth-child(25),
-  .dataTables_scrollHead thead th:nth-child(25) { width: 150px; min-width: 150px; } /* Redemption Value */
+  .dataTables_scrollHead thead th:nth-child(25) { width: 175px; min-width: 175px; } /* Prepayment Unit Price */
 
   #intrag-opt-table th:nth-child(26),
   #intrag-opt-table td:nth-child(26),
   .dt-scroll-head thead th:nth-child(26),
-  .dataTables_scrollHead thead th:nth-child(26) { width: 140px; min-width: 140px; } /* Call Strike Price */
+  .dataTables_scrollHead thead th:nth-child(26) { width: 150px; min-width: 150px; } /* Redemption Value */
 
   #intrag-opt-table th:nth-child(27),
   #intrag-opt-table td:nth-child(27),
   .dt-scroll-head thead th:nth-child(27),
-  .dataTables_scrollHead thead th:nth-child(27) { width: 135px; min-width: 135px; } /* Put Strike Price */
+  .dataTables_scrollHead thead th:nth-child(27) { width: 140px; min-width: 140px; } /* Call Strike Price */
 
   #intrag-opt-table th:nth-child(28),
   #intrag-opt-table td:nth-child(28),
   .dt-scroll-head thead th:nth-child(28),
-  .dataTables_scrollHead thead th:nth-child(28) { width: 150px; min-width: 150px; } /* Call Unit Premium */
+  .dataTables_scrollHead thead th:nth-child(28) { width: 135px; min-width: 135px; } /* Put Strike Price */
 
   #intrag-opt-table th:nth-child(29),
   #intrag-opt-table td:nth-child(29),
   .dt-scroll-head thead th:nth-child(29),
-  .dataTables_scrollHead thead th:nth-child(29) { width: 145px; min-width: 145px; } /* Put Unit Premium */
+  .dataTables_scrollHead thead th:nth-child(29) { width: 150px; min-width: 150px; } /* Call Unit Premium */
 
   #intrag-opt-table th:nth-child(30),
   #intrag-opt-table td:nth-child(30),
   .dt-scroll-head thead th:nth-child(30),
-  .dataTables_scrollHead thead th:nth-child(30) { width: 110px; min-width: 110px; } /* Barrier Rate */
+  .dataTables_scrollHead thead th:nth-child(30) { width: 145px; min-width: 145px; } /* Put Unit Premium */
 
   #intrag-opt-table th:nth-child(31),
   #intrag-opt-table td:nth-child(31),
   .dt-scroll-head thead th:nth-child(31),
-  .dataTables_scrollHead thead th:nth-child(31) { width: 120px; min-width: 120px; } /* Exercise Type */
+  .dataTables_scrollHead thead th:nth-child(31) { width: 110px; min-width: 110px; } /* Barrier Rate */
 
   #intrag-opt-table th:nth-child(32),
   #intrag-opt-table td:nth-child(32),
   .dt-scroll-head thead th:nth-child(32),
-  .dataTables_scrollHead thead th:nth-child(32) { width: 155px; min-width: 155px; } /* Information Source */
+  .dataTables_scrollHead thead th:nth-child(32) { width: 120px; min-width: 120px; } /* Exercise Type */
 
   #intrag-opt-table th:nth-child(33),
   #intrag-opt-table td:nth-child(33),
   .dt-scroll-head thead th:nth-child(33),
-  .dataTables_scrollHead thead th:nth-child(33) { width: 100px; min-width: 100px; } /* Bulletin */
+  .dataTables_scrollHead thead th:nth-child(33) { width: 155px; min-width: 155px; } /* Information Source */
 
   #intrag-opt-table th:nth-child(34),
   #intrag-opt-table td:nth-child(34),
   .dt-scroll-head thead th:nth-child(34),
-  .dataTables_scrollHead thead th:nth-child(34) { width: 120px; min-width: 120px; } /* Bulletin Time */
+  .dataTables_scrollHead thead th:nth-child(34) { width: 100px; min-width: 100px; } /* Bulletin */
 
   #intrag-opt-table th:nth-child(35),
   #intrag-opt-table td:nth-child(35),
   .dt-scroll-head thead th:nth-child(35),
-  .dataTables_scrollHead thead th:nth-child(35) { width: 120px; min-width: 120px; } /* Maturity Rate */
+  .dataTables_scrollHead thead th:nth-child(35) { width: 120px; min-width: 120px; } /* Bulletin Time */
 
   #intrag-opt-table th:nth-child(36),
   #intrag-opt-table td:nth-child(36),
   .dt-scroll-head thead th:nth-child(36),
-  .dataTables_scrollHead thead th:nth-child(36) { width: 200px; min-width: 200px; } /* Maturity Rate Description */
+  .dataTables_scrollHead thead th:nth-child(36) { width: 120px; min-width: 120px; } /* Maturity Rate */
 
   #intrag-opt-table th:nth-child(37),
   #intrag-opt-table td:nth-child(37),
   .dt-scroll-head thead th:nth-child(37),
-  .dataTables_scrollHead thead th:nth-child(37) { width: 120px; min-width: 120px; } /* Query Source */
+  .dataTables_scrollHead thead th:nth-child(37) { width: 200px; min-width: 200px; } /* Maturity Rate Description */
 
   #intrag-opt-table th:nth-child(38),
   #intrag-opt-table td:nth-child(38),
   .dt-scroll-head thead th:nth-child(38),
-  .dataTables_scrollHead thead th:nth-child(38) { width: 100px; min-width: 100px; } /* Ticker */
+  .dataTables_scrollHead thead th:nth-child(38) { width: 120px; min-width: 120px; } /* Query Source */
 
   #intrag-opt-table th:nth-child(39),
   #intrag-opt-table td:nth-child(39),
   .dt-scroll-head thead th:nth-child(39),
-  .dataTables_scrollHead thead th:nth-child(39) { width: 110px; min-width: 110px; } /* Quantity */
+  .dataTables_scrollHead thead th:nth-child(39) { width: 100px; min-width: 100px; } /* Ticker */
 
   #intrag-opt-table th:nth-child(40),
   #intrag-opt-table td:nth-child(40),
   .dt-scroll-head thead th:nth-child(40),
-  .dataTables_scrollHead thead th:nth-child(40) { width: 175px; min-width: 175px; } /* Premium Payment Date */
+  .dataTables_scrollHead thead th:nth-child(40) { width: 110px; min-width: 110px; } /* Quantity */
 
   #intrag-opt-table th:nth-child(41),
   #intrag-opt-table td:nth-child(41),
   .dt-scroll-head thead th:nth-child(41),
-  .dataTables_scrollHead thead th:nth-child(41) { width: 170px; min-width: 170px; } /* Asian Option Average */
+  .dataTables_scrollHead thead th:nth-child(41) { width: 175px; min-width: 175px; } /* Premium Payment Date */
+
+  #intrag-opt-table th:nth-child(42),
+  #intrag-opt-table td:nth-child(42),
+  .dt-scroll-head thead th:nth-child(42),
+  .dataTables_scrollHead thead th:nth-child(42) { width: 170px; min-width: 170px; } /* Asian Option Average */
   #column-search-inputs th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
   #column-search-inputs input { font-size: 12px; height: 28px; }
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
@@ -538,11 +542,17 @@ var OPT_STATUS_META = {
     'New':      { cls: 'bg-info text-white', lang: 'intrag-status-new' },
     'Pending':  { cls: 'text-bg-warning',    lang: 'intrag-status-pending' },
     'Approved': { cls: 'text-bg-secondary',  lang: 'intrag-status-approved' },
-    'Sent':     { cls: 'badge-sent',       lang: 'intrag-status-sent' }
+    'Sent':     { cls: 'badge-sent',       lang: 'intrag-status-sent' },
+    'Success':  { cls: 'text-bg-success',   lang: 'intrag-status-success' }
 };
 function statusBadge(status) {
-    var s = status || 'New';
-    var m = OPT_STATUS_META[s] || OPT_STATUS_META['New'];
+    // Legacy/older entries may carry an unexpected value or pre-rendered badge HTML —
+    // strip tags, match a known lifecycle status (case-insensitive), else fall back to
+    // New so it never renders as the class-less (white/invisible) badge.
+    var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim();
+    var s = 'New';
+    for (var k in OPT_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
+    var m = OPT_STATUS_META[s];
     return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
 }
 
@@ -740,6 +750,7 @@ $(document).ready(function() {
                     var d = this.data(); if (!d || (d[42] || '') !== result.id) return;
                     if (result.status === 'Success' && result.intrag_id != null) {
                         table.cell(this.node(), 3).data(result.intrag_id);
+                        table.cell(this.node(), 2).data('Success');   // status → Success
                     }
                 });
             });

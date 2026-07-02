@@ -7343,7 +7343,7 @@ def api_intrag_ndf_approve():
 
 
 # ── Intrag ID mapping (Return-folder export CSV → fill each entry's intrag_id) ──
-# The Return folder holds a single export CSV (export.csv / export(1).csv / …) with
+# The Return folder holds a single Boletas CSV (Boletas.csv / Boletas(1).csv / …) with
 # ALL operations and NO header — match by row content, not column names:
 #   • Option: col C (idx 2) == 'OPCAO'                → col I (idx 8) = B3 ID, col A (idx 0) = Intrag ID
 #   • NDF:    col B (idx 1) == 'NDF - TERMO MERCADORIA'→ col C (idx 2) = B3 ID, col A (idx 0) = Intrag ID
@@ -7354,10 +7354,10 @@ def _intrag_b3_key(v):
 
 
 def _intrag_find_export_csv():
-    """Most recent export*.csv in the Return folder, or None."""
+    """Most recent Boletas*.csv in the Return folder, or None."""
     try:
         cands = [os.path.join(RETURN_PATH, fn) for fn in os.listdir(RETURN_PATH)
-                 if fn.lower().startswith('export') and fn.lower().endswith('.csv')]
+                 if fn.lower().startswith('boletas') and fn.lower().endswith('.csv')]
     except OSError:
         return None
     cands = [p for p in cands if os.path.isfile(p)]
@@ -7365,7 +7365,7 @@ def _intrag_find_export_csv():
 
 
 def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
-    """Parse the export CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
+    """Parse the Boletas CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
     `match_col` equals `match_val`."""
     import csv as _csv
     out = {}
@@ -7388,12 +7388,12 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
     csv_path = _intrag_find_export_csv()
     if not csv_path:
-        return None, 'No export CSV found in the Return folder.'
+        return None, 'No Boletas CSV found in the Return folder.'
     try:
         b3map = _intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
     except Exception:
         log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
-        return None, 'Failed to read the export CSV.'
+        return None, 'Failed to read the Boletas CSV.'
     results = []
     with _cache_lock:
         for d in (deals or []):
@@ -7407,6 +7407,7 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
                 results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
                 continue
             entries[idx]['intrag_id'] = intrag_id
+            entries[idx]['status']    = 'Success'          # mapped → Success
             try:
                 _atomic_write_json(fp, entries)
             except Exception:
