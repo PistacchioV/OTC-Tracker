@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}Accrual — Swap{% endblock title %}
+{% block title %}MtM — Swap{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet"/>
@@ -12,7 +12,7 @@
 .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
 
 /* ============================================================================
- *  ACCRUAL — SWAP  (Apple Design Language · Emil-grade motion)
+ *  MTM — SWAP  (Apple Design Language · Emil-grade motion)
  * ========================================================================== */
 :root {
     --acc-ease:      cubic-bezier(0.23, 1, 0.32, 1);   /* strong ease-out */
@@ -1085,7 +1085,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     }
 
-    // Block file generation when any row is 'Missing Accrual' — list them instead.
+    // Block file generation when any row is 'Missing MtM' — list them instead.
     function showMissingAccrual(missing) {
         var rows = (missing || []).map(function (m) {
             return '<tr><td style="padding:4px 8px;font-family:monospace;font-size:.82em;border-bottom:1px solid #eee">' + esc(m.lob) + '</td>' +
@@ -1094,9 +1094,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         }).join('');
         Swal.fire({
             icon: 'warning', width: 620,
-            title: t('acc-missing-title', 'Missing Accrual — file not generated'),
+            title: t('mtm-missing-title', 'Missing MtM — file not generated'),
             html: '<p style="font-size:.86em;color:#555;margin:0 0 10px">' +
-                    t('acc-missing-desc', 'The contracts below have no updated factor. Resolve them before generating the file:') + '</p>' +
+                    t('mtm-missing-desc', 'The contracts below have no MtM value. Resolve them before generating the file:') + '</p>' +
                   '<div style="max-height:48vh;overflow:auto;border:1px solid #dee2e6;border-radius:6px">' +
                   '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#343a40;color:#fff">' +
                   '<th style="padding:6px 8px;text-align:left;font-size:.78em">LOB</th>' +
@@ -1144,7 +1144,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
     }
 
-    // ── batch send → split by view → ACCRUAL_<VIEW>-<LOB> in the Conecta folder ─
+    // ── batch send → split by view → MtM_<VIEW>-<LOB> in the Conecta folder ─
     function sendBatch(lob, btn) {
         Swal.fire({
             icon: 'question', title: t('acc-batch-confirm-title', 'Send batch?'),
@@ -1349,17 +1349,17 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         }
         if (data.factors) {                              // CEM / EDG / HYB enrichment
             var fx = data.factors;
-            if (fx.missing > 0) {                        // unidentified mappings → Missing Accrual first
+            if (fx.missing > 0) {                        // unidentified mappings → Missing MtM first
                 var fdt = dtInst['tbl-' + String(fx.lob).toLowerCase()];
                 if (fdt) fdt.order([2, 'asc']).draw();
             }
             asof.innerHTML = '<b>' + esc(fx.lob) + '</b> ' + t('acc-factors-applied', 'factors applied') +
                 ' &nbsp;·&nbsp; ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
-                ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('acc-factors-missing', 'missing accrual');
+                ' &nbsp;·&nbsp; ' + (fx.missing || 0) + ' ' + t('mtm-factors-missing', 'missing mtm');
             deferToast({ icon: (fx.missing ? 'warning' : 'success'), timer: 2800, timerProgressBar: true,
                         showConfirmButton: false, backdrop: true,
                         title: esc(fx.lob) + ' · ' + (fx.matched || 0) + ' ' + t('acc-factors-matched', 'matched') +
-                               (fx.missing ? ' · ' + fx.missing + ' ' + t('acc-factors-missing', 'missing accrual') : '') });
+                               (fx.missing ? ' · ' + fx.missing + ' ' + t('mtm-factors-missing', 'missing mtm') : '') });
             return;
         }
         var dg = data.diagnostics || {};
@@ -1440,7 +1440,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             }
             applyResult(res.j);                          // renders tables + counts + diagnostics
             var ap = res.j.applied || [];
-            ap.forEach(function (a) {                     // Missing Accrual first per enriched book
+            ap.forEach(function (a) {                     // Missing MtM first per enriched book
                 if (a && a.missing > 0) {
                     var d = dtInst['tbl-' + String(a.lob).toLowerCase()];
                     if (d) d.order([2, 'asc']).draw();
