@@ -1472,6 +1472,11 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 # secondary alias and the relay was not delivering to it.
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
+# CEM Latam BA (Buenos Aires CIB Ops) — receive the Option Position .OPC file, cc OTC Ops.
+CETIP_CEM_LATAM_EMAILS    = [e.strip() for e in os.getenv(
+    'CETIP_CEM_LATAM_EMAILS',
+    'lautaro.larriera@jpmchase.com,sacha.yebrin@jpmchase.com,candela.ferreiro@jpmorgan.com,'
+    'martina.rambert@jpmchase.com,mercedes.e.mino@jpmchase.com').split(',') if e.strip()]
 
 
 def _ensure_cetip_roots():
@@ -1522,6 +1527,7 @@ _CETIP_RULES = [
      'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
      'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
      'extra_dest': CETIP_OPTIONS_SHARE,
+     'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
      'json': {'category': 'Option', 'has_header': True,
               # de-dup: keep only our side (Parte/conta = coluna E)
               'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
@@ -1897,6 +1903,8 @@ def api_cp_cetip_settlement():
     saved, errors = [], []
     attach_paths = []   # file paths to e-mail to Sales Support (DPOSCONTRATOSIC)
     attach_saved = []   # their saved-entry dicts (for the Sales Support table)
+    opc_paths    = []   # .OPC file path(s) to e-mail to CEM Latam BA (DPOSICAO.OPC)
+    opc_saved    = []   # their saved-entry dicts (for the CEM Latam table)
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
     # files land in the single per-day destination folder, renamed. Rules with no
@@ -1925,6 +1933,9 @@ def api_cp_cetip_settlement():
                 if rule.get('attach_sales_support'):
                     attach_paths.append(dest_path)
                     attach_saved.append(entry)
+                if rule.get('attach_cem_latam'):
+                    opc_paths.append(dest_path)
+                    opc_saved.append(entry)
                 # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
                 # into per-day folders (<category>/YYYY/MM/DD/).
                 if rule.get('json'):
@@ -1952,11 +1963,12 @@ def api_cp_cetip_settlement():
                          'CETIP Files Saved', 'Control Panel',
                          '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
 
-    # Two distinct HTML e-mails from the OTC Tracker mailbox (best-effort):
+    # Three distinct HTML e-mails from the OTC Tracker mailbox (best-effort):
     #  1) Brazil OTC Ops only — saved-files notice + the complete list (no attachment).
     #  2) Sales Support (cc OTC Ops) — the DPOSCONTRATOSIC file attached, no list.
+    #  3) CEM Latam BA (cc OTC Ops) — the DPOSICAO.OPC file attached, no list.
     ref_fmt = ref.strftime('%d/%m/%Y')
-    mail_ops = mail_ss = None
+    mail_ops = mail_ss = mail_cem = None
     if send_mail and saved:
         ops_msg = ('The CETIP files required for the KPI generation have been saved successfully. '
                    'The complete list is shown below.')
@@ -1974,24 +1986,34 @@ def api_cp_cetip_settlement():
         ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref.strftime('%y%m%d'))
         mail_ss = _send_cetip_email(
             [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
-            'Good morning, Sales Support.', ss_msg,
+            'Hello, Sales Support.', ss_msg,
             ref_fmt, attach_saved, attachments=attach_paths)   # table = just the attached file
+
+        cem_msg = ('Please find attached the option position file (DPOSICAO.OPC), '
+                   'as requested.' if opc_paths else
+                   'The DPOSICAO.OPC file was not found for the reference date.')
+        cem_subject = 'CETIP Option Position - CEM Latam - {}'.format(ref.strftime('%y%m%d'))
+        mail_cem = _send_cetip_email(
+            CETIP_CEM_LATAM_EMAILS, [CETIP_OTC_OPS_EMAIL], cem_subject,
+            'Hello CEM Latam BA,', cem_msg,
+            ref_fmt, opc_saved, attachments=opc_paths)          # table = just the attached file
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
     if send_mail and saved:
         # _send_cetip_email returns True on success or an error string on failure.
-        probs = [v for v in (mail_ops, mail_ss) if v is not True]
+        probs = [v for v in (mail_ops, mail_ss, mail_cem) if v is not True]
         if not probs:
-            msg += '<br>Confirmation e-mails sent (OTC Ops + Sales Support).'
+            msg += '<br>Confirmation e-mails sent (OTC Ops + Sales Support + CEM Latam).'
         else:
             msg += ('<br><span class="text-warning">Files saved, but e-mail failed: {}</span>'
                     .format(probs[0]))
 
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'source': src_dir, 'destination': dest_dir,
-                    'email_sent': {'otc_ops': mail_ops, 'sales_support': mail_ss}})
+                    'email_sent': {'otc_ops': mail_ops, 'sales_support': mail_ss,
+                                   'cem_latam': mail_cem}})
 
 
 # ============================================================================
