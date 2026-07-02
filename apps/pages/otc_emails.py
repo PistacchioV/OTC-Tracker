@@ -226,11 +226,14 @@ def _group_by_acronym_commodity(deals):
 # ──────────────────────────────────────────────────────────────────────────
 # PREMIUM (D0) — SpotDate == today
 # ──────────────────────────────────────────────────────────────────────────
-def build_premium_emails(deals):
+def build_premium_emails(deals, asset_label='Commodities'):
     """D0 premium settlement notice.
 
     Eligible counterparties: CETIP account (RefData) == 73760.10-2 AND not Lawton,
     restricted to deals whose SpotDate (premium payment date) is today.
+
+    `asset_label` is the asset-class token shown in the subject line
+    (e.g. 'Commodities' for opt-commodities, 'Câmbio' for opt-fxo).
     """
     ref = _build_refdata_index()
     cpd = _build_cpdetails_index()
@@ -251,7 +254,7 @@ def build_premium_emails(deals):
         if _is_lawton(name, acronym):        # never Lawton
             continue
 
-        drafts.append(_premium_cliente_email(items, name, spn, taxid, cpd))
+        drafts.append(_premium_cliente_email(items, name, spn, taxid, cpd, asset_label))
 
     return drafts
 
@@ -263,7 +266,7 @@ def _premium_apurado(items):
     return apurado, ir, final
 
 
-def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
+def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Commodities'):
     apurado, ir, final = _premium_apurado(items)
     cp = cpd.get(spn, {})
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
@@ -354,7 +357,7 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd):
     body += FOOTER_HTML + '</body></html>'
 
     return {
-        'subject': '(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Commodities) - {} - {}'.format(_today_br(), contraparte),
+        'subject': '(Pagamento de Prêmio) Liquidação de Operação de Derivativo ({}) - {} - {}'.format(asset_label, _today_br(), contraparte),
         'html': body,
         'cc': 'Liquidação; Brazil Comm Sales',
         'to': to_emails,

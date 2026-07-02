@@ -8688,6 +8688,19 @@ def api_opt_premium_email():
     return _email_drafts_response(drafts)
 
 
+@blueprint.route('/api/new-deals/opt-fxo/premium-email', methods=['POST'])
+def api_fxo_premium_email():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_premium_emails(deals, asset_label='Taxas de Câmbio')
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    return _email_drafts_response(drafts)
+
+
 @blueprint.route('/api/new-deals/opt-commodities/economic-affirmation', methods=['POST'])
 def api_opt_economic_affirmation_email():
     if not session.get('authenticated'):
