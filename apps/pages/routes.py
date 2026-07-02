@@ -3563,6 +3563,207 @@ def api_mtm_send_batch():
     return jsonify({'success': True, 'files': _mtm_gen_preview(files), 'written': len(written)})
 
 
+# ── MtM Validation / End Process (EOM) — e-mail to Brazil OTC Ops ──────────────
+#  From otc.tracker@jpmorgan.com → brazil.otc.ops@jpmorgan.com.
+#  Validation: generate all book files (CEM/EDG/Hybrids swap + COE), attach the
+#  Lawton/Atacama view files. End Process: summary of 'Check' rows (recon) with
+#  their comments, or a 'no divergence' notice when there are none.
+_MTM_VAL_BOOKS = ('CEM', 'EDG', 'Hybrids')           # swap books (+ COE handled apart)
+
+
+def _mtm_missing_rows(data, books):
+    """Rows still flagged 'Missing MtM' (no MtM value) across the given books."""
+    out, tables = [], (data.get('tables') or {})
+    for lob in books:
+        for r in tables.get(lob, []) or []:
+            if r and str(r[-4] or '').strip().lower().startswith('missing'):
+                out.append({'lob': lob, 'codigo': str(r[0] or ''), 'id': str(r[-1])})
+    return out
+
+
+def _mtm_check_status_rows(data):
+    """(checks, uncommented) — rows whose status is 'Check' (recon divergence).
+    MtM row = data cells + [status(-4), maker(-3), checker(-2), id(-1)]; Comments = -5."""
+    checks, pending = [], []
+    for lob, table in (data.get('tables') or {}).items():
+        for r in table or []:
+            if not r or len(r) < 5:
+                continue
+            if str(r[-4] or '').strip().lower() == 'check':
+                comment = str(r[-5] or '').strip()
+                item = {'id': str(r[-1]), 'lob': lob, 'codigo': str(r[0] or ''), 'comment': comment}
+                checks.append(item)
+                if not comment:
+                    pending.append(item)
+    return checks, pending
+
+
+def _send_mtm_validation_email(subject, html, logo_path, attach_paths):
+    """SMTP-only MtM EOM validation e-mail to Brazil OTC Ops, attaching the
+    Lawton/Atacama view files. HTML/logo resolved by the caller. Best-effort."""
+    from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = subject
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = CETIP_OTC_OPS_EMAIL
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('MtM EOM validation files attached.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<otc_logo>')
+            img.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(img)
+        msg.attach(related)
+        for path in attach_paths:
+            try:
+                with open(path, 'rb') as f:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(path))
+                msg.attach(part)
+            except Exception:
+                log.warning('[mtm] could not attach %s:\n%s', path, traceback.format_exc())
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
+        log.info('[mtm] validation e-mail sent to %s', CETIP_OTC_OPS_EMAIL)
+        return True
+    except Exception:
+        log.error('[mtm] validation e-mail FAILED:\n%s', traceback.format_exc())
+        return False
+
+
+def _send_mtm_endprocess_email(subject, html, logo_path):
+    """SMTP-only MtM EOM final-status e-mail to Brazil OTC Ops. Best-effort."""
+    from email.mime.image import MIMEImage
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = subject
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = CETIP_OTC_OPS_EMAIL
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('MtM Swap EOM final status.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<otc_logo>')
+            img.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(img)
+        msg.attach(related)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
+        log.info('[mtm] end-process e-mail sent to %s', CETIP_OTC_OPS_EMAIL)
+        return True
+    except Exception:
+        log.error('[mtm] end-process e-mail FAILED:\n%s', traceback.format_exc())
+        return False
+
+
+@blueprint.route('/api/mtm-swap/validation', methods=['POST'])
+def api_mtm_validation():
+    """EOM Validation: generate the batch files for ALL MtM books (CEM/EDG/Hybrids
+    swap + COE), then e-mail the Lawton/Atacama view files to Brazil OTC Ops."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    if not data or not data.get('tables'):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    missing = _mtm_missing_rows(data, list(_MTM_VAL_BOOKS) + ['COE'])   # block if any row lacks a value
+    if missing:
+        return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
+
+    tables = data.get('tables') or {}
+    files = {}
+    try:
+        for lob in _MTM_VAL_BOOKS:
+            rows = tables.get(lob) or []
+            if rows:
+                files.update(_mtm_generate_book(lob, rows, ymd))
+        coe_rows = tables.get('COE') or []
+        if coe_rows:
+            files.update(_mtm_generate_coe(coe_rows, ymd))
+    except Exception:
+        log.error('[mtm] validation generate failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
+    if not files:
+        return jsonify({'success': False, 'error': 'No records to validate.'}), 400
+
+    _mtm_write_gen_files(files, ymd)
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    summary = [{'filename': fn + '.txt', 'view': fd['view'], 'count': len(fd['rows'])}
+               for fn, fd in files.items()]
+    attach = [os.path.join(CONECTA_NEW_PATH, fn + '.txt')
+              for fn, fd in files.items() if fd['view'] in ('LAWTON', 'ATACAMA')]
+    subject = 'MtM EOM - {} - Validation'.format(ref.strftime('%d/%m/%Y'))
+    try:
+        html = render_template(
+            'pages/email-template-mtm-validation.html',
+            ref_date_fmt=ref.strftime('%d/%m/%Y'), generated_files=summary,
+            attachment_names=[os.path.basename(a) for a in attach],
+            current_year=datetime.now().year)
+        logo_path = _get_logo_path()
+        threading.Thread(target=_send_mtm_validation_email,
+                         args=(subject, html, logo_path, attach), daemon=True).start()
+    except Exception:
+        log.error('[mtm] validation e-mail prep failed:\n%s', traceback.format_exc())
+
+    total = sum(len(fd['rows']) for fd in files.values())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Sent', 'MtM',
+                         'EOM Validation · {} file(s), {} attached'.format(len(files), len(attach)) + _nd_token(ymd))
+    return jsonify({'success': True, 'files': summary,
+                    'attached': [os.path.basename(a) for a in attach],
+                    'total': total, 'mail': 'queued'})
+
+
+@blueprint.route('/api/mtm-swap/end-process', methods=['POST'])
+def api_mtm_end_process():
+    """Finish the EOM MtM Swap process: every 'Check' row must be commented; then
+    e-mail the final status to Brazil OTC Ops (summary table or 'no divergence')."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    if not data or not data.get('tables'):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    checks, pending = _mtm_check_status_rows(data)
+    if pending:
+        return jsonify({'success': False, 'error': 'uncommented', 'pending': pending}), 400
+
+    ref = datetime.strptime(ymd, '%Y%m%d')
+    subject = 'MtM Swap - EOM - Final Status - {}'.format(ref.strftime('%d/%m/%Y'))
+    try:
+        html = render_template(
+            'pages/email-template-mtm-endprocess.html',
+            ref_date_fmt=ref.strftime('%d/%m/%Y'), has_check=bool(checks), checks=checks,
+            folder=_mtm_source_dir(ymd), current_year=datetime.now().year)
+        logo_path = _get_logo_path()
+        threading.Thread(target=_send_mtm_endprocess_email,
+                         args=(subject, html, logo_path), daemon=True).start()
+    except Exception:
+        log.error('[mtm] end-process e-mail prep failed:\n%s', traceback.format_exc())
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Sent', 'MtM',
+                         'End Process · {} check row(s)'.format(len(checks)) + _nd_token(ymd))
+    return jsonify({'success': True, 'checks': len(checks)})
+
+
 def _accrual_build_result(rows):
     """Core VCP→tables logic (no I/O). Splits the rows into the four LOB books and
     returns the result dict (without 'date'/'saved_at')."""

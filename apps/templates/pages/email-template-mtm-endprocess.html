@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – MtM Swap EOM Final Status</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+           style="background-color:#f4f6f9;padding:40px 0;">
+        <tr>
+            <td align="center">
+
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="620"
+                       style="max-width:620px;background-color:#ffffff;border-radius:8px;
+                              box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td bgcolor="#1a2c5e" style="background:#1a2c5e;background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%);
+                                   padding:32px 28px 24px;text-align:center;">
+                            <img src="cid:otc_logo" alt="OTC Tracker" height="72" width="auto"
+                                 style="height:72px;width:auto;display:block;margin:0 auto 14px;border:0;"/>
+                            <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 4px;letter-spacing:0.3px;">
+                                MtM Swap — EOM Final Status</p>
+                            <p style="color:rgba(255,255,255,0.78);font-size:13px;margin:0;">
+                                Generated automatically by OTC Tracker</p>
+                        </td>
+                    </tr>
+
+                    <!-- Date banner -->
+                    <tr>
+                        <td style="background-color:#1a2c5e;padding:12px 28px;text-align:center;">
+                            <p style="color:#ffffff;font-size:13px;font-weight:500;margin:0;letter-spacing:0.5px;">
+                                Reference Date &nbsp;·&nbsp; <strong style="color:#7eb3ff;">{{ ref_date_fmt }}</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding:32px 32px 24px;">
+
+                            <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">Hello,</p>
+
+                            {% if has_check %}
+                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 20px;">
+                                The end-of-month MtM Swap reconciliation process has been <strong>finalized</strong>.
+                                The contracts listed below were flagged for <strong>check</strong> (a divergence was found
+                                against the registered MtM) — the review comments are included. All remaining
+                                contracts are <strong>in agreement</strong> with the values sent by the respective
+                                Middle Offices.
+                            </p>
+
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="border-collapse:collapse;margin-bottom:8px;">
+                                <tr>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#5a6473;">LOB</td>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#5a6473;">Código IF</td>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#5a6473;">Status</td>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#5a6473;">Comment</td>
+                                </tr>
+                                {% for c in checks %}
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">{{ c.lob }}</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;font-family:'Courier New',monospace;">{{ c.codigo }}</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;">
+                                        <span style="display:inline-block;padding:2px 8px;border-radius:9999px;background:#fff3cd;color:#9a6b00;font-weight:600;font-size:11px;">Check</span>
+                                    </td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#444;">{{ c.comment }}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% else %}
+                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 20px;">
+                                The end-of-month MtM Swap reconciliation process has been <strong>finalized</strong> and
+                                <strong>no divergence</strong> was identified — all contracts are in agreement with the values
+                                sent by the respective Middle Offices.
+                            </p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:8px;">
+                                <tr>
+                                    <td align="center" valign="middle"
+                                        style="background-color:#e8f6ee;border-radius:8px;padding:18px 6px;border:1px solid #cdebd8;">
+                                        <p style="font-size:15px;font-weight:700;color:#157347;margin:0;">&#10003;&nbsp; No divergences found</p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endif %}
+
+                            {% if folder %}
+                            <p style="color:#555;font-size:12.5px;line-height:1.6;margin:16px 0 0;">
+                                For more information, all processed files are available in:<br/>
+                                <span style="font-family:'Courier New',monospace;color:#333;">{{ folder }}</span>
+                            </p>
+                            {% endif %}
+
+                            <p style="font-size:14px;line-height:1.6;color:#333333;margin:24px 0 0;">
+                                Regards,<br/><strong>OTC Tracker — Brazil OTC Operations</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                            <p style="color:#999999;font-size:11px;margin:0;">
+                                &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.</p>
+                            <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                                This is an automated notification. Do not reply to this email.</p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>

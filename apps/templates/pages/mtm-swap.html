@@ -884,12 +884,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             postJSON('/api/mtm-swap/row/comment', { date: currentDate, lob: lob.key, id: id, comment: this.value })
                 .catch(function () {});
         });
-        // Double-click a row → PU/Factor file preview (New Deals model).
-        $(card).on('dblclick.accrow', 'tbody tr', function (e) {
-            if ($(e.target).closest('.acc-cb-col, .acc-act-col, input, a, .btn').length) return;
-            var rd = dt.row(this).data();
-            if (rd) showAccrualPreview(lob, rd);
-        });
+        // MtM has no per-row PU/Factor file preview (Accrual-only) → no dblclick preview.
     }
 
     function postJSON(url, body) {
