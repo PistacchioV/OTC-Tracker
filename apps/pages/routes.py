@@ -3080,6 +3080,31 @@ def _mtm_finalize(buckets):
     return {k: len(v) for k, v in buckets.items()}
 
 
+def _mtm_normalize_zeros(data):
+    """Belt-and-suspenders: any STORED Valor MTM that is exactly zero → 0.01
+    (1 cent) + zero comment, across every book. B3 rejects a zero MtM, so the
+    table, preview and generated files must all register 1 cent — this guarantees
+    they agree regardless of which apply path (or none) filled the value. Blank
+    (unfilled / 'Missing MtM') cells are left untouched. Returns the count fixed."""
+    n = 0
+    for lob, table in (data.get('tables') or {}).items():
+        vidx = _MTM_COE_VALOR_IDX if lob == 'COE' else _MTM_VALOR_IDX
+        cidx = _MTM_COE_COMMENT_IDX if lob == 'COE' else _MTM_COMMENT_IDX
+        for r in table or []:
+            if not r or len(r) <= vidx:
+                continue
+            raw = '' if r[vidx] is None else str(r[vidx]).strip()
+            if raw == '':
+                continue                                   # blank / Missing → leave as-is
+            v = _mtm_parse_num(raw)
+            if v is not None and round(v, 2) == 0:
+                r[vidx] = '{:,.2f}'.format(0.01)
+                if len(r) > cidx and not str(r[cidx] or '').strip():
+                    r[cidx] = _MTM_ZERO_COMMENT
+                n += 1
+    return n
+
+
 def _mtm_build_from_folder(folder):
     files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
     swap_fn = next((fn for fn in files if _mtm_is_swap_name(fn)), None)
@@ -3120,6 +3145,9 @@ def _mtm_build_from_folder(folder):
             hrows = _cc_read_rows(hyb_val_fn, fh.read())
         hyb_matched, hyb_zeros, hyb_missing = _mtm_apply_hyb_values(
             buckets['Hybrids'], hrows, _mtm_load_hyb_mapping())
+    # Final guard: any zero MtM that slipped through → 0.01, so the table matches
+    # the preview/generated files (which register 1 cent).
+    _mtm_normalize_zeros({'tables': buckets})
     return {
         'success': True, 'tables': buckets, 'counts': counts,
         'ref_date': ref_date, 'coe_ref_date': coe_ref,
@@ -3178,9 +3206,16 @@ def _mtm_find_row(data, lob, rid):
 def api_mtm_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    _, data = _mtm_load(request.args.get('date'))
+    path, data = _mtm_load(request.args.get('date'))
     if not data:
         return jsonify({'success': True, 'empty': True})
+    # Repair legacy datasets saved before the zero→0.01 rule so the table shows
+    # the same 1-cent value as the preview/generated files.
+    if path and _mtm_normalize_zeros(data):
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            log.error('[mtm] zero-normalize save failed:\n%s', traceback.format_exc())
     data['success'] = True
     return jsonify(data)
 
