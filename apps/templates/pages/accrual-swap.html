@@ -582,9 +582,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             var id = row ? String(row[row.length - 1]) : '';
             var rc = accRecon[id];
             if (rc && rc[leg]) {
-                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success">' + esc(v) + '</span>';
+                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success bg-gradient">' + esc(v) + '</span>';
                 var reg = rc[leg].reg || '—';
-                return '<span class="badge rounded-pill text-bg-danger" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
+                return '<span class="badge rounded-pill text-bg-danger bg-gradient" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
             }
             return esc(v);
         };

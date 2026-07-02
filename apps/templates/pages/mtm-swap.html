@@ -589,22 +589,26 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                              'missing accrual': 'text-bg-warning', 'missing mtm': 'text-bg-warning',
                              'success': 'text-bg-success', 'check': 'text-bg-warning' };
 
-    // Factor cell (cols 9/10) render → recon badge: green=match, red=divergence (tooltip
-    // shows the registered factor). Plain text when no recon for that leg.
-    function factorRender(ci) {
-        var leg = ci === 9 ? 'p' : 'c';
-        return function (d, type, row) {
-            var v = (d == null ? '' : d);
-            if (type !== 'display') return v;
-            var id = row ? String(row[row.length - 1]) : '';
-            var rc = accRecon[id];
-            if (rc && rc[leg]) {
-                if (rc[leg].ok) return '<span class="badge rounded-pill text-bg-success">' + esc(v) + '</span>';
-                var reg = rc[leg].reg || '—';
-                return '<span class="badge rounded-pill text-bg-danger" title="' + esc(t('acc-recon-registered', 'Registered') + ': ' + reg) + '">' + esc(v) + '</span>';
-            }
-            return esc(v);
-        };
+    // Recon value pill — same look as the Status badges (badge + bg-gradient), pill-shaped:
+    // green (Success) on match, red (danger) on divergence with an optional tooltip.
+    function reconPill(v, ok, title) {
+        var cls = ok ? 'text-bg-success' : 'text-bg-danger';
+        var ttl = title ? ' title="' + esc(title) + '"' : '';
+        return '<span class="badge rounded-pill ' + cls + ' bg-gradient"' + ttl + '>' + esc(v) + '</span>';
+    }
+    // Valor MTM cell → recon pill: green when the page value matches the
+    // ConsultaInformacoesAtualizMID file, red (tooltip = file value) on divergence.
+    // Plain text when the row wasn't reconciled.
+    function valorRender(d, type, row) {
+        var v = (d == null ? '' : d);
+        if (type !== 'display') return v;
+        var id = row ? String(row[row.length - 1]) : '';
+        var rc = accRecon[id];
+        if (rc) {
+            if (rc.ok) return reconPill(v, true, '');
+            return reconPill(v, false, t('mtm-recon-file', 'File') + ': ' + (rc.file || '—'));
+        }
+        return esc(v);
     }
     // Comments → editable inline ONLY on 'Check' rows (enabled by the Recon step,
     // not yet implemented for MtM). Locked (plain text) in every other status.
@@ -738,8 +742,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             } }
         ];
         for (var ci = 0; ci < n; ci++) {
-            if (headers[ci] === 'Comments') columns.push({ data: ci, defaultContent: '', render: commentsRender });
-            else                            columns.push({ data: ci, defaultContent: '' });
+            if (headers[ci] === 'Comments')       columns.push({ data: ci, defaultContent: '', render: commentsRender });
+            else if (headers[ci] === 'Valor MTM') columns.push({ data: ci, defaultContent: '', render: valorRender });
+            else                                  columns.push({ data: ci, defaultContent: '' });
         }
 
         var dt = $('#' + tableId).DataTable({
@@ -1322,7 +1327,7 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     function applyResult(data) {
         var tables  = data.tables  || {};
         var counts  = data.counts  || {};
-        accRecon = data.recon || {};                     // drives factor badges + Check comments
+        accRecon = data.recon || {};                     // drives Valor MTM pills + Check comments
         if (data.date) { currentDate = data.date; syncPicker(data.date); }
         LOBS.forEach(function (lob) {
             renderTable(lob, headersFor(lob), tables[lob.key] || []);

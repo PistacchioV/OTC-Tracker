@@ -2759,6 +2759,8 @@ MTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 
 
 _MTM_ACCOUNT      = '73760009'               # col D house account (73760.00-9), digits only
 _MTM_FILTER_COL   = 3                         # col D
+_MTM_RECON_DATA_ROW  = 8                      # ConsultaInformacoesAtualizMID: headers row 8, data from row 9 (idx 8)
+_MTM_RECON_VALUE_COL = 6                      # col G = registered Valor MTM (signed)
 _MTM_SWAP_BOOKS   = ('CEM', 'EDG', 'Hybrids', 'Commodities')
 _MTM_FIXED_HEADERS = [
     'Código IF', 'Data Início', 'PARTE / Conta', 'Nome Simplificado Parte',
@@ -2783,7 +2785,7 @@ _MTM_COE_COMMENT_IDX = _MTM_COE_HEADERS.index('Comments')    # 5
 # CEM MtM values file "VCP_CETIP_MTM": A=Trade Name, B=Counterparty Name,
 # C=CETIP ID, D=MTM in BRL. Keep rows where B <> our own GEM-Rates side, join
 # C (CETIP ID) to the CEM book's Código IF, D → rounded 2dp (signed).
-_MTM_ZERO_COMMENT   = 'Valor MtM não poder ser ZERO'
+_MTM_ZERO_COMMENT   = 'MtM não pode ser Zero'
 _MTM_STATUS_MISSING = 'Missing MtM'                   # rows with no matching MtM value
 
 
@@ -2837,10 +2839,11 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in vmap:
             v = round(vmap[cid], 2)
-            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)      # #,##0.00 (comma thousands)
-            if v == 0:
+            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
+                v = 0.01
                 row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
                 zeros += 1
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)      # #,##0.00 (comma thousands)
             matched += 1
         else:
             row[-4] = _MTM_STATUS_MISSING                  # no MtM value → Missing MtM
@@ -2870,10 +2873,11 @@ def _mtm_apply_edg_values(data, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in fmap:
             v = round(fmap[cid], 2)
-            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
-            if v == 0:
+            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
+                v = 0.01
                 row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
                 zeros += 1
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
             edg_m += 1
         else:
             row[-4] = _MTM_STATUS_MISSING
@@ -2882,10 +2886,11 @@ def _mtm_apply_edg_values(data, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in fmap:
             v = round(fmap[cid], 2)
-            row[_MTM_COE_VALOR_IDX] = '{:,.2f}'.format(v)
-            if v == 0:
+            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
+                v = 0.01
                 row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT
                 zeros += 1
+            row[_MTM_COE_VALOR_IDX] = '{:,.2f}'.format(v)
             coe_m += 1
         else:
             row[-4] = _MTM_STATUS_MISSING
@@ -2936,10 +2941,11 @@ def _mtm_apply_hyb_values(hyb_rows, file_rows, mapping):
         cid = str(row[0] or '').strip().upper()
         if cid in vmap:
             v = round(vmap[cid], 2)
-            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
-            if v == 0:
+            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
+                v = 0.01
                 row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
                 zeros += 1
+            row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
             matched += 1
         else:
             row[-4] = _MTM_STATUS_MISSING
@@ -3648,6 +3654,7 @@ def _send_mtm_endprocess_email(subject, html, logo_path):
         msg['Subject'] = subject
         msg['From'] = SHARED_MAILBOX
         msg['To'] = CETIP_OTC_OPS_EMAIL
+        msg['Cc'] = ', '.join(_ACC_ENDPROC_CC)               # same From/To/Cc as accrual end-process
         related = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
         alt.attach(MIMEText('MtM Swap EOM final status.', 'plain', 'utf-8'))
@@ -3660,9 +3667,10 @@ def _send_mtm_endprocess_email(subject, html, logo_path):
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
         msg.attach(related)
+        recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
-            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
-        log.info('[mtm] end-process e-mail sent to %s', CETIP_OTC_OPS_EMAIL)
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[mtm] end-process e-mail sent to %s (cc %s)', CETIP_OTC_OPS_EMAIL, _ACC_ENDPROC_CC)
         return True
     except Exception:
         log.error('[mtm] end-process e-mail FAILED:\n%s', traceback.format_exc())
@@ -3762,6 +3770,116 @@ def api_mtm_end_process():
                          'MTM Sent', 'MtM',
                          'End Process · {} check row(s)'.format(len(checks)) + _nd_token(ymd))
     return jsonify({'success': True, 'checks': len(checks)})
+
+
+# ── MtM Recon: match the B3 ConsultaInformacoesAtualizMID file against the page ──
+#  File name (source folder): Swap-MID-ConsultaInformacoesAtualizMID.<ext>.
+#  Header row = 8, data from row 9. Col A = contract ID ('#' removed so it matches
+#  the page's Código IF). Col D = house account (73760.00-9)
+#  filter. Col G = registered MtM (signed). A page row whose Valor MTM equals the
+#  file value → Success (green pill); a divergence → Check (red pill, tooltip = file
+#  value) and its Comments field is unlocked.
+def _mtm_is_recon_name(n):
+    return 'consultainformacoesatualizmid' in _mtm_norm_party(n)
+
+
+def _mtm_recon_key(s):
+    """Contract-ID match key: drop the '#' (replace with nothing) and normalize to
+    match the page's Código IF."""
+    return str(s or '').replace('#', '').strip().strip("'").strip('"').upper()
+
+
+def _mtm_run_recon(data, rows):
+    """Build {ID → registered MtM} from the ConsultaInformacoesAtualizMID rows (house
+    account only) and flag each page row Success/Check by value equality. Mutates
+    data (recon map + status). Returns a summary dict."""
+    fmap = {}
+    for i in range(_MTM_RECON_DATA_ROW, len(rows)):
+        row = rows[i]
+        if _acc_digits(_cc_cell(row, _MTM_FILTER_COL)) != _MTM_ACCOUNT:      # col D
+            continue
+        key = _mtm_recon_key(_cc_cell(row, 0))                              # col A
+        val = _mtm_parse_num(_cc_cell(row, _MTM_RECON_VALUE_COL))           # col G
+        if not key or val is None:
+            continue
+        fmap.setdefault(key, round(val, 2))
+
+    recon_out, ok_rows, check_rows = {}, 0, 0
+    for lob, table in (data.get('tables') or {}).items():
+        vidx = _MTM_COE_VALOR_IDX if lob == 'COE' else _MTM_VALOR_IDX
+        for r in table or []:
+            if not r or len(r) < 5:
+                continue
+            key = _mtm_recon_key(r[0])
+            if key not in fmap:
+                continue
+            fv = fmap[key]
+            pv = _mtm_parse_num(r[vidx])
+            ok = (pv is not None and round(pv, 2) == fv)
+            recon_out[str(r[-1])] = {'ok': ok, 'file': '{:,.2f}'.format(fv)}
+            r[-4] = 'Success' if ok else 'Check'                            # status
+            if ok: ok_rows += 1
+            else:  check_rows += 1
+    data['recon'] = recon_out
+    return {'success_rows': ok_rows, 'check_rows': check_rows, 'map_entries': len(fmap)}
+
+
+def _mtm_find_recon_file(folder):
+    if not os.path.isdir(folder):
+        return None
+    for fn in os.listdir(folder):
+        if os.path.isfile(os.path.join(folder, fn)) and _mtm_is_recon_name(fn):
+            return os.path.join(folder, fn)
+    return None
+
+
+@blueprint.route('/api/mtm-swap/recon', methods=['POST'])
+def api_mtm_recon():
+    """Reconcile the saved MtM values against the B3 ConsultaInformacoesAtualizMID
+    return file (uploaded via the dropzone, or read from the run folder)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    date_arg = request.form.get('date')
+    path, data = _mtm_load(date_arg)
+    if not data or not data.get('tables'):
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+
+    ymd = _accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
+    try:
+        if f and f.filename:
+            rows = _cc_read_rows(f.filename, f.read())
+        else:
+            op = _mtm_find_recon_file(_mtm_source_dir(ymd))
+            if not op:
+                return jsonify({'success': False,
+                                'error': 'ConsultaInformacoesAtualizMID file not found in {}'.format(_mtm_source_dir(ymd))}), 400
+            with open(op, 'rb') as fh:
+                rows = _cc_read_rows(os.path.basename(op), fh.read())
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        log.error('[mtm] recon read failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to read the recon file.'}), 500
+
+    summary = _mtm_run_recon(data, rows)
+    try:
+        _mtm_save(path, data)
+    except Exception:
+        log.error('[mtm] recon save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MTM Mapped', 'MtM',
+                         'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _nd_token(ymd))
+    return jsonify({
+        'success': True,
+        'tables': data.get('tables') or {},
+        'counts': data.get('counts') or {},
+        'recon': data.get('recon') or {},
+        'ref_date': data.get('ref_date'), 'date': data.get('date'),
+        'summary': summary,
+    })
 
 
 def _accrual_build_result(rows):
@@ -9655,3 +9773,4 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
+
