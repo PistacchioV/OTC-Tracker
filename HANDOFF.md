@@ -2688,3 +2688,42 @@ Commit: `2bf02f2`.
 apps/templates/pages/mtm-swap.html            ← título/banner/comentários + Swal com chaves mtm-*
 apps/static/data/translations/{en,br,es}.json ← mtm-missing-title / mtm-missing-desc / mtm-factors-missing
 ```
+
+---
+
+## 51. Sessão 2026-07-01 (cont.) — MtM: e-mails Validation/End Process + fix duplo-clique
+
+Commit: `9c75f51`.
+
+### E-mails (mesma lógica da Accrual)
+- **Remetente/destinatário** (ambos): `otc.tracker@jpmorgan.com` (`SHARED_MAILBOX`) → `brazil.otc.ops@jpmorgan.com`
+  (`CETIP_OTC_OPS_EMAIL`). **Sem CC** (a Accrual tem CC Middle Office; o MtM não). Envio em `threading.Thread`
+  (SMTP lento não trava a resposta HTTP; arquivos já gravados).
+- **`POST /api/mtm-swap/validation`** (`api_mtm_validation`): bloqueia se houver linha `Missing MtM`
+  (`_mtm_missing_rows`, retorna `error='missing_accrual'` p/ reusar o modal `showMissingAccrual` do front). Gera TODOS
+  os arquivos: `_mtm_generate_book` p/ CEM/EDG/Hybrids + `_mtm_generate_coe` p/ COE; grava via `_mtm_write_gen_files`
+  (Batch Conecta + pasta do dia). **Anexa só os arquivos view LAWTON/ATACAMA** (path em `CONECTA_NEW_PATH`). Assunto
+  `MtM EOM - dd/mm/yyyy - Validation`. Retorno `{files, attached, total, mail:'queued'}`.
+- **`POST /api/mtm-swap/end-process`** (`api_mtm_end_process`): `_mtm_check_status_rows` → bloqueia se algum `Check`
+  estiver **sem comentário** (`error='uncommented'`, `pending` → modal do front). E-mail com tabela dos Checks
+  (LOB/Código IF/Status/Comment) **ou** bloco "No divergences found". Assunto `MtM Swap - EOM - Final Status - dd/mm/yyyy`.
+- **Templates novos**: `email-template-mtm-validation.html` e `email-template-mtm-endprocess.html` (copiados dos da
+  Accrual, wording MtM). Mesmas variáveis: validation `{ref_date_fmt, generated_files[filename/view/count],
+  attachment_names, current_year}`; endprocess `{ref_date_fmt, has_check, checks[lob/codigo/comment], folder, current_year}`.
+- **Layout de linha MtM** (importante p/ helpers): data cells + `[status(-4), maker(-3), checker(-2), id(-1)]`;
+  **Comments = índice -5**. NÃO usar o guard `len(r) < 15` da Accrual (linha MtM tem ~13 cells); usei `len(r) < 5`.
+- **Pendente:** a **Recon** (define status `Check` e habilita edição de Comments) ainda não existe — usuário enviará a
+  lógica. Até lá, End Process cai no caso "no divergence".
+
+### Fix duplo-clique (bug reportado)
+- O dblclick na tabela MtM disparava `showAccrualPreview` (preview PU/Factor, Accrual-only) → Swal
+  "This swap has no VCP leg to update." **Removido o binding `dblclick.accrow`** no `wireRowActions`. As funções
+  `showAccrualPreview/buildAccrualRecords/downloadAccrualFile` ficaram como dead code (inofensivas, não chamadas).
+
+### Arquivos (sessão 51)
+```
+apps/pages/routes.py                                 ← api_mtm_validation / api_mtm_end_process + helpers + 2 senders
+apps/templates/pages/email-template-mtm-validation.html   ← novo
+apps/templates/pages/email-template-mtm-endprocess.html   ← novo
+apps/templates/pages/mtm-swap.html                   ← remove dblclick preview PU/Factor
+```
