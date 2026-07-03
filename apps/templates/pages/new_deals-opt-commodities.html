@@ -4610,17 +4610,13 @@ $(document).ready(function() {
             var editRowId = $(arModalEl).data('editRowId') || '';
             var editTr    = $(arModalEl).data('editTr') || null;
 
-            // A B3 ID filled in on a deal that is Sent or Error confirms it at B3:
-            // promote to Success and let the PATCH handler push it into Intrag.
+            // Inserting the B3 ID is the LAST step of the deal lifecycle (done
+            // manually when there is no Conecta return file to auto-map). Once a
+            // B3 ID is present on an existing deal the process is complete, so
+            // promote it straight to Success — the PATCH handler then pushes it
+            // into Intrag — regardless of the previous status.
             var b3id = $('#ar-b3id').val().trim();
-            var curStatus = '';
-            if (editRowId && editTr) {
-                var _curData = table.row(editTr).data();
-                var _stTmp = document.createElement('div');
-                _stTmp.innerHTML = String((_curData && _curData[STATUS_COL_INDEX]) || '');
-                curStatus = (_stTmp.textContent || '').trim();
-            }
-            var promoteToSuccess = !!b3id && (curStatus === 'Sent' || curStatus === 'Error');
+            var promoteToSuccess = !!editRowId && !!b3id;
 
             var deal = {
                 Status:            editRowId ? (promoteToSuccess ? 'Success' : 'Pending') : 'Pending',

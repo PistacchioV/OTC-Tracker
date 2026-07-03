@@ -4301,18 +4301,14 @@ $(document).ready(function() {
                 return;
             }
 
-            // A B3 ID filled in on a deal that is Sent or Error confirms it at B3:
-            // promote to Success and let the PATCH handler push it into Intrag NDF.
-            var promoteToSuccess = false;
-            if (editRowId && editTr && deal.B3_ID) {
-                var _curData = table.row(editTr).data();
-                var _stTmp = document.createElement('div');
-                _stTmp.innerHTML = String((_curData && _curData[STATUS_COL_INDEX]) || '');
-                var curStatus = (_stTmp.textContent || '').trim();
-                if (curStatus === 'Sent' || curStatus === 'Error') {
-                    promoteToSuccess = true;
-                    deal.Status = 'Success';
-                }
+            // Inserting the B3 ID is the LAST step of the deal lifecycle (done
+            // manually when there is no Conecta return file to auto-map). Once a
+            // B3 ID is present on an existing deal the process is complete, so
+            // promote it straight to Success — the PATCH handler then pushes it
+            // into Intrag NDF — regardless of the previous status.
+            var promoteToSuccess = !!editRowId && !!deal.B3_ID;
+            if (promoteToSuccess) {
+                deal.Status = 'Success';
             }
 
             if (editRowId) {

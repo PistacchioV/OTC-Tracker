@@ -80,7 +80,6 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
-    'pages_blueprint.dev_login',          # DEV BYPASS — reachable while locked (strip before commit)
 }
 
 
@@ -5639,14 +5638,11 @@ def api_save_fxo_cache():
                              if deal_name
                              and d.get('Deal', '').strip() == deal_name
                              and d.get('Client', '').strip() == client_name), None)
+        # Persist in table-column order (Maker/Checker last) — not alphabetical.
         if existing_idx is not None:
-            deals[existing_idx] = data
+            deals[existing_idx] = _fxo_order_deal(data)
         else:
-            deals.append(data)
-        target_idx = existing_idx if existing_idx is not None else len(deals) - 1
-        for _k in ('Maker', 'Checker'):
-            if _k in deals[target_idx]:
-                deals[target_idx][_k] = deals[target_idx].pop(_k)
+            deals.append(_fxo_order_deal(data))
         _atomic_write_json(file_path, deals)
 
     return jsonify({"success": True, "deal": data.get('Deal', '')})
@@ -5703,9 +5699,8 @@ def api_update_fxo_cache(deal_id):
             return jsonify({"success": False, "message": "Deal not found"}), 404
         updates.pop('_client', None)
         deals[idx].update(updates)
-        for _k in ('Maker', 'Checker'):
-            if _k in deals[idx]:
-                deals[idx][_k] = deals[idx].pop(_k)
+        # Rewrite in table-column order (Maker/Checker last) — not alphabetical.
+        deals[idx] = _fxo_order_deal(deals[idx])
         _atomic_write_json(file_path, deals)
         updated_deal = deals[idx].copy()
 
@@ -5838,6 +5833,7 @@ def api_fxo_bulk_patch_deal_cache():
                             and (not want_client or (d.get('Client') or '').strip() == want_client)]
                 for idx in matching:
                     deals[idx].update(updates)
+                    deals[idx] = _fxo_order_deal(deals[idx])
                     updated += 1
             _atomic_write_json(fp, deals)
 
@@ -5921,6 +5917,39 @@ def _fxo_refdata_by_spn():
     return out
 
 
+# Canonical field order = the New Deals Opt-FXO table column order (same order the
+# XLSX import builds each dict). Persisted _optfxo.json must follow this, not the
+# alphabetical order some legacy writes produced. Maker/Checker are kept last.
+_FXO_FIELD_ORDER = (
+    'Status', 'Deal', 'B3_ID', 'TradeDate', 'Month', 'SettlementDate',
+    'SPN', 'Acronym', 'Client', 'TaxID', 'TradeType', 'UnderlyingAsset',
+    'FXHolidaySchedule', 'TotalNotional', 'Instrument', 'Strike',
+    'StrikeCurrency', 'Direction', 'Premium', 'PremiumPerUnit', 'PremiumCCY',
+    'SpotDate', 'FixingStartDate', 'FixingEndDate', 'TradingBook', 'OtherBook',
+)
+
+
+def _fxo_order_deal(d):
+    """Return a new dict with keys in table-column order so the persisted
+    _optfxo.json is column-ordered (not alphabetical). Known columns come first
+    in canonical order, then any extra keys (e.g. _fdate) in their existing
+    order, and Maker/Checker always last (matching the previous convention)."""
+    if not isinstance(d, dict):
+        return d
+    tail = ('Maker', 'Checker')
+    ordered = {}
+    for k in _FXO_FIELD_ORDER:
+        if k in d:
+            ordered[k] = d[k]
+    for k, v in d.items():
+        if k not in ordered and k not in tail:
+            ordered[k] = v
+    for k in tail:
+        if k in d:
+            ordered[k] = d[k]
+    return ordered
+
+
 def _fxo_persist_deals(deals):
     """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count."""
     by_file = {}
@@ -5949,9 +5978,9 @@ def _fxo_persist_deals(deals):
                             if (e.get('Deal') or '').strip() == (d.get('Deal') or '').strip()
                             and (e.get('Client') or '').strip() == (d.get('Client') or '').strip()), None)
                 if idx is not None:
-                    existing[idx] = d
+                    existing[idx] = _fxo_order_deal(d)
                 else:
-                    existing.append(d)
+                    existing.append(_fxo_order_deal(d))
                 saved += 1
             _atomic_write_json(fpath, existing)
     return saved
