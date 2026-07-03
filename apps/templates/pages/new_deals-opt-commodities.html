@@ -1242,6 +1242,14 @@ var _SUBJACENTE_MAP      = {};   // asset code → Commodity name
 var _SUBJACENTE_FATOR    = {};   // asset code → Fator Conversao (all entries)
 var _FX_HOLIDAY_OPTIONS  = [];   // available FX holiday schedule names
 
+// "Quoted in Cents" ⇔ Fator Conversao = 0.01. Tolerant of string/comma values and
+// float noise so a 0.01 factor is never misread as "not cents".
+function _optIsCents(f) {
+    if (f === null || f === undefined || f === '') return false;
+    var n = (typeof f === 'string') ? parseFloat(f.replace(',', '.')) : Number(f);
+    return isFinite(n) && Math.abs(n - 0.01) < 1e-9;
+}
+
 ;(function () {
     fetch('/static/data/RefData.json')
         .then(function (r) { return r.json(); })
@@ -1270,8 +1278,15 @@ var _FX_HOLIDAY_OPTIONS  = [];   // available FX holiday schedule names
                     }
                 }
                 // Fator Conversao for all entries (used by Add New Row modal)
-                if (code && !_SUBJACENTE_FATOR.hasOwnProperty(code)) {
-                    _SUBJACENTE_FATOR[code] = x['Fator Conversao'];
+                if (code) {
+                    var fc = x['Fator Conversao'];
+                    var num = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                    // When an asset appears with conflicting factors, keep the cents
+                    // factor (0.01); also let a defined value replace a null one.
+                    if (!_SUBJACENTE_FATOR.hasOwnProperty(code) ||
+                        _SUBJACENTE_FATOR[code] === null || _optIsCents(num)) {
+                        _SUBJACENTE_FATOR[code] = num;
+                    }
                 }
             });
             _ASSET_OPTIONS.sort();
@@ -1347,7 +1362,16 @@ function dealJsonToRow(deal) {
     var st = deal.Status || 'New';
     var statusHtml = '<span class="badge ' + (STATUS_BADGE[st] || 'text-bg-info') + ' bg-gradient">' + st + '</span>';
 
-    var q = deal.QuotedInCents || 'NO';
+    // QuotedInCents is an AUTO field — purely a function of the asset's Fator
+    // Conversao. Prefer the LIVE factor whenever the asset is registered so a stale
+    // stored value (e.g. 'NO' saved before the 0.01 factor was registered) is fixed.
+    var qCode = deal.UnderlyingAsset || '';
+    var q;
+    if (qCode && _SUBJACENTE_FATOR.hasOwnProperty(qCode) && _SUBJACENTE_FATOR[qCode] !== null) {
+        q = _optIsCents(_SUBJACENTE_FATOR[qCode]) ? 'YES' : 'NO';
+    } else {
+        q = deal.QuotedInCents || 'NO';
+    }
     var quotedHtml = q === 'YES'
         ? '<span class="badge text-bg-success rounded-pill">YES</span>'
         : q === 'MISSING'
@@ -3358,6 +3382,16 @@ $(document).ready(function() {
                             _SUBJACENTE_MAP[code] = x['Commodity'];
                         }
                     }
+                    // Refresh the Fator Conversao map too, so a freshly-registered
+                    // 0.01 factor is picked up (prefer cents / replace null on conflict).
+                    if (code) {
+                        var fc = x['Fator Conversao'];
+                        var num = (fc !== null && fc !== undefined && fc !== '') ? parseFloat(fc) : null;
+                        if (!_SUBJACENTE_FATOR.hasOwnProperty(code) ||
+                            _SUBJACENTE_FATOR[code] === null || _optIsCents(num)) {
+                            _SUBJACENTE_FATOR[code] = num;
+                        }
+                    }
                 });
                 _ASSET_OPTIONS.sort();
                 refreshAllMissingBadges();
@@ -4436,7 +4470,7 @@ $(document).ready(function() {
             if (!ua || !_SUBJACENTE_FATOR.hasOwnProperty(ua)) {
                 qVal = 'MISSING';
                 $badge.attr('class', 'badge text-bg-secondary rounded-pill').text('Missing B3');
-            } else if (_SUBJACENTE_FATOR[ua] === 0.01) {
+            } else if (_optIsCents(_SUBJACENTE_FATOR[ua])) {
                 qVal = 'YES';
                 $badge.attr('class', 'badge text-bg-success rounded-pill').text('YES');
             } else {
