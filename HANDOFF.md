@@ -2925,3 +2925,57 @@ apps/templates/pages/new_deals-ndf-commodities.html      ← idem
 apps/templates/pages/new_deals-ndf-fwdstart.html         ← promoteToSuccess = !!editRowId && !!deal.B3_ID
 apps/templates/pages/new_deals-ndf-otherpublisher.html   ← idem
 ```
+
+---
+
+## 58. Sessão 2026-07-03 — MtM-Swap: zero fica 0.00 na tabela + file preview por duplo clique (modelo Accrual)
+
+### Contas de referência (MtM / intragrupo)
+| Entidade | Conta      | Dígitos    |
+|----------|------------|------------|
+| Banco    | 73760.00-9 | `73760009` |
+| Atacama  | 85398.00-5 | `85398005` |
+| Lawton   | 00041.00-7 | `00041007` |
+| MGT      | 04880.00-6 | `04880006` |
+
+**Regras de contraparte (quem opera contra quem):**
+- **Atacama** opera **apenas contra o Banco** → gera linha-espelho (visão Banco + visão Atacama).
+- **Lawton** opera **apenas contra o Banco** → gera linha-espelho (visão Banco + visão Lawton).
+- **MGT** opera **apenas contra o Banco e cliente externo** — **nunca** contra Lawton/Atacama → **não** é contraparte de espelho.
+- **Banco** opera com todas + cliente externo.
+
+### Estrutura dos arquivos gerados (por LOB × visão)
+Todas as linhas dos books têm o **Banco como parte** (filtro col D = `73760009`). Os arquivos:
+
+| Arquivo          | Conteúdo                                                        |
+|------------------|-----------------------------------------------------------------|
+| `MtM_BANCO-CEM`  | tudo que for **Banco × Lawton** ou **× cliente externo**        |
+| `MtM_BANCO-EDG`  | tudo que for **Banco × Atacama** ou **× cliente externo**       |
+| `MtM_BANCO-HYB`  | tudo que for **Banco × Lawton** ou **× cliente externo**        |
+| `MtM_LAWTON-CEM` | tudo que for **Lawton × Banco** (espelho, sinal invertido)      |
+| `MtM_LAWTON-HYB` | tudo que for **Lawton × Banco** (espelho)                       |
+| `MtM_ATACAMA-EDG`| tudo que for **Atacama × Banco** (espelho)                      |
+| `MtM_BANCO-COE`  | arquivo único, visão Banco                                      |
+
+`_mtm_generate_book`: sempre grava **todas** as linhas no `MtM_BANCO-<suffix>`; a linha-espelho (sinal oposto) vai ao `MtM_<CPTY>-<suffix>` **apenas** quando `_mtm_cpty_of(row)` == cpty fixa do book (EDG→Atacama, CEM/Hybrids→Lawton). Cliente externo entra só no BANCO. Por isso o file preview mostra 1 linha (externo) ou 2 (intragrupo).
+
+### Valor zero → 0.00 na tabela; 1 na última casa só no preview/arquivo (`58`)
+- **Regra:** valores das planilhas entram **exatamente** como estão (só ajuste de formatação `#,##0.00`). Zero (`0.00`) **permanece 0.00 na tabela** + comentário `MtM não pode ser Zero`. Apenas no **preview e no arquivo gerado** o zero vira **1 na última casa disponível** (0.01 → `…0001`), pois a B3 rejeita MtM zero.
+- Back-end: `_mtm_apply_cem_values`/`_mtm_apply_edg_values`/`_mtm_apply_hyb_values` e `_mtm_normalize_zeros` **não convertem mais** zero→0.01 (mantêm 0.00 + comentário). Novo helper **`_mtm_gen_min_value(v)`** (0.00→0.01) usado só em `_mtm_swap_fields` e `_mtm_generate_coe`. **Recon** compara via `_mtm_gen_min_value` (página 0.00 casa com o 0.01 registrado na B3 → evita `Check` falso).
+- ⚠️ Datasets antigos salvos com `0.01` (regra anterior) continuam `0.01`; só reprocessando o arquivo voltam a `0.00`.
+
+### File preview por duplo clique (modelo Accrual)
+- Duplo clique numa linha → **`POST /api/mtm-swap/row/preview`** (`api_mtm_row_preview`): gera as linhas fixo-width **de uma única linha** (mesmo gerador do Send batch: `_mtm_generate_coe`/`_mtm_generate_book`), **sem** escrever em disco. Bloqueia com `missing_mtm` se a linha estiver `Missing MtM`.
+- Front-end **`renderMtmRowPreview`** replica o modal da Accrual: **layout vertical** (1 linha por campo, 1 coluna por registro), botões **download (telegram)** + **cancelar (x)**. Contratos intragrupo (Banco × Atacama / Banco × Lawton) mostram **as 2 linhas** (visão Banco + visão contraparte) como colunas. `downloadMtmFiles` baixa cada `.txt` (header + linha(s)). `mtmFilesPreviewHtml` (horizontal) segue sendo usado só pelo Send batch.
+- i18n en/br/es: `mtm-rowprev-title`, `mtm-rowprev-missing`.
+
+### Fix `_MTM_GEN_ATACAMA_ACCT` (bug de dígitos trocados)
+- Estava `{'83985005', '04880006'}` — `83985005` era **transposição** de `85398005` (Atacama) e `04880006` é **MGT** (não é espelho). Por isso a 2ª linha "Banco × Atacama" **não aparecia**. Corrigido para `{'85398005'}`.
+
+### Arquivos (sessão 58)
+```
+apps/pages/routes.py                          ← _mtm_gen_min_value; apply/normalize mantêm 0.00; recon via gen_min;
+                                                 _MTM_GEN_ATACAMA_ACCT={'85398005'}; endpoint /api/mtm-swap/row/preview
+apps/templates/pages/mtm-swap.html            ← dblclick preview vertical (renderMtmRowPreview/downloadMtmFiles)
+apps/static/data/translations/{en,br,es}.json ← mtm-rowprev-title / mtm-rowprev-missing
+```

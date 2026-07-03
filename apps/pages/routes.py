@@ -3474,8 +3474,12 @@ def api_mtm_process():
 #  Rows use the datepicker date; headers use TODAY (system date).
 #  Files saved to CONECTA_NEW_PATH and the day's MTM source folder.
 # ---------------------------------------------------------------------------
-_MTM_GEN_LAWTON_ACCT  = '00041007'
-_MTM_GEN_ATACAMA_ACCT = {'83985005', '04880006'}
+# Intragroup fund accounts that register a mirror line (opposite sign) against the
+# Banco book. Atacama (85398.00-5) and Lawton (00041.00-7) trade ONLY vs Banco.
+# MGT (04880.00-6) faces only Banco + external clients — never Lawton/Atacama — so
+# it is NOT a mirror counterparty here.
+_MTM_GEN_LAWTON_ACCT  = '00041007'                   # Lawton  = 00041.00-7
+_MTM_GEN_ATACAMA_ACCT = {'85398005'}                 # Atacama = 85398.00-5
 _MTM_GEN_PARTY = {                                   # Nome Simplificado Parte (20 chars)
     'BANCO':   'JPMORGANBM'       + ' ' * 10,
     'LAWTON':  'INTRAGLAWTONFDO'  + ' ' * 5,

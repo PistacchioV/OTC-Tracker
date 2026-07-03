@@ -1166,6 +1166,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     }
 
     // ── double-click a row → preview the fixed-width file line(s) it generates ──
+    // Accrual model: VERTICAL layout (one ROW per field, one COLUMN per record) +
+    // download/cancel buttons. Intragroup contracts (Banco × Atacama / Banco ×
+    // Lawton) show BOTH lines: view Banco + view counterparty.
     function showMtmRowPreview(lob, tableId, tr) {
         var dt = dtInst[tableId]; var id = getRowId(dt, tr);
         if (!id) return;
@@ -1179,13 +1182,79 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                 }
                 errSwal(j.error); return;
             }
-            Swal.fire({
-                title: t('mtm-rowprev-title', 'File preview') + ' · ' + esc(id),
-                html: mtmFilesPreviewHtml(j.files) || t('acc-empty', 'No rows.'),
-                width: '92%', confirmButtonText: 'OK', confirmButtonColor: '#0066cc',
-                customClass: { confirmButton: 'bg-gradient' }
-            });
+            renderMtmRowPreview(lob, id, j.files || []);
         }).catch(netErr);
+    }
+
+    // Flatten files → one record per generated line (keeps its file/view/cols).
+    function mtmRecordsFromFiles(files) {
+        var recs = [];
+        (files || []).forEach(function (f) {
+            (f.rows || []).forEach(function (vals) {
+                recs.push({ view: f.view, filename: f.filename, cols: f.cols, values: vals });
+            });
+        });
+        return recs;
+    }
+
+    function renderMtmRowPreview(lob, id, files) {
+        var recs = mtmRecordsFromFiles(files);
+        if (!recs.length) {
+            Swal.fire({ icon: 'info', title: t('mtm-rowprev-title', 'File preview'),
+                        text: t('acc-empty', 'No rows.'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        var cols  = recs[0].cols || [];
+        var multi = recs.length > 1;
+        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+            '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">' + esc(t('acc-prev-field', 'Field')) + '</th>' +
+            recs.map(function (r, i) {
+                return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
+                    (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
+            }).join('') + '</tr>';
+        var tbody = cols.map(function (label, fi) {
+            var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
+            var cells = recs.map(function (r) {
+                var raw = r.values[fi] == null ? '' : String(r.values[fi]);
+                var disp = (raw !== '' && raw.trim() === '')       // all-spaces padding → grey dots
+                    ? '<span style="color:#bbb">' + '·'.repeat(raw.length) + '</span>'
+                    : esc(raw);
+                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+            }).join('');
+            return '<tr style="background:' + bg + '">' +
+                '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
+                    (fi + 1) + '. ' + esc(label) + '</td>' + cells + '</tr>';
+        }).join('');
+        var html =
+            '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
+                recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
+            '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
+            '<table style="border-collapse:collapse;width:100%">' +
+            '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
+        Swal.fire({
+            title: '<span style="font-size:1rem">' + t('mtm-rowprev-title', 'File preview') + ' — ' + esc(id) + '</span>',
+            html: html, width: (recs.length > 2 ? 760 : 600),
+            showConfirmButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', confirmButtonColor: '#0066cc',
+            showCancelButton: true, cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
+            focusConfirm: false,
+            customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        }).then(function (res) {
+            if (res.isConfirmed) downloadMtmFiles(files);
+        });
+    }
+
+    // Download each generated file (.txt) = header line + its data line(s), fixed-width.
+    function downloadMtmFiles(files) {
+        (files || []).forEach(function (f) {
+            var lines = [f.header].concat((f.rows || []).map(function (vals) { return vals.join(''); }));
+            var content = lines.join('\r\n') + '\r\n';
+            var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = f.filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        });
     }
 
     // ── batch send → split by view → MtM_<VIEW>-<LOB> in the Conecta folder ─
