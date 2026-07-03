@@ -3845,7 +3845,7 @@ def api_mtm_validation():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
-    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    path, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
     if not data or not data.get('tables'):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
@@ -3870,6 +3870,19 @@ def api_mtm_validation():
         return jsonify({'success': False, 'error': 'No records to validate.'}), 400
 
     _mtm_write_gen_files(files, ymd)
+
+    # All batch files generated → mark EVERY row in ALL tables as 'Sent'
+    # (checker = current user) and persist, so the page reflects the finished run.
+    sid = session.get('user_sid', '')
+    for lob_rows in (data.get('tables') or {}).values():
+        for r in lob_rows or []:
+            if r and len(r) >= 4:
+                r[-4], r[-2] = 'Sent', sid
+    try:
+        _mtm_save(path, data)
+    except Exception:
+        log.error('[mtm] validation status save failed:\n%s', traceback.format_exc())
+
     ref = datetime.strptime(ymd, '%Y%m%d')
     summary = [{'filename': fn + '.txt', 'view': fd['view'], 'count': len(fd['rows'])}
                for fn, fd in files.items()]

@@ -1300,6 +1300,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
                     if (j.error === 'missing_accrual') { showMissingAccrual(j.missing); return; }
                     errSwal(j.error); return;
                 }
+                // Files generated → the backend flipped every row to 'Sent'; reload
+                // the tables so the status badges reflect it across all books.
+                loadByDate(currentDate || dateISO);
                 var att = (j.attached || []).join('<br>');
                 Swal.fire({
                     icon: (j.mail ? 'success' : 'warning'),
