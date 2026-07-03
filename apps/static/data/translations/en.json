@@ -334,6 +334,8 @@
   "cp-r-cetip-title": "Save CETIP Files",
   "cp-r-cetip-desc": "Reads the raw CETIP files from the B3 daily download folder, renames them to the standard convention and saves them into the settlement folders used by the KPI.",
   "cp-cetip-meta": "B3 → Settlement folders",
+  "cp-cetip-run-save": "Save + OTC e-mail",
+  "cp-cetip-run-dist": "Send to other areas",
   "cp-sec-fc-label": "Forecasts & Reports",
   "cp-sec-fc-title": "Settlement Reporting",
   "cp-sec-fc-desc": "Routines that consolidate positions and generate analytical reports sent by e-mail.",

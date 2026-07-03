@@ -147,6 +147,16 @@
 .cp-run-btn:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(0,102,204,.35); }
 .cp-run-btn:disabled { opacity: .75; cursor: default; transform: none; }
 
+/* Two-action footer (Save CETIP Files): meta on top, two buttons side by side. */
+.cp-card__foot--stack { flex-direction: column; align-items: stretch; gap: .8rem; }
+.cp-btn-row { display: flex; gap: .6rem; }
+.cp-btn-row .cp-run-btn { flex: 1; justify-content: center; padding-left: 1rem !important; padding-right: 1rem !important; }
+/* Secondary action (Send to other areas) — distinct from the primary save. */
+.cp-run-btn--alt { background: var(--cp-slate, #64748b) !important; box-shadow: 0 2px 8px rgba(100,116,139,.32); }
+.cp-run-btn--alt:hover  { background: #475569 !important; box-shadow: 0 6px 18px rgba(71,85,105,.42); }
+.cp-run-btn--alt:active { box-shadow: 0 1px 4px rgba(71,85,105,.3); }
+.cp-run-btn--alt:focus-visible { box-shadow: 0 0 0 4px rgba(100,116,139,.35); }
+
 /* Feedback: expanding ring pulse on press (Emil-style press affordance) */
 .cp-run-btn::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit;
@@ -219,16 +229,24 @@
                             <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
                         </div>
                     </div>
-                    <div class="cp-card__foot">
+                    <div class="cp-card__foot cp-card__foot--stack">
                         <span class="cp-card__meta">
                             <i class="ti ti-folder"></i><span data-lang="cp-cetip-meta">B3 → Settlement folders</span>
                         </span>
-                        <button type="button" class="cp-run-btn"
-                                data-endpoint="/api/control-panel/cetip-settlement"
-                                data-date-input="cp-cetip-date">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
+                        <div class="cp-btn-row">
+                            <button type="button" class="cp-run-btn"
+                                    data-endpoint="/api/control-panel/cetip-settlement"
+                                    data-date-input="cp-cetip-date" data-stage="save">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-cetip-run-save">Save + OTC e-mail</span>
+                            </button>
+                            <button type="button" class="cp-run-btn cp-run-btn--alt"
+                                    data-endpoint="/api/control-panel/cetip-settlement"
+                                    data-date-input="cp-cetip-date" data-stage="distribute">
+                                <i class="ti ti-mail-forward"></i>
+                                <span data-lang="cp-cetip-run-dist">Send to other areas</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -353,6 +371,7 @@ function cpRunRoutine(btn) {
     btn.disabled = true;
     if (label) label.textContent = t('cp-running', 'Running…');
     var icon = btn.querySelector('i');
+    var origIcon = icon ? icon.className : '';
     if (icon) icon.className = 'ti ti-loader-2 ti-spin';
 
     // Optional payload: a card may declare data-date-input pointing at a date field.
@@ -366,6 +385,10 @@ function cpRunRoutine(btn) {
             body.date = m ? (m[3] + '-' + m[2] + '-' + m[1]) : di.value;
         }
     }
+    // Optional stage flag (data-stage) — lets one endpoint expose multiple actions
+    // (e.g. Save CETIP Files: 'save' vs 'distribute').
+    var stage = btn.getAttribute('data-stage');
+    if (stage) body.stage = stage;
 
     fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(body) })
@@ -394,7 +417,7 @@ function cpRunRoutine(btn) {
         .finally(function () {
             btn.disabled = false;
             if (label) label.textContent = orig;
-            if (icon) icon.className = 'ti ti-player-play';
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
         });
 }
 

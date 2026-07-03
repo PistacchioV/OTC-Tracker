@@ -1862,6 +1862,77 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
         return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 
+def _cetip_distribute_emails(ref, dest_dir, send_mail):
+    """Stage 2 of Save CETIP Files ("Send to other areas"): e-mail Sales Support
+    (SIC + Term/Option/SWAP positions) and CEM Latam BA (.OPC) with the files that
+    stage 1 already saved to dest_dir — no re-save. Attachment paths are rebuilt
+    from each rule's deterministic dest name for the reference date."""
+    if not os.path.isdir(dest_dir):
+        return jsonify({'success': False,
+                        'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
+    ref_yymmdd = ref.strftime('%y%m%d')
+    ref_fmt    = ref.strftime('%d/%m/%Y')
+    attach_paths, attach_saved = [], []   # Sales Support (SIC + positions)
+    opc_paths,    opc_saved    = [], []   # CEM Latam (.OPC)
+    for rule in _CETIP_RULES:
+        if not (rule.get('attach_sales_support') or rule.get('attach_cem_latam')):
+            continue
+        try:
+            dest_name = rule['dest_name'](ref_yymmdd)
+        except Exception:
+            continue
+        dest_path = os.path.join(dest_dir, dest_name)
+        if not os.path.isfile(dest_path):
+            continue
+        entry = {'src': dest_name, 'dest': dest_name, 'type': rule['label']}
+        if rule.get('attach_sales_support'):
+            attach_paths.append(dest_path); attach_saved.append(entry)
+        if rule.get('attach_cem_latam'):
+            opc_paths.append(dest_path); opc_saved.append(entry)
+
+    if not attach_paths and not opc_paths:
+        return jsonify({'success': False,
+                        'error': 'No position files found for {}. Run "Save CETIP Files" first.'
+                        .format(ref_fmt)}), 400
+
+    mail_ss = mail_cem = None
+    if send_mail:
+        ss_msg = ('Please find attached the position files (Contract/SIC — DPOSCONTRATOSIC, '
+                  'Term — DPOSICAO-TER.TER, Option — DPOSICAO.OPC, and SWAP — DPOSICAO-SWAP), '
+                  'as requested. The complete list is shown below.' if attach_paths else
+                  'The requested position files were not found for the reference date.')
+        ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref_yymmdd)
+        mail_ss = _send_cetip_email(
+            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
+            'Hello, Sales Support.', ss_msg,
+            ref_fmt, attach_saved, attachments=attach_paths)
+
+        cem_msg = ('Please find attached the option position file (DPOSICAO.OPC), '
+                   'as requested.' if opc_paths else
+                   'The DPOSICAO.OPC file was not found for the reference date.')
+        cem_subject = 'CETIP Option Position - CEM Latam - {}'.format(ref_yymmdd)
+        mail_cem = _send_cetip_email(
+            CETIP_CEM_LATAM_EMAILS, [CETIP_OTC_OPS_EMAIL], cem_subject,
+            'Hello CEM Latam BA,', cem_msg,
+            ref_fmt, opc_saved, attachments=opc_paths)
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'CETIP Files Distributed', 'Control Panel',
+                         'Sales Support + CEM Latam ({})'.format(ref.strftime('%Y-%m-%d')))
+
+    msg = 'Distribution e-mails sent for <b>{}</b>.'.format(ref_fmt)
+    if send_mail:
+        probs = [v for v in (mail_ss, mail_cem) if v is not True and v is not None]
+        if not probs:
+            msg = '<br>Distribution e-mails sent (Sales Support + CEM Latam).'
+        else:
+            msg = ('<span class="text-warning">Some distribution e-mails failed: {}</span>'
+                   .format(probs[0]))
+    return jsonify({'success': True, 'message': msg,
+                    'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem},
+                    'destination': dest_dir})
+
+
 @blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
 def api_cp_cetip_settlement():
     if not session.get('authenticated'):
@@ -1870,6 +1941,10 @@ def api_cp_cetip_settlement():
     payload   = request.get_json(silent=True) or {}
     date_str  = (payload.get('date') or '').strip()
     send_mail = payload.get('send_email', True)
+    # Two-stage split: 'save' (default) saves the files/JSONs + e-mails OTC Ops only;
+    # 'distribute' only e-mails the other areas (Sales Support + CEM Latam) with the
+    # already-saved position files — no re-save.
+    stage     = (payload.get('stage') or 'save').strip().lower()
 
     try:
         ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
@@ -1882,6 +1957,11 @@ def api_cp_cetip_settlement():
     month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
     src_dir  = os.path.join(CETIP_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
     dest_dir = os.path.join(CETIP_DEST_ROOT,   ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+
+    # Stage 2 ("Send to other areas") — no re-save; e-mail Sales Support + CEM Latam
+    # from the already-saved files. Requires stage 1 ("Save CETIP Files") to have run.
+    if stage == 'distribute':
+        return _cetip_distribute_emails(ref, dest_dir, send_mail)
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
@@ -1904,10 +1984,8 @@ def api_cp_cetip_settlement():
     # Make sure the destination day folder exists before saving anything.
     os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
-    attach_paths = []   # file paths e-mailed to Sales Support (SIC + Term/Option/SWAP positions)
-    attach_saved = []   # their saved-entry dicts (for the Sales Support table)
-    opc_paths    = []   # .OPC file path(s) to e-mail to CEM Latam BA (DPOSICAO.OPC)
-    opc_saved    = []   # their saved-entry dicts (for the CEM Latam table)
+    # (Sales Support / CEM Latam attachments are gathered in stage 2 from dest_dir,
+    # so stage 1 only saves + e-mails OTC Ops — see _cetip_distribute_emails.)
 
     # One pass per rule (mirrors the independent Alteryx branches). All matched
     # files land in the single per-day destination folder, renamed. Rules with no
@@ -1933,12 +2011,6 @@ def api_cp_cetip_settlement():
                 _cetip_save_file(src_path, dest_path)
                 entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
                 saved.append(entry)
-                if rule.get('attach_sales_support'):
-                    attach_paths.append(dest_path)
-                    attach_saved.append(entry)
-                if rule.get('attach_cem_latam'):
-                    opc_paths.append(dest_path)
-                    opc_saved.append(entry)
                 # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
                 # into per-day folders (<category>/YYYY/MM/DD/).
                 if rule.get('json'):
@@ -1966,12 +2038,11 @@ def api_cp_cetip_settlement():
                          'CETIP Files Saved', 'Control Panel',
                          '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
 
-    # Three distinct HTML e-mails from the OTC Tracker mailbox (best-effort):
-    #  1) Brazil OTC Ops only — saved-files notice + the complete list (no attachment).
-    #  2) Sales Support (cc OTC Ops) — SIC + Term/Option/SWAP position files attached.
-    #  3) CEM Latam BA (cc OTC Ops) — the DPOSICAO.OPC file attached, no list.
+    # Stage 1 e-mail — Brazil OTC Ops only: saved-files notice + the complete list
+    # (no attachment). The Sales Support + CEM Latam e-mails go out in stage 2
+    # ("Send to other areas" → _cetip_distribute_emails).
     ref_fmt = ref.strftime('%d/%m/%Y')
-    mail_ops = mail_ss = mail_cem = None
+    mail_ops = None
     if send_mail and saved:
         ops_msg = ('The CETIP files required for the KPI generation have been saved successfully. '
                    'The complete list is shown below.')
@@ -1983,41 +2054,20 @@ def api_cp_cetip_settlement():
             'Hello,', ops_msg,
             ref_fmt, saved, dest_folder=dest_dir, missing=missing)
 
-        ss_msg = ('Please find attached the position files (Contract/SIC — DPOSCONTRATOSIC, '
-                  'Term — DPOSICAO-TER.TER, Option — DPOSICAO.OPC, and SWAP — DPOSICAO-SWAP), '
-                  'as requested. The complete list is shown below.' if attach_paths else
-                  'The requested position files were not found for the reference date.')
-        ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref.strftime('%y%m%d'))
-        mail_ss = _send_cetip_email(
-            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
-            'Hello, Sales Support.', ss_msg,
-            ref_fmt, attach_saved, attachments=attach_paths)   # table = just the attached file
-
-        cem_msg = ('Please find attached the option position file (DPOSICAO.OPC), '
-                   'as requested.' if opc_paths else
-                   'The DPOSICAO.OPC file was not found for the reference date.')
-        cem_subject = 'CETIP Option Position - CEM Latam - {}'.format(ref.strftime('%y%m%d'))
-        mail_cem = _send_cetip_email(
-            CETIP_CEM_LATAM_EMAILS, [CETIP_OTC_OPS_EMAIL], cem_subject,
-            'Hello CEM Latam BA,', cem_msg,
-            ref_fmt, opc_saved, attachments=opc_paths)          # table = just the attached file
-
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
     if send_mail and saved:
         # _send_cetip_email returns True on success or an error string on failure.
-        probs = [v for v in (mail_ops, mail_ss, mail_cem) if v is not True]
-        if not probs:
-            msg += '<br>Confirmation e-mails sent (OTC Ops + Sales Support + CEM Latam).'
+        if mail_ops is True:
+            msg += '<br>Confirmation e-mail sent to OTC Ops.'
         else:
-            msg += ('<br><span class="text-warning">Files saved, but e-mail failed: {}</span>'
-                    .format(probs[0]))
+            msg += ('<br><span class="text-warning">Files saved, but the OTC Ops e-mail failed: {}</span>'
+                    .format(mail_ops))
 
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'source': src_dir, 'destination': dest_dir,
-                    'email_sent': {'otc_ops': mail_ops, 'sales_support': mail_ss,
-                                   'cem_latam': mail_cem}})
+                    'email_sent': {'otc_ops': mail_ops}})
 
 
 # ============================================================================
