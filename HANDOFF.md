@@ -2727,3 +2727,201 @@ apps/templates/pages/email-template-mtm-validation.html   ← novo
 apps/templates/pages/email-template-mtm-endprocess.html   ← novo
 apps/templates/pages/mtm-swap.html                   ← remove dblclick preview PU/Factor
 ```
+
+---
+
+## 52. Sessão 2026-07-01/02 — MtM: Recon (ConsultaInformacoesAtualizMID) + zero→0.01 + End Process Cc
+
+Commit: `cccc961`.
+
+### Recon `POST /api/mtm-swap/recon` (`api_mtm_recon`)
+- Arquivo de recon = `ConsultaInformacoesAtualizMID`: **col A = ID** (remove `#`) casa contra `Código IF` da tabela;
+  filtro **col D = `73760.00-9`**; **col G = MtM** (linha 8 = header, linha 9+ = dados). Lê do dropzone **ou** da
+  pasta do dia.
+- Match → status **`Success`** (pill verde). Divergência → **`Check`** (pill vermelho + tooltip com o valor do arquivo)
+  e **habilita a edição de Comments** naquela linha. (Fecha a pendência antiga "Recon MtM produz status Check".)
+- `valorRender`/`reconPill` renderizam a célula Valor MTM e os pills no mesmo padrão gradiente dos status badges.
+- Notificação **'MTM Mapped'** no topbar; chave i18n `mtm-recon-file` (en/br/es).
+
+### Outros no mesmo commit
+- **Import zero → 0.01**: MtM zero registra `0.01` (gera `000000000001` no arquivo) + comentário automático.
+- **End Process e-mail**: adiciona **Cc** (mesmo From/To/Cc do accrual-swap).
+- **accrual-swap**: pills de recon com `bg-gradient` (padroniza com os status badges).
+
+### Arquivos (sessão 52)
+```
+apps/pages/routes.py                          ← api_mtm_recon + valor/recon render + zero→0.01 + End Process Cc
+apps/templates/pages/mtm-swap.html            ← valorRender/reconPill, célula Valor MTM
+apps/templates/pages/accrual-swap.html        ← pills recon bg-gradient
+apps/templates/partials/topbar.html           ← notificação 'MTM Mapped'
+apps/static/data/translations/{en,br,es}.json ← mtm-recon-file
+```
+
+---
+
+## 53. Sessão 2026-07-02 — Control Panel / Save Cetip Files: 3º e-mail CEM Latam BA (.OPC)
+
+Commit: `8517b0c`.
+
+- Novo **3º e-mail** (from `otc.tracker@jpmorgan.com`): **To = CEM Latam BA** (5 destinatários; override via env
+  `CETIP_CEM_LATAM_EMAILS`), **Cc = brazil.otc.ops**, anexa o arquivo `73760_*_DPOSICAO.OPC` (flag
+  `attach_cem_latam` na regra **Option Position**). Saudação `Hello CEM Latam BA,`; reusa o template do Sales Support.
+- **Sales Support**: saudação `Good morning` → `Hello, Sales Support.`
+- Retorno da rotina inclui `email_sent.cem_latam`.
+
+### Arquivos (sessão 53)
+```
+apps/pages/routes.py   ← 3º e-mail CEM Latam BA (.OPC) na rotina Save Cetip Files + saudação Sales Support
+```
+
+---
+
+## 54. Sessão 2026-07-02 — Dashboard Settlement Forecast: range 15/20/30d + período default Ano Atual
+
+Commit: `866323d`.
+
+- **Card Settlement Forecast (index.html)**: novo dropdown de **range** (15/20/30 dias úteis) além do dropdown de
+  período. Backend: `FORECAST_BIZDAYS = 15`, `FORECAST_RANGE_CHOICES = (15, 20, 30)`; `_forecast_spine(anchor, count)`
+  usa `count or FORECAST_BIZDAYS`; `_forecast_payload(ref, days)` repassa `count=days` e retorna `'days': len(spine)`;
+  `api_cp_forecast_data` valida `days` contra `FORECAST_RANGE_CHOICES`.
+- **Dropdown de período** (Current Month/Year/All) passa a **default = Current Year** (os 3 badges Top5 usam
+  `dash-filter-year`).
+- **dashboard.js**: `_forecastDays=15`, `wireForecastRange()`, `renderForecastSub()` (substitui `{n}` em
+  `dash-forecast-sub`; `MutationObserver` no `#forecast-sub` re-preenche após troca de idioma); `loadForecastChart`
+  envia `days:_forecastDays`; init chama `loadDashboard('year')` + `wireForecastRange()`.
+- ⚠️ **Nota de dev**: `flask run` com DEBUG mostra "Debug mode: off" (sem reload) — alterações em `.py` exigem
+  **restart do servidor** para valer. Confundir isso custou tempo depurando "range não muda".
+- i18n `dash-fc-range-days` (days/dias/días); `dash-forecast-sub` passou a usar `{n}`.
+
+### Arquivos (sessão 54)
+```
+apps/pages/routes.py                          ← FORECAST_RANGE_CHOICES + days no spine/payload/endpoint
+apps/static/js/pages/dashboard.js             ← range 15/20/30 + subtitle + default 'year'
+apps/templates/pages/index.html               ← dropdown range + default Ano Atual + subtitle #forecast-sub
+apps/static/data/translations/{en,br,es}.json ← dash-fc-range-days + dash-forecast-sub {n}
+```
+
+---
+
+## 55. Sessão 2026-07-02 — New Deals FXO: aviso de prêmio D0 + MtM zero na tabela
+
+Commits: `8421ccf`, `97c279c`, `1b62fe3`, `d604d46`, `e3498d7`.
+
+### Aviso de prêmio D0 (FXO)
+- **Bug original**: o botão chamava `/api/new-deals/opt-fxo/premium-email` que **não existia** → `_handleEmailResponse`
+  baixava o HTML 404 como `.eml` (falso sucesso). Criado o endpoint espelhando opt-commodities:
+  `api_fxo_premium_email()` → `otc_emails.build_premium_emails(deals, asset_label='Taxas de Câmbio', ref_key='FX CASH ACCRONYM')`.
+- **"Nenhuma operação"**: FXO grava `Acronym = ref['FX CASH ACCRONYM']`, mas `build_premium_emails` indexava RefData por
+  `COMMODITIES ACCRONYM` (códigos diferentes, ex. `ABBELETR` vs `ABBELTBR`). Corrigido com o parâmetro **`ref_key`**;
+  `_build_refdata_index(key=...)` passa a aceitar a coluna.
+- **`.eml` vazio/sem título**: `_safe_filename` mantinha acentos (`'ê'.isalnum()` → True) → `Content-Disposition`
+  não-ASCII pode ser descartado sob gunicorn. Corrigido para **transliterar p/ ASCII** (NFKD + drop combining +
+  keep `isascii()`).
+- **Contatos/dados bancários não puxados**: `_build_cpdetails_index` casava SPN exato; SPNs FXO podem ter zeros à
+  esquerda. Adicionado **`_norm_spn`** (tira `.0` e zeros à esquerda) no index e no lookup `_premium_cliente_email`.
+  (Nota: o CounterpartyDetails de dev está sanitizado — 0 contatos/banking; só a resolução de SPN foi validável local.)
+
+### MtM zero → 0.01 na tabela (`e3498d7`)
+- Antes, MtM importado = 0 ficava **0 na tabela** e só virava `0.01` nos arquivos/preview. Adicionado
+  `_mtm_normalize_zeros(data)` (belt-and-suspenders): converte Valor MTM **exato-zero não-branco → `0.01`** +
+  `_MTM_ZERO_COMMENT`, preservando brancos. Roda no `_mtm_build_from_folder` (após applies) **e** no `api_mtm_data`
+  (repara legado + persiste). Complementa o zero→0.01 do import da seção 52.
+
+### Arquivos (sessão 55)
+```
+apps/pages/routes.py         ← endpoint api_fxo_premium_email; _mtm_normalize_zeros (import + load-repair)
+apps/pages/otc_emails.py     ← build_premium_emails(asset_label, ref_key); _safe_filename ASCII; _norm_spn no CPDetails
+```
+
+---
+
+## 56. Sessão 2026-07-02 — Intrag NDF/Option: coluna Intrag ID + botão/endpoint de mapping + Clear Filters
+
+Commits: `44ff87d`, `edefc08`, `21db3d0`.
+
+### Coluna "Intrag ID" (após Status) — ndf e option
+- Nova coluna no índice DOM/data **3** (logo após Status). Todos os índices de coluna dos dois templates foram
+  deslocados **+1** (data cols, `row-id`, `TRADE_DATE_COL`/`OPT_REGDATE_COL`, `exportCols`, `columnDefs` hidden,
+  `data-column`, `_intragRowData` slice, edit `d[i+4]`, `SF_COLS` dtCol +1). `SF_COLS` ganha
+  `{label:'Intrag ID', dtCol:3, type:'text'}` (no option é **push** ao final p/ manter `SF_COLS[3]=Registration Date`).
+- **Larguras por coluna**: as regras `nth-child(N)` (inclusive as clonadas em `.dt-scroll-head`) foram bumpadas +1;
+  nova regra Intrag ID em `nth-child(4)` = 140px.
+
+### Botão + endpoint de mapping (lê `Boletas*.csv` da pasta Return)
+- Botão verde `ti-refresh` (`btnMappingNdf` / `btnMappingOpt`) **após o Add Row**. Coleta as linhas com B3 ID e
+  POSTa; ao voltar `Success` preenche a célula 3 (Intrag ID) e seta a célula 2 (Status) → `Success`.
+- Backend (**arquivo sem header, casa por conteúdo de linha**):
+  - `_intrag_b3_key(v)` = strip + `lstrip('0')`; `_intrag_find_export_csv()` = `boletas*.csv` mais recente em `RETURN_PATH`
+    (⚠️ corrigido de `export*` → **`boletas*`** a pedido do usuário); `_intrag_build_b3_map(csv, match_col, match_val, b3_col)`
+    (latin-1, sniff `;`/`,`); `_intrag_run_mapping(...)` grava `intrag_id` **e `status='Success'`** via `_cache_lock` +
+    `_atomic_write_json`.
+  - **NDF**: `col B = 'NDF - TERMO MERCADORIA'`, `col C = B3 ID`, `col A = Intrag ID` →
+    `api_intrag_ndf_mapping_intrag_id` = `_intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, _find_intrag_ndf_entry)`.
+  - **Option**: `col C = 'OPCAO'`, `col I = B3 ID`, `col A = Intrag ID` →
+    `api_intrag_option_mapping_intrag_id` = `_intrag_run_mapping(deals, 2, 'OPCAO', 8, _find_intrag_opt_entry)`.
+- **Atualização retroativa**: o JSON já existente é reescrito com o `intrag_id` da coluna A ("só a data carregada").
+
+### Fixes acessórios
+- **Badge de status legado (branco/invisível)** ao puxar operações antigas pelo filtro inteligente: `statusBadge`
+  ficou **defensivo** — remove HTML, casa status conhecido case-insensitive, senão cai em `New` (nunca renderiza badge
+  sem classe). Adicionado `'Success': text-bg-success` (`intrag-status-success`) ao META de ambos.
+- **Clear Filters no intrag-option** (`21db3d0`): era **gap de paridade** (nunca existiu no option, só no ndf), não
+  regressão. Botão `btnClearFilters` (`ti-filter-off`) após o Send + handler que zera inputs de coluna,
+  `intragDateRanges`, `sfActive`, chips, input e faz `table.columns().search('').draw()`.
+
+### i18n
+- `intrag-col-intrag-id` ("Intrag ID"), `intrag-status-success` ("Success"), `btn-clear-filters` (já existia).
+
+### Arquivos (sessão 56)
+```
+apps/pages/routes.py                          ← helpers _intrag_* + endpoints mapping ndf/option
+apps/templates/pages/intrag-ndf.html          ← coluna Intrag ID (idx 3) + botão mapping + statusBadge defensivo + larguras
+apps/templates/pages/intrag-option.html       ← idem + botão Clear Filters (paridade)
+apps/static/data/translations/{en,br,es}.json ← intrag-col-intrag-id + intrag-status-success
+```
+
+---
+
+## 57. Sessão 2026-07-02 (cont.) — intrag-option fixes + New Deals: B3 ID → Success em todas as páginas + FXO JSON em ordem de colunas
+
+Commits: `0714498`, `dae3130`.
+
+### intrag-option: badge Sent, Excel export, dropdown translúcido (`0714498`)
+- **`.badge.badge-sent`**: a regra CSS existia no intrag-ndf (`background-color:#17a2b8`) mas **faltava** no option →
+  operações antigas em **Sent** renderizavam badge sem fundo (branco/quase invisível). Copiada a regra.
+- **Excel não extraía**: o registro do JSZip dependia só de uma IIFE em parse-time (o `ready()` só fazia
+  `window.JSZip = JSZip`). Movido o registro completo `$.fn.dataTable.Buttons.jszip(JSZip)` p/ dentro do `ready()`
+  antes do init (como no ndf), IIFE redundante removida, `bom:true` no CSV.
+- **Dropdown do Export translúcido**: faltava o bloco CSS `div.dt-button-collection` (fundo sólido/borda/sombra) +
+  `fade:0`. Adicionado (idêntico ao ndf).
+
+### New Deals: inserir B3 ID no editar → Success (5 páginas) (`dae3130`)
+- Regra do usuário: **inserir o B3 ID é o último passo do ciclo** (feito manual quando não há arquivo de retorno
+  Conecta p/ mapear). Então preencher o B3 ID no modal de edição de uma linha existente promove o status **direto p/
+  Success**, e o PATCH de cada página empurra p/ a Intrag correspondente (gate contraparte Banco JP).
+- Frontend: `promoteToSuccess = !!editRowId && !!b3id` (opt-fxo/opt-comm/ndf-comm) e
+  `!!editRowId && !!deal.B3_ID` (fwdstart/otherpublisher — estrutura `arBuildDeal`). **Removido** em todas o bloco
+  frágil que lia `curStatus` da linha via `editTr` (que ficava stale e jogava p/ Pending). Antes o gate era
+  `curStatus === 'Sent' || 'Error'`.
+- Backends já existentes: opt-comm→`_maybe_save_intrag_opt`; fxo→`_maybe_save_intrag_fxo`; ndf-comm→`_save_intrag_ndf_entry`
+  (7687); fwd-start/other-publishers compartilham o endpoint genérico (9666)→`_save_intrag_ndf_entry`.
+
+### FXO: _optfxo.json em ordem de colunas (`dae3130`)
+- Bug: o JSON do FXO vinha com as características em **ordem alfabética** (não ordem de colunas). Nada no código
+  atual ordena — a origem é legado; a leitura é toda por chave (`deal.get`), então não quebra display/Intrag, mas
+  o usuário pediu ordem de colunas.
+- `_FXO_FIELD_ORDER` (= ordem das colunas da tabela / do import) + helper `_fxo_order_deal(d)` (conhecidos em ordem
+  canônica, extras preservados, **Maker/Checker por último**). Aplicado em **todos os 4 pontos de escrita**:
+  `api_save_fxo_cache` (add/upsert), `api_update_fxo_cache` (PATCH), `api_fxo_bulk_patch_deal_cache`,
+  `_fxo_persist_deals` (import/batch). Entradas antigas alfabéticas são corrigidas na próxima gravação.
+
+### Arquivos (sessão 57)
+```
+apps/pages/routes.py                              ← _FXO_FIELD_ORDER + _fxo_order_deal nos 4 writes FXO
+apps/templates/pages/intrag-option.html           ← .badge-sent + JSZip no ready() + div.dt-button-collection + bom/fade
+apps/templates/pages/new_deals-opt-fxo.html       ← promoteToSuccess = !!editRowId && !!b3id
+apps/templates/pages/new_deals-opt-commodities.html      ← idem
+apps/templates/pages/new_deals-ndf-commodities.html      ← idem
+apps/templates/pages/new_deals-ndf-fwdstart.html         ← promoteToSuccess = !!editRowId && !!deal.B3_ID
+apps/templates/pages/new_deals-ndf-otherpublisher.html   ← idem
+```
