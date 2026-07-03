@@ -9,6 +9,25 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
 <style>
+  /* Status 'Sent' — teal escurecido (diferencia do New; não tão escuro quanto Approved). */
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+  /* Export dropdown: ensure solid background, no opacity artifact */
+  div.dt-button-collection {
+      opacity: 1 !important;
+      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
+      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
+      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+  }
+  div.dt-button-collection .dropdown-item {
+      opacity: 1 !important;
+      color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important;
+  }
+  div.dt-button-collection .dropdown-item:hover {
+      background-color: var(--ins-dropdown-link-hover-bg, rgba(0,102,204,.06)) !important;
+  }
+
   .card-body { padding: 5px; }
   .table-responsive { overflow-x: auto; }
   /* Breathing room above the header row so the scrollX header clone doesn't clip
@@ -493,17 +512,6 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script>
-(function() {
-    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
-    if (!jz) return;
-    window.JSZip = jz;
-    if (typeof $ !== 'undefined' && $.fn.dataTable &&
-        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
-        $.fn.dataTable.Buttons.jszip(jz);
-    }
-})();
-</script>
 
 <script>
 // col index 2 = status, 3 = Intrag ID, 4-41 = data, col 42 = hidden row ID
@@ -558,7 +566,14 @@ function statusBadge(status) {
 }
 
 $(document).ready(function() {
-    if (typeof JSZip !== 'undefined') window.JSZip = JSZip;
+    // Register JSZip with DataTables Buttons before table init (needed for Excel export)
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons &&
+            typeof $.fn.dataTable.Buttons.jszip === 'function') {
+            $.fn.dataTable.Buttons.jszip(JSZip);
+        }
+    }
 
     function exportCols() { var a=[]; for(var i=3;i<=41;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
@@ -580,10 +595,10 @@ $(document).ready(function() {
         buttons: [{
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
-            autoClose:true,
+            autoClose:true, fade:0,
             buttons:[
                 {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
                 {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
                 {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
             ]
