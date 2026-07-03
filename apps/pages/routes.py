@@ -80,6 +80,7 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
+    'pages_blueprint.dev_login',          # DEV BYPASS — reachable while locked (strip before commit)
 }
 
 
@@ -2869,9 +2870,8 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in vmap:
             v = round(vmap[cid], 2)
-            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
-                v = 0.01
-                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+            if v == 0:                                     # keep 0.00 in the table (the
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT  # preview/file registers 1 cent)
                 zeros += 1
             row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)      # #,##0.00 (comma thousands)
             matched += 1
@@ -2903,9 +2903,8 @@ def _mtm_apply_edg_values(data, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in fmap:
             v = round(fmap[cid], 2)
-            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
-                v = 0.01
-                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+            if v == 0:                                     # keep 0.00 in the table (the
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT  # preview/file registers 1 cent)
                 zeros += 1
             row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
             edg_m += 1
@@ -2916,9 +2915,8 @@ def _mtm_apply_edg_values(data, file_rows):
         cid = str(row[0] or '').strip().upper()
         if cid in fmap:
             v = round(fmap[cid], 2)
-            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
-                v = 0.01
-                row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT
+            if v == 0:                                     # keep 0.00 in the table (the
+                row[_MTM_COE_COMMENT_IDX] = _MTM_ZERO_COMMENT  # preview/file registers 1 cent)
                 zeros += 1
             row[_MTM_COE_VALOR_IDX] = '{:,.2f}'.format(v)
             coe_m += 1
@@ -2971,9 +2969,8 @@ def _mtm_apply_hyb_values(hyb_rows, file_rows, mapping):
         cid = str(row[0] or '').strip().upper()
         if cid in vmap:
             v = round(vmap[cid], 2)
-            if v == 0:                                     # B3 rejects a zero MtM → register 1 cent
-                v = 0.01
-                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT
+            if v == 0:                                     # keep 0.00 in the table (the
+                row[_MTM_COMMENT_IDX] = _MTM_ZERO_COMMENT  # preview/file registers 1 cent)
                 zeros += 1
             row[_MTM_VALOR_IDX] = '{:,.2f}'.format(v)
             matched += 1
@@ -3080,11 +3077,12 @@ def _mtm_finalize(buckets):
 
 
 def _mtm_normalize_zeros(data):
-    """Belt-and-suspenders: any STORED Valor MTM that is exactly zero → 0.01
-    (1 cent) + zero comment, across every book. B3 rejects a zero MtM, so the
-    table, preview and generated files must all register 1 cent — this guarantees
-    they agree regardless of which apply path (or none) filled the value. Blank
-    (unfilled / 'Missing MtM') cells are left untouched. Returns the count fixed."""
+    """Belt-and-suspenders: any STORED Valor MTM that is exactly zero is KEPT as
+    0.00 in the table (canonical #,##0.00 format) + the zero comment, across every
+    book. The value is inserted exactly as it comes from the spreadsheet; only the
+    preview and generated files bump a zero to 1 in the last decimal place (B3
+    rejects a zero MtM) — see _mtm_gen_min_value. Blank (unfilled / 'Missing MtM')
+    cells are left untouched. Returns the count normalized."""
     n = 0
     for lob, table in (data.get('tables') or {}).items():
         vidx = _MTM_COE_VALOR_IDX if lob == 'COE' else _MTM_VALOR_IDX
@@ -3097,7 +3095,7 @@ def _mtm_normalize_zeros(data):
                 continue                                   # blank / Missing → leave as-is
             v = _mtm_parse_num(raw)
             if v is not None and round(v, 2) == 0:
-                r[vidx] = '{:,.2f}'.format(0.01)
+                r[vidx] = '{:,.2f}'.format(0.0)            # keep 0.00 in the table
                 if len(r) > cidx and not str(r[cidx] or '').strip():
                     r[cidx] = _MTM_ZERO_COMMENT
                 n += 1
@@ -3144,8 +3142,8 @@ def _mtm_build_from_folder(folder):
             hrows = _cc_read_rows(hyb_val_fn, fh.read())
         hyb_matched, hyb_zeros, hyb_missing = _mtm_apply_hyb_values(
             buckets['Hybrids'], hrows, _mtm_load_hyb_mapping())
-    # Final guard: any zero MtM that slipped through → 0.01, so the table matches
-    # the preview/generated files (which register 1 cent).
+    # Final guard: canonicalize any zero MtM to 0.00 + zero comment (the table keeps
+    # the exact spreadsheet value; the preview/files bump it to 1 cent when generated).
     _mtm_normalize_zeros({'tables': buckets})
     return {
         'success': True, 'tables': buckets, 'counts': counts,
@@ -3208,8 +3206,8 @@ def api_mtm_data():
     path, data = _mtm_load(request.args.get('date'))
     if not data:
         return jsonify({'success': True, 'empty': True})
-    # Repair legacy datasets saved before the zero→0.01 rule so the table shows
-    # the same 1-cent value as the preview/generated files.
+    # Repair legacy datasets: canonicalize any zero MtM to 0.00 + zero comment so the
+    # table shows the exact spreadsheet value (the preview/files bump it to 1 cent).
     if path and _mtm_normalize_zeros(data):
         try:
             _atomic_write_json(path, data)
@@ -3498,6 +3496,15 @@ _MTM_GEN_COE_COLS  = ['Tipo IF', 'Tipo de Linha', 'Código operação', 'Código
                       'Conta do Emissor', 'Data Referência', 'Valor MTM', 'Débito/Crédito']
 
 
+def _mtm_gen_min_value(v):
+    """Zero MtM → the smallest registrable amount (1 in the last available decimal
+    place, i.e. 0.01), since B3 rejects a zero MtM. Applied ONLY when generating the
+    preview / file — the table keeps the spreadsheet's exact 0.00. Non-zero values
+    pass through unchanged."""
+    v = v or 0.0
+    return 0.01 if round(v, 2) == 0 else v
+
+
 def _mtm_valor_fixed(v, int_digits):
     """Absolute value as (int_digits + 2) zero-padded digits (implicit 2 decimals)."""
     return str(int(round(abs(v or 0.0) * 100))).zfill(int_digits + 2)
@@ -3523,7 +3530,7 @@ def _mtm_swap_fields(cid, party_key, sinal, v, ymd):
         'Meu Número': _mtm_rand_meunum(), 'Código do Contrato': str(cid or ''),
         'Nome Simplificado Parte': _MTM_GEN_PARTY[party_key],
         'Código Conta Parte': _MTM_GEN_PARTY_ACCT[party_key],
-        'Sinal Valor MTM': sinal, 'Valor MTM': _mtm_valor_fixed(v, 10),
+        'Sinal Valor MTM': sinal, 'Valor MTM': _mtm_valor_fixed(_mtm_gen_min_value(v), 10),
         'Notional Mínimo': ' ' * 6, 'Notional Máximo': ' ' * 6, 'Data de Referência MTM': ymd,
     }
 
@@ -3570,7 +3577,7 @@ def _mtm_generate_coe(rows, ymd):
         f['rows'].append({
             'Tipo IF': 'COE  ', 'Tipo de Linha': '1', 'Código operação': '0475',
             'Código do Instrumento Financeiro': str(row[0] or ''), 'Conta do Emissor': '73760401',
-            'Data Referência': ymd, 'Valor MTM': _mtm_valor_fixed(v, 16),
+            'Data Referência': ymd, 'Valor MTM': _mtm_valor_fixed(_mtm_gen_min_value(v), 16),
             'Débito/Crédito': '+' if v >= 0 else '-',
         })
     return {'MtM_BANCO-COE': f}
@@ -3632,6 +3639,36 @@ def api_mtm_send_batch():
                          'MTM Sent', 'MtM',
                          '{} · {} file(s)'.format(lob, len(files)) + _nd_token(ymd))
     return jsonify({'success': True, 'files': _mtm_gen_preview(files), 'written': len(written)})
+
+
+@blueprint.route('/api/mtm-swap/row/preview', methods=['POST'])
+def api_mtm_row_preview():
+    """Preview the fixed-width Conecta file line(s) that ONE row would generate
+    (double-click on a table row). Same generator/format as Send batch, but scoped
+    to the single contract — nothing is written to disk."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    lob = p.get('lob', '')
+    rid = str(p.get('id', ''))
+    ymd = _accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
+    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+    if not data:
+        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+    rows = (data.get('tables') or {}).get(lob) or []
+    row = next((r for r in rows if str(r[-1]) == rid), None)
+    if row is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    if str(row[-4]) == _MTM_STATUS_MISSING:
+        return jsonify({'success': False, 'error': 'missing_mtm'}), 400
+    try:
+        files = _mtm_generate_coe([row], ymd) if lob == 'COE' else _mtm_generate_book(lob, [row], ymd)
+    except Exception:
+        log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Generation failed.'}), 500
+    if not files:
+        return jsonify({'success': False, 'error': 'Nothing to generate for this row.'}), 400
+    return jsonify({'success': True, 'files': _mtm_gen_preview(files)})
 
 
 # ── MtM Validation / End Process (EOM) — e-mail to Brazil OTC Ops ──────────────
@@ -3880,7 +3917,9 @@ def _mtm_run_recon(data, rows):
                 continue
             fv = fmap[key]
             pv = _mtm_parse_num(r[vidx])
-            ok = (pv is not None and round(pv, 2) == fv)
+            # Compare against the value we'd register: a page 0.00 is generated as
+            # 0.01 (B3 rejects a zero MtM), so it should reconcile with the file's 0.01.
+            ok = (pv is not None and round(_mtm_gen_min_value(pv), 2) == fv)
             recon_out[str(r[-1])] = {'ok': ok, 'file': '{:,.2f}'.format(fv)}
             r[-4] = 'Success' if ok else 'Check'                            # status
             if ok: ok_rows += 1

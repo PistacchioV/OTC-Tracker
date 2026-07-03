@@ -639,6 +639,8 @@
   "mtm-missing-title": "Missing MtM — arquivo não gerado",
   "mtm-missing-desc": "Os contratos abaixo não têm valor de MtM. Resolva-os antes de gerar o arquivo:",
   "mtm-factors-missing": "sem mtm",
+  "mtm-rowprev-title": "Preview do arquivo",
+  "mtm-rowprev-missing": "Este contrato ainda não tem valor de MtM.",
   "acc-batch-confirm-title": "Enviar lote?",
   "acc-batch-confirm": "Gera os arquivos na pasta Batch Conecta.",
   "acc-batch-done": "Lote enviado",

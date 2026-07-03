@@ -889,7 +889,12 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             postJSON('/api/mtm-swap/row/comment', { date: currentDate, lob: lob.key, id: id, comment: this.value })
                 .catch(function () {});
         });
-        // MtM has no per-row PU/Factor file preview (Accrual-only) → no dblclick preview.
+        // Double-click a data row → preview the fixed-width file line(s) it generates.
+        $(card).on('dblclick.accrow', 'tbody tr', function () {
+            if ($(this).find('.acc-edit-inp').length) return;   // ignore rows being edited
+            var rd = dt.row(this).data(); if (!rd) return;
+            showMtmRowPreview(lob, tableId, this);
+        });
     }
 
     function postJSON(url, body) {
@@ -1144,6 +1149,45 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         });
     }
 
+    // Preview modal body: one table per generated file (columns per the spec).
+    function mtmFilesPreviewHtml(files) {
+        return (files || []).map(function (f) {
+            var head = '<thead><tr>' + f.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead>';
+            var body = '<tbody>' + f.rows.map(function (row) {
+                return '<tr>' + row.map(function (cell) { return '<td>' + esc(cell) + '</td>'; }).join('') + '</tr>';
+            }).join('') + '</tbody>';
+            return '<div class="mb-3 text-start">' +
+                '<div class="fw-bold mb-1">' + esc(f.filename) +
+                ' <span class="badge badge-sent bg-gradient">' + esc(f.view) + '</span>' +
+                ' <span class="text-muted fw-normal">· ' + f.rows.length + ' row(s)</span></div>' +
+                '<div style="overflow:auto;max-height:38vh"><table class="table table-sm table-bordered mb-0" ' +
+                'style="font-family:monospace;font-size:.7rem;white-space:nowrap">' + head + body + '</table></div></div>';
+        }).join('');
+    }
+
+    // ── double-click a row → preview the fixed-width file line(s) it generates ──
+    function showMtmRowPreview(lob, tableId, tr) {
+        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
+        if (!id) return;
+        postJSON('/api/mtm-swap/row/preview', { date: currentDate, lob: lob.key, id: id }).then(function (j) {
+            if (!j.success) {
+                if (j.error === 'missing_mtm') {
+                    Swal.fire({ icon: 'info', title: t('mtm-rowprev-title', 'File preview'),
+                                text: t('mtm-rowprev-missing', 'This contract has no MtM value yet.'),
+                                confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                errSwal(j.error); return;
+            }
+            Swal.fire({
+                title: t('mtm-rowprev-title', 'File preview') + ' · ' + esc(id),
+                html: mtmFilesPreviewHtml(j.files) || t('acc-empty', 'No rows.'),
+                width: '92%', confirmButtonText: 'OK', confirmButtonColor: '#0066cc',
+                customClass: { confirmButton: 'bg-gradient' }
+            });
+        }).catch(netErr);
+    }
+
     // ── batch send → split by view → MtM_<VIEW>-<LOB> in the Conecta folder ─
     function sendBatch(lob, btn) {
         Swal.fire({
@@ -1158,22 +1202,9 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             postJSON('/api/mtm-swap/send-batch', { date: currentDate, lob: lob.key }).then(function (j) {
                 accBtnBusy(btn, false);
                 if (!j.success) { errSwal(j.error); return; }
-                // Preview modal: one table per generated file (columns per the spec).
-                var html = (j.files || []).map(function (f) {
-                    var head = '<thead><tr>' + f.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead>';
-                    var body = '<tbody>' + f.rows.map(function (row) {
-                        return '<tr>' + row.map(function (cell) { return '<td>' + esc(cell) + '</td>'; }).join('') + '</tr>';
-                    }).join('') + '</tbody>';
-                    return '<div class="mb-3 text-start">' +
-                        '<div class="fw-bold mb-1">' + esc(f.filename) +
-                        ' <span class="badge badge-sent bg-gradient">' + esc(f.view) + '</span>' +
-                        ' <span class="text-muted fw-normal">· ' + f.rows.length + ' row(s)</span></div>' +
-                        '<div style="overflow:auto;max-height:38vh"><table class="table table-sm table-bordered mb-0" ' +
-                        'style="font-family:monospace;font-size:.7rem;white-space:nowrap">' + head + body + '</table></div></div>';
-                }).join('');
                 Swal.fire({
                     title: t('mtm-preview-title', 'Batch preview') + ' · ' + lob.name,
-                    html: html || t('acc-empty', 'No rows.'),
+                    html: mtmFilesPreviewHtml(j.files) || t('acc-empty', 'No rows.'),
                     width: '92%', confirmButtonText: 'OK', confirmButtonColor: '#0066cc',
                     customClass: { confirmButton: 'bg-gradient' }
                 });

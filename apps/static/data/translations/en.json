@@ -639,6 +639,8 @@
   "mtm-missing-title": "Missing MtM — file not generated",
   "mtm-missing-desc": "The contracts below have no MtM value. Resolve them before generating the file:",
   "mtm-factors-missing": "missing mtm",
+  "mtm-rowprev-title": "File preview",
+  "mtm-rowprev-missing": "This contract has no MtM value yet.",
   "acc-batch-confirm-title": "Send batch?",
   "acc-batch-confirm": "Generates the files in the Batch Conecta folder.",
   "acc-batch-done": "Batch sent",
