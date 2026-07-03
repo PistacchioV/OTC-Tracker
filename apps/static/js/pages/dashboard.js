@@ -211,6 +211,36 @@ const FC_PRODUCT_COLORS = {
     'SWAP CEMHYB':     () => '#94a3b8',
 };
 const FC_FALLBACK = ['#4f46e5', '#0ea5e9', '#10b981', '#a855f7', '#f59e0b', '#f43f5e', '#14b8a6', '#94a3b8'];
+// Per-entity colors — aligned with the e-mail's "Settlements by Entity" chart
+// (settlement-forecast.js entityColors). Unknown entities fall back to the palette.
+const FC_ENTITY_COLORS = {
+    'LAWTON':  () => ins('chart-primary'),
+    'MGT':     () => '#10b981',
+    'ATACAMA': () => '#f59e0b',
+};
+let forecastEntityChart = null;
+
+// Non-destructive empty state: toggle the charts wrapper vs a message WITHOUT
+// wiping the card body (which would delete the canvases and stop later reloads).
+function _setForecastEmpty(ctx, isEmpty) {
+    const body  = ctx.closest('.card-body');
+    const inner = ctx.closest('[dir="ltr"]');   // wraps both product + entity charts
+    if (!body) return;
+    let msg = body.querySelector('.fc-empty-msg');
+    if (isEmpty) {
+        if (!msg) {
+            msg = document.createElement('p');
+            msg.className = 'fc-empty-msg text-muted text-center py-5 mb-0';
+            body.appendChild(msg);
+        }
+        msg.textContent = t('dash-no-deals', 'No deals found for the period.');
+        msg.style.display = '';
+        if (inner) inner.style.display = 'none';
+    } else {
+        if (msg) msg.style.display = 'none';
+        if (inner) inner.style.display = '';
+    }
+}
 
 async function loadForecastChart() {
     const ctx = document.getElementById('forecast-product-chart');
@@ -223,10 +253,10 @@ async function loadForecastChart() {
         });
         const data = await res.json();
         if (!data || data.success === false || !(data.products || []).length) {
-            const body = ctx.closest('.card-body');
-            if (body) body.innerHTML = `<p class="text-muted text-center py-5 mb-0">${t('dash-no-deals', 'Sem dados')}</p>`;
+            _setForecastEmpty(ctx, true);
             return;
         }
+        _setForecastEmpty(ctx, false);
         _forecastData = data;
         if (data.days) _forecastDays = data.days;   // backend is the source of truth (clamps to allowed set)
         renderForecastSub();
@@ -237,6 +267,7 @@ async function loadForecastChart() {
         }
         populateForecastFilter(data);
         buildForecastProductChart(data);
+        buildForecastEntityChart(data);
     } catch (err) {
         console.error('[Dashboard] forecast load failed:', err);
     }
@@ -410,6 +441,23 @@ const roundedStackTopClip = {
     }
 };
 
+// Shared options for both forecast stacked charts (by product / by entity).
+function _forecastStackOptions() {
+    return {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: -10 } },
+        animation: { duration: 700, easing: 'easeOutQuart' },
+        plugins: {
+            legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
+            tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
+        },
+        scales: {
+            x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
+            y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
+        }
+    };
+}
+
 function buildForecastProductChart(data) {
     const ctx = document.getElementById('forecast-product-chart');
     if (!ctx) return;
@@ -430,19 +478,33 @@ function buildForecastProductChart(data) {
     forecastChart = new Chart(ctx, {
         plugins: [roundedStackTopClip],
         data: { labels: data.date_labels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: -10 } },
-            animation: { duration: 700, easing: 'easeOutQuart' },
-            plugins: {
-                legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
-                tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
-            },
-            scales: {
-                x: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } },
-                y: { stacked: true, ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color'), lineWidth: 1 }, border: { display: false, dash: [5, 5] } }
-            }
-        }
+        options: _forecastStackOptions()
+    });
+}
+
+// "Settlements by Entity" — same stacked model as the product chart, LOB colors
+// aligned with the e-mail. Hidden when the dataset has no entity rows.
+function buildForecastEntityChart(data) {
+    const ctx = document.getElementById('forecast-entity-chart');
+    if (!ctx) return;
+    const section  = document.getElementById('forecast-entity-section');
+    const entities = data.entities || [];
+    if (!entities.length) { if (section) section.style.display = 'none'; return; }
+    if (section) section.style.display = '';
+    if (forecastEntityChart) forecastEntityChart.destroy();
+    let fb = 0;
+    const datasets = entities.map(en => {
+        const c = FC_ENTITY_COLORS[en.label] ? FC_ENTITY_COLORS[en.label]() : FC_FALLBACK[fb++ % FC_FALLBACK.length];
+        return {
+            type: 'bar', label: en.label, data: en.values,
+            backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
+            stack: 'fc', maxBarThickness: 24, borderRadius: 0, borderSkipped: false
+        };
+    });
+    forecastEntityChart = new Chart(ctx, {
+        plugins: [roundedStackTopClip],
+        data: { labels: data.date_labels, datasets },
+        options: _forecastStackOptions()
     });
 }
 

@@ -856,6 +856,7 @@
   "dash-chart-title": "Análise de Fluxo de Negócios",
   "dash-forecast-title": "Settlement Forecast",
   "dash-forecast-sub": "Próximos {n} dias úteis, por produto",
+  "dash-forecast-entity-title": "Liquidações por Entidade",
   "dash-forecast-asof": "dados de",
   "dash-fc-filter-all": "Todos",
   "dash-fc-range-days": "dias",

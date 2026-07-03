@@ -306,6 +306,14 @@
                         <div class="mt-1" style="height: 340px;">
                             <canvas id="forecast-product-chart"></canvas>
                         </div>
+                        <!-- Settlements by Entity — mesmo card, separado pela linha pontilhada -->
+                        <div id="forecast-entity-section">
+                            <hr class="border-dashed my-4">
+                            <h5 class="card-title mb-3" data-lang="dash-forecast-entity-title">Settlements by Entity</h5>
+                            <div class="mt-1" style="height: 340px;">
+                                <canvas id="forecast-entity-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div><!-- end card-body-->
             </div><!-- end card-->
@@ -317,5 +325,5 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260701b"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260703a"></script>
 {% endblock extra_javascript %}
