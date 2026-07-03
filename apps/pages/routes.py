@@ -2893,11 +2893,27 @@ def _mtm_is_cem_value_name(n):
 
 
 def _mtm_parse_num(s):
-    """Parse a BRL amount like "-1,802,855.646864" (comma thousands, dot decimal,
-    optional surrounding quotes) → float, or None."""
+    """Parse a US/en amount like "-1,802,855.646864" (comma thousands, dot decimal,
+    optional surrounding quotes) → float, or None. This is the format the page stores
+    (Valor MTM = '{:,.2f}')."""
     s = str(s or '').strip().strip("'").strip('"').replace(',', '').strip()
     if not s:
         return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _mtm_parse_num_br(s):
+    """Parse a BRL-formatted amount like "-1.802.855,64" (dot thousands, comma
+    decimal, optional surrounding quotes) → float, or None. Used for the recon file
+    (ConsultaInformacoesAtualizMID), whose values are in BRL format — unlike the
+    page's US-format Valor MTM (see _mtm_parse_num)."""
+    s = str(s or '').strip().strip("'").strip('"').strip()
+    if not s:
+        return None
+    s = s.replace('.', '').replace(',', '.')      # drop dot thousands, comma → decimal
     try:
         return float(s)
     except ValueError:
@@ -3972,7 +3988,7 @@ def _mtm_run_recon(data, rows):
         if _acc_digits(_cc_cell(row, _MTM_FILTER_COL)) != _MTM_ACCOUNT:      # col D
             continue
         key = _mtm_recon_key(_cc_cell(row, 0))                              # col A
-        val = _mtm_parse_num(_cc_cell(row, _MTM_RECON_VALUE_COL))           # col G
+        val = _mtm_parse_num_br(_cc_cell(row, _MTM_RECON_VALUE_COL))        # col G (BRL format)
         if not key or val is None:
             continue
         fmap.setdefault(key, round(val, 2))
