@@ -1518,6 +1518,7 @@ _CETIP_RULES = [
      'match': lambda n: 'dposicao-swap.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
+     'attach_sales_support': True,      # SWAP position also e-mailed to Sales Support
      'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position',
               # de-dup: Conta Parte (coluna D = "Participante")
               'filter': {'column': ['participante'], 'index': 3,
@@ -1528,6 +1529,7 @@ _CETIP_RULES = [
      'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
      'extra_dest': CETIP_OPTIONS_SHARE,
      'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
+     'attach_sales_support': True,      # .OPC position also e-mailed to Sales Support
      'json': {'category': 'Option', 'has_header': True,
               # de-dup: keep only our side (Parte/conta = coluna E)
               'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
@@ -1580,6 +1582,7 @@ _CETIP_RULES = [
      'date_start': 4,
      'dest_name': lambda r: '73760_{}_DPOSICAO-TER.TER'.format(r),
      'extra_dest': CETIP_NDF_SHARE,
+     'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
      'json': {'category': 'NDF', 'has_header': True,
               # de-dup: keep only our side (Código da Parte = coluna B)
               'filter': {'column': ['código da parte', 'codigo da parte'], 'index': 1,
@@ -1901,7 +1904,7 @@ def api_cp_cetip_settlement():
     # Make sure the destination day folder exists before saving anything.
     os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
-    attach_paths = []   # file paths to e-mail to Sales Support (DPOSCONTRATOSIC)
+    attach_paths = []   # file paths e-mailed to Sales Support (SIC + Term/Option/SWAP positions)
     attach_saved = []   # their saved-entry dicts (for the Sales Support table)
     opc_paths    = []   # .OPC file path(s) to e-mail to CEM Latam BA (DPOSICAO.OPC)
     opc_saved    = []   # their saved-entry dicts (for the CEM Latam table)
@@ -1965,7 +1968,7 @@ def api_cp_cetip_settlement():
 
     # Three distinct HTML e-mails from the OTC Tracker mailbox (best-effort):
     #  1) Brazil OTC Ops only — saved-files notice + the complete list (no attachment).
-    #  2) Sales Support (cc OTC Ops) — the DPOSCONTRATOSIC file attached, no list.
+    #  2) Sales Support (cc OTC Ops) — SIC + Term/Option/SWAP position files attached.
     #  3) CEM Latam BA (cc OTC Ops) — the DPOSICAO.OPC file attached, no list.
     ref_fmt = ref.strftime('%d/%m/%Y')
     mail_ops = mail_ss = mail_cem = None
@@ -1980,9 +1983,10 @@ def api_cp_cetip_settlement():
             'Hello,', ops_msg,
             ref_fmt, saved, dest_folder=dest_dir, missing=missing)
 
-        ss_msg = ('Please find attached the contract position file (DPOSCONTRATOSIC), '
-                  'as requested.' if attach_paths else
-                  'The DPOSCONTRATOSIC file was not found for the reference date.')
+        ss_msg = ('Please find attached the position files (Contract/SIC — DPOSCONTRATOSIC, '
+                  'Term — DPOSICAO-TER.TER, Option — DPOSICAO.OPC, and SWAP — DPOSICAO-SWAP), '
+                  'as requested. The complete list is shown below.' if attach_paths else
+                  'The requested position files were not found for the reference date.')
         ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref.strftime('%y%m%d'))
         mail_ss = _send_cetip_email(
             [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
