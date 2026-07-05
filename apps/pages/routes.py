@@ -2264,7 +2264,11 @@ _FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Com
 _FORECAST_SOURCES = [
     {'key': 'ndf', 'label': 'NDF (TER)', 'category': 'NDF',
      'file': lambda r: '73760_{}_DPOSICAO-TER.json'.format(r),
-     'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'parte', 'conta'],
+     # Prefer the exact "Data de Vencimento" (maturity) — the real JP TER file has
+     # many columns and could carry other "…vencimento…" fields; fall back to a
+     # loose 'vencimento' only if the exact name isn't present.
+     'date': ['data de vencimento', 'vencimento'],
+     'entity': ['titular', 'contraparte', 'parte', 'conta'],
      'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
@@ -2403,10 +2407,17 @@ def _fcst_norm(s):
 
 
 def _fcst_resolve_key(keys, tokens):
-    """First key whose accent-insensitive lower-cased name contains one of the
-    tokens (tokens in priority order). Tokens are accent-stripped too."""
+    """Resolve a column by name (tokens in priority order, accent- and
+    case-insensitive). An EXACT name match wins over a substring match, so
+    'data de vencimento' resolves to the column literally named "Data de
+    Vencimento" even when a longer "Data de Vencimento Antecipado" is present."""
     low = [(k, _fcst_norm(k)) for k in keys]
-    for tok in tokens:
+    for tok in tokens:                     # 1) exact match, priority order
+        tnorm = _fcst_norm(tok)
+        for k, kl in low:
+            if kl == tnorm:
+                return k
+    for tok in tokens:                     # 2) substring fallback, priority order
         tnorm = _fcst_norm(tok)
         for k, kl in low:
             if tnorm in kl:
