@@ -1442,15 +1442,21 @@ def api_dashboard_stats():
     })
 
 
-# Live Position entity breakdown includes the BANCO holder account (73760.00-9),
-# unlike the forecast (which drops it). Order fixed as Banco → Lawton → MGT → Atacama.
+# Live Position entity breakdown. The Banco (holder 73760) is a party to EVERY
+# intragroup trade, so its bucket AGGREGATES all operations it faces against the
+# four intragroup counterparty accounts below (its own 73760.10-2 book + Lawton +
+# MGT + Atacama). Lawton/MGT/Atacama remain their own counterparty-specific tallies.
+# Order fixed as Banco → Lawton → MGT → Atacama.
 _LIVE_ENTITY_MAP = {
-    '73760009': 'BANCO',
-    '00041007': 'LAWTON',
-    '04880006': 'MGT',
-    '85398005': 'ATACAMA',
+    '73760009': 'BANCO',    # holder book 73760.00-9 (mock data)
+    '73760102': 'BANCO',    # Banco counterparty book 73760.10-2
+    '00041007': 'LAWTON',   # 00041.00-7
+    '04880006': 'MGT',      # 04880.00-6
+    '85398005': 'ATACAMA',  # 85398.00-5
 }
 _LIVE_ENTITY_ORDER = ['BANCO', 'LAWTON', 'MGT', 'ATACAMA']
+# Counterparties whose trades the BANCO bucket aggregates (all intragroup).
+_LIVE_BANCO_COUNTERPARTIES = {'BANCO', 'LAWTON', 'MGT', 'ATACAMA'}
 
 # Every standard product is listed even at 0 (mirrors the Settlement Forecast
 # card), so the bar set is stable and never "loses" a product — e.g. Swap CEMHYB —
@@ -1551,7 +1557,14 @@ def api_dashboard_live_position():
             by_product[product] = by_product.get(product, 0) + 1
             ent = _live_map_entity(row.get(ent_key, '')) if ent_key else None
             if ent:
+                # Counterparty-specific bucket (LAWTON / MGT / ATACAMA / Banco own book).
                 by_entity[ent] = by_entity.get(ent, 0) + 1
+                # BANCO aggregates EVERY intragroup trade it is a party to. A row
+                # already resolving to BANCO (its own 73760.10-2 book) is counted
+                # once above; Lawton/MGT/Atacama rows add to BANCO on top of their
+                # own tally.
+                if ent in _LIVE_BANCO_COUNTERPARTIES and ent != 'BANCO':
+                    by_entity['BANCO'] = by_entity.get('BANCO', 0) + 1
             cnt += 1
         st['count'] = cnt
         sources.append(st)
