@@ -3544,3 +3544,47 @@ apps/templates/partials/head-css.html          ← CSS global do formato dos bot
 apps/templates/pages/other-products-summary.html ← #opsAddModal + handler abre modal + Save (row.add)
 apps/static/data/translations/{en,br,es}.json  ← ops-add-title/save, ops-cancel
 ```
+
+---
+
+## 68. Sessão 2026-07-05 — Páginas NDF: Live Position NDF + NDF Summary
+
+### Live Position NDF (`/live-position-ndf`, commit `3d92ef6`)
+Sidenav *Daily Settlement › Live Position › NDF* (item existia com âncora morta → apontei p/ a rota).
+**Clone do Live Position Swap Characteristics** (widgets + smart filter chip bar + Search + per-column
+filter + Columns/Export + Show entries + date picker; sem scrollX, tabela única). Adaptações:
+- **14 colunas** (`_LPNDF_COLUMNS`, iguais às de Operations B3): Conta, Tipo Operação, C/V, Título,
+  Tipo Título, Tipo de Regime, Data Vencimento, Valor, Modalidade Liquidação, Status, Data Liquidação,
+  Contraparte (Nome Simpl.), Conta Contraparte, Num Ctrl Operação. Resolvidas **por nome de header** no
+  `DPOSICAO-TER` (arquivo TER tem header próprio). Datas dd/mm/yyyy, Valor `#,##0.00`.
+- **Bloco Média Asiática dinâmico:** para linhas com `Tipo Media Asiática == ARITMETICA`, as colunas
+  **depois** dessa coluna trazem datas `yyyymmdd` (data a data). São anexadas como colunas dinâmicas
+  (`_lpndf_collect`): só valores `yyyymmdd` (8 dígitos) são considerados, exibidos dd/mm/yyyy; demais em
+  branco. Rótulos = header da fonte ou "Média Asiática N".
+- **Widgets** = placeholders (Metric A/B/C + Total = nº de operações). ⏳ definir métricas.
+- Fonte: `_ndf_ter_path` (walk-back D-1 ANBIMA por `73760_YYMMDD_DPOSICAO-TER.json`). Endpoint
+  `/api/live-position-ndf/data?date=`.
+- ⚠️ O mock TER tem só 8 colunas (sem os 14 nomes nem o bloco asiático) → na dev aparece a estrutura com
+  células vazias; no arquivo real (headers batendo) popula.
+
+### NDF Summary (`/ndf-summary`, commit `3d92ef6`)
+Sidenav *Daily Settlement › NDF › Summary*. **Base: Other Products Summary** (mantido o `#ops-page` +
+classes `ops-` p/ reusar todo o JS: initTable, add-row modal, show entries, colvis, delete, filtro).
+- **4 cards** no topo (de `/api/ndf-summary/cards`, lê o último `DPOSICAO-TER`): **Vanilla, Other
+  Publisher, T+0, Total**. Total = nº de operações; Vanilla/Other/T+0 = placeholder 0 (⏳ classificação).
+- **Trade Level** (11 colunas, imagem): LEGAL, HM COUNTERPARTY, ID_SOURCE_DEAL, VL_NOTIONAL_FC,
+  VL_FORWARD_RATE, SETTLEMENT, ID_CETIP, CCY, SETTLEMENT_B3, VL_FIXING_RATE, DIFFERENCE.
+- **Settlement Summary** (7 colunas): Counterparty, Receive, Pay, Settlement Net, Direction,
+  Internal Account, Observação.
+- Tabelas são worksheet manual (add-row via modal — padrão). i18n `ndf-c-*`, `ln-*`.
+
+### Arquivos (sessão 68)
+```
+apps/pages/routes.py                          ← _LPNDF_COLUMNS/_ndf_ter_path/_lpndf_collect + rotas
+                                                 /live-position-ndf + /api/...; /ndf-summary + /api/ndf-summary/cards
+apps/templates/pages/live-position-ndf.html   ← CRIADO (clone swap-characteristics)
+apps/static/js/pages/live-position-ndf.js     ← CRIADO
+apps/templates/pages/ndf-summary.html         ← CRIADO (base other-products-summary)
+apps/templates/partials/sidenav.html          ← NDF>Summary → /ndf-summary; LivePos>NDF → /live-position-ndf
+apps/static/data/translations/{en,br,es}.json ← ln-*, ndf-c-*
+```
