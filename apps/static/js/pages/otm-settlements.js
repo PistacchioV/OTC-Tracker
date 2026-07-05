@@ -86,7 +86,7 @@
       ],
       // No scrollX: one table → header/body never misalign; .table-responsive scrolls.
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
-      pageLength: 25, lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']], order: [],
+      pageLength: 200, order: [],
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
       buttons: [{
         extend: 'collection',
