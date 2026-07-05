@@ -1,0 +1,233 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}OTM Settlements{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#otm-page {
+    --otm-hairline: rgba(0,0,0,.08);
+    --otm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #otm-page { --otm-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets ────────────────────────────────────────────────────────────── */
+#otm-page .otm-widgets .col { display: flex; margin-bottom: .5rem; }
+#otm-page .otm-widget {
+    flex: 1; border: 1px solid var(--otm-hairline); border-radius: 14px; padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--otm-ease-out), box-shadow 220ms var(--otm-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #otm-page .otm-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#otm-page .otm-widget__head { display: flex; align-items: center; gap: .6rem; }
+#otm-page .otm-widget__icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+}
+#otm-page .otm-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
+#otm-page .otm-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#otm-page .otm-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#otm-page .otm-widget--total .otm-widget__title,
+#otm-page .otm-widget--total .otm-widget__value { color: #fff; }
+#otm-page .otm-widget--total .otm-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Reference date picker + Import ─────────────────────────────────────── */
+#otm-page .otm-datewrap { position: relative; width: 170px; }
+#otm-page .otm-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--otm-ease-out), box-shadow 0.16s var(--otm-ease-out);
+}
+#otm-page .otm-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
+#otm-page .otm-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#otm-page .btn:active { transform: scale(0.97); }
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#otm-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#otm-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
+
+/* Colunas específicas com larguras adequadas — um bloco por coluna
+   nth-child(1)=checkbox (2)=actions (3)=Status (4..21)=dados (_OTM_COLUMNS). Ajuste conforme necessário. */
+  #otm-table th:nth-child(1),  #otm-table td:nth-child(1)  { min-width: 38px;  width: 38px; }   /* checkbox */
+  #otm-table th:nth-child(2),  #otm-table td:nth-child(2)  { min-width: 64px;  width: 64px; }   /* actions */
+  #otm-table th:nth-child(3),  #otm-table td:nth-child(3)  { min-width: 90px;  width: 90px; }   /* Status */
+  #otm-table th:nth-child(4),  #otm-table td:nth-child(4)  { min-width: 130px; width: 130px; }  /* Trade Id */
+  #otm-table th:nth-child(5),  #otm-table td:nth-child(5)  { min-width: 90px;  width: 90px; }   /* Currency */
+  #otm-table th:nth-child(6),  #otm-table td:nth-child(6)  { min-width: 130px; width: 130px; }  /* Amount */
+  #otm-table th:nth-child(7),  #otm-table td:nth-child(7)  { min-width: 110px; width: 110px; }  /* Value Date */
+  #otm-table th:nth-child(8),  #otm-table td:nth-child(8)  { min-width: 100px; width: 100px; }  /* Direction */
+  #otm-table th:nth-child(9),  #otm-table td:nth-child(9)  { min-width: 100px; width: 100px; }  /* Cpty SPN */
+  #otm-table th:nth-child(10), #otm-table td:nth-child(10) { min-width: 180px; width: 180px; }  /* Cpty Name */
+  #otm-table th:nth-child(11), #otm-table td:nth-child(11) { min-width: 100px; width: 100px; }  /* Owner SPN */
+  #otm-table th:nth-child(12), #otm-table td:nth-child(12) { min-width: 110px; width: 110px; }  /* Trade Date */
+  #otm-table th:nth-child(13), #otm-table td:nth-child(13) { min-width: 120px; width: 120px; }  /* Asset Class */
+  #otm-table th:nth-child(14), #otm-table td:nth-child(14) { min-width: 150px; width: 150px; }  /* Owner Legal Entity */
+  #otm-table th:nth-child(15), #otm-table td:nth-child(15) { min-width: 180px; width: 180px; }  /* Owner Name */
+  #otm-table th:nth-child(16), #otm-table td:nth-child(16) { min-width: 130px; width: 130px; }  /* Exception Type */
+  #otm-table th:nth-child(17), #otm-table td:nth-child(17) { min-width: 120px; width: 120px; }  /* Cashflow Stage */
+  #otm-table th:nth-child(18), #otm-table td:nth-child(18) { min-width: 130px; width: 130px; }  /* Trade Ref */
+  #otm-table th:nth-child(19), #otm-table td:nth-child(19) { min-width: 120px; width: 120px; }  /* Underlying */
+  #otm-table th:nth-child(20), #otm-table td:nth-child(20) { min-width: 120px; width: 120px; }  /* Product Class */
+  #otm-table th:nth-child(21), #otm-table td:nth-child(21) { min-width: 160px; width: 160px; }  /* Break Reason */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#otm-table thead tr.otm-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--otm-hairline); }
+#otm-table thead tr.otm-th-filter input.otm-col-filter {
+    width: 100%; min-width: 90px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px; border: 1px solid var(--otm-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--otm-ease-out), box-shadow 150ms var(--otm-ease-out),
+                background-color 150ms var(--otm-ease-out);
+}
+#otm-table thead tr.otm-th-filter input.otm-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #otm-table thead tr.otm-th-filter input.otm-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#otm-table thead tr.otm-th-filter input.otm-col-filter:focus {
+    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#otm-table thead tr.otm-th-filter input.otm-col-filter.otm-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #otm-page * { transition: none !important; animation: none !important; }
+    #otm-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background (project standard, NOT scoped). */
+.dt-button-collection {
+    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
+    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
+    border: none !important; width: 100% !important; text-align: left !important;
+    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover {
+    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="otm-page" class="container-fluid" data-content="" data-today="{{ today }}">
+    {% set title='OTM Settlements' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Widgets -->
+    <div class="row otm-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="otm-widget">
+                <div class="otm-widget__head">
+                    <span class="otm-widget__icon bg-primary-subtle text-primary"><i class="ti ti-percentage"></i></span>
+                    <h3 class="otm-widget__title" data-lang="otm-w-rates">Rates</h3>
+                    <span class="otm-widget__value" id="otm-w-rates">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="otm-widget">
+                <div class="otm-widget__head">
+                    <span class="otm-widget__icon bg-info-subtle text-info"><i class="ti ti-chart-candle"></i></span>
+                    <h3 class="otm-widget__title" data-lang="otm-w-equities">Equities</h3>
+                    <span class="otm-widget__value" id="otm-w-equities">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="otm-widget">
+                <div class="otm-widget__head">
+                    <span class="otm-widget__icon bg-warning-subtle text-warning"><i class="ti ti-wheat"></i></span>
+                    <h3 class="otm-widget__title" data-lang="otm-w-commodities">Commodities</h3>
+                    <span class="otm-widget__value" id="otm-w-commodities">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="otm-widget otm-widget--total">
+                <div class="otm-widget__head">
+                    <span class="otm-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="otm-widget__title" data-lang="otm-w-total">Total</h3>
+                    <span class="otm-widget__value" id="otm-w-total">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-secondary bg-gradient" type="button" id="otmImportBtn">
+                    <i class="ti ti-file-import fs-xl me-1"></i><span data-lang="otm-import">Import cashflows</span>
+                </button>
+                <span class="text-muted fs-xs" id="otm-import-info"></span>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <label for="otm-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="otm-refdate">Settlement date</label>
+                    <div class="otm-datewrap" id="otmDateWrap">
+                        <input type="text" id="otm-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                        <span class="otm-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="columnToggleWrapper"></div>
+                    <div class="otmExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="otmClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="otm-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="otm-showing">Showing</span> <span id="otm-count">0</span> <span data-lang="otm-rows">rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="otm-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="otm-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otm-settlements.js?v=20260705"></script>
+{% endblock extra_javascript %}

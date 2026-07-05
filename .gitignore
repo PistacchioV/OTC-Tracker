@@ -56,3 +56,6 @@ apps/static/data/cache/b3 files/**/*.json
 
 # Generated Accrual JSON data (daily)
 apps/static/data/cache/accrual/**/*.json
+
+# Generated OTM Settlement JSON data (daily)
+apps/static/data/cache/daily settlement/**/*.json

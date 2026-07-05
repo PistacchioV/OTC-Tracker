@@ -3531,6 +3531,177 @@ def api_swapchar_data():
     return jsonify(payload)
 
 
+# ── Other Products › OTM Settlements ─────────────────────────────────────────
+#  Replaces the legacy Excel/VBA "Settlement - OTM" import. A cashflows_*.xlsx
+#  file (actually a TAB-delimited text export, opened by the VBA via OpenText
+#  Tab:=True) is dropped in OTM_SOURCE_ROOT. On import we clean it exactly like
+#  the macro's CleanSettlementOTM:
+#    A) drop rows whose col 14 == "DELETE" (keep header),
+#    B) normalise col 22 to a 4-digit text code (leading zeros),
+#    C) keep only col 22 in {"0228","0123"},
+#  then keep ONLY the reporting columns below and write them to
+#    static/data/cache/daily settlement/YYYY/MM/DD/otm-settlement_YYYYMMDD.json
+#  (today's date), deleting the consumed source file. Widgets' counting logic
+#  (RATES/EQUITIES/COMMODITIES) is pending (user will supply).
+OTM_SOURCE_ROOT = os.getenv('OTM_SOURCE_ROOT',
+                            r'I:\Confirmation\Derivativos\OTC Tracker\Settlement\OTM')
+OTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'daily settlement')
+_OTM_COLUMNS = [
+    'Trade Id', 'Currency', 'Amount', 'Value Date', 'Direction', 'Cpty SPN', 'Cpty Name',
+    'Owner SPN', 'Trade Date', 'Asset Class', 'Owner Legal Entity', 'Owner Name',
+    'Exception Type', 'Cashflow Stage', 'Trade Ref', 'Underlying', 'Product Class', 'Break Reason',
+]
+_OTM_DATE_COLS = {'Value Date', 'Trade Date'}
+_OTM_KEEP_CODES = {'0228', '0123'}          # col 22 values to keep (CleanSettlementOTM step C)
+
+
+def _otm_json_path(ref):
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'otm-settlement_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _otm_read_rows(path):
+    """Rows (list of lists) from the cashflows file. The VBA treats it as a TAB
+    text file even though it's named .xlsx; handle both a real .xlsx (zip) and a
+    tab-delimited text export."""
+    with open(path, 'rb') as fh:
+        raw = fh.read()
+    if raw[:2] == b'PK':                     # real .xlsx (zip container)
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    text = raw.decode('latin-1')
+    return [ln.split('\t') for ln in text.splitlines() if ln.strip()]
+
+
+def _otm_import(ref=None):
+    """Find cashflows_*.xlsx in OTM_SOURCE_ROOT, clean + extract the reporting
+    columns, write today's JSON and delete the source. Returns a summary dict."""
+    ref = ref or datetime.now()
+    if not os.path.isdir(OTM_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(OTM_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(OTM_SOURCE_ROOT)
+                     if f.lower().startswith('cashflows_') and f.lower().endswith('.xlsx'))
+    if not matches:
+        return {'success': False, 'error': 'No cashflows_*.xlsx found in {}'.format(OTM_SOURCE_ROOT)}
+    src_path = os.path.join(OTM_SOURCE_ROOT, matches[0])
+    try:
+        rows = _otm_read_rows(src_path)
+    except Exception:
+        log.warning("[otm] read failed for %s:\n%s", src_path, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    if not rows or len(rows) < 2:
+        return {'success': False, 'error': 'File {} has no data rows'.format(matches[0])}
+
+    header = [str(h or '').strip() for h in rows[0]]
+    hnorm = [_fcst_norm(h) for h in header]
+
+    def col_idx(name):
+        n = _fcst_norm(name)
+        if n in hnorm:
+            return hnorm.index(n)
+        for i, h in enumerate(hnorm):
+            if h and (n in h or h in n):
+                return i
+        return None
+    idx_map = {c: col_idx(c) for c in _OTM_COLUMNS}
+
+    def cell(r, i):
+        return str(r[i]).strip() if (i is not None and i < len(r) and r[i] is not None) else ''
+
+    out, kept, deleted, filtered = [], 0, 0, 0
+    for r in rows[1:]:
+        if cell(r, 13).upper() == 'DELETE':          # col 14 (0-based 13)
+            deleted += 1
+            continue
+        c22 = cell(r, 21)                            # col 22 (0-based 21)
+        try:
+            c22 = '{:04d}'.format(int(float(c22))) if c22 else ''
+        except (ValueError, TypeError):
+            pass
+        if c22 not in _OTM_KEEP_CODES:
+            filtered += 1
+            continue
+        out.append({c: cell(r, idx_map.get(c)) for c in _OTM_COLUMNS})
+        kept += 1
+
+    jp = _otm_json_path(ref)
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=2)
+    try:
+        os.remove(src_path)
+    except OSError:
+        log.warning("[otm] could not delete source %s", src_path)
+    log.info("[otm] imported %s: kept %d (deleted %d, filtered %d) → %s",
+             matches[0], kept, deleted, filtered, jp)
+    return {'success': True, 'file': matches[0], 'rows': kept, 'deleted': deleted,
+            'filtered': filtered, 'date': ref.strftime('%Y-%m-%d')}
+
+
+def _otm_collect(ref):
+    """Read the OTM JSON for `ref` (date) → display rows + widgets. Dates are
+    formatted dd/mm/yyyy and Amount as #,##0.00. Widget breakdown pending."""
+    widgets = {'total': 0, 'rates': 0, 'equities': 0, 'commodities': 0}
+    jp = _otm_json_path(ref)
+    rows_out = []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        for rec in data:
+            row = []
+            for c in _OTM_COLUMNS:
+                v = rec.get(c, '')
+                if c in _OTM_DATE_COLS:
+                    d = _fcst_parse_date(v)
+                    v = d.strftime('%d/%m/%Y') if d else (v or '')
+                elif c == 'Amount':
+                    v = _swapchar_fmt_value(v)
+                row.append('' if v is None else v)
+            rows_out.append(row)
+        widgets['total'] = len(data)
+    return {'widgets': widgets, 'columns': _OTM_COLUMNS, 'rows': rows_out}
+
+
+@blueprint.route('/otm-settlements')
+def otm_settlements():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/otm-settlements.html', segment='otm-settlements',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/otm-settlements/data')
+def api_otm_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _otm_collect(ref)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    'date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/otm-settlements/import', methods=['POST'])
+def api_otm_import():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    res = _otm_import(datetime.now())
+    if res.get('success'):
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'OTM Imported', 'OTM Settlements',
+                             '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
+    return jsonify(res)
+
+
 # ============================================================================
 #  MtM — Swap Mark-to-Market by line of business (+ COE)
 #  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /

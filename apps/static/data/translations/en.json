@@ -1144,5 +1144,16 @@
   "sc-contracts": "contracts",
   "sc-status": "Status",
   "sc-status-custody": "In Custody",
-  "sc-search": "Search"
+  "sc-search": "Search",
+  "otm-w-rates": "Rates",
+  "otm-w-equities": "Equities",
+  "otm-w-commodities": "Commodities",
+  "otm-w-total": "Total",
+  "otm-import": "Import cashflows",
+  "otm-refdate": "Settlement date",
+  "otm-actions": "Actions",
+  "otm-status": "Status",
+  "otm-clear-filters": "Clear filters",
+  "otm-showing": "Showing",
+  "otm-rows": "rows"
 }
