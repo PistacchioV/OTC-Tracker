@@ -3389,8 +3389,10 @@ apps/pages/routes.py   ← _CETIP_RULES +INDEXADORESSWAP_VCP; VCP_JSON;
 Sidenav *Daily Settlement › Other Products › OTM* (o item já existia apontando p/ `/other-products-otm`
 sem rota — apontei p/ `/otm-settlements`). Substitui a macro VBA "Settlement - OTM". Modelada na Swap
 Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **sem** scrollX).
-- **4 widgets:** RATES, EQUITIES, COMMODITIES, **TOTAL** (card azul). ⏳ contagem de Rates/Equities/
-  Commodities **pendente** (usuário envia a lógica); TOTAL = nº de linhas.
+- **4 widgets:** RATES, EQUITIES, COMMODITIES, **TOTAL** (card azul). Contam **Trade Ids ÚNICOS** por
+  **Asset Class** (`_otm_asset_bucket`: COMMODITIES→commodities, EQUITIES→equities, INTEREST_RATE→rates);
+  um Trade Id pode ter várias linhas. TOTAL = nº de Trade Ids distintos. **Cpty Name** é salvo **UPPER**
+  no JSON (no `_otm_import`).
 - **Tabela:** checkbox, actions (placeholder), status (Break Reason vazio→OK / preenchido→Break) + as
   **18 colunas** (`_OTM_COLUMNS`). Datas dd/mm/yyyy, Amount `#,##0.00`. Bloco de larguras `nth-child`.
 - **Import (`/api/otm-settlements/import`):** replica `CleanSettlementOTM` da macro — lê `cashflows_*.xlsx`
@@ -3422,9 +3424,12 @@ Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **s
   | `Swap-InstrumentoFinanceiro-ConsultaContrato*` | linha 7 | col2=`CONFIRMADO` **e** col23 dígitos=`73760009` | eventos-swap-jpm |
   | `SwapMGT.*` | linha 7 | col2=`CONFIRMADO` **e** col23 dígitos=`04880006` | eventos-swap-mgt |
   | `FXO Detail*` | linha 1 | (nenhum; pula se A1="No Data Available…") | tss-fx |
+  | `BrazilOnshoreSettlementsWarningFile*` | linha 1 | (nenhum) | br-onshore-settlements |
+  | `FbiRptLatamDeskPo*` | linha 1 | col62 **ou** col63 não-vazia (`nonempty_any`) | latam-desk-position |
 
-  Validado (dropzone): Operações JPM 2/4, Eventos Swap 1/3. ⏳ Enriquecimento/destinos finais e os
-  imports via `Workbooks.Open` (BR On Set, LatamDeskPosition) ficam para depois.
+  Validado (dropzone): Operações JPM 2/4, Eventos Swap 1/3, BR Onshore 2/2, Latam 3/4. ⏳ Enriquecimento/
+  destinos finais ficam para depois. (BR On/Latam usam `Workbooks.Open` no VBA — o `_ds_read_rows` trata
+  tab-delimited/xlsx-zip; filtro OR via kind `nonempty_any`.)
 - i18n: `cp-r-ds-*`, `cp-ds-*`, `cp-nofiles-title`; página OTM: `otm-*`.
 - Show entries (padrão New Deals) adicionado em OTM/Swap Characteristics/Other Products Summary
   (commits `e0ce5fb`, `4f83ff1`, `53bf70b`): OTM default 200 (200,500,1000..10000); OPS Trade Level
