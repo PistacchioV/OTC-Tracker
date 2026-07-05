@@ -3300,6 +3300,21 @@ apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
 - Validado: mock esparso (66 cols, 4 campos nos lugares certos) + json full-width sintético de 146
   valores (`V0..V145` → cada célula na posição correta, `Data vencimento 20260715 → 15/07/2026`).
 
+### Ajuste 63.2 (commit `0ce4228`) — linha de filtro por coluna
+- Segunda linha no `<thead>` (`.sc-th-filter`) com `<input>` por coluna (padrão `accrual-swap`);
+  checkbox e Status sem filtro. **`orderCellsTop: true`** (sort na linha de título, não no filtro) +
+  `autoWidth: true` para alinhamento com `scrollX`. Wire `keyup/change` → `dt.column(col).search().draw()`.
+- **Coexiste com o smart filter:** `reapplyChips` reaplica os inputs da linha de filtro junto com os
+  chips; o botão **Clear** limpa ambos.
+
+### Ajuste 63.3 (commit `ad57497`) — Tipo de Contrato invertido + Tipo de amortização mapeado
+- **Tipo de Contrato:** `01 → Bullet`, `02 → Cashflow` (⚠️ invertido do que estava) — na célula da
+  tabela **e** na contagem do widget Contract Type (`bullet`/`cashflow`).
+- **Tipo de amortização (idx38):** novo tipo de coluna **`amort`** (`_swapchar_coltype` →
+  `_SWAPCHAR_AMORT_MAP`/`_swapchar_amort_text`). Mostra o texto no lugar do número, sem parênteses:
+  `00 Sobre Valor Base Original · 01 Sobre Valor Base Remanescente · 03 Na Data de Vencimento ·
+  04 Sem Troca de Amortização`. Fallback extrai o texto entre parênteses se o arquivo já vier "NN (texto)".
+
 ---
 
 ## 64. Sessão 2026-07-05 — Save CETIP Files: INDEXADORESSWAP_VCP → vcp_indexers.json
