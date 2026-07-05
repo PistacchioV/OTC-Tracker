@@ -1200,5 +1200,22 @@
   "otm-add-row": "Add row",
   "otm-add-title": "Add row",
   "otm-add-save": "Add",
-  "otm-cancel": "Cancel"
+  "otm-cancel": "Cancel",
+  "ln-w-a": "Metric A",
+  "ln-w-b": "Metric B",
+  "ln-w-c": "Metric C",
+  "ln-w-total": "Total",
+  "ln-refdate": "Reference date",
+  "ln-search": "Search",
+  "ln-status": "Status",
+  "ln-show": "Show",
+  "ln-entries": "entries",
+  "ln-all": "All",
+  "ln-clear-filters": "Clear filters",
+  "ln-showing": "Showing",
+  "ln-rows": "rows",
+  "ndf-c-vanilla": "Vanilla",
+  "ndf-c-other": "Other Publisher",
+  "ndf-c-t0": "T+0",
+  "ndf-c-total": "Total"
 }

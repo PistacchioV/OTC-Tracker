@@ -1199,5 +1199,22 @@
   "otm-add-row": "Agregar fila",
   "otm-add-title": "Agregar fila",
   "otm-add-save": "Agregar",
-  "otm-cancel": "Cancelar"
+  "otm-cancel": "Cancelar",
+  "ln-w-a": "Metric A",
+  "ln-w-b": "Metric B",
+  "ln-w-c": "Metric C",
+  "ln-w-total": "Total",
+  "ln-refdate": "Fecha de referencia",
+  "ln-search": "Buscar",
+  "ln-status": "Status",
+  "ln-show": "Mostrar",
+  "ln-entries": "entradas",
+  "ln-all": "Todos",
+  "ln-clear-filters": "Limpiar filtros",
+  "ln-showing": "Mostrando",
+  "ln-rows": "filas",
+  "ndf-c-vanilla": "Vanilla",
+  "ndf-c-other": "Other Publisher",
+  "ndf-c-t0": "T+0",
+  "ndf-c-total": "Total"
 }

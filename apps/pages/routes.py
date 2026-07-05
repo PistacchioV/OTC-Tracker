@@ -4137,6 +4137,147 @@ def api_opb3_import():
     return jsonify(res)
 
 
+# ── Live Position › NDF ──────────────────────────────────────────────────────
+#  Read-only view of the NDF book from the DPOSICAO-TER position JSON (the TER
+#  file ships with its own header, so columns resolve by NAME). Besides the
+#  reporting columns below, rows whose "Tipo Media Asiática" == ARITMETICA carry
+#  a block of per-date columns right after it (yyyymmdd) — those are appended as
+#  dynamic columns (only yyyymmdd values are kept, shown dd/mm/yyyy).
+_LPNDF_COLUMNS = [
+    'Conta', 'Tipo Operação', 'C/V', 'Título', 'Tipo Título', 'Tipo de Regime', 'Data Vencimento',
+    'Valor', 'Modalidade Liquidação', 'Status', 'Data Liquidação', 'Contraparte (Nome Simpl.)',
+    'Conta Contraparte', 'Num Ctrl Operação',
+]
+_LPNDF_DATE_COLS = {'Data Vencimento', 'Data Liquidação'}
+
+
+def _ndf_ter_path(ref, max_back=10):
+    """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA)."""
+    cur = ref
+    for _ in range(max_back):
+        dref = cur.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'NDF', _b3_date_subpath(dref),
+                         '73760_{}_DPOSICAO-TER.json'.format(dref))
+        if os.path.isfile(p):
+            return p, dref
+        cur = _prev_anbima_bizday(cur)
+    return None, None
+
+
+def _lpndf_collect(ref):
+    widgets = {'total': 0, 'vanilla': 0, 'other_publisher': 0, 't0': 0}
+    path, _ = _ndf_ter_path(ref)
+    columns = list(_LPNDF_COLUMNS)
+    rows_out = []
+    if path:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if data:
+            keys = list(data[0].keys())
+
+            def resolve(name):
+                n = _fcst_norm(name)
+                low = [(k, _fcst_norm(k)) for k in keys]
+                for k, kn in low:
+                    if kn == n:
+                        return k
+                for k, kn in low:
+                    if kn and (n in kn or kn in n):
+                        return k
+                return None
+            idx = {c: resolve(c) for c in _LPNDF_COLUMNS}
+            # Tipo Média Asiática column + the per-date columns that follow it.
+            tma_key = resolve('Tipo Media Asiatica') or resolve('Media Asiatica')
+            tma_pos = keys.index(tma_key) if tma_key in keys else None
+            asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
+            asian_labels = [(k if not str(k).startswith('Field_') else 'Média Asiática {}'.format(i + 1))
+                            for i, k in enumerate(asian_keys)]
+            columns = list(_LPNDF_COLUMNS) + asian_labels
+
+            def is_yyyymmdd(s):
+                s = str(s or '').strip()
+                return len(s) == 8 and s.isdigit()
+
+            for rec in data:
+                row = []
+                for c in _LPNDF_COLUMNS:
+                    v = rec.get(idx[c], '') if idx[c] else ''
+                    if c in _LPNDF_DATE_COLS:
+                        d = _fcst_parse_date(v)
+                        v = d.strftime('%d/%m/%Y') if d else (v or '')
+                    elif c == 'Valor':
+                        v = _swapchar_fmt_value(v)
+                    row.append('' if v is None else v)
+                arit = (tma_key and _fcst_norm(str(rec.get(tma_key, ''))).strip() == 'aritmetica')
+                for k in asian_keys:
+                    raw = str(rec.get(k, '') or '').strip()
+                    if arit and is_yyyymmdd(raw):
+                        d = _fcst_parse_date(raw)
+                        row.append(d.strftime('%d/%m/%Y') if d else '')
+                    else:
+                        row.append('')
+                rows_out.append(row)
+            widgets['total'] = len(data)      # vanilla / other_publisher / t0 → classificação a definir
+    return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
+
+
+@blueprint.route('/live-position-ndf')
+def live_position_ndf():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-ndf.html', segment='live-position-ndf', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-ndf/data')
+def api_lpndf_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _prev_anbima_bizday(datetime.now())
+    except ValueError:
+        ref = _prev_anbima_bizday(datetime.now())
+    payload = _lpndf_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+# ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
+#  Worksheet page modelled on Other Products Summary: two editable tables (Trade
+#  Level + Settlement Summary) with their own columns, plus header cards pulled
+#  from the latest DPOSICAO-TER position JSON (Total real; Vanilla / Other
+#  Publisher / T+0 counting logic pending — user will supply).
+@blueprint.route('/ndf-summary')
+def ndf_summary():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/ndf-summary.html', segment='ndf-summary',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/ndf-summary/cards')
+def api_ndf_summary_cards():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = _prev_anbima_bizday(datetime.now())
+    path, dref = _ndf_ter_path(ref)
+    total = 0
+    if path:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                total = len(json.load(fh) or [])
+        except Exception:
+            total = 0
+    return jsonify({'success': True,
+                    'cards': {'vanilla': 0, 'other_publisher': 0, 't0': 0, 'total': total},
+                    'ter_date': dref})
+
+
 # ============================================================================
 #  MtM — Swap Mark-to-Market by line of business (+ COE)
 #  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /

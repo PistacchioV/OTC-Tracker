@@ -1,0 +1,522 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Other Products Summary{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<style>
+/* ── Apple/Emil tokens ─────────────────────────────────────── */
+#ops-page {
+    --ops-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ops-blue: #0066cc;
+    --ops-hairline: #e0e0e0;
+}
+[data-bs-theme=dark] #ops-page { --ops-hairline: rgba(255,255,255,.09); }
+
+/* Reference-date bar (daterangepicker dd/mm/yyyy + calendar icon) */
+#ops-page .ops-datewrap { position: relative; max-width: 180px; }
+#ops-page .ops-datewrap input {
+    width: 100%;
+    border: 1px solid var(--ops-hairline);
+    border-radius: 10px;
+    padding: .42rem 2.1rem .42rem .7rem;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ins-body-color);
+    background: var(--ins-secondary-bg, #fff);
+    cursor: pointer;
+    transition: border-color 160ms var(--ops-ease-out), box-shadow 160ms var(--ops-ease-out);
+}
+#ops-page .ops-datewrap input:focus {
+    outline: none; border-color: var(--ops-blue);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.18);
+}
+#ops-page .ops-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 34px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ins-secondary-color, #8a8a8f); cursor: pointer;
+    transition: color 160ms var(--ops-ease-out), transform 160ms var(--ops-ease-out);
+}
+#ops-page .ops-cal-btn:hover { color: var(--ops-blue); }
+#ops-page .ops-cal-btn:active { transform: scale(0.9); }
+@media (prefers-reduced-motion: reduce) {
+    #ops-page .ops-datewrap input, #ops-page .ops-cal-btn { transition: none; }
+}
+
+/* ── Widgets ───────────────────────────────────────────────── */
+.ops-widgets .col { display: flex; margin-bottom: .5rem; }
+.ops-widget {
+    flex: 1;
+    border: 1px solid var(--ops-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    .ops-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+.ops-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
+.ops-widget__icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
+}
+.ops-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
+.ops-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+.ops-widget__subs { border-top: 1px dashed var(--ops-hairline); padding-top: .5rem; margin-top: .1rem; }
+.ops-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+.ops-widget__sub .ops-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+.ops-widget--soon { opacity: .6; }
+
+/* Staggered widget entrance */
+@keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    .ops-widgets .col { opacity: 0; transform: translateY(8px); animation: opsWidgetIn 320ms var(--ops-ease-out) both; }
+    .ops-widgets .col:nth-child(1) { animation-delay: 0ms; }
+    .ops-widgets .col:nth-child(2) { animation-delay: 55ms; }
+    .ops-widgets .col:nth-child(3) { animation-delay: 110ms; }
+    .ops-widgets .col:nth-child(4) { animation-delay: 165ms; }
+}
+@media (prefers-reduced-motion: reduce) { .ops-widget:hover { transform: none; } }
+
+/* ── Table cards + toolbar ─────────────────────────────────── */
+#ops-page .ops-tcard .card-header { border-bottom: 1px dashed var(--ops-hairline); }
+#ops-page .ops-tcard .card-title { font-weight: 700; letter-spacing: -.2px; margin: 0; }
+.ops-toolbar { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+.ops-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+    transition: transform 140ms var(--ops-ease-out), background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+.ops-toolbar .btn i { font-size: .95em; }
+.ops-toolbar .btn:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+    .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
+}
+/* Row action + status control feedback */
+#ops-page .ops-row-del, #ops-page .ops-status-sel {
+    transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
+}
+#ops-page .ops-row-del:active { transform: scale(0.9); }
+@media (hover: hover) and (pointer: fine) {
+    #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
+    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active { transform: none; }
+}
+
+#ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
+#ops-page table.dataTable td { white-space: nowrap; font-size: .82rem; vertical-align: middle; }
+#ops-page .ops-filter th { padding: 4px 6px; }
+#ops-page .ops-filter input {
+    width: 100%; border: 1px solid var(--ops-hairline); border-radius: 7px;
+    padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
+}
+#ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
+#ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
+#ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
+.ops-num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="ops-page" class="container-fluid" data-content="">
+
+    {% set title='NDF Summary' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Reference date -->
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <p class="text-muted mb-0 fs-sm" data-lang="ops-sub">Settlement batch for the reference date (defaults to today).</p>
+            <div class="ops-datefield d-flex align-items-center gap-2">
+                <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
+                <div class="ops-datewrap" id="opsDateWrap">
+                    <input type="text" id="ops-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="ops-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards: Vanilla / Other Publisher / T+0 / Total (from latest DPOSICAO-TER) -->
+    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-primary-subtle text-primary"><i class="ti ti-exchange"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-vanilla">Vanilla</h3>
+                    <span class="ops-widget__value" id="ndf-c-vanilla">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-news"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-other">Other Publisher</h3>
+                    <span class="ops-widget__value" id="ndf-c-other">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-calendar-event"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-t0">T+0</h3>
+                    <span class="ops-widget__value" id="ndf-c-t0">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget" style="background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0;">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon" style="background: rgba(255,255,255,.18); color:#fff;"><i class="ti ti-sum"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-total" style="color:#fff;">Total</h3>
+                    <span class="ops-widget__value" id="ndf-c-total" style="color:#fff;">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settlement Summary table -->
+    <div class="row mt-2">
+        <div class="col-12">
+            <div class="card ops-tcard">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
+                    <div class="ops-toolbar" data-table="ops-summary-table">
+                        <div class="d-flex align-items-center gap-1 me-1">
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-show">Show</label>
+                            <select class="form-select form-select-sm ops-page-len" style="width:76px;">
+                                <option value="10">10</option>
+                                <option value="25" selected>25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="-1" data-lang="ops-all">All</option>
+                            </select>
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
+                        <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
+                        <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="ops-summary-table" class="table table-hover align-middle w-100">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
+                                    <th data-lang="ops-col-actions">Actions</th>
+                                    <th data-lang="ops-col-status">Status</th>
+                                    <th>Counterparty</th>
+                                    <th>Receive</th>
+                                    <th>Pay</th>
+                                    <th>Settlement Net</th>
+                                    <th>Direction</th>
+                                    <th>Internal Account</th>
+                                    <th>Observação</th>
+                                </tr>
+                                <tr class="ops-filter">
+                                    <th></th><th></th>
+                                    <th><input type="text" placeholder="Status"></th>
+                                    <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="Receive"></th>
+                                    <th><input type="text" placeholder="Pay"></th>
+                                    <th><input type="text" placeholder="Settlement Net"></th>
+                                    <th><input type="text" placeholder="Direction"></th>
+                                    <th><input type="text" placeholder="Internal Account"></th>
+                                    <th><input type="text" placeholder="Observação"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade Level table -->
+    <div class="row mt-1">
+        <div class="col-12">
+            <div class="card ops-tcard">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="card-title" data-lang="ops-trade-title">Trade Level</h4>
+                    <div class="ops-toolbar" data-table="ops-trade-table">
+                        <div class="d-flex align-items-center gap-1 me-1">
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-show">Show</label>
+                            <select class="form-select form-select-sm ops-page-len" style="width:76px;">
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="150">150</option>
+                                <option value="200">200</option>
+                                <option value="250">250</option>
+                                <option value="300">300</option>
+                            </select>
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
+                        <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
+                        <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="ops-trade-table" class="table table-hover align-middle w-100">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
+                                    <th data-lang="ops-col-actions">Actions</th>
+                                    <th data-lang="ops-col-status">Status</th>
+                                    <th>LEGAL</th>
+                                    <th>HM COUNTERPARTY</th>
+                                    <th>ID_SOURCE_DEAL</th>
+                                    <th>VL_NOTIONAL_FC</th>
+                                    <th>VL_FORWARD_RATE</th>
+                                    <th>SETTLEMENT</th>
+                                    <th>ID_CETIP</th>
+                                    <th>CCY</th>
+                                    <th>SETTLEMENT_B3</th>
+                                    <th>VL_FIXING_RATE</th>
+                                    <th>DIFFERENCE</th>
+                                </tr>
+                                <tr class="ops-filter">
+                                    <th></th><th></th>
+                                    <th><input type="text" placeholder="Status"></th>
+                                    <th><input type="text" placeholder="LEGAL"></th>
+                                    <th><input type="text" placeholder="HM COUNTERPARTY"></th>
+                                    <th><input type="text" placeholder="ID_SOURCE_DEAL"></th>
+                                    <th><input type="text" placeholder="VL_NOTIONAL_FC"></th>
+                                    <th><input type="text" placeholder="VL_FORWARD_RATE"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT"></th>
+                                    <th><input type="text" placeholder="ID_CETIP"></th>
+                                    <th><input type="text" placeholder="CCY"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT_B3"></th>
+                                    <th><input type="text" placeholder="VL_FIXING_RATE"></th>
+                                    <th><input type="text" placeholder="DIFFERENCE"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add row modal (New Deals pattern: a window with all columns to fill) -->
+    <div class="modal fade" id="opsAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-lang="ops-add-title">Add row</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="opsAddFields"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-lang="ops-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary bg-gradient" id="opsAddSave" data-lang="ops-add-save">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<!-- jQuery próprio ANTES de datatables/daterangepicker: o vendors.min.js global não
+     expõe jQuery utilizável, então plugins jQuery falham ('jQuery is not defined').
+     Mesmo padrão de accrual-swap / mtm-swap. -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Minimal i18n (falls back to the data-lang English text already in the DOM).
+    var _T = {}; fetch('/static/data/translations/' + (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0,2) + '.json')
+        .then(function (r) { return r.json(); }).then(function (d) { _T = d || {}; }).catch(function () {});
+    function t(k, fb) { return _T[k] || fb; }
+    function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+    var _opsAdd = null;            // active table for the Add-row modal
+    var STATUSES = ['New', 'OK', 'Check', 'Sent'];
+    function statusCell(v) {
+        var opts = STATUSES.map(function (s) { return '<option' + (s === v ? ' selected' : '') + '>' + s + '</option>'; }).join('');
+        return '<select class="form-select form-select-sm ops-status-sel">' + opts + '</select>';
+    }
+    function actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
+    function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
+
+    // Build a blank data row (array) for a table given its data-column count.
+    function blankRow(dataCols, numericIdx) {
+        var cb = '<input type="checkbox" class="form-check-input ops-cb">';
+        var row = [cb, actionsCell(), statusCell('New')];
+        for (var i = 0; i < dataCols; i++) row.push(inp(''));
+        return row;
+    }
+
+    // ── Per-table setup ─────────────────────────────────────────────────────
+    function initTable(id, dataCols, pageLen) {
+        var dt = $('#' + id).DataTable({
+            autoWidth: false, scrollX: true, orderCellsTop: true, paging: true, pageLength: pageLen || 25,
+            dom: "<'row'<'col-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            columnDefs: [{ orderable: false, targets: [0, 1] }],
+            language: { emptyTable: t('ops-empty', 'No rows for this date yet — add one or pick another date.') }
+        });
+
+        var $card = $('#' + id).closest('.ops-tcard');
+        var $toolbar = $card.find('.ops-toolbar');
+        var $delBtn = $toolbar.find('.ops-del');
+
+        // Show [N] entries (New Deals pattern) → DataTables page length.
+        var $len = $toolbar.find('.ops-page-len');
+        $len.on('change', function () { dt.page.len(parseInt(this.value, 10)).draw(); });
+        $len.val(String(dt.page.len()));
+
+        // Per-column filter row (second header row).
+        $card.find('.ops-filter th input').on('keyup change', function () {
+            var idx = $(this).closest('th').index();
+            if (dt.column(idx).search() !== this.value) dt.column(idx).search(this.value).draw();
+        });
+
+        // Add row → open a modal with a field per column (New Deals pattern).
+        $toolbar.find('.ops-add').on('click', function () {
+            var headers = [];
+            dt.columns().every(function () { headers.push($(dt.column(this.index()).header()).text().trim()); });
+            var dataHeaders = headers.slice(3);          // skip checkbox / actions / status
+            $('#opsAddFields').html(dataHeaders.map(function (h, i) {
+                return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(h) + '</label>' +
+                    '<input type="text" class="form-control form-control-sm ops-add-fld" data-i="' + i + '"></div>';
+            }).join(''));
+            _opsAdd = { dt: dt };
+            if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('opsAddModal')).show();
+        });
+
+        // Show/Hide columns — dependency-free Bootstrap dropdown (one item per
+        // data column). Toggles dt.column(i).visible().
+        var $colBtn = $toolbar.find('.ops-colvis').addClass('dropdown-toggle');
+        var $wrap = $('<div class="dropdown"></div>').insertBefore($colBtn).append($colBtn);
+        $colBtn.attr({ 'data-bs-toggle': 'dropdown', 'aria-expanded': 'false' });
+        var $menu = $('<ul class="dropdown-menu dropdown-menu-end p-1" style="max-height:320px;overflow:auto"></ul>').appendTo($wrap);
+        dt.columns().every(function () {
+            var i = this.index(); var ttl = $(dt.column(i).header()).text().trim();
+            if (i <= 1 || !ttl) return;   // skip checkbox + actions
+            var $li = $('<li><label class="dropdown-item d-flex align-items-center gap-2 mb-0" style="cursor:pointer">' +
+                '<input type="checkbox" class="form-check-input mt-0" checked>' + esc(ttl) + '</label></li>');
+            $li.find('input').on('change', function (e) { e.stopPropagation(); dt.column(i).visible(this.checked); });
+            $menu.append($li);
+        });
+        $menu.on('click', function (e) { e.stopPropagation(); });   // keep open while toggling
+
+        // Selection via checkboxes (no Select extension) → enable/disable Delete.
+        function selectedRows() {
+            return dt.rows(function (idx, data, node) { return $(node).find('.ops-cb').prop('checked'); });
+        }
+        function syncDel() { $delBtn.prop('disabled', selectedRows().count() === 0); }
+        $('#' + id + ' tbody').on('change', '.ops-cb', syncDel);
+        $card.find('.ops-cb-all').on('change', function () {
+            var on = this.checked;
+            $('#' + id + ' tbody .ops-cb').prop('checked', on);
+            syncDel();
+        });
+
+        // Bulk delete + per-row delete.
+        $delBtn.on('click', function () {
+            selectedRows().remove().draw(false);
+            $card.find('.ops-cb-all').prop('checked', false); syncDel();
+        });
+        $('#' + id + ' tbody').on('click', '.ops-row-del', function (e) {
+            e.preventDefault(); dt.row($(this).closest('tr')).remove().draw(false); syncDel();
+        });
+
+        return dt;
+    }
+
+    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
+    var dtTrade   = initTable('ops-trade-table', 11, 50); // 11 data cols (LEGAL…DIFFERENCE); default 50/page
+
+    // Add-row modal Save → append the filled row to the active table (cells stay
+    // inline-editable, seeded with the modal values).
+    $('#opsAddSave').on('click', function () {
+        if (!_opsAdd) return;
+        var row = ['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell('New')];
+        $('#opsAddFields .ops-add-fld').each(function () { row.push(inp(this.value)); });
+        _opsAdd.dt.row.add(row).draw(false);
+        if (window.bootstrap) bootstrap.Modal.getInstance(document.getElementById('opsAddModal')).hide();
+    });
+
+    // ── Cards: Vanilla / Other Publisher / T+0 / Total (from the latest TER) ──
+    function setCards(c) {
+        c = c || {};
+        $('#ndf-c-vanilla').text(c.vanilla || 0);
+        $('#ndf-c-other').text(c.other_publisher || 0);
+        $('#ndf-c-t0').text(c.t0 || 0);
+        $('#ndf-c-total').text(c.total || 0);
+    }
+
+    // ── Reference date → refresh the header cards (tables are a manual worksheet) ─
+    function loadDate(ymd) {
+        fetch('/api/ndf-summary/cards')
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j && j.success) setCards(j.cards); })
+            .catch(function () {});
+    }
+
+    // Expose the batch loader so the reference-date picker (own <script> below)
+    // can trigger a reload.
+    window.opsLoadDate = loadDate;
+    loadDate('{{ today }}');   // initial load for today
+});
+</script>
+
+<!-- Reference-date picker in its OWN script so an error in the table/widget setup
+     above can never block it. STANDARD PATTERN — same as MtM / Accrual / Control
+     Panel: jQuery daterangepicker (singleDatePicker) with its own assets loaded on
+     the page. NEVER use the native <input type="date"> (inherits the OS locale →
+     mm/dd/yyyy on the JP Windows env). Shows today in dd/mm/yyyy; future allowed. -->
+<script>
+function opsInitDatePicker() {
+    var inp = document.getElementById('ops-ref-date');
+    var iso = '{{ today }}'.split('-');
+    if (inp && iso.length === 3) inp.value = iso[2] + '/' + iso[1] + '/' + iso[0];
+    function reload(ymd) { if (window.opsLoadDate) window.opsLoadDate(ymd); }
+    if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
+        var $d = jQuery('#ops-ref-date');
+        $d.daterangepicker({
+            singleDatePicker: true, autoApply: true, showDropdowns: true,
+            locale: { format: 'DD/MM/YYYY' },
+            startDate: moment()   // default today; no maxDate → future reference dates allowed
+        }, function (start) { reload(start.format('YYYY-MM-DD')); });
+        jQuery('#opsDateWrap .ops-cal-btn').on('click', function () { $d.trigger('click'); });
+    } else if (inp) {
+        // Fallback: plain dd/mm/yyyy text field if the plugin failed to load.
+        inp.removeAttribute('readonly');
+        inp.addEventListener('change', function () {
+            var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (m) reload(m[3] + '-' + m[2] + '-' + m[1]);
+        });
+    }
+}
+// Run now if the DOM is already parsed, else on DOMContentLoaded — guarantees it
+// fires regardless of when this script executes relative to document readiness.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', opsInitDatePicker);
+} else {
+    opsInitDatePicker();
+}
+</script>
+{% endblock extra_javascript %}

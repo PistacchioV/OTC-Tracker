@@ -1,0 +1,232 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Live Position NDF{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#live-position-ndf-page {
+    --ln-hairline: rgba(0,0,0,.08);
+    --ln-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #live-position-ndf-page { --ln-hairline: rgba(255,255,255,.10); }
+
+/* Widgets */
+#live-position-ndf-page .ln-widgets .col { display: flex; margin-bottom: .5rem; }
+#live-position-ndf-page .ln-widget {
+    flex: 1; border: 1px solid var(--ln-hairline); border-radius: 14px; padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ln-ease-out), box-shadow 220ms var(--ln-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #live-position-ndf-page .ln-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#live-position-ndf-page .ln-widget__head { display: flex; align-items: center; gap: .6rem; }
+#live-position-ndf-page .ln-widget__icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+}
+#live-position-ndf-page .ln-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
+#live-position-ndf-page .ln-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#live-position-ndf-page .ln-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#live-position-ndf-page .ln-widget--total .ln-widget__title,
+#live-position-ndf-page .ln-widget--total .ln-widget__value { color: #fff; }
+#live-position-ndf-page .ln-widget--total .ln-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* Reference date picker */
+#live-position-ndf-page .ln-datewrap { position: relative; width: 170px; }
+#live-position-ndf-page .ln-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--ln-ease-out), box-shadow 0.16s var(--ln-ease-out);
+}
+#live-position-ndf-page .ln-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
+#live-position-ndf-page .ln-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#live-position-ndf-page .btn:active { transform: scale(0.97); }
+
+/* Smart filter (New Deals model) */
+#live-position-ndf-page .smart-filter-wrapper {
+    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    border: 1px solid var(--ln-hairline); border-radius: 0.6875rem;
+    padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#live-position-ndf-page .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+#live-position-ndf-page .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#live-position-ndf-page .smart-filter-chip {
+    display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff;
+    border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+#live-position-ndf-page .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+#live-position-ndf-page .smart-filter-input {
+    border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem;
+    background: transparent; color: var(--ins-body-color); padding: 2px 0;
+}
+#live-position-ndf-page .smart-filter-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055;
+    background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; display: none; padding: 4px 0;
+}
+#live-position-ndf-page .smart-filter-dropdown li {
+    padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center;
+    gap: 8px; list-style: none; color: var(--ins-body-color);
+}
+#live-position-ndf-page .smart-filter-dropdown li:hover { background: rgba(0,102,204,.10); }
+#live-position-ndf-page .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+#live-position-ndf-page .sf-type-text  { background: #6c757d; }
+#live-position-ndf-page .sf-type-date  { background: #0284c7; }
+#live-position-ndf-page .sf-type-value { background: #b45309; }
+
+/* Table */
+#lnndf-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#lnndf-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
+
+/* Per-column filter row — New Deals style */
+#lnndf-table thead tr.ln-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ln-hairline); }
+#lnndf-table thead tr.ln-th-filter input.ln-col-filter {
+    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px; border: 1px solid var(--ln-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--ln-ease-out), box-shadow 150ms var(--ln-ease-out), background-color 150ms var(--ln-ease-out);
+}
+#lnndf-table thead tr.ln-th-filter input.ln-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #lnndf-table thead tr.ln-th-filter input.ln-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#lnndf-table thead tr.ln-th-filter input.ln-col-filter:focus {
+    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff); box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#lnndf-table thead tr.ln-th-filter input.ln-col-filter.ln-has-val { border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) {
+    #live-position-ndf-page * { transition: none !important; animation: none !important; }
+    #live-position-ndf-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background (project standard, NOT scoped). */
+.dt-button-collection {
+    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
+    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
+    border: none !important; width: 100% !important; text-align: left !important;
+    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover { background: rgba(13,110,253,.08) !important; color: #0d6efd !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="live-position-ndf-page" class="container-fluid" data-content="" data-ref-date="{{ ref_date }}">
+    {% set title='Live Position NDF' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Widgets (placeholders — a definir por métrica) -->
+    <div class="row ln-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
+        <div class="col"><div class="ln-widget"><div class="ln-widget__head">
+            <span class="ln-widget__icon bg-primary-subtle text-primary"><i class="ti ti-circle-dot"></i></span>
+            <h3 class="ln-widget__title" data-lang="ln-w-a">Metric A</h3><span class="ln-widget__value" id="ln-w-a">0</span>
+        </div></div></div>
+        <div class="col"><div class="ln-widget"><div class="ln-widget__head">
+            <span class="ln-widget__icon bg-info-subtle text-info"><i class="ti ti-circle-dot"></i></span>
+            <h3 class="ln-widget__title" data-lang="ln-w-b">Metric B</h3><span class="ln-widget__value" id="ln-w-b">0</span>
+        </div></div></div>
+        <div class="col"><div class="ln-widget"><div class="ln-widget__head">
+            <span class="ln-widget__icon bg-warning-subtle text-warning"><i class="ti ti-circle-dot"></i></span>
+            <h3 class="ln-widget__title" data-lang="ln-w-c">Metric C</h3><span class="ln-widget__value" id="ln-w-c">0</span>
+        </div></div></div>
+        <div class="col"><div class="ln-widget ln-widget--total"><div class="ln-widget__head">
+            <span class="ln-widget__icon"><i class="ti ti-sum"></i></span>
+            <h3 class="ln-widget__title" data-lang="ln-w-total">Total</h3><span class="ln-widget__value" id="ln-w-total">0</span>
+        </div></div></div>
+    </div>
+
+    <!-- Smart filter + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="flex-grow-1 position-relative" style="min-width: 280px;">
+                    <div class="smart-filter-wrapper" id="lnSmartFilter">
+                        <div class="smart-filter-chips" id="lnChips"></div>
+                        <input type="text" class="smart-filter-input" id="lnInput" placeholder="Filter by column…" autocomplete="off">
+                        <ul class="smart-filter-dropdown mb-0 ps-0" id="lnDropdown"></ul>
+                    </div>
+                </div>
+                <button class="btn btn-secondary bg-gradient btn-search" type="button" id="lnSearchBtn">
+                    <i class="ti ti-search fs-xl me-1"></i><span data-lang="ln-search">Search</span>
+                </button>
+                <div class="vr d-none d-md-block"></div>
+                <label for="ln-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="ln-refdate">Reference date</label>
+                <div class="ln-datewrap" id="lnDateWrap">
+                    <input type="text" id="ln-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="ln-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ln-show">Show</label>
+                        <select class="form-select form-select-sm ln-page-len" style="width:84px;">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="-1" data-lang="ln-all">All</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ln-entries">entries</label>
+                    </div>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="lnExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="lnClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="ln-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="ln-showing">Showing</span> <span id="ln-count">0</span> <span data-lang="ln-rows">rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="lnndf-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="lnndf-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-ndf.js?v=20260706"></script>
+{% endblock extra_javascript %}
