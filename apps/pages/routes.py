@@ -3349,10 +3349,25 @@ def _swapchar_fmt_cell(value, ctype):
     return str(value)
 
 
+# Columns actually shown on the page — a subset of the 146 (in file order), from
+# the desk's reference layout. Values are read POSITIONALLY from the position-file
+# rows (which carry all 146 fields in order), so the repeated column names still
+# resolve unambiguously to the right cell.
+_SWAPCHAR_DISPLAY_IDX = [
+    0, 2, 3, 7, 8, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 23,           # A,C,D,H,I,L,M,O,P,Q,R,S,U,V,W,X
+    24, 25, 26, 27, 28, 31, 38, 39, 40, 42, 43,                          # Y,Z,AA,AB,AC,AF,AM,AN,AO,AQ,AR
+    44, 45, 46, 48, 49, 50, 52, 53, 54, 55, 56, 58, 60, 61, 62, 63, 64,  # AS..BM (skips AV,AZ,BF,BH)
+    65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,                          # BN..BX
+    76, 77, 78, 79, 126, 127, 132, 133, 134, 144, 145,                   # BY,BZ,CA,CB,DW,DX,EC,ED,EE,EO,EP
+]
+_SWAPCHAR_DISPLAY_LABELS = [_SWAPCHAR_LABELS[i] for i in _SWAPCHAR_DISPLAY_IDX]
+
+
 def _swapchar_collect(ref):
-    """Build widgets + positional rows from the DPOSICAO-SWAP file for `ref` (date).
-    Missing file → empty payload (logged). Only the columns actually present in the
-    position file are bound today; the rest are structural placeholders."""
+    """Build widgets + display rows from the DPOSICAO-SWAP file for `ref` (date).
+    The saved position JSON carries all 146 fields IN ORDER (headerless file parsed
+    with _B3_SWAP_HEADERS), so cells are read positionally by index; only the
+    _SWAPCHAR_DISPLAY_IDX subset is emitted. Missing file → empty payload (logged)."""
     widgets = {
         'total': 0,
         'tipo':  {'total': 0, 'cashflow': 0, 'bullet': 0},
@@ -3370,14 +3385,14 @@ def _swapchar_collect(ref):
     rows_out = []
     if not os.path.isfile(path):
         log.warning("[swapchar] no DPOSICAO-SWAP for %s; page shows 0", dref)
-        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
     try:
         with open(path, encoding='utf-8') as fh:
             src = json.load(fh)
     except Exception:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
     if not src:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
 
     keys = list(src[0].keys())
     tipo_key = _fcst_resolve_key(keys, ['tipo de contrato', 'tipo do contrato', 'tipo contrato'])
@@ -3385,26 +3400,33 @@ def _swapchar_collect(ref):
     venc_key = _fcst_resolve_key(keys, ['data vencimento', 'data de vencimento'])
     id_key   = _fcst_resolve_key(keys, ['código identificador', 'codigo identificador', 'identificador'])
     func_key = _fcst_resolve_key(keys, ['funcionalidade'])
-    # Positional bind: header index → position-file key + raw value transformer.
-    n = len(_SWAPCHAR_LABELS)
     for row in src:
-        arr = [''] * n
+        vals = list(row.values())          # all 146 fields, in file order (real file)
+        full = len(vals) >= 120             # sparse mock (4 named cols) → name-resolve fallback
         tv = str(row.get(tipo_key, '') or '').strip() if tipo_key else ''
         if tv.endswith('.0'):
             tv = tv[:-2]
-        arr[0] = 'Cashflow' if tv == '1' else ('Bullet' if tv == '2' else tv)
-        if cpty_key:
-            arr[7] = str(row.get(cpty_key, '') or '')
-        if venc_key:
-            arr[12] = row.get(venc_key, '')
-        if func_key:
-            arr[20] = row.get(func_key, '')
         cid = str(row.get(id_key, '') or '') if id_key else ''
-        arr[145] = cid
-        # Format every cell by its column type (dates dd/mm/yyyy, values #,##0.00,
-        # funcionalidade → clean label).
-        arr = [_swapchar_fmt_cell(arr[i], _SWAPCHAR_TYPES[i]) for i in range(n)]
-        rows_out.append(arr)
+        # Sparse-mock fallback: the few present fields keyed by their 146-list index.
+        sparse = {} if full else {
+            0: tv,
+            7: (row.get(cpty_key, '') if cpty_key else ''),
+            12: (row.get(venc_key, '') if venc_key else ''),
+            20: (row.get(func_key, '') if func_key else ''),
+            145: cid,
+        }
+        disp = []
+        for i in _SWAPCHAR_DISPLAY_IDX:
+            raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
+            if i == 0:                      # Tipo de Contrato → Cashflow / Bullet
+                rv = str(raw or '').strip()
+                if rv.endswith('.0'):
+                    rv = rv[:-2]
+                disp.append('Cashflow' if rv == '1' else ('Bullet' if rv == '2'
+                            else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
+            else:
+                disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
+        rows_out.append(disp)
         # Widgets
         widgets['total'] += 1
         widgets['tipo']['total'] += 1
@@ -3415,7 +3437,7 @@ def _swapchar_collect(ref):
         lob = _swapchar_lob(cid)
         widgets['lob']['total'] += 1
         widgets['lob'][lob] += 1
-    return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': rows_out}
+    return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': rows_out}
 
 
 @blueprint.route('/live-position-swap-characteristics')
