@@ -2982,49 +2982,180 @@ def _import_client_contacts(filename, raw_bytes):
 SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT',
                              r'I:\Confirmation\Derivativos\OTC Tracker\Settlements')
 
+# Text-import specs translated from the VBA "ImportarTexto" (OpenText, TAB
+# delimited) — one per source file, EXCLUDING Settlement OTM (done on its own
+# page). Each cashflows/blotter file is a tab-delimited export; we read it, keep
+# the header row, filter the data rows and write a per-type JSON. The Excel
+# XLOOKUP enrichment (Tipo/Contraparte columns) is NOT part of the text import
+# and is left out.
+#   header  : 1-based row that holds the column names
+#   filters : list of (kind, col, allowed) applied to each data row (ALL must pass)
+#             kind 'digits' → compare digits-only cell; 'set' → compare UPPER cell
+#   json    : output base name (…_YYYYMMDD.json under the daily-settlement folder)
+_DS_IMPORTS = [
+    {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
+     'match': lambda n: n.startswith('operacoes'),
+     'filters': [('digits', 2, {'73760009'}),
+                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})]},
+    {'key': 'operacoes-mgt', 'label': 'Operações MGT', 'json': 'operacoes-mgt', 'header': 5,
+     'match': lambda n: n.startswith('mgt.'),
+     'filters': [('digits', 2, {'04880006'}),
+                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})]},
+    {'key': 'eventos-swap-jpm', 'label': 'Eventos Swap', 'json': 'eventos-swap-jpm', 'header': 7,
+     'match': lambda n: n.startswith('swap-instrumentofinanceiro-consultacontrato'),
+     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'73760009'})]},
+    {'key': 'eventos-swap-mgt', 'label': 'Eventos Swap MGT', 'json': 'eventos-swap-mgt', 'header': 7,
+     'match': lambda n: n.startswith('swapmgt.'),
+     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'04880006'})]},
+    {'key': 'tss-fx', 'label': 'TSS-FX', 'json': 'tss-fx', 'header': 1,
+     'match': lambda n: n.startswith('fxo detail'),
+     'filters': [], 'skip_no_data': True},
+]
+
+
+def _ds_read_rows(raw):
+    """Rows from a Daily Settlement source file — tab-delimited text (as the VBA
+    OpenText Tab:=True treats them) with a real-.xlsx (zip) fallback."""
+    if raw[:2] == b'PK':
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    return [ln.split('\t') for ln in raw.decode('latin-1').splitlines()]
+
+
+def _ds_cell(row, i):
+    return '' if (i < 0 or i >= len(row) or row[i] is None) else str(row[i]).strip()
+
+
+def _ds_match_spec(name):
+    n = (name or '').lower()
+    for spec in _DS_IMPORTS:
+        if spec['match'](n):
+            return spec
+    return None
+
+
+def _ds_process(raw, spec):
+    """Apply one spec: header row + row filters → list of dicts (kept rows). Returns
+    (records, total_data_rows)."""
+    rows = _ds_read_rows(raw)
+    hidx = spec['header'] - 1
+    if len(rows) <= hidx:
+        return [], 0
+    if spec.get('skip_no_data') and _ds_cell(rows[hidx], 0).lower().startswith('no data available'):
+        return [], 0
+    raw_header = rows[hidx]
+    seen, header = {}, []
+    for i in range(len(raw_header)):
+        h = _ds_cell(raw_header, i) or 'Field_{}'.format(i + 1)
+        seen[h] = seen.get(h, 0) + 1
+        header.append(h if seen[h] == 1 else '{}_{}'.format(h, seen[h]))
+    out, total = [], 0
+    for row in rows[hidx + 1:]:
+        if not any(_ds_cell(row, i) for i in range(len(row))):
+            continue                                   # skip fully-blank lines
+        total += 1
+        keep = True
+        for kind, col, allowed in spec['filters']:
+            v = _ds_cell(row, col - 1)
+            if kind == 'digits':
+                if ''.join(ch for ch in v if ch.isdigit()) not in allowed:
+                    keep = False
+                    break
+            elif v.upper() not in allowed:
+                keep = False
+                break
+        if not keep:
+            continue
+        out.append({header[i] if i < len(header) else 'Field_{}'.format(i + 1): _ds_cell(row, i)
+                    for i in range(len(row))})
+    return out, total
+
+
+def _ds_handle(name, raw, delete_path, ref, processed, skipped):
+    spec = _ds_match_spec(name)
+    if not spec:
+        skipped.append(name)
+        return
+    try:
+        recs, total = _ds_process(raw, spec)
+    except Exception:
+        log.warning("[ds] process failed for %s:\n%s", name, traceback.format_exc())
+        skipped.append(name)
+        return
+    jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                      '{}_{}.json'.format(spec['json'], ref.strftime('%Y%m%d')))
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(recs, fh, ensure_ascii=False, indent=2)
+    processed.append({'file': name, 'type': spec['label'], 'kept': len(recs), 'total': total})
+    if delete_path:                                    # mirror the VBA Kill (folder source only)
+        try:
+            os.remove(delete_path)
+        except OSError:
+            log.warning("[ds] could not delete %s", delete_path)
+
 
 @blueprint.route('/api/control-panel/daily-settlement-save', methods=['POST'])
 def api_cp_daily_settlement_save():
-    """Control Panel — "Save Daily Settlement Files". Files come from the card's
-    dropzone (multipart 'files'); if none were attached, fall back to scanning
-    SETTLEMENTS_ROOT. If neither has any file → error so the UI can warn the user.
-
-    PLACEHOLDER: the actual per-file processing (build the JSONs, move/rename to
-    the settlement folders) is still to be wired — for now we only resolve WHICH
-    files would be processed and report them back."""
+    """Control Panel — "Save Daily Settlement Files". Source files come from the
+    card's dropzone (multipart 'files'); if none were attached, fall back to
+    scanning SETTLEMENTS_ROOT. Each recognised file is read (tab-delimited),
+    filtered per the VBA ImportarTexto rules and written to a per-type JSON under
+    the daily-settlement cache (today's date). Folder sources are deleted after
+    processing (mirrors the VBA Kill). OTM cashflows are handled on their own
+    page and are ignored here. No file anywhere → error (UI warns the user)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
 
+    ref = datetime.now()
     uploaded = [f for f in request.files.getlist('files') if f and f.filename]
+    processed, skipped = [], []
     source = 'dropzone'
-    names = [f.filename for f in uploaded]
 
-    if not names:
-        # Fall back to the network folder.
+    if uploaded:
+        for f in uploaded:
+            _ds_handle(f.filename, f.read(), None, ref, processed, skipped)
+    else:
         source = 'folder'
+        folder_files = []
         if os.path.isdir(SETTLEMENTS_ROOT):
             try:
-                names = [f for f in os.listdir(SETTLEMENTS_ROOT)
-                         if os.path.isfile(os.path.join(SETTLEMENTS_ROOT, f))]
+                folder_files = [f for f in os.listdir(SETTLEMENTS_ROOT)
+                                if os.path.isfile(os.path.join(SETTLEMENTS_ROOT, f))]
             except OSError:
-                names = []
+                folder_files = []
+        if not folder_files:
+            return jsonify({'success': False,
+                            'error': ('Nenhum arquivo encontrado para processamento — o dropzone está '
+                                      'vazio e não há arquivos em {}.'.format(SETTLEMENTS_ROOT))}), 400
+        for name in folder_files:
+            p = os.path.join(SETTLEMENTS_ROOT, name)
+            try:
+                with open(p, 'rb') as fh:
+                    raw = fh.read()
+            except OSError:
+                skipped.append(name)
+                continue
+            _ds_handle(name, raw, p, ref, processed, skipped)
 
-    if not names:
-        return jsonify({'success': False,
-                        'error': ('Nenhum arquivo encontrado para processamento — o dropzone está '
-                                  'vazio e não há arquivos em {}.'.format(SETTLEMENTS_ROOT))}), 400
+    if processed:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Daily Settlement Saved', 'Control Panel',
+                             '{} file(s) processed ({})'.format(len(processed), ref.strftime('%Y-%m-%d')))
 
-    # TODO: process each file (build JSONs, save to the settlement folders).
-    preview = ', '.join(names[:8]) + ('…' if len(names) > 8 else '')
-    return jsonify({
-        'success': True,
-        'source': source,
-        'count': len(names),
-        'files': names,
-        'message': ('{} arquivo(s) encontrado(s) via {}: {}.<br><br>'
-                    '<span class="text-muted">Processamento (geração dos JSONs) a implementar.</span>'
-                    ).format(len(names), 'dropzone' if source == 'dropzone' else 'pasta', preview),
-    })
+    lines = ['<b>{}</b>: {} de {} linha(s)'.format(p['type'], p['kept'], p['total']) for p in processed]
+    msg = ''
+    if lines:
+        msg += '{} arquivo(s) processado(s) via {}:<br>'.format(len(processed),
+               'dropzone' if source == 'dropzone' else 'pasta') + '<br>'.join(lines)
+    if skipped:
+        msg += ('<br><br>' if msg else '') + \
+            '<span class="text-muted">{} ignorado(s) (não reconhecido/OTM): {}</span>'.format(
+                len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
+    return jsonify({'success': True, 'source': source, 'processed': processed,
+                    'skipped': skipped, 'message': msg or 'Nada a processar.'})
 
 
 @blueprint.route('/api/control-panel/import-contacts', methods=['POST'])

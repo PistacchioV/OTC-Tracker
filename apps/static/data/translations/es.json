@@ -1156,7 +1156,7 @@
   "otm-showing": "Mostrando",
   "otm-rows": "filas",
   "cp-r-ds-title": "Guardar Archivos del Daily Settlement",
-  "cp-r-ds-desc": "Lee y guarda todos los archivos necesarios para el Daily Settlement (cashflows de OTM y demás fuentes) en las carpetas de liquidación. Lógica de guardado en construcción.",
+  "cp-r-ds-desc": "Procesa los archivos de texto del Daily Settlement (Operações JPM/MGT, Eventos Swap, TSS-FX) en JSONs. Adjunte los archivos, o déjelo vacío para buscar en la carpeta Settlements. OTM se maneja en su propia página.",
   "cp-ds-meta": "Dropzone o carpeta Settlements",
   "cp-ds-run": "Guardar archivos",
   "otm-show": "Mostrar",
