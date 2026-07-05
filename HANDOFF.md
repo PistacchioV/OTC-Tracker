@@ -3318,6 +3318,14 @@ apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
 - **Coexiste com o smart filter:** `reapplyChips` reaplica os inputs da linha de filtro junto com os
   chips; o botão **Clear** limpa ambos.
 
+### Ajuste 63.5 (commit `78422fd`) — header/body desalinhados: remover scrollX
+- Com `scrollX: true` o DataTables **clona o thead** numa tabela separada (`.dt-scroll-head`) e o body fica
+  em `#swapchar-table` → as larguras divergem (header desalinha do body) e o thead interativo/inputs podem
+  ir para o clone. Para esta tabela a solução robusta é **`scrollX: false` + `autoWidth: false`**: header e
+  body ficam na **mesma tabela** (nunca desalinham) e o `.table-responsive` (overflow-x) provê o scroll
+  horizontal; as larguras vêm do bloco `nth-child`. (Nas páginas New Deals, que usam scrollX, o alinhamento
+  depende de `table.columns.adjust().draw(false)` após o load — ver `_fixTableHeader`.)
+
 ### Ajuste 63.4 (commit `5778abc`) — filtro estilo New Deals + fix Tipo 01/02 + Search/Clear + larguras
 - **Fix Tipo de Contrato:** o arquivo real traz `01`/`02` (zero à esquerda). O código comparava com
   `'1'`/`'2'` → coluna mostrava "01" e o widget Contract Type ficava 0/0. Corrigido normalizando com
