@@ -2364,13 +2364,18 @@ def _fcst_opt_class_product(asset_class):
 
 
 def _fcst_lob(identifier):
-    """SWAP line of business from the "Código Identificador" string (Alteryx LOB
-    classification): CEM / EDG, else CEMHYB."""
+    """SWAP line of business from the "Código Identificador" string.
+    Order matters: HYB is tested BEFORE CEM/EDG, because a hybrid's identifier
+    contains 'CEMHYB' — and 'CEM' is a substring of 'CEMHYB'. Testing 'CEM' first
+    would swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
+    Mirrors _accrual_lob (same field), which already uses this ordering."""
     s = (identifier or '').upper()
-    if 'CEM' in s:
-        return 'CEM'
+    if 'CEMHYB' in s or 'HYB' in s:
+        return 'CEMHYB'
     if 'EDG' in s:
         return 'EDG'
+    if 'CEM' in s:
+        return 'CEM'
     return 'CEMHYB'
 
 
@@ -10366,3 +10371,4 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
+

@@ -3101,6 +3101,10 @@ Proteções em vigor (verificadas com `git check-ignore` / `git status`):
   `singleDatePicker` (`DD/MM/YYYY`); `_liveDrp` guarda a instância; sync do D-1 via `setStartDate`.
   ⚠️ Primeira tentativa usou flatpickr "global" — **abandonado** por violar a regra (não confiar no
   bundle; ver `other-products-summary`). Fallback a texto dd/mm/yyyy se o plugin não carregar.
+- **Fix classificação LOB de Swap (CEMHYB vinha 0):** `_fcst_lob` testava `'CEM'` **antes** do HYB,
+  e o identificador do híbrido contém `'CEMHYB'` (que contém `'CEM'`) → todo híbrido caía em CEM.
+  Corrigido testando `'CEMHYB'/'HYB'` **primeiro** (espelha `_accrual_lob`, mesmo campo "Código
+  Identificador"). Afeta Live Position **e** Settlement Forecast (função compartilhada).
 
 ### Fixes de texto (duplo espaço)
 - Settlement Forecast: "`product  as of`" → "`product as of`" (removido `ms-1` de `#forecast-asof`).
