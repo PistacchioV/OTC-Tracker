@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <style>
 /* ── Apple/Emil tokens ─────────────────────────────────────── */
 #ops-page {
@@ -13,7 +14,7 @@
 }
 [data-bs-theme=dark] #ops-page { --ops-hairline: rgba(255,255,255,.09); }
 
-/* Reference-date bar (flatpickr dd/mm/yyyy + calendar icon) */
+/* Reference-date bar (daterangepicker dd/mm/yyyy + calendar icon) */
 #ops-page .ops-datewrap { position: relative; max-width: 180px; }
 #ops-page .ops-datewrap input {
     width: 100%;
@@ -135,8 +136,8 @@
             <div class="ops-datefield d-flex align-items-center gap-2">
                 <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
                 <div class="ops-datewrap" id="opsDateWrap">
-                    <input type="text" id="ops-ref-date" data-input readonly placeholder="dd/mm/yyyy">
-                    <a class="ops-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                    <input type="text" id="ops-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="ops-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
                 </div>
             </div>
         </div>
@@ -303,8 +304,10 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <script>
-$(function () {
+document.addEventListener('DOMContentLoaded', function () {
     // Minimal i18n (falls back to the data-lang English text already in the DOM).
     var _T = {}; fetch('/static/data/translations/' + (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0,2) + '.json')
         .then(function (r) { return r.json(); }).then(function (d) { _T = d || {}; }).catch(function () {});
@@ -428,43 +431,47 @@ $(function () {
             }).catch(function () {});
     }
 
-    // ── Reference date: flatpickr dd/mm/yyyy, future dates allowed, default = today
-    var _todayIso = '{{ today }}';
-    var _tp = _todayIso.split('-');
-    var _todayDate = _tp.length === 3 ? new Date(+_tp[0], +_tp[1] - 1, +_tp[2]) : null;
-    var _todayBr  = _tp.length === 3 ? _tp[2] + '/' + _tp[1] + '/' + _tp[0] : '';
-    function _isoOf(d) {
-        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-               '-' + String(d.getDate()).padStart(2, '0');
-    }
-    // Load the batch first so the cards populate even if the date widget fails.
-    loadDate(_todayIso);
+    // Expose the batch loader so the reference-date picker (own <script> below)
+    // can trigger a reload.
+    window.opsLoadDate = loadDate;
+    loadDate('{{ today }}');   // initial load for today
+});
+</script>
 
-    var _wrap = document.getElementById('opsDateWrap');
-    var _inp  = document.getElementById('ops-ref-date');
-    try {
-        if (typeof flatpickr !== 'undefined' && _wrap) {
-            flatpickr(_wrap, {
-                wrap: true,
-                dateFormat: 'd/m/Y',   // visible value dd/mm/yyyy
-                defaultDate: _todayDate,
-                allowInput: false,
-                disableMobile: true,
-                onChange: function (sel) { if (sel && sel[0]) loadDate(_isoOf(sel[0])); }
-            });
-        }
-    } catch (e) { console.error('[OPS] flatpickr init failed:', e); }
-
-    // Fallback for any case where flatpickr didn't attach: keep it usable as a
-    // plain dd/mm/yyyy text field (and always show today by default).
-    if (_inp && !_inp.value) _inp.value = _todayBr;
-    if (_inp && !_inp._flatpickr) {
-        _inp.removeAttribute('readonly');
-        $(_inp).on('change', function () {
+<!-- Reference-date picker in its OWN script so an error in the table/widget setup
+     above can never block it. STANDARD PATTERN — same as MtM / Accrual / Control
+     Panel: jQuery daterangepicker (singleDatePicker) with its own assets loaded on
+     the page. NEVER use the native <input type="date"> (inherits the OS locale →
+     mm/dd/yyyy on the JP Windows env). Shows today in dd/mm/yyyy; future allowed. -->
+<script>
+function opsInitDatePicker() {
+    var inp = document.getElementById('ops-ref-date');
+    var iso = '{{ today }}'.split('-');
+    if (inp && iso.length === 3) inp.value = iso[2] + '/' + iso[1] + '/' + iso[0];
+    function reload(ymd) { if (window.opsLoadDate) window.opsLoadDate(ymd); }
+    if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
+        var $d = jQuery('#ops-ref-date');
+        $d.daterangepicker({
+            singleDatePicker: true, autoApply: true, showDropdowns: true,
+            locale: { format: 'DD/MM/YYYY' },
+            startDate: moment()   // no maxDate → future reference dates allowed
+        }, function (start) { reload(start.format('YYYY-MM-DD')); });
+        jQuery('#opsDateWrap .ops-cal-btn').on('click', function () { $d.trigger('click'); });
+    } else if (inp) {
+        // Fallback: plain dd/mm/yyyy text field if the plugin failed to load.
+        inp.removeAttribute('readonly');
+        inp.addEventListener('change', function () {
             var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-            if (m) loadDate(m[3] + '-' + m[2] + '-' + m[1]);
+            if (m) reload(m[3] + '-' + m[2] + '-' + m[1]);
         });
     }
-});
+}
+// Run now if the DOM is already parsed, else on DOMContentLoaded — guarantees it
+// fires regardless of when this script executes relative to document readiness.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', opsInitDatePicker);
+} else {
+    opsInitDatePicker();
+}
 </script>
 {% endblock extra_javascript %}
