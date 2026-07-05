@@ -1179,5 +1179,19 @@
   "about-feat-otm-desc": "Imports the cashflows file (dropzone or folder), applies the macro cleaning (DELETE/codes) and writes the daily JSON. Widgets by Asset Class (Rates, Equities, Commodities) counting distinct Trade IDs, with per-column filter and export.",
   "about-feat-opssum-title": "Other Products Summary",
   "about-feat-opssum-desc": "Settlement batch by date: count cards (NDF Commodities, Swap Flow/Maturity/Premium, Options, COE) from the B3 position files, with editable tables and export.",
-  "nav-advice": "Advice"
+  "nav-advice": "Advice",
+  "ob-w-tipoop": "Tipo Operação",
+  "ob-w-tipotit": "Tipo Título",
+  "ob-w-modliq": "Modalidade Liquidação",
+  "ob-w-total": "Total",
+  "ob-import": "Import operations",
+  "ob-refdate": "Reference date",
+  "ob-actions": "Actions",
+  "ob-status": "Status",
+  "ob-show": "Show",
+  "ob-entries": "entries",
+  "ob-all": "All",
+  "ob-clear-filters": "Clear filters",
+  "ob-showing": "Showing",
+  "ob-rows": "rows"
 }

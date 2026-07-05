@@ -3112,6 +3112,8 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
+    if spec.get('otm'):                                # OTM timestamp = import time (no in-file time)
+        _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
 
 
 def _ds_write(jp, recs, name, spec, total, processed, delete_path):
@@ -3770,6 +3772,34 @@ def _otm_json_path(ref):
                         'otm-settlement_{}.json'.format(ref.strftime('%Y%m%d')))
 
 
+# ── "Last updated" timestamp sidecar (shared by OTM + Operations B3) ──────────
+# A <json>.meta.json holds {"updated": "HH:MM:SS"} — the file's own extraction time
+# when the source provides one (Operations B3 = row 2 col A), else the import time.
+def _ds_meta_path(json_path):
+    return (json_path[:-5] if json_path.endswith('.json') else json_path) + '.meta.json'
+
+
+def _ds_write_updated(json_path, hhmmss):
+    try:
+        with open(_ds_meta_path(json_path), 'w', encoding='utf-8') as fh:
+            json.dump({'updated': hhmmss or ''}, fh)
+    except OSError:
+        pass
+
+
+def _ds_read_updated(json_path):
+    mp = _ds_meta_path(json_path)
+    if os.path.isfile(mp):
+        try:
+            with open(mp, encoding='utf-8') as fh:
+                return (json.load(fh) or {}).get('updated', '')
+        except Exception:
+            pass
+    if os.path.isfile(json_path):                    # fallback: file mtime
+        return datetime.fromtimestamp(os.path.getmtime(json_path)).strftime('%H:%M:%S')
+    return ''
+
+
 def _otm_read_rows(path):
     """Rows (list of lists) from the cashflows file. The VBA treats it as a TAB
     text file even though it's named .xlsx; handle both a real .xlsx (zip) and a
@@ -3850,6 +3880,7 @@ def _otm_import(ref=None):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(out, fh, ensure_ascii=False, indent=2)
+    _ds_write_updated(jp, ref.strftime('%H:%M:%S'))      # cashflows has no in-file time → import time
     try:
         os.remove(src_path)
     except OSError:
@@ -3909,7 +3940,8 @@ def _otm_collect(ref):
         widgets['equities'] = len(buckets['equities'])
         widgets['rates'] = len(buckets['rates'])
         widgets['total'] = len(all_ids)                 # distinct Trade Ids overall
-    return {'widgets': widgets, 'columns': _OTM_COLUMNS, 'rows': rows_out}
+    return {'widgets': widgets, 'columns': _OTM_COLUMNS, 'rows': rows_out,
+            'updated': _ds_read_updated(jp)}
 
 
 @blueprint.route('/otm-settlements')
@@ -3943,6 +3975,164 @@ def api_otm_import():
     if res.get('success'):
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'OTM Imported', 'OTM Settlements',
+                             '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
+    return jsonify(res)
+
+
+# ── Operations B3 ────────────────────────────────────────────────────────────
+#  Curated view of the B3 "Operações" file (tab-delimited). Header on ROW 5, data
+#  from row 6 — the JSON keeps only the reporting columns below (by header name).
+#  The extraction time is in ROW 2, COLUMN A (HH:MM:SS) → shown as the page's
+#  "last updated" timestamp. Import mirrors the Save Daily Settlement Files read
+#  logic. JSON: static/data/cache/daily settlement/YYYY/MM/DD/operations-b3_YYYYMMDD.json
+OPB3_SOURCE_ROOT = os.getenv('OPB3_SOURCE_ROOT', SETTLEMENTS_ROOT)
+_OPB3_COLUMNS = [
+    'Conta', 'Tipo Operação', 'C/V', 'Título', 'Tipo Título', 'Tipo de Regime', 'Data Vencimento',
+    'Valor', 'Modalidade Liquidação', 'Status', 'Data Liquidação', 'Contraparte (Nome Simpl.)',
+    'Conta Contraparte', 'Num Ctrl Operação',
+]
+_OPB3_DATE_COLS = {'Data Vencimento', 'Data Liquidação'}
+_OPB3_HEADER_ROW = 5                                   # 1-based
+
+
+def _opb3_json_path(ref):
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'operations-b3_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _opb3_extract(rows):
+    """Rows → (records, updated_time). Header on row 5; keep the reporting columns
+    by header name. Time = row 2 col A (HH:MM:SS)."""
+    updated = _ds_cell(rows[1], 0) if len(rows) >= 2 else ''
+    hidx = _OPB3_HEADER_ROW - 1
+    if len(rows) <= hidx:
+        return [], updated
+    header = [_ds_cell(rows[hidx], i) for i in range(len(rows[hidx]))]
+    hnorm = [_fcst_norm(h) for h in header]
+
+    def col_idx(name):
+        n = _fcst_norm(name)
+        if n in hnorm:
+            return hnorm.index(n)
+        for i, h in enumerate(hnorm):
+            if h and (n in h or h in n):
+                return i
+        return None
+    idx_map = {c: col_idx(c) for c in _OPB3_COLUMNS}
+
+    out = []
+    for r in rows[hidx + 1:]:
+        if not any(_ds_cell(r, i) for i in range(len(r))):
+            continue
+        out.append({c: _ds_cell(r, idx_map.get(c)) for c in _OPB3_COLUMNS})
+    return out, updated
+
+
+def _opb3_import(ref=None):
+    ref = ref or datetime.now()
+    if not os.path.isdir(OPB3_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(OPB3_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(OPB3_SOURCE_ROOT)
+                     if f.lower().startswith('operacoes') and os.path.isfile(os.path.join(OPB3_SOURCE_ROOT, f)))
+    if not matches:
+        return {'success': False, 'error': 'No Operacoes* file found in {}'.format(OPB3_SOURCE_ROOT)}
+    src_path = os.path.join(OPB3_SOURCE_ROOT, matches[0])
+    try:
+        with open(src_path, 'rb') as fh:
+            rows = _ds_read_rows(fh.read())
+    except Exception:
+        log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    recs, updated = _opb3_extract(rows)
+    jp = _opb3_json_path(ref)
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(recs, fh, ensure_ascii=False, indent=2)
+    _ds_write_updated(jp, updated or ref.strftime('%H:%M:%S'))
+    try:
+        os.remove(src_path)
+    except OSError:
+        log.warning("[opb3] could not delete source %s", src_path)
+    return {'success': True, 'file': matches[0], 'rows': len(recs),
+            'updated': updated, 'date': ref.strftime('%Y-%m-%d')}
+
+
+def _opb3_breakdown(data, col):
+    """Dynamic count per distinct value of `col` (skip blanks). Returns
+    {total, items:[{label,count}]} sorted by count desc then label."""
+    counts = {}
+    for rec in data:
+        v = str(rec.get(col, '') or '').strip()
+        if not v:
+            continue
+        counts[v] = counts.get(v, 0) + 1
+    items = [{'label': k, 'count': counts[k]}
+             for k in sorted(counts, key=lambda k: (-counts[k], k))]
+    return {'total': sum(counts.values()), 'items': items}
+
+
+def _opb3_collect(ref):
+    jp = _opb3_json_path(ref)
+    rows_out, data = [], []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        for rec in data:
+            row = []
+            for c in _OPB3_COLUMNS:
+                v = rec.get(c, '')
+                if c in _OPB3_DATE_COLS:
+                    d = _fcst_parse_date(v)
+                    v = d.strftime('%d/%m/%Y') if d else (v or '')
+                elif c == 'Valor':
+                    v = _swapchar_fmt_value(v)
+                row.append('' if v is None else v)
+            rows_out.append(row)
+    # Dynamic breakdown widgets: Tipo Operação, Tipo Título, Modalidade Liquidação.
+    widgets = {
+        'total': len(data),
+        'tipo_operacao': _opb3_breakdown(data, 'Tipo Operação'),
+        'tipo_titulo':   _opb3_breakdown(data, 'Tipo Título'),
+        'modalidade':    _opb3_breakdown(data, 'Modalidade Liquidação'),
+    }
+    return {'widgets': widgets, 'columns': _OPB3_COLUMNS, 'rows': rows_out,
+            'updated': _ds_read_updated(jp)}
+
+
+@blueprint.route('/operations-b3')
+def operations_b3():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/operations-b3.html', segment='operations-b3',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/operations-b3/data')
+def api_opb3_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _opb3_collect(ref)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    'date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/operations-b3/import', methods=['POST'])
+def api_opb3_import():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    res = _opb3_import(datetime.now())
+    if res.get('success'):
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Operations Imported', 'Operations B3',
                              '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
     return jsonify(res)
 

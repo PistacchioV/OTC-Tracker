@@ -1,0 +1,254 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Operations B3{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#operations-b3-page {
+    --ob-hairline: rgba(0,0,0,.08);
+    --ob-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #operations-b3-page { --ob-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets ────────────────────────────────────────────────────────────── */
+#operations-b3-page .ob-widgets .col { display: flex; margin-bottom: .5rem; }
+#operations-b3-page .ob-widget {
+    flex: 1; border: 1px solid var(--ob-hairline); border-radius: 14px; padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ob-ease-out), box-shadow 220ms var(--ob-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #operations-b3-page .ob-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#operations-b3-page .ob-widget__head { display: flex; align-items: center; gap: .6rem; }
+#operations-b3-page .ob-widget__icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+}
+#operations-b3-page .ob-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
+#operations-b3-page .ob-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#operations-b3-page .ob-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#operations-b3-page .ob-widget--total .ob-widget__title,
+#operations-b3-page .ob-widget--total .ob-widget__value { color: #fff; }
+#operations-b3-page .ob-widget--total .ob-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+/* Dynamic sub-items (Tipo Operação / Tipo Título / Modalidade Liquidação) */
+#operations-b3-page .ob-widget__subs { border-top: 1px dashed var(--ob-hairline); padding-top: .5rem; margin-top: .6rem; max-height: 168px; overflow-y: auto; }
+#operations-b3-page .ob-widget__subs:empty { display: none; }
+#operations-b3-page .ob-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .73rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+#operations-b3-page .ob-widget__sub i { font-size: .7rem; }
+#operations-b3-page .ob-widget__sub .ob-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+
+/* ── Reference date picker + Import ─────────────────────────────────────── */
+#operations-b3-page .ob-datewrap { position: relative; width: 170px; }
+#operations-b3-page .ob-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--ob-ease-out), box-shadow 0.16s var(--ob-ease-out);
+}
+#operations-b3-page .ob-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
+#operations-b3-page .ob-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#operations-b3-page .btn:active { transform: scale(0.97); }
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#opb3-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#opb3-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
+
+/* Colunas específicas com larguras adequadas — um bloco por coluna
+   nth-child(1)=checkbox (2)=actions (3)=Status (4..17)=dados (_OPB3_COLUMNS). Ajuste conforme necessário. */
+  #opb3-table th:nth-child(1),  #opb3-table td:nth-child(1)  { min-width: 38px;  width: 38px; }   /* checkbox */
+  #opb3-table th:nth-child(2),  #opb3-table td:nth-child(2)  { min-width: 64px;  width: 64px; }   /* actions */
+  #opb3-table th:nth-child(3),  #opb3-table td:nth-child(3)  { min-width: 90px;  width: 90px; }   /* Status (fixo) */
+  #opb3-table th:nth-child(4),  #opb3-table td:nth-child(4)  { min-width: 110px; width: 110px; }  /* Conta */
+  #opb3-table th:nth-child(5),  #opb3-table td:nth-child(5)  { min-width: 120px; width: 120px; }  /* Tipo Operação */
+  #opb3-table th:nth-child(6),  #opb3-table td:nth-child(6)  { min-width: 60px;  width: 60px; }   /* C/V */
+  #opb3-table th:nth-child(7),  #opb3-table td:nth-child(7)  { min-width: 120px; width: 120px; }  /* Título */
+  #opb3-table th:nth-child(8),  #opb3-table td:nth-child(8)  { min-width: 110px; width: 110px; }  /* Tipo Título */
+  #opb3-table th:nth-child(9),  #opb3-table td:nth-child(9)  { min-width: 120px; width: 120px; }  /* Tipo de Regime */
+  #opb3-table th:nth-child(10), #opb3-table td:nth-child(10) { min-width: 120px; width: 120px; }  /* Data Vencimento */
+  #opb3-table th:nth-child(11), #opb3-table td:nth-child(11) { min-width: 130px; width: 130px; }  /* Valor */
+  #opb3-table th:nth-child(12), #opb3-table td:nth-child(12) { min-width: 140px; width: 140px; }  /* Modalidade Liquidação */
+  #opb3-table th:nth-child(13), #opb3-table td:nth-child(13) { min-width: 100px; width: 100px; }  /* Status */
+  #opb3-table th:nth-child(14), #opb3-table td:nth-child(14) { min-width: 120px; width: 120px; }  /* Data Liquidação */
+  #opb3-table th:nth-child(15), #opb3-table td:nth-child(15) { min-width: 190px; width: 190px; }  /* Contraparte (Nome Simpl.) */
+  #opb3-table th:nth-child(16), #opb3-table td:nth-child(16) { min-width: 130px; width: 130px; }  /* Conta Contraparte */
+  #opb3-table th:nth-child(17), #opb3-table td:nth-child(17) { min-width: 140px; width: 140px; }  /* Num Ctrl Operação */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#opb3-table thead tr.ob-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ob-hairline); }
+#opb3-table thead tr.ob-th-filter input.ob-col-filter {
+    width: 100%; min-width: 80px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px; border: 1px solid var(--ob-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--ob-ease-out), box-shadow 150ms var(--ob-ease-out),
+                background-color 150ms var(--ob-ease-out);
+}
+#opb3-table thead tr.ob-th-filter input.ob-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #opb3-table thead tr.ob-th-filter input.ob-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#opb3-table thead tr.ob-th-filter input.ob-col-filter:focus {
+    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#opb3-table thead tr.ob-th-filter input.ob-col-filter.ob-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #operations-b3-page * { transition: none !important; animation: none !important; }
+    #operations-b3-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background (project standard, NOT scoped). */
+.dt-button-collection {
+    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
+    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
+    border: none !important; width: 100% !important; text-align: left !important;
+    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover {
+    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="operations-b3-page" class="container-fluid" data-content="" data-today="{{ today }}">
+    {% set title='Operations B3' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Widgets: dynamic breakdown per column (sub-items built from the file) -->
+    <div class="row ob-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="ob-widget">
+                <div class="ob-widget__head">
+                    <span class="ob-widget__icon bg-primary-subtle text-primary"><i class="ti ti-arrows-exchange-2"></i></span>
+                    <h3 class="ob-widget__title" data-lang="ob-w-tipoop">Tipo Operação</h3>
+                    <span class="ob-widget__value" id="ob-w-tipoop-total">0</span>
+                </div>
+                <div class="ob-widget__subs" id="ob-subs-tipoop"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ob-widget">
+                <div class="ob-widget__head">
+                    <span class="ob-widget__icon bg-info-subtle text-info"><i class="ti ti-file-text"></i></span>
+                    <h3 class="ob-widget__title" data-lang="ob-w-tipotit">Tipo Título</h3>
+                    <span class="ob-widget__value" id="ob-w-tipotit-total">0</span>
+                </div>
+                <div class="ob-widget__subs" id="ob-subs-tipotit"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ob-widget">
+                <div class="ob-widget__head">
+                    <span class="ob-widget__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></span>
+                    <h3 class="ob-widget__title" data-lang="ob-w-modliq">Modalidade Liquidação</h3>
+                    <span class="ob-widget__value" id="ob-w-modliq-total">0</span>
+                </div>
+                <div class="ob-widget__subs" id="ob-subs-modliq"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ob-widget ob-widget--total">
+                <div class="ob-widget__head">
+                    <span class="ob-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="ob-widget__title" data-lang="ob-w-total">Total</h3>
+                    <span class="ob-widget__value" id="ob-w-total">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import + reference date + last-updated timestamp -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-secondary bg-gradient" type="button" id="obImportBtn">
+                    <i class="ti ti-file-import fs-xl me-1"></i><span data-lang="ob-import">Import operations</span>
+                </button>
+                <span class="text-muted fs-xs" id="ob-import-info"></span>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="text-muted fs-xs text-nowrap" id="ob-updated"></span>
+                    <label for="ob-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="ob-refdate">Reference date</label>
+                    <div class="ob-datewrap" id="obDateWrap">
+                        <input type="text" id="ob-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                        <span class="ob-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ob-show">Show</label>
+                        <select class="form-select form-select-sm ob-page-len" style="width:84px;">
+                            <option value="200" selected>200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                            <option value="2000">2000</option>
+                            <option value="5000">5000</option>
+                            <option value="-1" data-lang="ob-all">All</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ob-entries">entries</label>
+                    </div>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="obExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="obClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="ob-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="ob-showing">Showing</span> <span id="ob-count">0</span> <span data-lang="ob-rows">rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="opb3-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="opb3-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/operations-b3.js?v=20260705"></script>
+{% endblock extra_javascript %}
