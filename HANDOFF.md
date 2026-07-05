@@ -3231,3 +3231,85 @@ contrato tipo=2 aparece nos dois arquivos com o mesmo `Código Identificador`.
 apps/pages/routes.py   ← _ops_settlement_counts: swap_mat_ids + join Código Identificador
                           (swap_flx exclui eventos de contratos que vencem na data do picker)
 ```
+
+---
+
+## 63. Sessão 2026-07-05 — NOVA página Live Position › Swap › Characteristics
+
+Rota **`/live-position-swap-characteristics`** (sidenav *Daily Settlement › Live Position › Swap ›
+Characteristics* — o item já existia, só troquei o `href` de âncora para a rota). "Foto" read-only do
+book de swap em custódia numa **reference date** (default **D-1 ANBIMA**), lida do **DPOSICAO-SWAP**
+(mesma fonte do card Live Position do dashboard). Commit `114d2f8`.
+
+### Layout (fiel ao projeto)
+1. **5 widgets** (modelo `ops-widget`): Tipo de Contrato (Cashflow/Bullet), LOB (CEM/EDG/COMM/HYB),
+   Indexadores (VCP/Calculado), Funcionalidades (Forward Start/Notional/Prêmio/Arrependimento/Sem
+   Funcionalidade) e **Total** (card azul destacado).
+2. **Filtro inteligente** (modelo New Deals: chips por coluna + dropdown com badge de tipo) + Clear +
+   **card de reference date** (daterangepicker `dd/mm/yyyy`, D-1 ANBIMA; padrão obrigatório do §topo:
+   jQuery próprio antes dos plugins + init resiliente com retry).
+3. Toolbar **Columns** (`ti-columns`) + **Export** (Copy/CSV/Excel) e **tabela** (checkbox + Status +
+   146 colunas de características).
+
+### Backend (`_swapchar_*` em routes.py)
+- **`_SWAPCHAR_LABELS`** = lista canônica das 146 colunas (idêntica a
+  `_B3_SWAP_HEADERS_RAW['swap_position']`). Vive no servidor (single source of truth); o endpoint
+  devolve `columns` + `rows` (**arrays posicionais** — resolve os nomes de coluna duplicados, que um
+  dict colapsaria).
+- **`_swapchar_collect(ref)`**: lê DPOSICAO-SWAP; hoje bindam **Tipo (idx0), Contraparte (idx7),
+  Data vencimento (idx12), Funcionalidade (idx20), Código Identificador (idx145)** — únicas presentes
+  no arquivo; resto placeholder. Widgets: Tipo (1=Cashflow/2=Bullet) e LOB (`_swapchar_lob`:
+  HYB→COMM→EDG→CEM) computam; **Indexadores e Funcionalidades ficam em 0** (⏳ usuário enviará a lógica
+  de contagem).
+- **Formatações:** `_swapchar_fmt_cell` por tipo de coluna (`_swapchar_coltype`): **date** →
+  `dd/mm/yyyy` (via `_fcst_parse_date`); **func** → `_swapchar_func_text`; **value** →
+  `_swapchar_fmt_value` (`#,##0.00`, guard numérico).
+- **Funcionalidade (`_SWAPCHAR_FUNC_MAP`):** código → texto limpo (sem `_`/parênteses):
+  0 SEM FUNCIONALIDADE · 1 KNOCK IN · 2 KNOCK OUT · 3 KNOCK INOUT · 4 SWAPTION · 5 COMPOUND ·
+  **6 OPCAO ARREPENDIMENTO** · 7 KNOCK IN COM OPCAO · 8 KNOCK OUT COM OPCAO · 9 SWAP COM PRÊMIO.
+  Fallback textual (`OPCAO_ARREPEND` → `OPCAO ARREPENDIMENTO`).
+- Endpoint **`/api/live-position-swap-characteristics/data?date=`** (default D-1 ANBIMA).
+
+### Padrões / notas
+- **Colunas com nomes repetidos → arrays posicionais**, não dict. Header e dados nunca desalinham.
+- **Front-end monta o `<thead>` e as `columns` do DataTables a partir do `columns` do servidor** —
+  a lista de 146 nunca é duplicada no template/JS.
+- Validado em servidor de teste (porta 8051, não tocar na 8050 do usuário): 45 linhas, 146 colunas,
+  Tipo 24/21, LOB CEM 18/EDG 12/HYB 15, datas dd/mm/yyyy.
+
+### Arquivos (sessão 63)
+```
+apps/pages/routes.py                                       ← _SWAPCHAR_*, _swapchar_*, rota + endpoint
+apps/templates/pages/live-position-swap-characteristics.html ← CRIADO
+apps/static/js/pages/live-position-swap-characteristics.js   ← CRIADO
+apps/templates/partials/sidenav.html                       ← href do item Characteristics
+apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
+```
+
+---
+
+## 64. Sessão 2026-07-05 — Save CETIP Files: INDEXADORESSWAP_VCP → vcp_indexers.json
+
+Adicionado o arquivo **`CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT`** à rotina **Salvar Arquivos CETIP**
+(`_CETIP_RULES`): é salvo na pasta de destino e, após salvar, atualiza a **referência de indexadores
+VCP** (`apps/static/data/vcp_indexers.json`). Commit `83ecb20`.
+
+### Regra + parse
+- Nova entrada em `_CETIP_RULES` (`match: 'indexadoresswap_vcp.txt'`, `date_start: 8`,
+  `dest_name: CETIP21_{}_INDEXADORESSWAP_VCP.TXT`, flag **`'vcp_update': True`**). Por estar em
+  `_CETIP_RULES`, entra no fluxo de save e no "missing" quando ausente.
+- **`_cetip_update_vcp_json(src_path)`** (chamado no loop quando `rule.get('vcp_update')`): ';'-delimitado,
+  Latin-1, pula header se presente. Mapa de colunas: **A=Qualification ID, B=Description,
+  C=Additional Description, D=Level 1 Classification, E=Status** — `Habilitado→Active`,
+  `Bloqueado→Inactive` (accent/case-insensitive via `_fcst_norm`; outros valores passam raw).
+  Grava `VCP_INDEXERS_JSON` (snapshot único, sobrescrito a cada run).
+
+### Pendente
+- ⏳ Plugar `vcp_indexers.json` no widget **Indexadores (VCP/Calculado)** da página Swap Characteristics
+  quando o usuário enviar a lógica de classificação.
+
+### Arquivos (sessão 64)
+```
+apps/pages/routes.py   ← _CETIP_RULES +INDEXADORESSWAP_VCP; VCP_INDEXERS_JSON;
+                          _cetip_update_vcp_json; hook no loop de save
+```
