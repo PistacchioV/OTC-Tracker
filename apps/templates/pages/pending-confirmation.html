@@ -125,18 +125,18 @@
     }
 
     /* Colunas específicas com larguras adequadas */
-    #pending-confirmation-table th:nth-child(3), /* LOB */
-    #pending-confirmation-table td:nth-child(3) {
+    #pending-confirmation-table th:nth-child(4), /* LOB */
+    #pending-confirmation-table td:nth-child(4) {
         min-width: 100px;
     }
 
-    #pending-confirmation-table th:nth-child(4), /* SPN */
-    #pending-confirmation-table td:nth-child(4) {
+    #pending-confirmation-table th:nth-child(5), /* SPN */
+    #pending-confirmation-table td:nth-child(5) {
         min-width: 120px;
     }
 
-    #pending-confirmation-table th:nth-child(5), /* Client */
-    #pending-confirmation-table td:nth-child(5) {
+    #pending-confirmation-table th:nth-child(6), /* Client */
+    #pending-confirmation-table td:nth-child(6) {
         min-width: 300px;
         width: 300px;
     }
@@ -923,11 +923,11 @@
                                                    value="option" />
                                         </th>
                                         <th>Actions</th>
+                                        <th data-table-sort="">Status</th>
                                         <th data-table-sort="">LOB</th>
                                         <th data-table-sort="">SPN</th>
                                         <th data-table-sort="">Client</th>
                                         <th data-table-sort="">Aging</th>
-                                        <th data-table-sort="">Status</th>
                                         <th data-table-sort="">Product Type</th>
                                         <th data-table-sort="">Trade Date</th>
                                         <th data-table-sort="">Maturity Date</th>
@@ -950,11 +950,11 @@
                                         <tr class="column-search-input-bar" id="column-search-inputs">
                                             <th></th> <!-- Coluna checkbox - sem input -->
                                             <th></th> <!-- Coluna actions - sem input -->
+                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="LOB"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="SPN"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Client"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Aging"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Product Type"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
@@ -1827,7 +1827,7 @@ $(document).ready(function() {
         table.rows().nodes().each(function(row) {
             var cells = row.querySelectorAll('td');
             if (cells.length < 12) return;
-            var statusText = cells[6].textContent.trim();
+            var statusText = cells[2].textContent.trim();
             var range = statusToRange[statusText];
             if (!range) return;
             counts[range]['total']++;
@@ -1863,11 +1863,11 @@ $(document).ready(function() {
     // SMART FILTER — client-side DataTable column search
     // ========================================================================
     var SF_COLS = [
-        { label: 'LOB',              type: 'text',   dtCol: 2  },
-        { label: 'SPN',              type: 'text',   dtCol: 3  },
-        { label: 'Client',           type: 'text',   dtCol: 4  },
-        { label: 'Aging',            type: 'number', dtCol: 5  },
-        { label: 'Status',           type: 'text',   dtCol: 6  },
+        { label: 'Status',           type: 'text',   dtCol: 2  },
+        { label: 'LOB',              type: 'text',   dtCol: 3  },
+        { label: 'SPN',              type: 'text',   dtCol: 4  },
+        { label: 'Client',           type: 'text',   dtCol: 5  },
+        { label: 'Aging',            type: 'number', dtCol: 6  },
         { label: 'Product Type',     type: 'text',   dtCol: 7  },
         { label: 'Trade Date',       type: 'date',   dtCol: 8  },
         { label: 'Maturity Date',    type: 'date',   dtCol: 9  },
@@ -2160,7 +2160,7 @@ $(document).ready(function() {
         var rowArray = [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
             actionsHtml,
-            lob, spn, client, aging, status, prodType,
+            status, lob, spn, client, aging, prodType,
             tDate, matDate, tradeNo, pStatus, owner, ea,
             sendDate, retDate, bReason, comments,
             econGrp, sigType, fepweb, bAbono, pend, abono
@@ -2209,11 +2209,11 @@ $(document).ready(function() {
         arEditTr = tr;
 
         // Populate modal fields from row data
-        document.getElementById('ar_lob').value             = d[2]  || '';
-        document.getElementById('ar_spn').value             = d[3]  || '';
-        document.getElementById('ar_client').value          = d[4]  || '';
-        document.getElementById('ar_aging').value           = d[5]  || '';
-        document.getElementById('ar_status').value          = d[6]  || '';
+        document.getElementById('ar_status').value          = d[2]  || '';
+        document.getElementById('ar_lob').value             = d[3]  || '';
+        document.getElementById('ar_spn').value             = d[4]  || '';
+        document.getElementById('ar_client').value          = d[5]  || '';
+        document.getElementById('ar_aging').value           = d[6]  || '';
         document.getElementById('ar_product_type').value    = d[7]  || '';
         document.getElementById('ar_trade_date').value      = d[8]  || '';
         document.getElementById('ar_maturity_date').value   = d[9]  || '';

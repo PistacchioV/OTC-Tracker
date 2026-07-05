@@ -250,6 +250,18 @@
 }
 [data-bs-theme=dark] .ab-stat__sub { color: rgba(255,255,255,.52); }
 
+/* ── Capability group headings (sidenav-style sections) ────── */
+.ab-cap-group {
+    font-size: .74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--ab-blue);
+    margin: 1.75rem 0 .9rem;
+}
+.ab-cap-groups > .ab-cap-group:first-child { margin-top: 0; }
+[data-bs-theme=dark] .ab-cap-group { color: var(--ab-blue-dk); }
+
 /* ── Feature cards (parchment tile) ────────────────────────── */
 .ab-feat {
     background: var(--ab-white);
@@ -519,33 +531,17 @@
                     <span class="ab-sl" data-lang="about-features-label">Funcionalidades</span>
                     <h2 class="ab-st" data-lang="about-features-title">O que o OTC Tracker oferece</h2>
                 </div>
-                <div class="row g-3 ab-sg">
+                <div class="ab-cap-groups">
+                <div class="ab-cap-group ab-rv" data-lang="about-cap-newdeals">New Deals</div>
+                <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
-                            <div class="ab-feat__title">NDF Commodities</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-ndf-desc">
-                                Importação de arquivos de operações NDF via Dropzone, validação automática,
-                                visualização em tabela e envio ao Conecta B3.
+                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-link"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapeamento B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
+                                Vinculação do ID interno de cada operação ao ID atribuído pela B3 após o registro,
+                                garantindo rastreabilidade ponta-a-ponta.
                             </p>
-                            <a href="/new_deals-ndf-commodities" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
-                            <div class="ab-feat__title">Option Commodities</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-opt-desc">
-                                Gestão de operações de Opções de Commodities, com suporte a importação em lote,
-                                parse de mensagens e integração completa com a B3.
-                            </p>
-                            <a href="/new_deals-opt-commodities" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
                         </div>
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
@@ -557,6 +553,20 @@
                                 moedas, cálculo de prêmio por unidade e envio ao Conecta B3 (calendário ANBIMA).
                             </p>
                             <a href="/new_deals-opt-fxo" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__title">NDF Commodities</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ndf-desc">
+                                Importação de arquivos de operações NDF via Dropzone, validação automática,
+                                visualização em tabela e envio ao Conecta B3.
+                            </p>
+                            <a href="/new_deals-ndf-commodities" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -592,27 +602,13 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-database"></i></div>
-                            <div class="ab-feat__title">Index B3</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-index-desc">
-                                Cadastro e manutenção de índices de referência da B3 utilizados no mapeamento
-                                e validação das operações de Commodities.
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
+                            <div class="ab-feat__title">Option Commodities</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-opt-desc">
+                                Gestão de operações de Opções de Commodities, com suporte a importação em lote,
+                                parse de mensagens e integração completa com a B3.
                             </p>
-                            <a href="/index-b3" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-git-compare"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-recon-title">Reconciliation Comitente</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-recon-desc">
-                                Reconciliação de comitentes entre B3, CGD e Party Central, com scores de matching por
-                                campo, status automático e exportação (Excel, CSV, PDF).
-                            </p>
-                            <a href="/reconciliation-comitente" class="ab-feat__link">
+                            <a href="/new_deals-opt-commodities" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -628,67 +624,18 @@
                             </p>
                         </div>
                     </div>
+                </div>
+                <div class="ab-cap-group ab-rv" data-lang="regulatory-title">Regulatory</div>
+                <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-link"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapeamento B3</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
-                                Vinculação do ID interno de cada operação ao ID atribuído pela B3 após o registro,
-                                garantindo rastreabilidade ponta-a-ponta.
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-refresh"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-accrual-title">Accrual Swap</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-accrual-desc">
+                                Atualização de PU/Fator dos swaps VCP: geração dos registros de atualização, reconciliação
+                                contra a B3, ciclo maker-checker e processo de fim de mês (EOM) com e-mail à OTC Ops.
                             </p>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-users"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-users-title">Gestão de Usuários</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-users-desc">
-                                Controle de acesso baseado em SID JPMorgan, autenticação 2FA por e-mail,
-                                aprovação de novos usuários e gestão de perfis e roles.
-                            </p>
-                            <a href="/users-roles" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-adjustments-horizontal"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-cp-title">Control Panel</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-cp-desc">
-                                Central de rotinas operacionais. A primeira rotina salva os arquivos CETIP dos
-                                Daily Settlements (tradução do fluxo Alteryx para Python), com data D-1 ANBIMA padrão.
-                            </p>
-                            <a href="/control-panel" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-bar"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-fcst-title">Settlement Forecast</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-fcst-desc">
-                                Projeção das liquidações dos próximos 14 dias úteis (ANBIMA), por produto e entidade,
-                                com gráficos no dashboard e envio automático de relatório por e-mail à OTC Ops.
-                            </p>
-                            <a href="/control-panel" class="ab-feat__link">
-                                <span data-lang="about-access">Acessar</span>
-                                <i class="ti ti-arrow-right"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="col-xl-4 col-md-6 ab-rv">
-                        <div class="ab-feat">
-                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-address-book"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-refdata-title">Reference Data</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-refdata-desc">
-                                Editor de contrapartes (estilo glass) com contas bancárias, contatos e CGD, fluxo
-                                maker-checker, contas Default PAY/RECEIVE e geração de e-mails (.eml) Premium/Economic Affirmation.
-                            </p>
-                            <a href="/reference-data" class="ab-feat__link">
+                            <a href="/accrual-swap" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -722,15 +669,35 @@
                             </a>
                         </div>
                     </div>
+                </div>
+                <div class="ab-cap-group ab-rv" data-lang="reconciliations-title">Reconciliations</div>
+                <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-refresh"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-accrual-title">Accrual Swap</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-accrual-desc">
-                                Atualização de PU/Fator dos swaps VCP: geração dos registros de atualização, reconciliação
-                                contra a B3, ciclo maker-checker e processo de fim de mês (EOM) com e-mail à OTC Ops.
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-git-compare"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-recon-title">Reconciliation Comitente</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-recon-desc">
+                                Reconciliação de comitentes entre B3, CGD e Party Central, com scores de matching por
+                                campo, status automático e exportação (Excel, CSV, PDF).
                             </p>
-                            <a href="/accrual-swap" class="ab-feat__link">
+                            <a href="/reconciliation-comitente" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="ab-cap-group ab-rv" data-lang="apps-title">Apps</div>
+                <div class="row g-3 ab-sg mb-2">
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-adjustments-horizontal"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-cp-title">Control Panel</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-cp-desc">
+                                Central de rotinas operacionais. A primeira rotina salva os arquivos CETIP dos
+                                Daily Settlements (tradução do fluxo Alteryx para Python), com data D-1 ANBIMA padrão.
+                            </p>
+                            <a href="/control-panel" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -750,6 +717,66 @@
                             </a>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-bar"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-fcst-title">Settlement Forecast</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-fcst-desc">
+                                Projeção das liquidações dos próximos 14 dias úteis (ANBIMA), por produto e entidade,
+                                com gráficos no dashboard e envio automático de relatório por e-mail à OTC Ops.
+                            </p>
+                            <a href="/control-panel" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-users"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-users-title">Gestão de Usuários</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-users-desc">
+                                Controle de acesso baseado em SID JPMorgan, autenticação 2FA por e-mail,
+                                aprovação de novos usuários e gestão de perfis e roles.
+                            </p>
+                            <a href="/users-roles" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="ab-cap-group ab-rv" data-lang="data-base-title">Data Base</div>
+                <div class="row g-3 ab-sg mb-2">
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-database"></i></div>
+                            <div class="ab-feat__title">Index B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-index-desc">
+                                Cadastro e manutenção de índices de referência da B3 utilizados no mapeamento
+                                e validação das operações de Commodities.
+                            </p>
+                            <a href="/index-b3" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-address-book"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-refdata-title">Reference Data</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-refdata-desc">
+                                Editor de contrapartes (estilo glass) com contas bancárias, contatos e CGD, fluxo
+                                maker-checker, contas Default PAY/RECEIVE e geração de e-mails (.eml) Premium/Economic Affirmation.
+                            </p>
+                            <a href="/reference-data" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
                 </div>
             </div>
         </div>

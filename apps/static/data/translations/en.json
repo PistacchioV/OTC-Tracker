@@ -1082,5 +1082,6 @@
   "acc-endproc-done": "Process finalized",
   "acc-endproc-checks": "check row(s) reported",
   "acc-endproc-nodiv": "No divergences identified.",
-  "acc-endproc-mail": "Final status e-mail sent to OTC Ops."
+  "acc-endproc-mail": "Final status e-mail sent to OTC Ops.",
+  "about-cap-newdeals": "New Deals"
 }

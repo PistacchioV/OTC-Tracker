@@ -5,6 +5,16 @@
 
 ---
 
+## ⚠️ PRÁTICA OBRIGATÓRIA — Design de páginas/UI
+
+**Toda alteração de página ou UI DEVE seguir, sempre:**
+1. A skill **`/emil-design-eng`** — feedback de press (`:active scale(0.97)`), curvas de easing custom (`cubic-bezier(0.23,1,0.32,1)`), durações < 300ms, `prefers-reduced-motion`, animar só `transform`/`opacity`, stagger de entrada, popovers origin-aware, etc.
+2. O guia **[`DESIGN-apple.md`](DESIGN-apple.md)** — tokens (Action Blue `#0066cc`, tipografia SF Pro com letter-spacing negativo, tiles claro/escuro, hairlines, raio 18px, sem sombras em chrome), hierarquia e paleta.
+
+Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabelas, modais, botões). Não é opcional.
+
+---
+
 ## 1. Objetivo
 
 Adicionar uma página "About" interna à aplicação OTC Tracker (dentro do layout com sidebar/topbar), modelada visualmente na `landing.html` existente mas sem seções de preço/compra. A página deve descrever o que a ferramenta faz, mostrar o fluxo operacional, e suportar o sistema de tradução (EN/BR/ES) via `data-lang`. Paralelamente, foram corrigidos bugs de navegação (logo redirecionando para sign-in) e UI (ícone de notificação fora de centro).
