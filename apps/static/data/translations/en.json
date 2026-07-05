@@ -1193,5 +1193,8 @@
   "ob-all": "All",
   "ob-clear-filters": "Clear filters",
   "ob-showing": "Showing",
-  "ob-rows": "rows"
+  "ob-rows": "rows",
+  "ops-add-title": "Add row",
+  "ops-add-save": "Add",
+  "ops-cancel": "Cancel"
 }

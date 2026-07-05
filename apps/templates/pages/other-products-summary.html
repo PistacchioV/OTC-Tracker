@@ -321,6 +321,25 @@
         </div>
     </div>
 
+    <!-- Add row modal (New Deals pattern: a window with all columns to fill) -->
+    <div class="modal fade" id="opsAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-lang="ops-add-title">Add row</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="opsAddFields"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-lang="ops-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary bg-gradient" id="opsAddSave" data-lang="ops-add-save">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock page_content %}
 
@@ -341,6 +360,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function t(k, fb) { return _T[k] || fb; }
     function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
 
+    var _opsAdd = null;            // active table for the Add-row modal
     var STATUSES = ['New', 'OK', 'Check', 'Sent'];
     function statusCell(v) {
         var opts = STATUSES.map(function (s) { return '<option' + (s === v ? ' selected' : '') + '>' + s + '</option>'; }).join('');
@@ -384,9 +404,17 @@ document.addEventListener('DOMContentLoaded', function () {
             if (dt.column(idx).search() !== this.value) dt.column(idx).search(this.value).draw();
         });
 
-        // Add row.
+        // Add row → open a modal with a field per column (New Deals pattern).
         $toolbar.find('.ops-add').on('click', function () {
-            dt.row.add(blankRow(dataCols)).draw(false);
+            var headers = [];
+            dt.columns().every(function () { headers.push($(dt.column(this.index()).header()).text().trim()); });
+            var dataHeaders = headers.slice(3);          // skip checkbox / actions / status
+            $('#opsAddFields').html(dataHeaders.map(function (h, i) {
+                return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(h) + '</label>' +
+                    '<input type="text" class="form-control form-control-sm ops-add-fld" data-i="' + i + '"></div>';
+            }).join(''));
+            _opsAdd = { dt: dt };
+            if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('opsAddModal')).show();
         });
 
         // Show/Hide columns — dependency-free Bootstrap dropdown (one item per
@@ -431,6 +459,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var dtSummary = initTable('ops-summary-table', 7);  // 7 data cols (Counterparty…Observação)
     var dtTrade   = initTable('ops-trade-table', 9, 50); // 9 data cols (Counterparty…Difference); default 50/page
+
+    // Add-row modal Save → append the filled row to the active table (cells stay
+    // inline-editable, seeded with the modal values).
+    $('#opsAddSave').on('click', function () {
+        if (!_opsAdd) return;
+        var row = ['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell('New')];
+        $('#opsAddFields .ops-add-fld').each(function () { row.push(inp(this.value)); });
+        _opsAdd.dt.row.add(row).draw(false);
+        if (window.bootstrap) bootstrap.Modal.getInstance(document.getElementById('opsAddModal')).hide();
+    });
 
     // ── Widgets: settlement counts for the reference date (from the backend, same
     //    JSON sources as the Settlement Forecast) ──────────────────────────────

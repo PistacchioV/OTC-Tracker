@@ -1192,5 +1192,8 @@
   "ob-all": "Todos",
   "ob-clear-filters": "Limpiar filtros",
   "ob-showing": "Mostrando",
-  "ob-rows": "filas"
+  "ob-rows": "filas",
+  "ops-add-title": "Agregar fila",
+  "ops-add-save": "Agregar",
+  "ops-cancel": "Cancelar"
 }
