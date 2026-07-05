@@ -3410,15 +3410,22 @@ Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **s
   com remover). Os arquivos ficam anexos e só processam ao clicar **Save files**. Se o dropzone estiver
   vazio, o backend varre **`SETTLEMENTS_ROOT`** (`I:\…\OTC Tracker\Settlements`); se não houver nada em
   ambos → **Swal de aviso** ("Nenhum arquivo encontrado…").
-- **Processamento (`229dea3`) — tradução dos imports de texto do VBA `ImportarTexto`** (OpenText Tab),
-  EXCETO OTM (feito na página própria). `_DS_IMPORTS` (um spec por arquivo): lê tab-delimited (fallback
-  xlsx-zip), pega a linha de header (1-based), filtra as linhas e grava um JSON por tipo em
+- **Processamento (`229dea3`, `382231f`) — tradução dos imports de texto do VBA `ImportarTexto`** (OpenText
+  Tab). `_DS_IMPORTS` (um spec por arquivo): lê tab-delimited (fallback xlsx-zip), pega a linha de header
+  (1-based), filtra as linhas e grava um JSON por tipo em
   `static/data/cache/daily settlement/YYYY/MM/DD/<tipo>_YYYYMMDD.json` (today). Arquivos da **pasta** são
   deletados após processar (mirror do VBA `Kill`); uploads do dropzone não. As **fórmulas Excel de
   enriquecimento** (Tipo/Contraparte via XLOOKUP) **NÃO** entram (não são "import de texto").
+- **`382231f` — OTM incluído no card:** o card agora processa **TODOS** os arquivos, inclusive o OTM
+  (`cashflows*`). O núcleo do OTM virou **`_otm_extract(rows)`** (limpeza CleanSettlementOTM + 18 colunas +
+  Cpty UPPER), reusado pela página OTM **e** pelo card. Spec com flag `'otm': True` → `_ds_handle` usa
+  `_otm_extract` e grava no **mesmo** `otm-settlement_YYYYMMDD.json` que a página OTM lê. **Cada página
+  mantém o processamento individual** (a OTM tem seu `/api/otm-settlements/import`). `_ds_write` extraído
+  para o append/delete comum.
 
   | Arquivo (match) | Header | Filtros | JSON |
   |---|---|---|---|
+  | `cashflows*` | — | CleanSettlementOTM (col14≠DELETE, col22∈{0228,0123}) → 18 colunas (`_otm_extract`) | otm-settlement |
   | `Operacoes*` | linha 5 | col2 dígitos=`73760009` **e** col10 ∈ {OPC,OFVC,OFCC,SWAP,TER,COE} | operacoes-jpm |
   | `MGT.*` | linha 5 | col2 dígitos=`04880006` **e** col10 ∈ {…} | operacoes-mgt |
   | `Swap-InstrumentoFinanceiro-ConsultaContrato*` | linha 7 | col2=`CONFIRMADO` **e** col23 dígitos=`73760009` | eventos-swap-jpm |
@@ -3427,10 +3434,13 @@ Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **s
   | `BrazilOnshoreSettlementsWarningFile*` | linha 1 | (nenhum) | br-onshore-settlements |
   | `FbiRptLatamDeskPo*` | linha 1 | col62 **ou** col63 não-vazia (`nonempty_any`) | latam-desk-position |
 
-  Validado (dropzone): Operações JPM 2/4, Eventos Swap 1/3, BR Onshore 2/2, Latam 3/4. ⏳ Enriquecimento/
-  destinos finais ficam para depois. (BR On/Latam usam `Workbooks.Open` no VBA — o `_ds_read_rows` trata
-  tab-delimited/xlsx-zip; filtro OR via kind `nonempty_any`.)
+  Validado (dropzone): OTM 1/3, Operações JPM 2/4, Eventos Swap 1/3, BR Onshore 2/2, Latam 3/4. ⏳
+  Enriquecimento/destinos finais ficam para depois. (BR On/Latam usam `Workbooks.Open` no VBA — o
+  `_ds_read_rows` trata tab-delimited/xlsx-zip; filtro OR via kind `nonempty_any`.)
 - i18n: `cp-r-ds-*`, `cp-ds-*`, `cp-nofiles-title`; página OTM: `otm-*`.
+- **About (`6bfd26a`):** novo grupo **Daily Settlement** em `about.html` (cards Swap Characteristics, OTM
+  Settlements, Other Products Summary) + descrição do Control Panel atualizada; i18n `about-cap-dailysettle`,
+  `about-feat-swapchar/-otm/-opssum-*`.
 - Show entries (padrão New Deals) adicionado em OTM/Swap Characteristics/Other Products Summary
   (commits `e0ce5fb`, `4f83ff1`, `53bf70b`): OTM default 200 (200,500,1000..10000); OPS Trade Level
   default 50 (50..300).
