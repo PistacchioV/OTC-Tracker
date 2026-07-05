@@ -3152,6 +3152,237 @@ def api_ops_data():
                     'summary': [], 'trade': []})
 
 
+# ── Live Position › Swap › Characteristics ───────────────────────────────────
+#  Read-only "photo" of the swap book still in custody on a reference date, from
+#  the DPOSICAO-SWAP position JSON (same source as the dashboard Live Position).
+#  Widgets break the count down by Tipo de Contrato, LOB, Indexador and
+#  Funcionalidade; the table lists every contract with its full characteristic
+#  column set. The canonical column list lives HERE (single source of truth) and
+#  is shipped to the front-end so the header/data arrays can never drift apart.
+#
+#  Column names repeat by design (the B3 swap layout has parallel leg/index
+#  blocks), so rows are emitted as POSITIONAL arrays aligned to _SWAPCHAR_LABELS
+#  — a name-keyed dict would collapse the duplicates.
+_SWAPCHAR_LABELS = [
+    'Tipo de Contrato', 'Data', 'Contrato', 'Participante', 'CPF/CNPJ Cliente Parte',
+    'Cesta Garantias Parte', 'Comissão Parte', 'Contraparte', 'CPF/CNPJ Cliente Contraparte',
+    'Cesta Garantias Contraparte', 'Comissão Contraparte', 'Data início', 'Data vencimento',
+    'Tipo de Adesão', 'Valor base', 'Valor Base Remanescente', 'Valor Antecipado', 'Saldo',
+    'Sinal Saldo', 'Data do Saldo', 'Funcionalidade', 'Agenda de Prêmio', 'Reset', 'Observação',
+    'Valor base inicial', 'Data operação termo', 'Índice Termo', 'Percentual Termo', 'PU Inicial',
+    'Tipo/Classe', 'Nome Tipo/Classe', 'Denominação', 'Juros a cada', 'Expresso em',
+    'Data inicio pagamento juros', 'Amortização a cada', 'Expresso em',
+    'Data inicio pagamento amortização', 'Tipo de amortização', 'Percentual', 'Código índice',
+    'TR Escolhida', 'Sinal Taxa', 'Taxa', 'Lim. Inferior (Floor)', 'Lim. Superior (Cap)',
+    'Valor Curva Atualizado', 'Data Correção', 'Fator Original de Juros', 'Percentual',
+    'Código índice', 'TR Escolhida', 'Sinal Taxa', 'Taxa', 'Lim. Inferior (Floor)',
+    'Lim. Superior (Cap)', 'Valor Curva Atualizado', 'Data Correção', 'Fator Original de Juros',
+    'Parte/Contraparte', 'Cupom Limpo', 'Percentual', 'Curva', 'Sinal Taxa', 'Taxa de Juros',
+    'Limitador', 'Pu inicial', 'Pu atual', 'Tipo/Classe', 'Nome Tipo/Classe', 'Denominação',
+    'Pu inicial', 'Pu atual', 'Tipo/Classe', 'Nome Tipo/Classe', 'Denominação', 'Cupom Limpo',
+    'Data de Cotação', 'Cupom Limpo', 'Data de Cotação', 'Tipo Libor - moeda',
+    'Tipo Libor - período', 'Data de Cotação', 'Variação Cambial', 'Tipo Classe',
+    'Nome Tipo/Classe', 'Outros - Cotação', 'Alíquota - IR', 'Limite inferior (FLOOR) - Perc.',
+    'Limite superior (CAP) - Perc.', 'Tipo Libor - moeda', 'Tipo Libor - período',
+    'Data de Cotação', 'Variação Cambial', 'Tipo Classe', 'Nome Tipo/Classe', 'Outros - Cotação',
+    'Alíquota - IR', 'Limite inferior (FLOOR) - Perc.', 'Limite superior (CAP) - Perc.',
+    'Taxa Juros', 'Troca de Fluxo', 'Variação Cambial', 'Tipo Classe', 'Nome Tipo/Classe',
+    'Outros - Cotação', 'Alíquota - IR', 'Limite inferior (FLOOR) - Perc.',
+    'Limite superior (CAP) - Perc.', 'Taxa Juros', 'Troca de Fluxo', 'Variação Cambial',
+    'Tipo Classe', 'Nome Tipo/Classe', 'Outros - Cotação', 'Alíquota - IR',
+    'Limite inferior (FLOOR) - Perc.', 'Limite superior (CAP) - Perc.', 'Parte/Contraparte',
+    'Fator/Valor/Taxa', 'Verificação', 'Data Disparo', 'Parte/Contraparte', 'Fator/Valor/Taxa',
+    'Verificação', 'Data Disparo', 'Titular', 'Prêmio 1', 'Rebate', 'Liquidação do Rebate',
+    'Dias Úteis após o Trigger Out', 'Prêmio 2', 'Data Exercício Prêmio 2', 'Estratégia',
+    'Amortiza sem Troca de Diferencial', 'Data da Cotação - Variação Cambial',
+    'Data da Cotação - Variação Cambial', 'Cotação Inicial', 'Código Commodity',
+    'Media Asiática Verificação', 'Data Cotação para Ajuste', 'Cotação Inicial', 'Código Commodity',
+    'Media Asiática Verificação', 'Data Cotação para Ajuste', 'Código Identificador',
+]
+
+# Funcionalidade code → clean label (no underscores/parentheses; OPCAO_ARREPEND →
+# "OPCAO ARREPENDIMENTO"). Keyed by the integer code as a string ('0'..'9').
+_SWAPCHAR_FUNC_MAP = {
+    '0': 'SEM FUNCIONALIDADE', '1': 'KNOCK IN', '2': 'KNOCK OUT', '3': 'KNOCK INOUT',
+    '4': 'SWAPTION', '5': 'COMPOUND', '6': 'OPCAO ARREPENDIMENTO', '7': 'KNOCK IN COM OPCAO',
+    '8': 'KNOCK OUT COM OPCAO', '9': 'SWAP COM PRÊMIO',
+}
+# Header tokens (normalised) that mark a numeric/value column → format #,##0.00.
+_SWAPCHAR_VALUE_TOKENS = ('valor', 'saldo', 'percentual', 'pu inicial', 'pu atual', 'taxa',
+                          'lim. inferior', 'lim. superior', 'limite inferior', 'limite superior',
+                          'curva atualizado', 'fator original', 'cupom limpo', 'premio', 'rebate',
+                          'cotacao inicial', 'aliquota', 'fator/valor', 'outros - cotacao',
+                          'variacao cambial', 'prêmio')
+
+
+def _swapchar_lob(identifier):
+    """Swap LOB bucket for the Characteristics widget: CEM / EDG / COMM / HYB.
+    Hybrid is tested first (its id also contains 'CEM')."""
+    s = _fcst_norm(identifier)
+    if 'hyb' in s or 'hib' in s:
+        return 'HYB'
+    if 'comm' in s or 'commod' in s:
+        return 'COMM'
+    if 'edg' in s:
+        return 'EDG'
+    if 'cem' in s:
+        return 'CEM'
+    return 'CEM'
+
+
+def _swapchar_coltype(label):
+    """Formatting class for a column: date | func | value | text."""
+    n = _fcst_norm(label)
+    if n.startswith('data'):
+        return 'date'
+    if n == 'funcionalidade':
+        return 'func'
+    if n.startswith('sinal') or n.startswith('tipo') or n.startswith('nome'):
+        return 'text'
+    if any(tok in n for tok in _SWAPCHAR_VALUE_TOKENS):
+        return 'value'
+    return 'text'
+
+
+_SWAPCHAR_TYPES = [_swapchar_coltype(l) for l in _SWAPCHAR_LABELS]
+
+
+def _swapchar_func_text(v):
+    """Map a Funcionalidade cell to its clean label (strip underscores/parentheses)."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits:
+        code = str(int(digits))
+        if code in _SWAPCHAR_FUNC_MAP:
+            return _SWAPCHAR_FUNC_MAP[code]
+    t = ' '.join(s.replace('(', ' ').replace(')', ' ').replace('_', ' ').split())
+    if 'ARREPEND' in t.upper():
+        return 'OPCAO ARREPENDIMENTO'
+    return t
+
+
+def _swapchar_fmt_value(v):
+    """Numeric cell → #,##0.00 (1,234.56); non-numeric passes through unchanged."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    try:
+        n = float(s.replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return s
+    return '{:,.2f}'.format(n)
+
+
+def _swapchar_fmt_cell(value, ctype):
+    if value in (None, ''):
+        return ''
+    if ctype == 'date':
+        d = _fcst_parse_date(value)
+        return d.strftime('%d/%m/%Y') if d else str(value)
+    if ctype == 'func':
+        return _swapchar_func_text(value)
+    if ctype == 'value':
+        return _swapchar_fmt_value(value)
+    return str(value)
+
+
+def _swapchar_collect(ref):
+    """Build widgets + positional rows from the DPOSICAO-SWAP file for `ref` (date).
+    Missing file → empty payload (logged). Only the columns actually present in the
+    position file are bound today; the rest are structural placeholders."""
+    widgets = {
+        'total': 0,
+        'tipo':  {'total': 0, 'cashflow': 0, 'bullet': 0},
+        'lob':   {'total': 0, 'CEM': 0, 'EDG': 0, 'COMM': 0, 'HYB': 0},
+        # VCP / Calculado breakdown — counting logic pending (user will supply).
+        'index': {'total': 0, 'vcp': 0, 'calculado': 0},
+        # Forward Start / Notional / Prêmio / Arrependimento / Sem Funcionalidade —
+        # counting logic pending (user will supply).
+        'func':  {'total': 0, 'forward_start': 0, 'notional': 0, 'premio': 0,
+                  'arrependimento': 0, 'sem': 0},
+    }
+    dref = ref.strftime('%y%m%d')
+    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                        '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+    rows_out = []
+    if not os.path.isfile(path):
+        log.warning("[swapchar] no DPOSICAO-SWAP for %s; page shows 0", dref)
+        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+    try:
+        with open(path, encoding='utf-8') as fh:
+            src = json.load(fh)
+    except Exception:
+        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+    if not src:
+        return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': []}
+
+    keys = list(src[0].keys())
+    tipo_key = _fcst_resolve_key(keys, ['tipo de contrato', 'tipo do contrato', 'tipo contrato'])
+    cpty_key = _fcst_resolve_key(keys, ['contraparte'])
+    venc_key = _fcst_resolve_key(keys, ['data vencimento', 'data de vencimento'])
+    id_key   = _fcst_resolve_key(keys, ['código identificador', 'codigo identificador', 'identificador'])
+    func_key = _fcst_resolve_key(keys, ['funcionalidade'])
+    # Positional bind: header index → position-file key + raw value transformer.
+    n = len(_SWAPCHAR_LABELS)
+    for row in src:
+        arr = [''] * n
+        tv = str(row.get(tipo_key, '') or '').strip() if tipo_key else ''
+        if tv.endswith('.0'):
+            tv = tv[:-2]
+        arr[0] = 'Cashflow' if tv == '1' else ('Bullet' if tv == '2' else tv)
+        if cpty_key:
+            arr[7] = str(row.get(cpty_key, '') or '')
+        if venc_key:
+            arr[12] = row.get(venc_key, '')
+        if func_key:
+            arr[20] = row.get(func_key, '')
+        cid = str(row.get(id_key, '') or '') if id_key else ''
+        arr[145] = cid
+        # Format every cell by its column type (dates dd/mm/yyyy, values #,##0.00,
+        # funcionalidade → clean label).
+        arr = [_swapchar_fmt_cell(arr[i], _SWAPCHAR_TYPES[i]) for i in range(n)]
+        rows_out.append(arr)
+        # Widgets
+        widgets['total'] += 1
+        widgets['tipo']['total'] += 1
+        if tv == '1':
+            widgets['tipo']['cashflow'] += 1
+        elif tv == '2':
+            widgets['tipo']['bullet'] += 1
+        lob = _swapchar_lob(cid)
+        widgets['lob']['total'] += 1
+        widgets['lob'][lob] += 1
+    return {'widgets': widgets, 'columns': _SWAPCHAR_LABELS, 'rows': rows_out}
+
+
+@blueprint.route('/live-position-swap-characteristics')
+def live_position_swap_characteristics():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-swap-characteristics.html',
+                           segment='live-position-swap-characteristics', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-swap-characteristics/data')
+def api_swapchar_data():
+    """Swap Characteristics payload for a reference date (default D-1 ANBIMA)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d').date() if ds else \
+            _prev_anbima_bizday(datetime.now()).date()
+    except ValueError:
+        ref = _prev_anbima_bizday(datetime.now()).date()
+    payload = _swapchar_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 # ============================================================================
 #  MtM — Swap Mark-to-Market by line of business (+ COE)
 #  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /

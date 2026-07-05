@@ -3192,3 +3192,42 @@ apps/pages/routes.py                          ← _ops_src_latest_path; _ops_set
                                                  (match exato); _FORECAST_SOURCES ndf date token
 apps/templates/pages/other-products-summary.html ← card Swap: sub-linhas Flow/Maturity/Premium
 ```
+
+---
+
+## 62. Sessão 2026-07-05 (continuação) — Other Products Summary: card Swap tipo=2 → Flow vs Maturity
+
+Escopo: no card **Swap** do `/other-products-summary`, um swap **tipo de contrato = 2** é um
+contrato de **fluxo** (aparece no `DFLUXO` com vários eventos). Antes, o card contava tipo=2
+sempre como **Maturity** (via `DPOSICAO-SWAP`, `Data Vencimento == picker`) e **todos** os eventos
+do `DFLUXO` na data do picker como **Flow** — sem distinguir se o evento de fluxo era o
+**pagamento final (vencimento)** ou um **fluxo intermediário**. Commit `ee4509c`.
+
+### Regra implementada (`_ops_settlement_counts`, `routes.py`)
+Join por **`Código Identificador`** entre `DPOSICAO-SWAP` e `DFLUXO`:
+1. **Maturity** — `DPOSICAO-SWAP`, tipo=2, `Data Vencimento == data do picker` → conta em Maturity
+   (inalterado). Agora também guarda o `Código Identificador` desses contratos em `swap_mat_ids`.
+2. **Flow** — `DFLUXO`, `Data de Ocorrência do Evento == data do picker`, **exceto** se o
+   `Código Identificador` estiver em `swap_mat_ids` (vencimento do contrato = data do picker):
+   nesse caso o evento é o pagamento final → **pulado** (não duplica com Maturity).
+3. tipo=2 com `Data Vencimento ≠ picker` e evento de fluxo na data do picker → cai em **Flow**.
+
+`swap_pos` roda **antes** de `swap_flx` na ordem de `_FORECAST_SOURCES`, então `swap_mat_ids` já
+está populado quando o Flow é lido. Novo helper de resolução: `id_key = _fcst_resolve_key(keys,
+_ID_TOKENS)` com `_ID_TOKENS = ['código identificador','codigo identificador','identificador']`.
+
+### Padrão identificado
+- **Split Flow/Maturity de swap tipo=2:** o `DFLUXO` sozinho não sabe qual evento é o vencimento;
+  é preciso cruzar com `DPOSICAO-SWAP` por `Código Identificador`. O evento cuja data coincide com
+  o `Data Vencimento` do próprio contrato é Maturity, não Flow.
+
+### ⚠️ Nota de dados (mock)
+No mock atual os IDs de `DPOSICAO-SWAP` e `DFLUXO` **não têm overlap** (gerados aleatoriamente),
+então as contagens do mock não mudam. A lógica está correta para os arquivos **reais**, onde um
+contrato tipo=2 aparece nos dois arquivos com o mesmo `Código Identificador`.
+
+### Arquivos (sessão 62)
+```
+apps/pages/routes.py   ← _ops_settlement_counts: swap_mat_ids + join Código Identificador
+                          (swap_flx exclui eventos de contratos que vencem na data do picker)
+```
