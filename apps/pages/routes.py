@@ -3057,6 +3057,8 @@ def _ops_settlement_counts(settle_ref, pos_ref):
         if not mapping:
             continue
         fam, primary_sub = mapping
+        if fam == 'ndf':
+            continue   # handled below via _forecast_collect (verbatim index logic)
         path, dref = _ops_src_latest_path(src)   # files are named yymmdd (e.g. 260703)
         if path is None:
             log.warning("[ops] %s (%s): no snapshot found in last 10 biz days; card counts 0",
@@ -3079,11 +3081,6 @@ def _ops_settlement_counts(settle_ref, pos_ref):
         cw = src.get('count_where')
         cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
         cw_allowed = cw[1] if cw else None
-        # The NDF card counts ONLY commodities: DPOSICAO-TER rows whose
-        # "Classe do Ativo Subjacente" (col M) resolves to COMMODITIES.
-        ndf_class_key = None
-        if fam == 'ndf' and src.get('product') and src['product'][0] == 'ndfclass':
-            ndf_class_key = _fcst_resolve_key(keys, src['product'][1])
         for row in rows:
             if cw_key is not None:
                 cwv = str(row.get(cw_key, '') or '').strip()
@@ -3091,8 +3088,6 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                     cwv = cwv[:-2]
                 if cwv not in cw_allowed:
                     continue
-            if ndf_class_key is not None and _fcst_ndf_product(row.get(ndf_class_key, '')) != 'NDF Commodities':
-                continue
             if date_key and _fcst_parse_date(row.get(date_key, '')) == settle_ref:
                 fams[fam]['total'] += 1
                 fams[fam][primary_sub] += 1
@@ -3100,6 +3095,16 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                 fams[fam]['total'] += 1
                 if fam == 'option':
                     fams[fam]['premium'] += 1
+
+    # NDF Commodities — reuse the Settlement Forecast (index.html) computation
+    # VERBATIM so the two cards can never disagree: same TER file, same "Data de
+    # Vencimento" field, same "Classe do Ativo Subjacente" → NDF Commodities
+    # mapping. Single-day spine at the settlement date; read that day's slot.
+    if pos_ref is not None:
+        f_by_product, _, _ = _forecast_collect(pos_ref.strftime('%y%m%d'), [settle_ref])
+        ndf_c = (f_by_product.get('NDF Commodities') or [0])[0]
+        fams['ndf']['total'] = ndf_c
+        fams['ndf']['maturity'] = ndf_c
     return fams
 
 
