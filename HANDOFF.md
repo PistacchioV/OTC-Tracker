@@ -3142,3 +3142,53 @@ apps/static/js/pages/dashboard.js             ← Swap no pie/flow; Live Positio
 apps/static/data/translations/{en,br,es}.json ← 7 chaves dash-top5-ranking / dash-live-*
 scratchpad/gen_mock.py (FORA do repo)         ← gerador idempotente da base MOCK (NUNCA commitar os *_mock.json / b3)
 ```
+
+---
+
+## 61. Sessão 2026-07-05 — Other Products Summary: card NDF Commodities (contagem correta) + robustez de snapshot + Swap alfabético
+
+Escopo: consertar a contagem de liquidação do card **NDF Commodities** na página
+**Other Products Summary** (`/other-products-summary`), que não puxava os deals liquidando
+na data do picker a partir do `DPOSICAO-TER`. Backend em `_ops_settlement_counts`
+(`routes.py`). Commits: `e68e6e1`, `dca138c`, `66b9e9c`, `7715385`.
+
+### Regra da contagem NDF Commodities (o que o card faz)
+Conta operações onde, no **último JSON de posição TER disponível**:
+`Data de Vencimento` (formato **yyyymmdd** no json, ex. `20260702`) == data do picker
+(o picker manda **yyyy-mm-dd**; o backend compara via `_fcst_parse_date` → objetos `date`,
+então formato não importa) **E** `Classe do Ativo Subjacente` == `COMMODITIES`.
+
+### (1) Snapshot por família (`e68e6e1`)
+- `_forecast_latest_ref()` escolhe **uma data global** (1ª pasta com QUALQUER arquivo).
+  Se o TER não estava salvo nessa data exata → `os.path.isfile` falhava e o loop dava
+  `continue` **em silêncio** → card NDF = 0 enquanto Swap/Option mostravam número.
+- Novo helper **`_ops_src_latest_path(src)`** — cada família resolve a SUA própria data
+  de snapshot mais recente (walk-back D-1 ANBIMA, 10 dias úteis). `log.warning [ops] …`
+  quando não acha arquivo (não zera mais em silêncio).
+
+### (2) Resolver de coluna por match EXATO (`dca138c`)
+- `_fcst_resolve_key`: **igualdade exata** de nome tem prioridade sobre "contains".
+  Assim `data de vencimento` casa a coluna literal "Data de Vencimento" mesmo que exista
+  "Data de Vencimento Antecipado" (que contém a string). Token NDF passou a
+  `['data de vencimento', 'vencimento']`.
+
+### (3) Card NDF delega ao `_forecast_collect` (`66b9e9c`) — paridade com o index
+- O card NDF agora **reutiliza `_forecast_collect`** (mesma função do Settlement Forecast do
+  `index.html`): spine de 1 dia na data do picker, lê `by_product['NDF Commodities'][0]`.
+  Garante que os dois cards **nunca divergem** (mesmo arquivo, mesmo campo de data, mesmo
+  mapeamento `Classe do Ativo Subjacente → NDF Commodities` via `_fcst_ndf_product`).
+- `ndf` é pulado no loop por-fonte (`if fam == 'ndf': continue`); Swap/Option/COE seguem
+  no loop com sub-eventos (flow/premium/maturity) que o forecast não quebra.
+- Frontend verificado e limpo: template (`ops-w-ndf-total`/`-maturity`), JS (`w.ndf`) e
+  i18n (`ops-w-ndf`="NDF Commodities" em en/br/es) todos consistentes.
+
+### (4) Card Swap em ordem alfabética (`7715385`)
+- Sub-linhas reordenadas: **Flow → Maturity → Premium** (só ordem visual das divs).
+
+### Arquivos (sessão 61)
+```
+apps/pages/routes.py                          ← _ops_src_latest_path; _ops_settlement_counts
+                                                 (NDF delega a _forecast_collect); _fcst_resolve_key
+                                                 (match exato); _FORECAST_SOURCES ndf date token
+apps/templates/pages/other-products-summary.html ← card Swap: sub-linhas Flow/Maturity/Premium
+```
