@@ -3402,13 +3402,33 @@ Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **s
 - `.gitignore`: `apps/static/data/cache/daily settlement/**/*.json` (dados de runtime, não commitar).
 - Endpoint de leitura: `/api/otm-settlements/data?date=` (default today).
 
-### Card Control Panel "Save Daily Settlement Files" (commit `c5e43f4`)
-- Novo `.cp-card` na coluna **Daily Settlements / File-Saving Routines** (ao lado do Save CETIP Files),
-  com date field flatpickr (padrão da página) + botão **Save files** → `data-endpoint`
-  `/api/control-panel/daily-settlement-save`.
-- **`api_cp_daily_settlement_save`** é um **STUB** (front-end pronto): retorna `success:true` com mensagem
-  "…ainda será implementada". ⏳ Lógica real (quais arquivos, fontes e destinos) a implementar.
-- i18n: `cp-r-ds-*`, `cp-ds-*`; página OTM: `otm-*`.
+### Card Control Panel "Save Daily Settlement Files" (commits `c5e43f4`, `facdf5b`, `229dea3`)
+- `.cp-card` na coluna **Daily Settlements / File-Saving Routines** (ao lado do Save CETIP Files).
+- **Dropzone** (`facdf5b`): no lugar do date picker, um dropzone dependency-free (drag/drop + click, chips
+  com remover). Os arquivos ficam anexos e só processam ao clicar **Save files**. Se o dropzone estiver
+  vazio, o backend varre **`SETTLEMENTS_ROOT`** (`I:\…\OTC Tracker\Settlements`); se não houver nada em
+  ambos → **Swal de aviso** ("Nenhum arquivo encontrado…").
+- **Processamento (`229dea3`) — tradução dos imports de texto do VBA `ImportarTexto`** (OpenText Tab),
+  EXCETO OTM (feito na página própria). `_DS_IMPORTS` (um spec por arquivo): lê tab-delimited (fallback
+  xlsx-zip), pega a linha de header (1-based), filtra as linhas e grava um JSON por tipo em
+  `static/data/cache/daily settlement/YYYY/MM/DD/<tipo>_YYYYMMDD.json` (today). Arquivos da **pasta** são
+  deletados após processar (mirror do VBA `Kill`); uploads do dropzone não. As **fórmulas Excel de
+  enriquecimento** (Tipo/Contraparte via XLOOKUP) **NÃO** entram (não são "import de texto").
+
+  | Arquivo (match) | Header | Filtros | JSON |
+  |---|---|---|---|
+  | `Operacoes*` | linha 5 | col2 dígitos=`73760009` **e** col10 ∈ {OPC,OFVC,OFCC,SWAP,TER,COE} | operacoes-jpm |
+  | `MGT.*` | linha 5 | col2 dígitos=`04880006` **e** col10 ∈ {…} | operacoes-mgt |
+  | `Swap-InstrumentoFinanceiro-ConsultaContrato*` | linha 7 | col2=`CONFIRMADO` **e** col23 dígitos=`73760009` | eventos-swap-jpm |
+  | `SwapMGT.*` | linha 7 | col2=`CONFIRMADO` **e** col23 dígitos=`04880006` | eventos-swap-mgt |
+  | `FXO Detail*` | linha 1 | (nenhum; pula se A1="No Data Available…") | tss-fx |
+
+  Validado (dropzone): Operações JPM 2/4, Eventos Swap 1/3. ⏳ Enriquecimento/destinos finais e os
+  imports via `Workbooks.Open` (BR On Set, LatamDeskPosition) ficam para depois.
+- i18n: `cp-r-ds-*`, `cp-ds-*`, `cp-nofiles-title`; página OTM: `otm-*`.
+- Show entries (padrão New Deals) adicionado em OTM/Swap Characteristics/Other Products Summary
+  (commits `e0ce5fb`, `4f83ff1`, `53bf70b`): OTM default 200 (200,500,1000..10000); OPS Trade Level
+  default 50 (50..300).
 
 ### Arquivos (sessão 65)
 ```
