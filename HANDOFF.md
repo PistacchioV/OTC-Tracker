@@ -15,6 +15,7 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
 
 **Padrões de UI a seguir:**
 - **Botão de visibilidade de colunas** (show/hide columns): rótulo **"Columns"** com ícone **`ti-columns`** (padrão em `index-b3-results.html`, `reference-data.html`). NÃO usar "Show/Hide".
+- **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
   - **Assets na própria página** (não assumir que estão no bundle): no `extra_css` → `plugins/daterangepicker/daterangepicker.css`; no `extra_javascript` → `plugins/daterangepicker/moment.min.js` + `plugins/daterangepicker/daterangepicker.js`.
@@ -3285,6 +3286,19 @@ apps/static/js/pages/live-position-swap-characteristics.js   ← CRIADO
 apps/templates/partials/sidenav.html                       ← href do item Characteristics
 apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
 ```
+
+### Ajuste 63.1 (commit `1557c21`) — subconjunto de colunas + pull posicional + fix Export
+- **Tabela reduzida a 66 colunas** (subconjunto do layout do desk, não as 146): índices em
+  **`_SWAPCHAR_DISPLAY_IDX`** (0-based na lista de 146), derivados das letras de coluna do Excel das
+  fotos de referência. `_SWAPCHAR_DISPLAY_LABELS = [_SWAPCHAR_LABELS[i] for i in _SWAPCHAR_DISPLAY_IDX]`.
+- **Valores lidos POSICIONALMENTE** (`list(row.values())[i]`): o JSON de posição salvo (headerless
+  parseado com `_B3_SWAP_HEADERS`) carrega os 146 campos **em ordem**, então índice = posição, e os
+  nomes de coluna repetidos resolvem sem ambiguidade. Fallback name-resolve só para o **mock esparso**
+  (4 campos): `full = len(vals) >= 120`.
+- **Fix do dropdown Export translúcido** aplicado (bloco `.dt-button-collection` **não escopado** —
+  ver padrão obrigatório no topo do handoff).
+- Validado: mock esparso (66 cols, 4 campos nos lugares certos) + json full-width sintético de 146
+  valores (`V0..V145` → cada célula na posição correta, `Data vencimento 20260715 → 15/07/2026`).
 
 ---
 
