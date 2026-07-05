@@ -15,6 +15,17 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
 
 **Padrões de UI a seguir:**
 - **Botão de visibilidade de colunas** (show/hide columns): rótulo **"Columns"** com ícone **`ti-columns`** (padrão em `index-b3-results.html`, `reference-data.html`). NÃO usar "Show/Hide".
+- **LINHA DE FILTRO POR COLUNA — PADRÃO (igual New Deals):** tabelas de dados devem ter uma 2ª linha no
+  `<thead>` com um `<input>` de busca por coluna. Markup: inputs `form-control form-control-sm` (arredondados
+  sutis, `bg-tertiary`/`bg-light-subtle`), placeholder = nome da coluna; **`orderCellsTop: true`** (sort na
+  linha de título, não no filtro) + `autoWidth: true` p/ alinhar com `scrollX`; wire `keyup/change` →
+  `dt.column(col).search(val).draw()`. **Emil:** foco com anel Action Blue (`box-shadow 0 0 0 3px rgba(0,102,204,.15)`),
+  transição `150ms cubic-bezier(0.23,1,0.32,1)` só em `border-color`/`box-shadow`/`background`, hover atrás de
+  `@media (hover:hover)`, classe `sc-has-val` (tint azul quando o filtro tem valor), guard `prefers-reduced-motion`.
+  Referência: `new_deals-ndf-commodities.html` (`#column-search-inputs`), `live-position-swap-characteristics.html`.
+- **BLOCO DE LARGURAS POR COLUNA:** incluir no `<style>` da página um bloco "Colunas específicas com larguras
+  adequadas — um bloco por coluna" (`#table th/td:nth-child(N) { min-width; width }`, um comentário com o nome
+  da coluna) para ajuste fino de largura quando necessário. Padrão em `new_deals-*` e `live-position-swap-characteristics`.
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
@@ -3306,6 +3317,18 @@ apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
   `autoWidth: true` para alinhamento com `scrollX`. Wire `keyup/change` → `dt.column(col).search().draw()`.
 - **Coexiste com o smart filter:** `reapplyChips` reaplica os inputs da linha de filtro junto com os
   chips; o botão **Clear** limpa ambos.
+
+### Ajuste 63.4 (commit `5778abc`) — filtro estilo New Deals + fix Tipo 01/02 + Search/Clear + larguras
+- **Fix Tipo de Contrato:** o arquivo real traz `01`/`02` (zero à esquerda). O código comparava com
+  `'1'`/`'2'` → coluna mostrava "01" e o widget Contract Type ficava 0/0. Corrigido normalizando com
+  `if tv.isdigit(): tv = str(int(tv))` (display **e** widget). Agora `01→Bullet`, `02→Cashflow` contam.
+- **Linha de filtro por coluna** repaginada no padrão New Deals (`form-control form-control-sm`) + polish
+  Emil (foco Action Blue, transição 150ms curva forte, `sc-has-val` tint, hover gated) — ver padrão no topo.
+- **Botão Search** (`btn btn-secondary bg-gradient btn-search`) no lugar do antigo Clear ao lado do smart
+  filter (commita o chip). **Clear filters** movido para o card da tabela, ao lado do Export (limpa chips +
+  inputs da linha de filtro).
+- **Bloco de larguras por coluna** (`nth-child` 1..68, um por coluna com o nome no comentário) no `<style>`.
+- i18n: +`sc-search`; `sc-clear-filters` → "Clear filters/Limpar filtros/Limpiar filtros".
 
 ### Ajuste 63.3 (commit `ad57497`) — Tipo de Contrato invertido + Tipo de amortização mapeado
 - **Tipo de Contrato:** `01 → Bullet`, `02 → Cashflow` (⚠️ invertido do que estava) — na célula da
