@@ -2372,7 +2372,7 @@ def _fcst_lob(identifier):
     English 'CEMHYB'/'HYB', but real B3 identifiers may use the Portuguese
     'HÍBRIDO'/'HIB'. Mirrors _accrual_lob (same field)."""
     s = _fcst_norm(identifier)   # lower-case + accent-stripped
-    if 'hyb' in s or 'hib' in s:
+    if 'cemhyb' in s or 'hib' in s:
         return 'CEMHYB'
     if 'edg' in s:
         return 'EDG'
@@ -10382,4 +10382,3 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
-
