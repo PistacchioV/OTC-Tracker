@@ -1722,6 +1722,15 @@ _CETIP_RULES = [
               # de-dup: Conta da Parte (coluna D = "Parte")
               'filter': {'column': ['parte'], 'index': 3,
                          'allowed': ['73760009', '04880006']}}},
+    {'label': 'SWAP Indexers (INDEXADORESSWAP_VCP)',
+     'match': lambda n: 'indexadoresswap_vcp.txt' in n,
+     'date_start': 8,                  # CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT → date at index 8
+     'dest_name': lambda r: 'CETIP21_{}_INDEXADORESSWAP_VCP.TXT'.format(r),
+     # Not a position file: after saving, its rows refresh the VCP indexer
+     # reference JSON (see _cetip_update_vcp_json), used by the Swap Characteristics
+     # page. A=Qualification ID, B=Description, C=Additional Description,
+     # D=Level 1 Classification, E=Status (Habilitado→Active / Bloqueado→Inactive).
+     'vcp_update': True},
     {'label': 'Operations (DOPERACOES)',
      'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
@@ -1955,6 +1964,55 @@ def _cetip_save_file(src_path, dest_path):
         f.write(out)
 
 
+# VCP indexer reference (Qualification table) — single latest snapshot, refreshed
+# by the Save CETIP Files routine from the INDEXADORESSWAP_VCP file. Read by the
+# Swap Characteristics page (Indexers widget). Overwritten each run.
+VCP_INDEXERS_JSON = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'vcp_indexers.json')
+
+
+def _cetip_update_vcp_json(src_path):
+    """Parse the saved INDEXADORESSWAP_VCP file (';'-delimited, Latin-1) into the
+    VCP indexer reference JSON. Columns: A=Qualification ID, B=Description,
+    C=Additional Description, D=Level 1 Classification, E=Status (Habilitado →
+    Active / Bloqueado → Inactive). Best-effort — returns the path or None."""
+    try:
+        with open(src_path, 'r', encoding='latin-1', newline='') as fh:
+            lines = [ln for ln in fh.read().splitlines() if ln.strip()]
+        if not lines:
+            return None
+        # Skip a header row if the file ships with one.
+        first = [c.strip().lower() for c in lines[0].split(';')]
+        if any('qualif' in c or c == 'status' or 'classif' in c or 'descri' in c for c in first):
+            lines = lines[1:]
+        out = []
+        for ln in lines:
+            f = ln.split(';')
+            def g(i):
+                return f[i].strip() if i < len(f) else ''
+            st = _fcst_norm(g(4))
+            if 'habilitad' in st:
+                status = 'Active'
+            elif 'bloquead' in st:
+                status = 'Inactive'
+            else:
+                status = g(4)
+            out.append({
+                'Qualification ID':       g(0),
+                'Description':            g(1),
+                'Additional Description': g(2),
+                'Level 1 Classification': g(3),
+                'Status':                 status,
+            })
+        os.makedirs(os.path.dirname(VCP_INDEXERS_JSON), exist_ok=True)
+        with open(VCP_INDEXERS_JSON, 'w', encoding='utf-8') as fh:
+            json.dump(out, fh, ensure_ascii=False, indent=2)
+        log.info("[cetip] VCP indexer reference updated: %d rows", len(out))
+        return VCP_INDEXERS_JSON
+    except Exception:
+        log.warning("[cetip] VCP json update failed:\n%s", traceback.format_exc())
+        return None
+
+
 def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
                       ref_date_fmt, saved, dest_folder='', attachments=None, missing=None):
     """Render the CETIP HTML template and send it FROM the OTC Tracker mailbox
@@ -2173,6 +2231,9 @@ def api_cp_cetip_settlement():
                 # into per-day folders (<category>/YYYY/MM/DD/).
                 if rule.get('json'):
                     _b3_export_json(dest_path, rule['json'], dest_name, dref)
+                # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
+                if rule.get('vcp_update'):
+                    _cetip_update_vcp_json(dest_path)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
