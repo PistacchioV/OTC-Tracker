@@ -1155,5 +1155,9 @@
   "otm-status": "Status",
   "otm-clear-filters": "Clear filters",
   "otm-showing": "Showing",
-  "otm-rows": "rows"
+  "otm-rows": "rows",
+  "cp-r-ds-title": "Save Daily Settlement Files",
+  "cp-r-ds-desc": "Reads and saves every file required for the Daily Settlement (OTM cashflows and the other product sources) into the settlement folders. Saving logic in progress.",
+  "cp-ds-meta": "Sources → Daily Settlement",
+  "cp-ds-run": "Save files"
 }

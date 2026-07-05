@@ -1154,5 +1154,9 @@
   "otm-status": "Status",
   "otm-clear-filters": "Limpiar filtros",
   "otm-showing": "Mostrando",
-  "otm-rows": "filas"
+  "otm-rows": "filas",
+  "cp-r-ds-title": "Guardar Archivos del Daily Settlement",
+  "cp-r-ds-desc": "Lee y guarda todos los archivos necesarios para el Daily Settlement (cashflows de OTM y demás fuentes) en las carpetas de liquidación. Lógica de guardado en construcción.",
+  "cp-ds-meta": "Fuentes → Daily Settlement",
+  "cp-ds-run": "Guardar archivos"
 }

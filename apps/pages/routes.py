@@ -2977,6 +2977,23 @@ def _import_client_contacts(filename, raw_bytes):
     }
 
 
+@blueprint.route('/api/control-panel/daily-settlement-save', methods=['POST'])
+def api_cp_daily_settlement_save():
+    """Control Panel — "Save Daily Settlement Files". PLACEHOLDER: the front-end
+    card is ready; the actual saving logic (which files, from which sources, to
+    which destination folders) will be wired later. Accepts an optional `date`."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = (payload.get('date') or '').strip()
+    # TODO: implement the Daily Settlement file-saving routine (sources → dest).
+    return jsonify({
+        'success': True,
+        'message': ('Front-end pronto. A rotina de salvamento dos arquivos do Daily Settlement '
+                    'ainda será implementada' + (' (data {}).'.format(ds) if ds else '.')),
+    })
+
+
 @blueprint.route('/api/control-panel/import-contacts', methods=['POST'])
 def api_cp_import_contacts():
     """Update client contacts from the uploaded 'CONTATO DE CLIENTES' spreadsheet."""

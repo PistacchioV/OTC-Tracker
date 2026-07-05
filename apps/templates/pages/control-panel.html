@@ -249,6 +249,35 @@
                     </div>
                 </div>
             </div>
+            <div class="cp-reveal mt-3">
+                <div class="cp-card">
+                    <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-ds-desc">
+                        Reads and saves every file required for the Daily Settlement (OTM cashflows and the
+                        other product sources) into the settlement folders. Saving logic in progress.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpDsDateWrap">
+                            <input type="text" id="cp-ds-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-folder"></i><span data-lang="cp-ds-meta">Sources → Daily Settlement</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-endpoint="/api/control-panel/daily-settlement-save"
+                                data-date-input="cp-ds-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-ds-run">Save files</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ── Coluna direita: Forecasts & Reports / Settlement Forecast ── -->
