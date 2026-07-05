@@ -454,7 +454,7 @@ function opsInitDatePicker() {
         $d.daterangepicker({
             singleDatePicker: true, autoApply: true, showDropdowns: true,
             locale: { format: 'DD/MM/YYYY' },
-            startDate: moment()   // no maxDate → future reference dates allowed
+            startDate: moment()   // default today; no maxDate → future reference dates allowed
         }, function (start) { reload(start.format('YYYY-MM-DD')); });
         jQuery('#opsDateWrap .ops-cal-btn').on('click', function () { $d.trigger('click'); });
     } else if (inp) {

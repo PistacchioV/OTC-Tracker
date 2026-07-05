@@ -2365,16 +2365,18 @@ def _fcst_opt_class_product(asset_class):
 
 def _fcst_lob(identifier):
     """SWAP line of business from the "Código Identificador" string.
-    Order matters: HYB is tested BEFORE CEM/EDG, because a hybrid's identifier
-    contains 'CEMHYB' — and 'CEM' is a substring of 'CEMHYB'. Testing 'CEM' first
-    would swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
-    Mirrors _accrual_lob (same field), which already uses this ordering."""
-    s = (identifier or '').upper()
-    if 'CEMHYB' in s or 'HYB' in s:
+    Order matters: hybrid is tested BEFORE CEM/EDG, because a hybrid's identifier
+    also contains 'CEM' (e.g. 'CEMHYB', 'CEM-HIB') — testing 'CEM' first would
+    swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
+    Accent-insensitive and tolerant of PT/EN hybrid spellings: the mock uses the
+    English 'CEMHYB'/'HYB', but real B3 identifiers may use the Portuguese
+    'HÍBRIDO'/'HIB'. Mirrors _accrual_lob (same field)."""
+    s = _fcst_norm(identifier)   # lower-case + accent-stripped
+    if 'hyb' in s or 'hib' in s:
         return 'CEMHYB'
-    if 'EDG' in s:
+    if 'edg' in s:
         return 'EDG'
-    if 'CEM' in s:
+    if 'cem' in s:
         return 'CEM'
     return 'CEMHYB'
 
@@ -2930,12 +2932,14 @@ def _acc_digits(s):
 
 def _accrual_lob(identifier):
     """Map a SWAP 'Código Identificador' to one of the four LOB buckets.
-    Order matters: CEMHYB / COMM are tested before the CEM / EDG substrings."""
-    s = (identifier or '').upper()
-    if 'CEMHYB' in s or 'HYB' in s:  return 'Hybrids'
-    if 'COMM' in s:                  return 'Commodities'
-    if 'EDG' in s:                   return 'EDG'
-    if 'CEM' in s:                   return 'CEM'
+    Order matters: hybrid / COMM are tested before the CEM / EDG substrings.
+    Accent-insensitive and tolerant of PT/EN hybrid spellings (HYB / HIB /
+    HÍBRIDO), mirroring _fcst_lob."""
+    s = _fcst_norm(identifier)   # lower-case + accent-stripped
+    if 'hyb' in s or 'hib' in s:  return 'Hybrids'
+    if 'comm' in s:               return 'Commodities'
+    if 'edg' in s:                return 'EDG'
+    if 'cem' in s:                return 'CEM'
     return None
 
 
@@ -10371,4 +10375,3 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
-
