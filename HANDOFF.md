@@ -3317,28 +3317,35 @@ apps/static/data/translations/{en,br,es}.json              ← 21 chaves sc-*
 
 ---
 
-## 64. Sessão 2026-07-05 — Save CETIP Files: INDEXADORESSWAP_VCP → vcp_indexers.json
+## 64. Sessão 2026-07-05 — Save CETIP Files: INDEXADORESSWAP_VCP → VCP.json (existente)
 
 Adicionado o arquivo **`CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT`** à rotina **Salvar Arquivos CETIP**
-(`_CETIP_RULES`): é salvo na pasta de destino e, após salvar, atualiza a **referência de indexadores
-VCP** (`apps/static/data/vcp_indexers.json`). Commit `83ecb20`.
+(`_CETIP_RULES`): é salvo na pasta de destino e, após salvar, **atualiza o `VCP.json` JÁ EXISTENTE**
+(`apps/static/data/VCP.json`, 2195 linhas — tabela de qualificações). Commits `83ecb20`, `fdda01a`.
 
-### Regra + parse
+⚠️ **Correção `fdda01a`:** a 1ª versão criava um `vcp_indexers.json` novo — **errado**. O alvo é o
+`VCP.json` existente (consumido por `index-b3.html` e por `routes.py:~9058`). Schema dele:
+`STATUS` (ACTIVE/INACTIVE) · `ID da Qualificação` (int) · `Descrição da Qualificação` ·
+`Descrição Adicional da Qualificação` · `Classificação Nível 1` · `Produto` (SWAP/OPC) · `MAKER` · `CHECKER`.
+
+### Regra + upsert
 - Nova entrada em `_CETIP_RULES` (`match: 'indexadoresswap_vcp.txt'`, `date_start: 8`,
-  `dest_name: CETIP21_{}_INDEXADORESSWAP_VCP.TXT`, flag **`'vcp_update': True`**). Por estar em
+  `dest_name: CETIP21_{}_INDEXADORESSWAP_VCP.TXT`, flag **`'vcp_update': True'`**). Por estar em
   `_CETIP_RULES`, entra no fluxo de save e no "missing" quando ausente.
-- **`_cetip_update_vcp_json(src_path)`** (chamado no loop quando `rule.get('vcp_update')`): ';'-delimitado,
-  Latin-1, pula header se presente. Mapa de colunas: **A=Qualification ID, B=Description,
-  C=Additional Description, D=Level 1 Classification, E=Status** — `Habilitado→Active`,
-  `Bloqueado→Inactive` (accent/case-insensitive via `_fcst_norm`; outros valores passam raw).
-  Grava `VCP_INDEXERS_JSON` (snapshot único, sobrescrito a cada run).
+- **`_cetip_update_vcp_json(src_path)`** (`VCP_JSON`): ';'-delimitado, Latin-1, pula header se presente.
+  Colunas do arquivo: **A=Qualification ID, B=Description, C=Additional Description,
+  D=Level 1 Classification, E=Status** — `Habilitado→ACTIVE` / `Bloqueado→INACTIVE`.
+- **UPSERT por `ID da Qualificação`** (não sobrescreve o arquivo inteiro): IDs existentes têm
+  STATUS/descrições/classificação atualizados (**MAKER/CHECKER preservados**); IDs novos são
+  adicionados com `Produto=SWAP`, MAKER/CHECKER null. Linhas não presentes no arquivo (ex.: as **42 OPC**)
+  ficam intactas. Validado em cópia: update ACTIVE→INACTIVE + novo ID + 42 OPC preservadas.
 
 ### Pendente
-- ⏳ Plugar `vcp_indexers.json` no widget **Indexadores (VCP/Calculado)** da página Swap Characteristics
+- ⏳ Plugar o `VCP.json` no widget **Indexadores (VCP/Calculado)** da página Swap Characteristics
   quando o usuário enviar a lógica de classificação.
 
 ### Arquivos (sessão 64)
 ```
-apps/pages/routes.py   ← _CETIP_RULES +INDEXADORESSWAP_VCP; VCP_INDEXERS_JSON;
-                          _cetip_update_vcp_json; hook no loop de save
+apps/pages/routes.py   ← _CETIP_RULES +INDEXADORESSWAP_VCP; VCP_JSON;
+                          _cetip_update_vcp_json (upsert por ID no VCP.json existente); hook no save
 ```
