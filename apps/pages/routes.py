@@ -3467,6 +3467,8 @@ def _swapchar_collect(ref):
         tv = str(row.get(tipo_key, '') or '').strip() if tipo_key else ''
         if tv.endswith('.0'):
             tv = tv[:-2]
+        if tv.isdigit():                    # '01' → '1', '02' → '2' (leading zeros)
+            tv = str(int(tv))
         cid = str(row.get(id_key, '') or '') if id_key else ''
         # Sparse-mock fallback: the few present fields keyed by their 146-list index.
         sparse = {} if full else {
@@ -3483,6 +3485,8 @@ def _swapchar_collect(ref):
                 rv = str(raw or '').strip()
                 if rv.endswith('.0'):
                     rv = rv[:-2]
+                if rv.isdigit():
+                    rv = str(int(rv))
                 disp.append('Bullet' if rv == '1' else ('Cashflow' if rv == '2'
                             else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
             else:

@@ -102,13 +102,106 @@
     text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
 }
 #swapchar-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
-#swapchar-table thead tr.sc-th-filter th { padding: .2rem .35rem .45rem; }
-#swapchar-table thead tr.sc-th-filter input {
-    width: 100%; min-width: 90px; font-size: .68rem; font-weight: 400;
-    padding: 3px 6px; border: 1px solid var(--sc-hairline); border-radius: 6px;
-    background: var(--ins-secondary-bg, #fff); color: var(--ins-body-color);
+
+/* ── Colunas específicas com larguras adequadas — um bloco por coluna ──────────
+   nth-child(1)=checkbox  (2)=Status  (3..68)=dados (ordem de _SWAPCHAR_DISPLAY_LABELS).
+   Ajuste min-width/width de qualquer coluna abaixo conforme necessário. */
+  #swapchar-table th:nth-child(1), #swapchar-table td:nth-child(1) { min-width: 38px;  width: 38px; }   /* checkbox */
+  #swapchar-table th:nth-child(2), #swapchar-table td:nth-child(2) { min-width: 90px;  width: 90px; }   /* Status */
+  #swapchar-table th:nth-child(3), #swapchar-table td:nth-child(3) { min-width: 120px; width: 120px; } /* Tipo de Contrato */
+  #swapchar-table th:nth-child(4), #swapchar-table td:nth-child(4) { min-width: 120px; width: 120px; } /* Contrato */
+  #swapchar-table th:nth-child(5), #swapchar-table td:nth-child(5) { min-width: 120px; width: 120px; } /* Participante */
+  #swapchar-table th:nth-child(6), #swapchar-table td:nth-child(6) { min-width: 120px; width: 120px; } /* Contraparte */
+  #swapchar-table th:nth-child(7), #swapchar-table td:nth-child(7) { min-width: 120px; width: 120px; } /* CPF/CNPJ Cliente Contraparte */
+  #swapchar-table th:nth-child(8), #swapchar-table td:nth-child(8) { min-width: 120px; width: 120px; } /* Data início */
+  #swapchar-table th:nth-child(9), #swapchar-table td:nth-child(9) { min-width: 120px; width: 120px; } /* Data vencimento */
+  #swapchar-table th:nth-child(10), #swapchar-table td:nth-child(10) { min-width: 120px; width: 120px; } /* Valor base */
+  #swapchar-table th:nth-child(11), #swapchar-table td:nth-child(11) { min-width: 120px; width: 120px; } /* Valor Base Remanescente */
+  #swapchar-table th:nth-child(12), #swapchar-table td:nth-child(12) { min-width: 120px; width: 120px; } /* Valor Antecipado */
+  #swapchar-table th:nth-child(13), #swapchar-table td:nth-child(13) { min-width: 120px; width: 120px; } /* Saldo */
+  #swapchar-table th:nth-child(14), #swapchar-table td:nth-child(14) { min-width: 120px; width: 120px; } /* Sinal Saldo */
+  #swapchar-table th:nth-child(15), #swapchar-table td:nth-child(15) { min-width: 120px; width: 120px; } /* Funcionalidade */
+  #swapchar-table th:nth-child(16), #swapchar-table td:nth-child(16) { min-width: 120px; width: 120px; } /* Agenda de Prêmio */
+  #swapchar-table th:nth-child(17), #swapchar-table td:nth-child(17) { min-width: 120px; width: 120px; } /* Reset */
+  #swapchar-table th:nth-child(18), #swapchar-table td:nth-child(18) { min-width: 120px; width: 120px; } /* Observação */
+  #swapchar-table th:nth-child(19), #swapchar-table td:nth-child(19) { min-width: 120px; width: 120px; } /* Valor base inicial */
+  #swapchar-table th:nth-child(20), #swapchar-table td:nth-child(20) { min-width: 120px; width: 120px; } /* Data operação termo */
+  #swapchar-table th:nth-child(21), #swapchar-table td:nth-child(21) { min-width: 120px; width: 120px; } /* Índice Termo */
+  #swapchar-table th:nth-child(22), #swapchar-table td:nth-child(22) { min-width: 120px; width: 120px; } /* Percentual Termo */
+  #swapchar-table th:nth-child(23), #swapchar-table td:nth-child(23) { min-width: 120px; width: 120px; } /* PU Inicial */
+  #swapchar-table th:nth-child(24), #swapchar-table td:nth-child(24) { min-width: 120px; width: 120px; } /* Denominação */
+  #swapchar-table th:nth-child(25), #swapchar-table td:nth-child(25) { min-width: 120px; width: 120px; } /* Tipo de amortização */
+  #swapchar-table th:nth-child(26), #swapchar-table td:nth-child(26) { min-width: 120px; width: 120px; } /* Percentual */
+  #swapchar-table th:nth-child(27), #swapchar-table td:nth-child(27) { min-width: 120px; width: 120px; } /* Código índice */
+  #swapchar-table th:nth-child(28), #swapchar-table td:nth-child(28) { min-width: 120px; width: 120px; } /* Sinal Taxa */
+  #swapchar-table th:nth-child(29), #swapchar-table td:nth-child(29) { min-width: 120px; width: 120px; } /* Taxa */
+  #swapchar-table th:nth-child(30), #swapchar-table td:nth-child(30) { min-width: 120px; width: 120px; } /* Lim. Inferior (Floor) */
+  #swapchar-table th:nth-child(31), #swapchar-table td:nth-child(31) { min-width: 120px; width: 120px; } /* Lim. Superior (Cap) */
+  #swapchar-table th:nth-child(32), #swapchar-table td:nth-child(32) { min-width: 120px; width: 120px; } /* Valor Curva Atualizado */
+  #swapchar-table th:nth-child(33), #swapchar-table td:nth-child(33) { min-width: 120px; width: 120px; } /* Fator Original de Juros */
+  #swapchar-table th:nth-child(34), #swapchar-table td:nth-child(34) { min-width: 120px; width: 120px; } /* Percentual */
+  #swapchar-table th:nth-child(35), #swapchar-table td:nth-child(35) { min-width: 120px; width: 120px; } /* Código índice */
+  #swapchar-table th:nth-child(36), #swapchar-table td:nth-child(36) { min-width: 120px; width: 120px; } /* Sinal Taxa */
+  #swapchar-table th:nth-child(37), #swapchar-table td:nth-child(37) { min-width: 120px; width: 120px; } /* Taxa */
+  #swapchar-table th:nth-child(38), #swapchar-table td:nth-child(38) { min-width: 120px; width: 120px; } /* Lim. Inferior (Floor) */
+  #swapchar-table th:nth-child(39), #swapchar-table td:nth-child(39) { min-width: 120px; width: 120px; } /* Lim. Superior (Cap) */
+  #swapchar-table th:nth-child(40), #swapchar-table td:nth-child(40) { min-width: 120px; width: 120px; } /* Valor Curva Atualizado */
+  #swapchar-table th:nth-child(41), #swapchar-table td:nth-child(41) { min-width: 120px; width: 120px; } /* Fator Original de Juros */
+  #swapchar-table th:nth-child(42), #swapchar-table td:nth-child(42) { min-width: 120px; width: 120px; } /* Cupom Limpo */
+  #swapchar-table th:nth-child(43), #swapchar-table td:nth-child(43) { min-width: 120px; width: 120px; } /* Percentual */
+  #swapchar-table th:nth-child(44), #swapchar-table td:nth-child(44) { min-width: 120px; width: 120px; } /* Curva */
+  #swapchar-table th:nth-child(45), #swapchar-table td:nth-child(45) { min-width: 120px; width: 120px; } /* Sinal Taxa */
+  #swapchar-table th:nth-child(46), #swapchar-table td:nth-child(46) { min-width: 120px; width: 120px; } /* Taxa de Juros */
+  #swapchar-table th:nth-child(47), #swapchar-table td:nth-child(47) { min-width: 120px; width: 120px; } /* Limitador */
+  #swapchar-table th:nth-child(48), #swapchar-table td:nth-child(48) { min-width: 120px; width: 120px; } /* Pu inicial */
+  #swapchar-table th:nth-child(49), #swapchar-table td:nth-child(49) { min-width: 120px; width: 120px; } /* Pu atual */
+  #swapchar-table th:nth-child(50), #swapchar-table td:nth-child(50) { min-width: 120px; width: 120px; } /* Tipo/Classe */
+  #swapchar-table th:nth-child(51), #swapchar-table td:nth-child(51) { min-width: 120px; width: 120px; } /* Nome Tipo/Classe */
+  #swapchar-table th:nth-child(52), #swapchar-table td:nth-child(52) { min-width: 120px; width: 120px; } /* Denominação */
+  #swapchar-table th:nth-child(53), #swapchar-table td:nth-child(53) { min-width: 120px; width: 120px; } /* Pu inicial */
+  #swapchar-table th:nth-child(54), #swapchar-table td:nth-child(54) { min-width: 120px; width: 120px; } /* Pu atual */
+  #swapchar-table th:nth-child(55), #swapchar-table td:nth-child(55) { min-width: 120px; width: 120px; } /* Tipo/Classe */
+  #swapchar-table th:nth-child(56), #swapchar-table td:nth-child(56) { min-width: 120px; width: 120px; } /* Nome Tipo/Classe */
+  #swapchar-table th:nth-child(57), #swapchar-table td:nth-child(57) { min-width: 120px; width: 120px; } /* Denominação */
+  #swapchar-table th:nth-child(58), #swapchar-table td:nth-child(58) { min-width: 120px; width: 120px; } /* Cupom Limpo */
+  #swapchar-table th:nth-child(59), #swapchar-table td:nth-child(59) { min-width: 120px; width: 120px; } /* Data de Cotação */
+  #swapchar-table th:nth-child(60), #swapchar-table td:nth-child(60) { min-width: 120px; width: 120px; } /* Cupom Limpo */
+  #swapchar-table th:nth-child(61), #swapchar-table td:nth-child(61) { min-width: 120px; width: 120px; } /* Data de Cotação */
+  #swapchar-table th:nth-child(62), #swapchar-table td:nth-child(62) { min-width: 120px; width: 120px; } /* Titular */
+  #swapchar-table th:nth-child(63), #swapchar-table td:nth-child(63) { min-width: 120px; width: 120px; } /* Prêmio 1 */
+  #swapchar-table th:nth-child(64), #swapchar-table td:nth-child(64) { min-width: 120px; width: 120px; } /* Data Exercício Prêmio 2 */
+  #swapchar-table th:nth-child(65), #swapchar-table td:nth-child(65) { min-width: 120px; width: 120px; } /* Estratégia */
+  #swapchar-table th:nth-child(66), #swapchar-table td:nth-child(66) { min-width: 120px; width: 120px; } /* Amortiza sem Troca de Diferencial */
+  #swapchar-table th:nth-child(67), #swapchar-table td:nth-child(67) { min-width: 120px; width: 120px; } /* Data Cotação para Ajuste */
+  #swapchar-table th:nth-child(68), #swapchar-table td:nth-child(68) { min-width: 120px; width: 120px; } /* Código Identificador */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#swapchar-table thead tr.sc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--sc-hairline); }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter {
+    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px;
+    border: 1px solid var(--sc-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms cubic-bezier(0.23,1,0.32,1),
+                box-shadow 150ms cubic-bezier(0.23,1,0.32,1),
+                background-color 150ms cubic-bezier(0.23,1,0.32,1);
 }
-#swapchar-table thead tr.sc-th-filter input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,.15); }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; font-weight: 400; }
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter:focus {
+    outline: none; border-color: #0066cc;
+    background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+/* Active filter (has a value) keeps a subtle Action Blue tint. */
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter.sc-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter { transition: none; }
+}
 #swapchar-page .toggle-vis + label { cursor: pointer; }
 #swapchar-page .btn:active { transform: scale(0.97); }
 @media (prefers-reduced-motion: reduce) {
@@ -253,8 +346,8 @@
                         <ul class="smart-filter-dropdown mb-0 ps-0" id="scDropdown"></ul>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
-                    <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear</span>
+                <button class="btn btn-secondary bg-gradient btn-search" type="button" id="scSearchBtn">
+                    <i class="ti ti-search fs-xl me-1"></i><span data-lang="sc-search">Search</span>
                 </button>
                 <div class="vr d-none d-md-block"></div>
                 <label for="sc-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="sc-refdate">Reference date</label>
@@ -273,6 +366,9 @@
                 <div class="d-flex align-items-center gap-2">
                     <div class="columnToggleWrapper"></div>
                     <div class="scExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
+                    </button>
                 </div>
                 <div class="text-muted fs-xs">
                     <span data-lang="sc-showing">Showing</span> <span id="sc-count">0</span> <span data-lang="sc-contracts">contracts</span>

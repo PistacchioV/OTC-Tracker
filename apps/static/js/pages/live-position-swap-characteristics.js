@@ -76,8 +76,8 @@
       '<tr class="sc-th-filter">' +
       '<th></th><th></th>' +
       columns.map(function (c, i) {
-        return '<th><input type="text" class="sc-col-filter" data-col="' + (i + 2) +
-          '" placeholder="' + esc(c) + '"></th>';
+        return '<th><input type="text" class="form-control form-control-sm sc-col-filter" data-col="' +
+          (i + 2) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
       }).join('') + '</tr>';
     document.querySelector('#swapchar-table thead').innerHTML = titleRow + filterRow;
 
@@ -124,6 +124,7 @@
     jQuery('#swapchar-table thead').off('keyup.sccol change.sccol')
       .on('keyup.sccol change.sccol', '.sc-col-filter', function () {
         var col = +this.getAttribute('data-col');
+        this.classList.toggle('sc-has-val', !!this.value);
         if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
       });
 
@@ -225,25 +226,33 @@
     if (!inp) return;
     inp.addEventListener('focus', function () { if (!activeField) showDropdown(inp.value); });
     inp.addEventListener('input', function () { if (!activeField) showDropdown(inp.value); });
+    // Commit the pending field+value as a chip (Enter or the Search button).
+    function commit() {
+      if (activeField && inp.value.trim()) {
+        chips.push({ idx: activeField.idx, value: inp.value.trim() });
+        activeField = null; inp.value = ''; inp.placeholder = t('filterPh');
+        renderChips(); reapplyChips(); dd.style.display = 'none';
+      }
+    }
     inp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (activeField && inp.value.trim()) {
-          chips.push({ idx: activeField.idx, value: inp.value.trim() });
-          activeField = null; inp.value = ''; inp.placeholder = t('filterPh');
-          renderChips(); reapplyChips();
-        }
-      } else if (e.key === 'Escape') {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') {
         activeField = null; inp.value = ''; inp.placeholder = t('filterPh'); dd.style.display = 'none';
       }
     });
     document.addEventListener('click', function (e) {
       if (!document.getElementById('scSmartFilter').contains(e.target)) dd.style.display = 'none';
     });
+    // Search button (New Deals style) — commits the smart filter.
+    var searchBtn = document.getElementById('scSearchBtn');
+    if (searchBtn) searchBtn.addEventListener('click', commit);
+    // Clear filters button (in the table card) — clears chips + per-column inputs.
     var clr = document.getElementById('scClearFilters');
     if (clr) clr.addEventListener('click', function () {
       chips = []; activeField = null; inp.value = ''; inp.placeholder = t('filterPh');
-      document.querySelectorAll('#swapchar-table .sc-col-filter').forEach(function (i) { i.value = ''; });
+      document.querySelectorAll('#swapchar-table .sc-col-filter').forEach(function (i) {
+        i.value = ''; i.classList.remove('sc-has-val');
+      });
       renderChips(); reapplyChips();
     });
     inp.placeholder = t('filterPh');

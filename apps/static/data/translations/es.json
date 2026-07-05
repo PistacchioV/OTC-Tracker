@@ -1137,10 +1137,11 @@
   "sc-sub-sem": "Sin Funcionalidad",
   "sc-w-total": "Total",
   "sc-total-asof": "Live Position al",
-  "sc-clear-filters": "Limpiar",
+  "sc-clear-filters": "Limpiar filtros",
   "sc-refdate": "Fecha de referencia",
   "sc-showing": "Mostrando",
   "sc-contracts": "contratos",
   "sc-status": "Status",
-  "sc-status-custody": "En Custodia"
+  "sc-status-custody": "En Custodia",
+  "sc-search": "Buscar"
 }

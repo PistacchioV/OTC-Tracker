@@ -1138,10 +1138,11 @@
   "sc-sub-sem": "No Feature",
   "sc-w-total": "Total",
   "sc-total-asof": "Live Position as of",
-  "sc-clear-filters": "Clear",
+  "sc-clear-filters": "Clear filters",
   "sc-refdate": "Reference date",
   "sc-showing": "Showing",
   "sc-contracts": "contracts",
   "sc-status": "Status",
-  "sc-status-custody": "In Custody"
+  "sc-status-custody": "In Custody",
+  "sc-search": "Search"
 }
