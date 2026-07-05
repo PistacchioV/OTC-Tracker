@@ -3016,24 +3016,40 @@ _OPS_SRC_MAP = {
 }
 
 
+def _ops_src_latest_path(src, max_back=10):
+    """Newest existing snapshot (path, dref) for ONE forecast source, walking back
+    from D-1 ANBIMA. Each product folder is saved independently and the dates can
+    drift a day apart (e.g. the NDF TER file lands after the SWAP files, or the
+    Save-CETIP routine ran for one family but not another). Resolving the ref
+    PER SOURCE — instead of a single shared `pos_ref` — keeps a family from
+    silently counting zero just because its file is missing on the shared date."""
+    ref = _prev_anbima_bizday(datetime.now())
+    for _ in range(max_back):
+        dref = ref.strftime('%y%m%d')
+        path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
+        if os.path.isfile(path):
+            return path, dref
+        ref = _prev_anbima_bizday(ref)
+    return None, None
+
+
 def _ops_settlement_counts(settle_ref, pos_ref):
     """Count operations settling on `settle_ref` (date) by product family +
-    sub-event, reading the position JSONs of `pos_ref` (the LATEST available
-    saved date). Missing files / no data → zeros (graceful)."""
+    sub-event, reading each family's OWN latest position JSON. Missing files /
+    no data → zeros (graceful, and logged so a silent zero is diagnosable)."""
     fams = {'swap':   {'total': 0, 'flow': 0, 'premium': 0, 'maturity': 0},
             'option': {'total': 0, 'maturity': 0, 'premium': 0},
             'ndf':    {'total': 0, 'maturity': 0},
             'coe':    {'total': 0}}
-    if pos_ref is None:
-        return fams
-    dref = pos_ref.strftime('%y%m%d')   # files are named yymmdd (e.g. 260703), like _forecast_payload
     for src in _FORECAST_SOURCES:
         mapping = _OPS_SRC_MAP.get(src['key'])
         if not mapping:
             continue
         fam, primary_sub = mapping
-        path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
-        if not os.path.isfile(path):
+        path, dref = _ops_src_latest_path(src)   # files are named yymmdd (e.g. 260703)
+        if path is None:
+            log.warning("[ops] %s (%s): no snapshot found in last 10 biz days; card counts 0",
+                        src['key'], fam)
             continue
         try:
             with open(path, encoding='utf-8') as fh:
