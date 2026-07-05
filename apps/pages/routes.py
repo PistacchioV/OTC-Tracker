@@ -1964,17 +1964,22 @@ def _cetip_save_file(src_path, dest_path):
         f.write(out)
 
 
-# VCP indexer reference (Qualification table) — single latest snapshot, refreshed
-# by the Save CETIP Files routine from the INDEXADORESSWAP_VCP file. Read by the
-# Swap Characteristics page (Indexers widget). Overwritten each run.
-VCP_INDEXERS_JSON = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'vcp_indexers.json')
+# Existing VCP qualification table (Descrição/Classificação/STATUS per Qualification
+# ID) — the Save CETIP Files routine refreshes it in place from the
+# INDEXADORESSWAP_VCP file. Also read by the Swap Characteristics page and index-b3.
+VCP_JSON = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'VCP.json')
 
 
 def _cetip_update_vcp_json(src_path):
-    """Parse the saved INDEXADORESSWAP_VCP file (';'-delimited, Latin-1) into the
-    VCP indexer reference JSON. Columns: A=Qualification ID, B=Description,
+    """Refresh the existing VCP.json IN PLACE from the saved INDEXADORESSWAP_VCP
+    file (';'-delimited, Latin-1). File columns: A=Qualification ID, B=Description,
     C=Additional Description, D=Level 1 Classification, E=Status (Habilitado →
-    Active / Bloqueado → Inactive). Best-effort — returns the path or None."""
+    ACTIVE / Bloqueado → INACTIVE).
+
+    Upsert by "ID da Qualificação": existing rows have their STATUS/descriptions/
+    classification updated (MAKER/CHECKER preserved); new IDs are appended with
+    Produto=SWAP. Rows not present in the file (e.g. the OPC entries) are left
+    untouched. Best-effort — returns the path or None."""
     try:
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
             lines = [ln for ln in fh.read().splitlines() if ln.strip()]
@@ -1984,32 +1989,59 @@ def _cetip_update_vcp_json(src_path):
         first = [c.strip().lower() for c in lines[0].split(';')]
         if any('qualif' in c or c == 'status' or 'classif' in c or 'descri' in c for c in first):
             lines = lines[1:]
-        out = []
+
+        # Load the existing table + index by Qualification ID (as string).
+        current = []
+        if os.path.isfile(VCP_JSON):
+            try:
+                with open(VCP_JSON, encoding='utf-8') as fh:
+                    current = json.load(fh) or []
+            except Exception:
+                current = []
+        by_id = {str(r.get('ID da Qualificação')): r for r in current}
+
+        added = updated = 0
         for ln in lines:
             f = ln.split(';')
             def g(i):
                 return f[i].strip() if i < len(f) else ''
+            qid_raw = g(0)
+            if not qid_raw:
+                continue
+            try:
+                qid = int(''.join(ch for ch in qid_raw if ch.isdigit() or ch == '-'))
+            except ValueError:
+                qid = qid_raw
             st = _fcst_norm(g(4))
-            if 'habilitad' in st:
-                status = 'Active'
-            elif 'bloquead' in st:
-                status = 'Inactive'
+            status = 'ACTIVE' if 'habilitad' in st else ('INACTIVE' if 'bloquead' in st else g(4))
+            row = by_id.get(str(qid))
+            if row is None:
+                current.append({
+                    'STATUS':                              status,
+                    'ID da Qualificação':                  qid,
+                    'Descrição da Qualificação':           g(1),
+                    'Descrição Adicional da Qualificação': g(2),
+                    'Classificação Nível 1':               g(3),
+                    'Produto':                             'SWAP',
+                    'MAKER':                               None,
+                    'CHECKER':                             None,
+                })
+                by_id[str(qid)] = current[-1]
+                added += 1
             else:
-                status = g(4)
-            out.append({
-                'Qualification ID':       g(0),
-                'Description':            g(1),
-                'Additional Description': g(2),
-                'Level 1 Classification': g(3),
-                'Status':                 status,
-            })
-        os.makedirs(os.path.dirname(VCP_INDEXERS_JSON), exist_ok=True)
-        with open(VCP_INDEXERS_JSON, 'w', encoding='utf-8') as fh:
-            json.dump(out, fh, ensure_ascii=False, indent=2)
-        log.info("[cetip] VCP indexer reference updated: %d rows", len(out))
-        return VCP_INDEXERS_JSON
+                row['STATUS'] = status
+                row['Descrição da Qualificação'] = g(1)
+                row['Descrição Adicional da Qualificação'] = g(2)
+                row['Classificação Nível 1'] = g(3)
+                updated += 1
+
+        with open(VCP_JSON, 'w', encoding='utf-8') as fh:
+            json.dump(current, fh, ensure_ascii=False, indent=2)
+        log.info("[cetip] VCP.json refreshed: %d updated, %d added (%d total)",
+                 updated, added, len(current))
+        return VCP_JSON
     except Exception:
-        log.warning("[cetip] VCP json update failed:\n%s", traceback.format_exc())
+        log.warning("[cetip] VCP.json update failed:\n%s", traceback.format_exc())
         return None
 
 
