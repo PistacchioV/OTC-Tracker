@@ -1157,7 +1157,7 @@
   "otm-showing": "Exibindo",
   "otm-rows": "linhas",
   "cp-r-ds-title": "Salvar Arquivos do Daily Settlement",
-  "cp-r-ds-desc": "Processa os arquivos de texto do Daily Settlement (Operações JPM/MGT, Eventos Swap, TSS-FX) em JSONs. Anexe os arquivos, ou deixe vazio para buscar na pasta Settlements. O OTM é tratado na página própria.",
+  "cp-r-ds-desc": "Processa TODOS os arquivos do Daily Settlement em JSONs — cashflows OTM, Operações JPM/MGT, Eventos Swap, TSS-FX, BR Onshore, Latam Desk. Anexe os arquivos, ou deixe vazio para buscar na pasta Settlements. Cada página também processa o seu arquivo individualmente.",
   "cp-ds-meta": "Dropzone ou pasta Settlements",
   "cp-ds-run": "Salvar arquivos",
   "otm-show": "Exibir",

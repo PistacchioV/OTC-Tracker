@@ -2993,6 +2993,11 @@ SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT',
 #             kind 'digits' → compare digits-only cell; 'set' → compare UPPER cell
 #   json    : output base name (…_YYYYMMDD.json under the daily-settlement folder)
 _DS_IMPORTS = [
+    # OTM cashflows — same output as the OTM Settlements page (18 columns, its own
+    # cleaning); processed here too so the card handles every file. `otm` flag →
+    # _ds_handle uses _otm_extract + the OTM json path.
+    {'key': 'otm', 'label': 'OTM Settlements', 'json': 'otm-settlement', 'header': 1,
+     'match': lambda n: n.startswith('cashflows'), 'otm': True, 'filters': []},
     {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
      'match': lambda n: n.startswith('operacoes'),
      'filters': [('digits', 2, {'73760009'}),
@@ -3093,13 +3098,23 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     try:
-        recs, total = _ds_process(raw, spec)
+        if spec.get('otm'):                            # OTM cashflows → OTM page's own logic + path
+            rows = _ds_read_rows(raw)
+            recs, kept, deleted, filtered = _otm_extract(rows) if len(rows) >= 2 else ([], 0, 0, 0)
+            total = kept + deleted + filtered
+            jp = _otm_json_path(ref)
+        else:
+            recs, total = _ds_process(raw, spec)
+            jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                              '{}_{}.json'.format(spec['json'], ref.strftime('%Y%m%d')))
     except Exception:
         log.warning("[ds] process failed for %s:\n%s", name, traceback.format_exc())
         skipped.append(name)
         return
-    jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
-                      '{}_{}.json'.format(spec['json'], ref.strftime('%Y%m%d')))
+    _ds_write(jp, recs, name, spec, total, processed, delete_path)
+
+
+def _ds_write(jp, recs, name, spec, total, processed, delete_path):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(recs, fh, ensure_ascii=False, indent=2)
@@ -3166,7 +3181,7 @@ def api_cp_daily_settlement_save():
                'dropzone' if source == 'dropzone' else 'pasta') + '<br>'.join(lines)
     if skipped:
         msg += ('<br><br>' if msg else '') + \
-            '<span class="text-muted">{} ignorado(s) (não reconhecido/OTM): {}</span>'.format(
+            '<span class="text-muted">{} ignorado(s) (não reconhecido): {}</span>'.format(
                 len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
     return jsonify({'success': True, 'source': source, 'processed': processed,
                     'skipped': skipped, 'message': msg or 'Nada a processar.'})
@@ -3770,25 +3785,11 @@ def _otm_read_rows(path):
     return [ln.split('\t') for ln in text.splitlines() if ln.strip()]
 
 
-def _otm_import(ref=None):
-    """Find cashflows_*.xlsx in OTM_SOURCE_ROOT, clean + extract the reporting
-    columns, write today's JSON and delete the source. Returns a summary dict."""
-    ref = ref or datetime.now()
-    if not os.path.isdir(OTM_SOURCE_ROOT):
-        return {'success': False, 'error': 'Source folder not found: {}'.format(OTM_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(OTM_SOURCE_ROOT)
-                     if f.lower().startswith('cashflows_') and f.lower().endswith('.xlsx'))
-    if not matches:
-        return {'success': False, 'error': 'No cashflows_*.xlsx found in {}'.format(OTM_SOURCE_ROOT)}
-    src_path = os.path.join(OTM_SOURCE_ROOT, matches[0])
-    try:
-        rows = _otm_read_rows(src_path)
-    except Exception:
-        log.warning("[otm] read failed for %s:\n%s", src_path, traceback.format_exc())
-        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
-    if not rows or len(rows) < 2:
-        return {'success': False, 'error': 'File {} has no data rows'.format(matches[0])}
-
+def _otm_extract(rows):
+    """Clean + extract the OTM reporting columns from a cashflows file's rows
+    (CleanSettlementOTM: drop col14==DELETE, keep col22 ∈ {0228,0123}; keep the 18
+    columns by header name; Cpty Name upper-cased). Returns (records, kept,
+    deleted, filtered). Shared by the OTM page and the Save Daily Settlement card."""
     header = [str(h or '').strip() for h in rows[0]]
     hnorm = [_fcst_norm(h) for h in header]
 
@@ -3822,7 +3823,29 @@ def _otm_import(ref=None):
         rec['Cpty Name'] = rec['Cpty Name'].upper()      # store counterparty name upper-cased
         out.append(rec)
         kept += 1
+    return out, kept, deleted, filtered
 
+
+def _otm_import(ref=None):
+    """Find cashflows_*.xlsx in OTM_SOURCE_ROOT, clean + extract the reporting
+    columns, write today's JSON and delete the source. Returns a summary dict."""
+    ref = ref or datetime.now()
+    if not os.path.isdir(OTM_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(OTM_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(OTM_SOURCE_ROOT)
+                     if f.lower().startswith('cashflows_') and f.lower().endswith('.xlsx'))
+    if not matches:
+        return {'success': False, 'error': 'No cashflows_*.xlsx found in {}'.format(OTM_SOURCE_ROOT)}
+    src_path = os.path.join(OTM_SOURCE_ROOT, matches[0])
+    try:
+        rows = _otm_read_rows(src_path)
+    except Exception:
+        log.warning("[otm] read failed for %s:\n%s", src_path, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    if not rows or len(rows) < 2:
+        return {'success': False, 'error': 'File {} has no data rows'.format(matches[0])}
+
+    out, kept, deleted, filtered = _otm_extract(rows)
     jp = _otm_json_path(ref)
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
