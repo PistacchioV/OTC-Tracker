@@ -32,6 +32,9 @@
 
 @media (prefers-reduced-motion: reduce) {
     .ab-rv { opacity: 1 !important; transform: none !important; transition: none !important; }
+    /* Drop hover/press movement too — keep only color/shadow feedback. */
+    .ab-feat:hover, .ab-feat:active, .ab-tech:hover,
+    .ab-feat__link:hover i { transform: none !important; }
 }
 
 /* Stagger delays — children of .ab-sg */
@@ -300,10 +303,11 @@
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    transition: gap 160ms ease;
 }
+/* Nudge the arrow with transform (GPU), not gap (layout). */
+.ab-feat__link i { transition: transform 160ms var(--ab-ease-out); }
 @media (hover:hover) and (pointer:fine) {
-    .ab-feat__link:hover { gap: .55rem; color: var(--ab-blue); }
+    .ab-feat__link:hover i { transform: translateX(3px); }
 }
 
 /* ── Flow steps (white tile) ────────────────────────────────── */
@@ -699,6 +703,48 @@
                                 e ciclo de vida (New, Pending, Approved, Sent) sob aprovação maker-checker.
                             </p>
                             <a href="/intrag-ndf" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-report-money"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-mtm-title">MtM Swap</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-mtm-desc">
+                                Mark-to-Market de swaps por LOB (CEM, EDG, Hybrids) e COE: mapeamento dos valores de MtM,
+                                reconciliação contra a B3, validação de fim de mês e geração dos arquivos Conecta.
+                            </p>
+                            <a href="/mtm-swap" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-refresh"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-accrual-title">Accrual Swap</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-accrual-desc">
+                                Atualização de PU/Fator dos swaps VCP: geração dos registros de atualização, reconciliação
+                                contra a B3, ciclo maker-checker e processo de fim de mês (EOM) com e-mail à OTC Ops.
+                            </p>
+                            <a href="/accrual-swap" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-clock-check"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-pending-title">Pending Confirmation</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-pending-desc">
+                                Acompanhamento das confirmações pendentes por faixa de atraso, com widgets por tipo de
+                                pendência (Digital Signature, FO, MO, POA, OTC…), smart filter e exportação.
+                            </p>
+                            <a href="/pending-confirmation" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>

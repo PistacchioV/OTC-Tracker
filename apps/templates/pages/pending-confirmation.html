@@ -83,6 +83,32 @@
         margin-left: auto;
     }
 
+    /* Staggered entrance: the six widgets fade+rise in sequence on load.
+       Keyframes (not transition) — one-shot entry, never re-triggered. */
+    @keyframes pendingWidgetIn {
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .pending-widgets-row .col {
+            opacity: 0;
+            transform: translateY(8px);
+            animation: pendingWidgetIn 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        .pending-widgets-row .col:nth-child(1) { animation-delay: 0ms; }
+        .pending-widgets-row .col:nth-child(2) { animation-delay: 50ms; }
+        .pending-widgets-row .col:nth-child(3) { animation-delay: 100ms; }
+        .pending-widgets-row .col:nth-child(4) { animation-delay: 150ms; }
+        .pending-widgets-row .col:nth-child(5) { animation-delay: 200ms; }
+        .pending-widgets-row .col:nth-child(6) { animation-delay: 250ms; }
+    }
+    /* Reduced motion: keep the shadow/border feedback, drop the lift + entrance. */
+    @media (prefers-reduced-motion: reduce) {
+        .pending-widgets-row .card {
+            transition: box-shadow 220ms ease, border-color 220ms ease;
+        }
+        .pending-widgets-row .card:hover { transform: none; }
+    }
+
     /* Footer adjustments – o footer real vem do layout, aqui não fixamos mais */
 
     /* DataTable custom adjustments */
@@ -338,6 +364,23 @@
             transform: translateY(-1px);
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
         }
+    }
+    /* Close buttons (modal X) aren't .btn — give them the same press feedback. */
+    .btn-close {
+        transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .btn-close:active {
+        transform: scale(0.9);
+    }
+    /* Reduced motion: keep color/shadow feedback, drop the movement. */
+    @media (prefers-reduced-motion: reduce) {
+        .container-fluid .btn {
+            transition: color .15s ease-in-out, background-color .15s ease-in-out,
+                        border-color .15s ease-in-out, box-shadow .15s ease-in-out;
+        }
+        .container-fluid .btn:active,
+        .container-fluid .btn:not(:active):hover,
+        .btn-close:active { transform: none !important; }
     }
     /* Export collection dropdown — fundo sólido e texto legível */
     .dt-button-collection {
