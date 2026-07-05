@@ -38,7 +38,8 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
   um **modal com um campo por coluna** (padrão New Deals `#addRowModal`), NÃO adicionar uma linha inline
   em branco. Referências: `new_deals-*` (`#addRowModal`, aberto via
   `bootstrap.Modal.getOrCreateInstance(el).show()`), `other-products-summary.html` (`#opsAddModal`,
-  campos gerados dinamicamente a partir dos headers da tabela → `dt.row.add([...])` no Save).
+  campos gerados dinamicamente a partir dos headers da tabela → `dt.row.add([...])` no Save),
+  `otm-settlements` (`#otmAddModal`, campos das 18 colunas via `COLS`, com polish Emil no botão/modal).
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
