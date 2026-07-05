@@ -3292,12 +3292,14 @@ def _swapchar_lob(identifier):
 
 
 def _swapchar_coltype(label):
-    """Formatting class for a column: date | func | value | text."""
+    """Formatting class for a column: date | func | amort | value | text."""
     n = _fcst_norm(label)
     if n.startswith('data'):
         return 'date'
     if n == 'funcionalidade':
         return 'func'
+    if n == 'tipo de amortizacao':
+        return 'amort'
     if n.startswith('sinal') or n.startswith('tipo') or n.startswith('nome'):
         return 'text'
     if any(tok in n for tok in _SWAPCHAR_VALUE_TOKENS):
@@ -3324,6 +3326,31 @@ def _swapchar_func_text(v):
     return t
 
 
+# Tipo de amortização code → text (image mapping; parentheses dropped, text kept).
+_SWAPCHAR_AMORT_MAP = {
+    '0': 'Sobre Valor Base Original',
+    '1': 'Sobre Valor Base Remanescente',
+    '3': 'Na Data de Vencimento',
+    '4': 'Sem Troca de Amortização',
+}
+
+
+def _swapchar_amort_text(v):
+    """Map a Tipo de amortização cell to its text label (no parentheses)."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    m = re.search(r'\(([^)]*)\)', s)          # value already carries "NN (text)"
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits:
+        code = str(int(digits))
+        if code in _SWAPCHAR_AMORT_MAP:
+            return _SWAPCHAR_AMORT_MAP[code]
+    return s
+
+
 def _swapchar_fmt_value(v):
     """Numeric cell → #,##0.00 (1,234.56); non-numeric passes through unchanged."""
     s = str(v or '').strip()
@@ -3344,6 +3371,8 @@ def _swapchar_fmt_cell(value, ctype):
         return d.strftime('%d/%m/%Y') if d else str(value)
     if ctype == 'func':
         return _swapchar_func_text(value)
+    if ctype == 'amort':
+        return _swapchar_amort_text(value)
     if ctype == 'value':
         return _swapchar_fmt_value(value)
     return str(value)
@@ -3418,11 +3447,11 @@ def _swapchar_collect(ref):
         disp = []
         for i in _SWAPCHAR_DISPLAY_IDX:
             raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
-            if i == 0:                      # Tipo de Contrato → Cashflow / Bullet
+            if i == 0:                      # Tipo de Contrato: 01 → Bullet, 02 → Cashflow
                 rv = str(raw or '').strip()
                 if rv.endswith('.0'):
                     rv = rv[:-2]
-                disp.append('Cashflow' if rv == '1' else ('Bullet' if rv == '2'
+                disp.append('Bullet' if rv == '1' else ('Cashflow' if rv == '2'
                             else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
@@ -3430,10 +3459,10 @@ def _swapchar_collect(ref):
         # Widgets
         widgets['total'] += 1
         widgets['tipo']['total'] += 1
-        if tv == '1':
-            widgets['tipo']['cashflow'] += 1
-        elif tv == '2':
+        if tv == '1':                       # 01 → Bullet, 02 → Cashflow
             widgets['tipo']['bullet'] += 1
+        elif tv == '2':
+            widgets['tipo']['cashflow'] += 1
         lob = _swapchar_lob(cid)
         widgets['lob']['total'] += 1
         widgets['lob'][lob] += 1
