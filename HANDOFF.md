@@ -3457,3 +3457,43 @@ apps/templates/partials/sidenav.html          ← href OTM → /otm-settlements
 apps/static/data/translations/{en,br,es}.json ← otm-*, cp-r-ds-*/cp-ds-*
 .gitignore                                    ← cache daily settlement
 ```
+
+---
+
+## 66. Sessão 2026-07-05 — NOVA página Operations B3 + timestamp "última atualização"
+
+### Página `/operations-b3` (commit `8449ed7`)
+Sidenav *Daily Settlement › B3 Files › Operations* (o item já existia com âncora morta → apontei p/
+`/operations-b3`). **Mesmo padrão do OTM Settlements** (widgets + filtro por coluna + Columns/Export +
+date picker + Show entries; sem scrollX). Vista curada do arquivo B3 "Operações".
+- **14 colunas** (`_OPB3_COLUMNS`): Conta, Tipo Operação, C/V, Título, Tipo Título, Tipo de Regime,
+  Data Vencimento, Valor, Modalidade Liquidação, Status, Data Liquidação, Contraparte (Nome Simpl.),
+  Conta Contraparte, Num Ctrl Operação. (+ checkbox/actions/status padrões). Datas dd/mm/yyyy, Valor `#,##0.00`.
+- **Import (`/api/operations-b3/import`):** varre `OPB3_SOURCE_ROOT` (default = `SETTLEMENTS_ROOT`) por
+  `Operacoes*`, lê via `_ds_read_rows` (mesma lógica do Save Daily Settlement Files). **Header na LINHA 5**,
+  dados da linha 6 → JSON só da linha 5 pra baixo (`_opb3_extract`). **Deleta** o fonte após. JSON:
+  `daily settlement/YYYY/MM/DD/operations-b3_YYYYMMDD.json`.
+- **Widgets dinâmicos** (`_opb3_breakdown`): **Tipo Operação**, **Tipo Título**, **Modalidade Liquidação** —
+  cada um com **total + sub-itens por valor distinto** (contagem, ordenado por count desc). 4º card = **Total**
+  (nº de operações). Sub-itens renderizados no front (`renderWidgets`/`renderSubs`). ⏳ ajustar métricas depois.
+- **Timestamp "última atualização"** ao lado do date picker: vem da **LINHA 2, COLUNA A** do arquivo
+  (HH:MM:SS, ex. `17:21:12`) — o horário de extração.
+
+### Timestamp — sidecar meta (OTM + Operations B3)
+- `<json>.meta.json` = `{"updated": "HH:MM:SS"}` (helpers `_ds_meta_path`/`_ds_write_updated`/`_ds_read_updated`;
+  fallback = mtime do arquivo). OTM usa o **horário do import** (o cashflows não tem horário no arquivo);
+  Operations B3 usa a **linha 2 col A**. Ambas as páginas exibem `#*-updated` ao lado do date picker.
+- Coberto pelo `.gitignore` (`daily settlement/**/*.json` pega o `.meta.json`).
+
+### Arquivos (sessão 66)
+```
+apps/pages/routes.py                          ← _ds_meta/_ds_write_updated/_ds_read_updated; OTM updated;
+                                                 OPB3_* + _opb3_extract/_opb3_import/_opb3_collect/_opb3_breakdown;
+                                                 rotas /operations-b3 + /api/operations-b3/{data,import}
+apps/templates/pages/operations-b3.html       ← CRIADO
+apps/static/js/pages/operations-b3.js         ← CRIADO
+apps/templates/pages/otm-settlements.html     ← span #otm-updated
+apps/static/js/pages/otm-settlements.js       ← seta timestamp (t('updated'))
+apps/templates/partials/sidenav.html          ← Operations → /operations-b3
+apps/static/data/translations/{en,br,es}.json ← ob-*
+```
