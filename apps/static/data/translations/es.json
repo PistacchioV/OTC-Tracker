@@ -1195,5 +1195,9 @@
   "ob-rows": "filas",
   "ops-add-title": "Agregar fila",
   "ops-add-save": "Agregar",
-  "ops-cancel": "Cancelar"
+  "ops-cancel": "Cancelar",
+  "otm-add-row": "Agregar fila",
+  "otm-add-title": "Agregar fila",
+  "otm-add-save": "Agregar",
+  "otm-cancel": "Cancelar"
 }

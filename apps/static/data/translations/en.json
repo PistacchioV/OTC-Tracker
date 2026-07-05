@@ -1196,5 +1196,9 @@
   "ob-rows": "rows",
   "ops-add-title": "Add row",
   "ops-add-save": "Add",
-  "ops-cancel": "Cancel"
+  "ops-cancel": "Cancel",
+  "otm-add-row": "Add row",
+  "otm-add-title": "Add row",
+  "otm-add-save": "Add",
+  "otm-cancel": "Cancel"
 }

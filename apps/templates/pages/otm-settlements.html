@@ -50,6 +50,24 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #otm-page .btn:active { transform: scale(0.97); }
+/* Add-row button — press feedback + hover lift (Emil) */
+#otm-page .otm-addrow-btn { transition: transform 150ms var(--otm-ease-out), box-shadow 150ms var(--otm-ease-out); }
+@media (hover: hover) and (pointer: fine) {
+    #otm-page .otm-addrow-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+}
+/* Add-row modal — centered (not origin-aware): scale 0.96 + opacity, strong ease-out ~200ms */
+.otm-add-modal .modal-content { border-radius: 16px; }
+.otm-add-modal.fade .modal-dialog {
+    transform: scale(0.96); opacity: 0;
+    transition: transform 200ms var(--otm-ease-out), opacity 200ms var(--otm-ease-out);
+}
+.otm-add-modal.show .modal-dialog { transform: scale(1); opacity: 1; }
+.otm-add-modal .form-control:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
+@media (prefers-reduced-motion: reduce) {
+    #otm-page .otm-addrow-btn { transition: none; }
+    #otm-page .otm-addrow-btn:hover { transform: none; }
+    .otm-add-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
+}
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 #otm-table thead th {
@@ -224,6 +242,9 @@
                         </select>
                         <label class="form-label mb-0 fs-xs text-muted" data-lang="otm-entries">entries</label>
                     </div>
+                    <button class="btn btn-sm btn-primary bg-gradient otm-addrow-btn" type="button" id="otmAddBtn">
+                        <i class="ti ti-plus me-1"></i><span data-lang="otm-add-row">Add row</span>
+                    </button>
                     <div class="columnToggleWrapper"></div>
                     <div class="otmExportWrapper"></div>
                     <button class="btn btn-sm btn-soft-secondary" type="button" id="otmClearFilters">
@@ -242,6 +263,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Add row modal (New Deals pattern: a window with all columns to fill) -->
+    <div class="modal fade otm-add-modal" id="otmAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-lang="otm-add-title">Add row</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="otmAddFields"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-lang="otm-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary bg-gradient" id="otmAddSave" data-lang="otm-add-save">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock page_content %}
 
@@ -257,5 +297,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/otm-settlements.js?v=20260705"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otm-settlements.js?v=20260706"></script>
 {% endblock extra_javascript %}
