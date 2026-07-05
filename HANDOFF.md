@@ -3096,6 +3096,11 @@ Proteções em vigor (verificadas com `git check-ignore` / `git status`):
 - `dashboard.js`: `buildLivePositionChart(data)` (barra horizontal, gradiente por barra,
   `stackEndRadius(6,'left')`), `renderLiveEntityStats(entities)`, `loadLivePosition(dateStr)`,
   `wireLivePosition()`. Cache em `_liveData`; `rerenderCharts` re-renderiza no theme-switch.
+- **Date picker = jQuery `daterangepicker`** (PADRÃO OBRIGATÓRIO, §topo) — assets `moment.min.js` +
+  `daterangepicker.js`/`.css` incluídos no próprio `index.html`. `wireLivePosition()` inicializa
+  `singleDatePicker` (`DD/MM/YYYY`); `_liveDrp` guarda a instância; sync do D-1 via `setStartDate`.
+  ⚠️ Primeira tentativa usou flatpickr "global" — **abandonado** por violar a regra (não confiar no
+  bundle; ver `other-products-summary`). Fallback a texto dd/mm/yyyy se o plugin não carregar.
 
 ### Fixes de texto (duplo espaço)
 - Settlement Forecast: "`product  as of`" → "`product as of`" (removido `ms-1` de `#forecast-asof`).

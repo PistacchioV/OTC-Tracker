@@ -718,7 +718,7 @@ function updatePeriodBadges(period) {
 
 let liveChart = null;
 let _liveData = null;
-let _liveFp = null;   // flatpickr instance for the Live Position date field
+let _liveDrp = null;  // daterangepicker instance for the Live Position date field
 // Multi-hue palette for the by-product bars (distinct from the flow/pie tokens).
 const LIVE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#a855f7', '#14b8a6', '#64748b'];
 
@@ -811,16 +811,19 @@ async function loadLivePosition(dateStr) {
         const asOf = document.getElementById('live-asof');
         if (asOf && data.ref_date_fmt) asOf.textContent = `${t('dash-forecast-asof', 'as of')} ${data.ref_date_fmt}`;
 
-        // Keep the picker in sync with the resolved reference date (default D-1).
-        // ISO is parsed into a *local* Date so flatpickr (dd/mm/yyyy) doesn't TZ-shift it.
-        if (_liveFp) {
-            if (data.ref_date && !_liveFp.selectedDates.length) {
-                const p = data.ref_date.split('-');
-                if (p.length === 3) _liveFp.setDate(new Date(+p[0], +p[1] - 1, +p[2]), false);
-            }
+        // Keep the picker in sync with the resolved reference date (default D-1 ANBIMA).
+        // daterangepicker.setStartDate auto-updates the input (dd/mm/yyyy) and doesn't
+        // re-fire the change callback, so no recursion.
+        if (_liveDrp && data.ref_date && window.moment) {
+            const m = window.moment(data.ref_date, 'YYYY-MM-DD');
+            _liveDrp.setStartDate(m);
+            _liveDrp.setEndDate(m);
         } else {
             const picker = document.getElementById('live-date');
-            if (picker && data.ref_date && !picker.value) picker.value = data.ref_date;
+            if (picker && data.ref_date && !picker.value) {
+                const p = data.ref_date.split('-');
+                if (p.length === 3) picker.value = p[2] + '/' + p[1] + '/' + p[0];
+            }
         }
 
         renderLiveEntityStats(data.by_entity);
@@ -830,33 +833,29 @@ async function loadLivePosition(dateStr) {
     }
 }
 
-// ISO (YYYY-MM-DD) from a local Date, no timezone drift.
-function _liveIso(d) {
-    if (!d) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 function wireLivePosition() {
-    const wrap = document.getElementById('liveDateWrap');
-    if (!wrap) return;
-    // flatpickr forces dd/mm/yyyy regardless of the OS locale (JP env shows mm/dd/yyyy
-    // with a native <input type="date">). We still send YYYY-MM-DD to the backend.
-    if (typeof flatpickr !== 'undefined') {
-        _liveFp = flatpickr(wrap, {
-            wrap: true,               // <input data-input> + <a data-toggle> (calendar icon)
-            dateFormat: 'd/m/Y',      // visible value = dd/mm/yyyy
-            allowInput: false,
-            disableMobile: true,
-            onChange: function (dates) { loadLivePosition(_liveIso(dates && dates[0])); }
-        });
+    const inp = document.getElementById('live-date');
+    if (!inp) return;
+    // MANDATORY project pattern: jQuery daterangepicker (dd/mm/yyyy), assets loaded on
+    // the page. NEVER a native <input type="date"> (inherits the OS locale → mm/dd/yyyy
+    // on the JP Windows env) nor the "global" flatpickr (failed intermittently).
+    if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
+        const $d = jQuery('#live-date');
+        $d.daterangepicker({
+            singleDatePicker: true, autoApply: true, showDropdowns: true,
+            locale: { format: 'DD/MM/YYYY' },
+            startDate: moment()   // re-synced to the backend's D-1 ANBIMA after first load
+        }, function (start) { loadLivePosition(start.format('YYYY-MM-DD')); });
+        jQuery('#liveDateWrap .live-cal-btn').on('click', function () { $d.trigger('click'); });
+        _liveDrp = $d.data('daterangepicker');
         return;
     }
-    // Fallback if flatpickr is unavailable: native text change.
-    const picker = document.getElementById('live-date');
-    if (picker) picker.addEventListener('change', () => loadLivePosition(picker.value));
+    // Fallback: plain dd/mm/yyyy text field if the plugin failed to load.
+    inp.removeAttribute('readonly');
+    inp.addEventListener('change', function () {
+        const m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) loadLivePosition(m[3] + '-' + m[2] + '-' + m[1]);
+    });
 }
 
 // ─── main load ───────────────────────────────────────────────────────────────
