@@ -3380,3 +3380,45 @@ Adicionado o arquivo **`CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT`** à rotina **Sa
 apps/pages/routes.py   ← _CETIP_RULES +INDEXADORESSWAP_VCP; VCP_JSON;
                           _cetip_update_vcp_json (upsert por ID no VCP.json existente); hook no save
 ```
+
+---
+
+## 65. Sessão 2026-07-05 — NOVA página Other Products › OTM Settlements + card Control Panel
+
+### Página `/otm-settlements` (commit `a819c53`)
+Sidenav *Daily Settlement › Other Products › OTM* (o item já existia apontando p/ `/other-products-otm`
+sem rota — apontei p/ `/otm-settlements`). Substitui a macro VBA "Settlement - OTM". Modelada na Swap
+Characteristics (widgets + filtro por coluna + Columns/Export + date picker; **sem** scrollX).
+- **4 widgets:** RATES, EQUITIES, COMMODITIES, **TOTAL** (card azul). ⏳ contagem de Rates/Equities/
+  Commodities **pendente** (usuário envia a lógica); TOTAL = nº de linhas.
+- **Tabela:** checkbox, actions (placeholder), status (Break Reason vazio→OK / preenchido→Break) + as
+  **18 colunas** (`_OTM_COLUMNS`). Datas dd/mm/yyyy, Amount `#,##0.00`. Bloco de larguras `nth-child`.
+- **Import (`/api/otm-settlements/import`):** replica `CleanSettlementOTM` da macro — lê `cashflows_*.xlsx`
+  de `OTM_SOURCE_ROOT` (tratado como **TAB-delimited**, como o VBA `OpenText Tab:=True`; fallback xlsx-zip
+  real via openpyxl). Limpeza: (A) descarta linhas com **col 14 == "DELETE"**; (B) normaliza **col 22** p/
+  texto 4 dígitos; (C) mantém só col 22 ∈ **{0228, 0123}**. Extrai as 18 colunas **por nome de header**,
+  grava `static/data/cache/daily settlement/YYYY/MM/DD/otm-settlement_YYYYMMDD.json` (**today**) e **deleta
+  o .xlsx** consumido. Validado: kept 2 / deleted 1 (DELETE) / filtered 1 (código fora).
+- `.gitignore`: `apps/static/data/cache/daily settlement/**/*.json` (dados de runtime, não commitar).
+- Endpoint de leitura: `/api/otm-settlements/data?date=` (default today).
+
+### Card Control Panel "Save Daily Settlement Files" (commit `c5e43f4`)
+- Novo `.cp-card` na coluna **Daily Settlements / File-Saving Routines** (ao lado do Save CETIP Files),
+  com date field flatpickr (padrão da página) + botão **Save files** → `data-endpoint`
+  `/api/control-panel/daily-settlement-save`.
+- **`api_cp_daily_settlement_save`** é um **STUB** (front-end pronto): retorna `success:true` com mensagem
+  "…ainda será implementada". ⏳ Lógica real (quais arquivos, fontes e destinos) a implementar.
+- i18n: `cp-r-ds-*`, `cp-ds-*`; página OTM: `otm-*`.
+
+### Arquivos (sessão 65)
+```
+apps/pages/routes.py                          ← OTM_* (source/json roots, _OTM_COLUMNS), _otm_read_rows/
+                                                 _otm_import/_otm_collect, rotas /otm-settlements + /api/...;
+                                                 stub api_cp_daily_settlement_save
+apps/templates/pages/otm-settlements.html     ← CRIADO
+apps/static/js/pages/otm-settlements.js       ← CRIADO
+apps/templates/pages/control-panel.html       ← card Save Daily Settlement Files
+apps/templates/partials/sidenav.html          ← href OTM → /otm-settlements
+apps/static/data/translations/{en,br,es}.json ← otm-*, cp-r-ds-*/cp-ds-*
+.gitignore                                    ← cache daily settlement
+```
