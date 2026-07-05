@@ -163,7 +163,7 @@ function buildPieChart(ndf, opt, fxo, swap) {
     });
 }
 
-function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
+function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap) {
     const ctx = document.getElementById('sales-analytics-chart');
     if (!ctx) return;
     if (flowChart) flowChart.destroy();
@@ -175,6 +175,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo) {
                 { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
                 { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
                 { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Swap', data: monthlySwap || [], backgroundColor: vGradient('#f59e0b', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
             ]
         },
         options: {
@@ -716,8 +717,8 @@ async function loadDashboard(period) {
         setText('dash-total-count', data.total_deals);
 
         updatePeriodBadges(period);
-        buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo);
-        buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo);
+        buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo, data.dist_swap);
+        buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo, data.monthly_swap);
         buildClientsChart(data.top5_clients);
         buildProductsChart(data.top5_products);
         buildCommoditiesChart(data.top5_underlying);
@@ -743,8 +744,8 @@ async function loadDashboard(period) {
 /** Rebuild every chart from the cached data using the current theme's tokens. */
 function rerenderCharts() {
     if (!_lastData) return;
-    buildPieChart(_lastData.dist_ndf, _lastData.dist_opt, _lastData.dist_fxo);
-    buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt, _lastData.monthly_fxo);
+    buildPieChart(_lastData.dist_ndf, _lastData.dist_opt, _lastData.dist_fxo, _lastData.dist_swap);
+    buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt, _lastData.monthly_fxo, _lastData.monthly_swap);
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
     buildCommoditiesChart(_lastData.top5_underlying);

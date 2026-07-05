@@ -201,9 +201,9 @@
                                     <th data-lang="ops-col-actions">Actions</th>
                                     <th data-lang="ops-col-status">Status</th>
                                     <th data-lang="ops-col-counterparty">Counterparty</th>
+                                    <th data-lang="ops-col-product">Product</th>
                                     <th data-lang="ops-col-receive">Receive</th>
                                     <th data-lang="ops-col-pay">Pay</th>
-                                    <th data-lang="ops-col-product">Product</th>
                                     <th data-lang="ops-col-settlement-net">Settlement Net</th>
                                     <th data-lang="ops-col-internal-account">Internal Account</th>
                                     <th data-lang="ops-col-obs">Observation</th>
@@ -212,9 +212,9 @@
                                     <th></th><th></th>
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="Product"></th>
                                     <th><input type="text" placeholder="Receive"></th>
                                     <th><input type="text" placeholder="Pay"></th>
-                                    <th><input type="text" placeholder="Product"></th>
                                     <th><input type="text" placeholder="Settlement Net"></th>
                                     <th><input type="text" placeholder="Internal Account"></th>
                                     <th><input type="text" placeholder="Observation"></th>
@@ -401,7 +401,7 @@ $(function () {
                 dtSummary.clear(); dtTrade.clear();
                 (j.summary || []).forEach(function (r) {
                     dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
-                        inp(r.counterparty), inp(r.receive), inp(r.pay), inp(r.product), inp(r.settlement_net), inp(r.internal_account), inp(r.obs)]);
+                        inp(r.counterparty), inp(r.product), inp(r.receive), inp(r.pay), inp(r.settlement_net), inp(r.internal_account), inp(r.obs)]);
                 });
                 (j.trade || []).forEach(function (r) {
                     dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),

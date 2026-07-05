@@ -46,6 +46,118 @@ FOOTER_HTML = (
     'Tel.: 0800 – 7700847 / E-mail: ouvidoria.jp.morgan@jpmorgan.com</p>'
 )
 
+# ──────────────────────────────────────────────────────────────────────────
+# HTML e-mail design (corporate, Emil/Apple) — table-based + inline styles so
+# Outlook/Gmail render it reliably. No images: a text wordmark, one Action-Blue
+# accent, hairline tables, generous spacing. Shared by the client-facing drafts.
+# ──────────────────────────────────────────────────────────────────────────
+_E_BLUE  = '#0066cc'
+_E_NAVY  = '#243b53'
+_E_INK   = '#1d1d1f'
+_E_MUTED = '#8a8a8f'
+_E_FONT  = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+
+def _esc(s):
+    s = '' if s is None else str(s)
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def _ep(html, muted=False):
+    """A body paragraph."""
+    color = '#6c6c72' if muted else '#333333'
+    return ('<p style="margin:0 0 12px;font-size:14px;line-height:1.62;color:' + color +
+            ';font-family:' + _E_FONT + ';">' + html + '</p>')
+
+
+def _email_data_table(headers, rows):
+    """A clean hairline table with a navy header and zebra rows."""
+    th = ''.join(
+        '<th style="padding:9px 11px;text-align:left;font-size:10.5px;font-weight:600;'
+        'text-transform:uppercase;letter-spacing:.04em;color:#ffffff;white-space:nowrap;">' + _esc(h) + '</th>'
+        for h in headers)
+    body = ''
+    for i, r in enumerate(rows):
+        bg = '#ffffff' if i % 2 == 0 else '#f6f7f9'
+        tds = ''.join(
+            '<td style="padding:8px 11px;font-size:12px;color:#1d1d1f;border-top:1px solid #edeef1;'
+            'white-space:nowrap;">' + _esc(c) + '</td>' for c in r)
+        body += '<tr style="background:' + bg + ';">' + tds + '</tr>'
+    return ('<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+            'style="border-collapse:separate;border-spacing:0;width:100%;border:1px solid #e6e6ea;'
+            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';">'
+            '<tr style="background:' + _E_NAVY + ';">' + th + '</tr>' + body + '</table>')
+
+
+def _email_summary(pairs):
+    """Highlighted totals panel. pairs: list of (label, value, is_total)."""
+    rows = ''
+    for i, (label, value, is_total) in enumerate(pairs):
+        top = '' if i == 0 else 'border-top:1px solid #dbe6f3;'
+        lblc = _E_INK if is_total else '#4a4a4f'
+        valc = _E_BLUE if is_total else _E_INK
+        wt = '700' if is_total else '600'
+        fs = '15px' if is_total else '13px'
+        rows += ('<tr><td style="padding:8px 14px;font-size:' + fs + ';font-weight:' + wt +
+                 ';color:' + lblc + ';' + top + '">' + _esc(label) + '</td>'
+                 '<td align="right" style="padding:8px 14px;font-size:' + fs + ';font-weight:700;color:' +
+                 valc + ';white-space:nowrap;' + top + '">' + _esc(value) + '</td></tr>')
+    return ('<table role="presentation" cellpadding="0" cellspacing="0" '
+            'style="border-collapse:separate;border-spacing:0;background:#f3f6fb;border:1px solid #dbe6f3;'
+            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';min-width:280px;">' + rows + '</table>')
+
+
+def _email_kv(title, pairs):
+    """A titled key/value block (e.g. banking details)."""
+    head = ('<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;'
+            'color:' + _E_MUTED + ';margin:0 0 8px;font-family:' + _E_FONT + ';">' + _esc(title) + '</div>')
+    rows = ''
+    for i, (label, value) in enumerate(pairs):
+        top = '' if i == 0 else 'border-top:1px solid #ececf0;'
+        rows += ('<tr><td style="padding:7px 14px;font-size:12.5px;color:#6c6c72;white-space:nowrap;' + top + '">' +
+                 _esc(label) + '</td>'
+                 '<td style="padding:7px 14px;font-size:12.5px;font-weight:600;color:#1d1d1f;' + top + '">' +
+                 _esc(value) + '</td></tr>')
+    return (head + '<table role="presentation" cellpadding="0" cellspacing="0" '
+            'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #e6e6ea;'
+            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';min-width:320px;">' + rows + '</table>')
+
+
+def _email_shell(title, ref_date, intro_html, body_html):
+    """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer."""
+    return (
+        '<!doctype html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+        '<body style="margin:0;padding:0;background:#f4f4f6;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f4f4f6;">'
+        '<tr><td align="center" style="padding:26px 12px;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="640" '
+        'style="width:640px;max-width:640px;background:#ffffff;border:1px solid #e6e6ea;border-radius:14px;'
+        'font-family:' + _E_FONT + ';">'
+        # header
+        '<tr><td style="padding:24px 34px 0;">'
+        '<table role="presentation" width="100%"><tr>'
+        '<td style="font-size:16px;font-weight:700;letter-spacing:.16em;color:#1d1d1f;">J.P.MORGAN</td>'
+        '<td align="right" style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:' +
+        _E_MUTED + ';">' + _esc(ref_date) + '</td>'
+        '</tr></table></td></tr>'
+        '<tr><td style="padding:14px 34px 0;"><div style="height:3px;width:44px;background:' + _E_BLUE +
+        ';border-radius:2px;font-size:0;line-height:0;">&nbsp;</div></td></tr>'
+        '<tr><td style="padding:13px 34px 0;"><div style="font-size:20px;font-weight:600;letter-spacing:-.3px;'
+        'color:#1d1d1f;line-height:1.25;">' + _esc(title) + '</div></td></tr>'
+        # intro + body
+        '<tr><td style="padding:16px 34px 2px;">' + intro_html + '</td></tr>'
+        '<tr><td style="padding:4px 34px 26px;">' + body_html + '</td></tr>'
+        # footer
+        '<tr><td style="padding:20px 34px;background:#fafafb;border-top:1px solid #ececf0;font-size:11px;'
+        'line-height:1.7;color:' + _E_MUTED + ';">'
+        '<div style="font-weight:600;color:#555;margin-bottom:2px;">Atenciosamente,</div>'
+        'Banco J.P. Morgan S.A. &nbsp;|&nbsp; Av. Brigadeiro Faria Lima, 3729 – 15º andar – São Paulo – SP<br>'
+        'T: 55 11 4950 6717 &nbsp;|&nbsp; brsp_otc_derivatives_ops@jpmorgan.com &nbsp;|&nbsp; jpmorgan.com<br>'
+        'Ouvidoria JPMorgan: 0800 – 7700847 &middot; ouvidoria.jp.morgan@jpmorgan.com'
+        '</td></tr>'
+        '</table></td></tr></table></body></html>')
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Data loading / lookups
@@ -286,94 +398,71 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
     cp = cpd.get(_norm_spn(spn), {})
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
 
-    rows = ''
+    data_rows = []
     for d in items:
         resultado = _num(d.get('Premium')) * (1 if _is_sell(d.get('Direction')) else -1)
-        rows += (
-            '<tr style="border:1px solid black;">'
-            '<td style="border:1px solid black;">{contrato}</td>'
-            '<td style="border:1px solid black;">{op}</td>'
-            '<td style="border:1px solid black;">{venc}</td>'
-            '<td style="border:1px solid black;">{ativo}</td>'
-            '<td style="border:1px solid black;">{base}</td>'
-            '<td style="border:1px solid black;">{res}</td>'
-            '</tr>'
-        ).format(
-            contrato=d.get('Deal', ''),
-            op=_date_br(d.get('TradeDate')),
-            venc=_date_br(d.get('SettlementDate')),
-            ativo=_asset_label(d),
-            base=_br(abs(_num(d.get('TotalNotional')))),
-            res=_br_currency(resultado),
-        )
+        data_rows.append([
+            d.get('Deal', ''),
+            _date_br(d.get('TradeDate')),
+            _date_br(d.get('SettlementDate')),
+            _asset_label(d),
+            _br(abs(_num(d.get('TotalNotional')))),
+            _br_currency(resultado),
+        ])
 
-    body = (
-        '<html><body style="font-family:\'Times New Roman\';font-size:12pt;">'
-        '<p>Prezados Senhores,</p>'
-        '<p>Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):</p>'
-        '<table style="font-family:\'Arial\';font-size:10pt;border-collapse:collapse;width:auto;border:1px solid black;text-align:center;">'
-        '<tr style="font-weight:bold;border:1px solid black;">'
-        '<td style="border:1px solid black;">Contrato</td>'
-        '<td style="border:1px solid black;">Data Operação</td>'
-        '<td style="border:1px solid black;">Data Vencimento</td>'
-        '<td style="border:1px solid black;">Moeda/Ativo</td>'
-        '<td style="border:1px solid black;">Valor Base/Quantidade</td>'
-        '<td style="border:1px solid black;">Resultado Final</td>'
-        '</tr>' + rows + '</table><br>'
-    )
+    table = _email_data_table(
+        ['Contrato', 'Data Operação', 'Data Vencimento', 'Moeda/Ativo', 'Valor Base/Quantidade', 'Resultado Final'],
+        data_rows)
 
-    body += (
-        '<table style="font-family:\'Times New Roman\';font-size:12pt;border-collapse:collapse;width:auto;">'
-        '<tr><td style="font-weight:bold;">Resultado Apurado:</td><td style="font-weight:bold;">R$ {ap}</td></tr>'
-        '<tr><td style="font-weight:bold;">IR (0,005%):</td><td style="font-weight:bold;">R$ {ir}</td></tr>'
-        '<tr><td style="font-weight:bold;">Resultado Final:</td><td style="font-weight:bold;">R$ {fi}</td></tr>'
-        '</table>'
-    ).format(ap=_br_currency(apurado), ir=_br(ir), fi=_br_currency(final))
+    summary = _email_summary([
+        ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
+        ('IR (0,005%)',       'R$ ' + _br(ir),               False),
+        ('Resultado Final',   'R$ ' + _br_currency(final),   True),
+    ])
 
+    # Settlement instruction + banking block depend on the sign of the result.
     if final < 0:
-        body += ('<p>Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
-                 'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
-                 'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
-                 'Financeira e/ou confirmados por ligação telefônica:</p>')
-    elif final > 0:
-        body += ('<p>Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
-                 'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
-                 'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
-                 'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
-                 'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:</p>')
-
-    # Blank line between the apurado/IR/final values block and the banking block.
-    body += '<br><table style="font-family:Times New Roman;font-size:12pt;border-collapse:collapse;width:auto;">'
-    if final < 0:
-        # JPM is paying the counterparty → use the PAY banking details.
-        bank_name, agency, account = _first_bank(cp, 'PAY')
-        body += (
-            '<tr><td style="font-weight:bold;">Nome e nº do banco:</td><td style="font-weight:bold;">{bank}</td></tr>'
-            '<tr><td style="font-weight:bold;">Nº e nome da agência:</td><td style="font-weight:bold;">{ag}</td></tr>'
-            '<tr><td style="font-weight:bold;">Conta–corrente nº:</td><td style="font-weight:bold;">{cc}</td></tr>'
-            '<tr><td style="font-weight:bold;">CNPJ/MF nº:</td><td style="font-weight:bold;">{cnpj}</td></tr>'
-        ).format(
-            bank=bank_name or '—',
-            ag=agency or '—',
-            cc=account or '—',
-            cnpj=_fmt_cnpj(taxid),
-        )
+        instr = _ep('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
+                    'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
+                    'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
+                    'Financeira e/ou confirmados por ligação telefônica:')
+        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM pays → PAY details
+        bank = _email_kv('Dados para pagamento', [
+            ('Nome e nº do banco', bank_name or '—'),
+            ('Nº e nome da agência', agency or '—'),
+            ('Conta-corrente nº', account or '—'),
+            ('CNPJ/MF nº', _fmt_cnpj(taxid)),
+        ])
     else:
-        body += (
-            '<tr><td style="font-weight:bold;">Nome e nº do banco:</td><td style="font-weight:bold;">BANCO JP MORGAN S/A - 376</td></tr>'
-            '<tr><td style="font-weight:bold;">Nº e nome da agência:</td><td style="font-weight:bold;">0011</td></tr>'
-            '<tr><td style="font-weight:bold;">Conta–corrente nº:</td><td style="font-weight:bold;">5116003</td></tr>'
-            '<tr><td style="font-weight:bold;">CNPJ/MF nº:</td><td style="font-weight:bold;">33.172.537/0001-98</td></tr>'
-        )
-    body += '</table>'
+        instr = _ep('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
+                    'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
+                    'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
+                    'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
+                    'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        bank = _email_kv('Dados bancários', [
+            ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
+            ('Nº e nome da agência', '0011'),
+            ('Conta-corrente nº', '5116003'),
+            ('CNPJ/MF nº', '33.172.537/0001-98'),
+        ])
 
-    body += ('<p>A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
-             'Confirmação de Operação de Derivativo em referência.</p>')
-    body += FOOTER_HTML + '</body></html>'
+    def _gap(h):
+        return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
+
+    body_html = (
+        table + _gap(18) + summary +
+        ((_gap(16) + instr) if instr else '') + _gap(6) + bank + _gap(16) +
+        _ep('A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
+            'Confirmação de Operação de Derivativo em referência.', muted=True))
+
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
+
+    html = _email_shell('Liquidação de Operação de Derivativo', _today_br(), intro, body_html)
 
     return {
         'subject': '(Pagamento de Prêmio) Liquidação de Operação de Derivativo ({}) - {} - {}'.format(asset_label, _today_br(), contraparte),
-        'html': body,
+        'html': html,
         'cc': 'Liquidação; Brazil Comm Sales',
         'to': to_emails,
     }
@@ -499,62 +588,41 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
 
 
 def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
-    rows = ''
+    data_rows = []
     for d in items:
         fix_ini = _date_br(d.get('FixingStartDate'))
         fix_fim = _date_br(d.get('FixingEndDate'))
-        rows += (
-            '<tr style="border:1px solid black;">'
-            '<td style="border:1px solid black;">{contrato}</td>'
-            '<td style="border:1px solid black;">{pos}</td>'
-            '<td style="border:1px solid black;">{op}</td>'
-            '<td style="border:1px solid black;">{base}</td>'
-            '<td style="border:1px solid black;">{strike}</td>'
-            '<td style="border:1px solid black;">{ativo}</td>'
-            '<td style="border:1px solid black;">{fini}</td>'
-            '<td style="border:1px solid black;">{ffim}</td>'
-            '<td style="border:1px solid black;">{fccy}</td>'
-            '<td style="border:1px solid black;">{venc}</td>'
-            '</tr>'
-        ).format(
-            contrato=d.get('Deal', ''),
-            pos='Vendedor' if _is_sell(d.get('Direction')) else 'Comprador',
-            op=_date_br(d.get('TradeDate')),
-            base=_br(abs(_num(d.get('TotalNotional'))), 0),
-            strike=_br_currency(abs(_num(d.get('Strike'))), 4),
-            ativo=_asset_label(d),
-            fini=fix_ini if fix_ini != fix_fim else 'N/A',
-            ffim=fix_fim,
-            fccy=_date_br(d.get('FXConvDate')),
-            venc=_date_br(d.get('SettlementDate')),
-        )
+        data_rows.append([
+            d.get('Deal', ''),
+            'Vendedor' if _is_sell(d.get('Direction')) else 'Comprador',
+            _date_br(d.get('TradeDate')),
+            _br(abs(_num(d.get('TotalNotional'))), 0),
+            _br_currency(abs(_num(d.get('Strike'))), 4),
+            _asset_label(d),
+            fix_ini if fix_ini != fix_fim else 'N/A',
+            fix_fim,
+            _date_br(d.get('FXConvDate')),
+            _date_br(d.get('SettlementDate')),
+        ])
 
-    body = (
-        '<html><body style="font-family:\'Calibri\';font-size:11pt;">'
-        '<p>Prezados Senhores,</p>'
-        '<p>Por gentileza, poderiam confirmar os dados da(s) operação(ões) abaixo?</p>'
-        '<p>Conta CETIP {cp}: {b3}</p>'
-        '<p>Conta CETIP BANCO JP MORGAN S.A: {jpm}</p>'
-        '<table style="font-family:\'Arial\';font-size:10pt;border-collapse:collapse;width:auto;border:1px solid black;text-align:center;">'
-        '<tr style="font-weight:bold;border:1px solid black;">'
-        '<td style="border:1px solid black;">Contrato</td>'
-        '<td style="border:1px solid black;">Posição JPMorgan</td>'
-        '<td style="border:1px solid black;">Data Operação</td>'
-        '<td style="border:1px solid black;">Valor Base/Quantidade</td>'
-        '<td style="border:1px solid black;">Taxa Forward</td>'
-        '<td style="border:1px solid black;">Moeda/Ativo</td>'
-        '<td style="border:1px solid black;">Inicio Fixing Mercadoria</td>'
-        '<td style="border:1px solid black;">Final Fixing Mercadoria</td>'
-        '<td style="border:1px solid black;">Fixing Moeda</td>'
-        '<td style="border:1px solid black;">Data Vencimento</td>'
-        '</tr>'
-    ).format(cp=contraparte, b3=b3_account, jpm=JPM_B3_ACCOUNT) + rows + '</table><br>'
+    accounts = _email_kv('Contas CETIP', [
+        (contraparte, b3_account),
+        ('Banco J.P. Morgan S.A.', JPM_B3_ACCOUNT),
+    ])
+    table = _email_data_table(
+        ['Contrato', 'Posição JPMorgan', 'Data Operação', 'Valor Base/Quantidade', 'Taxa Forward',
+         'Moeda/Ativo', 'Início Fixing Mercadoria', 'Final Fixing Mercadoria', 'Fixing Moeda', 'Data Vencimento'],
+        data_rows)
 
-    body += FOOTER_HTML + '</body></html>'
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Por gentileza, poderiam confirmar os dados da(s) operação(ões) abaixo?'))
+    body_html = accounts + '<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>' + table
+
+    html = _email_shell('Confirmação de Operação de Derivativo', _today_br(), intro, body_html)
 
     return {
         'subject': 'Confirmação da(s) Operação(ões) Fechada(s) em {} - {} - {}'.format(_today_br(), contraparte, asset_label),
-        'html': body,
+        'html': html,
         'cc': 'brazil.otc.ops@jpmorgan.com; Brazil Comm Sales',
         'to': '',
     }
