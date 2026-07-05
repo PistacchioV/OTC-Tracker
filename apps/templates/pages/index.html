@@ -117,6 +117,22 @@
     #dash-page .dropdown-menu.show { animation: dashDropFade 0.12s ease; }
     @keyframes dashDropFade { from { opacity: 0; } to { opacity: 1; } }
 }
+
+/* 11. Live Position date field — flatpickr forces dd/mm/yyyy (locale-independent).
+       O <input type="date"> nativo herda o formato do SO (mm/dd/yyyy no ambiente JP). */
+#dash-page .live-datefield { position: relative; width: 150px; }
+#dash-page .live-datefield input { padding-right: 34px; cursor: pointer; }
+#dash-page .live-cal-btn {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    width: 24px; height: 24px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--bs-secondary-color); cursor: pointer; text-decoration: none;
+    transition: background-color 0.14s var(--dash-ease-out), color 0.14s var(--dash-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #dash-page .live-cal-btn:hover { background-color: rgba(var(--bs-primary-rgb), 0.10); color: var(--bs-primary); }
+}
+#dash-page .live-cal-btn i { font-size: 0.95rem; }
 </style>
 {% endblock extra_css %}
 
@@ -317,7 +333,10 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <label for="live-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="dash-live-refdate">Reference date</label>
-                        <input type="date" id="live-date" class="form-control form-control-sm" style="width: auto;">
+                        <div class="live-datefield" id="liveDateWrap">
+                            <input type="text" id="live-date" class="form-control form-control-sm" data-input readonly placeholder="dd/mm/yyyy">
+                            <a class="live-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -406,5 +425,5 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260704c"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260704d"></script>
 {% endblock extra_javascript %}

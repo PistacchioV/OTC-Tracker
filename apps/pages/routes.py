@@ -10366,3 +10366,4 @@ def get_segment(request):
         return segment if segment else 'index'
     except Exception:
         return None
+

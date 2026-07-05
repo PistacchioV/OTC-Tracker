@@ -718,6 +718,7 @@ function updatePeriodBadges(period) {
 
 let liveChart = null;
 let _liveData = null;
+let _liveFp = null;   // flatpickr instance for the Live Position date field
 // Multi-hue palette for the by-product bars (distinct from the flow/pie tokens).
 const LIVE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#a855f7', '#14b8a6', '#64748b'];
 
@@ -810,9 +811,17 @@ async function loadLivePosition(dateStr) {
         const asOf = document.getElementById('live-asof');
         if (asOf && data.ref_date_fmt) asOf.textContent = `${t('dash-forecast-asof', 'as of')} ${data.ref_date_fmt}`;
 
-        // Keep the picker in sync with the resolved reference date (default D-1)
-        const picker = document.getElementById('live-date');
-        if (picker && data.ref_date && !picker.value) picker.value = data.ref_date;
+        // Keep the picker in sync with the resolved reference date (default D-1).
+        // ISO is parsed into a *local* Date so flatpickr (dd/mm/yyyy) doesn't TZ-shift it.
+        if (_liveFp) {
+            if (data.ref_date && !_liveFp.selectedDates.length) {
+                const p = data.ref_date.split('-');
+                if (p.length === 3) _liveFp.setDate(new Date(+p[0], +p[1] - 1, +p[2]), false);
+            }
+        } else {
+            const picker = document.getElementById('live-date');
+            if (picker && data.ref_date && !picker.value) picker.value = data.ref_date;
+        }
 
         renderLiveEntityStats(data.by_entity);
         buildLivePositionChart(data);
@@ -821,10 +830,33 @@ async function loadLivePosition(dateStr) {
     }
 }
 
+// ISO (YYYY-MM-DD) from a local Date, no timezone drift.
+function _liveIso(d) {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 function wireLivePosition() {
+    const wrap = document.getElementById('liveDateWrap');
+    if (!wrap) return;
+    // flatpickr forces dd/mm/yyyy regardless of the OS locale (JP env shows mm/dd/yyyy
+    // with a native <input type="date">). We still send YYYY-MM-DD to the backend.
+    if (typeof flatpickr !== 'undefined') {
+        _liveFp = flatpickr(wrap, {
+            wrap: true,               // <input data-input> + <a data-toggle> (calendar icon)
+            dateFormat: 'd/m/Y',      // visible value = dd/mm/yyyy
+            allowInput: false,
+            disableMobile: true,
+            onChange: function (dates) { loadLivePosition(_liveIso(dates && dates[0])); }
+        });
+        return;
+    }
+    // Fallback if flatpickr is unavailable: native text change.
     const picker = document.getElementById('live-date');
-    if (!picker) return;
-    picker.addEventListener('change', () => loadLivePosition(picker.value));
+    if (picker) picker.addEventListener('change', () => loadLivePosition(picker.value));
 }
 
 // ─── main load ───────────────────────────────────────────────────────────────

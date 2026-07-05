@@ -16,6 +16,12 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
 **Padrões de UI a seguir:**
 - **Botão de visibilidade de colunas** (show/hide columns): rótulo **"Columns"** com ícone **`ti-columns`** (padrão em `index-b3-results.html`, `reference-data.html`). NÃO usar "Show/Hide".
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
+- **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
+  - **Assets na própria página** (não assumir que estão no bundle): no `extra_css` → `plugins/daterangepicker/daterangepicker.css`; no `extra_javascript` → `plugins/daterangepicker/moment.min.js` + `plugins/daterangepicker/daterangepicker.js`.
+  - **Markup:** `<input type="text" id="..." readonly autocomplete="off">` (sem `type=date`).
+  - **Init:** `$('#id').daterangepicker({ singleDatePicker:true, autoApply:true, showDropdowns:true, locale:{ format:'DD/MM/YYYY' }, startDate: moment() /*, maxDate: moment() só se quiser bloquear datas futuras */ }, function(start){ /* start.format('YYYY-MM-DD') → backend */ });`
+  - **Ler a data escolhida:** `$('#id').data('daterangepicker').startDate.format('YYYY-MM-DD')`.
+  - Referência viva: `other-products-summary.html` (sessão 2026-07-04).
 
 ---
 
