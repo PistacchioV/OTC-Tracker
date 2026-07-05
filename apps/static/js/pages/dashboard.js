@@ -833,7 +833,7 @@ async function loadLivePosition(dateStr) {
     }
 }
 
-function wireLivePosition() {
+function wireLivePosition(attempt) {
     const inp = document.getElementById('live-date');
     if (!inp) return;
     // MANDATORY project pattern: jQuery daterangepicker (dd/mm/yyyy), assets loaded on
@@ -841,16 +841,25 @@ function wireLivePosition() {
     // on the JP Windows env) nor the "global" flatpickr (failed intermittently).
     if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
         const $d = jQuery('#live-date');
+        // Start already on the resolved ref date if loadLivePosition finished first.
+        const startISO = (_liveData && _liveData.ref_date) ? _liveData.ref_date : null;
         $d.daterangepicker({
             singleDatePicker: true, autoApply: true, showDropdowns: true,
             locale: { format: 'DD/MM/YYYY' },
-            startDate: moment()   // re-synced to the backend's D-1 ANBIMA after first load
+            startDate: startISO ? moment(startISO, 'YYYY-MM-DD') : moment()
         }, function (start) { loadLivePosition(start.format('YYYY-MM-DD')); });
         jQuery('#liveDateWrap .live-cal-btn').on('click', function () { $d.trigger('click'); });
         _liveDrp = $d.data('daterangepicker');
         return;
     }
-    // Fallback: plain dd/mm/yyyy text field if the plugin failed to load.
+    // Plugin not ready yet (slow/late script load) — RETRY briefly instead of dropping to
+    // the text fallback permanently. ~40 × 50ms = 2s before giving up.
+    attempt = attempt || 0;
+    if (attempt < 40) {
+        setTimeout(function () { wireLivePosition(attempt + 1); }, 50);
+        return;
+    }
+    // True fallback: plain dd/mm/yyyy text field only if the plugin genuinely failed to load.
     inp.removeAttribute('readonly');
     inp.addEventListener('change', function () {
         const m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
