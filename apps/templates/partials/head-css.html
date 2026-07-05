@@ -5,4 +5,25 @@
 /* Status badge "Sent": darker teal so it reads distinct from New (light cyan)
    without going as dark as Approved (gray). Used by New Deals / Intrag / Accrual / MtM. */
 .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+/* ── Row ACTION buttons — FORMAT ONLY (project-wide) ────────────────────────
+   Standardizes the SHAPE of the existing per-row action buttons to rounded
+   SQUARES (not circles), matching the reference format. Only the format changes:
+   each page keeps its own buttons, handlers and semantic colors (btn-info blue ·
+   btn-success green · btn-danger red · btn-primary send). Targets the legacy
+   functional classes so no markup/JS needs editing. */
+.btn-row-edit, .btn-row-delete, .btn-row-confirm, .btn-row-send, .btn-row-approve,
+.acc-act-edit, .acc-act-send, .acc-act-del,
+.ops-row-del,
+.ar-confirm, .ar-edit, .ar-delete,
+.btn-rd-edit, .btn-rd-confirm, .btn-rd-delete {
+    width: 30px !important; height: 30px !important; padding: 0 !important;
+    border-radius: 7px !important;                       /* rounded square (overrides rounded-circle 50%) */
+    display: inline-flex !important; align-items: center !important; justify-content: center !important;
+    line-height: 1;
+}
+.btn-row-edit > i, .btn-row-delete > i, .btn-row-confirm > i, .btn-row-send > i, .btn-row-approve > i,
+.acc-act-edit > i, .acc-act-send > i, .acc-act-del > i, .ops-row-del > i,
+.ar-confirm > i, .ar-edit > i, .ar-delete > i,
+.btn-rd-edit > i, .btn-rd-confirm > i, .btn-rd-delete > i { font-size: 15px; }
 </style>
