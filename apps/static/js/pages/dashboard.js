@@ -135,17 +135,17 @@ function hexToRgba(hex, a) {
 
 let pieChart = null, flowChart = null, clientsChart = null, productsChart = null, commoditiesChart = null;
 
-function buildPieChart(ndf, opt, fxo) {
+function buildPieChart(ndf, opt, fxo, swap) {
     const ctx = document.getElementById('multi-pie-chart');
     if (!ctx) return;
     if (pieChart) pieChart.destroy();
     pieChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['NDF Commodities', 'Option Commodities', 'Option FXO'],
+            labels: ['NDF Commodities', 'Option Commodities', 'Option FXO', 'Swap'],
             datasets: [{
-                data: [ndf, opt, fxo || 0],
-                backgroundColor: doughnutGradient([ins('chart-primary'), ins('chart-secondary'), '#10b981'], 1, 0.55),
+                data: [ndf, opt, fxo || 0, swap || 0],
+                backgroundColor: doughnutGradient([ins('chart-primary'), ins('chart-secondary'), '#10b981', '#f59e0b'], 1, 0.55),
                 borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
                 borderWidth: 2,
                 hoverOffset: 8,

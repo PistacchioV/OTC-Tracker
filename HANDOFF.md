@@ -13,6 +13,10 @@
 
 Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabelas, modais, botões). Não é opcional.
 
+**Padrões de UI a seguir:**
+- **Botão de visibilidade de colunas** (show/hide columns): rótulo **"Columns"** com ícone **`ti-columns`** (padrão em `index-b3-results.html`, `reference-data.html`). NÃO usar "Show/Hide".
+- **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
+
 ---
 
 ## 1. Objetivo
@@ -2988,4 +2992,49 @@ apps/pages/routes.py                          ← _mtm_gen_min_value; apply/norm
                                                  _MTM_GEN_ATACAMA_ACCT={'85398005'}; endpoint /api/mtm-swap/row/preview
 apps/templates/pages/mtm-swap.html            ← dblclick preview vertical (renderMtmRowPreview/downloadMtmFiles)
 apps/static/data/translations/{en,br,es}.json ← mtm-rowprev-title / mtm-rowprev-missing
+```
+
+---
+
+## 59. Sessão 2026-07-04 — Dashboard (index): passo de refinamento Emil no CSS
+
+Escopo: só CSS do `<style>` de `index.html`. `dashboard.js` **não** tocado (já completo:
+`hoverOffset:8`, `duration:700`, `easing:'easeOutQuart'`, gradientes dark-aware em todos os charts).
+Preservado o glassmorphism e toda a estrutura; edições cirúrgicas no bloco já existente.
+
+### O que foi feito (correção de anti-padrões Emil)
+- **Token de easing:** `#dash-page { --dash-ease-out: cubic-bezier(0.23,1,0.32,1) }`; entrada `.dash-fade-in`
+  passou de `ease` fraco → curva forte.
+- **Botões:** removido `transition: all 0.25s ease` (animava layout à toa) → props específicas
+  (`transform`/cores/shadow). Adicionado **press feedback `.btn:active { scale(0.97) }`** (não existia).
+- **Hover gating:** `card:hover` (lift + shadow) e `avatar-title` scale movidos para dentro de
+  `@media (hover:hover) and (pointer:fine)` — no toque o `:hover` dava falso-positivo e travava o lift.
+- **Curvas custom** aplicadas em `box-shadow`/`transform` das transições de card.
+- **Dropdowns origin-aware:** `.dropdown-menu.show` com scale-in `0.17s` + `transform-origin: top right`
+  (menus são `dropdown-menu-end`) — nunca de `scale(0)`. Item com `padding-left` deslizando 1.5rem no hover.
+- **Seta "View All":** `translateX(3px)` no hover do `.link-reset`.
+- **`prefers-reduced-motion`:** mantém os fades (só opacity), zera todo movimento/scale/nudge e troca o
+  scale-in do dropdown por fade — exigido pela prática obrigatória (§8).
+
+Nenhum texto novo → sem novas chaves `data-lang`. Tudo escopado em `#dash-page` (sidebar/topbar intactos).
+
+### Padrões identificados nesta sessão
+- **`transition: all` é anti-padrão:** listar props específicas (`transform`, cores, `box-shadow`) — mais
+  barato e previsível; `all` anima propriedades de layout sem necessidade.
+- **Hover sempre atrás de `@media (hover:hover) and (pointer:fine)`** em qualquer efeito de card/ícone —
+  no touch o `:hover` "gruda" após o tap e prende o estado (lift/scale).
+- **`:active { scale(0.97) }`** é o padrão de press feedback do projeto para botões (alinhado ao Emil;
+  Apple usa 0.95 — manter 0.97 aqui por consistência com o resto do dashboard).
+- **Dropdown Bootstrap origin-aware:** animar `.dropdown-menu.show` com `transform-origin: top right` para
+  `dropdown-menu-end` (cresce do gatilho). Reduced-motion troca por fade puro.
+
+### ⚠️ Nota de ambiente / git
+- A branch de trabalho real é **`apple-design`** (checkout principal em `/Desktop/OTC Tracker`). A `main` está
+  no boilerplate UBold original (2 commits) — worktrees criados a partir de `main` **não** têm o projeto real.
+  Sempre partir de `apple-design`.
+
+### Arquivos (sessão 59)
+```
+apps/templates/pages/index.html   ← refinamento Emil no <style> (tokens, :active, hover gating,
+                                     dropdown origin-aware, arrow nudge, prefers-reduced-motion)
 ```

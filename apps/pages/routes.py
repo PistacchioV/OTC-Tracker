@@ -1280,7 +1280,12 @@ def api_dashboard_stats():
         return ' '.join(label_parts) if label_parts else 'Other'
 
     def _type_from_product(product):
-        return 'OPT' if product.lower().startswith('option') else 'NDF'
+        p = product.lower()
+        if p.startswith('option'):
+            return 'OPT'
+        if p.startswith('swap'):
+            return 'SWAP'
+        return 'NDF'
 
     # Generic scan of all new deals cache directories
     all_deals = []
@@ -1325,13 +1330,14 @@ def api_dashboard_stats():
     ndf_lawton     = [d for d in lawton_deals if _fam(d) == 'NDF']
     optcomm_lawton = [d for d in lawton_deals if _fam(d) == 'OPT']
     fxo_lawton     = [d for d in lawton_deals if _fam(d) == 'FXO']
+    swap_lawton    = [d for d in lawton_deals if _fam(d) == 'SWAP']
     opt_lawton     = optcomm_lawton + fxo_lawton  # all options (stat card)
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
     pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
 
-    # Swap deals not yet implemented in the project — placeholder until the
-    # Swap product cache directory exists. Will count Swap-type deals later.
-    swap_total = 0
+    # Swap deals counted like NDF/Opt: by the Lawton (intragroup) leg, from any
+    # product folder under new deals whose path starts with "Swap".
+    swap_total = len(swap_lawton)
 
     client_counts = Counter(
         (d.get('Client') or '').strip()
@@ -1361,6 +1367,7 @@ def api_dashboard_stats():
     monthly_opt = [0] * 12
     monthly_ndf = [0] * 12
     monthly_fxo = [0] * 12
+    monthly_swap = [0] * 12
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
         for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in files:
@@ -1375,10 +1382,13 @@ def api_dashboard_stats():
                 fp = os.path.join(root, fname)
                 product = _product_from_path(fp)
                 is_fxo_file = 'fxo' in product.lower()
+                ptype = _type_from_product(product)
                 if is_fxo_file:
                     target = monthly_fxo
-                elif _type_from_product(product) == 'OPT':
+                elif ptype == 'OPT':
                     target = monthly_opt
+                elif ptype == 'SWAP':
+                    target = monthly_swap
                 else:
                     target = monthly_ndf
                 try:
@@ -1423,9 +1433,11 @@ def api_dashboard_stats():
         'dist_ndf':      len(ndf_lawton),
         'dist_opt':      len(optcomm_lawton),
         'dist_fxo':      len(fxo_lawton),
+        'dist_swap':     len(swap_lawton),
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
         'monthly_fxo':   monthly_fxo,
+        'monthly_swap':  monthly_swap,
         'recent_deals':  recent_deals,
     })
 
@@ -2134,7 +2146,10 @@ _FORECAST_SOURCES = [
      'product': ('lob', ['código identificador', 'codigo identificador', 'identificador'])},
     {'key': 'swap_prm', 'label': 'SWAP Premium Agenda', 'category': 'Swap',
      'file': lambda r: '73760_{}_DAGENDAPREMIOS.json'.format(r),
+     # Premium settlement date = "Data do Evento" (col F). Name first, then col F
+     # (index 5) as a fallback when the stored header is positional.
      'date': ['data do evento', 'evento'],
+     'date_index': 5,
      'entity': ['nome simplificado', 'parte'],
      'product': ('lob', ['código identificador', 'codigo identificador',
                          'codigo do contrato', 'identificador'])},
@@ -2276,6 +2291,12 @@ def _forecast_collect(dref, spine):
 
         keys = list(rows[0].keys())
         date_key = _fcst_resolve_key(keys, src['date'])
+        # Primary date fallback to a fixed column index if the header name could
+        # not be resolved (e.g. Agenda Prêmios premium settlement = col F).
+        if date_key is None and src.get('date_index') is not None:
+            di = src['date_index']
+            if 0 <= di < len(keys):
+                date_key = keys[di]
         # Optional second date column (e.g. options also count on the premium
         # settlement date). Resolve by name, then fall back to a fixed column
         # index if the header name could not be found.
@@ -2824,6 +2845,99 @@ def mtm_swap():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/mtm-swap.html', segment='mtm-swap')
+
+
+# ── Other Products Summary (Settlement Batch) ────────────────────────────────
+#  Counts operations SETTLING on the reference date, reusing the Settlement
+#  Forecast JSON sources (position files from Save CETIP Files). Each forecast
+#  source maps to a product family + sub-event; options also settle on the
+#  premium date (date2), swaps split flow/premium/maturity across the 3 files.
+_OPS_SRC_MAP = {
+    'swap_pos': ('swap', 'maturity'),   # DPOSICAO-SWAP (tipo 2, maturity)
+    'swap_flx': ('swap', 'flow'),       # DFLUXO (event date)
+    'swap_prm': ('swap', 'premium'),    # DAGENDAPREMIOS (premium settlement = col F)
+    'opc':      ('option', 'maturity'), # OPC maturity; date2 → premium
+    'ndf':      ('ndf', 'maturity'),    # TER maturity
+}
+
+
+def _ops_settlement_counts(settle_ref, pos_ref):
+    """Count operations settling on `settle_ref` (date) by product family +
+    sub-event, reading the position JSONs of `pos_ref` (the LATEST available
+    saved date). Missing files / no data → zeros (graceful)."""
+    fams = {'swap':   {'total': 0, 'flow': 0, 'premium': 0, 'maturity': 0},
+            'option': {'total': 0, 'maturity': 0, 'premium': 0},
+            'ndf':    {'total': 0, 'maturity': 0},
+            'coe':    {'total': 0}}
+    if pos_ref is None:
+        return fams
+    dref = pos_ref.strftime('%Y%m%d')
+    for src in _FORECAST_SOURCES:
+        mapping = _OPS_SRC_MAP.get(src['key'])
+        if not mapping:
+            continue
+        fam, primary_sub = mapping
+        path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding='utf-8') as fh:
+                rows = json.load(fh)
+        except Exception:
+            continue
+        if not rows:
+            continue
+        keys = list(rows[0].keys())
+        date_key = _fcst_resolve_key(keys, src['date'])
+        if date_key is None and src.get('date_index') is not None and 0 <= src['date_index'] < len(keys):
+            date_key = keys[src['date_index']]
+        date2_key = _fcst_resolve_key(keys, src['date2']) if src.get('date2') else None
+        if date2_key is None and src.get('date2_index') is not None and 0 <= src['date2_index'] < len(keys):
+            date2_key = keys[src['date2_index']]
+        cw = src.get('count_where')
+        cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
+        cw_allowed = cw[1] if cw else None
+        for row in rows:
+            if cw_key is not None:
+                cwv = str(row.get(cw_key, '') or '').strip()
+                if cwv.endswith('.0'):
+                    cwv = cwv[:-2]
+                if cwv not in cw_allowed:
+                    continue
+            if date_key and _fcst_parse_date(row.get(date_key, '')) == settle_ref:
+                fams[fam]['total'] += 1
+                fams[fam][primary_sub] += 1
+            if date2_key and _fcst_parse_date(row.get(date2_key, '')) == settle_ref:
+                fams[fam]['total'] += 1
+                if fam == 'option':
+                    fams[fam]['premium'] += 1
+    return fams
+
+
+@blueprint.route('/other-products-summary')
+def other_products_summary():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-summary.html', segment='other-products-summary',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-summary/data')
+def api_ops_data():
+    """Settlement-batch payload: widget counts for the reference date (from the B3
+    position JSONs) + the worksheet rows (empty until seeding is wired)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        settle_ref = datetime.strptime(ds[:10], '%Y-%m-%d').date() if ds else datetime.now().date()
+    except ValueError:
+        settle_ref = datetime.now().date()
+    pos_ref = _forecast_latest_ref()          # cards read the LATEST available position JSON
+    return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
+                    'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
+                    'widgets': _ops_settlement_counts(settle_ref, pos_ref),
+                    'summary': [], 'trade': []})
 
 
 # ============================================================================

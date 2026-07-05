@@ -1,6 +1,9 @@
 # local dev stubs (never commit)
 awmpy.py
 
+# Mock dashboard data — visual testing only, NEVER commit
+**/*_mock.json
+
 # Claude Code memory
 .claude/
 

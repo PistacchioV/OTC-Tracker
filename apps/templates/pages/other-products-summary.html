@@ -1,0 +1,418 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Other Products Summary{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* ── Apple/Emil tokens ─────────────────────────────────────── */
+#ops-page {
+    --ops-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ops-blue: #0066cc;
+    --ops-hairline: #e0e0e0;
+}
+[data-bs-theme=dark] #ops-page { --ops-hairline: rgba(255,255,255,.09); }
+
+/* Reference-date bar */
+#ops-page .ops-datefield input[type="date"] {
+    border: 1px solid var(--ops-hairline);
+    border-radius: 10px;
+    padding: .42rem .7rem;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ins-body-color);
+    background: var(--ins-secondary-bg, #fff);
+    transition: border-color 160ms var(--ops-ease-out), box-shadow 160ms var(--ops-ease-out);
+}
+#ops-page .ops-datefield input[type="date"]:focus {
+    outline: none; border-color: var(--ops-blue);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.18);
+}
+
+/* ── Widgets ───────────────────────────────────────────────── */
+.ops-widgets .col { display: flex; margin-bottom: .5rem; }
+.ops-widget {
+    flex: 1;
+    border: 1px solid var(--ops-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    .ops-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+.ops-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
+.ops-widget__icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
+}
+.ops-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
+.ops-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+.ops-widget__subs { border-top: 1px dashed var(--ops-hairline); padding-top: .5rem; margin-top: .1rem; }
+.ops-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+.ops-widget__sub .ops-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+.ops-widget--soon { opacity: .6; }
+
+/* Staggered widget entrance */
+@keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    .ops-widgets .col { opacity: 0; transform: translateY(8px); animation: opsWidgetIn 320ms var(--ops-ease-out) both; }
+    .ops-widgets .col:nth-child(1) { animation-delay: 0ms; }
+    .ops-widgets .col:nth-child(2) { animation-delay: 55ms; }
+    .ops-widgets .col:nth-child(3) { animation-delay: 110ms; }
+    .ops-widgets .col:nth-child(4) { animation-delay: 165ms; }
+}
+@media (prefers-reduced-motion: reduce) { .ops-widget:hover { transform: none; } }
+
+/* ── Table cards + toolbar ─────────────────────────────────── */
+#ops-page .ops-tcard .card-header { border-bottom: 1px dashed var(--ops-hairline); }
+#ops-page .ops-tcard .card-title { font-weight: 700; letter-spacing: -.2px; margin: 0; }
+.ops-toolbar { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+.ops-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+    transition: transform 140ms var(--ops-ease-out), background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+.ops-toolbar .btn i { font-size: .95em; }
+.ops-toolbar .btn:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+    .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
+}
+/* Row action + status control feedback */
+#ops-page .ops-row-del, #ops-page .ops-status-sel {
+    transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
+}
+#ops-page .ops-row-del:active { transform: scale(0.9); }
+@media (hover: hover) and (pointer: fine) {
+    #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
+    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active { transform: none; }
+}
+
+#ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
+#ops-page table.dataTable td { white-space: nowrap; font-size: .82rem; vertical-align: middle; }
+#ops-page .ops-filter th { padding: 4px 6px; }
+#ops-page .ops-filter input {
+    width: 100%; border: 1px solid var(--ops-hairline); border-radius: 7px;
+    padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
+}
+#ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
+#ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
+#ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
+.ops-num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="ops-page" class="container-fluid" data-content="">
+
+    {% set title='Other Products Summary' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Reference date -->
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <p class="text-muted mb-0 fs-sm" data-lang="ops-sub">Settlement batch for the reference date (defaults to today).</p>
+            <div class="ops-datefield d-flex align-items-center gap-2">
+                <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
+                <input type="date" id="ops-ref-date" value="{{ today }}" max="{{ today }}">
+            </div>
+        </div>
+    </div>
+
+    <!-- Widgets: Swap / Option / NDF / COE -->
+    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-warning-subtle text-warning"><i class="ti ti-arrows-exchange-2"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ops-w-swap">Swap</h3>
+                    <span class="ops-widget__value" id="ops-w-swap-total">0</span>
+                </div>
+                <div class="ops-widget__subs">
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-flow">Flow</span><span class="ops-sub-val" id="ops-w-swap-flow">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-premium">Premium</span><span class="ops-sub-val" id="ops-w-swap-premium">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-swap-maturity">0</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ops-w-option">Option</h3>
+                    <span class="ops-widget__value" id="ops-w-option-total">0</span>
+                </div>
+                <div class="ops-widget__subs">
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-option-maturity">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-premium">Premium</span><span class="ops-sub-val" id="ops-w-option-premium">0</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-primary-subtle text-primary"><i class="ti ti-exchange"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ops-w-ndf">NDF</h3>
+                    <span class="ops-widget__value" id="ops-w-ndf-total">0</span>
+                </div>
+                <div class="ops-widget__subs">
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-primary"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-ndf-maturity">0</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget ops-widget--soon">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-certificate"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ops-w-coe">COE</h3>
+                    <span class="ops-widget__value" id="ops-w-coe-total">0</span>
+                </div>
+                <div class="ops-widget__subs">
+                    <div class="ops-widget__sub"><i class="ti ti-clock"></i><span data-lang="ops-soon">Coming soon</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settlement Summary table -->
+    <div class="row mt-2">
+        <div class="col-12">
+            <div class="card ops-tcard">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
+                    <div class="ops-toolbar" data-table="ops-summary-table">
+                        <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
+                        <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
+                        <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="ops-summary-table" class="table table-hover align-middle w-100">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
+                                    <th data-lang="ops-col-actions">Actions</th>
+                                    <th data-lang="ops-col-status">Status</th>
+                                    <th data-lang="ops-col-counterparty">Counterparty</th>
+                                    <th data-lang="ops-col-receive">Receive</th>
+                                    <th data-lang="ops-col-pay">Pay</th>
+                                    <th data-lang="ops-col-product">Product</th>
+                                    <th data-lang="ops-col-settlement-net">Settlement Net</th>
+                                    <th data-lang="ops-col-internal-account">Internal Account</th>
+                                    <th data-lang="ops-col-obs">Observation</th>
+                                </tr>
+                                <tr class="ops-filter">
+                                    <th></th><th></th>
+                                    <th><input type="text" placeholder="Status"></th>
+                                    <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="Receive"></th>
+                                    <th><input type="text" placeholder="Pay"></th>
+                                    <th><input type="text" placeholder="Product"></th>
+                                    <th><input type="text" placeholder="Settlement Net"></th>
+                                    <th><input type="text" placeholder="Internal Account"></th>
+                                    <th><input type="text" placeholder="Observation"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade Level table -->
+    <div class="row mt-1">
+        <div class="col-12">
+            <div class="card ops-tcard">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="card-title" data-lang="ops-trade-title">Trade Level</h4>
+                    <div class="ops-toolbar" data-table="ops-trade-table">
+                        <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
+                        <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
+                        <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="ops-trade-table" class="table table-hover align-middle w-100">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
+                                    <th data-lang="ops-col-actions">Actions</th>
+                                    <th data-lang="ops-col-status">Status</th>
+                                    <th data-lang="ops-col-counterparty">Counterparty</th>
+                                    <th data-lang="ops-col-internal-id">Internal ID</th>
+                                    <th data-lang="ops-col-product">Product</th>
+                                    <th data-lang="ops-col-type">Type</th>
+                                    <th data-lang="ops-col-settlement">Settlement</th>
+                                    <th data-lang="ops-col-tax-income">Tax Income</th>
+                                    <th data-lang="ops-col-id-b3">ID B3</th>
+                                    <th data-lang="ops-col-settlement-b3">Settlement B3</th>
+                                    <th data-lang="ops-col-difference">Difference</th>
+                                </tr>
+                                <tr class="ops-filter">
+                                    <th></th><th></th>
+                                    <th><input type="text" placeholder="Status"></th>
+                                    <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="Internal ID"></th>
+                                    <th><input type="text" placeholder="Product"></th>
+                                    <th><input type="text" placeholder="Type"></th>
+                                    <th><input type="text" placeholder="Settlement"></th>
+                                    <th><input type="text" placeholder="Tax Income"></th>
+                                    <th><input type="text" placeholder="ID B3"></th>
+                                    <th><input type="text" placeholder="Settlement B3"></th>
+                                    <th><input type="text" placeholder="Difference"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script>
+$(function () {
+    // Minimal i18n (falls back to the data-lang English text already in the DOM).
+    var _T = {}; fetch('/static/data/translations/' + (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0,2) + '.json')
+        .then(function (r) { return r.json(); }).then(function (d) { _T = d || {}; }).catch(function () {});
+    function t(k, fb) { return _T[k] || fb; }
+    function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
+
+    var STATUSES = ['New', 'OK', 'Check', 'Sent'];
+    function statusCell(v) {
+        var opts = STATUSES.map(function (s) { return '<option' + (s === v ? ' selected' : '') + '>' + s + '</option>'; }).join('');
+        return '<select class="form-select form-select-sm ops-status-sel">' + opts + '</select>';
+    }
+    function actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
+    function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
+
+    // Build a blank data row (array) for a table given its data-column count.
+    function blankRow(dataCols, numericIdx) {
+        var cb = '<input type="checkbox" class="form-check-input ops-cb">';
+        var row = [cb, actionsCell(), statusCell('New')];
+        for (var i = 0; i < dataCols; i++) row.push(inp(''));
+        return row;
+    }
+
+    // ── Per-table setup ─────────────────────────────────────────────────────
+    function initTable(id, dataCols) {
+        var dt = $('#' + id).DataTable({
+            autoWidth: false, scrollX: true, orderCellsTop: true, paging: true, pageLength: 25,
+            dom: "<'row'<'col-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            columnDefs: [{ orderable: false, targets: [0, 1] }],
+            language: { emptyTable: t('ops-empty', 'No rows for this date yet — add one or pick another date.') }
+        });
+
+        var $card = $('#' + id).closest('.ops-tcard');
+        var $toolbar = $card.find('.ops-toolbar');
+        var $delBtn = $toolbar.find('.ops-del');
+
+        // Per-column filter row (second header row).
+        $card.find('.ops-filter th input').on('keyup change', function () {
+            var idx = $(this).closest('th').index();
+            if (dt.column(idx).search() !== this.value) dt.column(idx).search(this.value).draw();
+        });
+
+        // Add row.
+        $toolbar.find('.ops-add').on('click', function () {
+            dt.row.add(blankRow(dataCols)).draw(false);
+        });
+
+        // Show/Hide columns — dependency-free Bootstrap dropdown (one item per
+        // data column). Toggles dt.column(i).visible().
+        var $colBtn = $toolbar.find('.ops-colvis').addClass('dropdown-toggle');
+        var $wrap = $('<div class="dropdown"></div>').insertBefore($colBtn).append($colBtn);
+        $colBtn.attr({ 'data-bs-toggle': 'dropdown', 'aria-expanded': 'false' });
+        var $menu = $('<ul class="dropdown-menu dropdown-menu-end p-1" style="max-height:320px;overflow:auto"></ul>').appendTo($wrap);
+        dt.columns().every(function () {
+            var i = this.index(); var ttl = $(dt.column(i).header()).text().trim();
+            if (i <= 1 || !ttl) return;   // skip checkbox + actions
+            var $li = $('<li><label class="dropdown-item d-flex align-items-center gap-2 mb-0" style="cursor:pointer">' +
+                '<input type="checkbox" class="form-check-input mt-0" checked>' + esc(ttl) + '</label></li>');
+            $li.find('input').on('change', function (e) { e.stopPropagation(); dt.column(i).visible(this.checked); });
+            $menu.append($li);
+        });
+        $menu.on('click', function (e) { e.stopPropagation(); });   // keep open while toggling
+
+        // Selection via checkboxes (no Select extension) → enable/disable Delete.
+        function selectedRows() {
+            return dt.rows(function (idx, data, node) { return $(node).find('.ops-cb').prop('checked'); });
+        }
+        function syncDel() { $delBtn.prop('disabled', selectedRows().count() === 0); }
+        $('#' + id + ' tbody').on('change', '.ops-cb', syncDel);
+        $card.find('.ops-cb-all').on('change', function () {
+            var on = this.checked;
+            $('#' + id + ' tbody .ops-cb').prop('checked', on);
+            syncDel();
+        });
+
+        // Bulk delete + per-row delete.
+        $delBtn.on('click', function () {
+            selectedRows().remove().draw(false);
+            $card.find('.ops-cb-all').prop('checked', false); syncDel();
+        });
+        $('#' + id + ' tbody').on('click', '.ops-row-del', function (e) {
+            e.preventDefault(); dt.row($(this).closest('tr')).remove().draw(false); syncDel();
+        });
+
+        return dt;
+    }
+
+    var dtSummary = initTable('ops-summary-table', 7);  // 7 data cols (Counterparty…Observação)
+    var dtTrade   = initTable('ops-trade-table', 9);    // 9 data cols (Counterparty…Difference)
+
+    // ── Widgets: settlement counts for the reference date (from the backend, same
+    //    JSON sources as the Settlement Forecast) ──────────────────────────────
+    function setWidgets(w) {
+        w = w || {}; var s = w.swap || {}, o = w.option || {}, n = w.ndf || {}, c = w.coe || {};
+        $('#ops-w-swap-total').text(s.total || 0);       $('#ops-w-swap-flow').text(s.flow || 0);
+        $('#ops-w-swap-premium').text(s.premium || 0);   $('#ops-w-swap-maturity').text(s.maturity || 0);
+        $('#ops-w-option-total').text(o.total || 0);     $('#ops-w-option-maturity').text(o.maturity || 0);
+        $('#ops-w-option-premium').text(o.premium || 0);
+        $('#ops-w-ndf-total').text(n.total || 0);        $('#ops-w-ndf-maturity').text(n.maturity || 0);
+        $('#ops-w-coe-total').text(c.total || 0);
+    }
+
+    // ── Reference date → (re)load from the settlement batch endpoint ──────────
+    function loadDate(ymd) {
+        fetch('/api/other-products-summary/data?date=' + encodeURIComponent(ymd))
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) return;
+                dtSummary.clear(); dtTrade.clear();
+                (j.summary || []).forEach(function (r) {
+                    dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
+                        inp(r.counterparty), inp(r.receive), inp(r.pay), inp(r.product), inp(r.settlement_net), inp(r.internal_account), inp(r.obs)]);
+                });
+                (j.trade || []).forEach(function (r) {
+                    dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
+                        inp(r.counterparty), inp(r.internal_id), inp(r.product), inp(r.type), inp(r.settlement), inp(r.tax_income), inp(r.id_b3), inp(r.settlement_b3), inp(r.difference)]);
+                });
+                dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
+            }).catch(function () {});
+    }
+
+    $('#ops-ref-date').on('change', function () { if (this.value) loadDate(this.value); });
+    loadDate($('#ops-ref-date').val());
+});
+</script>
+{% endblock extra_javascript %}
