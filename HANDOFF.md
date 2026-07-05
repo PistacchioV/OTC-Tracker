@@ -26,6 +26,19 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
 - **BLOCO DE LARGURAS POR COLUNA:** incluir no `<style>` da página um bloco "Colunas específicas com larguras
   adequadas — um bloco por coluna" (`#table th/td:nth-child(N) { min-width; width }`, um comentário com o nome
   da coluna) para ajuste fino de largura quando necessário. Padrão em `new_deals-*` e `live-position-swap-characteristics`.
+- **BOTÕES DE ACTION — PADRÃO OBRIGATÓRIO (formato):** os botões da coluna Actions são **quadrados
+  arredondados** (não círculos), cores semânticas (`btn-info` azul editar · `btn-success` verde aprovar/
+  confirmar · `btn-danger` vermelho deletar · `btn-primary` enviar). Um bloco CSS **global** em
+  `apps/templates/partials/head-css.html` força `30×30px`, `border-radius:7px !important` (vence o
+  `rounded-circle` do Bootstrap) e centraliza o ícone, mirando as classes funcionais existentes
+  (`btn-row-*`, `acc-act-*`, `ops-row-del`, `ar-*`, `btn-rd-*`). **É só o formato** — cada página mantém
+  os seus próprios botões/handlers/cores. Ao criar uma página nova, use essas classes funcionais (ou
+  `btn btn-info/success/danger btn-sm` + uma dessas classes) para herdar o formato automaticamente.
+- **ADD ROW — PADRÃO OBRIGATÓRIO (modal):** sempre que uma página tiver ação **Add row**, ela deve abrir
+  um **modal com um campo por coluna** (padrão New Deals `#addRowModal`), NÃO adicionar uma linha inline
+  em branco. Referências: `new_deals-*` (`#addRowModal`, aberto via
+  `bootstrap.Modal.getOrCreateInstance(el).show()`), `other-products-summary.html` (`#opsAddModal`,
+  campos gerados dinamicamente a partir dos headers da tabela → `dt.row.add([...])` no Save).
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
@@ -3496,4 +3509,37 @@ apps/templates/pages/otm-settlements.html     ← span #otm-updated
 apps/static/js/pages/otm-settlements.js       ← seta timestamp (t('updated'))
 apps/templates/partials/sidenav.html          ← Operations → /operations-b3
 apps/static/data/translations/{en,br,es}.json ← ob-*
+```
+
+---
+
+## 67. Sessão 2026-07-05 — Padrão botões de Action (formato) + Add row via modal
+
+### Botões de Action — só o FORMATO (commit `fd63f27`)
+Padronizado o **formato** dos botões da coluna Actions para **quadrados arredondados** (não círculos),
+via CSS **global** em `apps/templates/partials/head-css.html`. Um único bloco mira as classes funcionais
+já existentes (`btn-row-edit/delete/confirm/send/approve`, `acc-act-edit/send/del`, `ops-row-del`,
+`ar-confirm/edit/delete`, `btn-rd-edit/confirm/delete`) forçando `30×30px`, `border-radius:7px !important`
+(vence o `rounded-circle !important` do Bootstrap por vir depois no `<style>` do head) e centralização do
+ícone. **Nenhum markup/handler alterado** — cada página mantém seus botões, cores semânticas
+(`btn-info`/`btn-success`/`btn-danger`/`btn-primary`) e conjuntos (algumas têm Send, outras só Delete).
+⚠️ Foi pedido explicitamente: **"o padrão do formato apenas, não os botões em si"** — por isso OTM/
+Operations B3 (que têm só um kebab placeholder) **não** ganharam botões edit/approve/delete.
+
+### Add row → modal (commit `54f5d1e`)
+Padrão: toda ação **Add row** abre um **modal com um campo por coluna** (como os New Deals `#addRowModal`),
+em vez de linha inline em branco. A única página que usava add-row **inline** era a
+`other-products-summary` → convertida: `#opsAddModal` (modal-lg) com `#opsAddFields` gerado dinamicamente
+a partir dos headers da tabela (pulando checkbox/actions/status); o botão Add abre o modal guardando a `dt`
+ativa em `_opsAdd`; o Save monta a linha (`[checkbox, actionsCell, statusCell('New'), inp(v)…]`) e faz
+`dt.row.add(...).draw()`. Células continuam editáveis inline, semeadas com os valores do modal.
+i18n: `ops-add-title/save`, `ops-cancel`. (mtm-swap não tem add-row; index-b3-results já era "new_deals style".)
+
+Ambos os padrões estão registrados no topo do handoff como **PADRÃO OBRIGATÓRIO**.
+
+### Arquivos (sessão 67)
+```
+apps/templates/partials/head-css.html          ← CSS global do formato dos botões de action
+apps/templates/pages/other-products-summary.html ← #opsAddModal + handler abre modal + Save (row.add)
+apps/static/data/translations/{en,br,es}.json  ← ops-add-title/save, ops-cancel
 ```
