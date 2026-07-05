@@ -1452,9 +1452,15 @@ _LIVE_ENTITY_MAP = {
 }
 _LIVE_ENTITY_ORDER = ['BANCO', 'LAWTON', 'MGT', 'ATACAMA']
 
-# Product bar always lists this placeholder alphabetically. COE is tracked but
-# not yet counted (no logic wired) — shows 0 until the counting rule arrives.
-_LIVE_PLACEHOLDER_PRODUCTS = ['COE']
+# Every standard product is listed even at 0 (mirrors the Settlement Forecast
+# card), so the bar set is stable and never "loses" a product — e.g. Swap CEMHYB —
+# just because the current snapshot happens to have none. COE is tracked but not
+# yet counted (no logic wired) — shows 0 until the counting rule arrives.
+_LIVE_PLACEHOLDER_PRODUCTS = ['NDF Moeda', 'NDF Commodities', 'Option FXO',
+                             'Option Commodities', 'Option EDG',
+                             'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB', 'COE']
+# Fixed display order for the Live Position product bar (unknown products last).
+_LIVE_PRODUCT_ORDER = {p: i for i, p in enumerate(_LIVE_PLACEHOLDER_PRODUCTS)}
 
 
 def _live_map_entity(raw):
@@ -1555,7 +1561,8 @@ def api_dashboard_live_position():
     if by_product:
         for p in _LIVE_PLACEHOLDER_PRODUCTS:
             by_product.setdefault(p, 0)
-    product_rows = [{'label': k, 'count': by_product[k]} for k in sorted(by_product)]
+    product_rows = [{'label': k, 'count': by_product[k]}
+                    for k in sorted(by_product, key=lambda k: (_LIVE_PRODUCT_ORDER.get(k, 999), k))]
     entity_rows = [{'label': k, 'count': by_entity[k]}
                    for k in _LIVE_ENTITY_ORDER if k in by_entity]
     return jsonify({

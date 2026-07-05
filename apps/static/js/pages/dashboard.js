@@ -131,6 +131,24 @@ function hexToRgba(hex, a) {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
+// ─── shared "grow" animation ─────────────────────────────────────────────────
+// Every card animates the SAME way the Settlement Forecast does: bars rise from
+// the baseline, doughnuts scale/rotate in. Because every chart is destroyed and
+// re-created on data change, this fires on first paint AND on every range/date/
+// filter change — no extra wiring needed.
+const GROW_ANIM     = { duration: 850, easing: 'easeOutQuart' };
+const GROW_ANIM_PIE = { animateRotate: true, animateScale: true, duration: 850, easing: 'easeOutQuart' };
+
+// Live Position display labels: SWAP → Swap, CEMHYB → HYB (house convention).
+function liveDisplayLabel(label) {
+    return String(label == null ? '' : label).replace(/^SWAP /, 'Swap ').replace(/CEMHYB/, 'HYB');
+}
+// Live Position bar color per product — aligned with the Settlement Forecast palette.
+function liveProductColor(label, idx) {
+    const fn = FC_PRODUCT_COLORS[label];
+    return fn ? fn() : LIVE_COLORS[idx % LIVE_COLORS.length];
+}
+
 // ─── chart instances ─────────────────────────────────────────────────────────
 
 let pieChart = null, flowChart = null, clientsChart = null, productsChart = null, commoditiesChart = null;
@@ -154,7 +172,7 @@ function buildPieChart(ndf, opt, fxo, swap) {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            animation: { animateRotate: true, animateScale: true, duration: 700 },
+            animation: GROW_ANIM_PIE,
             plugins: {
                 legend: { position: 'bottom', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
@@ -181,7 +199,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap) {
         options: {
             responsive: true, maintainAspectRatio: false,
             layout: { padding: { top: -10 } },
-            animation: { duration: 700, easing: 'easeOutQuart' },
+            animation: GROW_ANIM,
             plugins: {
                 legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
                 tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
@@ -447,7 +465,7 @@ function _forecastStackOptions() {
     return {
         responsive: true, maintainAspectRatio: false,
         layout: { padding: { top: -10 } },
-        animation: { duration: 700, easing: 'easeOutQuart' },
+        animation: GROW_ANIM,
         plugins: {
             legend: { display: true, position: 'top', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
             tooltip: premiumTooltip({ mode: 'index', intersect: false, callbacks: { footer: totalFooter } })
@@ -571,7 +589,7 @@ function buildClientsChart(top5) {
         data: { labels: top5.map(d => d.label), datasets: datasets },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-            animation: { duration: 700, easing: 'easeOutQuart' },
+            animation: GROW_ANIM,
             plugins: {
                 legend: stacked
                     ? { position: 'bottom', labels: { font: { family: bodyFont, size: 10 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 10 } }
@@ -597,7 +615,7 @@ function buildProductsChart(top5) {
         data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(baseColors, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
-            animation: { animateRotate: true, animateScale: true, duration: 700 },
+            animation: GROW_ANIM_PIE,
             plugins: {
                 legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
@@ -620,7 +638,7 @@ function buildCommoditiesChart(top5) {
         data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
-            animation: { animateRotate: true, animateScale: true, duration: 700 },
+            animation: GROW_ANIM_PIE,
             plugins: {
                 legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
@@ -729,19 +747,22 @@ function buildLivePositionChart(data) {
     if (liveChart) liveChart.destroy();
     const rows = data.by_product || [];
     if (_setLiveEmpty(ctx, !rows.length)) return;
+    // Horizontal gradient (left→right) keyed by the product's Settlement Forecast
+    // color, so the two cards read as one consistent palette.
     const barColor = (context) => {
-        const hex = LIVE_COLORS[context.dataIndex % LIVE_COLORS.length];
+        const raw = rows[context.dataIndex] ? rows[context.dataIndex].label : '';
+        const hex = liveProductColor(raw, context.dataIndex);
         const { ctx: c, chartArea } = context.chart;
         if (!chartArea) return hexToRgba(hex, 1);
         const g = c.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
-        g.addColorStop(0, hexToRgba(hex, 0.55));
+        g.addColorStop(0, hexToRgba(hex, 0.5));
         g.addColorStop(1, hexToRgba(hex, 1));
         return g;
     };
     liveChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: rows.map(r => r.label),
+            labels: rows.map(r => liveDisplayLabel(r.label)),
             datasets: [{
                 label: t('dash-live-total', 'Live operations'),
                 data: rows.map(r => r.count),
@@ -752,10 +773,10 @@ function buildLivePositionChart(data) {
         },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-            animation: { duration: 700, easing: 'easeOutQuart' },
+            animation: GROW_ANIM,
             plugins: {
                 legend: { display: false },
-                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x} ${ctx.parsed.x !== 1 ? 'ops' : 'op'}` } })
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x}` } })
             },
             scales: {
                 x: { ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color') }, border: { display: false } },

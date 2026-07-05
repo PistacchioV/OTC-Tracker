@@ -3038,3 +3038,90 @@ Nenhum texto novo → sem novas chaves `data-lang`. Tudo escopado em `#dash-page
 apps/templates/pages/index.html   ← refinamento Emil no <style> (tokens, :active, hover gating,
                                      dropdown origin-aware, arrow nudge, prefers-reduced-motion)
 ```
+
+---
+
+## 60. Sessão 2026-07-04 — Dashboard: Swap card, Top 5 unificado, Live Position + mock DB
+
+Escopo: reestruturação do dashboard (`index.html` + `dashboard.js` + `routes.py`) e criação de uma
+**base de dados MOCK apenas para teste visual**. Modelo conceitual de 4 cards:
+1. **Consolidado** de tudo que foi operado (ano/mês/tudo) — stat cards + distribution + deal flow.
+2. **Top 5 Ranking** do que foi operado (Clients / Products / Underlying).
+3. **Live Position** — "foto" do que ainda está em estoque/custódia, independente de quando foi operado.
+4. **Settlement Forecast** — visão futura do que vai liquidar no range escolhido.
+
+### ⚠️⚠️ REGRA CRÍTICA — nunca commitar a base MOCK
+A base de dados de teste **JAMAIS** pode ir para o GitHub — é só para visualização local.
+Proteções em vigor (verificadas com `git check-ignore` / `git status`):
+- New deals mock → sufixo **`*_mock.json`** → `.gitignore: **/*_mock.json`.
+- B3 files mock → sob `apps/static/data/cache/b3 files/` → já ignorado por `b3 files/**/*.json`.
+- Gerador **`gen_mock.py`** vive no **scratchpad** (fora do repo), é idempotente (apaga mocks antigos
+  antes de regravar), `random.seed(42)`. Contas: BANCO `73760.00-9`, LAWTON `00041.00-7`,
+  MGT `04880.00-6`, ATACAMA `85398.00-5`.
+
+### (1) Stat card "Swap Deals" — contagem real (antes fixo em 0)
+- `api_dashboard_stats`: `_type_from_product` retorna `NDF`/`OPT`/`SWAP`; adicionado
+  `swap_lawton = [d for d in lawton_deals if _fam(d)=='SWAP']`, `swap_total`, `monthly_swap`;
+  retorno agora inclui `dist_swap` + `monthly_swap`.
+- `dashboard.js`: `buildPieChart(ndf,opt,fxo,swap)` ganhou fatia **Swap** (amber `#f59e0b`);
+  `buildFlowChart(...)` ganhou barra empilhada Swap; callers passam `data.dist_swap`/`data.monthly_swap`.
+
+### (2) Top 5 — 3 cards unificados em UM
+- Os 3 cards (Clients / Products / Underlying) viraram **um card só**, colunas separadas por
+  **linha pontilhada** (`border-end border-dashed`, `row g-0`), estilo do primeiro card.
+- **Header único** `Top 5 Ranking` (`data-lang="dash-top5-ranking"`) alinhado à esquerda; cada gráfico
+  com **subtítulo** (`<h5 class="fs-sm text-muted fw-semibold mb-3">`).
+- **Removidos** os badges coloridos de período ("Current Year"). Canvases: `top5-clients-chart`,
+  `top5-products-chart`, `top5-commodities-chart`.
+
+### (3) NOVO card "Live Position" — estoque em custódia por data
+- Card abaixo do Top 5 com **date picker à direita**; reference date padrão = **D-1 ANBIMA**
+  (`_prev_anbima_bizday`). Puxa a **quantidade de operações ainda em estoque** dos arquivos de posição
+  da data escolhida.
+- Endpoint **`/api/dashboard-live-position`** (`api_dashboard_live_position`): lê os arquivos de posição
+  (`_LIVE_POSITION_SOURCES`: NDF `DPOSICAO-TER` ndfclass, Options `DPOSICAO` optclass,
+  Swap `DPOSICAO-SWAP` lob) para a data ref; retorna `ref_date`, `ref_date_fmt`, `total`, `by_product`,
+  `by_entity`, `sources`.
+- **Breakdown por entidade (esquerda)** — inclui **BANCO** (`73760009`), LAWTON, MGT, ATACAMA na ordem
+  fixa `_LIVE_ENTITY_ORDER = ['BANCO','LAWTON','MGT','ATACAMA']` (`_LIVE_ENTITY_MAP`, `_live_map_entity`).
+- **Barra por produto (direita)** — **ordem alfabética** (`sorted(by_product)`) e inclui **COE** como item
+  fixo em **0** (`_LIVE_PLACEHOLDER_PRODUCTS = ['COE']`, `by_product.setdefault('COE',0)`).
+  ⏳ **Pendente:** o usuário enviará a **lógica de contagem do COE** — plugar no `by_product` (o item já existe).
+- `dashboard.js`: `buildLivePositionChart(data)` (barra horizontal, gradiente por barra,
+  `stackEndRadius(6,'left')`), `renderLiveEntityStats(entities)`, `loadLivePosition(dateStr)`,
+  `wireLivePosition()`. Cache em `_liveData`; `rerenderCharts` re-renderiza no theme-switch.
+
+### Fixes de texto (duplo espaço)
+- Settlement Forecast: "`product  as of`" → "`product as of`" (removido `ms-1` de `#forecast-asof`).
+- Live Position: mesmo bug entre o texto e "as of" → removido `ms-1` de `#live-asof`.
+- Ordem de fade ajustada: Live Position `dash-fade-in-4`, Settlement Forecast `dash-fade-in-5`
+  (nova classe `.dash-fade-in-5 { animation-delay: 0.50s }`).
+
+### i18n (7 chaves novas em en/br/es)
+`dash-top5-ranking`, `dash-live-title`, `dash-live-sub`, `dash-live-refdate`, `dash-live-total`,
+`dash-live-byproduct`, `dash-live-empty`.
+
+### ⚠️ Incidente — `routes.py` sumiu do disco (recuperado)
+Durante a sessão, `apps/pages/routes.py` **desapareceu**, substituído por cópias-conflito
+`routes 2.py` (Jul 2, antigo) e `routes 3.py` (Jul 4 22:19, atual com todas as edições) — padrão típico de
+**sync iCloud/IDE** (projeto está no `~/Desktop`). Restaurado a partir de `routes 3.py` (compila, byte a byte
+igual), servidor sobe do `routes.py` restaurado, endpoint validado. Depois **confirmado idêntico e as duas
+cópias numeradas foram apagadas** — sobrou só `routes.py`.
+**Recomendação:** mover o projeto para fora do Desktop/iCloud (ex.: `~/dev/OTC Tracker`) ou desativar o sync
+nessa pasta; fechar abas duplicadas no editor.
+
+### Validação
+Servidor em **http://127.0.0.1:8050/dev-login**. `/api/dashboard-live-position` (ref D-1 = 2026-07-03):
+`total 175 | entities ['BANCO','LAWTON','MGT','ATACAMA'] | products ['COE','NDF Commodities','NDF Moeda',
+'Option Commodities','Option EDG','Option FXO','SWAP CEM','SWAP CEMHYB','SWAP EDG']`.
+
+### Arquivos (sessão 60)
+```
+apps/pages/routes.py                          ← swap_total/dist_swap/monthly_swap; _LIVE_* maps/order/placeholder;
+                                                 _LIVE_POSITION_SOURCES; endpoint /api/dashboard-live-position
+apps/templates/pages/index.html               ← Top 5 unificado (1 card, border-dashed); card Live Position
+                                                 (date picker D-1, entity stats, canvas); fixes duplo-espaço; fade-in-5
+apps/static/js/pages/dashboard.js             ← Swap no pie/flow; Live Position (build/load/wire, gradiente por barra)
+apps/static/data/translations/{en,br,es}.json ← 7 chaves dash-top5-ranking / dash-live-*
+scratchpad/gen_mock.py (FORA do repo)         ← gerador idempotente da base MOCK (NUNCA commitar os *_mock.json / b3)
+```

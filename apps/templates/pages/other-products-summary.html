@@ -432,27 +432,39 @@ $(function () {
     var _todayIso = '{{ today }}';
     var _tp = _todayIso.split('-');
     var _todayDate = _tp.length === 3 ? new Date(+_tp[0], +_tp[1] - 1, +_tp[2]) : null;
+    var _todayBr  = _tp.length === 3 ? _tp[2] + '/' + _tp[1] + '/' + _tp[0] : '';
     function _isoOf(d) {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
                '-' + String(d.getDate()).padStart(2, '0');
     }
-    if (typeof flatpickr !== 'undefined') {
-        flatpickr('#opsDateWrap', {
-            wrap: true,
-            dateFormat: 'd/m/Y',   // visible value dd/mm/yyyy
-            defaultDate: _todayDate,
-            allowInput: false,
-            disableMobile: true,
-            onChange: function (sel) { if (sel && sel[0]) loadDate(_isoOf(sel[0])); }
-        });
-    } else {
-        // graceful fallback: plain text input, expect dd/mm/yyyy
-        $('#ops-ref-date').on('change', function () {
+    // Load the batch first so the cards populate even if the date widget fails.
+    loadDate(_todayIso);
+
+    var _wrap = document.getElementById('opsDateWrap');
+    var _inp  = document.getElementById('ops-ref-date');
+    try {
+        if (typeof flatpickr !== 'undefined' && _wrap) {
+            flatpickr(_wrap, {
+                wrap: true,
+                dateFormat: 'd/m/Y',   // visible value dd/mm/yyyy
+                defaultDate: _todayDate,
+                allowInput: false,
+                disableMobile: true,
+                onChange: function (sel) { if (sel && sel[0]) loadDate(_isoOf(sel[0])); }
+            });
+        }
+    } catch (e) { console.error('[OPS] flatpickr init failed:', e); }
+
+    // Fallback for any case where flatpickr didn't attach: keep it usable as a
+    // plain dd/mm/yyyy text field (and always show today by default).
+    if (_inp && !_inp.value) _inp.value = _todayBr;
+    if (_inp && !_inp._flatpickr) {
+        _inp.removeAttribute('readonly');
+        $(_inp).on('change', function () {
             var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
             if (m) loadDate(m[3] + '-' + m[2] + '-' + m[1]);
         });
     }
-    loadDate(_todayIso);
 });
 </script>
 {% endblock extra_javascript %}
