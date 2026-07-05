@@ -112,6 +112,8 @@
 
     setVal('otm-count', rows.length);
     buildColumnsToggle();
+    var sel = document.querySelector('.otm-page-len');   // sync "Show entries" to current length
+    if (sel) sel.value = String(dt.page.len());
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
 
@@ -217,9 +219,17 @@
     });
   }
 
+  function wirePageLen() {
+    var sel = document.querySelector('.otm-page-len');
+    if (sel) sel.addEventListener('change', function () {
+      if (dt) dt.page.len(parseInt(this.value, 10)).draw();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     wireClear();
     wireImport();
+    wirePageLen();
     wireDatePicker();
     load(page.getAttribute('data-today'));
   });

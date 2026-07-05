@@ -205,6 +205,17 @@
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
                     <div class="ops-toolbar" data-table="ops-summary-table">
+                        <div class="d-flex align-items-center gap-1 me-1">
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-show">Show</label>
+                            <select class="form-select form-select-sm ops-page-len" style="width:76px;">
+                                <option value="10">10</option>
+                                <option value="25" selected>25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="-1" data-lang="ops-all">All</option>
+                            </select>
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
+                        </div>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
@@ -253,6 +264,17 @@
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-trade-title">Trade Level</h4>
                     <div class="ops-toolbar" data-table="ops-trade-table">
+                        <div class="d-flex align-items-center gap-1 me-1">
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-show">Show</label>
+                            <select class="form-select form-select-sm ops-page-len" style="width:76px;">
+                                <option value="10">10</option>
+                                <option value="25" selected>25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="-1" data-lang="ops-all">All</option>
+                            </select>
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
+                        </div>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
@@ -349,6 +371,11 @@ document.addEventListener('DOMContentLoaded', function () {
         var $card = $('#' + id).closest('.ops-tcard');
         var $toolbar = $card.find('.ops-toolbar');
         var $delBtn = $toolbar.find('.ops-del');
+
+        // Show [N] entries (New Deals pattern) → DataTables page length.
+        var $len = $toolbar.find('.ops-page-len');
+        $len.on('change', function () { dt.page.len(parseInt(this.value, 10)).draw(); });
+        $len.val(String(dt.page.len()));
 
         // Per-column filter row (second header row).
         $card.find('.ops-filter th input').on('keyup change', function () {

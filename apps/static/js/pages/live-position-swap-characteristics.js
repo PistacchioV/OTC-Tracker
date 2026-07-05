@@ -133,6 +133,8 @@
 
     setVal('sc-count', rows.length);
     buildColumnsToggle();
+    var pl = document.querySelector('.sc-page-len');      // sync "Show entries"
+    if (pl) pl.value = String(dt.page.len());
     reapplyChips();
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
@@ -291,8 +293,16 @@
     });
   }
 
+  function wirePageLen() {
+    var sel = document.querySelector('.sc-page-len');
+    if (sel) sel.addEventListener('change', function () {
+      if (dt) dt.page.len(parseInt(this.value, 10)).draw();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     wireSmartFilter();
+    wirePageLen();
     wireDatePicker();
     load(page.getAttribute('data-ref-date'));
   });

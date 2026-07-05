@@ -1159,5 +1159,14 @@
   "cp-r-ds-title": "Salvar Arquivos do Daily Settlement",
   "cp-r-ds-desc": "Lê e salva todos os arquivos necessários para o Daily Settlement (cashflows do OTM e demais fontes) nas pastas de liquidação. Lógica de salvamento em construção.",
   "cp-ds-meta": "Fontes → Daily Settlement",
-  "cp-ds-run": "Salvar arquivos"
+  "cp-ds-run": "Salvar arquivos",
+  "otm-show": "Exibir",
+  "otm-entries": "entradas",
+  "otm-all": "Todos",
+  "sc-show": "Exibir",
+  "sc-entries": "entradas",
+  "sc-all": "Todos",
+  "ops-show": "Exibir",
+  "ops-entries": "entradas",
+  "ops-all": "Todos"
 }

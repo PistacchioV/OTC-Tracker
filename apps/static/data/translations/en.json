@@ -1159,5 +1159,14 @@
   "cp-r-ds-title": "Save Daily Settlement Files",
   "cp-r-ds-desc": "Reads and saves every file required for the Daily Settlement (OTM cashflows and the other product sources) into the settlement folders. Saving logic in progress.",
   "cp-ds-meta": "Sources → Daily Settlement",
-  "cp-ds-run": "Save files"
+  "cp-ds-run": "Save files",
+  "otm-show": "Show",
+  "otm-entries": "entries",
+  "otm-all": "All",
+  "sc-show": "Show",
+  "sc-entries": "entries",
+  "sc-all": "All",
+  "ops-show": "Show",
+  "ops-entries": "entries",
+  "ops-all": "All"
 }
