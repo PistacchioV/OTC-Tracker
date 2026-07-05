@@ -95,8 +95,11 @@
       data: data,
       columns: [{}, {}].concat(columns.map(function () { return {}; })),
       columnDefs: colDefs,
-      scrollX: true,
-      autoWidth: true,
+      // No scrollX: the header + body stay in ONE table (never misaligns). The
+      // wrapping .table-responsive (overflow-x) provides the horizontal scroll,
+      // and the per-column widths come from the nth-child CSS block.
+      scrollX: false,
+      autoWidth: false,
       orderCellsTop: true,          // sort listeners on the title row, not the filter row
       deferRender: true,
       pageLength: 25,
