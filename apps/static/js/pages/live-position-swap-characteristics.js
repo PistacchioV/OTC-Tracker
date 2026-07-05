@@ -66,12 +66,20 @@
   function buildTable(columns, rows) {
     COLS = columns.map(function (label, i) { return { label: label, idx: i }; });
 
-    // Header: checkbox, status, then the server columns.
-    var head = document.getElementById('swapchar-head');
-    head.innerHTML =
+    // Header: title row (checkbox, status, columns) + per-column filter row.
+    var titleRow =
+      '<tr id="swapchar-head">' +
       '<th class="text-center" style="min-width:38px"><input type="checkbox" id="scCheckAll" class="form-check-input"></th>' +
       '<th data-lang="sc-status">Status</th>' +
-      columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('');
+      columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+    var filterRow =
+      '<tr class="sc-th-filter">' +
+      '<th></th><th></th>' +
+      columns.map(function (c, i) {
+        return '<th><input type="text" class="sc-col-filter" data-col="' + (i + 2) +
+          '" placeholder="' + esc(c) + '"></th>';
+      }).join('') + '</tr>';
+    document.querySelector('#swapchar-table thead').innerHTML = titleRow + filterRow;
 
     var statusBadge = '<span class="badge bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
     var data = rows.map(function (r) {
@@ -88,7 +96,8 @@
       columns: [{}, {}].concat(columns.map(function () { return {}; })),
       columnDefs: colDefs,
       scrollX: true,
-      autoWidth: false,
+      autoWidth: true,
+      orderCellsTop: true,          // sort listeners on the title row, not the filter row
       deferRender: true,
       pageLength: 25,
       lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
@@ -110,6 +119,13 @@
     // Place export dropdown into its wrapper.
     var expWrap = document.querySelector('.scExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
+
+    // Per-column filter row → column search (debounced by keyup/change).
+    jQuery('#swapchar-table thead').off('keyup.sccol change.sccol')
+      .on('keyup.sccol change.sccol', '.sc-col-filter', function () {
+        var col = +this.getAttribute('data-col');
+        if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
+      });
 
     setVal('sc-count', rows.length);
     buildColumnsToggle();
@@ -152,6 +168,10 @@
   function reapplyChips() {
     if (!dt) return;
     dt.columns().every(function () { this.search(''); });
+    // Keep the per-column filter row inputs alongside the smart-filter chips.
+    document.querySelectorAll('#swapchar-table .sc-col-filter').forEach(function (inp) {
+      if (inp.value) dt.column(+inp.getAttribute('data-col')).search(inp.value);
+    });
     chips.forEach(function (c) { dt.column(c.idx + 2).search(c.value); });
     dt.draw();
   }
@@ -223,6 +243,7 @@
     var clr = document.getElementById('scClearFilters');
     if (clr) clr.addEventListener('click', function () {
       chips = []; activeField = null; inp.value = ''; inp.placeholder = t('filterPh');
+      document.querySelectorAll('#swapchar-table .sc-col-filter').forEach(function (i) { i.value = ''; });
       renderChips(); reapplyChips();
     });
     inp.placeholder = t('filterPh');

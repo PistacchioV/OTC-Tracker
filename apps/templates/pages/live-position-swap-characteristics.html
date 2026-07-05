@@ -102,6 +102,13 @@
     text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
 }
 #swapchar-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
+#swapchar-table thead tr.sc-th-filter th { padding: .2rem .35rem .45rem; }
+#swapchar-table thead tr.sc-th-filter input {
+    width: 100%; min-width: 90px; font-size: .68rem; font-weight: 400;
+    padding: 3px 6px; border: 1px solid var(--sc-hairline); border-radius: 6px;
+    background: var(--ins-secondary-bg, #fff); color: var(--ins-body-color);
+}
+#swapchar-table thead tr.sc-th-filter input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,.15); }
 #swapchar-page .toggle-vis + label { cursor: pointer; }
 #swapchar-page .btn:active { transform: scale(0.97); }
 @media (prefers-reduced-motion: reduce) {
