@@ -1442,6 +1442,132 @@ def api_dashboard_stats():
     })
 
 
+# Live Position entity breakdown includes the BANCO holder account (73760.00-9),
+# unlike the forecast (which drops it). Order fixed as Banco → Lawton → MGT → Atacama.
+_LIVE_ENTITY_MAP = {
+    '73760009': 'BANCO',
+    '00041007': 'LAWTON',
+    '04880006': 'MGT',
+    '85398005': 'ATACAMA',
+}
+_LIVE_ENTITY_ORDER = ['BANCO', 'LAWTON', 'MGT', 'ATACAMA']
+
+# Product bar always lists this placeholder alphabetically. COE is tracked but
+# not yet counted (no logic wired) — shows 0 until the counting rule arrives.
+_LIVE_PLACEHOLDER_PRODUCTS = ['COE']
+
+
+def _live_map_entity(raw):
+    """Like _fcst_map_entity but keeps BANCO (holder account) in the breakdown."""
+    s = (raw or '').strip()
+    if not s:
+        return None
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits in _LIVE_ENTITY_MAP:
+        return _LIVE_ENTITY_MAP[digits]
+    up = s.upper()
+    for nm in _LIVE_ENTITY_ORDER:
+        if nm in up:
+            return nm
+    return None
+
+
+# One entry per B3 position (DPOSICAO*) snapshot file. Each row = one live
+# operation still in custody on the reference date. Product/entity resolved by
+# name token (reusing the forecast classifiers) so it survives header drift.
+_LIVE_POSITION_SOURCES = [
+    {'key': 'ndf', 'label': 'NDF', 'category': 'NDF',
+     'file': lambda r: '73760_{}_DPOSICAO-TER.json'.format(r),
+     'entity': ['titular', 'contraparte', 'parte', 'conta'],
+     'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
+    {'key': 'opc', 'label': 'Options', 'category': 'Option',
+     'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
+     'entity': ['titular', 'contraparte', 'conta'],
+     'product': ('optclass', ['classe do ativo subjacente', 'classe do ativo', 'classe'])},
+    {'key': 'swap', 'label': 'Swap', 'category': 'Swap',
+     'file': lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r),
+     'entity': ['contraparte', 'titular', 'parte'],
+     'product': ('lob', ['código identificador', 'codigo identificador', 'identificador'])},
+]
+
+
+@blueprint.route('/api/dashboard-live-position')
+def api_dashboard_live_position():
+    """Snapshot of open operations still in custody on a reference date, read from
+    the B3 position (DPOSICAO*) JSONs. Independent of the trade-date period filter:
+    it's a photo of current inventory. `date` (YYYY-MM-DD) defaults to D-1 ANBIMA."""
+    if not session.get('authenticated'):
+        return jsonify({'error': 'unauthorized'}), 401
+
+    date_str = request.args.get('date')
+    ref = None
+    if date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            ref = None
+    if ref is None:
+        ref = _prev_anbima_bizday(datetime.now())
+    dref = ref.strftime('%y%m%d')
+
+    by_product, by_entity = {}, {}
+    sources = []
+    for src in _LIVE_POSITION_SOURCES:
+        path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
+        st = {'label': src['label'], 'file': os.path.basename(path), 'found': False, 'count': 0}
+        if not os.path.isfile(path):
+            sources.append(st)
+            continue
+        try:
+            with open(path, 'r', encoding='utf-8') as fh:
+                rows = json.load(fh)
+        except Exception:
+            sources.append(st)
+            continue
+        st['found'] = True
+        if not rows:
+            sources.append(st)
+            continue
+        keys = list(rows[0].keys())
+        ent_key = _fcst_resolve_key(keys, src['entity'])
+        pmode, pspec = src['product']
+        prod_key = _fcst_resolve_key(keys, pspec)
+        cnt = 0
+        for row in rows:
+            if pmode == 'ndfclass':
+                product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
+            elif pmode == 'optclass':
+                product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
+            elif pmode == 'lob':
+                product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+            else:
+                product = src['label']
+            by_product[product] = by_product.get(product, 0) + 1
+            ent = _live_map_entity(row.get(ent_key, '')) if ent_key else None
+            if ent:
+                by_entity[ent] = by_entity.get(ent, 0) + 1
+            cnt += 1
+        st['count'] = cnt
+        sources.append(st)
+
+    # Only surface the product bar when there is real position data. COE (and any
+    # other placeholder) is always shown at 0 alongside the real products.
+    if by_product:
+        for p in _LIVE_PLACEHOLDER_PRODUCTS:
+            by_product.setdefault(p, 0)
+    product_rows = [{'label': k, 'count': by_product[k]} for k in sorted(by_product)]
+    entity_rows = [{'label': k, 'count': by_entity[k]}
+                   for k in _LIVE_ENTITY_ORDER if k in by_entity]
+    return jsonify({
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        'ref_date_fmt': ref.strftime('%d/%m/%Y'),
+        'total':        sum(by_product.values()),
+        'by_product':   product_rows,
+        'by_entity':    entity_rows,
+        'sources':      sources,
+    })
+
+
 @blueprint.route('/about')
 def about():
     if not session.get('authenticated'):
@@ -2871,7 +2997,7 @@ def _ops_settlement_counts(settle_ref, pos_ref):
             'coe':    {'total': 0}}
     if pos_ref is None:
         return fams
-    dref = pos_ref.strftime('%Y%m%d')
+    dref = pos_ref.strftime('%y%m%d')   # files are named yymmdd (e.g. 260703), like _forecast_payload
     for src in _FORECAST_SOURCES:
         mapping = _OPS_SRC_MAP.get(src['key'])
         if not mapping:

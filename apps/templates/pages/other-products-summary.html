@@ -13,20 +13,34 @@
 }
 [data-bs-theme=dark] #ops-page { --ops-hairline: rgba(255,255,255,.09); }
 
-/* Reference-date bar */
-#ops-page .ops-datefield input[type="date"] {
+/* Reference-date bar (flatpickr dd/mm/yyyy + calendar icon) */
+#ops-page .ops-datewrap { position: relative; max-width: 180px; }
+#ops-page .ops-datewrap input {
+    width: 100%;
     border: 1px solid var(--ops-hairline);
     border-radius: 10px;
-    padding: .42rem .7rem;
+    padding: .42rem 2.1rem .42rem .7rem;
     font-size: .85rem;
     font-weight: 600;
     color: var(--ins-body-color);
     background: var(--ins-secondary-bg, #fff);
+    cursor: pointer;
     transition: border-color 160ms var(--ops-ease-out), box-shadow 160ms var(--ops-ease-out);
 }
-#ops-page .ops-datefield input[type="date"]:focus {
+#ops-page .ops-datewrap input:focus {
     outline: none; border-color: var(--ops-blue);
     box-shadow: 0 0 0 3px rgba(0,102,204,.18);
+}
+#ops-page .ops-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 34px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ins-secondary-color, #8a8a8f); cursor: pointer;
+    transition: color 160ms var(--ops-ease-out), transform 160ms var(--ops-ease-out);
+}
+#ops-page .ops-cal-btn:hover { color: var(--ops-blue); }
+#ops-page .ops-cal-btn:active { transform: scale(0.9); }
+@media (prefers-reduced-motion: reduce) {
+    #ops-page .ops-datewrap input, #ops-page .ops-cal-btn { transition: none; }
 }
 
 /* ── Widgets ───────────────────────────────────────────────── */
@@ -120,7 +134,10 @@
             <p class="text-muted mb-0 fs-sm" data-lang="ops-sub">Settlement batch for the reference date (defaults to today).</p>
             <div class="ops-datefield d-flex align-items-center gap-2">
                 <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
-                <input type="date" id="ops-ref-date" value="{{ today }}" max="{{ today }}">
+                <div class="ops-datewrap" id="opsDateWrap">
+                    <input type="text" id="ops-ref-date" data-input readonly placeholder="dd/mm/yyyy">
+                    <a class="ops-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                </div>
             </div>
         </div>
     </div>
@@ -411,8 +428,31 @@ $(function () {
             }).catch(function () {});
     }
 
-    $('#ops-ref-date').on('change', function () { if (this.value) loadDate(this.value); });
-    loadDate($('#ops-ref-date').val());
+    // ── Reference date: flatpickr dd/mm/yyyy, future dates allowed, default = today
+    var _todayIso = '{{ today }}';
+    var _tp = _todayIso.split('-');
+    var _todayDate = _tp.length === 3 ? new Date(+_tp[0], +_tp[1] - 1, +_tp[2]) : null;
+    function _isoOf(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+               '-' + String(d.getDate()).padStart(2, '0');
+    }
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr('#opsDateWrap', {
+            wrap: true,
+            dateFormat: 'd/m/Y',   // visible value dd/mm/yyyy
+            defaultDate: _todayDate,
+            allowInput: false,
+            disableMobile: true,
+            onChange: function (sel) { if (sel && sel[0]) loadDate(_isoOf(sel[0])); }
+        });
+    } else {
+        // graceful fallback: plain text input, expect dd/mm/yyyy
+        $('#ops-ref-date').on('change', function () {
+            var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (m) loadDate(m[3] + '-' + m[2] + '-' + m[1]);
+        });
+    }
+    loadDate(_todayIso);
 });
 </script>
 {% endblock extra_javascript %}

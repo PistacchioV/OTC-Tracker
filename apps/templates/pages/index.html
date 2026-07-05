@@ -28,6 +28,7 @@
 .dash-fade-in-3b { animation-delay: 0.36s; }
 .dash-fade-in-3c { animation-delay: 0.42s; }
 .dash-fade-in-4 { animation-delay: 0.42s; }
+.dash-fade-in-5 { animation-delay: 0.50s; }
 
 /* 2. Glassmorphism — Light mode */
 [data-bs-theme="light"] #dash-page .card {
@@ -261,64 +262,100 @@
         </div><!-- end col-->
     </div><!-- end row-->
 
-    <!-- Top 5 Charts -->
+    <!-- Top 5 Ranking — Clientes + Produtos + Underlying num único card -->
     <div class="row">
-        <!-- Top 5 Clientes -->
-        <div class="col-xxl-4 col-md-6">
-            <div class="card h-100 dash-fade-in dash-fade-in-3">
-                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
-                    <h4 class="card-title mb-0" data-lang="dash-top5-clients">Top 5 Clientes</h4>
-                    <span class="badge bg-primary-subtle text-primary fs-xxs" id="dash-top5-clients-period" data-lang="dash-filter-year">Ano Atual</span>
+        <div class="col-12">
+            <div class="card dash-fade-in dash-fade-in-3">
+                <div class="card-header border-dashed">
+                    <h4 class="card-title mb-0" data-lang="dash-top5-ranking">Top 5 Ranking</h4>
                 </div>
-                <div class="card-body">
-                    <div style="height: 260px;">
-                        <canvas id="top5-clients-chart"></canvas>
-                    </div>
-                </div>
-            </div>
+                <div class="card-body p-0">
+                    <div class="row g-0">
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 border-end border-dashed h-100">
+                                <h5 class="fs-sm text-muted fw-semibold mb-3" data-lang="dash-top5-clients">Top 5 Clientes</h5>
+                                <div style="height: 260px;">
+                                    <canvas id="top5-clients-chart"></canvas>
+                                </div>
+                            </div>
+                            <hr class="d-md-none border-light m-0">
+                        </div><!-- end col -->
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 border-end border-dashed h-100">
+                                <h5 class="fs-sm text-muted fw-semibold mb-3" data-lang="dash-top5-products">Top 5 Produtos</h5>
+                                <div style="height: 260px;">
+                                    <canvas id="top5-products-chart"></canvas>
+                                </div>
+                            </div>
+                            <hr class="d-xxl-none border-light m-0">
+                        </div><!-- end col -->
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 h-100">
+                                <h5 class="fs-sm text-muted fw-semibold mb-3" data-lang="dash-top5-underlying">Top 5 Underlying Assets</h5>
+                                <div style="height: 260px;">
+                                    <canvas id="top5-commodities-chart"></canvas>
+                                </div>
+                            </div>
+                        </div><!-- end col -->
+                    </div><!-- end row -->
+                </div><!-- end card-body -->
+            </div><!-- end card -->
         </div><!-- end col -->
+    </div><!-- end row -->
 
-        <!-- Top 5 Produto -->
-        <div class="col-xxl-4 col-md-6">
-            <div class="card h-100 dash-fade-in dash-fade-in-3b">
-                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
-                    <h4 class="card-title mb-0" data-lang="dash-top5-products">Top 5 Produtos</h4>
-                    <span class="badge bg-success-subtle text-success fs-xxs" id="dash-top5-products-period" data-lang="dash-filter-year">Ano Atual</span>
-                </div>
-                <div class="card-body">
-                    <div style="height: 260px;">
-                        <canvas id="top5-products-chart"></canvas>
+    <!-- Live Position — foto do estoque em custódia na data de referência -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card dash-fade-in dash-fade-in-4">
+                <div class="card-header border-dashed d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h4 class="card-title mb-0" data-lang="dash-live-title">Live Position</h4>
+                        <p class="text-muted fs-xs mb-0 mt-1">
+                            <span data-lang="dash-live-sub">Operações em custódia na data de referência</span>
+                            <span id="live-asof" class="fst-italic"></span>
+                        </p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="live-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="dash-live-refdate">Reference date</label>
+                        <input type="date" id="live-date" class="form-control form-control-sm" style="width: auto;">
                     </div>
                 </div>
-            </div>
-        </div><!-- end col -->
-
-        <!-- Top 5 Underlying Assets -->
-        <div class="col-xxl-4 col-md-6">
-            <div class="card h-100 dash-fade-in dash-fade-in-3c">
-                <div class="card-header border-dashed d-flex align-items-center justify-content-between">
-                    <h4 class="card-title mb-0" data-lang="dash-top5-underlying">Top 5 Underlying Assets</h4>
-                    <span class="badge bg-info-subtle text-info fs-xxs" id="dash-top5-commodities-period" data-lang="dash-filter-year">Ano Atual</span>
-                </div>
-                <div class="card-body">
-                    <div style="height: 260px;">
-                        <canvas id="top5-commodities-chart"></canvas>
-                    </div>
-                </div>
-            </div>
+                <div class="card-body p-0">
+                    <div class="row g-0">
+                        <div class="col-xxl-3 col-md-4">
+                            <div class="p-3 border-end border-dashed h-100 d-flex flex-column justify-content-center">
+                                <p class="text-muted fs-xs mb-1" data-lang="dash-live-total">Live operations</p>
+                                <h2 class="mb-3 fw-semibold"><span id="live-total">–</span></h2>
+                                <div id="live-entity-stats" class="d-flex flex-column gap-2"></div>
+                            </div>
+                            <hr class="d-md-none border-light m-0">
+                        </div><!-- end col -->
+                        <div class="col-xxl-9 col-md-8">
+                            <div class="p-3">
+                                <h5 class="fs-sm text-muted fw-semibold mb-3" data-lang="dash-live-byproduct">By product</h5>
+                                <div dir="ltr">
+                                    <div style="height: 300px;">
+                                        <canvas id="live-position-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div><!-- end col -->
+                    </div><!-- end row -->
+                </div><!-- end card-body -->
+            </div><!-- end card -->
         </div><!-- end col -->
     </div><!-- end row -->
 
     <!-- Settlement Forecast (by product) — próximos 14 dias úteis -->
     <div class="row mt-3">
         <div class="col-12">
-            <div class="card dash-fade-in dash-fade-in-4">
+            <div class="card dash-fade-in dash-fade-in-5">
                 <div class="card-header justify-content-between align-items-center border-dashed d-flex">
                     <div>
                         <h4 class="card-title mb-0" data-lang="dash-forecast-title">Settlement Forecast</h4>
                         <p class="text-muted fs-xs mb-0 mt-1">
                             <span id="forecast-sub" data-lang="dash-forecast-sub">Próximos 15 dias úteis, por produto</span>
-                            <span id="forecast-asof" class="ms-1 fst-italic"></span>
+                            <span id="forecast-asof" class="fst-italic"></span>
                         </p>
                     </div>
                     <div class="d-flex align-items-center gap-3">
@@ -369,5 +406,5 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260704a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260704b"></script>
 {% endblock extra_javascript %}

@@ -1115,5 +1115,12 @@
   "ops-col-id-b3": "ID B3",
   "ops-col-settlement-b3": "Settlement B3",
   "ops-col-difference": "Difference",
-  "ops-empty": "No rows for this date yet — add one or pick another date."
+  "ops-empty": "No rows for this date yet — add one or pick another date.",
+  "dash-top5-ranking": "Top 5 Ranking",
+  "dash-live-title": "Live Position",
+  "dash-live-sub": "Operations in custody on the reference date",
+  "dash-live-refdate": "Reference date",
+  "dash-live-total": "Live operations",
+  "dash-live-byproduct": "By product",
+  "dash-live-empty": "No position files for this date."
 }

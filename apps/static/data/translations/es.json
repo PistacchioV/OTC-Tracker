@@ -1114,5 +1114,12 @@
   "ops-col-id-b3": "ID B3",
   "ops-col-settlement-b3": "Liquidación B3",
   "ops-col-difference": "Diferencia",
-  "ops-empty": "Sin filas para esta fecha — agregue una o elija otra fecha."
+  "ops-empty": "Sin filas para esta fecha — agregue una o elija otra fecha.",
+  "dash-top5-ranking": "Top 5 Ranking",
+  "dash-live-title": "Posición Viva",
+  "dash-live-sub": "Operaciones en custodia en la fecha de referencia",
+  "dash-live-refdate": "Fecha de referencia",
+  "dash-live-total": "Operaciones en cartera",
+  "dash-live-byproduct": "Por producto",
+  "dash-live-empty": "Sin archivos de posición para esta fecha."
 }

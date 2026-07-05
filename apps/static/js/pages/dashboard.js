@@ -696,6 +696,116 @@ function updatePeriodBadges(period) {
     });
 }
 
+// ─── live position (custody snapshot) ────────────────────────────────────────
+
+let liveChart = null;
+let _liveData = null;
+// Multi-hue palette for the by-product bars (distinct from the flow/pie tokens).
+const LIVE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#a855f7', '#14b8a6', '#64748b'];
+
+/** Toggle a centered "no data" message over the live-position canvas. */
+function _setLiveEmpty(canvas, isEmpty) {
+    const wrap = canvas.parentElement;
+    let msg = wrap.querySelector('.dash-empty-msg');
+    if (isEmpty) {
+        if (!msg) {
+            msg = document.createElement('div');
+            msg.className = 'dash-empty-msg text-center text-muted d-flex align-items-center justify-content-center h-100';
+            wrap.appendChild(msg);
+        }
+        msg.textContent = t('dash-live-empty', 'Sem arquivos de posição para esta data.');
+        msg.style.display = '';
+        canvas.style.display = 'none';
+    } else if (msg) {
+        msg.style.display = 'none';
+        canvas.style.display = '';
+    }
+    return isEmpty;
+}
+
+function buildLivePositionChart(data) {
+    const ctx = document.getElementById('live-position-chart');
+    if (!ctx) return;
+    if (liveChart) liveChart.destroy();
+    const rows = data.by_product || [];
+    if (_setLiveEmpty(ctx, !rows.length)) return;
+    const barColor = (context) => {
+        const hex = LIVE_COLORS[context.dataIndex % LIVE_COLORS.length];
+        const { ctx: c, chartArea } = context.chart;
+        if (!chartArea) return hexToRgba(hex, 1);
+        const g = c.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+        g.addColorStop(0, hexToRgba(hex, 0.55));
+        g.addColorStop(1, hexToRgba(hex, 1));
+        return g;
+    };
+    liveChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.label),
+            datasets: [{
+                label: t('dash-live-total', 'Live operations'),
+                data: rows.map(r => r.count),
+                backgroundColor: barColor,
+                borderRadius: stackEndRadius(6, 'left'), borderSkipped: false,
+                barThickness: 22,
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            animation: { duration: 700, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x} ${ctx.parsed.x !== 1 ? 'ops' : 'op'}` } })
+            },
+            scales: {
+                x: { ticks: { font: { family: bodyFont }, color: ins('secondary-color'), precision: 0 }, grid: { color: ins('chart-border-color') }, border: { display: false } },
+                y: { ticks: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color') }, grid: { display: false }, border: { display: false } }
+            }
+        }
+    });
+}
+
+function renderLiveEntityStats(entities) {
+    const box = document.getElementById('live-entity-stats');
+    if (!box) return;
+    if (!entities || !entities.length) { box.innerHTML = ''; return; }
+    box.innerHTML = entities.map(e => `
+        <div class="d-flex align-items-center justify-content-between">
+            <span class="text-muted fs-xs">${e.label}</span>
+            <span class="badge bg-light text-body fw-semibold">${e.count}</span>
+        </div>`).join('');
+}
+
+async function loadLivePosition(dateStr) {
+    try {
+        const qs = dateStr ? `?date=${dateStr}` : '';
+        const res = await fetch(`/api/dashboard-live-position${qs}`);
+        const data = await res.json();
+        _liveData = data;
+
+        const total = document.getElementById('live-total');
+        if (total) total.textContent = (data.total ?? 0).toLocaleString();
+
+        const asOf = document.getElementById('live-asof');
+        if (asOf && data.ref_date_fmt) asOf.textContent = `${t('dash-forecast-asof', 'as of')} ${data.ref_date_fmt}`;
+
+        // Keep the picker in sync with the resolved reference date (default D-1)
+        const picker = document.getElementById('live-date');
+        if (picker && data.ref_date && !picker.value) picker.value = data.ref_date;
+
+        renderLiveEntityStats(data.by_entity);
+        buildLivePositionChart(data);
+    } catch (err) {
+        console.error('[Dashboard] Failed to load live position:', err);
+    }
+}
+
+function wireLivePosition() {
+    const picker = document.getElementById('live-date');
+    if (!picker) return;
+    picker.addEventListener('change', () => loadLivePosition(picker.value));
+}
+
 // ─── main load ───────────────────────────────────────────────────────────────
 
 let _lastData = null;
@@ -750,6 +860,7 @@ function rerenderCharts() {
     buildProductsChart(_lastData.top5_products);
     buildCommoditiesChart(_lastData.top5_underlying);
     if (_forecastData) buildForecastProductChart(_forecastData);
+    if (_liveData) buildLivePositionChart(_liveData);
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -759,6 +870,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadDashboard('year');
     wireForecastRange();
     loadForecastChart();   // independent of the period filter
+    wireLivePosition();
+    loadLivePosition();    // custody snapshot at D-1 ANBIMA (independent of period)
 
     document.querySelectorAll('#dash-period-filter [data-period]').forEach(item => {
         item.addEventListener('click', (e) => {
