@@ -1177,5 +1177,6 @@
   "about-feat-otm-title": "OTM Settlements",
   "about-feat-otm-desc": "Importa el archivo cashflows (dropzone o carpeta), aplica la limpieza de la macro (DELETE/códigos) y genera el JSON diario. Widgets por Asset Class (Rates, Equities, Commodities) contando Trade IDs únicos, con filtro por columna y exportación.",
   "about-feat-opssum-title": "Other Products Summary",
-  "about-feat-opssum-desc": "Batch de liquidación por fecha: tarjetas de conteo (NDF Commodities, Swap Flow/Maturity/Premium, Options, COE) desde los archivos de posición de B3, con tablas editables y exportación."
+  "about-feat-opssum-desc": "Batch de liquidación por fecha: tarjetas de conteo (NDF Commodities, Swap Flow/Maturity/Premium, Options, COE) desde los archivos de posición de B3, con tablas editables y exportación.",
+  "nav-advice": "Advice"
 }
