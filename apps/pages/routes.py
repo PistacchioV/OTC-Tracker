@@ -2977,20 +2977,53 @@ def _import_client_contacts(filename, raw_bytes):
     }
 
 
+# Network folder scanned for Daily Settlement source files when the dropzone is
+# left empty (see api_cp_daily_settlement_save).
+SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT',
+                             r'I:\Confirmation\Derivativos\OTC Tracker\Settlements')
+
+
 @blueprint.route('/api/control-panel/daily-settlement-save', methods=['POST'])
 def api_cp_daily_settlement_save():
-    """Control Panel — "Save Daily Settlement Files". PLACEHOLDER: the front-end
-    card is ready; the actual saving logic (which files, from which sources, to
-    which destination folders) will be wired later. Accepts an optional `date`."""
+    """Control Panel — "Save Daily Settlement Files". Files come from the card's
+    dropzone (multipart 'files'); if none were attached, fall back to scanning
+    SETTLEMENTS_ROOT. If neither has any file → error so the UI can warn the user.
+
+    PLACEHOLDER: the actual per-file processing (build the JSONs, move/rename to
+    the settlement folders) is still to be wired — for now we only resolve WHICH
+    files would be processed and report them back."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    payload = request.get_json(silent=True) or {}
-    ds = (payload.get('date') or '').strip()
-    # TODO: implement the Daily Settlement file-saving routine (sources → dest).
+
+    uploaded = [f for f in request.files.getlist('files') if f and f.filename]
+    source = 'dropzone'
+    names = [f.filename for f in uploaded]
+
+    if not names:
+        # Fall back to the network folder.
+        source = 'folder'
+        if os.path.isdir(SETTLEMENTS_ROOT):
+            try:
+                names = [f for f in os.listdir(SETTLEMENTS_ROOT)
+                         if os.path.isfile(os.path.join(SETTLEMENTS_ROOT, f))]
+            except OSError:
+                names = []
+
+    if not names:
+        return jsonify({'success': False,
+                        'error': ('Nenhum arquivo encontrado para processamento — o dropzone está '
+                                  'vazio e não há arquivos em {}.'.format(SETTLEMENTS_ROOT))}), 400
+
+    # TODO: process each file (build JSONs, save to the settlement folders).
+    preview = ', '.join(names[:8]) + ('…' if len(names) > 8 else '')
     return jsonify({
         'success': True,
-        'message': ('Front-end pronto. A rotina de salvamento dos arquivos do Daily Settlement '
-                    'ainda será implementada' + (' (data {}).'.format(ds) if ds else '.')),
+        'source': source,
+        'count': len(names),
+        'files': names,
+        'message': ('{} arquivo(s) encontrado(s) via {}: {}.<br><br>'
+                    '<span class="text-muted">Processamento (geração dos JSONs) a implementar.</span>'
+                    ).format(len(names), 'dropzone' if source == 'dropzone' else 'pasta', preview),
     })
 
 

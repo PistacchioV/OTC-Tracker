@@ -1157,7 +1157,7 @@
   "otm-rows": "filas",
   "cp-r-ds-title": "Guardar Archivos del Daily Settlement",
   "cp-r-ds-desc": "Lee y guarda todos los archivos necesarios para el Daily Settlement (cashflows de OTM y demás fuentes) en las carpetas de liquidación. Lógica de guardado en construcción.",
-  "cp-ds-meta": "Fuentes → Daily Settlement",
+  "cp-ds-meta": "Dropzone o carpeta Settlements",
   "cp-ds-run": "Guardar archivos",
   "otm-show": "Mostrar",
   "otm-entries": "entradas",
@@ -1167,5 +1167,8 @@
   "sc-all": "Todos",
   "ops-show": "Mostrar",
   "ops-entries": "entradas",
-  "ops-all": "Todos"
+  "ops-all": "Todos",
+  "cp-ds-files": "Archivos",
+  "cp-ds-dz": "Arrastre los archivos aquí o haga clic para seleccionar",
+  "cp-nofiles-title": "Ningún archivo encontrado"
 }

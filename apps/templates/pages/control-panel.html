@@ -113,6 +113,27 @@
 .cp-cal-btn:hover { background-color: rgba(0,102,204,.10); color: var(--cp-blue); }
 .cp-cal-btn i { font-size: 1rem; }
 
+/* Dropzone (Daily Settlement files) */
+.cp-dropzone {
+    border: 1.5px dashed var(--bs-border-color, #ced4da); border-radius: 12px;
+    padding: .85rem 1rem; cursor: pointer; background: var(--bs-tertiary-bg, #f8f9fa);
+    transition: border-color 150ms var(--cp-ease), background-color 150ms var(--cp-ease);
+}
+.cp-dropzone:hover, .cp-dropzone:focus-visible { border-color: var(--cp-blue); outline: none; }
+.cp-dropzone.cp-dz-over { border-color: var(--cp-blue); background: rgba(0,102,204,.06); }
+.cp-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--cp-muted); font-size: .82rem; }
+.cp-dz-hint i { font-size: 1.15rem; color: var(--cp-blue); }
+.cp-dz-list { list-style: none; margin: .55rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.cp-dz-list:empty { margin: 0; }
+.cp-dz-list li {
+    display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem;
+    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 50rem; padding: 2px 6px 2px 10px; color: var(--cp-ink);
+}
+.cp-dz-list .cp-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
+.cp-dz-list .cp-dz-x:hover { opacity: 1; color: #dc3545; }
+@media (prefers-reduced-motion: reduce) { .cp-dropzone { transition: none; } }
+
 /* ── Footer / meta / button ─────────────────────────────────── */
 .cp-card__foot {
     display: flex; align-items: center; justify-content: space-between;
@@ -258,20 +279,21 @@
                         other product sources) into the settlement folders. Saving logic in progress.
                     </p>
                     <div class="cp-field">
-                        <label data-lang="cp-ref-date">Reference date</label>
-                        <div class="cp-datefield" id="cpDsDateWrap">
-                            <input type="text" id="cp-ds-date" data-input readonly
-                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
-                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        <label data-lang="cp-ds-files">Files</label>
+                        <div class="cp-dropzone" id="cpDsDrop" tabindex="0">
+                            <input type="file" id="cp-ds-files" multiple hidden>
+                            <div class="cp-dz-hint">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span data-lang="cp-ds-dz">Drop files here or click to browse</span>
+                            </div>
+                            <ul class="cp-dz-list" id="cp-ds-list"></ul>
                         </div>
                     </div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-folder"></i><span data-lang="cp-ds-meta">Sources → Daily Settlement</span>
+                            <i class="ti ti-folder"></i><span data-lang="cp-ds-meta">Dropzone or Settlements folder</span>
                         </span>
-                        <button type="button" class="cp-run-btn"
-                                data-endpoint="/api/control-panel/daily-settlement-save"
-                                data-date-input="cp-ds-date">
+                        <button type="button" class="cp-run-btn" id="cpDsSaveBtn">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-ds-run">Save files</span>
                         </button>
@@ -487,6 +509,71 @@ document.addEventListener('click', function (e) {
     if (btn.getAttribute('data-endpoint')) cpRunRoutine(btn);
     else if (btn.getAttribute('data-upload-endpoint')) cpRunUpload(btn);
 });
+
+// ── Daily Settlement: dropzone holds the files; Save uploads them (or, if the
+//    dropzone is empty, the backend scans the Settlements folder). Nothing in
+//    either → warning. ─────────────────────────────────────────────────────────
+(function () {
+    var drop = document.getElementById('cpDsDrop');
+    var input = document.getElementById('cp-ds-files');
+    var listEl = document.getElementById('cp-ds-list');
+    var saveBtn = document.getElementById('cpDsSaveBtn');
+    if (!drop || !input || !saveBtn) return;
+    var files = [];
+    function esch(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function render() {
+        listEl.innerHTML = files.map(function (f, i) {
+            return '<li><i class="ti ti-file"></i>' + esch(f.name) + '<span class="cp-dz-x" data-i="' + i + '">&times;</span></li>';
+        }).join('');
+        listEl.querySelectorAll('.cp-dz-x').forEach(function (x) {
+            x.addEventListener('click', function (e) { e.stopPropagation(); files.splice(+this.dataset.i, 1); render(); });
+        });
+    }
+    drop.addEventListener('click', function (e) { if (e.target.closest('.cp-dz-x')) return; input.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    input.addEventListener('change', function () { Array.prototype.forEach.call(input.files, function (f) { files.push(f); }); input.value = ''; render(); });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('cp-dz-over'); }); });
+    ['dragleave', 'dragend'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('cp-dz-over'); }); });
+    drop.addEventListener('drop', function (e) {
+        e.preventDefault(); drop.classList.remove('cp-dz-over');
+        Array.prototype.forEach.call(e.dataTransfer.files, function (f) { files.push(f); }); render();
+    });
+
+    saveBtn.addEventListener('click', function () {
+        var label = saveBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = saveBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        saveBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        var opts;
+        if (files.length) {
+            var fd = new FormData(); files.forEach(function (f) { fd.append('files', f); }); opts = { method: 'POST', body: fd };
+        } else {
+            opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' };
+        }
+        fetch('/api/control-panel/daily-settlement-save', opts)
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (res.ok && res.body && res.body.success !== false) {
+                    Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                                html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+                    files = []; render();
+                } else {
+                    Swal.fire({ icon: 'warning', title: t('cp-nofiles-title', 'No files found'),
+                                html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred.'), confirmButtonColor: '#0066cc' });
+                }
+            })
+            .catch(function () {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+            })
+            .finally(function () {
+                saveBtn.disabled = false;
+                if (label) label.textContent = orig;
+                if (icon) icon.className = origIcon || 'ti ti-player-play';
+            });
+    });
+})();
 
 // ── Date pickers: dd/mm/yyyy display, calendar icon, default = D-1 ANBIMA ─────
 // Every .cp-datefield wrap gets its own flatpickr. The ISO default (YYYY-MM-DD)
