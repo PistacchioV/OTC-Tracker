@@ -3052,6 +3052,16 @@ def _ops_settlement_counts(settle_ref, pos_ref):
             'option': {'total': 0, 'maturity': 0, 'premium': 0},
             'ndf':    {'total': 0, 'maturity': 0},
             'coe':    {'total': 0}}
+    # A tipo-2 swap is a cash-flow contract: it appears in DFLUXO with several
+    # event dates. The event that lands on its OWN maturity date is the final
+    # (bullet) payment → it must be counted as MATURITY, not Flow. So we collect
+    # the "Código Identificador" of every contract maturing on `settle_ref`
+    # (from DPOSICAO-SWAP, tipo 2) and then EXCLUDE those ids from the DFLUXO
+    # Flow count — a flow event only counts as Flow when its contract's maturity
+    # is NOT the picker date. swap_pos is processed before swap_flx in
+    # _FORECAST_SOURCES, so the set is fully populated by the time Flow is read.
+    swap_mat_ids = set()
+    _ID_TOKENS = ['código identificador', 'codigo identificador', 'identificador']
     for src in _FORECAST_SOURCES:
         mapping = _OPS_SRC_MAP.get(src['key'])
         if not mapping:
@@ -3081,6 +3091,7 @@ def _ops_settlement_counts(settle_ref, pos_ref):
         cw = src.get('count_where')
         cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
         cw_allowed = cw[1] if cw else None
+        id_key = _fcst_resolve_key(keys, _ID_TOKENS)   # contract join key (swap)
         for row in rows:
             if cw_key is not None:
                 cwv = str(row.get(cw_key, '') or '').strip()
@@ -3088,9 +3099,16 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                     cwv = cwv[:-2]
                 if cwv not in cw_allowed:
                     continue
+            cid = str(row.get(id_key, '') or '').strip() if id_key else ''
+            # Flow event whose contract matures on the picker date → it's the
+            # maturity payment (already counted via swap_pos), not a Flow.
+            if src['key'] == 'swap_flx' and cid and cid in swap_mat_ids:
+                continue
             if date_key and _fcst_parse_date(row.get(date_key, '')) == settle_ref:
                 fams[fam]['total'] += 1
                 fams[fam][primary_sub] += 1
+                if src['key'] == 'swap_pos' and cid:
+                    swap_mat_ids.add(cid)
             if date2_key and _fcst_parse_date(row.get(date2_key, '')) == settle_ref:
                 fams[fam]['total'] += 1
                 if fam == 'option':
