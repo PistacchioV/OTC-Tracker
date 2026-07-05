@@ -3010,6 +3010,14 @@ _DS_IMPORTS = [
     {'key': 'tss-fx', 'label': 'TSS-FX', 'json': 'tss-fx', 'header': 1,
      'match': lambda n: n.startswith('fxo detail'),
      'filters': [], 'skip_no_data': True},
+    # Opened via Workbooks.Open in the VBA (real workbook / .txt) — header on row 1.
+    {'key': 'br-onshore', 'label': 'BR Onshore Settlements', 'json': 'br-onshore-settlements',
+     'header': 1, 'match': lambda n: n.startswith('brazilonshoresettlementswarningfile'),
+     'filters': []},
+    {'key': 'latam-desk', 'label': 'Latam Desk Position', 'json': 'latam-desk-position',
+     'header': 1, 'match': lambda n: n.startswith('fbirptlatamdeskpo'),   # VBA name has a typo ("Postion")
+     # Keep a row if col 62 OR col 63 is non-empty (VBA does two <> "" filter passes).
+     'filters': [('nonempty_any', [62, 63])]},
 ]
 
 
@@ -3057,7 +3065,13 @@ def _ds_process(raw, spec):
             continue                                   # skip fully-blank lines
         total += 1
         keep = True
-        for kind, col, allowed in spec['filters']:
+        for f in spec['filters']:
+            if f[0] == 'nonempty_any':           # keep if ANY of the listed cols is non-empty
+                if not any(_ds_cell(row, c - 1) for c in f[1]):
+                    keep = False
+                    break
+                continue
+            kind, col, allowed = f
             v = _ds_cell(row, col - 1)
             if kind == 'digits':
                 if ''.join(ch for ch in v if ch.isdigit()) not in allowed:
@@ -3804,7 +3818,9 @@ def _otm_import(ref=None):
         if c22 not in _OTM_KEEP_CODES:
             filtered += 1
             continue
-        out.append({c: cell(r, idx_map.get(c)) for c in _OTM_COLUMNS})
+        rec = {c: cell(r, idx_map.get(c)) for c in _OTM_COLUMNS}
+        rec['Cpty Name'] = rec['Cpty Name'].upper()      # store counterparty name upper-cased
+        out.append(rec)
         kept += 1
 
     jp = _otm_json_path(ref)
@@ -3821,9 +3837,23 @@ def _otm_import(ref=None):
             'filtered': filtered, 'date': ref.strftime('%Y-%m-%d')}
 
 
+def _otm_asset_bucket(asset_class):
+    """Asset Class → widget bucket: COMMODITIES → commodities, EQUITIES → equities,
+    INTEREST_RATE → rates (accent/case tolerant). None if unmapped."""
+    ac = str(asset_class or '').upper()
+    if 'COMMOD' in ac:
+        return 'commodities'
+    if 'EQUIT' in ac:
+        return 'equities'
+    if 'INTEREST' in ac or 'RATE' in ac:
+        return 'rates'
+    return None
+
+
 def _otm_collect(ref):
     """Read the OTM JSON for `ref` (date) → display rows + widgets. Dates are
-    formatted dd/mm/yyyy and Amount as #,##0.00. Widget breakdown pending."""
+    formatted dd/mm/yyyy and Amount as #,##0.00. Widgets count DISTINCT Trade Ids
+    per Asset Class (a Trade Id may span several rows)."""
     widgets = {'total': 0, 'rates': 0, 'equities': 0, 'commodities': 0}
     jp = _otm_json_path(ref)
     rows_out = []
@@ -3833,6 +3863,8 @@ def _otm_collect(ref):
                 data = json.load(fh) or []
         except Exception:
             data = []
+        buckets = {'commodities': set(), 'equities': set(), 'rates': set()}
+        all_ids = set()
         for rec in data:
             row = []
             for c in _OTM_COLUMNS:
@@ -3844,7 +3876,16 @@ def _otm_collect(ref):
                     v = _swapchar_fmt_value(v)
                 row.append('' if v is None else v)
             rows_out.append(row)
-        widgets['total'] = len(data)
+            tid = str(rec.get('Trade Id', '') or '').strip()
+            if tid:
+                all_ids.add(tid)
+                bucket = _otm_asset_bucket(rec.get('Asset Class', ''))
+                if bucket:
+                    buckets[bucket].add(tid)
+        widgets['commodities'] = len(buckets['commodities'])
+        widgets['equities'] = len(buckets['equities'])
+        widgets['rates'] = len(buckets['rates'])
+        widgets['total'] = len(all_ids)                 # distinct Trade Ids overall
     return {'widgets': widgets, 'columns': _OTM_COLUMNS, 'rows': rows_out}
 
 
