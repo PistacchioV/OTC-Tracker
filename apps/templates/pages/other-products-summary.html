@@ -302,6 +302,10 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
+<!-- jQuery próprio ANTES de datatables/daterangepicker: o vendors.min.js global não
+     expõe jQuery utilizável, então plugins jQuery falham ('jQuery is not defined').
+     Mesmo padrão de accrual-swap / mtm-swap. -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
