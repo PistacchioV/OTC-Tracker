@@ -1170,5 +1170,12 @@
   "ops-all": "Todos",
   "cp-ds-files": "Archivos",
   "cp-ds-dz": "Arrastre los archivos aquí o haga clic para seleccionar",
-  "cp-nofiles-title": "Ningún archivo encontrado"
+  "cp-nofiles-title": "Ningún archivo encontrado",
+  "about-cap-dailysettle": "Daily Settlement",
+  "about-feat-swapchar-title": "Swap Characteristics",
+  "about-feat-swapchar-desc": "Foto del book de swap en custodia por fecha de referencia (D-1 ANBIMA): widgets por Tipo de Contrato, LOB, Indexador y Funcionalidad, filtro por columna y exportación, desde el archivo de posición DPOSICAO-SWAP.",
+  "about-feat-otm-title": "OTM Settlements",
+  "about-feat-otm-desc": "Importa el archivo cashflows (dropzone o carpeta), aplica la limpieza de la macro (DELETE/códigos) y genera el JSON diario. Widgets por Asset Class (Rates, Equities, Commodities) contando Trade IDs únicos, con filtro por columna y exportación.",
+  "about-feat-opssum-title": "Other Products Summary",
+  "about-feat-opssum-desc": "Batch de liquidación por fecha: tarjetas de conteo (NDF Commodities, Swap Flow/Maturity/Premium, Options, COE) desde los archivos de posición de B3, con tablas editables y exportación."
 }

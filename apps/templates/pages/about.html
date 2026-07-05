@@ -625,6 +625,53 @@
                         </div>
                     </div>
                 </div>
+                <div class="ab-cap-group ab-rv" data-lang="about-cap-dailysettle">Daily Settlement</div>
+                <div class="row g-3 ab-sg mb-2">
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-swapchar-title">Swap Characteristics</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-swapchar-desc">
+                                Foto do book de swap em custódia por data de referência (D-1 ANBIMA): widgets por Tipo de
+                                Contrato, LOB, Indexador e Funcionalidade, filtro por coluna e exportação, a partir do
+                                arquivo de posição DPOSICAO-SWAP.
+                            </p>
+                            <a href="/live-position-swap-characteristics" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-cash-banknote"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-otm-title">OTM Settlements</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-otm-desc">
+                                Importa o arquivo cashflows (dropzone ou pasta), aplica a limpeza da macro (DELETE/códigos)
+                                e gera o JSON diário. Widgets por Asset Class (Rates, Equities, Commodities) contando
+                                Trade IDs únicos, tabela com filtro por coluna e exportação.
+                            </p>
+                            <a href="/otm-settlements" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-opssum-title">Other Products Summary</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-opssum-desc">
+                                Batch de liquidação por data: cards de contagem (NDF Commodities, Swap Flow/Maturity/Premium,
+                                Options, COE) a partir dos arquivos de posição da B3, com tabelas editáveis e exportação.
+                            </p>
+                            <a href="/other-products-summary" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
                 <div class="ab-cap-group ab-rv" data-lang="regulatory-title">Regulatory</div>
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
@@ -694,8 +741,9 @@
                             <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-adjustments-horizontal"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-cp-title">Control Panel</div>
                             <p class="ab-feat__desc" data-lang="about-feat-cp-desc">
-                                Central de rotinas operacionais. A primeira rotina salva os arquivos CETIP dos
-                                Daily Settlements (tradução do fluxo Alteryx para Python), com data D-1 ANBIMA padrão.
+                                Central de rotinas operacionais: salva os arquivos CETIP (tradução do Alteryx, D-1 ANBIMA)
+                                e processa os arquivos do Daily Settlement via dropzone/pasta em JSONs, além de Settlement
+                                Forecast e manutenção de contatos.
                             </p>
                             <a href="/control-panel" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
