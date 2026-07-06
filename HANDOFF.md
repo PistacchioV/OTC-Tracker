@@ -3685,3 +3685,96 @@ apps/static/js/sidenav-drilldown.js        ← CRIADO (controller drill-down)
 apps/templates/partials/sidenav.html       ← CSS dd-* no <style>
 apps/templates/partials/footer-scripts.html← inclui sidenav-drilldown.js após app.js
 ```
+
+## 70. Sessão 2026-07-06 — Live Position NDF: todas as datas da média asiática (dd/mm/yyyy, cap 60)
+
+**Pedido:** no Live Position NDF só aparecia a **primeira** data da média asiática; precisa mostrar
+**todas** (algumas ops têm >40 datas). O padrão no JSON é trio de colunas por fixing: **coluna com a
+data / coluna vazia / coluna com 0** — trazer **apenas as colunas com as datas**, formatadas
+**dd/mm/yyyy** no front. Depois: **limitar a 60 colunas** (chegava a 145, inviável).
+
+**Como foi feito (`_lpndf_collect`, `routes.py`, commits `76426ac` + `6dd4933`):**
+- As chaves de coluna passam a vir da **UNIÃO ordenada de TODAS as chaves de todos os registros**
+  (antes usava só `data[0]`, que na op vanilla-first não tinha o bloco asiático) — preserva a ordem
+  de aparição.
+- `date_keys = [k for k in asian_keys if any(is_yyyymmdd(rec.get(k,'')) for rec in data)]` — só
+  entram colunas em que **algum** registro tem um valor `YYYYMMDD` válido (descarta a vazia e o 0).
+- **Cap:** `_LPNDF_MAX_ASIAN = 60`; `date_keys = date_keys[:_LPNDF_MAX_ASIAN]`.
+- Labels sequenciais `'Média Asiática {}'.format(i+1)`; cada valor formatado **dd/mm/yyyy** por célula.
+
+**⚠️ Nota de dados (dev):** o TER JSON do cache local é uma variante reduzida de 8 colunas (sem bloco
+asiático), então **não dá para testar com dado real localmente** — validado com dado sintético
+(vanilla-first + 3/5 linhas com data → 5 colunas; 200 datas → cap 60).
+
+### Arquivos (sessão 70)
+```
+apps/pages/routes.py   ← _lpndf_collect (união de chaves, filtro is_yyyymmdd, cap 60, fmt dd/mm/yyyy) + const _LPNDF_MAX_ASIAN
+```
+
+## 71. Sessão 2026-07-06 — Intrag Option (filtro server-fetch + filtros de coluna) + Export Excel + Notificações
+
+**(1) Filtro inteligente = busca no servidor (não filtro de tabela) — `eabd1d6`.**
+Pedido: a Intrag Option tem que funcionar como a **Intrag NDF** — o filtro inteligente **busca** as
+operações nos JSONs (server-fetch), não filtra linhas já carregadas. Apagar o filtro **não** pode
+mostrar todas as linhas geradas.
+- Em `pages/intrag-option.html`: `SF_COLS` marca Registration Date com `isDate=true`; novo `_dmyToIso`;
+  `intragOptLoad()` → `intragLoad(qs, colFilters)` que faz `GET /api/intrag/option?qs`. O botão Search
+  monta `qs` a partir dos chips de data (`date=` / `date_from` / `date_to`) + chips de coluna
+  client-side. Removidos `applyOptFilters()` e a auto-chamada ao remover chip / backspace.
+- Load inicial: `sfAddFilter(SF_COLS[3], _todayDmy()); sfSearchBtn.click();`.
+- **Backend não mudou** — `/api/intrag/option` já aceitava `date`/`date_from`/`date_to`.
+
+**(2) Filtros de coluna Status e Intrag ID — `eabd1d6`.**
+Na linha de filtros por coluna, os `<th>` de **Status** e **Intrag ID** estavam vazios. Adicionados
+`<input placeholder="Status">` e `<input placeholder="Intrag ID">`.
+
+**(3) Export Excel não funcionava (na verdade: linhas vazias) — `eabd1d6`.**
+Causa raiz (achada via teste de paginação jsdom): `fmtExport`/`formatExportData` liam do **DOM
+`node`**, que é **null** para linhas fora da página atual → o book exportava ~metade das linhas
+vazias. Fix: usar o **model `data`** quando `node` é null.
+```js
+function fmtExport(data, row, column, node){
+  if (node){ var inp=$(node).find('input[type!="checkbox"]'); if(inp.length) return inp.val()||''; }
+  return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
+}
+```
+Aplicado em **8 páginas** (intrag-ndf, intrag-option, pending-confirmation, 5 new_deals). Adicionado
+`title:'…'` aos botões Copy/CSV/Excel/Print. Verificado: **0** linhas vazias após o fix.
+
+**(4) Notificações — "Mark All as Read" fecha o dropdown — `eabd1d6`.**
+Em `partials/topbar.html`, após marcar tudo como lido, fecha o dropdown via
+`bootstrap.Dropdown.getOrCreateInstance(toggle).hide()`.
+
+**(5) Badges DATE/NUMBER do filtro inteligente invisíveis — `ced199c`.**
+A Intrag Option só tinha `.sf-type-text`; faltavam `.sf-type-date`/`.sf-type-number` (a `.sf-type-badge`
+força `color:#fff` sem fundo → branco no branco). Adicionadas iguais à NDF:
+`.sf-type-date{background:#0dcaf0;color:#000!important}` e `.sf-type-number{background:#ffc107;color:#000!important}`.
+
+### Arquivos (sessão 71)
+```
+apps/templates/pages/intrag-option.html   ← SF server-fetch, filtros Status/Intrag ID, fmtExport, CSS badges DATE/NUMBER
+apps/templates/pages/intrag-ndf.html       ← fmtExport (fallback model data)
+apps/templates/pages/pending-confirmation.html + 5 new_deals-*.html ← formatExportData (fallback model data)
+apps/templates/partials/topbar.html        ← Mark All as Read fecha o dropdown
+```
+
+## 72. Sessão 2026-07-06 — Padrão SÓLIDO de badges/botões nas páginas Daily Settlement (`97d9ce7`)
+
+**Pedido:** adotar como **padrão** o estilo **sólido** do Intrag (badge cheio + botão de ação
+circular sólido) nas páginas Daily Settlement recém-criadas (que estavam no estilo *soft*).
+
+**Padrão SÓLIDO (referência = Intrag NDF):**
+- **Badges:** `<span class="badge {cls} bg-gradient">` — New=`bg-info text-white`,
+  Pending=`text-bg-warning`, OK=`text-bg-success`, Sent=`badge-sent` (#17a2b8).
+- **Botões de ação:** `btn btn-{cor} btn-sm rounded-circle btn-row-{ação}` — Edit=`btn-info`,
+  Confirm=`btn-success`, Delete=`btn-danger`, Send=`btn-primary`; tamanho **28px** via CSS scoped
+  (`width:28px;height:28px;flex:0 0 28px;padding:0;border-radius:50%;inline-flex center`).
+
+Aplicado em `operations-b3.js`, `otm-settlements.js`, `ndf-cockpit.js` (statusBadge + actionsHtml) e
+o CSS 28px nos respectivos `.html`. **Já documentado como padrão** na seção de maker/checker.
+
+### Arquivos (sessão 72)
+```
+apps/static/js/pages/{operations-b3,otm-settlements,ndf-cockpit}.js ← statusBadge + actionsHtml sólidos
+apps/templates/pages/{operations-b3,otm-settlements,ndf-cockpit}.html ← CSS 28px botão circular + bump ?v
+```

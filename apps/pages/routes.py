@@ -5165,6 +5165,143 @@ def api_lpndf_data():
     return jsonify(payload)
 
 
+# ── Live Position › Option ───────────────────────────────────────────────────
+#  Read-only view of the Option book from the DPOSICAO position JSON (the file
+#  ships with its own header, so columns resolve by NAME — same engine as NDF).
+#  If the file carries a trailing block of per-date columns (yyyymmdd) not mapped
+#  to any reporting column below, they are appended as dynamic "Média Asiática"
+#  columns (shown dd/mm/yyyy), mirroring the NDF page.
+_LPOPT_COLUMNS = [
+    'Código IF', 'Tipo de Opção', 'Combinação de operações', 'Posição da Parte', 'Parte (Conta)',
+    'Parte (Nome simplificado)', 'CPF/CNPJ Cliente Parte', 'Contraparte (Conta)',
+    'Contraparte (Nome simplificado)', 'CPF/CNPJ Cliente Contraparte', 'Data Registro', 'Data Início',
+    'Data Vencimento', 'Classe do ativo subjacente', 'Classe do ativo VCP', 'Tipo de Mercadoria',
+    'Opção quanto', 'Cotação para opção quanto', 'Ativo subjacente / Moeda base',
+    'Moeda do ativo / Moeda cotada', 'Quantidade', 'Quantidade Antecipada',
+    'Strike/Limitador/Barreiras em Valor ou Percentual?', 'Strike (percentual)', 'Strike (valor)',
+    'Valor base', 'Tipo de Exercício', 'Situação do contrato', 'Data Referência para valores em %',
+    'Data de fixing do ativo subjacente', 'Tipo de cotação', 'Data de fixing da moeda do ativo subjacente',
+    'Strike/Limitador/Barreiras em Reais', 'Limitador', 'Limitador (percentual)',
+    'Periodicidade de Verificação das Barreiras', 'Rebate Unitário', 'Barreira de KI',
+    'Direção Barreira de KI', 'Barreira KI (percentual)', 'Tipo de Cotação p/ Verificação de Barreira de KI',
+    'Barreira de KO', 'Direção Barreira de KO', 'Barreira KO (percentual)',
+    'Tipo de Cotação p/ Verificação de Barreira de KO', 'Liquidação do Rebate de KO',
+    'Situação Barreira KI', 'Situação Barreira KO', 'Média Asiática', 'Quantidade de datas de verificação',
+    'Modalidade de liquidação do prêmio', 'Prêmio Unitário', 'Valor financeiro total do prêmio',
+    'Valor financeiro Total do Rebate', 'Data de Liquidação do Prêmio', 'Data da Última Antecipação',
+    'Proteção contra Proventos', 'Informações complementares', 'Cotação Inicial do Ativo (em reais)',
+    'Trigger Proporção',
+]
+# Date columns → dd/mm/yyyy; value columns → #,##0.00 (derived from the names above).
+_LPOPT_DATE_COLS = {c for c in _LPOPT_COLUMNS if c.startswith('Data ')}
+_LPOPT_VALUE_COLS = {c for c in _LPOPT_COLUMNS if c.startswith('Valor ')}
+# Max number of dynamic Asian-average fixing-date columns to surface (cap).
+_LPOPT_MAX_ASIAN = 60
+
+
+def _opt_dposicao_path(ref, max_back=10):
+    """Newest existing Option DPOSICAO (path, dref) walking back from `ref`."""
+    cur = ref
+    for _ in range(max_back):
+        dref = cur.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'Option', _b3_date_subpath(dref),
+                         '73760_{}_DPOSICAO.json'.format(dref))
+        if os.path.isfile(p):
+            return p, dref
+        cur = _prev_anbima_bizday(cur)
+    return None, None
+
+
+def _lpopt_collect(ref):
+    widgets = {'total': 0, 'a': 0, 'b': 0, 'c': 0}
+    path, _ = _opt_dposicao_path(ref)
+    columns = list(_LPOPT_COLUMNS)
+    rows_out = []
+    if path:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if data:
+            # Ordered UNION of keys across ALL records (a row may carry extra
+            # per-date columns another row lacks). First-seen order is kept.
+            keys, _seen = [], set()
+            for rec in data:
+                for k in rec.keys():
+                    if k not in _seen:
+                        _seen.add(k); keys.append(k)
+
+            def resolve(name):
+                n = _fcst_norm(name)
+                low = [(k, _fcst_norm(k)) for k in keys]
+                for k, kn in low:
+                    if kn == n:
+                        return k                       # exact (accent/case-insensitive) — preferred
+                cands = [(k, kn) for k, kn in low if kn and n in kn]
+                if cands:
+                    return min(cands, key=lambda t: len(t[1]))[0]
+                return None
+            idx = {c: resolve(c) for c in _LPOPT_COLUMNS}
+
+            def is_yyyymmdd(s):
+                s = str(s or '').strip()
+                return len(s) == 8 and s.isdigit()
+
+            # Dynamic per-date block: any file key NOT mapped to a reporting column
+            # that holds a yyyymmdd date on some record (the repeating fixing block).
+            mapped = {idx[c] for c in _LPOPT_COLUMNS if idx[c]}
+            date_keys = [k for k in keys
+                         if k not in mapped and any(is_yyyymmdd(rec.get(k, '')) for rec in data)]
+            date_keys = date_keys[:_LPOPT_MAX_ASIAN]
+            asian_labels = ['Média Asiática (data) {}'.format(i + 1) for i in range(len(date_keys))]
+            columns = list(_LPOPT_COLUMNS) + asian_labels
+
+            for rec in data:
+                row = []
+                for c in _LPOPT_COLUMNS:
+                    v = rec.get(idx[c], '') if idx[c] else ''
+                    if c in _LPOPT_DATE_COLS:
+                        d = _fcst_parse_date(v)
+                        v = d.strftime('%d/%m/%Y') if d else (v or '')
+                    elif c in _LPOPT_VALUE_COLS:
+                        v = _swapchar_fmt_value(v)
+                    row.append('' if v is None else v)
+                for k in date_keys:
+                    raw = str(rec.get(k, '') or '').strip()
+                    if is_yyyymmdd(raw):
+                        d = _fcst_parse_date(raw)
+                        row.append(d.strftime('%d/%m/%Y') if d else '')
+                    else:
+                        row.append('')
+                rows_out.append(row)
+            widgets['total'] = len(data)
+    return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
+
+
+@blueprint.route('/live-position-option')
+def live_position_option():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-option.html', segment='live-position-option', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-option/data')
+def api_lpopt_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _prev_anbima_bizday(datetime.now())
+    except ValueError:
+        ref = _prev_anbima_bizday(datetime.now())
+    payload = _lpopt_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 # ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
 #  Worksheet page modelled on Other Products Summary: two editable tables (Trade
 #  Level + Settlement Summary) with their own columns, plus header cards pulled
