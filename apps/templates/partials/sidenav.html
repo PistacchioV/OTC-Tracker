@@ -96,6 +96,78 @@
           /* Garante que o fill do SVG use a cor herdada */
           fill: currentColor;
         }
+
+        /* ============================================================================
+           DRILL-DOWN NAVIGATION (sidenav-drilldown.js)
+           Master → detail: clicar um item com subitens desliza o menu para mostrar
+           apenas aquele nível; breadcrumb no topo volta os níveis. Só o COMPORTAMENTO
+           muda — cada nível continua sendo um `ul.side-nav`, herdando 100% do tema.
+           Animação: transform/opacity (GPU), ease-out forte, ~240ms, interrompível.
+           ============================================================================ */
+        .sidenav-menu { --dd-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+
+        /* Original theme accordion is hidden — drill-down runs in its own container. */
+        .side-nav.dd-source-hidden { display: none !important; }
+
+        /* Items with subitems: force a RIGHT chevron (theme default is chevron-down).
+           `rotate(-90deg)` turns the down glyph into a right one and overrides the
+           theme's -180deg active/expanded rotation, so it always points →. */
+        .dd-branch .menu-arrow { transform: rotate(-90deg) !important; }
+
+        /* Breadcrumb ------------------------------------------------------------- */
+        .dd-crumbs {
+          display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .1rem;
+          padding: .55rem .9rem .3rem; margin-bottom: .1rem;
+          font-size: .7rem; line-height: 1.2;
+        }
+        .dd-crumbs.dd-at-root { display: none; }
+        .dd-crumb {
+          appearance: none; background: none; border: 0; color: inherit;
+          padding: .1rem .28rem; border-radius: 6px; font-weight: 600; opacity: .55;
+          cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          transition: opacity .16s var(--dd-ease), background-color .16s var(--dd-ease), transform .12s var(--dd-ease);
+        }
+        button.dd-crumb:hover { opacity: 1; background: rgba(128, 128, 128, .2); }
+        button.dd-crumb:active { transform: scale(.96); }
+        .dd-crumb-active { opacity: 1; cursor: default; }
+        .dd-crumb-sep { display: inline-flex; align-items: center; opacity: .4; margin: 0 -1px; }
+        .dd-crumb-sep svg { width: 13px; height: 13px; }
+
+        /* Sliding stage + panels ------------------------------------------------- */
+        .dd-stage { position: relative; overflow: hidden; }
+        .dd-panel {
+          transform: translateX(0); opacity: 1;
+          transition: transform .24s var(--dd-ease), opacity .24s var(--dd-ease);
+          will-change: transform, opacity; margin-bottom: 0;
+        }
+        .dd-enter-right { transform: translateX(100%); opacity: .35; }
+        .dd-enter-left  { transform: translateX(-34%); opacity: .35; }
+        .dd-exit-left   { transform: translateX(-34%); opacity: 0; }
+        .dd-exit-right  { transform: translateX(100%); opacity: 0; }
+
+        /* Back row --------------------------------------------------------------- */
+        .dd-back { border-bottom: 1px solid rgba(128, 128, 128, .16); margin-bottom: .15rem; padding-bottom: .1rem; }
+        .dd-back-link { opacity: .78; }
+        .dd-back-link:hover { opacity: 1; }
+        .dd-back-icon svg { transition: transform .16s var(--dd-ease); }
+        .dd-back-link:hover .dd-back-icon svg { transform: translateX(-2px); }
+
+        /* The branch drill trigger keeps the theme's menu-arrow (points right). */
+        .dd-branch:active, .dd-leaf:active, .dd-back-link:active { transform: scale(.985); }
+
+        /* Entrance stagger (dropped under reduced motion by the controller) ------ */
+        .dd-stagger > li {
+          opacity: 0; transform: translateY(6px);
+          animation: ddRowIn .26s var(--dd-ease) both; animation-delay: var(--dd-delay, 0ms);
+        }
+        @keyframes ddRowIn { to { opacity: 1; transform: none; } }
+
+        @media (prefers-reduced-motion: reduce) {
+          .dd-panel { transition: opacity .18s ease; }
+          .dd-enter-right, .dd-enter-left, .dd-exit-left, .dd-exit-right { transform: none; }
+          .dd-stagger > li { animation: none; opacity: 1; transform: none; }
+          .dd-back-link:hover .dd-back-icon svg { transform: none; }
+        }
         </style>
         
         <!-- Sidenav Menu Start -->

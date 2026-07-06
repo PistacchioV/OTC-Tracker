@@ -3604,3 +3604,59 @@ apps/templates/pages/ndf-summary.html         ← CRIADO (base other-products-su
 apps/templates/partials/sidenav.html          ← NDF>Summary → /ndf-summary; LivePos>NDF → /live-position-ndf
 apps/static/data/translations/{en,br,es}.json ← ln-*, ndf-c-*
 ```
+
+---
+
+## 69. Sidenav drill-down (master → detail) — nova navegação
+
+**Pedido:** trocar o comportamento do sidenav: ao clicar num item COM subitens, em vez de
+expandir a lista para baixo (accordion do tema), o menu **desliza** para mostrar **apenas os
+subitens daquele item**, com **breadcrumb no topo** para voltar os níveis. Só o COMPORTAMENTO
+muda — o visual/estrutura dos itens é mantido.
+
+**Como foi feito (não mexer no HTML dos itens):**
+- Novo `apps/static/js/sidenav-drilldown.js` (incluído no `partials/footer-scripts.html` DEPOIS do
+  `app.js`). CSS scoped no `<style>` de `partials/sidenav.html` (prefixo `dd-`).
+- **DESACOPLADO do menu original:** o `ul.side-nav` do tema é apenas **escondido**
+  (`.dd-source-hidden { display:none !important }`) — o `app.js`/Bootstrap/SimpleBar continuam
+  operando nele sem efeito visível. O drill-down vive num container próprio `.dd-nav` (crumbs +
+  `.dd-stage`). Cada nível é um **`ul.side-nav` novo** (clones dos `<li>`) → herda 100% do estilo do
+  tema (hrefs, `data-lang`, lucide, `.active`).
+- ⚠️ **GOTCHA CRÍTICO — capturar o menu ANTES do app.js:** o `<script>` roda durante o parse do body
+  (antes do `DOMContentLoaded`), então captura um **clone PRISTINE** do `ul.side-nav` logo no topo do
+  IIFE (`var PRISTINE = ...cloneNode(true)`). Se clonar depois, o `app.js` já expandiu collapses e o
+  Bootstrap está no meio da animação (`.collapse`↔`.collapsing`), o que **corrompe o parse/strip** →
+  o accordion vaza e o auto-open falha. Todo o build usa `PRISTINE`. O strip remove QUALQUER
+  `.collapse, .collapsing, ul.sub-menu` (querySelectorAll, à prova de estado de animação).
+- Um **branch** = `<a>` com submenu vira gatilho de drill-in (removido `data-bs-toggle`). Setas: o
+  tema usa `chevron-down` (▾) por padrão; forço `.dd-branch .menu-arrow { transform: rotate(-90deg)
+  !important }` → sempre **▸ (direita)**. **Leaf** = link normal. **Back row** no topo de cada nível.
+- **Breadcrumb** para no **penúltimo nível** (todos os crumbs são clicáveis); o nível atual NÃO entra
+  no breadcrumb pois já aparece na back row (evita duplicação). Esconde no root (`.dd-at-root`).
+- **Auto-open:** no load abre direto no nível da página atual (match `location.pathname` × href do
+  leaf) e marca `.active`. Crumb raiz = literal "Menu" (NÃO usar `menu-title` — traduz p/ "Navigation").
+- **i18n:** clones carregam `data-lang` → `applyTranslations()` global traduz. Chamadas de globais do
+  browser são qualificadas (`window.lucide`, `window.requestAnimationFrame`).
+
+**Animação (skill /emil-design-eng):** só `transform`/`opacity` (GPU), ease-out forte
+`cubic-bezier(.23,1,.32,1)`, 240ms, **CSS transitions** (interrompível, não keyframes). Painel entra
+de `translateX(100%)`/`opacity .35` (nunca `scale(0)`); no back entra da esquerda. O painel que sai é
+congelado como overlay `position:absolute` para o painel novo (em fluxo) **definir a altura** — sem
+animar layout/height. Stagger leve das linhas (26ms, cap 9) só na entrada. `prefers-reduced-motion`:
+controller pula o slide, CSS remove transforms/stagger. Press feedback: `scale(.96)`/`.985`.
+
+**Testado (jsdom + headless Chrome no runtime real com app.js):** `/otm-settlements` e `/dashboard`
+→ original escondido, **0** collapse/submenu vazando, auto-open (`Menu / Daily Settlement / Other
+Products`), breadcrumb no penúltimo, setas ▸, drill/back/crumb ok. ✅ (Testar sobre o HTML cru NÃO
+reproduz o bug do accordion — precisa do DOM pós-app.js; ver gotcha acima.)
+
+**Limitação conhecida:** modo **condensed** (sidebar só-ícones com fly-out no hover) usava a estrutura
+`.collapse` que agora fica oculta — nesse modo o drill funciona mas sem texto/breadcrump ideais. Não
+foi pedido; refinar se necessário.
+
+### Arquivos (sessão 69)
+```
+apps/static/js/sidenav-drilldown.js        ← CRIADO (controller drill-down)
+apps/templates/partials/sidenav.html       ← CSS dd-* no <style>
+apps/templates/partials/footer-scripts.html← inclui sidenav-drilldown.js após app.js
+```
