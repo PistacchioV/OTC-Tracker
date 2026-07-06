@@ -88,9 +88,9 @@
   // Standard status badge (project format): OK=success, Pending=warning, New=info.
   function statusBadge(status) {
     var s = String(status || 'New').toLowerCase();
-    if (s === 'pending') return '<span class="badge bg-warning-subtle text-warning">' + esc(t('pending')) + '</span>';
-    if (s === 'ok')      return '<span class="badge bg-success-subtle text-success">' + esc(t('ok')) + '</span>';
-    return '<span class="badge bg-info-subtle text-info">' + esc(t('newst')) + '</span>';
+    if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'ok')      return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
   }
 
   function metaOf(r) {
@@ -101,9 +101,9 @@
   // Action buttons — standard rounded-square format via btn-row-* classes.
   function actionsHtml(id) {
     return '<div class="d-inline-flex gap-1">' +
-      '<button class="btn btn-sm btn-soft-primary btn-row-edit" data-id="' + esc(id) + '" title="' + esc(t('edit')) + '"><i class="ti ti-pencil"></i></button>' +
-      '<button class="btn btn-sm btn-soft-success btn-row-confirm" data-id="' + esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>' +
-      '<button class="btn btn-sm btn-soft-danger btn-row-delete" data-id="' + esc(id) + '" title="' + esc(t('del')) + '"><i class="ti ti-trash"></i></button>' +
+      '<button class="btn btn-info btn-sm rounded-circle btn-row-edit" data-id="' + esc(id) + '" title="' + esc(t('edit')) + '"><i class="ti ti-pencil"></i></button>' +
+      '<button class="btn btn-success btn-sm rounded-circle btn-row-confirm" data-id="' + esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>' +
+      '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete" data-id="' + esc(id) + '" title="' + esc(t('del')) + '"><i class="ti ti-trash"></i></button>' +
       '</div>';
   }
 

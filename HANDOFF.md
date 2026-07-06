@@ -52,9 +52,19 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
   (no OTM: chaves `_ot_status`/`_ot_maker`/`_ot_checker`/`_ot_id`; `_otm_collect` anexa `[status,maker,checker,id]`
   no fim de cada row). Lifecycle: importado/inserido = **OK**; **Edit** → **Pending** (maker = usuário, checker
   limpo); **Confirm** só por **outro** usuário (guard `maker == sid` → 403 `same_user`) → volta a **OK**.
-  Badges no formato padrão (`bg-*-subtle text-*`): OK=success, Pending=warning, New=info. Endpoints
-  `/api/otm-settlements/row/{add,edit,delete,confirm}`. Ações são delegadas em jQuery (`.off().on(... , '.btn-row-*')`)
-  para sobreviver a redraws do DataTables; após cada mutação → `load()` recarrega + `fetchNotifications()`.
+  Endpoints `/api/otm-settlements/row/{add,edit,delete,confirm}`. Ações são delegadas em jQuery
+  (`.off().on(... , '.btn-row-*')`) para sobreviver a redraws do DataTables; após cada mutação →
+  `load()` recarrega + `fetchNotifications()`.
+- **⚠️ PADRÃO DE BADGES + BOTÕES DE AÇÃO (SÓLIDO — igual Intrag/New Deals):** NÃO usar o estilo soft
+  (`bg-*-subtle text-*` / `btn-soft-*`). O padrão adotado (2026-07-06) é SÓLIDO:
+  - **Status badge:** `<span class="badge {cls} bg-gradient">` — New=`bg-info text-white`,
+    Pending=`text-bg-warning`, OK/Success=`text-bg-success`, Sent=`badge-sent` (#17a2b8).
+  - **Botões de ação:** `btn btn-{cor} btn-sm rounded-circle btn-row-{ação}` — Edit=`btn-info`,
+    Confirm=`btn-success`, Delete=`btn-danger`, Send=`btn-primary` (`ti-brand-telegram`). Dimensionar
+    com CSS scoped no `<style>` da página: `#<tabela> td .btn-sm.rounded-circle { width:28px;height:28px;
+    flex:0 0 28px;padding:0;font-size:13px;display:inline-flex;align-items:center;justify-content:center;
+    border-radius:50%; }`. Aplicado em operations-b3, otm-settlements, ndf-cockpit (paridade com
+    intrag-option/ndf). Ref viva: `intrag-option.html` (`_optActionsCell`, `statusBadge`).
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).

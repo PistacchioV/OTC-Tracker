@@ -50,6 +50,10 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #otm-page .btn:active { transform: scale(0.97); }
+/* Row action buttons — solid circular (project standard, matches Intrag). */
+#otm-table td .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
+  font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; box-sizing: border-box; }
 /* Toolbar buttons — compact project standard (matches .ops-toolbar): keeps Add row,
    Columns, Export and Clear filters uniform instead of the taller btn-sm default. */
 #otm-page .otm-toolbar .btn {
@@ -303,5 +307,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/otm-settlements.js?v=20260706"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otm-settlements.js?v=20260706b"></script>
 {% endblock extra_javascript %}
