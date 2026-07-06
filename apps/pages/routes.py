@@ -12619,7 +12619,7 @@ def reconciliation_comitente_run():
 def reconciliation_payrec():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    ref_date = datetime.now().strftime('%Y-%m-%d')   # Pay/Rec runs on today's date
     return render_template('pages/reconciliation-payrec.html',
                            segment='reconciliation-payrec', ref_date=ref_date)
 
