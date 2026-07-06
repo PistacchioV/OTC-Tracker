@@ -1,0 +1,305 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}NDF Cockpit{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#ndfc-page {
+    --ndfc-hairline: rgba(0,0,0,.08);
+    --ndfc-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #ndfc-page { --ndfc-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets ────────────────────────────────────────────────────────────── */
+#ndfc-page .ndfc-widgets .col { display: flex; margin-bottom: .5rem; }
+#ndfc-page .ndfc-widget {
+    flex: 1; border: 1px solid var(--ndfc-hairline); border-radius: 14px; padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ndfc-ease-out), box-shadow 220ms var(--ndfc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #ndfc-page .ndfc-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#ndfc-page .ndfc-widget__head { display: flex; align-items: center; gap: .6rem; }
+#ndfc-page .ndfc-widget__icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+}
+#ndfc-page .ndfc-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
+#ndfc-page .ndfc-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#ndfc-page .ndfc-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#ndfc-page .ndfc-widget--total .ndfc-widget__title,
+#ndfc-page .ndfc-widget--total .ndfc-widget__value { color: #fff; }
+#ndfc-page .ndfc-widget--total .ndfc-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Reference date picker + Import ─────────────────────────────────────── */
+#ndfc-page .ndfc-datewrap { position: relative; width: 170px; }
+#ndfc-page .ndfc-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--ndfc-ease-out), box-shadow 0.16s var(--ndfc-ease-out);
+}
+#ndfc-page .ndfc-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
+#ndfc-page .ndfc-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#ndfc-page .btn:active { transform: scale(0.97); }
+/* Toolbar buttons — compact project standard (matches .ops-toolbar): keeps Add row,
+   Columns, Export and Clear filters uniform instead of the taller btn-sm default. */
+#ndfc-page .ndfc-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+}
+#ndfc-page .ndfc-toolbar .btn i { font-size: .95em; }
+/* Add-row button — press feedback + hover lift (Emil) */
+#ndfc-page .ndfc-addrow-btn { transition: transform 150ms var(--ndfc-ease-out), box-shadow 150ms var(--ndfc-ease-out); }
+@media (hover: hover) and (pointer: fine) {
+    #ndfc-page .ndfc-addrow-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+}
+/* Add-row modal — centered (not origin-aware): scale 0.96 + opacity, strong ease-out ~200ms */
+.ndfc-add-modal .modal-content { border-radius: 16px; }
+.ndfc-add-modal.fade .modal-dialog {
+    transform: scale(0.96); opacity: 0;
+    transition: transform 200ms var(--ndfc-ease-out), opacity 200ms var(--ndfc-ease-out);
+}
+.ndfc-add-modal.show .modal-dialog { transform: scale(1); opacity: 1; }
+.ndfc-add-modal .form-control:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
+@media (prefers-reduced-motion: reduce) {
+    #ndfc-page .ndfc-addrow-btn { transition: none; }
+    #ndfc-page .ndfc-addrow-btn:hover { transform: none; }
+    .ndfc-add-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#ndfc-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#ndfc-table tbody td { white-space: nowrap; font-size: 0.74rem; vertical-align: middle; }
+
+/* Colunas específicas com larguras adequadas — um bloco por coluna
+   nth-child(1)=checkbox (2)=actions (3)=Status (4..19)=dados (_NDFC_COLUMNS). Ajuste conforme necessário. */
+  #ndfc-table th:nth-child(1),  #ndfc-table td:nth-child(1)  { min-width: 38px;  width: 38px; }   /* checkbox */
+  #ndfc-table th:nth-child(2),  #ndfc-table td:nth-child(2)  { min-width: 64px;  width: 64px; }   /* actions */
+  #ndfc-table th:nth-child(3),  #ndfc-table td:nth-child(3)  { min-width: 90px;  width: 90px; }   /* Status */
+  #ndfc-table th:nth-child(4), #ndfc-table td:nth-child(4) { min-width: 190px; width: 190px; }  /* LEGAL */
+  #ndfc-table th:nth-child(5), #ndfc-table td:nth-child(5) { min-width: 190px; width: 190px; }  /* NM_COUNTERPARTY */
+  #ndfc-table th:nth-child(6), #ndfc-table td:nth-child(6) { min-width: 130px; width: 130px; }  /* ID_SOURCE_DEAL */
+  #ndfc-table th:nth-child(7), #ndfc-table td:nth-child(7) { min-width: 110px; width: 110px; }  /* DT_DEAL */
+  #ndfc-table th:nth-child(8), #ndfc-table td:nth-child(8) { min-width: 130px; width: 130px; }  /* CD_CETIP_RETURN */
+  #ndfc-table th:nth-child(9), #ndfc-table td:nth-child(9) { min-width: 110px; width: 110px; }  /* DT_SETTLEMENT */
+  #ndfc-table th:nth-child(10), #ndfc-table td:nth-child(10) { min-width: 130px; width: 130px; }  /* VL_NOTIONAL_LC */
+  #ndfc-table th:nth-child(11), #ndfc-table td:nth-child(11) { min-width: 130px; width: 130px; }  /* VL_NOTIONAL_FC */
+  #ndfc-table th:nth-child(12), #ndfc-table td:nth-child(12) { min-width: 130px; width: 130px; }  /* VL_STRIKE_PRICE */
+  #ndfc-table th:nth-child(13), #ndfc-table td:nth-child(13) { min-width: 130px; width: 130px; }  /* VL_FORWARD_RATE */
+  #ndfc-table th:nth-child(14), #ndfc-table td:nth-child(14) { min-width: 130px; width: 130px; }  /* VL_TAX_INCOME */
+  #ndfc-table th:nth-child(15), #ndfc-table td:nth-child(15) { min-width: 130px; width: 130px; }  /* ID_DEAL */
+  #ndfc-table th:nth-child(16), #ndfc-table td:nth-child(16) { min-width: 190px; width: 190px; }  /* [PROD] Cockpit.SETTLEMENT */
+  #ndfc-table th:nth-child(17), #ndfc-table td:nth-child(17) { min-width: 130px; width: 130px; }  /* NB_BANK */
+  #ndfc-table th:nth-child(18), #ndfc-table td:nth-child(18) { min-width: 130px; width: 130px; }  /* CD_BRANCH */
+  #ndfc-table th:nth-child(19), #ndfc-table td:nth-child(19) { min-width: 130px; width: 130px; }  /* CD_BANK_ACCOUNT */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#ndfc-table thead tr.ndfc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ndfc-hairline); }
+#ndfc-table thead tr.ndfc-th-filter input.ndfc-col-filter {
+    width: 100%; min-width: 90px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px; border: 1px solid var(--ndfc-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--ndfc-ease-out), box-shadow 150ms var(--ndfc-ease-out),
+                background-color 150ms var(--ndfc-ease-out);
+}
+#ndfc-table thead tr.ndfc-th-filter input.ndfc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #ndfc-table thead tr.ndfc-th-filter input.ndfc-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#ndfc-table thead tr.ndfc-th-filter input.ndfc-col-filter:focus {
+    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#ndfc-table thead tr.ndfc-th-filter input.ndfc-col-filter.ndfc-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #ndfc-page * { transition: none !important; animation: none !important; }
+    #ndfc-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background (project standard, NOT scoped). */
+.dt-button-collection {
+    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
+    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
+    border: none !important; width: 100% !important; text-align: left !important;
+    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover {
+    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="ndfc-page" class="container-fluid" data-content="" data-today="{{ today }}">
+    {% set title='NDF Cockpit' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Widgets -->
+    <div class="row ndfc-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="ndfc-widget">
+                <div class="ndfc-widget__head">
+                    <span class="ndfc-widget__icon bg-primary-subtle text-primary"><i class="ti ti-users"></i></span>
+                    <h3 class="ndfc-widget__title" data-lang="ndfc-w-cpty">Counterparties</h3>
+                    <span class="ndfc-widget__value" id="ndfc-w-cpty">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ndfc-widget">
+                <div class="ndfc-widget__head">
+                    <span class="ndfc-widget__icon bg-info-subtle text-info"><i class="ti ti-cash"></i></span>
+                    <h3 class="ndfc-widget__title" data-lang="ndfc-w-notional">Notional (LC)</h3>
+                    <span class="ndfc-widget__value" id="ndfc-w-notional" style="font-size:1.25rem;">0.00</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ndfc-widget">
+                <div class="ndfc-widget__head">
+                    <span class="ndfc-widget__icon bg-success-subtle text-success"><i class="ti ti-arrows-exchange"></i></span>
+                    <h3 class="ndfc-widget__title" data-lang="ndfc-w-settlement">Settlement</h3>
+                    <span class="ndfc-widget__value" id="ndfc-w-settlement" style="font-size:1.25rem;">0.00</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ndfc-widget ndfc-widget--total">
+                <div class="ndfc-widget__head">
+                    <span class="ndfc-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="ndfc-widget__title" data-lang="ndfc-w-total">Total</h3>
+                    <span class="ndfc-widget__value" id="ndfc-w-total">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-secondary bg-gradient" type="button" id="ndfcImportBtn">
+                    <i class="ti ti-file-import fs-xl me-1"></i><span data-lang="ndfc-import">Import settlement</span>
+                </button>
+                <span class="text-muted fs-xs" id="ndfc-import-info"></span>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="text-muted fs-xs text-nowrap" id="ndfc-updated"></span>
+                    <label for="ndfc-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="ndfc-refdate">Settlement date</label>
+                    <div class="ndfc-datewrap" id="ndfcDateWrap">
+                        <input type="text" id="ndfc-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                        <span class="ndfc-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap ndfc-toolbar">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ndfc-show">Show</label>
+                        <select class="form-select form-select-sm ndfc-page-len" style="width:84px;">
+                            <option value="200" selected>200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                            <option value="1500">1500</option>
+                            <option value="2000">2000</option>
+                            <option value="2500">2500</option>
+                            <option value="3000">3000</option>
+                            <option value="3500">3500</option>
+                            <option value="4000">4000</option>
+                            <option value="4500">4500</option>
+                            <option value="5000">5000</option>
+                            <option value="5500">5500</option>
+                            <option value="6000">6000</option>
+                            <option value="6500">6500</option>
+                            <option value="7000">7000</option>
+                            <option value="7500">7500</option>
+                            <option value="8000">8000</option>
+                            <option value="8500">8500</option>
+                            <option value="9000">9000</option>
+                            <option value="9500">9500</option>
+                            <option value="10000">10000</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ndfc-entries">entries</label>
+                    </div>
+                    <button class="btn btn-sm btn-primary bg-gradient ndfc-addrow-btn" type="button" id="ndfcAddBtn">
+                        <i class="ti ti-plus me-1"></i><span data-lang="ndfc-add-row">Add row</span>
+                    </button>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="ndfcExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="ndfcClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="ndfc-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="ndfc-showing">Showing</span> <span id="ndfc-count">0</span> <span data-lang="ndfc-rows">rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="ndfc-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="ndfc-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit row modal (New Deals glass pattern: a window with all columns) -->
+    <div class="modal fade ndfc-add-modal" id="ndfcAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span id="ndfcModalTitle" data-lang="ndfc-add-title">Add row</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="ndfcAddFields"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="ndfcAddSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-cockpit.js?v=20260706"></script>
+{% endblock extra_javascript %}

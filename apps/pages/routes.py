@@ -3035,6 +3035,8 @@ _DS_IMPORTS = [
     # _ds_handle uses _otm_extract + the OTM json path.
     {'key': 'otm', 'label': 'OTM Settlements', 'json': 'otm-settlement', 'header': 1,
      'match': lambda n: n.startswith('cashflows'), 'otm': True, 'filters': []},
+    {'key': 'ndfc', 'label': 'NDF Cockpit', 'json': 'ndf-cockpit', 'header': 4,
+     'match': lambda n: n.startswith('settlement') and n.endswith('.xlsx'), 'ndfc': True, 'filters': []},
     {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
      'match': lambda n: n.startswith('operacoes'),
      'filters': [('digits', 2, {'73760009'}),
@@ -3150,6 +3152,11 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
             recs, kept, deleted, filtered = _otm_extract(rows) if len(rows) >= 2 else ([], 0, 0, 0)
             total = kept + deleted + filtered
             jp = _otm_json_path(ref)
+        elif spec.get('ndfc'):                         # SETTLEMENT.xlsx → NDF Cockpit page's logic + path
+            rows = _ndfc_read_rows(raw)
+            recs, kept = _ndfc_extract(rows)
+            total = kept
+            jp = _ndfc_json_path(ref)
         else:
             recs, total = _ds_process(raw, spec)
             jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
@@ -3159,11 +3166,12 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
-    if spec.get('otm'):                                # OTM timestamp = import time (no in-file time)
+    if spec.get('otm') or spec.get('ndfc'):            # OTM/Cockpit timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
-        try:                                           # (same extraction as the page's own import)
-            b3_rows, b3_updated = _opb3_extract(_ds_read_rows(raw))
+        try:                                           # use the FILTERED recs (processed rows), not the raw file
+            b3_rows = _opb3_map_recs(recs)
+            b3_updated = _opb3_updated_from(_ds_read_rows(raw))
             b3_jp = _opb3_json_path(ref)
             os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
             with open(b3_jp, 'w', encoding='utf-8') as fh:
@@ -4270,6 +4278,367 @@ def api_otm_row_confirm():
     return jsonify({'success': True})
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  NDF Cockpit — Daily Settlement › NDF › Cockpit
+#  Source: SETTLEMENT.xlsx (header on ROW 4 starting at column B, data from ROW 5).
+#  Modelled on OTM Settlements: per-day JSON, maker/checker CRUD, glass Add/Edit.
+#  Columns kept (the file has more; only these): the 16 below (by header name).
+#  Formatting: DT_* dates m/d/yyyy → dd/mm/yyyy; notional/tax/settlement → #,##0.00;
+#  VL_FORWARD_RATE → 0.000000; LEGAL & NM_COUNTERPARTY → UPPER (stored upper-cased).
+# ══════════════════════════════════════════════════════════════════════════════
+NDFC_SOURCE_ROOT = os.getenv('NDFC_SOURCE_ROOT', SETTLEMENTS_ROOT)
+NDFC_JSON_ROOT = OTM_JSON_ROOT
+_NDFC_COLUMNS = [
+    'LEGAL', 'NM_COUNTERPARTY', 'ID_SOURCE_DEAL', 'DT_DEAL', 'CD_CETIP_RETURN', 'DT_SETTLEMENT',
+    'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'VL_TAX_INCOME',
+    'ID_DEAL', '[PROD] Cockpit.SETTLEMENT', 'NB_BANK', 'CD_BRANCH', 'CD_BANK_ACCOUNT',
+]
+_NDFC_HEADER_ROW = 4                                  # 1-based (data from row 5)
+_NDFC_DATE_COLS  = {'DT_DEAL', 'DT_SETTLEMENT'}
+_NDFC_VALUE_COLS = {'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_TAX_INCOME', '[PROD] Cockpit.SETTLEMENT'}
+_NDFC_FWD_COLS   = {'VL_FORWARD_RATE'}
+_NDFC_UPPER_COLS = {'LEGAL', 'NM_COUNTERPARTY'}
+_NDFC_META_KEYS  = ('_nc_status', '_nc_maker', '_nc_checker', '_nc_id')
+
+
+def _ndfc_json_path(ref):
+    return os.path.join(NDFC_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'ndf-cockpit_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _ndfc_fmt_date(v):
+    """SETTLEMENT dates are US m/d/yyyy (e.g. 7/6/2026 = 6 Jul) → dd/mm/yyyy."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+        try:
+            return datetime.strptime(s.split(' ')[0], fmt).strftime('%d/%m/%Y')
+        except ValueError:
+            continue
+    d = _fcst_parse_date(s)                            # fallback (yyyymmdd / dd/mm/yyyy / …)
+    return d.strftime('%d/%m/%Y') if d else s
+
+
+def _ndfc_fmt_fwd(v):
+    """Forward rate → 0.000000 (6 decimals); comma decimal tolerated; non-numeric kept."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    try:
+        return '{:.6f}'.format(float(s.replace(' ', '').replace(',', '.')))
+    except ValueError:
+        return s
+
+
+def _ndfc_ensure_meta(data, default_status='OK'):
+    changed = False
+    for rec in data:
+        if not rec.get('_nc_id'):
+            rec['_nc_id'] = _otm_new_id(); changed = True
+        if '_nc_status' not in rec:
+            rec['_nc_status'] = default_status; changed = True
+        for k in ('_nc_maker', '_nc_checker'):
+            if k not in rec:
+                rec[k] = ''; changed = True
+    return changed
+
+
+def _ndfc_load(ref):
+    jp = _ndfc_json_path(ref)
+    if not os.path.isfile(jp):
+        return jp, None
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return jp, None
+    _ndfc_ensure_meta(data)
+    return jp, data
+
+
+def _ndfc_save(jp, data):
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _ndfc_find(data, rid):
+    for rec in data:
+        if str(rec.get('_nc_id', '')) == str(rid):
+            return rec
+    return None
+
+
+def _ndfc_read_rows(raw):
+    """Rows from SETTLEMENT.xlsx — real .xlsx (zip) or tab-delimited text fallback."""
+    if raw[:2] == b'PK':
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    return [ln.split('\t') for ln in raw.decode('latin-1').splitlines()]
+
+
+def _ndfc_extract(rows):
+    """Header on row 4, data from row 5. Keep the 16 columns by name; LEGAL &
+    NM_COUNTERPARTY stored UPPER; meta stamped 'OK'. Returns (records, kept)."""
+    hidx = _NDFC_HEADER_ROW - 1
+    if len(rows) <= hidx:
+        return [], 0
+    header = [str(h or '').strip() for h in rows[hidx]]
+    hnorm = [_fcst_norm(h) for h in header]
+
+    def col_idx(name):
+        n = _fcst_norm(name)
+        if n in hnorm:
+            return hnorm.index(n)
+        for i, h in enumerate(hnorm):
+            if h and (n in h or h in n):
+                return i
+        return None
+    idx_map = {c: col_idx(c) for c in _NDFC_COLUMNS}
+
+    def cell(r, i):
+        return str(r[i]).strip() if (i is not None and i < len(r) and r[i] is not None) else ''
+
+    out = []
+    for r in rows[hidx + 1:]:
+        if not any(cell(r, i) for i in range(len(r))):
+            continue                                  # skip fully-blank lines
+        rec = {c: cell(r, idx_map.get(c)) for c in _NDFC_COLUMNS}
+        for c in _NDFC_UPPER_COLS:
+            rec[c] = rec.get(c, '').upper()
+        out.append(rec)
+    _ndfc_ensure_meta(out)
+    return out, len(out)
+
+
+def _ndfc_import(ref=None):
+    """Find SETTLEMENT*.xlsx in NDFC_SOURCE_ROOT, extract, write today's JSON, delete source."""
+    ref = ref or datetime.now()
+    if not os.path.isdir(NDFC_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(NDFC_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(NDFC_SOURCE_ROOT)
+                     if f.lower().startswith('settlement') and f.lower().endswith('.xlsx'))
+    if not matches:
+        return {'success': False, 'error': 'No SETTLEMENT*.xlsx found in {}'.format(NDFC_SOURCE_ROOT)}
+    src_path = os.path.join(NDFC_SOURCE_ROOT, matches[0])
+    try:
+        with open(src_path, 'rb') as fh:
+            rows = _ndfc_read_rows(fh.read())
+    except Exception:
+        log.warning("[ndfc] read failed for %s:\n%s", src_path, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    out, kept = _ndfc_extract(rows)
+    jp = _ndfc_json_path(ref)
+    _ndfc_save(jp, out)
+    _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
+    try:
+        os.remove(src_path)
+    except OSError:
+        log.warning("[ndfc] could not delete source %s", src_path)
+    return {'success': True, 'file': matches[0], 'rows': kept, 'date': ref.strftime('%Y-%m-%d')}
+
+
+def _ndfc_num(v):
+    try:
+        return float(str(v or '').replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return 0.0
+
+
+def _ndfc_collect(ref):
+    """Read the NDF Cockpit JSON for `ref` → display rows (formatted) + widgets."""
+    widgets = {'total': 0, 'counterparties': 0, 'notional': '0.00', 'settlement': '0.00'}
+    jp = _ndfc_json_path(ref)
+    rows_out = []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if _ndfc_ensure_meta(data) and data:          # legacy JSON w/o meta → migrate once
+            try:
+                _ndfc_save(jp, data)
+            except Exception:
+                pass
+        cpties, sum_notional, sum_settle = set(), 0.0, 0.0
+        for rec in data:
+            row = []
+            for c in _NDFC_COLUMNS:
+                v = rec.get(c, '')
+                if c in _NDFC_DATE_COLS:
+                    v = _ndfc_fmt_date(v)
+                elif c in _NDFC_FWD_COLS:
+                    v = _ndfc_fmt_fwd(v)
+                elif c in _NDFC_VALUE_COLS:
+                    v = _swapchar_fmt_value(v)
+                row.append('' if v is None else v)
+            row += [rec.get('_nc_status', 'OK'), rec.get('_nc_maker', ''),
+                    rec.get('_nc_checker', ''), rec.get('_nc_id', '')]
+            rows_out.append(row)
+            nm = str(rec.get('NM_COUNTERPARTY', '') or '').strip()
+            if nm:
+                cpties.add(nm)
+            sum_notional += _ndfc_num(rec.get('VL_NOTIONAL_LC', ''))
+            sum_settle += _ndfc_num(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+        widgets['total'] = len(data)
+        widgets['counterparties'] = len(cpties)
+        widgets['notional'] = '{:,.2f}'.format(sum_notional)
+        widgets['settlement'] = '{:,.2f}'.format(sum_settle)
+    return {'widgets': widgets, 'columns': _NDFC_COLUMNS, 'rows': rows_out,
+            'updated': _ds_read_updated(jp)}
+
+
+@blueprint.route('/ndf-cockpit')
+def ndf_cockpit():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/ndf-cockpit.html', segment='ndf-cockpit',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/ndf-cockpit/data')
+def api_ndfc_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ndfc_collect(ref)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    'date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/ndf-cockpit/import', methods=['POST'])
+def api_ndfc_import():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    res = _ndfc_import(datetime.now())
+    if res.get('success'):
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'NDF Cockpit Imported', 'NDF Cockpit',
+                             '{}: {} row(s) ({})'.format(res.get('file', ''), res.get('rows', 0), res.get('date', '')))
+    return jsonify(res)
+
+
+def _ndfc_ref_from(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return datetime.now()
+
+
+@blueprint.route('/api/ndf-cockpit/row/add', methods=['POST'])
+def api_ndfc_row_add():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    ref = _ndfc_ref_from(p)
+    jp, data = _ndfc_load(ref)
+    if data is None:
+        data = []
+    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+           for i, c in enumerate(_NDFC_COLUMNS)}
+    for c in _NDFC_UPPER_COLS:
+        rec[c] = rec.get(c, '').upper()
+    rec['_nc_status'], rec['_nc_maker'], rec['_nc_checker'], rec['_nc_id'] = 'OK', sid, '', _otm_new_id()
+    data.append(rec)
+    try:
+        _ndfc_save(jp, data)
+    except Exception:
+        log.error('[ndfc] add save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Added', 'NDF Cockpit',
+                         '{} ({})'.format(rec.get('ID_DEAL', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'id': rec['_nc_id']})
+
+
+@blueprint.route('/api/ndf-cockpit/row/edit', methods=['POST'])
+def api_ndfc_row_edit():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid, cells = str(p.get('id', '')), (p.get('cells') or [])
+    sid = session.get('user_sid', '')
+    jp, data = _ndfc_load(_ndfc_ref_from(p))
+    rec = _ndfc_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    for i, c in enumerate(_NDFC_COLUMNS):
+        if i < len(cells):
+            rec[c] = str(cells[i]).strip()
+    for c in _NDFC_UPPER_COLS:
+        rec[c] = rec.get(c, '').upper()
+    rec['_nc_status'], rec['_nc_maker'], rec['_nc_checker'] = 'Pending', sid, ''
+    try:
+        _ndfc_save(jp, data)
+    except Exception:
+        log.error('[ndfc] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Updated', 'NDF Cockpit',
+                         '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-cockpit/row/delete', methods=['POST'])
+def api_ndfc_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _ndfc_load(_ndfc_ref_from(p))
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    rec = _ndfc_find(data, rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    data.remove(rec)
+    try:
+        _ndfc_save(jp, data)
+    except Exception:
+        log.error('[ndfc] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Deleted', 'NDF Cockpit',
+                         '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-cockpit/row/confirm', methods=['POST'])
+def api_ndfc_row_confirm():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _ndfc_load(_ndfc_ref_from(p))
+    rec = _ndfc_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(rec.get('_nc_maker', '') or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must confirm a row you changed.'}), 403
+    rec['_nc_status'], rec['_nc_checker'] = 'OK', sid
+    try:
+        _ndfc_save(jp, data)
+    except Exception:
+        log.error('[ndfc] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Confirmed', 'NDF Cockpit',
+                         '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
 # ── Operations B3 ────────────────────────────────────────────────────────────
 #  Curated view of the B3 "Operações" file (tab-delimited). Header on ROW 5, data
 #  from row 6 — the JSON keeps only the reporting columns below (by header name).
@@ -4319,6 +4688,36 @@ def _opb3_extract(rows):
     return out, updated
 
 
+def _opb3_spec():
+    return next((s for s in _DS_IMPORTS if s.get('key') == 'operacoes-jpm'), None)
+
+
+def _opb3_map_recs(recs):
+    """Map the FILTERED _ds_process recs (dicts keyed by the full header) to the 14
+    Operations B3 reporting columns by header name — so the page shows exactly the
+    rows that were processed (house account + operation-type filter), not the raw file."""
+    if not recs:
+        return []
+    keys = list(recs[0].keys())
+    knorm = [(k, _fcst_norm(k)) for k in keys]
+
+    def resolve(name):
+        n = _fcst_norm(name)
+        for k, kn in knorm:
+            if kn == n:
+                return k
+        for k, kn in knorm:
+            if kn and (n in kn or kn in n):
+                return k
+        return None
+    idx = {c: resolve(c) for c in _OPB3_COLUMNS}
+    return [{c: (rec.get(idx[c], '') if idx[c] else '') for c in _OPB3_COLUMNS} for rec in recs]
+
+
+def _opb3_updated_from(rows):
+    return _ds_cell(rows[1], 0) if len(rows) >= 2 else ''
+
+
 def _opb3_import(ref=None):
     ref = ref or datetime.now()
     if not os.path.isdir(OPB3_SOURCE_ROOT):
@@ -4330,11 +4729,20 @@ def _opb3_import(ref=None):
     src_path = os.path.join(OPB3_SOURCE_ROOT, matches[0])
     try:
         with open(src_path, 'rb') as fh:
-            rows = _ds_read_rows(fh.read())
+            raw = fh.read()
+        rows = _ds_read_rows(raw)
     except Exception:
         log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
         return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
-    recs, updated = _opb3_extract(rows)
+    # Show ONLY the processed rows (house account + operation-type filter), not the raw
+    # file: reuse the operacoes-jpm _ds_process filter, then map to the 14 columns.
+    spec = _opb3_spec()
+    if spec:
+        filtered, _tot = _ds_process(raw, spec)
+        recs = _opb3_map_recs(filtered)
+    else:
+        recs, _u = _opb3_extract(rows)
+    updated = _opb3_updated_from(rows)
     jp = _opb3_json_path(ref)
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
