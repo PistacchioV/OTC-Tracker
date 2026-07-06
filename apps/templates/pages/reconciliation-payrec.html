@@ -1,0 +1,254 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Pay/Rec Reconciliation{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#payrec-page {
+    --pr-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --pr-navy: #1c2b6b;
+    --pr-navy-2: #23347e;
+    --pr-hairline: rgba(0,0,0,.08);
+}
+[data-bs-theme="dark"] #payrec-page { --pr-hairline: rgba(255,255,255,.10); }
+
+/* ── Toolbar (dropzone + buttons) ─────────────────────────────── */
+#payrec-page .pr-dropzone {
+    border: 1.5px dashed var(--bs-border-color, #ced4da); border-radius: 12px;
+    padding: .85rem 1rem; cursor: pointer; background: var(--bs-tertiary-bg, #f8f9fa);
+    transition: border-color 150ms var(--pr-ease-out), background-color 150ms var(--pr-ease-out);
+}
+#payrec-page .pr-dropzone:hover, #payrec-page .pr-dropzone:focus-visible { border-color: #0066cc; outline: none; }
+#payrec-page .pr-dropzone.pr-dz-over { border-color: #0066cc; background: rgba(0,102,204,.06); }
+#payrec-page .pr-dz-hint { display: flex; align-items: center; gap: .5rem; color: var(--ins-secondary-color); font-size: .82rem; }
+#payrec-page .pr-dz-hint i { font-size: 1.15rem; color: #0066cc; }
+#payrec-page .pr-dz-list { list-style: none; margin: .55rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+#payrec-page .pr-dz-list:empty { margin: 0; }
+#payrec-page .pr-dz-list li {
+    display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem;
+    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 50rem; padding: 2px 6px 2px 10px; color: var(--ins-body-color);
+    animation: pr-chip-in 200ms var(--pr-ease-out) both;
+}
+@keyframes pr-chip-in { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
+#payrec-page .pr-dz-list .pr-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
+#payrec-page .pr-dz-list .pr-dz-x:hover { opacity: 1; color: #dc3545; }
+
+#payrec-page .btn { transition: transform 160ms var(--pr-ease-out), box-shadow 160ms var(--pr-ease-out); }
+#payrec-page .btn:active { transform: scale(0.97); }
+
+/* Reference date */
+#payrec-page .pr-datewrap { position: relative; width: 160px; }
+#payrec-page .pr-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+}
+#payrec-page .pr-cal-btn { position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer; }
+
+/* ── Result blocks ────────────────────────────────────────────── */
+#payrec-page .pr-block { animation: pr-block-in 280ms var(--pr-ease-out) both; }
+@keyframes pr-block-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+#payrec-page .pr-block:nth-child(1) { animation-delay: 0ms; }
+#payrec-page .pr-block:nth-child(2) { animation-delay: 45ms; }
+#payrec-page .pr-block:nth-child(3) { animation-delay: 90ms; }
+#payrec-page .pr-block:nth-child(4) { animation-delay: 135ms; }
+
+#payrec-page .pr-block__title { font-size: .95rem; font-weight: 700; letter-spacing: -.2px; margin: 0 0 .55rem; display: flex; align-items: center; gap: .45rem; }
+#payrec-page .pr-block__title i { font-size: 1.05rem; color: #0066cc; }
+#payrec-page .pr-block__count { font-size: .72rem; font-weight: 600; color: var(--ins-secondary-color); background: var(--bs-tertiary-bg); border-radius: 50rem; padding: 1px 9px; }
+
+#payrec-page .pr-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--pr-hairline); }
+#payrec-page table.pr-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin: 0; }
+#payrec-page table.pr-table thead th {
+    background: var(--pr-navy); color: #fff; font-weight: 600; text-align: left;
+    padding: 8px 12px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.12);
+}
+#payrec-page table.pr-table thead th:last-child { border-right: 0; }
+#payrec-page table.pr-table tbody td { padding: 7px 12px; border-bottom: 1px solid var(--pr-hairline); white-space: nowrap; vertical-align: middle; }
+#payrec-page table.pr-table tbody tr:last-child td { border-bottom: 0; }
+#payrec-page table.pr-table tbody tr:hover td { background: rgba(0,102,204,.05); }
+#payrec-page table.pr-table .pr-num { text-align: right; font-variant-numeric: tabular-nums; }
+#payrec-page table.pr-table .pr-neg { color: #c0392b; }
+#payrec-page table.pr-table tr.pr-total td { font-weight: 700; background: rgba(0,102,204,.07); }
+#payrec-page .pr-empty { padding: 14px; text-align: center; color: var(--ins-secondary-color); font-size: .8rem; }
+
+/* Check chips (OK / Not OK) */
+#payrec-page .pr-check { display: inline-flex; align-items: center; gap: .3rem; font-weight: 700; font-size: .72rem; padding: 2px 8px; border-radius: 50rem; }
+#payrec-page .pr-check--ok { background: #e8f5e9; color: #1b5e20; }
+#payrec-page .pr-check--no { background: #fde8e8; color: #b71c1c; }
+[data-bs-theme="dark"] #payrec-page .pr-check--ok { background: rgba(76,175,80,.18); color: #a5d6a7; }
+[data-bs-theme="dark"] #payrec-page .pr-check--no { background: rgba(244,67,54,.18); color: #ef9a9a; }
+#payrec-page .badge-status { font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: 50rem; }
+#payrec-page .badge-pending { background: #fff8e1; color: #7b5e00; }
+#payrec-page .badge-settled { background: #e8f5e9; color: #1b5e20; }
+[data-bs-theme="dark"] #payrec-page .badge-pending { background: rgba(255,193,7,.18); color: #ffd54f; }
+[data-bs-theme="dark"] #payrec-page .badge-settled { background: rgba(76,175,80,.18); color: #a5d6a7; }
+
+#payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
+@keyframes pr-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    #payrec-page *, #payrec-page .pr-block, #payrec-page .pr-dz-list li { animation: none !important; transition: none !important; }
+    #payrec-page .btn:active { transform: none; }
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="payrec-page" class="container-fluid" data-ref-date="{{ ref_date }}">
+    {% set title='Pay/Rec Reconciliation' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Toolbar: dropzone + import/run/end-process -->
+    <div class="card mt-1">
+        <div class="card-body">
+            <div class="row g-3 align-items-stretch">
+                <div class="col-lg-7">
+                    <div class="pr-dropzone h-100" id="prDrop" tabindex="0">
+                        <div class="pr-dz-hint">
+                            <i class="ti ti-cloud-upload"></i>
+                            <span data-lang="pr-dz">Drop the Pay/Rec input files here or click to browse</span>
+                        </div>
+                        <ul class="pr-dz-list" id="prDzList"></ul>
+                        <input type="file" id="prFiles" multiple hidden accept=".csv,.txt,.xls,.xlsx">
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="d-flex flex-column gap-2 h-100">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <label class="text-muted fs-xs mb-0 text-nowrap" data-lang="pr-refdate">Reference date</label>
+                            <div class="pr-datewrap" id="prDateWrap">
+                                <input type="text" id="pr-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                                <span class="pr-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap mt-auto">
+                            <button class="btn btn-soft-primary" type="button" id="prImportBtn">
+                                <i class="ti ti-folder-down me-1"></i><span data-lang="pr-import">Import from folder</span>
+                            </button>
+                            <button class="btn btn-primary bg-gradient" type="button" id="prRunBtn">
+                                <i class="ti ti-player-play me-1"></i><span data-lang="pr-run">Run reconciliation</span>
+                            </button>
+                            <button class="btn btn-success bg-gradient" type="button" id="prEndBtn" disabled>
+                                <i class="ti ti-mail-forward me-1"></i><span data-lang="pr-end">End process</span>
+                            </button>
+                        </div>
+                        <div class="text-muted fs-xs" id="prMeta"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="prResults">
+        <!-- Summary -->
+        <div class="card mt-2 pr-block" id="prCardSummary" hidden>
+            <div class="card-body">
+                <h3 class="pr-block__title"><i class="ti ti-clipboard-check"></i><span data-lang="pr-summary">Summary</span></h3>
+                <div class="pr-table-wrap">
+                    <table class="pr-table">
+                        <thead><tr>
+                            <th data-lang="pr-c-payrec">Pay/Receive</th>
+                            <th class="pr-num" data-lang="pr-c-jpmqty">JPM Qty</th>
+                            <th class="pr-num" data-lang="pr-c-cliqty">Client Qty</th>
+                            <th data-lang="pr-c-checkqty">Check Qty</th>
+                            <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
+                            <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
+                            <th class="pr-num" data-lang="pr-c-diff">Difference</th>
+                            <th data-lang="pr-c-checkval">Check Value</th>
+                        </tr></thead>
+                        <tbody id="prSummaryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Payment -->
+        <div class="card mt-2 pr-block" id="prCardPendPay" hidden>
+            <div class="card-body">
+                <h3 class="pr-block__title"><i class="ti ti-arrow-up-right"></i><span data-lang="pr-pendpay">Pending Payment</span>
+                    <span class="pr-block__count" id="prPendPayCount">0</span></h3>
+                <div class="pr-table-wrap">
+                    <table class="pr-table">
+                        <thead><tr>
+                            <th data-lang="pr-c-product">Product</th>
+                            <th data-lang="pr-c-jpmcpty">JPM cpty</th>
+                            <th data-lang="pr-c-client">Client</th>
+                            <th data-lang="pr-c-payrec">Pay/Receive</th>
+                            <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
+                            <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
+                            <th data-lang="pr-c-status">Status</th>
+                        </tr></thead>
+                        <tbody id="prPendPayBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Receivement -->
+        <div class="card mt-2 pr-block" id="prCardPendRec" hidden>
+            <div class="card-body">
+                <h3 class="pr-block__title"><i class="ti ti-arrow-down-left"></i><span data-lang="pr-pendrec">Pending Receivement</span>
+                    <span class="pr-block__count" id="prPendRecCount">0</span></h3>
+                <div class="pr-table-wrap">
+                    <table class="pr-table">
+                        <thead><tr>
+                            <th data-lang="pr-c-product">Product</th>
+                            <th data-lang="pr-c-jpmcpty">JPM cpty</th>
+                            <th data-lang="pr-c-client">Client</th>
+                            <th data-lang="pr-c-payrec">Pay/Receive</th>
+                            <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
+                            <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
+                            <th data-lang="pr-c-status">Status</th>
+                        </tr></thead>
+                        <tbody id="prPendRecBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settled -->
+        <div class="card mt-2 pr-block" id="prCardSettled" hidden>
+            <div class="card-body">
+                <h3 class="pr-block__title"><i class="ti ti-circle-check"></i><span data-lang="pr-settled">Settled</span>
+                    <span class="pr-block__count" id="prSettledCount">0</span></h3>
+                <div class="pr-table-wrap">
+                    <table class="pr-table">
+                        <thead><tr>
+                            <th data-lang="pr-c-product">Product</th>
+                            <th data-lang="pr-c-jpmcpty">JPM cpty</th>
+                            <th data-lang="pr-c-client">Client</th>
+                            <th data-lang="pr-c-payrec">Pay/Receive</th>
+                            <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
+                            <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
+                            <th data-lang="pr-c-sistema">Sistema</th>
+                            <th data-lang="pr-c-status">Status</th>
+                            <th data-lang="pr-c-snumconta">sNumConta</th>
+                        </tr></thead>
+                        <tbody id="prSettledBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="card mt-2" id="prEmpty">
+        <div class="card-body text-center py-5">
+            <i class="ti ti-file-search" style="font-size:2.4rem; color:var(--ins-secondary-color); opacity:.55;"></i>
+            <p class="text-muted mt-2 mb-0" data-lang="pr-emptystate">Drop the input files or import from the folder, then run the reconciliation.</p>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260706"></script>
+{% endblock extra_javascript %}

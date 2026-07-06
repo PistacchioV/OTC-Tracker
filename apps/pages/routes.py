@@ -12611,6 +12611,76 @@ def reconciliation_comitente_run():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Reconciliation › Pay/Rec ──────────────────────────────────────────────────
+#  Matches JPM-side payments/receipts against client-side amounts. Input files can
+#  be dropped in the page (held until Run) or imported from the network Pay_Rec
+#  folder. "End process" e-mails the final situation of the day to OTC Ops.
+@blueprint.route('/reconciliation-payrec')
+def reconciliation_payrec():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/reconciliation-payrec.html',
+                           segment='reconciliation-payrec', ref_date=ref_date)
+
+
+@blueprint.route('/reconciliation-payrec/data')
+def reconciliation_payrec_data():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from apps.pages.recon_payrec import load_last
+        return jsonify(load_last(request.args.get('recon_date', '')))
+    except Exception as e:
+        log.error('[recon_payrec_data] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-payrec/run', methods=['POST'])
+def reconciliation_payrec_run():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    mode       = request.form.get('mode', 'auto')
+    recon_date = request.form.get('recon_date', '')
+    try:
+        from apps.pages.recon_payrec import run_payrec
+        files = request.files.getlist('files') if mode == 'manual' else None
+        result = run_payrec(recon_date, files=files, mode=mode)
+        if result.get('success'):
+            _create_notification(
+                session.get('user_sid', ''), session.get('user_name', ''),
+                'Pay/Rec Reconciliation', 'Reconciliation',
+                result.get('meta', '') + (' (' + recon_date + ')' if recon_date else '')
+            )
+        return jsonify(result)
+    except FileNotFoundError as e:
+        log.warning('[recon_payrec_run] arquivo não encontrado: %s', e)
+        return jsonify({'not_found': True, 'detail': str(e)})
+    except Exception as e:
+        log.error('[recon_payrec_run] %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-payrec/end-process', methods=['POST'])
+def reconciliation_payrec_end():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    recon_date = request.form.get('recon_date', '')
+    try:
+        from apps.pages.recon_payrec import send_payrec_email
+        ok = send_payrec_email(recon_date)
+        if ok:
+            _create_notification(
+                session.get('user_sid', ''), session.get('user_name', ''),
+                'Pay/Rec End of Day', 'Reconciliation',
+                'Final situation e-mailed to OTC Ops' + (' (' + recon_date + ')' if recon_date else '')
+            )
+        return jsonify({'success': bool(ok)} if ok else {'success': False, 'error': 'E-mail not sent (no processed result for this date, or SMTP unavailable).'})
+    except Exception as e:
+        log.error('[recon_payrec_end] %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==============================================================================
 # ROTA GENÉRICA — TEMPLATES (deve ser a ÚLTIMA rota definida)
 # ==============================================================================

@@ -59,3 +59,6 @@ apps/static/data/cache/accrual/**/*.json
 
 # Generated OTM Settlement JSON data (daily)
 apps/static/data/cache/daily settlement/**/*.json
+
+# Support file: pasted Alteryx/VBA flows (never commit — dev reference only)
+scripts/Codigo_VBA_TratarArquivos*
