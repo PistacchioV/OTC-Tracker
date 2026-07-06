@@ -199,7 +199,7 @@
 (function () {
     'use strict';
 
-    const DATA = { subj: [], vcp: [], dominio: [] };
+    const DATA = { subj: [], vcp: [], dominio: [], swapindex: [] };
     let _TRANS = {};
     function t(key, fallback) { return _TRANS[key] || fallback || key; }
 
@@ -346,7 +346,8 @@
             filters: { classe, codigo, bolsa, indice, tipoIF, moeda, tipoCot, commodity, mes, ano, ticker, calc, status },
             subj: subjResult,
             vcp: vcpResult,
-            dominio: domResult
+            dominio: domResult,
+            swapindex: DATA.swapindex     // reference table — always the full mapping
         };
 
         try {
@@ -376,10 +377,11 @@
 
         try {
             const _lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
-            const [subj, vcp, dom, trans] = await Promise.all([
+            const [subj, vcp, dom, swap, trans] = await Promise.all([
                 fetch('{{ config.ASSETS_ROOT }}/data/Subjacente.json').then(r => r.json()),
                 fetch('{{ config.ASSETS_ROOT }}/data/VCP.json').then(r => r.json()),
                 fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json()),
+                fetch('{{ config.ASSETS_ROOT }}/data/SwapIndex.json').then(r => r.json()).catch(() => ([])),
                 fetch('{{ config.ASSETS_ROOT }}/data/translations/' + _lang + '.json').then(r => r.json()).catch(() => ({}))
             ]);
             _TRANS = trans;
@@ -387,9 +389,11 @@
             subj.forEach(function(r,i){ r._idx = i; });
             vcp.forEach(function(r,i){ r._idx = i; });
             dom.forEach(function(r,i){ r._idx = i; });
+            swap.forEach(function(r,i){ r._idx = i; });
             DATA.subj    = subj;
             DATA.vcp     = vcp;
             DATA.dominio = dom;
+            DATA.swapindex = swap;
 
             fillSelect('selClasse', unique(DATA.subj, 'Classe'), '-- Select Class --');
             fillSelect('selCodigo', unique(DATA.subj, 'Codigo do Ativo Subjacente'));
