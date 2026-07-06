@@ -4179,6 +4179,23 @@ _LPNDF_COLUMNS = [
 # "Horario do Boletim" is a time, not a date, so it stays raw).
 _LPNDF_DATE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Data ')}
 _LPNDF_VALUE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Valor ')}
+# Rate columns → US format (dot decimal), no unnecessary leading zeros, rounded to 8 dp.
+_LPNDF_RATE_COLS = {'Taxa Forward', 'Taxa de Cambio'}
+
+
+def _lpndf_fmt_rate(v):
+    """BR rate string like '000000000006,02650000' → US '6.0265' (dot decimal, no
+    leading zeros, rounded to 8 decimals, trailing zeros trimmed). Non-numeric →
+    returned untouched."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    try:
+        f = float(s.replace('.', '').replace(',', '.'))   # drop dot thousands, comma → decimal
+    except ValueError:
+        return s
+    out = ('%.8f' % round(f, 8)).rstrip('0').rstrip('.')
+    return out if out else '0'
 
 
 def _ndf_ter_path(ref, max_back=10):
@@ -4245,6 +4262,8 @@ def _lpndf_collect(ref):
                         v = d.strftime('%d/%m/%Y') if d else (v or '')
                     elif c in _LPNDF_VALUE_COLS:
                         v = _swapchar_fmt_value(v)
+                    elif c in _LPNDF_RATE_COLS:
+                        v = _lpndf_fmt_rate(v)
                     row.append('' if v is None else v)
                 arit = (tma_key and _fcst_norm(str(rec.get(tma_key, ''))).strip() == 'aritmetica')
                 for k in asian_keys:
