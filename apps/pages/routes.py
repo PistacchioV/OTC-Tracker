@@ -5031,6 +5031,9 @@ _LPNDF_DATE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Data ')}
 _LPNDF_VALUE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Valor ')}
 # Rate columns → US format (dot decimal), no unnecessary leading zeros, rounded to 8 dp.
 _LPNDF_RATE_COLS = {'Taxa Forward', 'Taxa de Cambio'}
+# Max number of Asian-average fixing-date columns to surface (a contract can have
+# 100+ fixings; cap to keep the table sane).
+_LPNDF_MAX_ASIAN = 60
 
 
 def _lpndf_fmt_rate(v):
@@ -5111,6 +5114,7 @@ def _lpndf_collect(ref):
             asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
             date_keys = [k for k in asian_keys
                          if any(is_yyyymmdd(rec.get(k, '')) for rec in data)]
+            date_keys = date_keys[:_LPNDF_MAX_ASIAN]   # cap the number of date columns
             asian_labels = ['Média Asiática {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPNDF_COLUMNS) + asian_labels
 
