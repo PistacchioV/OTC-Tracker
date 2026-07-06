@@ -1231,7 +1231,7 @@
   "pr-dz": "Drop the Pay/Rec input files here or click to browse",
   "pr-refdate": "Reference date",
   "pr-import": "Import from folder",
-  "pr-run": "Run reconciliation",
+  "pr-run": "Run",
   "pr-end": "End process",
   "pr-summary": "Summary",
   "pr-pendpay": "Pending Payment",
