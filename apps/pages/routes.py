@@ -2714,6 +2714,7 @@ def _send_forecast_email(payload, images):
         msg['Subject'] = 'Settlement Forecast'
         msg['From'] = SHARED_MAILBOX
         msg['To'] = CETIP_OTC_OPS_EMAIL
+        msg['Cc'] = ', '.join(_ACC_ENDPROC_CC)     # Renato + Danilo (same cc as accrual / MTM swap)
 
         related = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
@@ -2738,9 +2739,10 @@ def _send_forecast_email(payload, images):
             related.attach(cimg)
         msg.attach(related)
 
+        recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
-            server.sendmail(SHARED_MAILBOX, [CETIP_OTC_OPS_EMAIL], msg.as_string())
-        log.info("[forecast] e-mail sent to %s", CETIP_OTC_OPS_EMAIL)
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info("[forecast] e-mail sent to %s (cc %s)", CETIP_OTC_OPS_EMAIL, _ACC_ENDPROC_CC)
         return True
     except Exception as e:
         log.error("[forecast] e-mail FAILED:\n%s", traceback.format_exc())

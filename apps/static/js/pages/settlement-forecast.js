@@ -173,6 +173,19 @@
     }
   };
 
+  // Reserve extra vertical space below the legend so the per-bar total badges
+  // (drawn above the tallest bar) never overlap the product colour legend.
+  var legendGap = {
+    id: 'legendGap',
+    beforeInit: function (chart) {
+      var lgd = chart.legend;
+      if (!lgd || lgd._gapPatched) return;
+      lgd._gapPatched = true;
+      var origFit = lgd.fit;
+      lgd.fit = function () { origFit.call(this); this.height += 22; };
+    }
+  };
+
   function stackedConfig(data, rows, colorMap, title, subtitle) {
     var datasets = rows.map(function (r, idx) {
       var base = colorMap[r.label] || FALLBACK[idx % FALLBACK.length];
@@ -204,13 +217,13 @@
         scales: {
           x: { stacked: true, grid: { display: false }, border: { display: false },
                ticks: { font: { family: bodyFont }, color: '#54545a' } },
-          y: { stacked: true, beginAtZero: true,
+          y: { stacked: true, beginAtZero: true, grace: '10%',
                grid: { color: '#eceef2', lineWidth: 1 },
                border: { display: false, dash: [5, 5] },
                ticks: { precision: 0, font: { family: bodyFont }, color: '#54545a' } }
         }
       },
-      plugins: [whiteBg, valueLabels]
+      plugins: [whiteBg, valueLabels, legendGap]
     };
   }
 
