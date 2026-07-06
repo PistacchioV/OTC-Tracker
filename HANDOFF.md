@@ -3650,6 +3650,21 @@ controller pula o slide, CSS remove transforms/stagger. Press feedback: `scale(.
 Products`), breadcrumb no penúltimo, setas ▸, drill/back/crumb ok. ✅ (Testar sobre o HTML cru NÃO
 reproduz o bug do accordion — precisa do DOM pós-app.js; ver gotcha acima.)
 
+**Refinamentos (mesma sessão, pós-1º commit):**
+- **Cor do breadcrumb:** usar `var(--ins-sidenav-item-color)` / `-hover-color` (com `inherit` ficava
+  quase invisível no sidenav escuro).
+- **Ícones nas transições:** `lucide.createIcons()` varre o DOM ao vivo, então tem que rodar DEPOIS
+  que o painel entra no DOM (`refreshIcons()` após o `appendChild` nos 2 caminhos da transição) —
+  senão os `<i data-lucide>` do painel novo ficam sem converter (invisíveis) ao drillar/voltar.
+- **Index no root:** `/dashboard` (e `/`) NÃO auto-drilla nos subitens de Dashboards; mostra o root
+  com "Dashboards" destacado (`INDEX_PATHS`).
+- **Só root tem ícone:** em níveis não-root o `.menu-icon` dos itens é removido no `fillPanel`
+  (`if (openPath.length) remove`). A back row mantém o chevron.
+- **SWAP→Swap / OPTION→Option:** literais em caixa alta no `sidenav.html` corrigidos + `es.json`
+  (estava `SWAP`/`OPCIÓN`). ⚠️ o `applyTranslations` do tema é método do `I18nManager` (NÃO existe
+  `window.applyTranslations`), então os painéis do drill mostram o LITERAL do HTML — por isso o
+  literal precisa já estar no caso certo.
+
 **Limitação conhecida:** modo **condensed** (sidebar só-ícones com fly-out no hover) usava a estrutura
 `.collapse` que agora fica oculta — nesse modo o drill funciona mas sem texto/breadcrump ideais. Não
 foi pedido; refinar se necessário.

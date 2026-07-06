@@ -21,6 +21,10 @@
 
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Pages that should keep the sidenav at the ROOT level instead of auto-drilling
+  // into a submenu (the Dashboards/home page lives directly under a root branch).
+  var INDEX_PATHS = ['/dashboard', '/'];
+
   // Capture the menu NOW — this <script> runs during body parse, before app.js's
   // DOMContentLoaded handler mutates it (Bootstrap collapse .show() flips
   // .collapse↔.collapsing mid-animation, which would corrupt our parse/strip).
@@ -113,6 +117,10 @@
     }
     this.activeLeaf = activeLeaf;
 
+    // The index/home page (Dashboards) shows the ROOT level with "Dashboards"
+    // highlighted — not drilled into its subitems.
+    if (INDEX_PATHS.indexOf(this.currentPathname) !== -1) this.openPath = [];
+
     // First panel is a fresh <ul.side-nav> (inherits 100% of the theme look).
     var first = h('ul', 'side-nav dd-panel dd-current');
     this.fillPanel(first);
@@ -182,6 +190,12 @@
       Array.prototype.forEach.call(
         li.querySelectorAll('.collapse, .collapsing, ul.sub-menu'),
         function (n) { if (n.parentNode) n.remove(); });
+
+      // Only the ROOT items keep icons; sub-levels (openPath deep) drop them.
+      if (self.openPath.length) {
+        var mi = li.querySelector('.menu-icon');
+        if (mi) mi.remove();
+      }
 
       var a = li.querySelector(':scope > a');
       if (node.kind === 'branch') {
@@ -258,6 +272,7 @@
       if (outgoing) outgoing.remove();
       incoming.classList.add('dd-current');
       this.stage.appendChild(incoming);
+      this.refreshIcons();                           // lucide scans the live DOM
       return;
     }
 
@@ -270,6 +285,7 @@
 
     incoming.classList.add(direction > 0 ? 'dd-enter-right' : 'dd-enter-left');
     this.stage.appendChild(incoming);
+    this.refreshIcons();                             // convert now that it's in the DOM
 
     window.requestAnimationFrame(function () {
       window.requestAnimationFrame(function () {
@@ -287,6 +303,13 @@
     }
     outgoing.addEventListener('transitionend', cleanup, { once: true });
     setTimeout(cleanup, 380);
+  };
+
+  // lucide.createIcons() scans the live document, so it must run AFTER a panel is
+  // attached — otherwise a freshly-built panel's <i data-lucide> stay unconverted
+  // (invisible). fillPanel/renderCrumbs run it too, but pre-attach during a slide.
+  SideNavDrill.prototype.refreshIcons = function () {
+    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
   };
 
   SideNavDrill.prototype.drillInto = function (node) {

@@ -121,16 +121,25 @@
           font-size: .7rem; line-height: 1.2;
         }
         .dd-crumbs.dd-at-root { display: none; }
+        /* Use the theme's sidenav item colour so the crumbs stay legible on BOTH
+           light and dark sidebars (inherit alone was near-invisible on dark). */
         .dd-crumb {
-          appearance: none; background: none; border: 0; color: inherit;
-          padding: .1rem .28rem; border-radius: 6px; font-weight: 600; opacity: .55;
+          appearance: none; background: none; border: 0;
+          color: var(--ins-sidenav-item-color, inherit); opacity: .8;
+          padding: .1rem .28rem; border-radius: 6px; font-weight: 600;
           cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          transition: opacity .16s var(--dd-ease), background-color .16s var(--dd-ease), transform .12s var(--dd-ease);
+          transition: opacity .16s var(--dd-ease), color .16s var(--dd-ease), background-color .16s var(--dd-ease), transform .12s var(--dd-ease);
         }
-        button.dd-crumb:hover { opacity: 1; background: rgba(128, 128, 128, .2); }
+        button.dd-crumb:hover {
+          opacity: 1; color: var(--ins-sidenav-item-hover-color, var(--ins-sidenav-item-color, inherit));
+          background: rgba(128, 128, 128, .2);
+        }
         button.dd-crumb:active { transform: scale(.96); }
         .dd-crumb-active { opacity: 1; cursor: default; }
-        .dd-crumb-sep { display: inline-flex; align-items: center; opacity: .4; margin: 0 -1px; }
+        .dd-crumb-sep {
+          display: inline-flex; align-items: center; margin: 0 -1px; opacity: .55;
+          color: var(--ins-sidenav-item-color, inherit);
+        }
         .dd-crumb-sep svg { width: 13px; height: 13px; }
 
         /* Sliding stage + panels ------------------------------------------------- */
@@ -431,7 +440,7 @@
                                                 <a data-bs-toggle="collapse" href="#otherProductsSwap" aria-expanded="false"
                                                    aria-controls="otherProductsSwap" class="side-nav-link">
                                                     <!-- <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>-->
-                                                    <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                                    <span class="menu-text" data-lang="nav-swap">Swap</span>
                                                     <span class="menu-arrow"></span>
                                                 </a>
                                                 <div class="collapse" id="otherProductsSwap">
@@ -467,7 +476,7 @@
                                                 <a data-bs-toggle="collapse" href="#otherProductsOPTION" aria-expanded="false" 
                                                    aria-controls="otherProductsOPTION" class="side-nav-link">
                                                     <span class="menu-icon"><i data-lucide="chart-candlestick"></i></span>
-                                                    <span class="menu-text" data-lang="nav-option">OPTION</span>
+                                                    <span class="menu-text" data-lang="nav-option">Option</span>
                                                     <span class="menu-arrow"></span>
                                                 </a>
                                                 <div class="collapse" id="otherProductsOPTION">
@@ -506,7 +515,7 @@
                                             <li class="side-nav-item">
                                                 <a data-bs-toggle="collapse" href="#livePositionSWAP" aria-expanded="false"
                                                    aria-controls="livePositionSWAP" class="side-nav-link">
-                                                    <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                                    <span class="menu-text" data-lang="nav-swap">Swap</span>
                                                     <span class="menu-arrow"></span>
                                                 </a>
                                                 <div class="collapse" id="livePositionSWAP">
@@ -531,7 +540,7 @@
                                             </li>
                                             <li class="side-nav-item">
                                                 <a href="#livepositionoption" class="side-nav-link">
-                                                    <span class="menu-text" data-lang="nav-option">OPTION</span>
+                                                    <span class="menu-text" data-lang="nav-option">Option</span>
                                                 </a>
                                             </li>
                                         </ul>
@@ -708,7 +717,7 @@
                                     <a data-bs-toggle="collapse" href="#newDealsSwap" aria-expanded="false" 
                                        aria-controls="newDealsSwap" class="side-nav-link">
                                         <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>
-                                        <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                        <span class="menu-text" data-lang="nav-swap">Swap</span>
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <div class="collapse" id="newDealsSwap">
@@ -847,7 +856,7 @@
                                     <a data-bs-toggle="collapse" href="#unwindsSwap" aria-expanded="false" 
                                        aria-controls="unwindsSwap" class="side-nav-link">
                                         <span class="menu-icon"><i data-lucide="badge-dollar-sign"></i></span>
-                                        <span class="menu-text" data-lang="nav-swap">SWAP</span>
+                                        <span class="menu-text" data-lang="nav-swap">Swap</span>
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <div class="collapse" id="unwindsSwap">
