@@ -3242,17 +3242,19 @@ def api_cp_daily_settlement_save():
                              'Daily Settlement Saved', 'Control Panel',
                              '{} file(s) processed: {} ({})'.format(len(processed), types, ref.strftime('%Y-%m-%d')))
 
-    lines = ['<b>{}</b>: {} de {} linha(s)'.format(p['type'], p['kept'], p['total']) for p in processed]
+    # The user-facing message is built client-side from the structured fields
+    # below so it follows the UI language; this English string is only a fallback.
+    lines = ['<b>{}</b>: {} of {} line(s)'.format(p['type'], p['kept'], p['total']) for p in processed]
     msg = ''
     if lines:
-        msg += '{} arquivo(s) processado(s) via {}:<br>'.format(len(processed),
-               'dropzone' if source == 'dropzone' else 'pasta') + '<br>'.join(lines)
+        msg += '{} file(s) processed via {}:<br>'.format(len(processed),
+               'dropzone' if source == 'dropzone' else 'folder') + '<br>'.join(lines)
     if skipped:
         msg += ('<br><br>' if msg else '') + \
-            '<span class="text-muted">{} ignorado(s) (não reconhecido): {}</span>'.format(
+            '<span class="text-muted">{} ignored (unrecognized): {}</span>'.format(
                 len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
     return jsonify({'success': True, 'source': source, 'processed': processed,
-                    'skipped': skipped, 'message': msg or 'Nada a processar.'})
+                    'skipped': skipped, 'message': msg or 'Nothing to process.'})
 
 
 @blueprint.route('/api/control-panel/import-contacts', methods=['POST'])
@@ -4653,6 +4655,53 @@ _OPB3_COLUMNS = [
 ]
 _OPB3_DATE_COLS = {'Data Vencimento', 'Data Liquidação'}
 _OPB3_HEADER_ROW = 5                                   # 1-based
+_OPB3_META_KEYS = ('_ob_status', '_ob_maker', '_ob_checker', '_ob_id')
+
+
+# ── Operations B3 maker/checker meta (standard: same pattern as OTM) ──────────
+def _opb3_ensure_meta(data, default_status='New'):
+    """Ensure every record has status/maker/checker/id meta. Returns True if any
+    record changed (caller may persist — one-time migration for legacy JSONs).
+    Imported rows default to 'New' (matches the page's historical badge)."""
+    changed = False
+    for rec in data:
+        if not rec.get('_ob_id'):
+            rec['_ob_id'] = _otm_new_id(); changed = True
+        if '_ob_status' not in rec:
+            rec['_ob_status'] = default_status; changed = True
+        for k in ('_ob_maker', '_ob_checker'):
+            if k not in rec:
+                rec[k] = ''; changed = True
+    return changed
+
+
+def _opb3_load(ref):
+    """(json_path, data|None) for `ref`; ensures meta on the loaded records."""
+    jp = _opb3_json_path(ref)
+    if not os.path.isfile(jp):
+        return jp, None
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return jp, None
+    _opb3_ensure_meta(data)
+    return jp, data
+
+
+def _opb3_find(data, rid):
+    for rec in data:
+        if str(rec.get('_ob_id', '')) == str(rid):
+            return rec
+    return None
+
+
+def _opb3_ref_from(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return datetime.now()
 
 
 def _opb3_json_path(ref):
@@ -4779,6 +4828,11 @@ def _opb3_collect(ref):
                 data = json.load(fh) or []
         except Exception:
             data = []
+        if _opb3_ensure_meta(data) and data:             # legacy JSON w/o meta → migrate once
+            try:
+                _otm_save(jp, data)
+            except Exception:
+                pass
         for rec in data:
             row = []
             for c in _OPB3_COLUMNS:
@@ -4789,6 +4843,9 @@ def _opb3_collect(ref):
                 elif c == 'Valor':
                     v = _swapchar_fmt_value(v)
                 row.append('' if v is None else v)
+            # Append maker/checker meta as the row tail: [...data..., status, maker, checker, id]
+            row += [rec.get('_ob_status', 'New'), rec.get('_ob_maker', ''),
+                    rec.get('_ob_checker', ''), rec.get('_ob_id', '')]
             rows_out.append(row)
     # Dynamic breakdown widgets: Tipo Operação, Tipo Título, Modalidade Liquidação.
     widgets = {
@@ -4834,6 +4891,111 @@ def api_opb3_import():
                              'Operations Imported', 'Operations B3',
                              '{}: {} row(s) imported ({})'.format(res.get('file', ''), res.get('rows', 0), res.get('date', '')))
     return jsonify(res)
+
+
+# ── Operations B3 maker/checker CRUD — every change/insert persisted to the JSON ──
+@blueprint.route('/api/operations-b3/row/add', methods=['POST'])
+def api_opb3_row_add():
+    """Insert a manual row → status 'New' (maker = current user). Persisted to JSON."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    ref = _opb3_ref_from(p)
+    jp, data = _opb3_load(ref)
+    if data is None:
+        data = []
+    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+           for i, c in enumerate(_OPB3_COLUMNS)}
+    rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'], rec['_ob_id'] = 'New', sid, '', _otm_new_id()
+    data.append(rec)
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[opb3] add save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Added', 'Operations B3',
+                         '{} ({})'.format(rec.get('Num Ctrl Operação', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'id': rec['_ob_id']})
+
+
+@blueprint.route('/api/operations-b3/row/edit', methods=['POST'])
+def api_opb3_row_edit():
+    """Edit a row's cells → status 'Pending', maker = current user (checker reset)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid, cells = str(p.get('id', '')), (p.get('cells') or [])
+    sid = session.get('user_sid', '')
+    jp, data = _opb3_load(_opb3_ref_from(p))
+    rec = _opb3_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    for i, c in enumerate(_OPB3_COLUMNS):
+        if i < len(cells):
+            rec[c] = str(cells[i]).strip()
+    rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'] = 'Pending', sid, ''
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[opb3] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Updated', 'Operations B3',
+                         '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _opb3_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/operations-b3/row/delete', methods=['POST'])
+def api_opb3_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _opb3_load(_opb3_ref_from(p))
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    rec = _opb3_find(data, rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    data.remove(rec)
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[opb3] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Deleted', 'Operations B3',
+                         '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _opb3_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/operations-b3/row/confirm', methods=['POST'])
+def api_opb3_row_confirm():
+    """Confirm a row → 'OK'. Maker/checker guard: the user who changed it cannot
+    confirm it (a different user must)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _opb3_load(_opb3_ref_from(p))
+    rec = _opb3_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(rec.get('_ob_maker', '') or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must confirm a row you changed.'}), 403
+    rec['_ob_status'], rec['_ob_checker'] = 'OK', sid
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[opb3] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Confirmed', 'Operations B3',
+                         '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _opb3_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
 
 
 # ── Live Position › NDF ──────────────────────────────────────────────────────

@@ -59,6 +59,12 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #operations-b3-page .btn:active { transform: scale(0.97); }
+/* Toolbar buttons — compact project standard (keeps Add row, Columns, Export and
+   Clear filters uniform instead of the taller btn-sm default). */
+#operations-b3-page .ob-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+}
+#operations-b3-page .ob-toolbar .btn i { font-size: .95em; }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 #opb3-table thead th {
@@ -204,7 +210,7 @@
     <div class="card mt-2">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap ob-toolbar">
                     <div class="d-flex align-items-center gap-1">
                         <label class="form-label mb-0 fs-xs text-muted" data-lang="ob-show">Show</label>
                         <select class="form-select form-select-sm ob-page-len" style="width:84px;">
@@ -217,6 +223,9 @@
                         </select>
                         <label class="form-label mb-0 fs-xs text-muted" data-lang="ob-entries">entries</label>
                     </div>
+                    <button class="btn btn-sm btn-primary bg-gradient" type="button" id="obAddBtn">
+                        <i class="ti ti-plus me-1"></i><span data-lang="ob-add-row">Add row</span>
+                    </button>
                     <div class="columnToggleWrapper"></div>
                     <div class="obExportWrapper"></div>
                     <button class="btn btn-sm btn-soft-secondary" type="button" id="obClearFilters">
@@ -235,6 +244,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Add/Edit row modal (New Deals glass pattern: a window with all columns) -->
+    <div class="modal fade ob-add-modal" id="obAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span id="obModalTitle" data-lang="ob-add-title">Add row</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="obAddFields"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="obAddSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock page_content %}
 
@@ -250,5 +278,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/operations-b3.js?v=20260705"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/operations-b3.js?v=20260706"></script>
 {% endblock extra_javascript %}

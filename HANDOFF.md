@@ -478,6 +478,7 @@ apps/pages/routes.py                               ← _create_notification em /
 9. **FullCalendar list view + classes Bootstrap** — `text-*` no `<tr>` não cascateia para `<a>` interno (link style tem prioridade). Sempre adicionar regra explícita `.fc-list-event.bg-*-subtle a { color: ... !important }` para cada cor
 10. **FC toolbar buttons com background sobrescrito** — ao mudar `background-color` de `.fc-button-primary`, sempre adicionar `color: #fff !important` — o Bootstrap theme recalcula a cor e pode escolher texto escuro
 11. **Commit+push com `routes.py`** — o bloco DEV BYPASS (`/dev-login`) nunca vai para o repositório. Usar `scripts/commit-push.sh` ou: backup → remover bloco → commit+push → restaurar backup
+12. **Mensagens de Swal/notificação construídas dinamicamente (contagens, listas, resultados de rotina) NÃO podem vir prontas em texto do backend** — o backend deve retornar apenas dados estruturados (ex.: `processed: [{type,kept,total}]`, `skipped`, `source`) e o **frontend monta o texto com `t('chave','fallback EN')`**, para seguir o idioma da UI. `data-lang` estático não funciona em HTML injetado depois do load; usar o helper `t()` (padrão `_TRANS_CACHE`). O texto padrão/fallback é sempre **inglês**, com as chaves nos 3 JSON (en/br/es). Exemplo real: mensagem do Daily Settlement no Control Panel (`buildDsMessage` em `control-panel.html` + chaves `cp-files-processed-via`, `cp-of`, `cp-lines`, `cp-ignored`, `cp-src-dropzone`, `cp-src-folder`, `cp-nothing`).
 
 ---
 

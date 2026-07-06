@@ -397,6 +397,35 @@ var _TRANS_CACHE = {};
 })();
 function t(key, fallback) { return _TRANS_CACHE[key] || fallback || key; }
 
+// ── Daily Settlement result message (built client-side so it follows the UI
+//    language via t(); backend only returns structured counts). ───────────────
+function _cpEsc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function buildDsMessage(body) {
+    body = body || {};
+    var processed = body.processed || [];
+    var skipped = body.skipped || [];
+    if (!processed.length && !skipped.length) return t('cp-nothing', 'Nothing to process.');
+    var src = (body.source === 'dropzone')
+        ? t('cp-src-dropzone', 'dropzone') : t('cp-src-folder', 'folder');
+    var out = '';
+    if (processed.length) {
+        out += processed.length + ' ' + t('cp-files-processed-via', 'file(s) processed via') +
+               ' ' + src + ':<br>';
+        out += processed.map(function (p) {
+            return '<b>' + _cpEsc(p.type) + '</b>: ' + p.kept + ' ' + t('cp-of', 'of') +
+                   ' ' + p.total + ' ' + t('cp-lines', 'line(s)');
+        }).join('<br>');
+    }
+    if (skipped.length) {
+        var names = skipped.slice(0, 8).map(_cpEsc).join(', ') + (skipped.length > 8 ? '…' : '');
+        out += (out ? '<br><br>' : '') +
+               '<span class="text-muted">' + skipped.length + ' ' +
+               t('cp-ignored', 'ignored (unrecognized)') + ': ' + names + '</span>';
+    }
+    return out;
+}
+
 // ── Generic routine runner ───────────────────────────────────────────────────
 // Cada card declara data-endpoint; ao clicar, POSTa e mostra o resultado via Swal.
 function cpRunRoutine(btn) {
@@ -556,7 +585,7 @@ document.addEventListener('click', function (e) {
             .then(function (res) {
                 if (res.ok && res.body && res.body.success !== false) {
                     Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
-                                html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+                                html: buildDsMessage(res.body), confirmButtonColor: '#0066cc' });
                     files = []; render();
                 } else {
                     Swal.fire({ icon: 'warning', title: t('cp-nofiles-title', 'No files found'),
