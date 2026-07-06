@@ -3008,10 +3008,12 @@ _DS_IMPORTS = [
                  ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})]},
     {'key': 'eventos-swap-jpm', 'label': 'Eventos Swap', 'json': 'eventos-swap-jpm', 'header': 7,
      'match': lambda n: n.startswith('swap-instrumentofinanceiro-consultacontrato'),
-     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'73760009'})]},
+     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'73760009'})],
+     'strip_hash': [1]},                            # remove "#" dos IDs da coluna A
     {'key': 'eventos-swap-mgt', 'label': 'Eventos Swap MGT', 'json': 'eventos-swap-mgt', 'header': 7,
      'match': lambda n: n.startswith('swapmgt.'),
-     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'04880006'})]},
+     'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'04880006'})],
+     'strip_hash': [1]},                            # remove "#" dos IDs da coluna A
     {'key': 'tss-fx', 'label': 'TSS-FX', 'json': 'tss-fx', 'header': 1,
      'match': lambda n: n.startswith('fxo detail'),
      'filters': [], 'skip_no_data': True},
@@ -3087,8 +3089,15 @@ def _ds_process(raw, spec):
                 break
         if not keep:
             continue
-        out.append({header[i] if i < len(header) else 'Field_{}'.format(i + 1): _ds_cell(row, i)
-                    for i in range(len(row))})
+        strip_cols = {c - 1 for c in spec.get('strip_hash', [])}   # 1-based → 0-based
+        rec = {}
+        for i in range(len(row)):
+            key = header[i] if i < len(header) else 'Field_{}'.format(i + 1)
+            val = _ds_cell(row, i)
+            if i in strip_cols:
+                val = val.replace('#', '')
+            rec[key] = val
+        out.append(rec)
     return out, total
 
 
