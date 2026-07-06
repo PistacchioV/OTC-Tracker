@@ -49,9 +49,6 @@ _SMTP_PORT = 25
 _TOL_CHECK_VALUE = 1.0      # Summary per-row |diff| < 1 → OK
 _TOL_SPB_SETTLED = -0.50    # SPB: diff > -0.50 → Settled
 
-_JPM_EXCLUDE = ('bco j.p.', 'banco j.p. morgan', 'jpmorgan chase bank, n.a. - sao paulo')
-
-
 # ── Small helpers ─────────────────────────────────────────────────────────────
 def _norm(s):
     """Accent/case-insensitive, non-alphanumeric-stripped key for column matching."""
@@ -88,6 +85,52 @@ def _to_num(v):
             s = s.replace(',', '')
     elif ',' in s:
         s = s.replace('.', '').replace(',', '.')
+    try:
+        f = float(s)
+    except ValueError:
+        return 0.0
+    return -f if neg else f
+
+
+def _to_num_br(v):
+    """Parse a Brazilian-formatted number: '.' = thousands, ',' = decimal.
+    '1.234.567,89' → 1234567.89 · '1.234' → 1234 · '-219.036,41' → -219036.41."""
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace('R$', '').replace(' ', '')
+    if not s or s in ('-', '.', ','):
+        return 0.0
+    neg = False
+    if s.startswith('(') and s.endswith(')'):
+        neg = True; s = s[1:-1]
+    if s.endswith('-'):
+        neg = True; s = s[:-1]
+    s = s.replace('.', '').replace(',', '.')
+    try:
+        f = float(s)
+    except ValueError:
+        return 0.0
+    return -f if neg else f
+
+
+def _to_num_us(v):
+    """Parse a US comma-grouped number: ',' = thousands, '.' = decimal.
+    '1,234,567.89' → 1234567.89 · '-3067696.42' → -3067696.42."""
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace('R$', '').replace(' ', '')
+    if not s or s in ('-', '.', ','):
+        return 0.0
+    neg = False
+    if s.startswith('(') and s.endswith(')'):
+        neg = True; s = s[1:-1]
+    if s.endswith('-'):
+        neg = True; s = s[:-1]
+    s = s.replace(',', '')
     try:
         f = float(s)
     except ValueError:
@@ -146,8 +189,8 @@ def _read_table(src, sheet_hint=None):
             df = xls.parse(sheet, dtype=str)
         else:
             handle = src if isinstance(src, str) else src.stream
-            # Sniff delimiter; BR exports are frequently ';'.
-            df = pd.read_csv(handle, dtype=str, sep=None, engine='python',
+            # BR exports: ';'-delimited, ISO-8859-1 (Latin-1 / codepage 28591).
+            df = pd.read_csv(handle, dtype=str, sep=';', engine='python',
                              encoding='latin-1', on_bad_lines='skip')
         df = df.fillna('')
         return df.to_dict('records'), list(df.columns)
@@ -177,92 +220,160 @@ def _classify_source(name):
     return 'unknown'
 
 
+# SDConta inclusion allowlist — a rlctahis row is kept ONLY if its nHistorico is
+# here (Alteryx TextInput[175] inner-joined on nHistorico). This is the main
+# row-reducer that cuts the bank statement down to the relevant OTC lines.
+_SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
+                       '4413', '9386', '4414', '4406', 'AA', '4409'}
+_JPM_ENTITIES = ('banco j.p. morgan s.a.', 'jpmorgan chase bank, n.a. - sao paulo')
+
+
 # ── Normalisation into JPM / client record lists ──────────────────────────────
 def _norm_jpm(rows, cols, is_fxo):
-    """→ list of {value, cpty, product, pay_receive}."""
+    """Cockpit side → list of {value, cpty, product, pay_receive}.
+    FXO uses ATH SET AMT + Direction; cashflows use the signed Amount (US comma)."""
     out = []
-    c_amount = _resolve(cols, 'ATH SET AMT', 'Amount')
     c_dir = _resolve(cols, 'Direction')
-    c_cpty = _resolve(cols, 'Counterparty', 'Cpty Name')
-    c_prod = _resolve(cols, 'POG', 'Product', 'Asset Class')
     c_event = _resolve(cols, 'Cashflow Event')
     c_asset = _resolve(cols, 'Asset Class')
+    c_owner_le = _resolve(cols, 'Owner Legal Entity')
+    if is_fxo:
+        c_amt = _resolve(cols, 'ATH SET AMT')
+        c_cpty = _resolve(cols, 'Counterparty Name', 'Counterparty', 'Cpty Name')
+        c_prod = _resolve(cols, 'POG', 'Product')
+    else:
+        c_amt = _resolve(cols, 'Amount')
+        c_cpty = _resolve(cols, 'Cpty Name', 'Counterparty Name', 'Counterparty')
+        c_prod = _resolve(cols, 'POG', 'Product', 'New Field')
     for r in rows:
         cpty = str(r.get(c_cpty, '') if c_cpty else '').strip()
-        if any(x in cpty.lower() for x in _JPM_EXCLUDE):
+        cl = cpty.lower()
+        if 'bco j.p.' in cl:                                   # Filter[112]
             continue
-        if c_event and str(r.get(c_event, '')).strip().upper() == 'DELETE':
+        if any(e in cl for e in _JPM_ENTITIES):               # Filter[16]
             continue
-        amt = _to_num(r.get(c_amount, '') if c_amount else 0)
-        direction = str(r.get(c_dir, '') if c_dir else '').strip().upper()
-        if direction == 'PAY':
-            value = -abs(amt)
-        elif direction in ('RECEIVE', 'REC'):
-            value = abs(amt)
+        if c_event and str(r.get(c_event, '')).strip().upper() == 'DELETE':  # Filter[121]
+            continue
+        if c_owner_le:                                        # Filter[195] Owner Legal Entity = 0228
+            le = re.sub(r'\D', '', str(r.get(c_owner_le, '')))
+            if le and '228' not in le:
+                continue
+        if is_fxo:
+            amt = _to_num_us(r.get(c_amt, '') if c_amt else 0)
+            direction = str(r.get(c_dir, '') if c_dir else '').strip().upper()
+            value = -abs(amt) if direction == 'PAY' else abs(amt)
+            product = str(r.get(c_prod, '') if c_prod else '').strip() or 'FXO'
         else:
-            value = amt  # sign of Amount already carries direction
-        pay_receive = 'Pay' if value < 0 else 'Receive'
-        product = str(r.get(c_prod, '') if c_prod else '').strip()
-        asset = str(r.get(c_asset, '') if c_asset else '').strip().upper()
-        if not product:
-            product = {'INTEREST_RATE': 'SWAP', 'EQUITIES': 'EQUITIES'}.get(asset, 'FXO' if is_fxo else 'NDF')
-        if value == 0:
+            if 'banco' in cl:                                 # Filter[114] Bilateral bank leg
+                continue
+            value = _to_num_us(r.get(c_amt, '') if c_amt else 0)   # Amount already signed
+            product = str(r.get(c_prod, '') if c_prod else '').strip()
+            asset = str(r.get(c_asset, '') if c_asset else '').strip().upper()
+            if not product:
+                product = {'INTEREST_RATE': 'SWAP', 'EQUITIES': 'EQUITIES'}.get(asset, 'NDF')
+        if abs(value) < 1e-9:                                 # Filter[199] Value != 0
             continue
+        pay_receive = 'Receive' if value > 0 else 'Pay'
         out.append({'value': value, 'cpty': cpty.upper(), 'product': product or 'NDF',
                     'pay_receive': pay_receive})
     return out
 
 
-def _norm_client(rows, cols, source):
-    """→ list of {value, client, sistema, snumconta, product, pay_receive, status_hint}."""
+def _norm_spb(rows, cols):
+    """SPB (HistoricoMensagensJPM) → client records. Status='Sucesso' AND event
+    is derivatives/LMA-COMM-BR only. Labeled Pay (value → negative)."""
     out = []
-    c_val = _resolve(cols, 'Valor (R$)', 'nVlrLanc', 'Valor', 'Amount', 'Value')
-    c_desc = _resolve(cols, 'sDescricao', 'Descricao', 'Descrição')
+    c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
-    c_tit = _resolve(cols, 'sNomeTitular', 'Titular', 'Client')
+    c_status = _resolve(cols, 'Status')
+    c_codmsg = _resolve(cols, 'CodMsg')
     c_conta = _resolve(cols, 'sNumConta')
+    for r in rows:
+        if c_status and _norm(r.get(c_status, '')) != _norm('Sucesso'):   # Filter[47]
+            continue
+        evt = str(r.get(c_evt, '') if c_evt else '')
+        en = evt.lower()
+        if 'derivativos' not in en and 'lma-comm-br' not in en:            # Filter[48]
+            continue
+        val = _to_num_br(r.get(c_val, '') if c_val else 0)
+        titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
+        conta = str(r.get(c_conta, '') if c_conta else '').strip()
+        val = -abs(val)                                                    # SPB → Pay → negative
+        if abs(val) < 1e-9:
+            continue
+        out.append({'value': val, 'client': titular, 'sistema': 'SPB - conta externa',
+                    'snumconta': conta, 'product': 'NDF', 'pay_receive': 'Pay'})
+    return out
+
+
+def _norm_client(rows, cols, source):
+    """SDConta (interna/TED) + MGT → client records, with the nHistorico allowlist
+    and the merged post-processing (sign by DEBITO/CREDITO, thresholds)."""
+    if source == 'spb':
+        return _norm_spb(rows, cols)
+    out = []
+    c_val = _resolve(cols, 'nVlrLanc', 'nValor', 'Valor (R$)', 'Valor')
+    c_desc = _resolve(cols, 'sDescricao', 'Descricao', 'Descrição')
+    c_tit = _resolve(cols, 'sNomeTitular', 'sNomeEmissor', 'Nome Cliente', 'Titular')
+    c_conta = _resolve(cols, 'sNumConta')
+    c_hist = _resolve(cols, 'nHistorico')
+    c_sist = _resolve(cols, 'Sistema', 'sNomeCli')
     c_banco = _resolve(cols, 'nBancoEmissor')
     c_ag = _resolve(cols, 'nAgDebitada')
     c_cc = _resolve(cols, 'nCcDebitada')
-
-    sistema = {'spb': 'SPB - conta externa', 'sdconta_ted': 'SDConta - conta externa',
-               'sdconta_int': 'SDConta - conta interna', 'mgt': 'MGT - conta externa',
-               'settlement': 'SDConta - conta externa', 'sep': 'MGT - conta externa'}.get(source, '')
-
     for r in rows:
-        # SPB filter: only derivatives / LMA-COMM-BR events.
-        if source == 'spb' and c_evt:
-            ev = str(r.get(c_evt, '')).lower()
-            if 'derivativos' not in ev and 'lma-comm-br' not in ev:
-                continue
-        raw = _to_num(r.get(c_val, '') if c_val else 0)
-        desc = str(r.get(c_desc, '') if c_desc else '')
-        # sDescricao → Pay/Receive
-        if 'debito' in _norm(desc):
-            pay_receive = 'Receive'
-        else:
-            pay_receive = 'Pay'
-        if source in ('sdconta_int',):
-            value = abs(raw)
-            pay_receive = 'Receive' if value >= 0 else 'Pay'
-        else:
-            value = -abs(raw) if pay_receive == 'Pay' else abs(raw)
-        titular = str(r.get(c_tit, '') if c_tit else '').strip()
-        titular = titular.replace('LMA-COMM-BR ', '').strip()
+        hist = str(r.get(c_hist, '') if c_hist else '').strip()
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        if source == 'sdconta_ted' and c_banco and c_ag and c_cc:
-            conta = '-'.join([str(r.get(c_banco, '')).strip(), str(r.get(c_ag, '')).strip(),
-                              str(r.get(c_cc, '')).strip()]).strip('-')
-        tl = titular.lower()
-        if any(x in tl for x in _JPM_EXCLUDE):
+        desc = str(r.get(c_desc, '') if c_desc else '')
+        titular = str(r.get(c_tit, '') if c_tit else '').strip()
+        val = _to_num_br(r.get(c_val, '') if c_val else 0)
+        sistema = str(r.get(c_sist, '') if c_sist else '').strip()
+
+        if source == 'sdconta_int':
+            if hist == '5347' and conta == '0512026-0':       # Formula[34] remap
+                hist = '9409'; desc = 'DEBITO NDF'
+            keep = hist in _SDCONTA_HIST_ALLOW                # Join[174] inner allowlist
+            if not keep and 'DEB.TRANSF CTAS MM TITULARIDAD' in desc.upper() and conta == '0511600-3':
+                keep = True                                   # Filter[153] transfer recapture
+            if not keep:
+                continue
+            if val < 1:
+                titular = 'ZERAGEM DA CONTA'
+        elif source == 'sdconta_ted':
+            val = abs(val); desc = 'DEBITO NDF'; sistema = 'SDConta - conta externa'
+            if c_banco and c_ag and c_cc:
+                conta = '-'.join([str(r.get(c_banco, '')).strip(), str(r.get(c_ag, '')).strip(),
+                                  str(r.get(c_cc, '')).strip()]).strip('-')
+        elif source == 'mgt':
+            desc = 'DEBITO NDF'; sistema = 'MGT - conta externa'
+
+        # ── merged SDConta post-processing (Filter[35], Formula[27], Filter[29]) ──
+        if titular == '/OTC DERIVATIVES PRODUCTS':
             continue
-        if abs(value) < 1:
+        if not sistema:
+            sistema = 'SDConta - conta interna'
+        if titular == 'LIQS FINANCEIRAS - OPERACOES CAMBIO':
+            sistema = 'SDConta - conta externa FX'
+        dn = _norm(desc)
+        if 'debito' in dn:
+            pr = 'Receive'
+        elif 'credito' in dn:
+            pr = 'Pay'
+        elif hist[:1] == '9':
+            pr = 'Receive'
+        elif hist[:1] == '4':
+            pr = 'Pay'
+        else:
+            pr = 'Pay'
+        val = -abs(val) if pr == 'Pay' else abs(val)
+        if pr == 'Pay' and conta == '0511600-3':              # extra sign flip
+            val = -val
+        if 'LAWTON MULTIMERCADO EXCLUSIVO' in titular.upper():
+            titular = 'LAWTON MULTIMERCADO EXCLUSIVO'
+        if not (val > 1 or val < -1):                         # Filter[29] threshold
             continue
-        s = sistema
-        if source == 'sdconta_int' and 'liqs financeiras' in tl and 'operacoes cambio' in tl:
-            s = 'SDConta - conta externa FX'
-        out.append({'value': value, 'client': titular, 'sistema': s, 'snumconta': conta,
-                    'product': '', 'pay_receive': pay_receive})
+        out.append({'value': val, 'client': titular, 'sistema': sistema, 'snumconta': conta,
+                    'product': 'NDF', 'pay_receive': pr})
     return out
 
 
@@ -394,8 +505,9 @@ def run_payrec(recon_date, files=None, mode='auto'):
             continue
         if bucket in ('jpm_cash', 'jpm_fxo'):
             jpm += _norm_jpm(rows, cols, is_fxo=(bucket == 'jpm_fxo')); used += 1
-        elif bucket in ('spb', 'sdconta_ted', 'sdconta_int', 'settlement', 'mgt', 'sep'):
+        elif bucket in ('spb', 'sdconta_ted', 'sdconta_int', 'mgt'):
             client += _norm_client(rows, cols, bucket); used += 1
+        # 'settlement' / 'sep' / 'unknown' are not part of the Alteryx recon feed.
 
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
