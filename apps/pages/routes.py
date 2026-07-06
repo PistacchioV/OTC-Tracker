@@ -4155,11 +4155,30 @@ def api_opb3_import():
 #  a block of per-date columns right after it (yyyymmdd) — those are appended as
 #  dynamic columns (only yyyymmdd values are kept, shown dd/mm/yyyy).
 _LPNDF_COLUMNS = [
-    'Conta', 'Tipo Operação', 'C/V', 'Título', 'Tipo Título', 'Tipo de Regime', 'Data Vencimento',
-    'Valor', 'Modalidade Liquidação', 'Status', 'Data Liquidação', 'Contraparte (Nome Simpl.)',
-    'Conta Contraparte', 'Num Ctrl Operação',
+    'Codigo da Parte', 'Nome da Parte', 'CPF/CNPJ do Participante', 'Codigo da Contraparte',
+    'Nome da Contraparte', 'CPF/CNPJ da Contraparte', 'Contrato', 'Classe do Ativo Subjacente',
+    'Data de Emissao', 'Data de Inicio de Vigencia', 'Data de Vencimento', 'Valor Base no registro',
+    'Valor Base atual', 'Taxa Forward', 'Taxa de Cambio', 'Descricao da posicao do Participante',
+    'Tipo Indicador Financeiro', 'Tipo do Contrato', 'Situacao do Contrato', 'Codigo Sisbacen da Moeda',
+    'Simbolo da Moeda', 'Codigo Sisbacen da Moeda Cotada', 'Codigo do Ativo Subjacente',
+    'Data de Fixing do Ativo Subjacente', 'Data de Fixing da Moeda', 'Codigo da Cotacao',
+    'Cotacao de Moeda para o Vencimento', 'Tipo de Cotacao', 'Cross-Rate', 'Codigo da Paridade Cross',
+    'Data de fixing da Paridade Cross', 'Codigo do Boletim', 'Horario do Boletim', 'Taxa de Paridade',
+    'Nome do Feeder', 'Tela funcao Consulta', 'Tipo de Cotacao Moeda', 'Tipo de Paridade',
+    'Data de Avaliacao', 'Indicador de Termo a Termo', 'Data de Fixacao',
+    'Forma de Atualizacao da taxa a termo', 'Valor ou Percentual Negociado', 'Ajustar Taxa',
+    'Responsavel pelo Ajuste de Taxa', 'Data inicial para o ajuste da taxa',
+    'Data final para o ajuste da taxa', 'Data do Ajuste da Taxa', 'Cotacao para Fixing',
+    'Atualizar Valor Base?', 'Cotacao Inicial', 'Valor Base Original', 'Premio a ser pago pelo',
+    'Valor do Premio', 'Modalidade de Liquidacao', 'Data de Liquidacao do Premio',
+    'Premio em Moeda Estrangeira', 'Data de Fixing da Moeda do Premio', 'Codigo Identificador',
+    'Data de Alteracao', 'Valor Antecipado', 'Criterio de Apuracao', 'Taxa a Termo em Reais',
+    'Data da Cotacao Inicial', 'Tipo Media Asiatico',
 ]
-_LPNDF_DATE_COLS = {'Data Vencimento', 'Data Liquidação'}
+# Date columns → dd/mm/yyyy; value columns → #,##0.00 (derived from the names above;
+# "Horario do Boletim" is a time, not a date, so it stays raw).
+_LPNDF_DATE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Data ')}
+_LPNDF_VALUE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Valor ')}
 
 
 def _ndf_ter_path(ref, max_back=10):
@@ -4194,14 +4213,19 @@ def _lpndf_collect(ref):
                 low = [(k, _fcst_norm(k)) for k in keys]
                 for k, kn in low:
                     if kn == n:
-                        return k
-                for k, kn in low:
-                    if kn and (n in kn or kn in n):
-                        return k
+                        return k                       # exact (accent/case-insensitive) — preferred
+                # Fallback: only when the file header is a SUPERSET of the target
+                # (n ⊆ kn). The reverse (a short generic key like "Contrato" inside
+                # "Tipo do Contrato") would mis-map, so it is intentionally excluded;
+                # pick the closest (shortest) candidate.
+                cands = [(k, kn) for k, kn in low if kn and n in kn]
+                if cands:
+                    return min(cands, key=lambda t: len(t[1]))[0]
                 return None
             idx = {c: resolve(c) for c in _LPNDF_COLUMNS}
             # Tipo Média Asiática column + the per-date columns that follow it.
-            tma_key = resolve('Tipo Media Asiatica') or resolve('Media Asiatica')
+            tma_key = (resolve('Tipo Media Asiatico') or resolve('Tipo Media Asiatica')
+                       or resolve('Media Asiatica'))
             tma_pos = keys.index(tma_key) if tma_key in keys else None
             asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
             asian_labels = [(k if not str(k).startswith('Field_') else 'Média Asiática {}'.format(i + 1))
@@ -4219,7 +4243,7 @@ def _lpndf_collect(ref):
                     if c in _LPNDF_DATE_COLS:
                         d = _fcst_parse_date(v)
                         v = d.strftime('%d/%m/%Y') if d else (v or '')
-                    elif c == 'Valor':
+                    elif c in _LPNDF_VALUE_COLS:
                         v = _swapchar_fmt_value(v)
                     row.append('' if v is None else v)
                 arit = (tma_key and _fcst_norm(str(rec.get(tma_key, ''))).strip() == 'aritmetica')
