@@ -4273,17 +4273,62 @@ def ndf_summary():
 def api_ndf_summary_cards():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    ref = _prev_anbima_bizday(datetime.now())
-    path, dref = _ndf_ter_path(ref)
-    total = 0
+    # Reference date from the picker (defaults to today's D-1 ANBIMA). Cards count
+    # only rows whose maturity ("Data de Vencimento") == the picker date AND whose
+    # "Classe do Ativo Subjacente" == TAXAS DE CAMBIO (FX NDFs).
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _prev_anbima_bizday(datetime.now())
+    except ValueError:
+        ref = _prev_anbima_bizday(datetime.now())
+    want_mat = ref.strftime('%Y%m%d')
+    fx = _fcst_norm('TAXAS DE CAMBIO')
+    total = vanilla = other_publisher = t0 = 0
+    # Position snapshot is always the LATEST available TER (independent of the picker,
+    # which only drives the maturity filter below).
+    path, dref = _ndf_ter_path(_prev_anbima_bizday(datetime.now()))
     if path:
         try:
             with open(path, encoding='utf-8') as fh:
-                total = len(json.load(fh) or [])
+                data = json.load(fh) or []
         except Exception:
-            total = 0
+            data = []
+        # Resolve "Tipo do Contrato" / "Codigo da Cotacao" by header (real TER only;
+        # not present in the minimal dev mock).
+        tipo_key = cot_key = None
+        if data:
+            for k in data[0].keys():
+                kn = _fcst_norm(k)
+                if kn in ('tipo do contrato', 'tipo de contrato'):
+                    tipo_key = k
+                elif kn in ('codigo da cotacao', 'codigo de cotacao'):
+                    cot_key = k
+
+        def _is_zero_cot(rec):
+            v = str(rec.get(cot_key, '') if cot_key else '').strip().replace(',', '.')
+            try:
+                return float(v) == 0
+            except ValueError:
+                return True                          # empty / non-numeric → treated as 0
+
+        for rec in data:
+            if _fcst_norm(str(rec.get('Classe do Ativo Subjacente', ''))) != fx:
+                continue
+            d = _fcst_parse_date(rec.get('Data de Vencimento', ''))
+            if not (d and d.strftime('%Y%m%d') == want_mat):
+                continue
+            total += 1
+            tipo = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
+            if tipo == 'sisbacen':
+                if _is_zero_cot(rec):
+                    t0 += 1                           # SISBACEN + Cotação = 0
+                else:
+                    vanilla += 1                      # SISBACEN + Cotação <> 0
+            elif tipo == 'feeder':
+                other_publisher += 1                  # FEEDER
     return jsonify({'success': True,
-                    'cards': {'vanilla': 0, 'other_publisher': 0, 't0': 0, 'total': total},
+                    'cards': {'vanilla': vanilla, 'other_publisher': other_publisher,
+                              't0': t0, 'total': total},
                     'ter_date': dref})
 
 

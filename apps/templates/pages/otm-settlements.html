@@ -50,6 +50,12 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #otm-page .btn:active { transform: scale(0.97); }
+/* Toolbar buttons — compact project standard (matches .ops-toolbar): keeps Add row,
+   Columns, Export and Clear filters uniform instead of the taller btn-sm default. */
+#otm-page .otm-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+}
+#otm-page .otm-toolbar .btn i { font-size: .95em; }
 /* Add-row button — press feedback + hover lift (Emil) */
 #otm-page .otm-addrow-btn { transition: transform 150ms var(--otm-ease-out), box-shadow 150ms var(--otm-ease-out); }
 @media (hover: hover) and (pointer: fine) {
@@ -214,7 +220,7 @@
     <div class="card mt-2">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap otm-toolbar">
                     <div class="d-flex align-items-center gap-1">
                         <label class="form-label mb-0 fs-xs text-muted" data-lang="otm-show">Show</label>
                         <select class="form-select form-select-sm otm-page-len" style="width:84px;">

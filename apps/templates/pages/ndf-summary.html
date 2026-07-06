@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}Other Products Summary{% endblock title %}
+{% block title %}NDF Summary{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
@@ -470,7 +470,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ── Reference date → refresh the header cards (tables are a manual worksheet) ─
     function loadDate(ymd) {
-        fetch('/api/ndf-summary/cards')
+        var qs = ymd ? ('?date=' + encodeURIComponent(ymd)) : '';
+        fetch('/api/ndf-summary/cards' + qs)
             .then(function (r) { return r.json(); })
             .then(function (j) { if (j && j.success) setCards(j.cards); })
             .catch(function () {});
