@@ -647,7 +647,15 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
         if (!tools) return;
         var cols = [];
         for (var c = 2; c <= n + 2; c++) cols.push(c);        // Status + all data columns (skip checkbox/actions)
-        var xopts = { columns: cols, modifier: { page: 'all' }, orthogonal: 'export' };
+        // Export sanitizer: strip HTML (badges) like the default AND blank Excel error
+        // literals (#NULL!, #N/A, #REF! …) so IDs sourced as errors export clean.
+        var xopts = { columns: cols, modifier: { page: 'all' }, orthogonal: 'export',
+            format: { body: function (data) {
+                if (typeof data !== 'string') return data;
+                var v = data.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')
+                            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+                return /^#?(NULL!?|N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!)$/i.test(v) ? '' : v;
+            } } };
         var xtitle = 'MTM ' + lob.name + (currentDate ? ' ' + currentDate : '');
         try {
             new $.fn.dataTable.Buttons(dt, {

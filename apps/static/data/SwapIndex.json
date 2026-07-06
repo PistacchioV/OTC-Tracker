@@ -1,0 +1,618 @@
+[
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "ACO",
+    "Nome Curva": "ACOES",
+    "Nome Categoria": "ACOES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "COM",
+    "Nome Curva": "COMMODITIES",
+    "Nome Categoria": "COMMODITIES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C04",
+    "Nome Curva": "OURO Ajuste",
+    "Nome Categoria": "COMMODITIES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "IBL",
+    "Nome Curva": "IBOVESPA LIQUIDACAO",
+    "Nome Categoria": "INDICES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "IBC",
+    "Nome Curva": "IBOVESPA LIQUIDACAO CONTINUO",
+    "Nome Categoria": "INDICES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "IBO",
+    "Nome Curva": "IBOVESPA FECHAMENTO",
+    "Nome Categoria": "INDICES",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C19",
+    "Nome Curva": "IPCA",
+    "Nome Categoria": "INDICES DE PRECOS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C09",
+    "Nome Curva": "IGP-M",
+    "Nome Categoria": "INDICES DE PRECOS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C10",
+    "Nome Curva": "IGP-DI",
+    "Nome Categoria": "INDICES DE PRECOS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C16",
+    "Nome Curva": "INPC",
+    "Nome Categoria": "INDICES DE PRECOS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C21",
+    "Nome Curva": "IPCA-NC",
+    "Nome Categoria": "INDICES DE PRECOS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C23",
+    "Nome Curva": "TJLP",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C52",
+    "Nome Curva": "DI 360D",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C20",
+    "Nome Curva": "TR",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C60",
+    "Nome Curva": "PREFIXADO 360D",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C66",
+    "Nome Curva": "PRE LINEAR 360D",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C99",
+    "Nome Curva": "PREFIXADO 252D",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C03",
+    "Nome Curva": "DI",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C01",
+    "Nome Curva": "SELIC",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C65",
+    "Nome Curva": "PREFIXADO 365D",
+    "Nome Categoria": "JUROS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "T12",
+    "Nome Curva": "TSFR12M",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "T06",
+    "Nome Curva": "TSFR6M",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "SFR",
+    "Nome Curva": "SOFR",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "T03",
+    "Nome Curva": "TSFR3M",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "T01",
+    "Nome Curva": "TSFR1M",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C29",
+    "Nome Curva": "TJMI",
+    "Nome Categoria": "JUROS INTERNACIONAIS",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "425",
+    "Nome Curva": "FRANCO SUICO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "796",
+    "Nome Curva": "RENMINBI HONG KON",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "930",
+    "Nome Curva": "WON/COREIA SUL",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "642",
+    "Nome Curva": "NOVA LIRA/TURQUIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "450",
+    "Nome Curva": "GUARANI/PARAGUAI",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "745",
+    "Nome Curva": "PESO/URUGUAIO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "820",
+    "Nome Curva": "RIAL/ARAB SAUDITA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "165",
+    "Nome Curva": "DOLAR CANADENSE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "USD",
+    "Nome Curva": "DOLAR COMERCIAL EXPONENCIAL",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "100",
+    "Nome Curva": "DINAR/KWAIT",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "055",
+    "Nome Curva": "COROA DINAM/DINAM",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "660",
+    "Nome Curva": "NOVO-SOL",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "795",
+    "Nome Curva": "IUAN RENMIMBI/CHI",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "785",
+    "Nome Curva": "RANDE/AFRICA SUL",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "860",
+    "Nome Curva": "RUPIA/INDIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "CHF",
+    "Nome Curva": "FRANCO SUICO BCE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "129",
+    "Nome Curva": "EURO WMR",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "706",
+    "Nome Curva": "PESO ARGENTINO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "470",
+    "Nome Curva": "IENE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "540",
+    "Nome Curva": "LIBRA ESTERLINA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "245",
+    "Nome Curva": "DOLAR/NOVA ZELAND",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "145",
+    "Nome Curva": "DIRHAM/EMIR.ARABE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "137",
+    "Nome Curva": "FRANCO SUICO WMR",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "150",
+    "Nome Curva": "DOLAR AUSTRALIANO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "070",
+    "Nome Curva": "COROA SUECA/SUECI",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "978",
+    "Nome Curva": "EURO/COM.EUROPEIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "640",
+    "Nome Curva": "NOVO DOLAR/TAIWAN",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "828",
+    "Nome Curva": "RINGGIT/MALASIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "800",
+    "Nome Curva": "RIAL/CATAR",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "026",
+    "Nome Curva": "BOLIVAR FORTE/VEN",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "345",
+    "Nome Curva": "FORINT/HUNGRIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "471",
+    "Nome Curva": "IENE WMR REAIS",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "220",
+    "Nome Curva": "DOLAR DOS EUA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "741",
+    "Nome Curva": "PESO MEXICANO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "EUR",
+    "Nome Curva": "EURO BCE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "205",
+    "Nome Curva": "DOLAR/HONG-KONG",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "015",
+    "Nome Curva": "BATH/TAILANDIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "075",
+    "Nome Curva": "COROA TCHECA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "735",
+    "Nome Curva": "PESO/FILIPINAS",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "506",
+    "Nome Curva": "NOVO LEU/ROMENIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "U30",
+    "Nome Curva": "DOLAR DOS EUA 30/360",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "715",
+    "Nome Curva": "PESO CHILENO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "195",
+    "Nome Curva": "DOLAR/CINGAPURA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "830",
+    "Nome Curva": "RUBLO/RUSSIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "260",
+    "Nome Curva": "DONGUE/VIETNAN",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "030",
+    "Nome Curva": "BOLIVIANO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "065",
+    "Nome Curva": "COROA NORUE/NORUE",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "865",
+    "Nome Curva": "RUPIA/INDONESIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "975",
+    "Nome Curva": "ZLOTY/POLONIA",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "720",
+    "Nome Curva": "PESO COLOMBIANO",
+    "Nome Categoria": "TAXAS DE CAMBIO",
+    "MAKER": null,
+    "CHECKER": null
+  },
+  {
+    "STATUS": "ACTIVE",
+    "Codigo Referencia Externa": "C00",
+    "Nome Curva": "VCP",
+    "Nome Categoria": "VCP",
+    "MAKER": null,
+    "CHECKER": null
+  }
+]

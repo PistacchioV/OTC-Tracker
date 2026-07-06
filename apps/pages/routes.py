@@ -1520,6 +1520,23 @@ def api_dashboard_live_position():
             ref = None
     if ref is None:
         ref = _prev_anbima_bizday(datetime.now())
+
+    # Fallback: if the requested date has no snapshot yet, walk back (up to ~10 ANBIMA
+    # business days) to the latest date that DOES have position files, so the dashboard
+    # stays populated instead of showing zeros.
+    def _live_has_files(dr):
+        for src in _LIVE_POSITION_SOURCES:
+            p = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dr), src['file'](dr))
+            if os.path.isfile(p):
+                return True
+        return False
+
+    probe = ref
+    for _ in range(11):
+        if _live_has_files(probe.strftime('%y%m%d')):
+            ref = probe
+            break
+        probe = _prev_anbima_bizday(probe)
     dref = ref.strftime('%y%m%d')
 
     by_product, by_entity = {}, {}
@@ -3585,7 +3602,11 @@ def _swapchar_coltype(label):
         return 'func'
     if n == 'tipo de amortizacao':
         return 'amort'
-    if n.startswith('sinal') or n.startswith('tipo') or n.startswith('nome'):
+    if n.startswith('sinal'):
+        return 'sinal'                         # Sinal Taxa: 00 → +, 01 → -
+    if n in ('codigo indice', 'codigo do indice'):
+        return 'indice'                        # show Nome Curva instead of the raw code
+    if n.startswith('tipo') or n.startswith('nome'):
         return 'text'
     if any(tok in n for tok in _SWAPCHAR_VALUE_TOKENS):
         return 'value'
@@ -3648,6 +3669,56 @@ def _swapchar_fmt_value(v):
     return '{:,.2f}'.format(n)
 
 
+# Swap Index (B3 Index Results tab) — Codigo Referencia Externa → Nome Curva.
+_SWAPINDEX_CACHE = {'mtime': None, 'map': {}}
+
+
+def _swapindex_lookup():
+    """Cached {code(upper) → Nome Curva} from SwapIndex.json (reloads on mtime change)."""
+    path = os.path.join(_B3_DATA_DIR, 'SwapIndex.json')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _SWAPINDEX_CACHE['mtime'] != mt:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        m = {}
+        for rec in data:
+            code = str(rec.get('Codigo Referencia Externa', '') or '').strip().upper()
+            name = str(rec.get('Nome Curva', '') or '').strip()
+            if code:
+                m[code] = name
+                m.setdefault(code.lstrip('0') or '0', name)   # tolerant to leading zeros
+        _SWAPINDEX_CACHE['mtime'] = mt
+        _SWAPINDEX_CACHE['map'] = m
+    return _SWAPINDEX_CACHE['map']
+
+
+def _swapindex_name(code):
+    s = str(code or '').strip()
+    if not s:
+        return ''
+    m = _swapindex_lookup()
+    return m.get(s.upper()) or m.get(s.upper().lstrip('0') or '0') or s
+
+
+def _swapchar_sinal_text(v):
+    """Sinal Taxa code → sign: 00 → +, 01 → - (tolerant to '0'/'1')."""
+    s = str(v or '').strip()
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits != '':
+        code = int(digits)
+        if code == 0:
+            return '+'
+        if code == 1:
+            return '-'
+    return s
+
+
 def _swapchar_fmt_cell(value, ctype):
     if value in (None, ''):
         return ''
@@ -3658,6 +3729,10 @@ def _swapchar_fmt_cell(value, ctype):
         return _swapchar_func_text(value)
     if ctype == 'amort':
         return _swapchar_amort_text(value)
+    if ctype == 'sinal':
+        return _swapchar_sinal_text(value)
+    if ctype == 'indice':
+        return _swapindex_name(value)
     if ctype == 'value':
         return _swapchar_fmt_value(value)
     return str(value)
@@ -10141,10 +10216,11 @@ def api_ndf_mapping_b3():
 
 _B3_DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
 _B3_FILE_MAP = {
-    'subj':    'Subjacente.json',
-    'vcp':     'VCP.json',
-    'dominio': 'Dominio.json',
-    'refdata': 'RefData.json',
+    'subj':      'Subjacente.json',
+    'vcp':       'VCP.json',
+    'dominio':   'Dominio.json',
+    'refdata':   'RefData.json',
+    'swapindex': 'SwapIndex.json',
 }
 
 
