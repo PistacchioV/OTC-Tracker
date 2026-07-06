@@ -442,8 +442,8 @@
                                 </tr>
                                 <tr id="column-search-inputs">
                                     <th></th><th></th>
-                                    <th></th><!-- Status -->
-                                    <th></th><!-- Intrag ID -->
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrag ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="System ID"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Line Type ID"></th>
@@ -577,8 +577,11 @@ $(document).ready(function() {
 
     function exportCols() { var a=[]; for(var i=3;i<=41;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
-        var inp=$(node).find('input[type!="checkbox"]');
-        return inp.length ? (inp.val()||'') : $(node).text().trim();
+        // Use the MODEL data (present for every row, even those not on the current
+        // page). Reading from `node` returned blanks for off-page rows, so a 65-row
+        // book exported ~50 empty rows. Fall back to node only for editable inputs.
+        if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
+        return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
     }
 
     var table = window.intragOptTable = $('#intrag-opt-table').DataTable({
@@ -597,10 +600,10 @@ $(document).ready(function() {
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
             autoClose:true, fade:0,
             buttons:[
-                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
-                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'Intrag Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
             ]
         }],
         language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },
@@ -672,8 +675,17 @@ $(document).ready(function() {
         var d = new Date();
         return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
     }
-    function intragOptLoad() {
-        fetch('/api/intrag/option')
+    function _dmyToIso(dmy) {
+        var p = (dmy || '').trim().split('/');
+        if (p.length !== 3 || p[2].length !== 4) return '';
+        return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+    // The smart filter DRIVES the server fetch (same as Intrag NDF): the
+    // Registration Date chip scopes which day-file(s) are read from the JSONs;
+    // other chips filter the fetched rows client-side. It is NOT a filter over
+    // every row already generated — clearing it does not reveal all of them.
+    function intragLoad(qs, colFilters) {
+        fetch('/api/intrag/option' + (qs ? '?'+qs : ''))
             .then(function(r){ return r.json(); })
             .then(function(data){
                 table.clear();
@@ -687,18 +699,24 @@ $(document).ready(function() {
                         table.row.add(row);
                     });
                 }
+                table.columns().search('');
+                intragDateRanges = {};
+                (colFilters||[]).forEach(function(f){
+                    if (f.col.type === 'date') {          // client-side date match on fetched rows
+                        var d = sfToDate(f.value);
+                        intragDateRanges[f.col.dtCol] = intragDateRanges[f.col.dtCol] || {from:null,to:null};
+                        if (f.mode === 'from') intragDateRanges[f.col.dtCol].from = d;
+                        else if (f.mode === 'to') intragDateRanges[f.col.dtCol].to = d;
+                        else { intragDateRanges[f.col.dtCol].from = d; intragDateRanges[f.col.dtCol].to = d; }
+                    } else {
+                        table.column(f.col.dtCol).search(f.value);
+                    }
+                });
                 table.draw();
-                // Default view: Registration Date (= trade date) = today, like Intrag NDF.
-                // Pre-add the chip on first load; user can clear it to see all dates.
-                if (typeof sfAddFilter === 'function' && SF_COLS[3] && !sfActive.length) {
-                    sfAddFilter(SF_COLS[3], _todayDmy());
-                    applyOptFilters();
-                }
                 setTimeout(function(){ table.columns.adjust().draw(false); }, 100);
             })
             .catch(function(err){ console.error('[Intrag OPT] Load error:', err); });
     }
-    intragOptLoad();
 
     // Fix double-header on first load: scrollX clones <thead> before height
     // calculations run; columns.adjust() forces a re-sync after the DOM settles.
@@ -979,7 +997,13 @@ $(document).ready(function() {
         'Redemption Value':'number','Call Strike Price':'number','Put Strike Price':'number','Call Unit Premium':'number',
         'Put Unit Premium':'number','Barrier Rate':'number','Maturity Rate':'number','Quantity':'number','Asian Option Average':'number'
     };
-    var SF_COLS=OPT_COLS.map(function(lbl,i){return{label:lbl,dtCol:i+4,type:(OPT_TYPES[lbl]||'text')};});
+    var SF_COLS=OPT_COLS.map(function(lbl,i){
+        var c={label:lbl,dtCol:i+4,type:(OPT_TYPES[lbl]||'text')};
+        // Registration Date (= trade date) scopes the server day-file(s), like the
+        // Trade Date chip in Intrag NDF — it drives the fetch, not a table filter.
+        if(lbl==='Registration Date') c.isDate=true;
+        return c;
+    });
     SF_COLS.push({label:'Intrag ID', dtCol:3, type:'text'});   // extra column, searchable
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
@@ -1048,7 +1072,7 @@ $(document).ready(function() {
         sfActive.forEach(function(f) {
             var chip=document.createElement('span'); chip.className='smart-filter-chip';
             chip.innerHTML='<strong>'+sfEsc(sfChipPrefix(f))+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
-            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();applyOptFilters();});
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();});
             sfChips.appendChild(chip);
         });
     }
@@ -1065,30 +1089,29 @@ $(document).ready(function() {
         }
         return true;
     });
-    function applyOptFilters(){
-        table.columns().search('');
-        intragDateRanges={};
-        sfActive.forEach(function(f){
-            if(f.col.type==='date'){
-                // Route ALL date filters (from/to/exact) through sfToDate so the
-                // match is format-agnostic (data comes as YYYY-MM-DD; the chip may
-                // be DD/MM/YYYY). 'exact' = same calendar day (from = to = that day).
-                var d=sfToDate(f.value);
-                intragDateRanges[f.col.dtCol]=intragDateRanges[f.col.dtCol]||{from:null,to:null};
-                if(f.mode==='from') intragDateRanges[f.col.dtCol].from=d;
-                else if(f.mode==='to') intragDateRanges[f.col.dtCol].to=d;
-                else { intragDateRanges[f.col.dtCol].from=d; intragDateRanges[f.col.dtCol].to=d; }
-            } else {
-                table.column(f.col.dtCol).search(f.value);
-            }
-        });
-        table.draw();
-    }
+    // (Filtering now happens inside intragLoad after the server fetch — the smart
+    //  filter drives the fetch, it is not a client-side filter over all rows.)
     sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
     sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
     sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
     sfWrapper.addEventListener('click',function(){sfInput.focus();});
-    document.getElementById('sfSearchBtn').addEventListener('click',function(){sfDropdown.style.display='none';applyOptFilters();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){
+        sfDropdown.style.display='none';
+        var dExact=sfActive.find(function(f){return f.col.isDate&&f.mode==='exact';});
+        var dFrom =sfActive.find(function(f){return f.col.isDate&&f.mode==='from';});
+        var dTo   =sfActive.find(function(f){return f.col.isDate&&f.mode==='to';});
+        var colChips=sfActive.filter(function(f){return !f.col.isDate&&f.col.dtCol>=0;});
+        var qs='';
+        if(dFrom||dTo){
+            var parts=[];
+            if(dFrom) parts.push('date_from='+encodeURIComponent(_dmyToIso(dFrom.value)));
+            if(dTo)   parts.push('date_to='+encodeURIComponent(_dmyToIso(dTo.value)));
+            qs=parts.join('&');
+        } else if(dExact){
+            qs='date='+encodeURIComponent(_dmyToIso(dExact.value));
+        }
+        intragLoad(qs,colChips);
+    });
     document.getElementById('btnClearFilters').addEventListener('click',function(){
         document.querySelectorAll('#column-search-inputs th input').forEach(function(inp){ inp.value=''; });
         intragDateRanges={};
@@ -1101,7 +1124,7 @@ $(document).ready(function() {
     sfInput.addEventListener('keydown',function(e) {
         var items=sfDropdown.querySelectorAll('li');
         var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
-        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();applyOptFilters();return;}
+        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();return;}
         if(e.key==='Enter'){
             e.preventDefault();
             if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));}
@@ -1114,6 +1137,10 @@ $(document).ready(function() {
         else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
         items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
     });
+
+    // Default view: Registration Date = today, fetched from the server (like NDF).
+    sfAddFilter(SF_COLS[3], _todayDmy());
+    document.getElementById('sfSearchBtn').click();
 });
 </script>
 

@@ -600,6 +600,12 @@
                     // Reflect the change immediately in the open list.
                     var list = document.getElementById('notif-list');
                     if (list) list.querySelectorAll('.notif-unread').forEach(function (it) { it.classList.remove('notif-unread'); });
+                    // Close the Notifications dropdown after marking everything read.
+                    var dd = markBtn.closest('.dropdown');
+                    var toggle = dd && dd.querySelector('[data-bs-toggle="dropdown"]');
+                    if (toggle && window.bootstrap && bootstrap.Dropdown) {
+                        bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+                    }
                 });
             }
 

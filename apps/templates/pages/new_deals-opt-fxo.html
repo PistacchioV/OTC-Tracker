@@ -1136,13 +1136,18 @@
 // Função auxiliar para formatar dados de export (selects, inputs, texto)
 // ============================================================================
 function formatExportData(data, row, column, node) {
-    if ($(node).find('select').length > 0) {
-        return $(node).find('select').val() || '';
+    // Off-page rows have no DOM node; fall back to the model data so the export
+    // is not blank for every row that is not on the current page.
+    if (node) {
+        if ($(node).find('select').length > 0) {
+            return $(node).find('select').val() || '';
+        }
+        if ($(node).find('input[type!="checkbox"]').length > 0) {
+            return $(node).find('input[type!="checkbox"]').val() || '';
+        }
+        return $(node).text().trim();
     }
-    if ($(node).find('input[type!="checkbox"]').length > 0) {
-        return $(node).find('input[type!="checkbox"]').val() || '';
-    }
-    return $(node).text().trim();
+    return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
 }
 
 // Current authenticated user SID (set by Flask session)

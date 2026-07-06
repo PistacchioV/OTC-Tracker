@@ -570,8 +570,10 @@ $(document).ready(function() {
 
     function exportCols() { var a=[]; for(var i=3;i<=33;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
-        var inp=$(node).find('input[type!="checkbox"]');
-        return inp.length ? (inp.val()||'') : $(node).text().trim();
+        // Use the MODEL data (present for every row, even those not on the current
+        // page). Reading from `node` returned blanks for off-page rows.
+        if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
+        return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
     }
 
     var table = window.intragNdfTable = $('#intrag-ndf-table').DataTable({

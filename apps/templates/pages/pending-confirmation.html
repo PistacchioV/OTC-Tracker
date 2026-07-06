@@ -1201,15 +1201,19 @@
 // Função auxiliar para formatar dados de export (selects, inputs, texto)
 // ============================================================================
 function formatExportData(data, row, column, node) {
-    if ($(node).find('select').length > 0) {
-        var select = $(node).find('select');
-        return select.val() || '';
+    // Off-page rows have no DOM node; fall back to the model data.
+    if (node) {
+        if ($(node).find('select').length > 0) {
+            var select = $(node).find('select');
+            return select.val() || '';
+        }
+        if ($(node).find('input').length > 0) {
+            var input = $(node).find('input');
+            return input.val() || '';
+        }
+        return $(node).text().trim();
     }
-    if ($(node).find('input').length > 0) {
-        var input = $(node).find('input');
-        return input.val() || '';
-    }
-    return $(node).text().trim();
+    return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
 }
 
 $(document).ready(function() {
