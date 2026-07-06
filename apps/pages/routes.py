@@ -5073,7 +5073,14 @@ def _lpndf_collect(ref):
         except Exception:
             data = []
         if data:
-            keys = list(data[0].keys())
+            # Ordered UNION of keys across ALL records — an Asian (ARITMETICA) row
+            # carries a big block of per-date columns that a vanilla row lacks, so
+            # keying off data[0] alone would drop them. First-seen order is kept.
+            keys, _seen = [], set()
+            for rec in data:
+                for k in rec.keys():
+                    if k not in _seen:
+                        _seen.add(k); keys.append(k)
 
             def resolve(name):
                 n = _fcst_norm(name)
@@ -5090,18 +5097,22 @@ def _lpndf_collect(ref):
                     return min(cands, key=lambda t: len(t[1]))[0]
                 return None
             idx = {c: resolve(c) for c in _LPNDF_COLUMNS}
-            # Tipo Média Asiática column + the per-date columns that follow it.
-            tma_key = (resolve('Tipo Media Asiatico') or resolve('Tipo Media Asiatica')
-                       or resolve('Media Asiatica'))
-            tma_pos = keys.index(tma_key) if tma_key in keys else None
-            asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
-            asian_labels = [(k if not str(k).startswith('Field_') else 'Média Asiática {}'.format(i + 1))
-                            for i, k in enumerate(asian_keys)]
-            columns = list(_LPNDF_COLUMNS) + asian_labels
 
             def is_yyyymmdd(s):
                 s = str(s or '').strip()
                 return len(s) == 8 and s.isdigit()
+
+            # Tipo Média Asiática column + the per-date columns that follow it. The
+            # block repeats as [date, blank, 0] per fixing — keep ONLY the columns
+            # that actually hold a yyyymmdd date (drop the blank/0 companions).
+            tma_key = (resolve('Tipo Media Asiatico') or resolve('Tipo Media Asiatica')
+                       or resolve('Media Asiatica'))
+            tma_pos = keys.index(tma_key) if tma_key in keys else None
+            asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
+            date_keys = [k for k in asian_keys
+                         if any(is_yyyymmdd(rec.get(k, '')) for rec in data)]
+            asian_labels = ['Média Asiática {}'.format(i + 1) for i in range(len(date_keys))]
+            columns = list(_LPNDF_COLUMNS) + asian_labels
 
             for rec in data:
                 row = []
@@ -5115,10 +5126,9 @@ def _lpndf_collect(ref):
                     elif c in _LPNDF_RATE_COLS:
                         v = _lpndf_fmt_rate(v)
                     row.append('' if v is None else v)
-                arit = (tma_key and _fcst_norm(str(rec.get(tma_key, ''))).strip() == 'aritmetica')
-                for k in asian_keys:
+                for k in date_keys:                    # one dd/mm/yyyy column per fixing date
                     raw = str(rec.get(k, '') or '').strip()
-                    if arit and is_yyyymmdd(raw):
+                    if is_yyyymmdd(raw):
                         d = _fcst_parse_date(raw)
                         row.append(d.strftime('%d/%m/%Y') if d else '')
                     else:
