@@ -312,18 +312,18 @@
 
     <!-- Add row modal (New Deals pattern: a window with all columns to fill) -->
     <div class="modal fade" id="opsAddModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" data-lang="ops-add-title">Add row</h5>
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-title">Add row</span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-3" id="opsAddFields"></div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-lang="ops-cancel">Cancel</button>
-                    <button type="button" class="btn btn-primary bg-gradient" id="opsAddSave" data-lang="ops-add-save">Add</button>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="opsAddSave" title="Save"><i class="ti ti-device-floppy"></i></button>
                 </div>
             </div>
         </div>

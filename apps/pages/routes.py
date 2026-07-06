@@ -2399,7 +2399,7 @@ _FORECAST_SOURCES = [
 ]
 
 
-_MONTH_ABBR = {  # English + Portuguese 3-letter month abbreviations → month number
+_FCST_MONTH_ABBR = {  # English + Portuguese 3-letter month abbreviations → month number
     'jan': 1, 'feb': 2, 'fev': 2, 'mar': 3, 'apr': 4, 'abr': 4, 'may': 5, 'mai': 5,
     'jun': 6, 'jul': 7, 'aug': 8, 'ago': 8, 'sep': 9, 'set': 9, 'oct': 10, 'out': 10,
     'nov': 11, 'dec': 12, 'dez': 12,
@@ -2420,7 +2420,7 @@ def _fcst_parse_date(s):
     # dd-mmm-yyyy with month names (e.g. 06-Jul-2026) — locale-independent via map.
     m = re.match(r'^(\d{1,2})[-/ ]([A-Za-zçÇ]{3,9})[-/ ](\d{2,4})$', s)
     if m:
-        mon = _MONTH_ABBR.get(m.group(2)[:3].lower())
+        mon = _FCST_MONTH_ABBR.get(m.group(2)[:3].lower())
         if mon:
             try:
                 y = int(m.group(3))
@@ -3945,6 +3945,7 @@ def _otm_extract(rows):
         rec['Cpty Name'] = rec['Cpty Name'].upper()      # store counterparty name upper-cased
         out.append(rec)
         kept += 1
+    _otm_ensure_meta(out)                                # stamp status='OK' + id per imported row
     return out, kept, deleted, filtered
 
 
@@ -4009,6 +4010,11 @@ def _otm_collect(ref):
                 data = json.load(fh) or []
         except Exception:
             data = []
+        if _otm_ensure_meta(data) and data:              # legacy JSON w/o meta → migrate once
+            try:
+                _otm_save(jp, data)
+            except Exception:
+                pass
         buckets = {'commodities': set(), 'equities': set(), 'rates': set()}
         all_ids = set()
         for rec in data:
@@ -4021,6 +4027,9 @@ def _otm_collect(ref):
                 elif c == 'Amount':
                     v = _swapchar_fmt_value(v)
                 row.append('' if v is None else v)
+            # Append maker/checker meta as the row tail: [...18 data..., status, maker, checker, id]
+            row += [rec.get('_ot_status', 'OK'), rec.get('_ot_maker', ''),
+                    rec.get('_ot_checker', ''), rec.get('_ot_id', '')]
             rows_out.append(row)
             tid = str(rec.get('Trade Id', '') or '').strip()
             if tid:
@@ -4069,6 +4078,121 @@ def api_otm_import():
                              'OTM Imported', 'OTM Settlements',
                              '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
     return jsonify(res)
+
+
+# ── OTM maker/checker CRUD — every change/insert is persisted to the day's JSON ──
+def _otm_ref_from(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return datetime.now()
+
+
+@blueprint.route('/api/otm-settlements/row/add', methods=['POST'])
+def api_otm_row_add():
+    """Insert a manual row → status 'OK' (maker = current user). Persisted to JSON."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    ref = _otm_ref_from(p)
+    jp, data = _otm_load(ref)
+    if data is None:
+        data = []                                     # first manual row on a day with no import
+    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+           for i, c in enumerate(_OTM_COLUMNS)}
+    rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
+    rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'], rec['_ot_id'] = 'OK', sid, '', _otm_new_id()
+    data.append(rec)
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[otm] add save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'OTM Row Added', 'OTM Settlements',
+                         '{} ({})'.format(rec.get('Trade Id', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'id': rec['_ot_id']})
+
+
+@blueprint.route('/api/otm-settlements/row/edit', methods=['POST'])
+def api_otm_row_edit():
+    """Edit a row's cells → status 'Pending', maker = current user (checker reset)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid, cells = str(p.get('id', '')), (p.get('cells') or [])
+    sid = session.get('user_sid', '')
+    jp, data = _otm_load(_otm_ref_from(p))
+    rec = _otm_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    for i, c in enumerate(_OTM_COLUMNS):
+        if i < len(cells):
+            rec[c] = str(cells[i]).strip()
+    rec['Cpty Name'] = rec.get('Cpty Name', '').upper()
+    rec['_ot_status'], rec['_ot_maker'], rec['_ot_checker'] = 'Pending', sid, ''
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[otm] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'OTM Row Updated', 'OTM Settlements',
+                         '{} ({})'.format(rec.get('Trade Id', ''), _otm_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/otm-settlements/row/delete', methods=['POST'])
+def api_otm_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _otm_load(_otm_ref_from(p))
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    rec = _otm_find(data, rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    data.remove(rec)
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[otm] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'OTM Row Deleted', 'OTM Settlements',
+                         '{} ({})'.format(rec.get('Trade Id', ''), _otm_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/otm-settlements/row/confirm', methods=['POST'])
+def api_otm_row_confirm():
+    """Confirm a Pending row → 'OK'. Maker/checker guard: the user who changed it
+    cannot confirm it (a different user must)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _otm_load(_otm_ref_from(p))
+    rec = _otm_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(rec.get('_ot_maker', '') or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must confirm a row you changed.'}), 403
+    rec['_ot_status'], rec['_ot_checker'] = 'OK', sid
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[otm] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'OTM Row Confirmed', 'OTM Settlements',
+                         '{} ({})'.format(rec.get('Trade Id', ''), _otm_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
 
 
 # ── Operations B3 ────────────────────────────────────────────────────────────

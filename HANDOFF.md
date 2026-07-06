@@ -34,12 +34,27 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
   (`btn-row-*`, `acc-act-*`, `ops-row-del`, `ar-*`, `btn-rd-*`). **É só o formato** — cada página mantém
   os seus próprios botões/handlers/cores. Ao criar uma página nova, use essas classes funcionais (ou
   `btn btn-info/success/danger btn-sm` + uma dessas classes) para herdar o formato automaticamente.
-- **ADD ROW — PADRÃO OBRIGATÓRIO (modal):** sempre que uma página tiver ação **Add row**, ela deve abrir
-  um **modal com um campo por coluna** (padrão New Deals `#addRowModal`), NÃO adicionar uma linha inline
-  em branco. Referências: `new_deals-*` (`#addRowModal`, aberto via
-  `bootstrap.Modal.getOrCreateInstance(el).show()`), `other-products-summary.html` (`#opsAddModal`,
-  campos gerados dinamicamente a partir dos headers da tabela → `dt.row.add([...])` no Save),
-  `otm-settlements` (`#otmAddModal`, campos das 18 colunas via `COLS`, com polish Emil no botão/modal).
+- **ADD ROW — PADRÃO OBRIGATÓRIO (modal GLASS):** sempre que uma página tiver ação **Add row**, ela deve
+  abrir um **modal com um campo por coluna** (padrão New Deals), NÃO adicionar uma linha inline em branco.
+  O modal usa **glassmorphism/liquid glass** e botões de rodapé **só-ícone** (sem texto):
+  - `modal-content` **DEVE** ter a classe **`liquid-glass`** (CSS global em `scss/components/_modal.scss` →
+    `app.css`; blur/opacidade já prontos, funciona em light/dark).
+  - `modal-dialog`: `modal-lg modal-dialog-centered modal-dialog-scrollable`; header `py-2` com título
+    `fs-6` + `<i class="ti ti-plus">`.
+  - **Rodapé (`modal-footer py-2`)**: apenas ícones — **Cancel** = `btn btn-sm btn-danger` com
+    `ti ti-x` (vermelho, `data-bs-dismiss="modal"`); **Save** = `btn btn-sm btn-success` com
+    `ti ti-device-floppy` (verde). SEM texto nos botões.
+  - Referências vivas: `new_deals-ndf-commodities.html` (`#addRowModal`, origem do padrão),
+    `otm-settlements.html` (`#otmAddModal` — serve Add **e** Edit, título alterna via `#otmModalTitle`),
+    `other-products-summary.html` / `ndf-summary.html` (`#opsAddModal`).
+- **MAKER/CHECKER + PERSISTÊNCIA (padrão Accrual/Intrag):** páginas com CRUD por linha (Edit/Delete/Confirm)
+  persistem TODA alteração/inclusão no JSON do dia. Cada registro carrega meta `status/maker/checker/id`
+  (no OTM: chaves `_ot_status`/`_ot_maker`/`_ot_checker`/`_ot_id`; `_otm_collect` anexa `[status,maker,checker,id]`
+  no fim de cada row). Lifecycle: importado/inserido = **OK**; **Edit** → **Pending** (maker = usuário, checker
+  limpo); **Confirm** só por **outro** usuário (guard `maker == sid` → 403 `same_user`) → volta a **OK**.
+  Badges no formato padrão (`bg-*-subtle text-*`): OK=success, Pending=warning, New=info. Endpoints
+  `/api/otm-settlements/row/{add,edit,delete,confirm}`. Ações são delegadas em jQuery (`.off().on(... , '.btn-row-*')`)
+  para sobreviver a redraws do DataTables; após cada mutação → `load()` recarrega + `fetchNotifications()`.
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).

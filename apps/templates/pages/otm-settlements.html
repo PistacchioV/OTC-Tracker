@@ -270,20 +270,20 @@
         </div>
     </div>
 
-    <!-- Add row modal (New Deals pattern: a window with all columns to fill) -->
+    <!-- Add/Edit row modal (New Deals glass pattern: a window with all columns) -->
     <div class="modal fade otm-add-modal" id="otmAddModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" data-lang="otm-add-title">Add row</h5>
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span id="otmModalTitle" data-lang="otm-add-title">Add row</span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-3" id="otmAddFields"></div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-lang="otm-cancel">Cancel</button>
-                    <button type="button" class="btn btn-primary bg-gradient" id="otmAddSave" data-lang="otm-add-save">Add</button>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="otmAddSave" title="Save"><i class="ti ti-device-floppy"></i></button>
                 </div>
             </div>
         </div>
