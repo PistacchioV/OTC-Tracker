@@ -220,25 +220,36 @@
     if (window.applyTranslations) { try { window.applyTranslations(); } catch (e) {} }
   }
 
+  function isoToDmy(iso) {
+    if (!iso) return '';
+    var p = String(iso).split('-');
+    return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : '';
+  }
+
   function wireDatePicker(attempt) {
     var inp = document.getElementById('lo-date');
     if (!inp) return;
     var startISO = page.getAttribute('data-ref-date');
+    // Always show the reference date (D-1 ANBIMA) up front — the picker's own
+    // autoUpdateInput can't be relied on to write the field on init.
+    if (startISO && !inp.value) inp.value = isoToDmy(startISO);
     if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
-      var $d = jQuery('#lo-date');
-      $d.daterangepicker({
-        singleDatePicker: true, autoApply: true, showDropdowns: true,
-        locale: { format: 'DD/MM/YYYY' },
-        startDate: startISO ? moment(startISO, 'YYYY-MM-DD') : moment(),
-        maxDate: moment(),
-      }, function (start) { load(start.format('YYYY-MM-DD')); });
-      jQuery('#loDateWrap .ln-cal-btn').on('click', function () { $d.trigger('click'); });
-      return;
+      try {
+        var $d = jQuery('#lo-date');
+        $d.daterangepicker({
+          singleDatePicker: true, autoApply: true, showDropdowns: true,
+          autoUpdateInput: true, locale: { format: 'DD/MM/YYYY' },
+          startDate: startISO ? moment(startISO, 'YYYY-MM-DD') : moment(),
+          maxDate: moment(),
+        }, function (start) { inp.value = start.format('DD/MM/YYYY'); load(start.format('YYYY-MM-DD')); });
+        if (startISO) inp.value = isoToDmy(startISO);   // ensure it's visible even if the plugin skips it
+        jQuery('#loDateWrap .ln-cal-btn').on('click', function () { $d.trigger('click'); });
+        return;
+      } catch (e) { /* fall through to the plain-input fallback */ }
     }
     attempt = attempt || 0;
     if (attempt < 40) { setTimeout(function () { wireDatePicker(attempt + 1); }, 50); return; }
     inp.removeAttribute('readonly');
-    if (startISO) { var p = startISO.split('-'); inp.value = p[2] + '/' + p[1] + '/' + p[0]; }
     inp.addEventListener('change', function () {
       var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       if (m) load(m[3] + '-' + m[2] + '-' + m[1]);
@@ -253,9 +264,10 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    wireSmartFilter();
-    wirePageLen();
-    wireDatePicker();
+    // Load the table FIRST so a datepicker/plugin hiccup can never block the data.
     load(page.getAttribute('data-ref-date'));
+    try { wireSmartFilter(); } catch (e) {}
+    try { wirePageLen(); } catch (e) {}
+    try { wireDatePicker(); } catch (e) {}
   });
 })();
