@@ -2399,6 +2399,13 @@ _FORECAST_SOURCES = [
 ]
 
 
+_MONTH_ABBR = {  # English + Portuguese 3-letter month abbreviations → month number
+    'jan': 1, 'feb': 2, 'fev': 2, 'mar': 3, 'apr': 4, 'abr': 4, 'may': 5, 'mai': 5,
+    'jun': 6, 'jul': 7, 'aug': 8, 'ago': 8, 'sep': 9, 'set': 9, 'oct': 10, 'out': 10,
+    'nov': 11, 'dec': 12, 'dez': 12,
+}
+
+
 def _fcst_parse_date(s):
     """Parse a CETIP date string (several known layouts) → date, or None."""
     s = (s or '').strip()
@@ -2410,6 +2417,17 @@ def _fcst_parse_date(s):
             return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
+    # dd-mmm-yyyy with month names (e.g. 06-Jul-2026) — locale-independent via map.
+    m = re.match(r'^(\d{1,2})[-/ ]([A-Za-zçÇ]{3,9})[-/ ](\d{2,4})$', s)
+    if m:
+        mon = _MONTH_ABBR.get(m.group(2)[:3].lower())
+        if mon:
+            try:
+                y = int(m.group(3))
+                y += 2000 if y < 100 else 0
+                return datetime(y, mon, int(m.group(1))).date()
+            except ValueError:
+                pass
     return None
 
 
@@ -3003,7 +3021,8 @@ _DS_IMPORTS = [
     {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
      'match': lambda n: n.startswith('operacoes'),
      'filters': [('digits', 2, {'73760009'}),
-                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})]},
+                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})],
+     'opb3': True},                                 # also feeds the Operations B3 page json
     {'key': 'operacoes-mgt', 'label': 'Operações MGT', 'json': 'operacoes-mgt', 'header': 5,
      'match': lambda n: n.startswith('mgt.'),
      'filters': [('digits', 2, {'04880006'}),
@@ -3125,6 +3144,16 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
     if spec.get('otm'):                                # OTM timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
+    if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
+        try:                                           # (same extraction as the page's own import)
+            b3_rows, b3_updated = _opb3_extract(_ds_read_rows(raw))
+            b3_jp = _opb3_json_path(ref)
+            os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
+            with open(b3_jp, 'w', encoding='utf-8') as fh:
+                json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
+            _ds_write_updated(b3_jp, b3_updated or ref.strftime('%H:%M:%S'))
+        except Exception:
+            log.warning("[ds] operations-b3 side-write failed for %s:\n%s", name, traceback.format_exc())
 
 
 def _ds_write(jp, recs, name, spec, total, processed, delete_path):
@@ -3183,9 +3212,10 @@ def api_cp_daily_settlement_save():
             _ds_handle(name, raw, p, ref, processed, skipped)
 
     if processed:
+        types = ', '.join(p['type'] for p in processed)
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Daily Settlement Saved', 'Control Panel',
-                             '{} file(s) processed ({})'.format(len(processed), ref.strftime('%Y-%m-%d')))
+                             '{} file(s) processed: {} ({})'.format(len(processed), types, ref.strftime('%Y-%m-%d')))
 
     lines = ['<b>{}</b>: {} de {} linha(s)'.format(p['type'], p['kept'], p['total']) for p in processed]
     msg = ''
@@ -3777,6 +3807,57 @@ _OTM_COLUMNS = [
 _OTM_DATE_COLS = {'Value Date', 'Trade Date'}
 _OTM_KEEP_CODES = {'0228', '0123'}          # col 22 values to keep (CleanSettlementOTM step C)
 
+# Maker/checker lifecycle meta stored per OTM record (keys prefixed to avoid clashing
+# with the 18 data columns). Imported/added rows start 'OK'; an edit → 'Pending' (maker
+# set, checker cleared); a DIFFERENT user confirms → 'OK' (checker set).
+_OTM_META_KEYS = ('_ot_status', '_ot_maker', '_ot_checker', '_ot_id')
+
+
+def _otm_new_id():
+    return uuid.uuid4().hex[:10]
+
+
+def _otm_ensure_meta(data, default_status='OK'):
+    """Ensure every record has status/maker/checker/id meta. Returns True if any
+    record changed (caller may persist — one-time migration for legacy JSONs)."""
+    changed = False
+    for rec in data:
+        if not rec.get('_ot_id'):
+            rec['_ot_id'] = _otm_new_id(); changed = True
+        if '_ot_status' not in rec:
+            rec['_ot_status'] = default_status; changed = True
+        for k in ('_ot_maker', '_ot_checker'):
+            if k not in rec:
+                rec[k] = ''; changed = True
+    return changed
+
+
+def _otm_load(ref):
+    """(json_path, data|None) for `ref`; ensures meta on the loaded records."""
+    jp = _otm_json_path(ref)
+    if not os.path.isfile(jp):
+        return jp, None
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return jp, None
+    _otm_ensure_meta(data)
+    return jp, data
+
+
+def _otm_save(jp, data):
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _otm_find(data, rid):
+    for rec in data:
+        if str(rec.get('_ot_id', '')) == str(rid):
+            return rec
+    return None
+
 
 def _otm_json_path(ref):
     return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
@@ -4144,7 +4225,7 @@ def api_opb3_import():
     if res.get('success'):
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Operations Imported', 'Operations B3',
-                             '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
+                             '{}: {} row(s) imported ({})'.format(res.get('file', ''), res.get('rows', 0), res.get('date', '')))
     return jsonify(res)
 
 
