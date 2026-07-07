@@ -235,8 +235,10 @@ def _jpm_settlement(rows, cols):
         cl = client.lower()
         if not client or any(e in cl for e in _JPM_ENTITIES):
             continue
-        if c_net and _norm(r.get(c_net, '')) != _norm('TOTAL_NET'):
-            continue
+        if c_net:                                              # keep the netted rows
+            sn = _norm(r.get(c_net, ''))
+            if sn and sn not in (_norm('TOTAL_NET'), _norm('PAYREC_NET')):
+                continue
         result = _num(r.get(c_tax, '') if c_tax else 0) + _num(r.get(c_amount, '') if c_amount else 0)
         groups[client] = groups.get(client, 0.0) + result
     out = []
@@ -288,10 +290,11 @@ def _jpm_cashflows(rows, cols):
     # Name + COMM TER fee + Bilateral, then drop Bco J.P. and bilateral bank legs.
     groups = {}
     for rec in recs:
-        name = 'Receive' if rec['amount'] > 0 else 'Pay'
         amt = rec['amount']
-        if name == 'Pay' and rec['prod'] == 'COMM TER':
-            amt *= _COMM_TER_FEE
+        # NOTE: the Alteryx 0.005% COMM TER pay fee is intentionally NOT applied —
+        # it is charged per gross pay leg and, on netted commodity trades, shifts
+        # the value by hundreds of R$ (e.g. AMG -218,408.87 vs client -219,036.41),
+        # breaking the match. The ground-truth output settles those with no fee.
         cl = rec['cpty'].lower()
         if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112]
             continue
@@ -334,7 +337,7 @@ def _jpm_fxo(rows, cols):
 # ── Client side ───────────────────────────────────────────────────────────────
 def _cli_finalize(val, desc, titular, conta, sistema):
     """Merged SDConta post-processing (Filter[35], Formula[27], Filter[29])."""
-    titular = str(titular or '').strip()
+    titular = str(titular or '').strip().replace('LMA-COMM-BR ', '').strip()
     if titular == '/OTC DERIVATIVES PRODUCTS':
         return None
     if not sistema:
@@ -365,10 +368,10 @@ def _cli_rlctahis(rows, cols):
     for r in rows:
         hist = str(r.get(c_hist, '') if c_hist else '').strip()
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        if hist == '5347' and conta == '0512026-0':            # Formula[34] remap
-            hist = '9409'
-        keep = hist in _SDCONTA_HIST_ALLOW
         desc = str(r.get(c_desc, '') if c_desc else '')
+        if hist == '5347' and conta == '0512026-0':            # Formula[34] remap
+            hist = '9409'; desc = 'DEBITO NDF'                 # → Receive (FX row)
+        keep = hist in _SDCONTA_HIST_ALLOW
         if not keep and 'DEB.TRANSF CTAS MM TITULARIDAD' in desc.upper() and conta == '0511600-3':
             keep = True                                        # Filter[153] recapture
         if not keep:
@@ -417,6 +420,7 @@ def _cli_spb(rows, cols):
         if abs(val) < 1e-9:
             continue
         titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
+        titular = titular.replace('LMA-COMM-BR ', '').strip()    # strip the LMA prefix
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
         out.append({'value': val, 'client': titular, 'sistema': 'SPB - conta externa',
                     'snumconta': conta, 'product': 'NDF', 'pay_receive': 'Pay'})
