@@ -41,7 +41,9 @@ _SMTP_PORT = 25
 # ── Constants ─────────────────────────────────────────────────────────────────
 _TOL_CHECK_VALUE = 1.0        # Summary per-row |diff| < 1 → OK
 _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
-_COMM_TER_FEE = 1 - 0.00005   # 0.005% fee on COMM TER pays
+# NOTE: the Alteryx 0.005% COMM TER pay fee is intentionally NOT applied — on
+# netted commodity trades it shifts the value by hundreds of R$ and breaks the
+# match; the ground-truth output settles those with no fee.
 _JPM_ENTITIES = ('banco j.p. morgan s.a.', 'jpmorgan chase bank, n.a. - sao paulo')
 # rlctahis inclusion allowlist (Alteryx TextInput[175]) — the main row-reducer.
 _SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
@@ -370,11 +372,11 @@ def _cli_rlctahis(rows, cols):
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
         desc = str(r.get(c_desc, '') if c_desc else '')
         if hist == '5347' and conta == '0512026-0':            # Formula[34] remap
-            hist = '9409'; desc = 'DEBITO NDF'                 # → Receive (FX row)
-        keep = hist in _SDCONTA_HIST_ALLOW
-        if not keep and 'DEB.TRANSF CTAS MM TITULARIDAD' in desc.upper() and conta == '0511600-3':
-            keep = True                                        # Filter[153] recapture
-        if not keep:
+            hist = '9409'; desc = 'DEBITO NDF'                 # → Receive (FX transfer row)
+        # Join[174] allowlist. (The Alteryx Filter[153]/Join[154] recapture of the
+        # 0511600-3 "DEB.TRANSF" entries is only a value-annotation on the TED
+        # stream — it produces no display row — so it is intentionally omitted.)
+        if hist not in _SDCONTA_HIST_ALLOW:
             continue
         val = _num(r.get(c_val, '') if c_val else 0)
         titular = str(r.get(c_tit, '') if c_tit else '').strip()
