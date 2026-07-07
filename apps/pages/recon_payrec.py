@@ -41,9 +41,15 @@ _SMTP_PORT = 25
 # ── Constants ─────────────────────────────────────────────────────────────────
 _TOL_CHECK_VALUE = 1.0        # Summary per-row |diff| < 1 → OK
 _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
-# NOTE: the Alteryx 0.005% COMM TER pay fee is intentionally NOT applied — on
-# netted commodity trades it shifts the value by hundreds of R$ and breaks the
-# match; the ground-truth output settles those with no fee.
+# 0.005% COMM TER fee (IR). Applied to the NETTED value only when the net is a
+# Pay (negative) — Alteryx `if Name='Pay' AND New Field='COMM TER'`. A Receive
+# net (e.g. Lawton +230,927.66) is untouched; a Pay net (AMG -219,047.36) becomes
+# -219,036.41, matching the SPB side. Applying it per-leg (before netting) would
+# wrongly hit Lawton's pay leg, so it must run AFTER the per-client sum.
+_COMM_TER_FEE = 1 - 0.00005
+# Internal exclusive funds are EXEMPT from the COMM TER IR fee (Lawton, Atacama…).
+# The fee only hits external corporate clients (e.g. AMG BRASIL).
+_IR_EXEMPT_CPTY = ('LAWTON MULTIMERCADO EXCLUSIVO', 'ATACAMA MULTIMERCADO')
 _JPM_ENTITIES = ('banco j.p. morgan s.a.', 'jpmorgan chase bank, n.a. - sao paulo')
 # rlctahis inclusion allowlist (Alteryx TextInput[175]) — the main row-reducer.
 _SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
@@ -289,25 +295,24 @@ def _jpm_cashflows(rows, cols):
             rec['prod'] = 'COMM TER'
         else:
             rec['prod'] = 'COMM OPT'
-    # Name + COMM TER fee + Bilateral, then drop Bco J.P. and bilateral bank legs.
+    # Per-client net (drop Bco J.P. and bilateral bank legs first).
     groups = {}
     for rec in recs:
-        amt = rec['amount']
-        # NOTE: the Alteryx 0.005% COMM TER pay fee is intentionally NOT applied —
-        # it is charged per gross pay leg and, on netted commodity trades, shifts
-        # the value by hundreds of R$ (e.g. AMG -218,408.87 vs client -219,036.41),
-        # breaking the match. The ground-truth output settles those with no fee.
         cl = rec['cpty'].lower()
         if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112]
             continue
         if 'banco' in cl:                                       # Filter[114] Bilateral
             continue
         key = (rec['cpty'], rec['prod'])
-        groups[key] = groups.get(key, 0.0) + amt
+        groups[key] = groups.get(key, 0.0) + rec['amount']
     out = []
     for (cpty, prod), val in groups.items():
         if abs(val) < 1e-9:
             continue
+        # 0.005% COMM TER IR fee: only on a Pay net, and NOT for the exempt
+        # internal exclusive funds (Lawton, Atacama…).
+        if prod == 'COMM TER' and val < 0 and cpty.upper() not in _IR_EXEMPT_CPTY:
+            val *= _COMM_TER_FEE
         out.append({'product': prod, 'cpty': cpty.upper(), 'value': val,
                     'pay_receive': 'Receive' if val > 0 else 'Pay'})
     return out
