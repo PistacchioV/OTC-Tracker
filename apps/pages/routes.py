@@ -3054,9 +3054,9 @@ _DS_IMPORTS = [
      'match': lambda n: n.startswith('swapmgt.'),
      'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'04880006'})],
      'strip_hash': [1]},                            # remove "#" dos IDs da coluna A
-    {'key': 'tss-fx', 'label': 'TSS-FX', 'json': 'tss-fx', 'header': 1,
+    {'key': 'cognos', 'label': 'Cognos (FXO Detail)', 'json': 'cognos', 'header': 1,
      'match': lambda n: n.startswith('fxo detail'),
-     'filters': [], 'skip_no_data': True},
+     'cog': True, 'filters': [], 'skip_no_data': True},   # feeds the Cognos page
     # Opened via Workbooks.Open in the VBA (real workbook / .txt) — header on row 1.
     {'key': 'br-onshore', 'label': 'BR Onshore Settlements', 'json': 'br-onshore-settlements',
      'header': 1, 'match': lambda n: n.startswith('brazilonshoresettlementswarningfile'),
@@ -3157,6 +3157,10 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
             recs, kept = _ndfc_extract(rows)
             total = kept
             jp = _ndfc_json_path(ref)
+        elif spec.get('cog'):                          # FXO Detail → Cognos page's logic + path
+            recs, kept = _cog_extract(_cog_read_rows(raw))
+            total = kept
+            jp = _cog_json_path(ref)
         else:
             recs, total = _ds_process(raw, spec)
             jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
@@ -3166,7 +3170,7 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
-    if spec.get('otm') or spec.get('ndfc'):            # OTM/Cockpit timestamp = import time (no in-file time)
+    if spec.get('otm') or spec.get('ndfc') or spec.get('cog'):   # timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
         try:                                           # use the FILTERED recs (processed rows), not the raw file
@@ -4638,6 +4642,350 @@ def api_ndfc_row_confirm():
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Confirmed', 'NDF Cockpit',
                          '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Cognos — Daily Settlement › Other Products › Option › Cognos
+#  Source: "FXO Detail - Beta.xlsx" (header on ROW 1). Modelled on OTM Settlements:
+#  per-day JSON, maker/checker CRUD, glass Add/Edit. Keeps the reporting columns
+#  below (by header name). Date columns are yyyy-mm-dd in the file → dd/mm/yyyy
+#  on the front end. Also fed by the Save Daily Settlement Files card (cog flag).
+# ══════════════════════════════════════════════════════════════════════════════
+COG_SOURCE_ROOT = os.getenv('COG_SOURCE_ROOT', SETTLEMENTS_ROOT)
+COG_JSON_ROOT = OTM_JSON_ROOT
+_COG_COLUMNS = [
+    'Athena ID', 'Branch', 'MAP STAT', 'TSS Contract NO', 'CNPTY', 'Counterparty SPN',
+    'Counterparty Name', 'Buy Sell', 'Call Put Indicator', 'Call Currency', 'Call Amount',
+    'Put Currency', 'Put Amount', 'Strike Rate', 'Client Type', 'USD Amount', 'PRM DUE DT',
+    'PRM Currency', 'PRM Amount', 'Expiry Date From', 'Expiry Date To', 'TRN DT', 'Trade Date',
+    'Event Trade Date', 'OPT STRT DT', 'OPT END DT', 'OPT SET DT', 'FX RATE IND', 'ATH SET CUR',
+    'ATH SET AMT', 'Delivery Style', 'CPTY caid', 'Client Type 2', 'Source System',
+    'SWIFT BIC / Address', 'Athena Instr Name', 'Direction',
+]
+# The FXO file has TWO "Client Type" columns — the 2nd is resolved positionally and
+# stored under 'Client Type 2' (its display header is normalised back to 'Client Type').
+_COG_DUP_HEADER = {'Client Type 2': 'Client Type'}
+_COG_DATE_COLS = {'PRM DUE DT', 'Expiry Date From', 'Expiry Date To', 'TRN DT', 'Trade Date',
+                  'Event Trade Date', 'OPT STRT DT', 'OPT END DT', 'OPT SET DT'}
+_COG_META_KEYS = ('_cg_status', '_cg_maker', '_cg_checker', '_cg_id')
+
+
+def _cog_new_id():
+    return uuid.uuid4().hex[:10]
+
+
+def _cog_ensure_meta(data, default_status='OK'):
+    changed = False
+    for rec in data:
+        if not rec.get('_cg_id'):
+            rec['_cg_id'] = _cog_new_id(); changed = True
+        if '_cg_status' not in rec:
+            rec['_cg_status'] = default_status; changed = True
+        for k in ('_cg_maker', '_cg_checker'):
+            if k not in rec:
+                rec[k] = ''; changed = True
+    return changed
+
+
+def _cog_json_path(ref):
+    return os.path.join(COG_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'cognos_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _cog_load(ref):
+    jp = _cog_json_path(ref)
+    if not os.path.isfile(jp):
+        return jp, None
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return jp, None
+    _cog_ensure_meta(data)
+    return jp, data
+
+
+def _cog_save(jp, data):
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _cog_find(data, rid):
+    for rec in data:
+        if str(rec.get('_cg_id', '')) == str(rid):
+            return rec
+    return None
+
+
+def _cog_read_rows(path_or_raw):
+    """Rows from the FXO Detail file — real .xlsx (zip) or tab-delimited text."""
+    raw = path_or_raw if isinstance(path_or_raw, (bytes, bytearray)) else open(path_or_raw, 'rb').read()
+    if raw[:2] == b'PK':
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    return [ln.split('\t') for ln in raw.decode('latin-1').splitlines() if ln.strip()]
+
+
+def _cog_extract(rows):
+    """Keep the Cognos reporting columns from the FXO Detail rows (header row 1),
+    resolving duplicate 'Client Type' positionally. Returns (records, kept)."""
+    if not rows or len(rows) < 2:
+        return [], 0
+    if str((rows[0][0] if rows[0] else '') or '').strip().lower().startswith('no data available'):
+        return [], 0
+    header = [str(h or '').strip() for h in rows[0]]
+    hnorm = [_fcst_norm(h) for h in header]
+
+    used = set()
+
+    def col_idx(name):
+        target = _COG_DUP_HEADER.get(name, name)
+        n = _fcst_norm(target)
+        for i, h in enumerate(hnorm):        # exact first, honouring already-used indices
+            if h == n and i not in used:
+                used.add(i)
+                return i
+        for i, h in enumerate(hnorm):        # substring fallback
+            if h and (n in h or h in n) and i not in used:
+                used.add(i)
+                return i
+        return None
+    idx_map = {c: col_idx(c) for c in _COG_COLUMNS}
+
+    def cell(r, i):
+        return str(r[i]).strip() if (i is not None and i < len(r) and r[i] is not None) else ''
+
+    out = []
+    for r in rows[1:]:
+        if not any(cell(r, i) for i in range(len(r))):
+            continue
+        out.append({c: cell(r, idx_map.get(c)) for c in _COG_COLUMNS})
+    _cog_ensure_meta(out)
+    return out, len(out)
+
+
+def _cog_import(ref=None):
+    """Find "FXO Detail*.xlsx" in COG_SOURCE_ROOT, extract, write today's JSON."""
+    ref = ref or datetime.now()
+    if not os.path.isdir(COG_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(COG_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(COG_SOURCE_ROOT)
+                     if f.lower().startswith('fxo detail') and f.lower().endswith(('.xlsx', '.xls', '.txt')))
+    if not matches:
+        return {'success': False, 'error': 'No "FXO Detail*" file found in {}'.format(COG_SOURCE_ROOT)}
+    src_path = os.path.join(COG_SOURCE_ROOT, matches[0])
+    try:
+        rows = _cog_read_rows(src_path)
+    except Exception:
+        log.warning("[cognos] read failed for %s:\n%s", src_path, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    out, kept = _cog_extract(rows)
+    jp = _cog_json_path(ref)
+    _cog_save(jp, out)
+    _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
+    try:
+        os.remove(src_path)
+    except OSError:
+        log.warning("[cognos] could not delete source %s", src_path)
+    log.info("[cognos] imported %s: kept %d → %s", matches[0], kept, jp)
+    return {'success': True, 'file': matches[0], 'rows': kept, 'date': ref.strftime('%Y-%m-%d')}
+
+
+def _cog_fmt_date(v):
+    """FXO Detail dates are yyyy-mm-dd → dd/mm/yyyy (tolerant of other formats)."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(s.split(' ')[0], fmt).strftime('%d/%m/%Y')
+        except ValueError:
+            continue
+    d = _fcst_parse_date(s)
+    return d.strftime('%d/%m/%Y') if d else s
+
+
+def _cog_collect(ref):
+    """Read the Cognos JSON for `ref` → display rows + widgets (Call/Put/Total).
+    Date columns formatted dd/mm/yyyy."""
+    widgets = {'total': 0, 'call': 0, 'put': 0}
+    jp = _cog_json_path(ref)
+    rows_out = []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if _cog_ensure_meta(data) and data:
+            try:
+                _cog_save(jp, data)
+            except Exception:
+                pass
+        for rec in data:
+            row = []
+            for c in _COG_COLUMNS:
+                v = rec.get(c, '')
+                if c in _COG_DATE_COLS:
+                    v = _cog_fmt_date(v)
+                row.append('' if v is None else v)
+            row += [rec.get('_cg_status', 'OK'), rec.get('_cg_maker', ''),
+                    rec.get('_cg_checker', ''), rec.get('_cg_id', '')]
+            rows_out.append(row)
+            cp = str(rec.get('Call Put Indicator', '') or '').upper()
+            if 'CALL' in cp:
+                widgets['call'] += 1
+            elif 'PUT' in cp:
+                widgets['put'] += 1
+        widgets['total'] = len(data)
+    return {'widgets': widgets, 'columns': _COG_COLUMNS, 'rows': rows_out,
+            'updated': _ds_read_updated(jp)}
+
+
+def _cog_ref_from(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return datetime.now()
+
+
+@blueprint.route('/cognos')
+def cognos():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/cognos.html', segment='cognos',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/cognos/data')
+def api_cog_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _cog_collect(ref)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    'date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/cognos/import', methods=['POST'])
+def api_cog_import():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    res = _cog_import(datetime.now())
+    if res.get('success'):
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Cognos Imported', 'Cognos',
+                             '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
+    return jsonify(res)
+
+
+@blueprint.route('/api/cognos/row/add', methods=['POST'])
+def api_cog_row_add():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    ref = _cog_ref_from(p)
+    jp, data = _cog_load(ref)
+    if data is None:
+        data = []
+    rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
+           for i, c in enumerate(_COG_COLUMNS)}
+    rec['_cg_status'], rec['_cg_maker'], rec['_cg_checker'], rec['_cg_id'] = 'OK', sid, '', _cog_new_id()
+    data.append(rec)
+    try:
+        _cog_save(jp, data)
+    except Exception:
+        log.error('[cognos] add save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Cognos Row Added', 'Cognos',
+                         '{} ({})'.format(rec.get('Athena ID', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'id': rec['_cg_id']})
+
+
+@blueprint.route('/api/cognos/row/edit', methods=['POST'])
+def api_cog_row_edit():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid, cells = str(p.get('id', '')), (p.get('cells') or [])
+    sid = session.get('user_sid', '')
+    jp, data = _cog_load(_cog_ref_from(p))
+    rec = _cog_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    for i, c in enumerate(_COG_COLUMNS):
+        if i < len(cells):
+            rec[c] = str(cells[i]).strip()
+    rec['_cg_status'], rec['_cg_maker'], rec['_cg_checker'] = 'Pending', sid, ''
+    try:
+        _cog_save(jp, data)
+    except Exception:
+        log.error('[cognos] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Cognos Row Updated', 'Cognos',
+                         '{} ({})'.format(rec.get('Athena ID', ''), _cog_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/cognos/row/delete', methods=['POST'])
+def api_cog_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _cog_load(_cog_ref_from(p))
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    rec = _cog_find(data, rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    data.remove(rec)
+    try:
+        _cog_save(jp, data)
+    except Exception:
+        log.error('[cognos] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Cognos Row Deleted', 'Cognos',
+                         '{} ({})'.format(rec.get('Athena ID', ''), _cog_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/cognos/row/confirm', methods=['POST'])
+def api_cog_row_confirm():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    jp, data = _cog_load(_cog_ref_from(p))
+    rec = _cog_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(rec.get('_cg_maker', '') or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must confirm a row you changed.'}), 403
+    rec['_cg_status'], rec['_cg_checker'] = 'OK', sid
+    try:
+        _cog_save(jp, data)
+    except Exception:
+        log.error('[cognos] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Cognos Row Confirmed', 'Cognos',
+                         '{} ({})'.format(rec.get('Athena ID', ''), _cog_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 
