@@ -3778,3 +3778,126 @@ o CSS 28px nos respectivos `.html`. **Já documentado como padrão** na seção 
 apps/static/js/pages/{operations-b3,otm-settlements,ndf-cockpit}.js ← statusBadge + actionsHtml sólidos
 apps/templates/pages/{operations-b3,otm-settlements,ndf-cockpit}.html ← CSS 28px botão circular + bump ?v
 ```
+
+## 73. Sessão 2026-07-06 — NOVA página Live Position › Option (`c741069`, `99cb00b`)
+
+Clone da **Live Position NDF** (seção 68) trocando NDF→Option. Fonte: `Option/…/73760_{dref}_DPOSICAO.json`
+(gerado do `DPOSICAO.OPC`, header próprio → resolução por NOME). Rota `/live-position-option`, API
+`/api/live-position-option/data`. **60 colunas** do book de opções (`Código IF … Trigger Proporção`),
+datas (`Data …`) → dd/mm/yyyy, valores (`Valor …`) → #,##0.00. Bloco dinâmico **"Média Asiática (data) N"**
+para colunas `yyyymmdd` extras não mapeadas (cap 60). Filtro inteligente + per-column + Columns/Export
+(mesmo motor da NDF). Sidenav Live Position › Option agora aponta pra rota real (era placeholder).
+
+**Fix `99cb00b`:** reference date default = **hoje** aparecia vazio (o daterangepicker não escreve o
+campo no init) → seto `input.value` explícito; e a tabela não carregava porque `wireDatePicker()` rodava
+ANTES de `load()` — se o plugin falhasse, bloqueava tudo. Reordenei: `load()` primeiro, resto em
+try/catch. Bump `?v`.
+
+**⚠️ Nota (dev):** o `DPOSICAO.json` local é uma variante reduzida (poucas chaves) → células vêm vazias
+na dev; com o arquivo real (header completo) as colunas resolvem por nome.
+
+### Arquivos (sessão 73)
+```
+apps/pages/routes.py                            ← _LPOPT_* + _opt_dposicao_path + _lpopt_collect + rota/API
+apps/templates/pages/live-position-option.html  ← CRIADO (larguras genéricas p/ 60 colunas)
+apps/static/js/pages/live-position-option.js    ← CRIADO (ids lo*/lnopt-*)
+apps/templates/partials/sidenav.html            ← link Option → /live-position-option
+```
+
+## 74. Sessão 2026-07-06 — NOVA página Reconciliation › Pay/Rec (engine do Alteryx PayRec)
+
+**O quê:** bate pagamentos × recebimentos (lado JPM × lado cliente), reproduzindo o fluxo Alteryx
+"PayRec". Página `/reconciliation-payrec` (skill /emil-design-eng): **dropzone que segura os arquivos até
+clicar Run** (nada automático) + botão **Import from folder** (pasta de rede) + **Run** + **End process**.
+Blocos: **Summary**, **Pending Payment**, **Pending Receivement**, **Settled** (headers navy, chips OK/Not OK).
+Módulo dedicado `apps/pages/recon_payrec.py`. Rotas em routes.py: page + `/data` + `/run` + `/end-process`.
+
+### Pipeline (VERIFICADO contra o gabarito do Alteryx — 10 settled, Summary OK/OK/OK)
+Extraído via subagente que leu `scripts/Codigo_VBA_TratarArquivos.` (arquivo de apoio Alteryx, **gitignored**,
+NUNCA commitar). Lado **JPM/Cockpit** (Union de 3 fontes):
+- **`settlement.csv`** (CSV `,` com aspas) → **NDF**: valor = `Tax Income + Amount`, filtro
+  `Settlement Net ∈ {TOTAL_NET, PAYREC_NET}`, **soma por `Client`**; Product='NDF', cpty=Client UPPER.
+- **`cashflows_*.xlsx`** (sheet `data`) → **COMM TER / SWAP**: filtros `Owner Legal Entity=0228`,
+  `Cashflow Event≠DELETE`, `!Contains(Cpty,'Bco J.P.')`, exclui Bilateral (`BANCO`). **Netting por cliente**
+  (as pernas de ~12,5M do Lawton somam 230.927,66). COMM TER = Trade Id com >1 perna; SWAP = Asset Class
+  INTEREST_RATE. Nomes Lawton/Atacama/BcoJP canonizados.
+- **`FXO Detail*.xlsx`** (sheet `FXO Detail`) → **FXO**: valor = `ATH SET AMT`, `Direction=PAY`→negativo.
+
+Lado **cliente** (Union de 3 fontes, `;` Latin-1):
+- **`rlctahis.csv`** (SDConta interna): **allowlist `nHistorico`** {9409,4407,9410,4408,9411,4419,9385,4413,
+  9386,4414,4406,AA,4409} (redutor principal); remap `5347/0512026-0 → 9409` **E** `sDescricao='DEBITO NDF'`
+  (FX transfer da conta câmbio → Receive); DEBITO→Receive/senão Pay; drop `sNomeTitular='/OTC DERIVATIVES
+  PRODUCTS'`; threshold `|v|>1`.
+- **`rlDocTed01.csv`** (SDConta externa TED): valor=`nValor` ABS, titular=`sNomeEmissor`,
+  conta=`nBancoEmissor-nAgDebitada-nCcDebitada`, sistema `SDConta - conta externa`, sDescricao='DEBITO NDF'→Receive.
+- **`HistoricoMensagensJPM_*.csv`** (SPB externa): filtro `Descrição Evento` contém `Derivativos`/`LMA-COMM-BR`
+  (o `Status='Sucesso'` do Alteryx é MORTO — a planilha real nem tem essa coluna); nome = `Replace('Operacao
+  de Derivativos-','')` + `Replace('LMA-COMM-BR ','')`; sempre Pay (valor negativo).
+
+**Match:** valor arredondado à unidade (join só por valor), greedy 1-para-1; `Difference = Client − JPM`;
+Settled se `|diff| < 0,005` (senão Pending); tolerância SPB `diff > -0,50`. **Summary** agregado por
+Pay/Receive: Check Qty = qtde igual; Check Value = `|somaJPM − somaCli| < 1` (TOTAL usa < 0,005).
+
+### ⚠️ Gotchas críticos (descobertos iterando com dados reais)
+- **Parse numérico BR vs US por célula:** CSVs BR (`.`=milhar `,`=decimal); cashflows/FXO xlsx podem vir US
+  do pandas. `_num()` auto-detecta (ver regra dot-only 3-dígitos = milhar). Leitura CSV tenta `;`+Latin-1,
+  depois `,`+aspas+UTF-8. **Errar isso deu 28 bilhões** (linha de saldo não filtrada + parse errado).
+- **IR 0,005% no COMM TER:** aplica **só quando o NET é Pay** (negativo), **sobre o líquido** (NÃO por perna —
+  por perna quebra o Lawton, que tem perna de pagamento mas net Receive). AMG (net Pay -219.047,36) → com IR
+  → **-219.036,41** (casa). **Fundos internos Lawton/Atacama são ISENTOS** de IR (`_IR_EXEMPT_CPTY`).
+- **settlement.csv:** manter `TOTAL_NET` **E** `PAYREC_NET` (o YARA é PAYREC_NET e precisa entrar).
+- **`_ds_process`/leitura:** os statements têm `sNomeTitular` que NÃO pode ser `/OTC DERIVATIVES PRODUCTS`.
+- Testado montando os 6 arquivos sintéticos que reproduzem o dia → **10 settled, 0 pending, TOTAL 4.906.489,04**.
+
+### End process + histórico (`7ee9def`)
+Ao clicar **End process**: (1) salva o status do dia em **`static/data/cache/payrec/yyyy/mm/dd/payrec_status_
+yyyymmdd.json`** (histórico permanente, gitignored), independente do e-mail; (2) envia e-mail. Mudar a
+**reference date** puxa o status salvo daquele dia (`load_last` prioriza histórico finalizado → cache de
+trabalho → vazio) e **limpa a tela** se não houver. `_load_flat(date)` NÃO faz fallback pro `_last` (senão
+mostrava o último resultado em qualquer data). Reference date default = **hoje** (`be40a2c`).
+
+### E-mail (template próprio)
+`send_payrec_email` → `pages/email-template-recon-payrec.html` (Summary + Pending + Settled, headers navy).
+To=`brazil.otc.ops@jpmorgan.com`, **Cc = Renato + Danilo** (`renato.montoza@jpmorgan.com`,
+`danilo.camposfonseca@jpmchase.com` — mesmos do Settlement Forecast/MTM/Accrual `_ACC_ENDPROC_CC`).
+Assunto **em inglês, sem prefixo**: `Pay/Rec — OTC Settlement Status - dd/mm/yyyy`. Swal do End process
+pergunta só "deseja enviar?" (sem citar destinatários).
+
+### Arquivos (sessão 74)
+```
+apps/pages/recon_payrec.py                          ← CRIADO (engine completo)
+apps/templates/pages/reconciliation-payrec.html     ← CRIADO
+apps/static/js/pages/reconciliation-payrec.js       ← CRIADO
+apps/templates/pages/email-template-recon-payrec.html ← CRIADO
+apps/pages/routes.py                                ← 4 rotas payrec
+apps/templates/partials/sidenav.html                ← link Reconciliation › Pay/Rec
+apps/static/data/translations/{en,br,es}.json       ← chaves pr-*
+.gitignore                                          ← scripts/Codigo_VBA_TratarArquivos* + cache/payrec/**
+```
+
+## 75. Sessão 2026-07-06 — NOVA página Daily Settlement › Other Products › Option › Cognos (`baab78b`, `a91adff`)
+
+Clone do **OTM Settlements** (seção 65) trocando `otm`→`cog`. Fonte: **`FXO Detail - Beta.xlsx`** (header
+ROW 1). Rota `/cognos`, API `/api/cognos/data` + `/import` + CRUD (`/row/{add,edit,delete,confirm}`).
+Maker/checker (`_cg_*`), JSON por dia (`cognos_YYYYMMDD.json` no cache daily settlement), modal glass.
+
+- **37 colunas** (`_COG_COLUMNS`): `Athena ID … Direction`. O arquivo tem ~100 colunas (A..CU); resolvo por
+  NOME. **Duas "Client Type"** (col S e col CM) → a 2ª entra como `Client Type 2` (mapeada positionalmente
+  via `_COG_DUP_HEADER`, exibida como "Client Type"). `col_idx` usa set `used` p/ não repetir índice.
+- **Datas → dd/mm/yyyy** (`_COG_DATE_COLS`): PRM DUE DT, Expiry Date From/To, TRN DT, Trade Date, Event Trade
+  Date, OPT STRT/END/SET DT. `_cog_fmt_date` trata `yyyy-mm-dd` **e** `Event Trade Date` = `jul 2, 2026
+  12:00:00 AM` (`%b %d, %Y %I:%M:%S %p`).
+- **Widgets** adaptados: **Call / Put / Total** (contados por `Call Put Indicator`).
+- **SEM filtro de linhas** — mantém TODAS as linhas com dado (confirmado: o Alteryx NÃO tem fluxo Cognos;
+  FXO Detail lá só alimenta o PayRec com 3 colunas). Só filtra COLUNAS (as 37 de ~100).
+- **Duas formas de importar:** botão "Import FXO Detail" na página **OU** Control Panel (a regra `_DS_IMPORTS`
+  que casava `fxo detail` — era `tss-fx`, sem consumidores — virou `cognos` com flag `cog` em `_ds_handle`).
+
+### Arquivos (sessão 75)
+```
+apps/pages/routes.py                     ← _COG_* + _cog_* + rotas + hook CP (spec cognos + _ds_handle cog)
+apps/templates/pages/cognos.html         ← CRIADO (widgets Call/Put/Total, larguras genéricas 37 cols)
+apps/static/js/pages/cognos.js           ← CRIADO (ids cog*, /api/cognos/*)
+apps/templates/partials/sidenav.html     ← link Option › Cognos → /cognos
+apps/static/data/translations/{en,br,es}.json ← cog-* espelhadas de otm-* + Call/Put/import/nav
+```
