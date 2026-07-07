@@ -3952,3 +3952,6 @@ páginas: Live Position (NDF, Option, Swap Characteristics), OTM Settlements, ND
 NDF Summary e Other Products Summary. CSS inline no `<style>` de cada template → sem bump de `?v`.
 Obs.: `.ops-num` (right-align p/ números) nas summaries está apenas *definida*, nunca aplicada; se um
 dia for usada, as células passam a centralizar junto (coerente com o pedido).
+
+### 76.3 — Centralização do td: + Operations B3
+Mesma centralização (76.2) aplicada à `operations-b3.html` (`#opb3-table tbody td` + `text-align: center`).
