@@ -5419,7 +5419,7 @@ def _ndf_ter_path(ref, max_back=10):
 
 
 def _lpndf_collect(ref):
-    widgets = {'total': 0, 'vanilla': 0, 'other_publisher': 0, 't0': 0}
+    widgets = {'total': 0, 'vanilla': 0, 'other_publisher': 0, 't0': 0, 'commodities': 0}
     path, _ = _ndf_ter_path(ref)
     columns = list(_LPNDF_COLUMNS)
     rows_out = []
@@ -5478,6 +5478,7 @@ def _lpndf_collect(ref):
             # Resolve tipo/cotação aceitando as duas grafias (do/de), igual ao
             # NDF Summary, para não zerar os buckets se o header vier com "de".
             fx_norm = _fcst_norm('TAXAS DE CAMBIO')
+            comm_norm = _fcst_norm('COMMODITIES')
             classe_key = idx['Classe do Ativo Subjacente']
             tipo_key = resolve('Tipo do Contrato') or resolve('Tipo de Contrato')
             cot_key = resolve('Codigo da Cotacao') or resolve('Codigo de Cotacao')
@@ -5503,13 +5504,14 @@ def _lpndf_collect(ref):
                         row.append('')
                 rows_out.append(row)
 
-                # Só NDFs de câmbio (TAXAS DE CAMBIO) entram na classificação; o
+                # NDFs de câmbio (TAXAS DE CAMBIO) entram na classificação; o
                 # Tipo do Contrato + Código da Cotação decidem o bucket:
                 #   SISBACEN + Cotação = 0   → T+0
                 #   SISBACEN + Cotação <> 0  → Vanilla
                 #   FEEDER                   → Other Publisher
-                if classe_key and \
-                        _fcst_norm(str(rec.get(classe_key, ''))) == fx_norm:
+                # Commodities → contagem simples por Classe do Ativo Subjacente.
+                classe_val = _fcst_norm(str(rec.get(classe_key, ''))) if classe_key else ''
+                if classe_val == fx_norm:
                     tp = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
                     if tp == 'sisbacen':
                         cot = str(rec.get(cot_key, '') if cot_key else '').strip().replace(',', '.')
@@ -5523,6 +5525,8 @@ def _lpndf_collect(ref):
                             widgets['vanilla'] += 1
                     elif tp == 'feeder':
                         widgets['other_publisher'] += 1
+                elif classe_val == comm_norm:
+                    widgets['commodities'] += 1
             widgets['total'] = len(data)      # Total = contagem da posição viva (todas as linhas)
     return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
 

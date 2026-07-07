@@ -3937,3 +3937,10 @@ apps/templates/pages/live-position-ndf.html   ← 3 widgets → Vanilla/Other Pu
 apps/static/js/pages/live-position-ndf.js     ← mapeia w.vanilla/other_publisher/t0/total
 apps/static/data/translations/{en,br,es}.json ← ln-w-a/b/c → ln-w-vanilla/other/t0
 ```
+
+### 76.1 — Live Position NDF: + widget **Commodities**
+5º widget na LP NDF: **Commodities** = contagem simples de `Classe do Ativo Subjacente` = Commodities
+(lógica única, independente de Tipo/Cotação). Ordem: Vanilla · Other Publisher · T+0 · Commodities · Total.
+Grid dos widgets `row-cols-xxl-4` → `row-cols-xxl-5`. Ícone `ti-package`, cor warning. `_lpndf_collect`:
+`widgets['commodities']` no init + `elif classe_val == comm_norm`. JS mapeia `w.commodities`; i18n
+`ln-w-commodities`="Commodities" (en/br/es); bump `?v=20260707b`. Teste sintético: commodities=2 ok.

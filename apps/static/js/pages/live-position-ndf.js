@@ -3,7 +3,8 @@
  * Read-only view of the NDF book from the DPOSICAO-TER position file (columns
  * come from the server, including the dynamic "Média Asiática" date block).
  * Widgets: Vanilla / Other Publisher / T+0 (NDF Summary classification, no
- * maturity filter) + Total (live-position row count). Smart filter + per-column
+ * maturity filter) + Commodities (Classe do Ativo Subjacente = Commodities) +
+ * Total (live-position row count). Smart filter + per-column
  * filter + Columns/Export + Show entries + reference date, same as the Swap page.
  */
 (function () {
@@ -39,7 +40,8 @@
         if (!d || !d.success) return;
         var w = d.widgets || {};
         setVal('ln-w-vanilla', w.vanilla || 0); setVal('ln-w-other', w.other_publisher || 0);
-        setVal('ln-w-t0', w.t0 || 0); setVal('ln-w-total', w.total || 0);
+        setVal('ln-w-t0', w.t0 || 0); setVal('ln-w-commodities', w.commodities || 0);
+        setVal('ln-w-total', w.total || 0);
         buildTable(d.columns || [], d.rows || []);
       })
       .catch(function () {});
