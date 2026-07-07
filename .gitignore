@@ -62,3 +62,7 @@ apps/static/data/cache/daily settlement/**/*.json
 
 # Support file: pasted Alteryx/VBA flows (never commit — dev reference only)
 scripts/Codigo_VBA_TratarArquivos*
+
+# Generated Pay/Rec history + working cache (daily)
+apps/static/data/cache/payrec/**/*.json
+apps/static/data/cache/reconciliation/payrec/**/*.json

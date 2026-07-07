@@ -242,7 +242,7 @@
         var $d = jQuery('#pr-date');
         $d.daterangepicker({ singleDatePicker: true, autoApply: true, showDropdowns: true, autoUpdateInput: true,
           locale: { format: 'DD/MM/YYYY' }, startDate: startISO ? moment(startISO, 'YYYY-MM-DD') : moment(), maxDate: moment() },
-          function (start) { inp.value = start.format('DD/MM/YYYY'); });
+          function (start) { inp.value = start.format('DD/MM/YYYY'); loadLast(); });   // pull that day's saved status
         if (startISO) inp.value = isoToDmy(startISO);
         jQuery('#prDateWrap .pr-cal-btn').on('click', function () { $d.trigger('click'); });
         return;
@@ -251,17 +251,31 @@
     attempt = attempt || 0;
     if (attempt < 40) { setTimeout(function () { wireDatePicker(attempt + 1); }, 50); return; }
     inp.removeAttribute('readonly');
+    inp.addEventListener('change', function () {
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(this.value || '')) loadLast();   // pull that day's saved status
+    });
   }
 
-  // Show the last persisted result for this date (if any) when the page opens.
+  // Hide every result block and show the empty state (used when a date has no
+  // saved status, e.g. browsing a past day that was never finalised).
+  function clearResults() {
+    ['prCardSummary', 'prCardPendPay', 'prCardPendRec', 'prCardSettled'].forEach(function (id) { show(id, false); });
+    show('prEmpty', true);
+    setText('prMeta', '');
+    var endBtn = document.getElementById('prEndBtn');
+    if (endBtn) endBtn.disabled = true;
+  }
+
+  // Pull the saved status for the current reference date (finalised history, or
+  // the latest working run). Renders it, or clears the screen if there's none.
   function loadLast() {
     fetch('/reconciliation-payrec/data?recon_date=' + encodeURIComponent(refDate()), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d) return;
-        var has = (d.summary && d.summary.length) || (d.settled && d.settled.length) ||
-                  (d.pending_payment && d.pending_payment.length) || (d.pending_receivement && d.pending_receivement.length);
+        var has = d && ((d.summary && d.summary.length) || (d.settled && d.settled.length) ||
+                  (d.pending_payment && d.pending_payment.length) || (d.pending_receivement && d.pending_receivement.length));
         if (has) { render(d); setText('prMeta', d.meta || ''); }
+        else { clearResults(); }
       })
       .catch(function () {});
   }

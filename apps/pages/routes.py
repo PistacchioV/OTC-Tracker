@@ -12667,15 +12667,20 @@ def reconciliation_payrec_end():
         return jsonify({'error': 'Unauthorized'}), 401
     recon_date = request.form.get('recon_date', '')
     try:
-        from apps.pages.recon_payrec import send_payrec_email
-        ok = send_payrec_email(recon_date)
-        if ok:
-            _create_notification(
-                session.get('user_sid', ''), session.get('user_name', ''),
-                'Pay/Rec End of Day', 'Reconciliation',
-                'Final situation e-mailed to OTC Ops' + (' (' + recon_date + ')' if recon_date else '')
-            )
-        return jsonify({'success': bool(ok)} if ok else {'success': False, 'error': 'E-mail not sent (no processed result for this date, or SMTP unavailable).'})
+        from apps.pages.recon_payrec import send_payrec_email, finalize_history
+        # Persist the day's status to the dated history first — this is the record
+        # of the finalized day, independent of whether SMTP is reachable.
+        saved = finalize_history(recon_date)
+        if not saved:
+            return jsonify({'success': False, 'error': 'No processed result for this date — run the reconciliation first.'})
+        emailed = send_payrec_email(recon_date)
+        _create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Pay/Rec End of Day', 'Reconciliation',
+            'Day finalised' + (' — e-mailed to OTC Ops' if emailed else ' (e-mail skipped)') +
+            (' (' + recon_date + ')' if recon_date else '')
+        )
+        return jsonify({'success': True, 'emailed': bool(emailed)})
     except Exception as e:
         log.error('[recon_payrec_end] %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500

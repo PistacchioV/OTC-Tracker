@@ -24,8 +24,13 @@ import unicodedata
 from datetime import datetime
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Working cache (latest run per date + _last).
 _CACHE_DIR = os.path.normpath(os.path.join(
     _MODULE_DIR, '..', 'static', 'data', 'cache', 'reconciliation', 'payrec'))
+# Finalized-day history (written on End process):
+#   static/data/cache/payrec/yyyy/mm/dd/payrec_status_yyyymmdd.json
+_HISTORY_BASE = os.path.normpath(os.path.join(
+    _MODULE_DIR, '..', 'static', 'data', 'cache', 'payrec'))
 
 # Network folder holding the input files.
 _INPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Pay_Rec"
@@ -568,6 +573,7 @@ def _fmt_date(recon_date):
 
 
 def _persist(recon_date, payload):
+    """Working cache: latest run for the date + _last (overwritten each run)."""
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
         key = (recon_date or 'last').replace('/', '-')
@@ -579,17 +585,65 @@ def _persist(recon_date, payload):
         pass
 
 
-def load_last(recon_date=''):
+def _history_path(recon_date):
+    """static/data/cache/payrec/yyyy/mm/dd/payrec_status_yyyymmdd.json for a date."""
     try:
-        key = (recon_date or '').replace('/', '-')
-        cand = os.path.join(_CACHE_DIR, (key + '.json') if key else '_last.json')
-        if not os.path.exists(cand):
+        dt = datetime.strptime((recon_date or '')[:10], '%Y-%m-%d')
+    except Exception:
+        return None
+    return os.path.join(_HISTORY_BASE, dt.strftime('%Y'), dt.strftime('%m'), dt.strftime('%d'),
+                        'payrec_status_{}.json'.format(dt.strftime('%Y%m%d')))
+
+
+def _load_flat(recon_date=''):
+    """Read the working cache. With a date → only that date's file (no _last
+    fallback, so a day without a run shows empty); without a date → _last."""
+    try:
+        if recon_date:
+            cand = os.path.join(_CACHE_DIR, recon_date.replace('/', '-') + '.json')
+        else:
             cand = os.path.join(_CACHE_DIR, '_last.json')
         if os.path.exists(cand):
             with open(cand, encoding='utf-8') as fh:
                 return json.load(fh)
     except Exception:
         pass
+    return None
+
+
+def finalize_history(recon_date):
+    """On End process: persist the day's result to the dated history path so it
+    can be pulled back when the reference date is set to a past day. Returns path."""
+    data = _load_flat(recon_date)
+    if not data or not (data.get('summary') or data.get('settled')
+                        or data.get('pending_payment') or data.get('pending_receivement')):
+        return None
+    p = _history_path(recon_date)
+    if not p:
+        return None
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        return p
+    except Exception:
+        return None
+
+
+def load_last(recon_date=''):
+    """For the page: prefer the finalized dated history (browsing past days),
+    then the working cache, then an empty shell."""
+    if recon_date:
+        p = _history_path(recon_date)
+        if p and os.path.exists(p):
+            try:
+                with open(p, encoding='utf-8') as fh:
+                    return json.load(fh)
+            except Exception:
+                pass
+    data = _load_flat(recon_date)
+    if data:
+        return data
     return {'success': True, 'summary': [], 'pending_payment': [],
             'pending_receivement': [], 'settled': []}
 
