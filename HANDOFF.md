@@ -3901,3 +3901,39 @@ apps/static/js/pages/cognos.js           ← CRIADO (ids cog*, /api/cognos/*)
 apps/templates/partials/sidenav.html     ← link Option › Cognos → /cognos
 apps/static/data/translations/{en,br,es}.json ← cog-* espelhadas de otm-* + Call/Put/import/nav
 ```
+
+## 76. Sessão 2026-07-07 — Live Position NDF: widgets Vanilla/Other Publisher/T+0 (classificação do NDF Summary)
+
+**Pedido:** aplicar na **Live Position NDF** os **mesmos widgets do NDF Summary** (Vanilla / Other
+Publisher / T+0 / Total), **descartando o filtro de Data de Vencimento** e contando sobre a posição
+viva. Os widgets da LP NDF eram placeholder (Metric A/B/C) desde a sessão 68.
+
+**Como foi feito (`_lpndf_collect` em `routes.py`):** dentro do loop de linhas já existente, classifico
+cada registro **só quando `Classe do Ativo Subjacente` = TAXAS DE CAMBIO** (FX), pelo mesmo critério dos
+cards do NDF Summary — porém **sem** o filtro `Data de Vencimento == picker`:
+- `Tipo do Contrato` = **SISBACEN** + `Código da Cotação` = 0 → **T+0**;
+- **SISBACEN** + Cotação ≠ 0 → **Vanilla**;
+- **FEEDER** → **Other Publisher**.
+Cotação vazia/não-numérica = 0 (igual ao NDF Summary). `Total` segue **`len(data)`** = contagem de toda a
+posição viva (todas as linhas, inclusive NDF não-FX) — por isso `Vanilla+Other+T+0` pode ser < Total se
+houver NDF de commodity na posição. Tipo/cotação resolvidos aceitando **as duas grafias** (`do`/`de`),
+como o NDF Summary, para não zerar os buckets se o header vier com "de".
+
+**Front:** os 3 widgets placeholder viraram Vanilla/Other Publisher/T+0 (ícones `ti-exchange`/`ti-news`/
+`ti-calendar-event`, cores primary/info/success, ids/`data-lang` `ln-w-vanilla|other|t0`); Total intacto.
+O JS lia `w.a/w.b/w.c` (inexistentes no payload → sempre 0); passou a ler `w.vanilla/w.other_publisher/
+w.t0/w.total`. Chaves i18n `ln-w-a/b/c` → `ln-w-vanilla/other/t0` (Vanilla / Other Publisher / T+0) nos 3
+JSON. Bump `?v=20260707`.
+
+**⚠️ Dev:** o mock TER local tem só 8 colunas (sem Classe/Tipo/Cotação) → na dev os 3 buckets ficam 0 e
+Total = nº de linhas; no arquivo real (headers completos) popula. Verificado com teste sintético da
+classificação (usando o `_fcst_norm` real): t0=3, vanilla=2, other=2, total=9 — cobre zero BR (`0,00`),
+cotação vazia, classe acentuada, decimal BR, linha não-FX (fora dos buckets) e tipo desconhecido.
+
+### Arquivos (sessão 76)
+```
+apps/pages/routes.py                          ← _lpndf_collect: classificação FX+Tipo+Cotação (sem filtro de vencimento)
+apps/templates/pages/live-position-ndf.html   ← 3 widgets → Vanilla/Other Publisher/T+0 + bump ?v
+apps/static/js/pages/live-position-ndf.js     ← mapeia w.vanilla/other_publisher/t0/total
+apps/static/data/translations/{en,br,es}.json ← ln-w-a/b/c → ln-w-vanilla/other/t0
+```

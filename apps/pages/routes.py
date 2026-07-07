@@ -5472,6 +5472,16 @@ def _lpndf_collect(ref):
             asian_labels = ['Média Asiática {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPNDF_COLUMNS) + asian_labels
 
+            # Widgets: mesma classificação dos cards do NDF Summary
+            # (FX + Tipo do Contrato + Código da Cotação), porém SEM o filtro de
+            # Data de Vencimento — conta sobre toda a posição viva (Live Position).
+            # Resolve tipo/cotação aceitando as duas grafias (do/de), igual ao
+            # NDF Summary, para não zerar os buckets se o header vier com "de".
+            fx_norm = _fcst_norm('TAXAS DE CAMBIO')
+            classe_key = idx['Classe do Ativo Subjacente']
+            tipo_key = resolve('Tipo do Contrato') or resolve('Tipo de Contrato')
+            cot_key = resolve('Codigo da Cotacao') or resolve('Codigo de Cotacao')
+
             for rec in data:
                 row = []
                 for c in _LPNDF_COLUMNS:
@@ -5492,7 +5502,28 @@ def _lpndf_collect(ref):
                     else:
                         row.append('')
                 rows_out.append(row)
-            widgets['total'] = len(data)      # vanilla / other_publisher / t0 → classificação a definir
+
+                # Só NDFs de câmbio (TAXAS DE CAMBIO) entram na classificação; o
+                # Tipo do Contrato + Código da Cotação decidem o bucket:
+                #   SISBACEN + Cotação = 0   → T+0
+                #   SISBACEN + Cotação <> 0  → Vanilla
+                #   FEEDER                   → Other Publisher
+                if classe_key and \
+                        _fcst_norm(str(rec.get(classe_key, ''))) == fx_norm:
+                    tp = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
+                    if tp == 'sisbacen':
+                        cot = str(rec.get(cot_key, '') if cot_key else '').strip().replace(',', '.')
+                        try:
+                            is_zero = float(cot) == 0
+                        except ValueError:
+                            is_zero = True            # vazio / não-numérico → tratado como 0
+                        if is_zero:
+                            widgets['t0'] += 1
+                        else:
+                            widgets['vanilla'] += 1
+                    elif tp == 'feeder':
+                        widgets['other_publisher'] += 1
+            widgets['total'] = len(data)      # Total = contagem da posição viva (todas as linhas)
     return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
 
 
