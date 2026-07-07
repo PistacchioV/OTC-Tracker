@@ -4796,13 +4796,19 @@ def _cog_import(ref=None):
 
 
 def _cog_fmt_date(v):
-    """FXO Detail dates are yyyy-mm-dd → dd/mm/yyyy (tolerant of other formats)."""
+    """FXO Detail dates → dd/mm/yyyy. Most are yyyy-mm-dd; Event Trade Date comes
+    as 'jul 2, 2026 12:00:00 AM'. Tolerant of other formats."""
     s = str(v or '').strip()
     if not s:
         return ''
-    for fmt in ('%Y-%m-%d', '%Y/%m/%d'):
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d'):                 # yyyy-mm-dd (date part)
         try:
             return datetime.strptime(s.split(' ')[0], fmt).strftime('%d/%m/%Y')
+        except ValueError:
+            continue
+    for fmt in ('%b %d, %Y %I:%M:%S %p', '%b %d, %Y'):   # 'jul 2, 2026 12:00:00 AM'
+        try:
+            return datetime.strptime(s, fmt).strftime('%d/%m/%Y')
         except ValueError:
             continue
     d = _fcst_parse_date(s)
