@@ -640,7 +640,7 @@ def send_payrec_email(recon_date):
     )
 
     msg = MIMEMultipart('related')
-    msg['Subject'] = '[OTC Tracker] Pay/Rec — OTC Settlement Status - {}'.format(recon_date_fmt)
+    msg['Subject'] = 'Pay/Rec — OTC Settlement Status - {}'.format(recon_date_fmt)
     msg['From'] = _SHARED_MAILBOX
     msg['To'] = _MAILBOX
     msg['Cc'] = ', '.join(_CC)
