@@ -3944,3 +3944,11 @@ apps/static/data/translations/{en,br,es}.json ← ln-w-a/b/c → ln-w-vanilla/ot
 Grid dos widgets `row-cols-xxl-4` → `row-cols-xxl-5`. Ícone `ti-package`, cor warning. `_lpndf_collect`:
 `widgets['commodities']` no init + `elif classe_val == comm_norm`. JS mapeia `w.commodities`; i18n
 `ln-w-commodities`="Commodities" (en/br/es); bump `?v=20260707b`. Teste sintético: commodities=2 ok.
+
+### 76.2 — Centralização do conteúdo (td) das tabelas
+Conteúdo das células centralizado horizontalmente (`text-align: center` na regra `tbody td` /
+`#ops-page table.dataTable td`, que já existia — o `thead th` já era centralizado). Aplicado nas 8
+páginas: Live Position (NDF, Option, Swap Characteristics), OTM Settlements, NDF Cockpit, Cognos,
+NDF Summary e Other Products Summary. CSS inline no `<style>` de cada template → sem bump de `?v`.
+Obs.: `.ops-num` (right-align p/ números) nas summaries está apenas *definida*, nunca aplicada; se um
+dia for usada, as células passam a centralizar junto (coerente com o pedido).
