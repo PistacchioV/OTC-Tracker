@@ -31,6 +31,13 @@
     border-radius: 50%;
     background: var(--ins-primary, #0d6efd);
   }
+  /* Live notification toast (bottom-right) — mirrors the bell item content. */
+  #otc-toast-container { z-index: 1090; }
+  .otc-notif-toast { width: 360px; max-width: calc(100vw - 2rem); }
+  .otc-notif-toast .notification-badge {
+    display: flex !important; align-items: center !important; justify-content: center !important;
+  }
+  .otc-notif-toast .notification-badge svg { width: 10px !important; height: 10px !important; display: block; flex-shrink: 0; }
 </style>
 <header class="app-topbar">
     <div class="container-fluid topbar-menu">
@@ -362,6 +369,10 @@
             var LS_SEEN = 'otc_notif_last_seen_id';   // legacy high-water mark (migrated once)
             var _totalToday = 0;
             var _notifs = [];
+            // Live-toast state: baseline the existing backlog on first fetch, then
+            // toast only notifications that arrive afterwards (each ID once).
+            var _toastInit = false;
+            var _toastedIds = new Set();
 
             function getReadSet() {
                 try {
@@ -503,6 +514,65 @@
                 return parts[0][0].toUpperCase();
             }
 
+            // Shared per-notification computation (icon, colour, deep-link URL,
+            // avatar, detail) used by BOTH the bell dropdown and the live toast so
+            // their text and click behaviour stay identical.
+            function buildNotif(n) {
+                var meta     = ACTION_META[n.action] || { icon: 'bell', color: 'bg-secondary' };
+                // Reference Data badge uses the sidenav icon for the page (database)
+                var badgeIcon = (n.page === 'Reference Data') ? 'database' : meta.icon;
+                // A trailing [ND:YYYY-MM-DD] token carries the deal/accrual date so the
+                // click can deep-link to it — parse it out and strip it from the text.
+                var rawDetail = n.detail || '';
+                var ndMatch   = /\s*\[ND:(\d{4}-\d{2}-\d{2})\]/.exec(rawDetail);
+                var navDate   = ndMatch ? ndMatch[1] : null;
+                if (ndMatch) rawDetail = rawDetail.replace(ndMatch[0], '');
+                var detail   = rawDetail ? ' &mdash; ' + esc(rawDetail) : '';
+                var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
+                var initials = getInitials(n.actor_name || n.actor_sid);
+                var pageUrl  = PAGE_URL[n.page] || null;
+                // Reference Data banking notifications deep-link to the SPN (parsed
+                // from "SPN <spn> · …" in the detail) so approval lands pre-filtered.
+                if (pageUrl && n.page === 'Reference Data') {
+                    var mSpn = /SPN\s+(\S+)/.exec(n.detail || '');
+                    if (mSpn) pageUrl += '?spn=' + encodeURIComponent(mSpn[1]);
+                }
+                // Date deep-link: Accrual → ?date=, New Deals pages → ?tradedate=
+                // (falls back to the page's own default — today — when absent).
+                if (pageUrl && navDate) {
+                    if (n.page === 'Accrual' || n.page === 'MtM') {
+                        pageUrl += '?date=' + encodeURIComponent(navDate);
+                    } else if (NEW_DEALS_PAGES[n.page]) {
+                        pageUrl += '?tradedate=' + encodeURIComponent(navDate);
+                    }
+                }
+                return { meta: meta, badgeIcon: badgeIcon, detail: detail,
+                         pageUrl: pageUrl, imgSrc: imgSrc, initials: initials };
+            }
+
+            // Inner content (avatar + actor + action + detail + time) shared by the
+            // bell item and the toast body.
+            function notifBodyHtml(n, b) {
+                return '<span class="d-flex align-items-center gap-3">' +
+                          '<span class="flex-shrink-0 position-relative">' +
+                            '<img alt="' + esc(n.actor_name || n.actor_sid) + '" class="avatar-md rounded-circle" src="' + b.imgSrc + '" ' +
+                              'onerror="this.onerror=null;this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\';" />' +
+                            '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" ' +
+                              'style="display:none;width:40px;height:40px;">' + esc(b.initials) + '</span>' +
+                            '<span class="position-absolute rounded-pill ' + b.meta.color + ' notification-badge">' +
+                              '<i data-lucide="' + b.badgeIcon + '"></i>' +
+                            '</span>' +
+                          '</span>' +
+                          '<span class="flex-grow-1 text-muted">' +
+                            '<span class="fw-medium text-body">' + esc(n.actor_name || n.actor_sid) + '</span>' +
+                            ' ' + esc(n.action) + ' in ' +
+                            '<span class="fw-medium text-body">' + esc(n.page) + '</span>' +
+                            b.detail +
+                            '<br/><span class="fs-xs">' + timeAgo(n.created_at) + '</span>' +
+                          '</span>' +
+                        '</span>';
+            }
+
             function renderNotifications(items) {
                 var list = document.getElementById('notif-list');
                 if (!list) return;
@@ -512,65 +582,82 @@
                     return;
                 }
                 items.forEach(function (n) {
-                    var meta     = ACTION_META[n.action] || { icon: 'bell', color: 'bg-secondary' };
-                    // Reference Data badge uses the sidenav icon for the page (database)
-                    var badgeIcon = (n.page === 'Reference Data') ? 'database' : meta.icon;
-                    // A trailing [ND:YYYY-MM-DD] token carries the deal/accrual date so the
-                    // click can deep-link to it — parse it out and strip it from the text.
-                    var rawDetail = n.detail || '';
-                    var ndMatch   = /\s*\[ND:(\d{4}-\d{2}-\d{2})\]/.exec(rawDetail);
-                    var navDate   = ndMatch ? ndMatch[1] : null;
-                    if (ndMatch) rawDetail = rawDetail.replace(ndMatch[0], '');
-                    var detail   = rawDetail ? ' &mdash; ' + esc(rawDetail) : '';
-                    var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
-                    var initials = getInitials(n.actor_name || n.actor_sid);
-                    var pageUrl  = PAGE_URL[n.page] || null;
-                    // Reference Data banking notifications deep-link to the SPN (parsed
-                    // from "SPN <spn> · …" in the detail) so approval lands pre-filtered.
-                    if (pageUrl && n.page === 'Reference Data') {
-                        var mSpn = /SPN\s+(\S+)/.exec(n.detail || '');
-                        if (mSpn) pageUrl += '?spn=' + encodeURIComponent(mSpn[1]);
-                    }
-                    // Date deep-link: Accrual → ?date=, New Deals pages → ?tradedate=
-                    // (falls back to the page's own default — today — when absent).
-                    if (pageUrl && navDate) {
-                        if (n.page === 'Accrual' || n.page === 'MtM') {
-                            pageUrl += '?date=' + encodeURIComponent(navDate);
-                        } else if (NEW_DEALS_PAGES[n.page]) {
-                            pageUrl += '?tradedate=' + encodeURIComponent(navDate);
-                        }
-                    }
-                    var el       = document.createElement(pageUrl ? 'a' : 'div');
+                    var b        = buildNotif(n);
+                    var el       = document.createElement(b.pageUrl ? 'a' : 'div');
                     el.className = 'dropdown-item notification-item py-2 text-wrap' + (isRead(n.id) ? '' : ' notif-unread');
                     el.dataset.notifId = n.id;
-                    if (pageUrl) { el.href = pageUrl; el.style.cursor = 'pointer'; }
+                    if (b.pageUrl) { el.href = b.pageUrl; el.style.cursor = 'pointer'; }
                     // Clicking a single notification marks only that one as read.
                     el.addEventListener('click', function () {
                         markRead(this.dataset.notifId);
                         this.classList.remove('notif-unread');
                     });
-                    el.innerHTML =
-                        '<span class="d-flex align-items-center gap-3">' +
-                          '<span class="flex-shrink-0 position-relative">' +
-                            '<img alt="' + esc(n.actor_name || n.actor_sid) + '" class="avatar-md rounded-circle" src="' + imgSrc + '" ' +
-                              'onerror="this.onerror=null;this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\';" />' +
-                            '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs" ' +
-                              'style="display:none;width:40px;height:40px;">' + esc(initials) + '</span>' +
-                            '<span class="position-absolute rounded-pill ' + meta.color + ' notification-badge">' +
-                              '<i data-lucide="' + badgeIcon + '"></i>' +
-                            '</span>' +
-                          '</span>' +
-                          '<span class="flex-grow-1 text-muted">' +
-                            '<span class="fw-medium text-body">' + esc(n.actor_name || n.actor_sid) + '</span>' +
-                            ' ' + esc(n.action) + ' in ' +
-                            '<span class="fw-medium text-body">' + esc(n.page) + '</span>' +
-                            detail +
-                            '<br/><span class="fs-xs">' + timeAgo(n.created_at) + '</span>' +
-                          '</span>' +
-                        '</span>';
+                    el.innerHTML = notifBodyHtml(n, b);
                     list.appendChild(el);
                 });
                 if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
+            }
+
+            // Live toast (bottom-right) mirroring a bell notification: same content,
+            // same deep-link + mark-read on click. Auto-hides after 8s; stacks.
+            function ensureToastContainer() {
+                var c = document.getElementById('otc-toast-container');
+                if (!c) {
+                    c = document.createElement('div');
+                    c.id = 'otc-toast-container';
+                    c.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                    document.body.appendChild(c);
+                }
+                return c;
+            }
+            function showToast(n) {
+                if (typeof bootstrap === 'undefined' || !bootstrap.Toast) return;
+                var b = buildNotif(n);
+                var container = ensureToastContainer();
+                var toastEl = document.createElement('div');
+                toastEl.className = 'toast otc-notif-toast border-0 shadow';
+                toastEl.setAttribute('role', 'alert');
+                toastEl.setAttribute('aria-live', 'assertive');
+                toastEl.setAttribute('aria-atomic', 'true');
+                toastEl.innerHTML =
+                    '<div class="toast-body position-relative pe-4">' +
+                      '<button type="button" class="btn-close position-absolute top-0 end-0 m-1" data-bs-dismiss="toast" aria-label="Close"></button>' +
+                      '<div class="otc-toast-content"' + (b.pageUrl ? ' style="cursor:pointer"' : '') + '>' +
+                        notifBodyHtml(n, b) +
+                      '</div>' +
+                    '</div>';
+                container.appendChild(toastEl);
+                var content = toastEl.querySelector('.otc-toast-content');
+                if (content) {
+                    // Same behaviour as the bell item: mark read + deep-link.
+                    content.addEventListener('click', function () {
+                        markRead(n.id);
+                        if (b.pageUrl) window.location.href = b.pageUrl;
+                    });
+                }
+                if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
+                var t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 8000, autohide: true });
+                toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+                t.show();
+            }
+
+            // Toast every notification that appeared since the last poll (each ID
+            // once). The first fetch only baselines the backlog — no toast spam on
+            // page load. Applies to ALL notification types.
+            function toastNew(items) {
+                if (!_toastInit) {
+                    (items || []).forEach(function (n) { _toastedIds.add(Number(n.id) || 0); });
+                    _toastInit = true;
+                    return;
+                }
+                (items || []).slice()
+                    .sort(function (a, b) { return (Number(a.id) || 0) - (Number(b.id) || 0); })
+                    .forEach(function (n) {
+                        var id = Number(n.id) || 0;
+                        if (!id || _toastedIds.has(id)) return;
+                        _toastedIds.add(id);
+                        if (!isRead(id)) showToast(n);
+                    });
             }
 
             function fetchNotifications() {
@@ -581,6 +668,7 @@
                         _totalToday = resp.total_today || 0;
                         _notifs = resp.notifications || [];
                         migrateLegacySeen(_notifs);
+                        toastNew(_notifs);
                         updateBadge(computeUnread(_notifs));
                         renderNotifications(_notifs);
                         var cb = document.getElementById('notif-count-badge');
