@@ -3090,7 +3090,7 @@ Nenhum texto novo → sem novas chaves `data-lang`. Tudo escopado em `#dash-page
 
 ### ⚠️ Nota de ambiente / git
 - A branch de trabalho real é **`apple-design`** (checkout principal em `/Desktop/OTC Tracker`). A `main` está
-  no boilerplate UBold original (2 commits) — worktrees criados a partir de `main` **não** têm o projeto real.
+  no boilerplate OTC Tracker original (2 commits) — worktrees criados a partir de `main` **não** têm o projeto real.
   Sempre partir de `apple-design`.
 
 ### Arquivos (sessão 59)
