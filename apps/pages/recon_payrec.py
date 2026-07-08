@@ -154,6 +154,81 @@ def _norm_cpty(name):
     return str(name or '').strip()
 
 
+# ── Settlement Net Type per counterparty ──────────────────────────────────────
+# Drives HOW a counterparty is matched:
+#   Total Net → one netted value per group (Pay netted against Receive)  [default]
+#   Pay/Rec   → Pay and Receive kept as two separate legs (never netted together)
+#   No Net    → every individual trade/cashflow settles on its own (no netting)
+# Resolved by joining the recon counterparty NAME → SPN (RefData.json) → NET.value
+# (CounterpartyDetails.json). Unconfigured / not-yet-approved → Total Net.
+_REFDATA_PATH = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'RefData.json'))
+_CPD_PATH = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'CounterpartyDetails.json'))
+_VALID_NET_TYPES = ('Total Net', 'Pay/Rec', 'No Net')
+
+
+def _load_net_type_map():
+    """{normalized counterparty name → net type}. Joins RefData (name→SPN) with
+    CounterpartyDetails (SPN→NET.value). Only an Active (approved) net type
+    overrides the default; everything else stays 'Total Net' (safe)."""
+    name_to_spn = {}
+    try:
+        for r in json.load(open(_REFDATA_PATH, encoding='utf-8')):
+            nm = _norm(r.get('COUNTERPARTY', ''))
+            spn = str(r.get('SPN', '') or '').strip()
+            if nm and spn and nm not in name_to_spn:
+                name_to_spn[nm] = spn
+    except Exception:
+        return {}
+    spn_to_net = {}
+    try:
+        for r in json.load(open(_CPD_PATH, encoding='utf-8')):
+            spn = str(r.get('SPN', '') or '').strip()
+            net = r.get('NET') or {}
+            val = str(net.get('value', '') or '').strip()
+            status = (str(net.get('status', '') or '').strip() or 'Active')
+            if spn and val in _VALID_NET_TYPES and status == 'Active':
+                spn_to_net[spn] = val
+    except Exception:
+        pass
+    return {nm: spn_to_net.get(spn, 'Total Net') for nm, spn in name_to_spn.items()}
+
+
+def _net_type_for(net_map, cpty_name):
+    """Net type for a counterparty name (defaults to Total Net when unmapped)."""
+    return (net_map or {}).get(_norm(cpty_name), 'Total Net')
+
+
+def _emit_records(product, cpty, values, net_type):
+    """Reduce a group's signed values into settlement records per the net type.
+      Total Net → 1 record (Pay netted against Receive)
+      Pay/Rec   → up to 2 records: Σ receives (>0) and Σ pays (<0), not netted
+      No Net    → one record per individual value
+    Sign decides Pay/Receive; near-zero results are dropped."""
+    cu = str(cpty or '').upper()
+    out = []
+
+    def _rec(v):
+        return {'product': product, 'cpty': cu, 'value': v,
+                'pay_receive': 'Receive' if v > 0 else 'Pay'}
+
+    if net_type == 'No Net':
+        for v in values:
+            if abs(v) >= 1e-9:
+                out.append(_rec(v))
+    elif net_type == 'Pay/Rec':
+        recv = sum(v for v in values if v > 0)
+        pay = sum(v for v in values if v < 0)
+        if abs(recv) >= 1e-9:
+            out.append(_rec(recv))
+        if abs(pay) >= 1e-9:
+            out.append(_rec(pay))
+    else:  # Total Net (default)
+        tot = sum(values)
+        if abs(tot) >= 1e-9:
+            out.append(_rec(tot))
+    return out
+
+
 # ── File reading ──────────────────────────────────────────────────────────────
 def _read_table(src, sheet_hint=None):
     """Read a CSV/XLSX (path or FileStorage) → (list-of-dicts, columns).
@@ -235,9 +310,10 @@ def _classify_source(name):
 
 
 # ── JPM / Cockpit side ────────────────────────────────────────────────────────
-def _jpm_settlement(rows, cols):
-    """settlement.csv → NDF. Value = per-Client sum of (Tax Income + Amount),
-    keeping only Settlement Net = 'TOTAL_NET' and non-JPM clients."""
+def _jpm_settlement(rows, cols, net_map=None):
+    """settlement.csv → NDF. Per-Client (Tax Income + Amount), keeping only
+    Settlement Net = 'TOTAL_NET'/'PAYREC_NET' and non-JPM clients. The per-client
+    values are then reduced according to the client's configured net type."""
     c_client = _resolve(cols, 'Client')
     c_amount = _resolve(cols, 'Amount')
     c_tax = _resolve(cols, 'Tax Income')
@@ -253,18 +329,15 @@ def _jpm_settlement(rows, cols):
             if sn and sn not in (_norm('TOTAL_NET'), _norm('PAYREC_NET')):
                 continue
         result = _num(r.get(c_tax, '') if c_tax else 0) + _num(r.get(c_amount, '') if c_amount else 0)
-        groups[client] = groups.get(client, 0.0) + result
+        groups.setdefault(client, []).append(result)
     out = []
-    for client, val in groups.items():
-        if abs(val) < 1e-9:
-            continue
-        out.append({'product': 'NDF', 'cpty': client.upper(), 'value': val,
-                    'pay_receive': 'Receive' if val > 0 else 'Pay'})
+    for client, values in groups.items():
+        out += _emit_records('NDF', client, values, _net_type_for(net_map, client))
     return out
 
 
-def _jpm_cashflows(rows, cols):
-    """cashflows → COMM TER / COMM OPT / SWAP, per-client net sum."""
+def _jpm_cashflows(rows, cols, net_map=None):
+    """cashflows → COMM TER / COMM OPT / SWAP, reduced per the client's net type."""
     c_trade = _resolve(cols, 'Trade Id')
     c_amt = _resolve(cols, 'Amount')
     c_cpty = _resolve(cols, 'Cpty Name')
@@ -300,7 +373,7 @@ def _jpm_cashflows(rows, cols):
             rec['prod'] = 'COMM TER'
         else:
             rec['prod'] = 'COMM OPT'
-    # Per-client net (drop Bco J.P. and bilateral bank legs first).
+    # Per-(client, product) contributions (drop Bco J.P. and bilateral bank legs).
     groups = {}
     for rec in recs:
         cl = rec['cpty'].lower()
@@ -309,22 +382,22 @@ def _jpm_cashflows(rows, cols):
         if 'banco' in cl:                                       # Filter[114] Bilateral
             continue
         key = (rec['cpty'], rec['prod'])
-        groups[key] = groups.get(key, 0.0) + rec['amount']
+        groups.setdefault(key, []).append(rec['amount'])
     out = []
-    for (cpty, prod), val in groups.items():
-        if abs(val) < 1e-9:
-            continue
-        # 0.005% COMM TER IR fee: only on a Pay net, and NOT for the exempt
-        # internal exclusive funds (Lawton, Atacama…).
-        if prod == 'COMM TER' and val < 0 and cpty.upper() not in _IR_EXEMPT_CPTY:
-            val *= _COMM_TER_FEE
-        out.append({'product': prod, 'cpty': cpty.upper(), 'value': val,
-                    'pay_receive': 'Receive' if val > 0 else 'Pay'})
+    for (cpty, prod), values in groups.items():
+        for rec in _emit_records(prod, cpty, values, _net_type_for(net_map, cpty)):
+            # 0.005% COMM TER IR fee: only on a Pay leg, and NOT for the exempt
+            # internal exclusive funds (Lawton, Atacama…). Applied AFTER the
+            # net-type reduction so it hits the aggregated pay, never a raw leg
+            # of a netted client.
+            if prod == 'COMM TER' and rec['value'] < 0 and cpty.upper() not in _IR_EXEMPT_CPTY:
+                rec['value'] *= _COMM_TER_FEE
+            out.append(rec)
     return out
 
 
-def _jpm_fxo(rows, cols):
-    """FXO Detail → FXO. Value from ATH SET AMT + Direction."""
+def _jpm_fxo(rows, cols, net_map=None):
+    """FXO Detail → FXO. Value from ATH SET AMT + Direction, reduced per net type."""
     c_amt = _resolve(cols, 'ATH SET AMT')
     c_dir = _resolve(cols, 'Direction')
     c_cpty = _resolve(cols, 'Counterparty Name')
@@ -336,13 +409,10 @@ def _jpm_fxo(rows, cols):
         value = -abs(amt) if direction == 'PAY' else abs(amt)
         if abs(value) < 1e-9:
             continue
-        groups[cpty] = groups.get(cpty, 0.0) + value
+        groups.setdefault(cpty, []).append(value)
     out = []
-    for cpty, val in groups.items():
-        if abs(val) < 1e-9:
-            continue
-        out.append({'product': 'FXO', 'cpty': cpty.upper(), 'value': val,
-                    'pay_receive': 'Receive' if val > 0 else 'Pay'})
+    for cpty, values in groups.items():
+        out += _emit_records('FXO', cpty, values, _net_type_for(net_map, cpty))
     return out
 
 
@@ -535,16 +605,20 @@ def run_payrec(recon_date, files=None, mode='auto'):
     if not srcs:
         raise FileNotFoundError('No Pay/Rec input files provided or found for this date.')
 
+    # Net type per counterparty (name → SPN → CounterpartyDetails.NET), resolved
+    # once and shared by the JPM producers to branch the batimento.
+    net_map = _load_net_type_map()
+
     jpm, client = [], []
     for bucket, rows, cols in srcs:
         if not rows:
             continue
         if bucket == 'settlement':
-            jpm += _jpm_settlement(rows, cols)
+            jpm += _jpm_settlement(rows, cols, net_map)
         elif bucket == 'jpm_cash':
-            jpm += _jpm_cashflows(rows, cols)
+            jpm += _jpm_cashflows(rows, cols, net_map)
         elif bucket == 'jpm_fxo':
-            jpm += _jpm_fxo(rows, cols)
+            jpm += _jpm_fxo(rows, cols, net_map)
         elif bucket == 'sdconta_int':
             client += _cli_rlctahis(rows, cols)
         elif bucket == 'sdconta_ted':
