@@ -373,6 +373,13 @@
             // toast only notifications that arrive afterwards (each ID once).
             var _toastInit = false;
             var _toastedIds = new Set();
+            // Current user's SID — used to suppress toasts for the user's OWN actions.
+            var CURRENT_USER_SID = '{{ session.get("user_sid", "") }}';
+            function isOwnAction(n) {
+                var me = (CURRENT_USER_SID || '').trim().toUpperCase();
+                var actor = String(n.actor_sid || '').trim().toUpperCase();
+                return me !== '' && actor !== '' && me === actor;
+            }
 
             function getReadSet() {
                 try {
@@ -656,6 +663,9 @@
                         var id = Number(n.id) || 0;
                         if (!id || _toastedIds.has(id)) return;
                         _toastedIds.add(id);
+                        // Don't toast the current user's own actions (the bell still
+                        // lists them; the toast is only for others' activity).
+                        if (isOwnAction(n)) return;
                         if (!isRead(id)) showToast(n);
                     });
             }
