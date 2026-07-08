@@ -13139,6 +13139,29 @@ def reconciliation_payrec_run():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@blueprint.route('/reconciliation-payrec/justify', methods=['POST'])
+def reconciliation_payrec_justify():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    payload    = request.get_json(silent=True) or {}
+    recon_date = (payload.get('recon_date') or '').strip()
+    table      = (payload.get('table') or '').strip()
+    comment    = (payload.get('comment') or '').strip()
+    if table not in ('pay', 'rec'):
+        return jsonify({'success': False, 'error': 'Invalid table'}), 400
+    if not comment:
+        return jsonify({'success': False, 'error': 'A justification comment is required.'}), 400
+    try:
+        from apps.pages.recon_payrec import justify_row
+        data = justify_row(recon_date, table, payload.get('index'), comment)
+        if not data:
+            return jsonify({'success': False, 'error': 'Row not found for this date.'}), 404
+        return jsonify({'success': True})
+    except Exception as e:
+        log.error('[recon_payrec_justify] %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @blueprint.route('/reconciliation-payrec/end-process', methods=['POST'])
 def reconciliation_payrec_end():
     if not session.get('authenticated'):

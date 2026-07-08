@@ -704,6 +704,30 @@ def finalize_history(recon_date):
         return None
 
 
+def justify_row(recon_date, table, index, comment):
+    """Justify one pending row: set its status to 'Justified' and store the
+    operator's comment, then re-persist the working cache so End process (and the
+    e-mailed situation) reflect it. `table` is 'pay' or 'rec'. Returns the updated
+    payload, or None when the date/row can't be resolved."""
+    data = _load_flat(recon_date)
+    if not data:
+        return None
+    key = {'pay': 'pending_payment', 'rec': 'pending_receivement'}.get(table)
+    if not key:
+        return None
+    rows = data.get(key) or []
+    try:
+        index = int(index)
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= index < len(rows)):
+        return None
+    rows[index]['status'] = 'Justified'
+    rows[index]['comment'] = str(comment or '').strip()
+    _persist(recon_date, data)
+    return data
+
+
 def load_last(recon_date=''):
     """For the page: prefer the finalized dated history (browsing past days),
     then the working cache, then an empty shell."""

@@ -18,19 +18,34 @@
           failTitle: 'Reconciliation failed', netErr: 'Network error.', done: 'Reconciliation completed',
           sentTitle: 'Process finalised', sentMsg: 'The end-of-day situation was e-mailed to OTC Ops.',
           confirmEnd: 'Do you want to send the final Pay/Rec situation of the day?',
-          yes: 'Yes, send', cancel: 'Cancel', empty: 'No records' },
+          yes: 'Yes, send', cancel: 'Cancel', empty: 'No records',
+          pendTitle: 'Pending settlements',
+          pendMsg: 'There are pending settlements. Do you want to justify the pending items or run the reconciliation again?',
+          justify: 'Justify pending', runAgain: 'Run again', justified: 'Justified',
+          commentPh: 'Enter justification…', commentReq: 'Please enter a justification comment.',
+          justifyFail: 'Could not save the justification.' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
           sentTitle: 'Processo encerrado', sentMsg: 'A situação final do dia foi enviada por e-mail para a OTC Ops.',
           confirmEnd: 'Deseja enviar a situação final do Pay/Rec do dia?',
-          yes: 'Sim, enviar', cancel: 'Cancelar', empty: 'Sem registros' },
+          yes: 'Sim, enviar', cancel: 'Cancelar', empty: 'Sem registros',
+          pendTitle: 'Liquidações pendentes',
+          pendMsg: 'Existem liquidações pendentes. Deseja justificar as pendências ou rodar a reconciliação novamente?',
+          justify: 'Justificar pendências', runAgain: 'Rodar novamente', justified: 'Justificado',
+          commentPh: 'Digite a justificativa…', commentReq: 'Informe um comentário de justificativa.',
+          justifyFail: 'Não foi possível salvar a justificativa.' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
           sentTitle: 'Proceso finalizado', sentMsg: 'La situación final del día se envió por correo a OTC Ops.',
           confirmEnd: '¿Desea enviar la situación final de Pay/Rec del día?',
-          yes: 'Sí, enviar', cancel: 'Cancelar', empty: 'Sin registros' },
+          yes: 'Sí, enviar', cancel: 'Cancelar', empty: 'Sin registros',
+          pendTitle: 'Liquidaciones pendientes',
+          pendMsg: 'Hay liquidaciones pendientes. ¿Desea justificar las pendencias o ejecutar la reconciliación nuevamente?',
+          justify: 'Justificar pendientes', runAgain: 'Ejecutar de nuevo', justified: 'Justificado',
+          commentPh: 'Ingrese la justificación…', commentReq: 'Ingrese un comentario de justificación.',
+          justifyFail: 'No se pudo guardar la justificación.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -57,11 +72,21 @@
     return '<span class="pr-check ' + (ok ? 'pr-check--ok' : 'pr-check--no') + '">' +
       '<i class="ti ' + (ok ? 'ti-check' : 'ti-alert-triangle') + '"></i>' + esc(v) + '</span>';
   }
+  function isPending(v) { return String(v || '').toLowerCase().indexOf('pend') !== -1; }
+  function isJustified(v) { return String(v || '').toLowerCase().indexOf('justif') !== -1; }
   function statusBadge(v) {
     var s = String(v || '').toLowerCase();
-    var cls = s.indexOf('settl') !== -1 ? 'badge-settled' : 'badge-pending';
-    return '<span class="badge-status ' + cls + '">' + esc(v) + '</span>';
+    var cls, label = v;
+    if (isJustified(v)) { cls = 'badge-justified'; label = t('justified'); }
+    else if (s.indexOf('settl') !== -1) { cls = 'badge-settled'; }
+    else { cls = 'badge-pending'; }
+    return '<span class="badge-status ' + cls + '">' + esc(label) + '</span>';
   }
+
+  // Justify mode: revealed when the operator chooses to justify pending items
+  // from the End-process dialog. Adds the Comment + Actions columns.
+  var justifyMode = false;
+  var _lastData = null;
 
   // ── Render results ──────────────────────────────────────────────────────────
   function show(id, on) { var el = document.getElementById(id); if (el) el.hidden = !on; }
@@ -84,17 +109,17 @@
     show('prCardSummary', true);
   }
 
-  function renderList(cardId, bodyId, countId, rows, kind) {
+  function renderList(cardId, bodyId, countId, rows, kind, tableKey) {
     var body = document.getElementById(bodyId);
     var span = countId ? String(rows ? rows.length : 0) : '';
     if (countId) setText(countId, span);
     if (!rows || !rows.length) {
-      var cols = kind === 'settled' ? 9 : 7;
+      var cols = kind === 'settled' ? 9 : (justifyMode ? 9 : 7);
       body.innerHTML = '<tr><td colspan="' + cols + '" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
       show(cardId, true);
       return;
     }
-    body.innerHTML = rows.map(function (r) {
+    body.innerHTML = rows.map(function (r, i) {
       var base =
         '<td>' + esc(r.product) + '</td>' +
         '<td>' + esc(r.jpm_cpty) + '</td>' +
@@ -105,15 +130,27 @@
         return '<tr>' + base + '<td>' + esc(r.sistema) + '</td><td>' + statusBadge(r.status) +
           '</td><td>' + esc(r.snumconta) + '</td></tr>';
       }
-      return '<tr>' + base + '<td>' + statusBadge(r.status) + '</td></tr>';
+      // Pending tables: Status + (Comment + Actions, revealed in justify mode).
+      // Actions (Edit/Confirm) appear only for rows that still need justifying.
+      var needs = isPending(r.status);
+      var actions = needs
+        ? '<button type="button" class="pr-act-btn pr-act-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
+          '<button type="button" class="pr-act-btn pr-act-confirm" title="Confirm"><i class="ti ti-check"></i></button>'
+        : '';
+      return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '">' + base +
+        '<td>' + statusBadge(r.status) + '</td>' +
+        '<td class="pr-justify-col pr-comment-cell">' + esc(r.comment || '') + '</td>' +
+        '<td class="pr-justify-col pr-actions-cell">' + actions + '</td>' +
+        '</tr>';
     }).join('');
     show(cardId, true);
   }
 
   function render(d) {
+    _lastData = d || {};
     renderSummary(d.summary || []);
-    renderList('prCardPendPay', 'prPendPayBody', 'prPendPayCount', d.pending_payment || [], 'pend');
-    renderList('prCardPendRec', 'prPendRecBody', 'prPendRecCount', d.pending_receivement || [], 'pend');
+    renderList('prCardPendPay', 'prPendPayBody', 'prPendPayCount', d.pending_payment || [], 'pend', 'pay');
+    renderList('prCardPendRec', 'prPendRecBody', 'prPendRecCount', d.pending_receivement || [], 'pend', 'rec');
     renderList('prCardSettled', 'prSettledBody', 'prSettledCount', d.settled || [], 'settled');
     show('prEmpty', false);
     // The final situation can only be e-mailed once there is a processed result.
@@ -167,6 +204,7 @@
       .then(function (res) {
         var b = res.body || {};
         if (res.ok && b.success !== false && !b.error && !b.not_found) {
+          resetJustify();
           render(b);
           setText('prMeta', (b.meta || '') + (b.recon_date_fmt ? ('  ·  ' + b.recon_date_fmt) : ''));
           if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: t('done'), html: b.meta || '', confirmButtonColor: '#0066cc', timer: 1600, showConfirmButton: false });
@@ -198,11 +236,90 @@
         .catch(function () { if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: t('netErr'), confirmButtonColor: '#0066cc' }); })
         .finally(function () { busy(btn, false); });
     };
+    // Any settlement still Pending in the Summary / Pending tables? Warn first and
+    // offer to justify the pending items — otherwise go straight to the send flow.
+    if (pendingCount() > 0 && typeof Swal !== 'undefined') {
+      Swal.fire({
+        icon: 'warning', title: t('pendTitle'), html: t('pendMsg'),
+        showConfirmButton: true, showDenyButton: true, showCloseButton: true,
+        confirmButtonText: t('justify'), denyButtonText: t('runAgain'),
+        confirmButtonColor: '#0066cc', denyButtonColor: '#6c757d'
+      }).then(function (r) {
+        // Justify → reveal the Comment/Actions columns. Run again / close → no-op.
+        if (r.isConfirmed) enterJustifyMode();
+      });
+      return;
+    }
     if (typeof Swal !== 'undefined') {
       Swal.fire({ icon: 'question', title: t('end'), html: t('confirmEnd'), showCancelButton: true,
         confirmButtonText: t('yes'), cancelButtonText: t('cancel'), confirmButtonColor: '#198754', cancelButtonColor: '#6c757d' })
         .then(function (r) { if (r.isConfirmed) go(); });
     } else { go(); }
+  }
+
+  // Count pending rows across the two pending tables (Summary has no per-row
+  // status; "status Pending" lives only in the pending tables).
+  function pendingCount() {
+    if (!_lastData) return 0;
+    var n = 0;
+    (_lastData.pending_payment || []).forEach(function (r) { if (isPending(r.status)) n++; });
+    (_lastData.pending_receivement || []).forEach(function (r) { if (isPending(r.status)) n++; });
+    return n;
+  }
+
+  function resetJustify() { justifyMode = false; if (page) page.classList.remove('pr-justify'); }
+
+  function enterJustifyMode() {
+    justifyMode = true;
+    page.classList.add('pr-justify');
+    if (_lastData) render(_lastData);   // re-render to expose Comment + Actions
+  }
+
+  // Edit / Confirm on a pending row (event delegation over both pending tbodies).
+  function wireJustifyActions() {
+    ['prPendPayBody', 'prPendRecBody'].forEach(function (bodyId) {
+      var body = document.getElementById(bodyId);
+      if (!body) return;
+      body.addEventListener('click', function (e) {
+        var editBtn = e.target.closest('.pr-act-edit');
+        var okBtn = e.target.closest('.pr-act-confirm');
+        if (!editBtn && !okBtn) return;
+        var tr = e.target.closest('tr'); if (!tr) return;
+        var cell = tr.querySelector('.pr-comment-cell'); if (!cell) return;
+        if (editBtn) {
+          if (cell.querySelector('input')) return;   // already editing
+          var cur = cell.textContent.trim();
+          cell.innerHTML = '<input type="text" class="pr-comment-input" value="' +
+            cur.replace(/"/g, '&quot;') + '" placeholder="' + esc(t('commentPh')) + '">';
+          var inp = cell.querySelector('input'); if (inp) inp.focus();
+          return;
+        }
+        // Confirm → require a comment, persist, flip the row to Justified.
+        var input = cell.querySelector('input');
+        var comment = (input ? input.value : cell.textContent).trim();
+        if (!comment) {
+          if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: t('pendTitle'), html: t('commentReq'), confirmButtonColor: '#0066cc' });
+          else if (input) input.focus();
+          return;
+        }
+        var table = tr.getAttribute('data-pr-table');
+        var index = parseInt(tr.getAttribute('data-pr-index'), 10);
+        fetch('/reconciliation-payrec/justify', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+          body: JSON.stringify({ recon_date: refDate(), table: table, index: index, comment: comment })
+        }).then(function (r) { return r.json(); }).then(function (res) {
+          if (res && res.success) {
+            var arr = table === 'pay' ? (_lastData.pending_payment || []) : (_lastData.pending_receivement || []);
+            if (arr[index]) { arr[index].status = 'Justified'; arr[index].comment = comment; }
+            render(_lastData);
+          } else if (typeof Swal !== 'undefined') {
+            Swal.fire({ icon: 'error', title: t('failTitle'), html: (res && res.error) || t('justifyFail'), confirmButtonColor: '#0066cc' });
+          }
+        }).catch(function () {
+          if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: t('failTitle'), html: t('netErr'), confirmButtonColor: '#0066cc' });
+        });
+      });
+    });
   }
 
   // ── Dropzone (holds files until Run) ────────────────────────────────────────
@@ -259,6 +376,7 @@
   // Hide every result block and show the empty state (used when a date has no
   // saved status, e.g. browsing a past day that was never finalised).
   function clearResults() {
+    resetJustify();
     ['prCardSummary', 'prCardPendPay', 'prCardPendRec', 'prCardSettled'].forEach(function (id) { show(id, false); });
     show('prEmpty', true);
     setText('prMeta', '');
@@ -274,7 +392,7 @@
       .then(function (d) {
         var has = d && ((d.summary && d.summary.length) || (d.settled && d.settled.length) ||
                   (d.pending_payment && d.pending_payment.length) || (d.pending_receivement && d.pending_receivement.length));
-        if (has) { render(d); setText('prMeta', d.meta || ''); }
+        if (has) { resetJustify(); render(d); setText('prMeta', d.meta || ''); }
         else { clearResults(); }
       })
       .catch(function () {});
@@ -283,6 +401,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     try { wireDropzone(); } catch (e) {}
     try { wireDatePicker(); } catch (e) {}
+    try { wireJustifyActions(); } catch (e) {}
     var runBtn = document.getElementById('prRunBtn');
     var impBtn = document.getElementById('prImportBtn');
     var endBtn = document.getElementById('prEndBtn');

@@ -89,8 +89,21 @@
 #payrec-page .badge-status { font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: 50rem; }
 #payrec-page .badge-pending { background: #fff8e1; color: #7b5e00; }
 #payrec-page .badge-settled { background: #e8f5e9; color: #1b5e20; }
+#payrec-page .badge-justified { background: #e3f2fd; color: #0d47a1; }
 [data-bs-theme="dark"] #payrec-page .badge-pending { background: rgba(255,193,7,.18); color: #ffd54f; }
 [data-bs-theme="dark"] #payrec-page .badge-settled { background: rgba(76,175,80,.18); color: #a5d6a7; }
+[data-bs-theme="dark"] #payrec-page .badge-justified { background: rgba(33,150,243,.18); color: #90caf9; }
+
+/* Justify columns (Comment + Actions): hidden until the operator chooses to
+   justify pending items from the End-process dialog. */
+#payrec-page .pr-justify-col { display: none; }
+#payrec-page.pr-justify .pr-justify-col { display: table-cell; }
+#payrec-page .pr-comment-input { width: 100%; min-width: 160px; font-size: .78rem; padding: 3px 8px;
+    border: 1px solid var(--pr-hairline); border-radius: 6px; background: var(--ins-secondary-bg, #fff); color: inherit; }
+#payrec-page .pr-act-btn { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 6px;
+    color: var(--bs-secondary-color); line-height: 1; }
+#payrec-page .pr-act-btn:hover { background: rgba(0,102,204,.10); color: #0066cc; }
+#payrec-page .pr-act-confirm:hover { background: rgba(25,135,84,.12); color: #198754; }
 
 #payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
 @keyframes pr-spin { to { transform: rotate(360deg); } }
@@ -186,6 +199,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
+                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
+                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendPayBody"></tbody>
                     </table>
@@ -208,6 +223,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
+                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
+                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendRecBody"></tbody>
                     </table>
