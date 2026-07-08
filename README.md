@@ -1,4 +1,4 @@
-# UBold Flask - Guia de Instalação e Estrutura
+# OTC Tracker Flask - Guia de Instalação e Estrutura
 
 ## Índice
 1. [Pré-requisitos](#pré-requisitos)
@@ -16,7 +16,7 @@
 
 ## Estrutura do Projeto
 ```
-UBold/
+OTC Tracker/
 ├── apps/                     # Pasta principal onde fica todo o código do sistema
 │   ├── config.py            # Arquivo que guarda todas as configurações do sistema (banco de dados, senhas, etc.)
 │   ├── pages/               # Pasta que contém os arquivos que controlam as páginas do site (como elas funcionam e o que mostram)

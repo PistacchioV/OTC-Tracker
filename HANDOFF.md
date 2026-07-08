@@ -3955,3 +3955,10 @@ dia for usada, as células passam a centralizar junto (coerente com o pedido).
 
 ### 76.3 — Centralização do td: + Operations B3
 Mesma centralização (76.2) aplicada à `operations-b3.html` (`#opb3-table tbody td` + `text-align: center`).
+
+### 76.4 — Varredura de branding (UBold / Coderthemes)
+Varredura em todo o projeto (incl. minificados/binários e `Docs/`): **0** ocorrências de "Coderthemes"
+(o rename já removera tudo) e só **2** de "UBold" em código/docs → trocadas em `README.md` (título
+"UBold Flask" → "OTC Tracker Flask"; raiz da árvore `UBold/` → `OTC Tracker/`). A única outra ocorrência
+é a linha 3093 deste HANDOFF ("boilerplate UBold original") — **referência histórica** ao template de
+origem, mantida (descreve o estado pré-rename; §8 proíbe sobrescrever sem permissão).
