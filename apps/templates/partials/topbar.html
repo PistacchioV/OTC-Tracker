@@ -31,8 +31,8 @@
     border-radius: 50%;
     background: var(--ins-primary, #0d6efd);
   }
-  /* Live notification toast (bottom-right) — mirrors the bell item content. */
-  #otc-toast-container { z-index: 1090; }
+  /* Live notification toast (top-right, just below the topbar) — mirrors the bell item content. */
+  #otc-toast-container { z-index: 1090; top: var(--ins-topbar-height, 64px); }
   .otc-notif-toast { width: 360px; max-width: calc(100vw - 2rem); }
   .otc-notif-toast .notification-badge {
     display: flex !important; align-items: center !important; justify-content: center !important;
@@ -605,14 +605,14 @@
                 if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
             }
 
-            // Live toast (bottom-right) mirroring a bell notification: same content,
+            // Live toast (top-right) mirroring a bell notification: same content,
             // same deep-link + mark-read on click. Auto-hides after 8s; stacks.
             function ensureToastContainer() {
                 var c = document.getElementById('otc-toast-container');
                 if (!c) {
                     c = document.createElement('div');
                     c.id = 'otc-toast-container';
-                    c.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                    c.className = 'toast-container position-fixed end-0 p-3';
                     document.body.appendChild(c);
                 }
                 return c;
