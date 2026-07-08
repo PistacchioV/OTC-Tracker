@@ -14,6 +14,22 @@
 
 ---
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+  COMO EDITAR ESTE DOCUMENTO
+  Este arquivo .md é a FONTE ÚNICA do SOP. Edite aqui e regenere o Word:
+      pip install python-docx           (uma vez)
+      python scripts/build_sop_docx.py  (gera SOP_PROCESSAMENTO_OTC.docx)
+  • Para INCLUIR um módulo novo: copie o bloco-modelo do fim do arquivo
+    (secao 8), cole na seção 5 sob a seção correta do sidebar, e aponte a
+    imagem para docs/sop-screenshots/<nome>.png.
+  • Para RECAPTURAR as telas (após novos módulos): veja o guia na seção 8.
+  • Comentarios como este (<!-- ... -->) sao ignorados no Word.
+═══════════════════════════════════════════════════════════════════════ -->
+
+> ✏️ **Documento vivo.** Ainda faltam módulos a desenvolver no código. Os módulos já prontos estão na seção 5; os pendentes estão listados na seção 5.99 (marque conforme forem entregues). Edite este `.md` e rode `python scripts/build_sop_docx.py` para regerar o Word.
+
+---
+
 ## 1. Índice
 
 - 2. Visão Geral
@@ -287,6 +303,51 @@ Abertura de um novo chamado de suporte interno.
 
 ![Central de Chamados — Novo](docs/sop-screenshots/ticket-create.png)
 
+### 5.99. Módulos pendentes (a desenvolver) 🔧
+
+Os 29 módulos abaixo estão previstos no menu lateral mas **ainda não foram desenvolvidos** no código (as rotas retornam 404). Conforme cada um for entregue: (1) recapture a tela — veja a seção 8; (2) marque o item como concluído `- [x]`; (3) mova-o para a seção 5 correspondente usando o bloco-modelo da seção 8.
+
+**Aplicações — Daily Settlement (Apps)**
+
+- [ ] **Electronic Inventory** — `/electronic-inventory`
+- [ ] **Latam Desk Position** — `/other-products-swap-latamdeskposition`
+- [ ] **Athena** — `/other-products-swap-athena`
+- [ ] **VCP** — `/other-products-swap-vcp`
+- [ ] **Events** — `/other-products-swap-events`
+
+**Documentação (Documentation)**
+
+- [ ] **Metrics** — `/metrics`
+- [ ] **Manual Confirmation** — `/manual-confirmation`
+- [ ] **CGD** — `/cgd`
+
+**Regulatório (Regulatory)**
+
+- [ ] **KAPITAL** — `/regulatory/e-financeira/kapital`
+- [ ] **ATHENA-NDF** — `/regulatory/e-financeira/athena-ndf`
+- [ ] **ATHENA-FXO** — `/regulatory/e-financeira/athena-fxo`
+- [ ] **PYRAMID** — `/regulatory/e-financeira/pyramid`
+- [ ] **WHT** — `/regulatory/wht`
+
+**Produtos — New Deals (Products)**
+
+- [ ] **Deliverable Forward** — `/new-deals/dce/deliverable-forward`
+- [ ] **NDF** — `/new-deals/dce/ndf`
+- [ ] **Option** — `/new-deals/dce/option`
+- [ ] **Swap** — `/new_deals-dce-swap`
+- [ ] **CEM** — `/unwinds/swap/cem`
+- [ ] **EDG** — `/unwinds/swap/edg`
+- [ ] **FX** — `/unwinds/ndf/fx`
+- [ ] **Commodities** — `/unwinds/ndf/commodities`
+- [ ] **FXO** — `/unwinds/options/fxo`
+- [ ] **Commodities** — `/unwinds/options/commodities`
+- [ ] **EDG** — `/unwinds/options/edg`
+- [ ] **COE** — `/unwinds/coe`
+- [ ] **Deliverable Forward** — `/unwinds/dce/deliverable-forward`
+- [ ] **NDF** — `/unwinds/dce/ndf`
+- [ ] **Option** — `/unwinds/dce/option`
+- [ ] **Swap** — `/unwinds/dce/swap`
+
 ## 6. Tratamento de Exceções
 
 | Código / Mensagem | Quando ocorre | Ação do operador |
@@ -315,3 +376,39 @@ Abertura de um novo chamado de suporte interno.
 | 3 — Plantão Back Office OTC | plantao.otc@exemplo · +55 (11) 4000-0099 | Dias úteis 06–22h |
 
 Ao abrir chamado, informe: rotina/tela, Data Base, mensagem de erro + horário, nome do arquivo.
+
+---
+
+## 8. Manutenção do documento
+
+### 8.1. Regerar o Word a partir deste `.md`
+
+```bash
+pip install python-docx          # apenas na primeira vez
+python scripts/build_sop_docx.py  # gera SOP_PROCESSAMENTO_OTC.docx
+```
+
+O conversor entende títulos, tabelas, listas, checkboxes, citações, `código`, imagens `![alt](caminho)` e ignora comentários `<!-- ... -->`. Os caminhos de imagem são relativos à raiz do repositório.
+
+### 8.2. Recapturar as telas (quando um módulo novo ficar pronto)
+
+As telas foram capturadas com um runner local de desenvolvimento (Flask + Chromium headless) que injeta dados **fictícios** via mock. O runner e os scripts de captura **não ficam no repositório** (contêm um stub de login de desenvolvimento que nunca deve ser commitado). Fluxo resumido:
+
+1. Suba o app localmente em modo dev e autentique com o bypass local.
+2. Rode o capturador (Playwright/Chromium) apontando para a nova rota; ele intercepta as chamadas `/api/**` e injeta linhas fictícias reaproveitando as colunas reais.
+3. Salve o PNG em `docs/sop-screenshots/<rota-com-hifens>.png`.
+4. Inclua o módulo na seção 5 (bloco-modelo abaixo) e regere o Word.
+
+### 8.3. Bloco-modelo para incluir um módulo
+
+Copie o trecho abaixo, cole na subseção correta da seção 5 e preencha:
+
+```markdown
+#### <Título do Módulo>
+
+<Descrição operacional: o que a tela faz, o que o operador preenche/importa/valida, e o que o botão principal gera.>
+
+![<Título do Módulo>](docs/sop-screenshots/<nome-do-arquivo>.png)
+```
+
+> Ao trocar/incluir telas, garanta que os dados exibidos sejam **fictícios** — nenhum dado real de cliente, servidor, conta ou credencial pode aparecer nas imagens.
