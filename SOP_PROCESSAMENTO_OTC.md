@@ -1,0 +1,317 @@
+# Procedimento Operacional Padrão (SOP)
+
+## Processamento de Operações de Derivativos OTC — Sistema OTC Tracker
+
+| Campo | Conteúdo |
+|---|---|
+| **Empresa** | JPMorgan Chase & Co. — Back Office de Derivativos |
+| **Sistema** | OTC Tracker — Plataforma de Back Office de Derivativos OTC |
+| **Documento** | SOP-OTC-001 · **Versão** 1.0 |
+| **Data de emissão** | 08/07/2026 |
+| **Público-alvo** | Operador / Analista de Back Office de Derivativos OTC |
+
+> **Aviso de privacidade:** as telas são renderizações reais do OTC Tracker; os dados exibidos (contrapartes, CNPJs, contas, valores, datas) são **fictícios**. Nenhum dado real de cliente, servidor ou credencial é reproduzido.
+
+---
+
+## 1. Índice
+
+- 2. Visão Geral
+- 3. Conceitos-Chave
+- 4. Passo a Passo Operacional
+- 5. Referência de Módulos (ordem do sidebar)
+- 6. Tratamento de Exceções
+- 7. Suporte
+
+---
+
+## 2. Visão Geral
+
+O **OTC Tracker** consolida, valida, registra e concilia operações de Derivativos de Balcão (OTC) — NDF, Opções (FXO e Commodities), Swap e COE — no ciclo diário de liquidação. O sistema importa os arquivos de posição, aplica as regras de negócio, gera os arquivos de registro no layout da câmara e permite a conciliação (recon) contra o retorno. Todo processamento é ancorado à **Data Base** (data de referência).
+
+## 3. Conceitos-Chave
+
+**Data Base** — eixo do processamento. Em branco, o sistema assume o dia útil anterior (calendário ANBIMA/câmara). Arquivos são organizados em pastas por data; reprocessar um dia sobrescreve só a porção daquele dia.
+
+**Campos validados:** Trade Date, Maturity/Expiry, Strike, Notional, Data Base/Data de Referência MTM, Classe do Ativo Subjacente.
+
+**Ciclo de vida:** Definir Data Base → Importar posição → Validar → Gerar registro → Conciliar (recon) → Encerrar (End Process).
+
+## 4. Passo a Passo Operacional
+
+### Passo 1 — Autenticar e definir a Data Base
+
+Faça login (com verificação em duas etapas) e abra o Painel de Controle. Em cada rotina, defina a "Reference date". Deixe em branco apenas para processar automaticamente o dia útil anterior. Exemplo fictício: para reprocessar 02/03/2026 da contraparte AURORA TRADING LTDA, selecione essa data.
+
+![Passo 1 — Autenticar e definir a Data Base](docs/sop-screenshots/control-panel.png)
+
+*Tela real do OTC Tracker — dados fictícios.*
+
+### Passo 2 — Importar / salvar os arquivos de posição
+
+Na tela do produto (ex.: NDF Cockpit, OTM Settlements, MtM Swap), arraste os arquivos na dropzone ou importe da pasta. O sistema reconhece o tipo pelo nome e exibe os contadores por categoria.
+
+![Passo 2 — Importar / salvar os arquivos de posição](docs/sop-screenshots/ndf-cockpit.png)
+
+*Tela real do OTC Tracker — dados fictícios.*
+
+### Passo 3 — Validar os campos e classificar a posição
+
+Revise as linhas (Trade Date, Vencimento, Strike, Notional, Classe). Use Adicionar/Editar/Remover e Confirmar. Os cards (ex.: Vanilla / Other Publisher / T+0 / Total no NDF Summary) mostram a classificação.
+
+![Passo 3 — Validar os campos e classificar a posição](docs/sop-screenshots/ndf-summary.png)
+
+*Tela real do OTC Tracker — dados fictícios.*
+
+### Passo 4 — Conferir a posição viva
+
+Nas telas de Live Position (somente leitura), confira a posição em custódia na Data Base. No NDF, os widgets Vanilla / Other Publisher / T+0 / Commodities / Total resumem a carteira.
+
+![Passo 4 — Conferir a posição viva](docs/sop-screenshots/live-position-ndf.png)
+
+*Tela real do OTC Tracker — dados fictícios.*
+
+### Passo 5 — Processar, conciliar e encerrar
+
+Gere o arquivo de registro (Process / Send batch), importe o retorno da câmara e rode o Recon; trate as divergências (OK/Check) e acione End Process. No MtM Swap todo esse ciclo está em uma tela.
+
+![Passo 5 — Processar, conciliar e encerrar](docs/sop-screenshots/mtm-swap.png)
+
+*Tela real do OTC Tracker — dados fictícios.*
+
+## 5. Referência de Módulos (na ordem do sidebar)
+
+### Navegação (Main)
+
+#### Dashboard
+
+Tela inicial do operador. Consolida os KPIs do dia — número de deals de NDF, Opções, Swap e Total — além da distribuição por produto, do fluxo mensal de negócios, dos rankings Top 5 (clientes, produtos e ativos subjacentes), da posição viva por produto e do Settlement Forecast. É somente leitura e serve como ponto de partida diário.
+
+![Dashboard](docs/sop-screenshots/dashboard.png)
+
+#### Sobre o Sistema
+
+Página institucional com a identificação do sistema OTC Tracker e informações gerais de versão e propósito.
+
+![Sobre o Sistema](docs/sop-screenshots/about.png)
+
+### Aplicações — Daily Settlement (Apps)
+
+#### Calendário de Feriados
+
+Calendário de feriados (base ANBIMA / câmara) que alimenta o cálculo de dias úteis. É a referência que o sistema usa para resolver automaticamente a Data Base (dia útil anterior) e para projetar liquidações.
+
+![Calendário de Feriados](docs/sop-screenshots/holidays-calendar.png)
+
+#### Interpretador de Arquivos
+
+Ferramenta de apoio para inspecionar e interpretar arquivos de posição e mensagens (planilhas, .msg) antes do processamento, ajudando o operador a validar o conteúdo bruto recebido.
+
+![Interpretador de Arquivos](docs/sop-screenshots/file-interpreter.png)
+
+#### Painel de Controle
+
+Hub das rotinas operacionais diárias. Contém "Save CETIP Files" (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação), "Save Daily Settlement Files" (dropzone que processa todos os arquivos do dia em JSON), "Settlement Forecast" (projeta as liquidações dos próximos dias úteis e envia por e-mail) e "Update Contacts". Em cada cartão o operador define a Reference date (Data Base).
+
+![Painel de Controle](docs/sop-screenshots/control-panel.png)
+
+#### NDF — Summary
+
+Batch de liquidação de NDF do dia. Os cards Vanilla / Other Publisher / T+0 / Total classificam a posição. As grades editáveis "Settlement Summary" e "Trade Level" permitem adicionar, editar, remover e confirmar linhas antes de gerar o batch.
+
+![NDF — Summary](docs/sop-screenshots/ndf-summary.png)
+
+#### NDF — Cockpit
+
+Cockpit operacional do NDF. Importa o arquivo do dia e permite adicionar, editar, remover e confirmar linhas da posição, consolidando o registro antes do envio.
+
+![NDF — Cockpit](docs/sop-screenshots/ndf-cockpit.png)
+
+#### Other Products — Summary
+
+Resumo consolidado dos demais produtos (COE, NDF, Option, Swap) com widgets de total, vencimentos (maturity), prêmio e fluxo por produto.
+
+![Other Products — Summary](docs/sop-screenshots/other-products-summary.png)
+
+#### OTM Settlements
+
+Liquidações OTM (cashflows). Importa o arquivo de liquidação e permite adicionar, editar, remover e confirmar cada linha antes do fechamento.
+
+![OTM Settlements](docs/sop-screenshots/otm-settlements.png)
+
+#### Cognos (FXO Detail)
+
+Visão de detalhe das operações de Opção FX (FXO), com as datas e parâmetros do contrato (strike, vencimento, prêmio) para conferência.
+
+![Cognos (FXO Detail)](docs/sop-screenshots/cognos.png)
+
+#### Live Position — NDF
+
+Posição viva de NDF (somente leitura), com os widgets Vanilla / Other Publisher / T+0 / Commodities / Total e a tabela dos contratos em custódia na Data Base. Descarta o filtro de vencimento — conta a posição viva.
+
+![Live Position — NDF](docs/sop-screenshots/live-position-ndf.png)
+
+#### Live Position — Swap (Características)
+
+Posição viva de Swap com as características de cada contrato em custódia na Data Base.
+
+![Live Position — Swap (Características)](docs/sop-screenshots/live-position-swap-characteristics.png)
+
+#### Live Position — Option
+
+Posição viva das Opções em custódia na Data Base, com strike, barreiras, prêmio e situação do contrato.
+
+![Live Position — Option](docs/sop-screenshots/live-position-option.png)
+
+#### Operations — B3
+
+Operações registradas na B3. Importa o retorno, permite adicionar/editar/remover e confirmar linhas e consolida as métricas de operações do dia.
+
+![Operations — B3](docs/sop-screenshots/operations-b3.png)
+
+### Conciliações (Reconciliations)
+
+#### Conciliação — Comitente
+
+Concilia as posições por comitente entre a base interna e o retorno da câmara, sinalizando divergências.
+
+![Conciliação — Comitente](docs/sop-screenshots/reconciliation-comitente.png)
+
+#### Conciliação — Pay/Rec
+
+Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tratar antes do encerramento.
+
+![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
+
+### Documentação (Documentation)
+
+#### Pending Confirmation
+
+Fila das operações com confirmação pendente, para o operador acompanhar e tratar o que ainda não foi confirmado pela contraparte/câmara.
+
+![Pending Confirmation](docs/sop-screenshots/pending-confirmation.png)
+
+### Regulatório (Regulatory)
+
+#### Accrual — Swap (EOM)
+
+Processamento de accrual de Swap no fim de mês (EOM). Importa/calcula os fatores, roda a Validação (que bloqueia com "missing_accrual" se houver contratos sem fator), gera os arquivos de validação, concilia (recon) contra o retorno e encerra o processo.
+
+![Accrual — Swap (EOM)](docs/sop-screenshots/accrual-swap.png)
+
+#### MtM — Swap
+
+Marcação a mercado (MtM) de Swap e COE. Importa o arquivo de posição e os arquivos de valores de MtM (o sistema reconhece o tipo pelo nome), gera o batch no layout da câmara, concilia (recon) e encerra o processo.
+
+![MtM — Swap](docs/sop-screenshots/mtm-swap.png)
+
+### Produtos — New Deals (Products)
+
+#### New Deals — NDF Forward Start
+
+Registro de novos negócios de NDF do tipo Forward Start.
+
+![New Deals — NDF Forward Start](docs/sop-screenshots/new_deals-ndf-fwdstart.png)
+
+#### New Deals — NDF Other Publisher
+
+Registro de novos negócios de NDF do tipo Other Publisher (feeder).
+
+![New Deals — NDF Other Publisher](docs/sop-screenshots/new_deals-ndf-otherpublisher.png)
+
+#### New Deals — NDF Commodities
+
+Registro de novos negócios de NDF de Commodities. Mantém o cache de deals, gera o arquivo Conecta e o mapeamento para a B3.
+
+![New Deals — NDF Commodities](docs/sop-screenshots/new_deals-ndf-commodities.png)
+
+#### New Deals — Opção FXO
+
+Registro de novos negócios de Opção FX (FXO). Importa a planilha, mantém o cache, gera o arquivo Conecta e o mapeamento B3 (strike, notional, vencimento, fixing).
+
+![New Deals — Opção FXO](docs/sop-screenshots/new_deals-opt-fxo.png)
+
+#### New Deals — Opção Commodities
+
+Registro de novos negócios de Opção de Commodities, com cache, geração Conecta e mapeamento B3.
+
+![New Deals — Opção Commodities](docs/sop-screenshots/new_deals-opt-commodities.png)
+
+### Base de Dados & Administração (Data Base)
+
+#### Reference Data
+
+Dados de referência e tabelas de apoio usados pelas demais telas (contrapartes, contas, mapeamentos).
+
+![Reference Data](docs/sop-screenshots/reference-data.png)
+
+#### Index B3
+
+Consulta de índices e resultados da B3 usados nas apurações.
+
+![Index B3](docs/sop-screenshots/index-b3.png)
+
+#### Intragrupo — NDF
+
+Operações intragrupo de NDF. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo.
+
+![Intragrupo — NDF](docs/sop-screenshots/intrag-ndf.png)
+
+#### Intragrupo — Opção
+
+Operações intragrupo de Opção. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo.
+
+![Intragrupo — Opção](docs/sop-screenshots/intrag-option.png)
+
+#### Usuários & Papéis
+
+Administração de usuários e papéis (perfis de acesso) do sistema.
+
+![Usuários & Papéis](docs/sop-screenshots/users-roles.png)
+
+#### Central de Chamados — Lista
+
+Lista dos chamados de suporte interno registrados no sistema.
+
+![Central de Chamados — Lista](docs/sop-screenshots/tickets-list.png)
+
+#### Central de Chamados — Detalhe
+
+Detalhe de um chamado de suporte, com histórico e status.
+
+![Central de Chamados — Detalhe](docs/sop-screenshots/ticket-details.png)
+
+#### Central de Chamados — Novo
+
+Abertura de um novo chamado de suporte interno.
+
+![Central de Chamados — Novo](docs/sop-screenshots/ticket-create.png)
+
+## 6. Tratamento de Exceções
+
+| Código / Mensagem | Quando ocorre | Ação do operador |
+|---|---|---|
+| HTTP 401 — Not authenticated | Sessão expirou/não autenticada. | Refaça login + 2FA. |
+| HTTP 400 — No file provided | Nenhum arquivo enviado. | Selecione/arraste o arquivo. |
+| HTTP 400 — Invalid date | Data em formato inválido. | Use o datepicker. |
+| HTTP 400 — Unrecognized file | Nome do arquivo fora do padrão. | Envie o arquivo correto; renomeie. |
+| HTTP 400 — No files in source folder | Pasta da Data Base vazia. | Confirme os arquivos do dia / ajuste a data. |
+| HTTP 400 — No CEM/EDG rows loaded | Valores de MtM antes da posição. | Importe a posição primeiro. |
+| HTTP 400 — missing_accrual | Contratos sem fator (EOM). | Preencha os fatores e revalide. |
+| HTTP 404 — No saved data for this date | Sem conjunto salvo para a data. | Rode a importação antes de validar/recon. |
+| HTTP 500 — Failed to read/save/write | Falha interna (log/traceback). | Tente de novo; se persistir, Suporte. |
+| Validação de formulário | Campo vazio/inválido (ex.: Strike). | Corrija (Editar) e reconfirme. |
+
+> Erros 400/404 são corrigíveis pelo operador; erros 500 vão para o Suporte de TI.
+
+## 7. Suporte
+
+> Contatos fictícios — modelo para preenchimento.
+
+| Nível | Canal / Contato | Horário |
+|---|---|---|
+| 1 — Central de TI | portal.suporte.exemplo · +55 (11) 4000-0000 | 24x7 |
+| 2 — Aplicação (OTC Tracker) | suporte.otctracker@exemplo | Dias úteis 07–20h |
+| 3 — Plantão Back Office OTC | plantao.otc@exemplo · +55 (11) 4000-0099 | Dias úteis 06–22h |
+
+Ao abrir chamado, informe: rotina/tela, Data Base, mensagem de erro + horário, nome do arquivo.
