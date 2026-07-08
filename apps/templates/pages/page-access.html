@@ -1,0 +1,201 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Page Access{% endblock title %}
+
+{% block extra_css %}
+<style>
+  #page-access-page .pa-user-list { max-height: 66vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  #page-access-page .pa-user { text-align: left; border: 1px solid var(--bs-border-color); background: var(--ins-secondary-bg, #fff);
+      border-radius: 10px; padding: 8px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; transition: .12s; }
+  #page-access-page .pa-user:hover { border-color: #0066cc; background: rgba(0,102,204,.05); }
+  #page-access-page .pa-user.active { border-color: #0066cc; background: rgba(0,102,204,.10); }
+  #page-access-page .pa-user-name { font-weight: 600; font-size: .85rem; }
+  #page-access-page .pa-user-sub { font-size: .72rem; color: var(--bs-secondary-color); }
+  #page-access-page .pa-section { margin-bottom: 14px; }
+  #page-access-page .pa-section__head { display: flex; align-items: center; justify-content: space-between;
+      font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color);
+      border-bottom: 1px solid var(--bs-border-color); padding-bottom: 4px; margin-bottom: 6px; }
+  #page-access-page .pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
+  #page-access-page .pa-item { display: flex; align-items: center; gap: 8px; font-size: .82rem; padding: 2px 0; }
+  #page-access-page .pa-note { font-size: .78rem; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  #page-access-page .pa-note--info { background: #e3f2fd; color: #0d47a1; }
+  #page-access-page .pa-note--admin { background: #fff8e1; color: #7b5e00; }
+  [data-bs-theme="dark"] #page-access-page .pa-note--info { background: rgba(33,150,243,.18); color: #90caf9; }
+  [data-bs-theme="dark"] #page-access-page .pa-note--admin { background: rgba(255,193,7,.18); color: #ffd54f; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="page-access-page" data-content="">
+
+    {% set subtitle='Users' %}
+    {% set title='Page Access' %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="row">
+        <!-- Users -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header border-light">
+                    <h4 class="card-title mb-0" data-lang="pa-users">Users</h4>
+                </div>
+                <div class="card-body">
+                    <input id="pa-user-search" class="form-control form-control-sm mb-2" type="search"
+                        placeholder="Search user…" data-lang-placeholder="pa-search">
+                    <div id="pa-user-list" class="pa-user-list">
+                        {% for u in users %}
+                        <button type="button" class="pa-user" data-sid="{{ u.SID }}"
+                                data-name="{{ u.Name }}" data-role="{{ u.Role }}">
+                            <span class="pa-user-name">{{ u.Name or u.SID }}</span>
+                            <span class="pa-user-sub">{{ u.SID }}{% if u.Role %} · {{ u.Role }}{% endif %}</span>
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Access editor -->
+        <div class="col-lg-8">
+            <div class="card" id="pa-empty">
+                <div class="card-body text-center text-muted py-5">
+                    <i data-lucide="lock" style="width:34px;height:34px;opacity:.5"></i>
+                    <p class="mt-2 mb-0" data-lang="pa-pick">Select a user to choose which pages they can access.</p>
+                </div>
+            </div>
+            <div class="card" id="pa-editor" hidden>
+                <div class="card-header border-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h4 class="card-title mb-0" id="pa-editor-title">—</h4>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" id="pa-all" type="button" data-lang="pa-all">Select all</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="pa-none" type="button" data-lang="pa-none">Clear</button>
+                        <button class="btn btn-sm btn-primary" id="pa-save" type="button"><i class="ti ti-device-floppy me-1"></i><span data-lang="pa-save">Save</span></button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="pa-note" class="pa-note" hidden></div>
+                    <div id="pa-sections"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" />
+<script>
+(function () {
+  'use strict';
+  var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
+  var current = null;   // {sid, name, role}
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // Enumerate the grantable pages from the live sidebar (real labels + sections).
+  function buildPages() {
+    var nav = document.querySelector('.side-nav');
+    var out = [], seen = {}, section = 'General';
+    if (!nav) return out;
+    nav.querySelectorAll('.side-nav-title, a.side-nav-link[href^="/"]').forEach(function (el) {
+      if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
+      var href = el.getAttribute('href');
+      if (!href || ALWAYS[href] || seen[href]) return;
+      seen[href] = 1;
+      var lbl = el.querySelector('.menu-text');
+      out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href, section: section });
+    });
+    return out;
+  }
+  var PAGES = buildPages();
+
+  function renderSections(allowed) {
+    // allowed === null → unconfigured (pre-check everything). Else a set of URLs.
+    var bySection = {}, order = [];
+    PAGES.forEach(function (p) {
+      if (!bySection[p.section]) { bySection[p.section] = []; order.push(p.section); }
+      bySection[p.section].push(p);
+    });
+    var html = order.map(function (sec) {
+      var items = bySection[sec].map(function (p) {
+        var checked = (allowed === null || allowed[p.url]) ? 'checked' : '';
+        return '<label class="pa-item"><input type="checkbox" class="form-check-input pa-cb" value="' +
+          esc(p.url) + '" ' + checked + '><span>' + esc(p.label) + '</span></label>';
+      }).join('');
+      return '<div class="pa-section"><div class="pa-section__head"><span>' + esc(sec) +
+        '</span><a href="javascript:void(0)" class="pa-sec-all" style="font-size:.7rem">all</a></div>' +
+        '<div class="pa-grid">' + items + '</div></div>';
+    }).join('');
+    document.getElementById('pa-sections').innerHTML = html;
+    // Per-section "all" toggles.
+    document.querySelectorAll('.pa-sec-all').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var grid = this.closest('.pa-section').querySelectorAll('.pa-cb');
+        var allOn = Array.prototype.every.call(grid, function (c) { return c.checked; });
+        grid.forEach(function (c) { c.checked = !allOn; });
+      });
+    });
+  }
+
+  function selectUser(btn) {
+    current = { sid: btn.getAttribute('data-sid'), name: btn.getAttribute('data-name'), role: btn.getAttribute('data-role') };
+    document.querySelectorAll('.pa-user').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    document.getElementById('pa-empty').hidden = true;
+    document.getElementById('pa-editor').hidden = false;
+    document.getElementById('pa-editor-title').textContent = current.name + ' (' + current.sid + ')';
+    var note = document.getElementById('pa-note');
+    fetch('/api/page-access/' + encodeURIComponent(current.sid), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var allowed = null;
+        if (d && d.success && d.configured) { allowed = {}; (d.pages || []).forEach(function (u) { allowed[u] = 1; }); }
+        renderSections(allowed);
+        if (current.role === 'ADMIN') {
+          note.hidden = false; note.className = 'pa-note pa-note--admin';
+          note.textContent = 'This user is an admin and always has full access — a restriction here has no effect.';
+        } else if (allowed === null) {
+          note.hidden = false; note.className = 'pa-note pa-note--info';
+          note.textContent = 'Not restricted yet — this user currently has full access. Saving will start enforcing the selection.';
+        } else { note.hidden = true; }
+      });
+  }
+
+  function save() {
+    if (!current) return;
+    var pages = Array.prototype.map.call(document.querySelectorAll('.pa-cb:checked'), function (c) { return c.value; });
+    fetch('/api/page-access/' + encodeURIComponent(current.sid), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ pages: pages })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res && res.success) {
+        var note = document.getElementById('pa-note');
+        if (current.role !== 'ADMIN') { note.hidden = false; note.className = 'pa-note pa-note--info';
+          note.textContent = current.name + ' can now access ' + pages.length + ' page(s).'; }
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Saved',
+          text: current.name + ' — ' + pages.length + ' page(s) allowed.', timer: 1400, showConfirmButton: false, confirmButtonColor: '#0066cc' });
+      } else if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || 'Could not save.', confirmButtonColor: '#0066cc' });
+      }
+    }).catch(function () {
+      if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Error', text: 'Network error.', confirmButtonColor: '#0066cc' });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.pa-user').forEach(function (b) { b.addEventListener('click', function () { selectUser(b); }); });
+    document.getElementById('pa-save').addEventListener('click', save);
+    document.getElementById('pa-all').addEventListener('click', function () { document.querySelectorAll('.pa-cb').forEach(function (c) { c.checked = true; }); });
+    document.getElementById('pa-none').addEventListener('click', function () { document.querySelectorAll('.pa-cb').forEach(function (c) { c.checked = false; }); });
+    var search = document.getElementById('pa-user-search');
+    if (search) search.addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      document.querySelectorAll('.pa-user').forEach(function (b) {
+        b.style.display = (b.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  });
+})();
+</script>
+{% endblock extra_javascript %}

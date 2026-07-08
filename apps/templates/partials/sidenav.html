@@ -1041,6 +1041,12 @@
                             <span class="menu-text" data-lang="users">Users</span>
                         </a>
                     </li>
+                    <li class="side-nav-item" id="nav-item-page-access" hidden>
+                        <a href="/page-access" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="lock"></i></span>
+                            <span class="menu-text" data-lang="page-access">Page Access</span>
+                        </a>
+                    </li>
 
                     <li class="side-nav-item">
                         <a data-bs-toggle="collapse" href="#sidebarTickets" aria-expanded="false" aria-controls="sidebarTickets"
@@ -1835,3 +1841,53 @@
             </div>
         </div>
         <!-- Sidenav Menu End -->
+
+<script>
+// Per-user page access applied to the sidebar: an admin sees the Page Access
+// link; a configured non-admin only sees the links they can reach; unconfigured
+// users and admins see everything.
+(function () {
+  var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
+  fetch('/api/me/access', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.success) return;
+      if (d.is_admin) {
+        var pa = document.getElementById('nav-item-page-access');
+        if (pa) pa.hidden = false;
+        return;
+      }
+      if (!d.configured) return;                       // full access — nothing to hide
+      var allowed = {};
+      (d.pages || []).forEach(function (u) { allowed[u] = 1; });
+      var nav = document.querySelector('.side-nav');
+      if (!nav) return;
+      // Hide each link the user can't reach.
+      nav.querySelectorAll('a.side-nav-link[href^="/"]').forEach(function (a) {
+        var href = a.getAttribute('href');
+        if (ALWAYS[href] || allowed[href]) return;
+        var li = a.closest('.side-nav-item');
+        if (li) li.hidden = true;
+      });
+      // Collapse submenu parents left with no visible children.
+      nav.querySelectorAll('.sub-menu').forEach(function (sub) {
+        var anyVisible = Array.prototype.some.call(sub.querySelectorAll('.side-nav-item'),
+          function (li) { return !li.hidden; });
+        if (!anyVisible) {
+          var parentLi = sub.closest('.side-nav-item');
+          if (parentLi) parentLi.hidden = true;
+        }
+      });
+      // Hide section titles with no visible items beneath them (until next title).
+      nav.querySelectorAll('.side-nav-title').forEach(function (title) {
+        var anyVisible = false, el = title.nextElementSibling;
+        while (el && !el.classList.contains('side-nav-title')) {
+          if (el.classList.contains('side-nav-item') && !el.hidden) { anyVisible = true; break; }
+          el = el.nextElementSibling;
+        }
+        if (!anyVisible) title.hidden = true;
+      });
+    })
+    .catch(function () {});
+})();
+</script>

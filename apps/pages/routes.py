@@ -109,6 +109,101 @@ def add_no_store_on_authed_pages(response):
 
 
 # ==============================================================================
+# PER-USER PAGE ACCESS
+# An admin grants each user a subset of the sidebar pages. Users with no
+# configuration keep full access (backward compatible); admins always have full
+# access. Enforced here (before_request), in the sidebar (JS), and in the
+# notification feed (only pages the user can reach).
+# ==============================================================================
+
+# Pages everyone can always reach regardless of configuration.
+_ALWAYS_ALLOWED_PATHS = {'/dashboard', '/dashboard-2', '/users-profile', '/page-access'}
+
+# Notification "page" label → the sidebar URL it belongs to (for feed filtering).
+_NOTIF_PAGE_URL = {
+    'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
+    'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
+    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'Index B3': '/index-b3',
+    'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
+    'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
+    'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
+    'Intrag NDF': '/intrag-ndf', 'Reconciliation': '/reconciliation-payrec',
+}
+
+
+def _load_nav_urls():
+    """Parse the sidebar template once for every side-nav-link href — the set of
+    controllable pages. Robust to markup changes (matches the href only)."""
+    try:
+        fp = os.path.join(os.path.dirname(__file__), '..', 'templates', 'partials', 'sidenav.html')
+        with open(fp, encoding='utf-8') as fh:
+            html = fh.read()
+        urls = set(re.findall(r'<a[^>]*\bhref="(/[^"]+)"[^>]*\bclass="side-nav-link"', html))
+        urls |= set(re.findall(r'<a[^>]*\bclass="side-nav-link"[^>]*\bhref="(/[^"]+)"', html))
+        return urls - _ALWAYS_ALLOWED_PATHS
+    except Exception:
+        log.warning('[page-access] could not parse sidenav urls:\n%s', traceback.format_exc())
+        return set()
+
+
+_NAV_URLS = _load_nav_urls()
+
+
+def _get_page_access(sid):
+    """(configured, urls_set). configured=False → not set yet (full access);
+    configured=True → the stored allowlist (possibly empty)."""
+    if not sid:
+        return (False, set())
+    try:
+        conn = get_db_connection()
+        try:
+            row = conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid]).fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return (False, set())
+    raw = ((row[0] if row else '') or '').strip()
+    if not raw:
+        return (False, set())
+    try:
+        arr = json.loads(raw)
+        if isinstance(arr, list):
+            return (True, set(str(u) for u in arr))
+    except Exception:
+        pass
+    return (False, set())
+
+
+def _set_page_access(sid, urls):
+    conn = get_db_connection()
+    try:
+        payload = json.dumps(sorted(set(str(u) for u in (urls or []))))
+        conn.execute("UPDATE users SET Page_Access = ? WHERE SID = ?", [payload, sid])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _session_is_admin():
+    return session.get('user_role') == 'ADMIN'
+
+
+@blueprint.before_request
+def enforce_page_access():
+    """Block direct navigation to a page the user isn't allowed to see. Admins and
+    unconfigured users pass; only a configured non-admin is restricted. API and
+    static requests are never blocked here (they keep their own auth)."""
+    if not session.get('authenticated') or _session_is_admin():
+        return
+    path = request.path or ''
+    if path.startswith('/api/') or path.startswith('/static') or path not in _NAV_URLS:
+        return
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    if configured and path not in allowed:
+        return redirect('/dashboard')
+
+
+# ==============================================================================
 # CONFIGURAÇÕES
 # ==============================================================================
 
@@ -425,6 +520,13 @@ def _migrate_schema():
             if 'Position' not in cols:
                 log.warning("[migrate] Adding missing column Position")
                 conn.execute("ALTER TABLE users ADD COLUMN Position VARCHAR DEFAULT ''")
+                conn.commit()
+
+            if 'Page_Access' not in cols:
+                # JSON array of accessible page URLs. NULL/'' = not configured yet →
+                # full access (backward compatible); a stored array = enforced allowlist.
+                log.warning("[migrate] Adding missing column Page_Access")
+                conn.execute("ALTER TABLE users ADD COLUMN Page_Access VARCHAR DEFAULT ''")
                 conn.commit()
 
             log.info("[migrate] Schema migration complete")
@@ -8231,6 +8333,56 @@ def users_roles():
                            users=users, role_groups=role_groups, role_display=role_display)
 
 
+# ── Page Access (admin-only) ──────────────────────────────────────────────────
+@blueprint.route('/page-access')
+def page_access():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    if not _session_is_admin():
+        return redirect('/dashboard')
+    return render_template('pages/page-access.html', segment='page-access',
+                           users=get_all_users())
+
+
+@blueprint.route('/api/me/access', methods=['GET'])
+def api_my_access():
+    """Current user's access, for the sidebar + admin-link visibility. is_admin →
+    everything; configured → the allowlist; otherwise unconfigured (full access)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False}), 401
+    if _session_is_admin():
+        return jsonify({'success': True, 'is_admin': True, 'configured': False, 'pages': []})
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    return jsonify({'success': True, 'is_admin': False,
+                    'configured': configured, 'pages': sorted(allowed)})
+
+
+@blueprint.route('/api/page-access/<sid>', methods=['GET', 'POST'])
+def api_page_access(sid):
+    if not session.get('authenticated'):
+        return jsonify({'success': False}), 401
+    if not _session_is_admin():
+        return jsonify({'success': False, 'message': 'Admins only.'}), 403
+    sid = (sid or '').strip()
+    if not sid:
+        return jsonify({'success': False, 'message': 'Missing SID'}), 400
+    if request.method == 'GET':
+        configured, allowed = _get_page_access(sid)
+        return jsonify({'success': True, 'configured': configured, 'pages': sorted(allowed)})
+    data = request.get_json(silent=True) or {}
+    pages = data.get('pages')
+    if not isinstance(pages, list):
+        return jsonify({'success': False, 'message': 'pages must be a list'}), 400
+    # Only persist URLs that are real controllable pages (ignore anything else).
+    clean = [u for u in (str(p) for p in pages) if u in _NAV_URLS]
+    _set_page_access(sid, clean)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Page Access Updated', 'Users',
+                         sid + ' — ' + str(len(clean)) + ' page' + ('' if len(clean) == 1 else 's'),
+                         target_role='ADMIN')
+    return jsonify({'success': True, 'pages': sorted(set(clean))})
+
+
 @blueprint.route('/api/users/update', methods=['POST'])
 def api_update_user():
     if not session.get('authenticated'):
@@ -12994,9 +13146,22 @@ def api_get_notifications():
                 "detail": r[5] or '',
                 "created_at": r[7].isoformat() if r[7] else ''
             })
-        return jsonify({"success": True, "notifications": notifs, "total_today": len(notifs)})
     finally:
         conn.close()
+
+    # Page-access filter: a configured non-admin only sees notifications for the
+    # pages they can reach. Admins / unconfigured users see everything. A page
+    # label with no known URL, or one that isn't a controllable page, is kept.
+    if not _session_is_admin():
+        configured, allowed = _get_page_access(session.get('user_sid', ''))
+        if configured:
+            def _visible(n):
+                url = _NOTIF_PAGE_URL.get(n.get('page', ''))
+                if not url or url not in _NAV_URLS:
+                    return True
+                return url in allowed
+            notifs = [n for n in notifs if _visible(n)]
+    return jsonify({"success": True, "notifications": notifs, "total_today": len(notifs)})
 
 
 @blueprint.route('/api/notifications', methods=['POST'])
