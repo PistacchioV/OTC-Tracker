@@ -781,6 +781,12 @@ def send_payrec_email(recon_date):
     except Exception:
         current_year = datetime.now().year
 
+    # Show the Comment column only when the day actually has justifications.
+    def _any_comment(rows):
+        return any(str((r or {}).get('comment', '') or '').strip() for r in (rows or []))
+    has_comments = (_any_comment(data.get('pending_payment', [])) or
+                    _any_comment(data.get('pending_receivement', [])))
+
     html_body = render_template(
         'pages/email-template-recon-payrec.html',
         recon_date_fmt=recon_date_fmt,
@@ -788,6 +794,7 @@ def send_payrec_email(recon_date):
         pending_payment=_decorate_rows(data.get('pending_payment', [])),
         pending_receivement=_decorate_rows(data.get('pending_receivement', [])),
         settled=_decorate_rows(data.get('settled', [])),
+        has_comments=has_comments,
         current_year=current_year,
     )
 
