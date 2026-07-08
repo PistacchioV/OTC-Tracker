@@ -2371,6 +2371,9 @@ _FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Com
 #             ('ndfclass', tokens)    → NDF Moeda / NDF Commodities from class field
 #             ('sisbacen', tokens)    → option product by Código SISBACEN
 #             ('lob', tokens)         → SWAP CEM/EDG/CEMHYB from "Código Identificador"
+#             ('lob_join', tokens)    → same, but the source has only the contract
+#                                       code; join it to the DPOSICAO-SWAP position
+#                                       map to recover the identifier first
 _FORECAST_SOURCES = [
     {'key': 'ndf', 'label': 'NDF (TER)', 'category': 'NDF',
      'file': lambda r: '73760_{}_DPOSICAO-TER.json'.format(r),
@@ -2411,8 +2414,9 @@ _FORECAST_SOURCES = [
      'date': ['data do evento', 'evento'],
      'date_index': 5,
      'entity': ['nome simplificado', 'parte'],
-     'product': ('lob', ['código identificador', 'codigo identificador',
-                         'codigo do contrato', 'identificador'])},
+     # DAGENDAPREMIOS has no "Código Identificador": classify by joining the
+     # contract code (col A) to the DPOSICAO-SWAP position map → identifier → LOB.
+     'product': ('lob_join', ['codigo do contrato', 'código do contrato', 'contrato'])},
 ]
 
 
@@ -2553,6 +2557,51 @@ def _fcst_resolve_key(keys, tokens):
     return None
 
 
+def _fcst_norm_contract(v):
+    """Normalize a contract code for the premium↔position join (strip, drop a
+    numeric '.0' tail so 12345.0 and 12345 match)."""
+    s = str(v or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return s
+
+
+def _swap_contract_ident_map(dref):
+    """Map {Contrato → Código Identificador} from the DPOSICAO-SWAP file.
+    DAGENDAPREMIOS carries only the contract code (no "Código Identificador"),
+    so its premium rows recover the LOB by joining the contract code here and
+    running _fcst_lob on the matched identifier. Empty dict when the position
+    file is missing/unreadable or lacks the two columns."""
+    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                        '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+    out = {}
+    if not os.path.isfile(path):
+        return out
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        log.warning("[forecast] could not read swap position for ident map:\n%s",
+                    traceback.format_exc())
+        return out
+    if not rows:
+        return out
+    keys = list(rows[0].keys())
+    contrato_key = _fcst_resolve_key(keys, ['contrato'])
+    ident_key = _fcst_resolve_key(keys, ['código identificador', 'codigo identificador',
+                                         'identificador'])
+    if not contrato_key or not ident_key:
+        log.warning("[forecast] swap ident map: contrato=%r ident=%r (one missing)",
+                    contrato_key, ident_key)
+        return out
+    for r in rows:
+        ck = _fcst_norm_contract(r.get(contrato_key, ''))
+        iv = str(r.get(ident_key, '') or '').strip()
+        if ck and iv:
+            out.setdefault(ck, iv)
+    return out
+
+
 def _forecast_collect(dref, spine):
     """Read every JSON source and tally counts into by_product / by_entity
     matrices aligned with the business-day spine. Returns (by_product, by_entity,
@@ -2560,6 +2609,9 @@ def _forecast_collect(dref, spine):
     spine_index = {d: i for i, d in enumerate(spine)}
     n = len(spine)
     by_product, by_entity = {}, {}
+    # {Contrato → Código Identificador} so premium-agenda rows (which lack the
+    # identifier column) can be classified by joining on the contract code.
+    swap_ident_by_contract = _swap_contract_ident_map(dref)
     status = []
     for src in _FORECAST_SOURCES:
         path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
@@ -2600,7 +2652,7 @@ def _forecast_collect(dref, spine):
         ent_key = _fcst_resolve_key(keys, src['entity'])
         pmode, pspec = src['product']
         prod_key = (_fcst_resolve_key(keys, pspec)
-                    if pmode in ('sisbacen', 'lob', 'ndfclass', 'optclass') else None)
+                    if pmode in ('sisbacen', 'lob', 'ndfclass', 'optclass', 'lob_join') else None)
 
         # Optional row gate: only count rows whose value in a given column is in
         # an allowed set (e.g. SWAP Position counts only "Tipo de Contrato" = 2).
@@ -2639,6 +2691,11 @@ def _forecast_collect(dref, spine):
                 product = pspec
             elif pmode == 'lob':
                 product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+            elif pmode == 'lob_join':
+                # No identifier column: join the contract code to the swap
+                # position map to recover the "Código Identificador", then LOB it.
+                cc = _fcst_norm_contract(row.get(prod_key, '') if prod_key else '')
+                product = 'SWAP ' + _fcst_lob(swap_ident_by_contract.get(cc, ''))
             elif pmode == 'ndfclass':
                 product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'optclass':
