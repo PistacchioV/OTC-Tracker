@@ -17,6 +17,10 @@
   /* Breathing room above the header row so the scrollX header clone doesn't clip
      the select-all checkbox / header text at the top edge. */
   .dt-scroll-head, .dataTables_scrollHead { padding-top: 18px; }
+  /* Hide the duplicate <thead> DataTables keeps inside the scroll body: the real
+     header lives in .dt-scroll-head; column widths come from the body <colgroup>,
+     so this only removes the stray empty header strip below the filter row. */
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
   #intrag-ndf-table thead th,
   .dt-scroll-head thead th,
   .dataTables_scrollHeadInner thead th,
@@ -837,6 +841,7 @@ $(document).ready(function() {
                     // checkbox / selectAll / toolbar state from selectedRowIds.
                     selectedRowIds.clear();
                     table.draw(false);
+                    if (window.fetchNotifications) window.fetchNotifications();
                     Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).',
                         icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
                 } else {
@@ -883,6 +888,7 @@ $(document).ready(function() {
               .then(function(o){
                 if(o.ok && o.data.success){
                     d[2]='Approved'; rowApi.data(d); table.draw(false);
+                    if (window.fetchNotifications) window.fetchNotifications();
                     Swal.fire({ title:'Approved', icon:'success', confirmButtonText:'OK', confirmButtonColor:'#198754' });
                 } else {
                     Swal.fire({ title:'Error', text:o.data.message||'Approval failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
@@ -925,7 +931,7 @@ $(document).ready(function() {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({ deal_id: id, trade_date: vals[10], fields: fields })
             }).then(function(resp){ return resp.json(); })
-              .then(function(){ _applyRow('Pending'); })
+              .then(function(){ _applyRow('Pending'); if (window.fetchNotifications) window.fetchNotifications(); })
               .catch(function(){ _applyRow('Pending'); });   // client-only row: still mark Pending
         } else {
             _applyRow('New');

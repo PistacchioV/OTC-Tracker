@@ -10306,6 +10306,9 @@ def api_intrag_option_send_file():
         log.error('[INTRAG OPT] send-file failed: %s', exc)
         return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
 
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Intrag Sent', 'Intrag Option',
+                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'files': written, 'count': len(items)})
 
 
@@ -10332,6 +10335,8 @@ def api_intrag_option_edit():
         entries[idx]['maker']   = session.get('user_sid', '')
         entries[idx]['checker'] = ''
         _atomic_write_json(fp, entries)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deal Updated', 'Intrag Option', deal_id)
     return jsonify({'success': True, 'status': 'Pending'})
 
 
@@ -10358,6 +10363,8 @@ def api_intrag_option_approve():
         entries[idx]['status']  = 'Approved'
         entries[idx]['checker'] = user_sid
         _atomic_write_json(fp, entries)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Status Updated', 'Intrag Option', deal_id + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 
@@ -10450,6 +10457,9 @@ def api_intrag_ndf_send_file():
         log.error('[INTRAG NDF] send-file failed: %s', exc)
         return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
 
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Intrag Sent', 'Intrag NDF',
+                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'files': written, 'count': len(items)})
 
 
@@ -10480,6 +10490,8 @@ def api_intrag_ndf_edit():
         entries[idx]['checker'] = ''
         _atomic_write_json(fp, entries)
 
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deal Updated', 'Intrag NDF', deal_id)
     return jsonify({'success': True, 'status': 'Pending'})
 
 
@@ -10510,6 +10522,8 @@ def api_intrag_ndf_approve():
         entries[idx]['checker'] = user_sid
         _atomic_write_json(fp, entries)
 
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Status Updated', 'Intrag NDF', deal_id + ' → Approved')
     return jsonify({'success': True, 'status': 'Approved'})
 
 
