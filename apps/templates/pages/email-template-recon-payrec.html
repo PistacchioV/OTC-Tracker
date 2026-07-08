@@ -1,3 +1,16 @@
+{%- macro status_badge(s) -%}
+{%- set v = (s or '')|lower -%}
+{%- if 'justif' in v -%}<span style="display:inline-block;background:#e3f2fd;color:#0d47a1;border-radius:20px;padding:2px 10px;font-weight:700;font-size:11px;">{{ s }}</span>
+{%- elif 'settl' in v -%}<span style="display:inline-block;background:#e8f5e9;color:#1b5e20;border-radius:20px;padding:2px 10px;font-weight:700;font-size:11px;">{{ s }}</span>
+{%- elif 'pend' in v -%}<span style="display:inline-block;background:#fff8e1;color:#7b5e00;border-radius:20px;padding:2px 10px;font-weight:700;font-size:11px;">{{ s }}</span>
+{%- else -%}<span style="display:inline-block;background:#eeeeee;color:#555555;border-radius:20px;padding:2px 10px;font-weight:700;font-size:11px;">{{ s or '—' }}</span>
+{%- endif -%}
+{%- endmacro -%}
+{%- macro check_badge(v) -%}
+{%- if (v or '')|upper == 'OK' -%}<span style="display:inline-block;background:#e8f5e9;color:#1b5e20;padding:2px 10px;border-radius:20px;font-weight:700;font-size:11px;">OK</span>
+{%- else -%}<span style="display:inline-block;background:#fde8e8;color:#b71c1c;padding:2px 10px;border-radius:20px;font-weight:700;font-size:11px;">{{ v }}</span>
+{%- endif -%}
+{%- endmacro -%}
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -56,17 +69,11 @@
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;">{{ r.pay_receive }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.jpm_qty }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.client_qty }}</td>
-                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">
-                                    {% if r.check_qty|upper == 'OK' %}<span style="background:#e8f5e9;color:#1b5e20;padding:1px 8px;border-radius:20px;font-weight:700;">OK</span>
-                                    {% else %}<span style="background:#fde8e8;color:#b71c1c;padding:1px 8px;border-radius:20px;font-weight:700;">{{ r.check_qty }}</span>{% endif %}
-                                </td>
+                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">{{ check_badge(r.check_qty) }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;{% if r.jpm_value_neg %}color:#c0392b;{% endif %}">{{ r.jpm_value_fmt }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;{% if r.client_value_neg %}color:#c0392b;{% endif %}">{{ r.client_value_fmt }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.difference_fmt }}</td>
-                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">
-                                    {% if r.check_value|upper == 'OK' %}<span style="background:#e8f5e9;color:#1b5e20;padding:1px 8px;border-radius:20px;font-weight:700;">OK</span>
-                                    {% else %}<span style="background:#fde8e8;color:#b71c1c;padding:1px 8px;border-radius:20px;font-weight:700;">{{ r.check_value }}</span>{% endif %}
-                                </td>
+                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">{{ check_badge(r.check_value) }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -94,7 +101,7 @@
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.pay_receive }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;{% if r.jpm_value_neg %}color:#c0392b;{% endif %}">{{ r.jpm_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.client_value_fmt }}</td>
-                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.status }}</td>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ status_badge(r.status) }}</td>
                                 {% if has_comments %}<td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.comment }}</td>{% endif %}
                             </tr>{% endfor %}</tbody>
                     </table>
@@ -122,7 +129,7 @@
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.pay_receive }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.jpm_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.client_value_fmt }}</td>
-                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.status }}</td>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ status_badge(r.status) }}</td>
                                 {% if has_comments %}<td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.comment }}</td>{% endif %}
                             </tr>{% endfor %}</tbody>
                     </table>
@@ -152,7 +159,7 @@
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.jpm_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.client_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.sistema }}</td>
-                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.status }}</td>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ status_badge(r.status) }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.snumconta }}</td>
                             </tr>{% endfor %}</tbody>
                     </table>
