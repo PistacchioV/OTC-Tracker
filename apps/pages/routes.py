@@ -2617,6 +2617,8 @@ def _forecast_collect(dref, spine):
                 cwv = str(row.get(cw_key, '') or '').strip()
                 if cwv.endswith('.0'):       # numeric read as 2.0 → '2'
                     cwv = cwv[:-2]
+                if cwv.isdigit():            # leading zeros: '02' → '2', '01' → '1'
+                    cwv = str(int(cwv))
                 if cwv not in cw_allowed:
                     continue
             # Business-day slots this row counts on: the primary date plus an
@@ -3474,6 +3476,8 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                 cwv = str(row.get(cw_key, '') or '').strip()
                 if cwv.endswith('.0'):
                     cwv = cwv[:-2]
+                if cwv.isdigit():            # leading zeros: '02' → '2', '01' → '1'
+                    cwv = str(int(cwv))
                 if cwv not in cw_allowed:
                     continue
             cid = str(row.get(id_key, '') or '').strip() if id_key else ''
