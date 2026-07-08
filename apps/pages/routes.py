@@ -1568,7 +1568,10 @@ def api_dashboard_live_position():
             elif pmode == 'optclass':
                 product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'lob':
-                product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+                lob = _fcst_lob(row.get(prod_key, '') if prod_key else '')
+                if lob is None:
+                    continue      # unclassified swap: leave uncounted, not mislabeled
+                product = 'SWAP ' + lob
             else:
                 product = src['label']
             by_product[product] = by_product.get(product, 0) + 1
@@ -2500,13 +2503,17 @@ def _fcst_opt_class_product(asset_class):
 
 
 def _fcst_lob(identifier):
-    """SWAP line of business from the "Código Identificador" string.
+    """SWAP line of business from the "Código Identificador" string, or None when
+    the identifier carries no recognizable token.
     Order matters: hybrid is tested BEFORE CEM/EDG, because a hybrid's identifier
     also contains 'CEM' (e.g. 'CEMHYB', 'CEM-HIB') — testing 'CEM' first would
     swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
     Accent-insensitive and tolerant of PT/EN hybrid spellings: the mock uses the
     English 'CEMHYB'/'HYB', but real B3 identifiers may use the Portuguese
-    'HÍBRIDO'/'HIB'. Mirrors _accrual_lob (same field)."""
+    'HÍBRIDO'/'HIB'. Returns None (rather than defaulting to CEMHYB) when nothing
+    matches, so callers can leave the row UNCLASSIFIED instead of mislabeling it —
+    e.g. a premium whose contract has no match in the position file. Mirrors
+    _accrual_lob (same field), which also returns None for the unmatched case."""
     s = _fcst_norm(identifier)   # lower-case + accent-stripped
     if 'cemhyb' in s or 'hib' in s:
         return 'CEMHYB'
@@ -2514,7 +2521,7 @@ def _fcst_lob(identifier):
         return 'EDG'
     if 'cem' in s:
         return 'CEM'
-    return 'CEMHYB'
+    return None
 
 
 def _forecast_spine(anchor=None, count=None):
@@ -2690,18 +2697,25 @@ def _forecast_collect(dref, spine):
             if pmode == 'fixed':
                 product = pspec
             elif pmode == 'lob':
-                product = 'SWAP ' + _fcst_lob(row.get(prod_key, '') if prod_key else '')
+                lob = _fcst_lob(row.get(prod_key, '') if prod_key else '')
+                product = ('SWAP ' + lob) if lob else None
             elif pmode == 'lob_join':
                 # No identifier column: join the contract code to the swap
                 # position map to recover the "Código Identificador", then LOB it.
                 cc = _fcst_norm_contract(row.get(prod_key, '') if prod_key else '')
-                product = 'SWAP ' + _fcst_lob(swap_ident_by_contract.get(cc, ''))
+                lob = _fcst_lob(swap_ident_by_contract.get(cc, ''))
+                product = ('SWAP ' + lob) if lob else None
             elif pmode == 'ndfclass':
                 product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'optclass':
                 product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
             else:
                 product = _fcst_option_product(row.get(prod_key, '') if prod_key else '')
+            # Unclassifiable swap (no LOB token / no position match): leave it
+            # UNCOUNTED — better no classification than a wrong one. Drop from both
+            # product and entity tallies so the totals stay consistent.
+            if pmode in ('lob', 'lob_join') and product is None:
+                continue
             ent = _fcst_map_entity(row.get(ent_key, '')) if ent_key else None
             for di in slots:
                 if product:
