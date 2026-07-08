@@ -1,0 +1,5 @@
+# Nunca versionar o launcher local (contém o bypass /dev-login) nem artefatos
+devrun.py
+__pycache__/
+*.pyc
+shots/

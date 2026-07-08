@@ -66,3 +66,10 @@ scripts/Codigo_VBA_TratarArquivos*
 # Generated Pay/Rec history + working cache (daily)
 apps/static/data/cache/payrec/**/*.json
 apps/static/data/cache/reconciliation/payrec/**/*.json
+
+# SOP local dev launcher (contém o bypass /dev-login — NUNCA versionar)
+/devrun.py
+devrun.py
+
+# Runtime DuckDB (users) criado ao subir o app localmente para captura
+apps/static/data/db/
