@@ -3431,13 +3431,13 @@ def _ops_settlement_counts(settle_ref, pos_ref):
             'option': {'total': 0, 'maturity': 0, 'premium': 0},
             'ndf':    {'total': 0, 'maturity': 0},
             'coe':    {'total': 0}}
-    # A tipo-2 swap is a cash-flow contract: it appears in DFLUXO with several
-    # event dates. The event that lands on its OWN maturity date is the final
-    # (bullet) payment → it must be counted as MATURITY, not Flow. So we collect
-    # the "Código Identificador" of every contract maturing on `settle_ref`
-    # (from DPOSICAO-SWAP, tipo 2) and then EXCLUDE those ids from the DFLUXO
-    # Flow count — a flow event only counts as Flow when its contract's maturity
-    # is NOT the picker date. swap_pos is processed before swap_flx in
+    # A tipo-2 swap is a bullet contract: its single settlement is on its own
+    # maturity date, and that same final payment can also surface in DFLUXO as an
+    # event. It must be counted as MATURITY, not Flow. So we collect the "Código
+    # Identificador" of every contract maturing on `settle_ref` (from
+    # DPOSICAO-SWAP, tipo 2) and then EXCLUDE those ids from the DFLUXO Flow
+    # count — a flow event only counts as Flow when its contract's maturity is
+    # NOT the picker date. swap_pos is processed before swap_flx in
     # _FORECAST_SOURCES, so the set is fully populated by the time Flow is read.
     swap_mat_ids = set()
     _ID_TOKENS = ['código identificador', 'codigo identificador', 'identificador']
@@ -3827,13 +3827,13 @@ def _swapchar_collect(ref):
         disp = []
         for i in _SWAPCHAR_DISPLAY_IDX:
             raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
-            if i == 0:                      # Tipo de Contrato: 01 → Bullet, 02 → Cashflow
+            if i == 0:                      # Tipo de Contrato: 02 → Bullet, 01 → Cashflow
                 rv = str(raw or '').strip()
                 if rv.endswith('.0'):
                     rv = rv[:-2]
                 if rv.isdigit():
                     rv = str(int(rv))
-                disp.append('Bullet' if rv == '1' else ('Cashflow' if rv == '2'
+                disp.append('Bullet' if rv == '2' else ('Cashflow' if rv == '1'
                             else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
@@ -3841,9 +3841,9 @@ def _swapchar_collect(ref):
         # Widgets
         widgets['total'] += 1
         widgets['tipo']['total'] += 1
-        if tv == '1':                       # 01 → Bullet, 02 → Cashflow
+        if tv == '2':                       # 02 → Bullet, 01 → Cashflow
             widgets['tipo']['bullet'] += 1
-        elif tv == '2':
+        elif tv == '1':
             widgets['tipo']['cashflow'] += 1
         lob = _swapchar_lob(cid)
         widgets['lob']['total'] += 1
