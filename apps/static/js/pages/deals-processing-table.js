@@ -343,9 +343,43 @@ var OTCFileUpload = (function () {
     }
 
     // -------------------------------------------------------------------------
+    // "Quoted in Cents" ⇔ Fator Conversao = 0.01. Tolerant of string/comma
+    // values and float noise so a 0.01 factor is never misread as "not cents".
+    // (Mirrors _optIsCents/_ndfIsCents used in the New Deals templates.)
+    // -------------------------------------------------------------------------
+    function isCentsFactor(f) {
+        if (f === null || f === undefined || f === '') return false;
+        var n = (typeof f === 'string') ? parseFloat(f.replace(',', '.')) : Number(f);
+        return isFinite(n) && Math.abs(n - 0.01) < 1e-9;
+    }
+
+    // Parse a raw Fator Conversao (number, "0.01", "0,01", null, "") → Number|null.
+    function parseFator(fc) {
+        if (fc === null || fc === undefined || fc === '') return null;
+        var n = (typeof fc === 'string') ? parseFloat(fc.replace(',', '.')) : Number(fc);
+        return isFinite(n) ? n : null;
+    }
+
+    // Merge one Subjacente row into the index under `key`. When a code appears
+    // with conflicting factors, keep the cents factor (0.01); also let a defined
+    // factor replace a null one and preserve the first non-empty commodity name.
+    function _mergeSubjEntry(idx, key, commodity, fator) {
+        if (!key) return;
+        var prev = idx[key];
+        if (!prev) {
+            idx[key] = { commodity: commodity, fatorConversao: fator };
+            return;
+        }
+        if (isCentsFactor(fator) || (prev.fatorConversao === null && fator !== null)) {
+            prev.fatorConversao = fator;
+        }
+        if (!prev.commodity && commodity) prev.commodity = commodity;
+    }
+
+    // -------------------------------------------------------------------------
     // Load Subjacente.json → code lookup index (cached)
     // Index key: Ticker (when non-null) and Codigo do Ativo Subjacente
-    // Value: { commodity, fatorConversao }
+    // Value: { commodity, fatorConversao }  (fatorConversao is Number|null)
     // -------------------------------------------------------------------------
     var _subjacenteCache = null;
     function loadSubjacenteData(assetsRoot) {
@@ -355,14 +389,12 @@ var OTCFileUpload = (function () {
             .then(function (data) {
                 var idx = {};
                 data.forEach(function (row) {
-                    var entry = {
-                        commodity:       row['Commodity'] || '',
-                        fatorConversao:  row['Fator Conversao']
-                    };
+                    var commodity = row['Commodity'] || '';
+                    var fator     = parseFator(row['Fator Conversao']);
                     var cod = (row['Codigo do Ativo Subjacente'] || '').trim();
                     var tkr = (row['Ticker'] || '').trim();
-                    if (cod && !idx[cod]) idx[cod] = entry;
-                    if (tkr && !idx[tkr]) idx[tkr] = entry;
+                    _mergeSubjEntry(idx, cod, commodity, fator);
+                    _mergeSubjEntry(idx, tkr, commodity, fator);
                 });
                 _subjacenteCache = idx;
                 return idx;
@@ -395,10 +427,9 @@ var OTCFileUpload = (function () {
     }
 
     function quotedBadge(fator) {
-        if (fator === 0.01) {
-            return '<span class="badge text-bg-success rounded-pill">YES</span>';
-        }
-        return '<span class="badge text-bg-warning rounded-pill">NO</span>';
+        return isCentsFactor(fator)
+            ? '<span class="badge text-bg-success rounded-pill">YES</span>'
+            : '<span class="badge text-bg-warning rounded-pill">NO</span>';
     }
 
     // -------------------------------------------------------------------------
