@@ -139,8 +139,8 @@
         : '';
       return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '">' + base +
         '<td>' + statusBadge(r.status) + '</td>' +
-        '<td class="pr-justify-col pr-comment-cell">' + esc(r.comment || '') + '</td>' +
-        '<td class="pr-justify-col pr-actions-cell">' + actions + '</td>' +
+        '<td class="pr-comment-col pr-comment-cell">' + esc(r.comment || '') + '</td>' +
+        '<td class="pr-actions-col pr-actions-cell">' + actions + '</td>' +
         '</tr>';
     }).join('');
     show(cardId, true);
@@ -148,6 +148,12 @@
 
   function render(d) {
     _lastData = d || {};
+    // Reveal the Comment column whenever the day has any justified row (with a
+    // comment), so justifications stay visible on load — independent of the
+    // justify (edit) mode, which the End-process dialog turns on.
+    var hasComments = ((d.pending_payment || []).concat(d.pending_receivement || []))
+      .some(function (r) { return isJustified(r.status) || String(r.comment || '').trim(); });
+    if (page) page.classList.toggle('pr-has-comments', !!hasComments);
     renderSummary(d.summary || []);
     renderList('prCardPendPay', 'prPendPayBody', 'prPendPayCount', d.pending_payment || [], 'pend', 'pay');
     renderList('prCardPendRec', 'prPendRecBody', 'prPendRecCount', d.pending_receivement || [], 'pend', 'rec');
@@ -267,7 +273,7 @@
     return n;
   }
 
-  function resetJustify() { justifyMode = false; if (page) page.classList.remove('pr-justify'); }
+  function resetJustify() { justifyMode = false; if (page) page.classList.remove('pr-justify', 'pr-has-comments'); }
 
   function enterJustifyMode() {
     justifyMode = true;

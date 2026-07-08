@@ -94,10 +94,13 @@
 [data-bs-theme="dark"] #payrec-page .badge-settled { background: rgba(76,175,80,.18); color: #a5d6a7; }
 [data-bs-theme="dark"] #payrec-page .badge-justified { background: rgba(33,150,243,.18); color: #90caf9; }
 
-/* Justify columns (Comment + Actions): hidden until the operator chooses to
-   justify pending items from the End-process dialog. */
-#payrec-page .pr-justify-col { display: none; }
-#payrec-page.pr-justify .pr-justify-col { display: table-cell; }
+/* Comment column: shown in justify mode OR whenever the day already has
+   justified rows (so their comments stay visible on load). Actions (Edit/
+   Confirm) only appear in justify mode. */
+#payrec-page .pr-comment-col, #payrec-page .pr-actions-col { display: none; }
+#payrec-page.pr-justify .pr-comment-col,
+#payrec-page.pr-justify .pr-actions-col,
+#payrec-page.pr-has-comments .pr-comment-col { display: table-cell; }
 #payrec-page .pr-comment-input { width: 100%; min-width: 160px; font-size: .78rem; padding: 3px 8px;
     border: 1px solid var(--pr-hairline); border-radius: 6px; background: var(--ins-secondary-bg, #fff); color: inherit; }
 #payrec-page .pr-act-btn { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 6px;
@@ -199,8 +202,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
-                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
-                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
+                            <th class="pr-comment-col" data-lang="pr-c-comment">Comment</th>
+                            <th class="pr-actions-col" data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendPayBody"></tbody>
                     </table>
@@ -223,8 +226,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
-                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
-                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
+                            <th class="pr-comment-col" data-lang="pr-c-comment">Comment</th>
+                            <th class="pr-actions-col" data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendRecBody"></tbody>
                     </table>
