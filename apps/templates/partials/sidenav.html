@@ -1769,7 +1769,7 @@
 // link; a configured non-admin only sees the links they can reach; unconfigured
 // users and admins see everything.
 (function () {
-  var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
+  var ALWAYS = { '/users-profile': 1, '/page-access': 1 };   // dashboards are grantable
   fetch('/api/me/access', { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (d) {

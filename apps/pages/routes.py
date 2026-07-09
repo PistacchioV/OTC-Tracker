@@ -116,8 +116,10 @@ def add_no_store_on_authed_pages(response):
 # notification feed (only pages the user can reach).
 # ==============================================================================
 
-# Pages everyone can always reach regardless of configuration.
-_ALWAYS_ALLOWED_PATHS = {'/dashboard', '/dashboard-2', '/users-profile', '/page-access'}
+# Pages everyone can always reach regardless of configuration. The dashboards are
+# NOT here — they are grantable like any other page (Main › Dashboards). '/users-profile'
+# stays open so a fully-restricted user always has a safe landing (no redirect loop).
+_ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access'}
 
 # Notification "page" label → the sidebar URL it belongs to (for feed filtering).
 _NOTIF_PAGE_URL = {
@@ -246,10 +248,26 @@ def enforce_page_access():
     # Control Panel is card-gated: the page opens if at least one card is granted.
     if path == '/control-panel':
         if not _cp_page_allowed(allowed):
-            return redirect('/dashboard')
+            return redirect(_safe_landing(allowed))
         return
     if path not in allowed:
-        return redirect('/dashboard')
+        return redirect(_safe_landing(allowed))
+
+
+def _safe_landing(allowed):
+    """A page the user is actually allowed to reach — used when a blocked navigation
+    is redirected, so it never bounces to a page they also can't see (the dashboards
+    are now grantable, so '/dashboard' is not guaranteed). '/users-profile' is the
+    always-open last resort."""
+    for u in ('/dashboard', '/dashboard-2'):
+        if u in allowed:
+            return u
+    if _cp_page_allowed(allowed):
+        return '/control-panel'
+    for u in sorted(allowed):
+        if u in _NAV_URLS:
+            return u
+    return '/users-profile'
 
 
 @blueprint.before_request

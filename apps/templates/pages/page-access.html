@@ -204,7 +204,7 @@
   'use strict';
   var PA_BOOT = {};
   try { PA_BOOT = JSON.parse(document.getElementById('pa-bootstrap').textContent || '{}'); } catch (e) {}
-  var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
+  var ALWAYS = { '/users-profile': 1, '/page-access': 1 };   // dashboards are grantable
   var PA_ASSETS = PA_BOOT.assets || '';   // user photos: <ASSETS>/images/users/<sid>.jpg
   var PA_IS_MASTER = !!PA_BOOT.isMaster;  // master can restrict admins
   // Control Panel routine cards — granted individually, grouped under "Apps › Control Panel".
