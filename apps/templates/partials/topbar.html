@@ -733,25 +733,23 @@
                     // Control Panel card grant → keep the Control Panel entry visible.
                     for (var k in allowed) { if (k.indexOf('/control-panel#') === 0) { allowed['/control-panel'] = 1; break; } }
                     function norm(h) { return h === '/' ? '/dashboard' : h; }   // KPI link is "/"
-                    // Hide each page link the user can't reach.
-                    mm.querySelectorAll('a.dropdown-item[href^="/"]').forEach(function (a) {
-                        if (allowed[norm(a.getAttribute('href'))]) return;
-                        var li = a.closest('li'); if (li) li.hidden = true;
+                    // Keep only real, accessible pages — anything else (a page the user
+                    // can't reach, or a label with no page like "javascript:void(0)") is hidden.
+                    mm.querySelectorAll('a.dropdown-item').forEach(function (a) {
+                        var href = a.getAttribute('href') || '';
+                        var keep = href.charAt(0) === '/' && allowed[norm(href)];
+                        if (!keep) { var li = a.closest('li'); if (li) li.hidden = true; }
                     });
-                    // Hide a group (header + list) when none of its real pages remain.
+                    // Hide a group (header + list) once nothing under it remains visible.
                     mm.querySelectorAll('.dropdown-header').forEach(function (h) {
                         var ul = h.nextElementSibling;
                         while (ul && !(ul.classList && ul.classList.contains('megamenu-list'))) ul = ul.nextElementSibling;
                         if (!ul) return;
-                        var reals = Array.prototype.filter.call(ul.querySelectorAll('li'), function (li) { return li.querySelector('a[href^="/"]'); });
-                        var anyVisible = reals.some(function (li) { return !li.hidden; });
-                        if (!anyVisible) {
-                            h.hidden = true; ul.hidden = true;
-                            Array.prototype.forEach.call(ul.querySelectorAll('li'), function (li) { li.hidden = true; });
-                        }
+                        var anyVisible = Array.prototype.some.call(ul.querySelectorAll('li'), function (li) { return !li.hidden; });
+                        if (!anyVisible) { h.hidden = true; ul.hidden = true; }
                     });
                     // Nothing left → drop the whole "Pages" dropdown.
-                    var anyItem = Array.prototype.some.call(mm.querySelectorAll('a.dropdown-item[href^="/"]'), function (a) {
+                    var anyItem = Array.prototype.some.call(mm.querySelectorAll('a.dropdown-item'), function (a) {
                         var li = a.closest('li'); return li && !li.hidden;
                     });
                     if (!anyItem) mm.hidden = true;
