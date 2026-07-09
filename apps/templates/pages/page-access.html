@@ -66,6 +66,8 @@
   #pa-page .pa-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
       padding: 9px 14px; background: var(--bs-tertiary-bg); border-bottom: 1px solid var(--pa-line); }
   #pa-page .pa-sec__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); }
+  #pa-page .pa-sec__crumb { font-weight: 600; opacity: .6; }
+  #pa-page .pa-sec__leaf { color: var(--bs-body-color); }
   #pa-page .pa-sec__count { font-size: .68rem; font-weight: 600; color: var(--bs-secondary-color); background: var(--ins-secondary-bg,#fff);
       border: 1px solid var(--pa-line); border-radius: 50rem; padding: 1px 8px; margin-left: 8px; }
   #pa-page .pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 20px; padding: 10px 14px; }
@@ -206,14 +208,16 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  // Grantable pages from the live sidebar (real labels + sections). Pages inside a
-  // collapsible menu group (Charts, Tables, Base UI, Icons, Maps…) are grouped
-  // under that group's label instead of being lumped into the top section.
+  // Grantable pages from the live sidebar (real labels + full menu path). Every page
+  // is grouped under its complete hierarchy — top section title plus each collapsible
+  // menu group that wraps it (e.g. "Apps › Daily Settlement › NDF",
+  // "Products › New Deals › Swap", "Components › Charts › Apex Charts").
+  var PATH_SEP = ' › ';   // " › "
   function buildPages() {
     var nav = document.querySelector('.side-nav'); var out = [], seen = {}, section = 'General';
     if (!nav) return out;
-    // Outermost collapsible-group label wrapping a link (e.g. Charts, Tables).
-    function groupOf(a) {
+    // Collapsible-group labels wrapping a link, ordered outermost → innermost.
+    function groupPath(a) {
       var labels = [], el = a.parentElement;
       while (el && el !== nav) {
         if (el.classList && el.classList.contains('side-nav-item')) {
@@ -221,27 +225,41 @@
           if (tg && tg !== a) {
             var h = tg.getAttribute('href') || '';
             if (tg.getAttribute('data-bs-toggle') === 'collapse' || h.charAt(0) === '#') {
-              var mt = tg.querySelector('.menu-text'); if (mt) labels.push(mt.textContent.trim());
+              var mt = tg.querySelector('.menu-text');
+              if (mt) labels.push(mt.textContent.trim());   // nearest first
             }
           }
         }
         el = el.parentElement;
       }
-      return labels.length ? labels[labels.length - 1] : '';
+      return labels.reverse();   // outermost → innermost
     }
-    nav.querySelectorAll('.side-nav-title, a.side-nav-link[href^="/"]').forEach(function (el) {
+    // Walk titles + links in strict document order so each link inherits the
+    // section title that precedes it (sort defends against engines that return
+    // selector-list matches grouped rather than in document order).
+    var nodes = Array.prototype.slice.call(nav.querySelectorAll('.side-nav-title, a.side-nav-link[href^="/"]'));
+    nodes.sort(function (a, b) { var p = a.compareDocumentPosition(b); return (p & 4) ? -1 : (p & 2) ? 1 : 0; });
+    nodes.forEach(function (el) {
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
       var href = el.getAttribute('href');
       if (!href || ALWAYS[href] || seen[href]) return;
       seen[href] = 1;
       var lbl = el.querySelector('.menu-text');
+      var path = [section].concat(groupPath(el)).filter(Boolean);
       out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href,
-                 section: groupOf(el) || section });
+                 section: path.join(PATH_SEP) });
     });
     return out;
   }
   var PAGES = buildPages();
   var TOTAL = PAGES.length;
+
+  // Breadcrumb head: muted parent path + emphasized leaf group.
+  function sectionHeadHtml(sec) {
+    var parts = sec.split(PATH_SEP), leaf = parts.pop();
+    var crumb = parts.length ? '<span class="pa-sec__crumb">' + esc(parts.join(PATH_SEP) + PATH_SEP) + '</span>' : '';
+    return crumb + '<span class="pa-sec__leaf">' + esc(leaf) + '</span>';
+  }
 
   function renderSections(allowed) {
     var bySection = {}, order = [];
@@ -254,7 +272,7 @@
           '<span>' + esc(p.label) + '</span></label>';
       }).join('');
       return '<div class="pa-sec" data-section="' + esc(sec) + '">' +
-        '<div class="pa-sec__head"><span class="pa-sec__title">' + esc(sec) +
+        '<div class="pa-sec__head"><span class="pa-sec__title">' + sectionHeadHtml(sec) +
         '<span class="pa-sec__count" data-count>0/0</span></span>' +
         '<div class="form-check form-switch mb-0"><input class="form-check-input pa-sec-all" type="checkbox"></div></div>' +
         '<div class="pa-grid">' + items + '</div></div>';
