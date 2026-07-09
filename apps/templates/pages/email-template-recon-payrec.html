@@ -65,13 +65,13 @@
                         </thead>
                         <tbody>
                             {% for r in summary %}
-                            <tr style="{% if r.is_total %}background:#eef2ff;font-weight:700;{% endif %}">
+                            {% if r.is_total %}<tr style="background:#eef2ff;font-weight:700;">{% else %}<tr>{% endif %}
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;">{{ r.pay_receive }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.jpm_qty }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.client_qty }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">{{ check_badge(r.check_qty) }}</td>
-                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;{% if r.jpm_value_neg %}color:#c0392b;{% endif %}">{{ r.jpm_value_fmt }}</td>
-                                <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;{% if r.client_value_neg %}color:#c0392b;{% endif %}">{{ r.client_value_fmt }}</td>
+                                {% if r.jpm_value_neg %}<td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;color:#c0392b;">{% else %}<td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{% endif %}{{ r.jpm_value_fmt }}</td>
+                                {% if r.client_value_neg %}<td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;color:#c0392b;">{% else %}<td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{% endif %}{{ r.client_value_fmt }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:right;">{{ r.difference_fmt }}</td>
                                 <td style="padding:7px 10px;border-bottom:1px solid #eaeaea;text-align:center;">{{ check_badge(r.check_value) }}</td>
                             </tr>
@@ -99,7 +99,7 @@
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.jpm_cpty }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.client }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.pay_receive }}</td>
-                                <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;{% if r.jpm_value_neg %}color:#c0392b;{% endif %}">{{ r.jpm_value_fmt }}</td>
+                                {% if r.jpm_value_neg %}<td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;color:#c0392b;">{% else %}<td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{% endif %}{{ r.jpm_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;text-align:right;">{{ r.client_value_fmt }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ status_badge(r.status) }}</td>
                                 {% if has_comments %}<td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.comment }}</td>{% endif %}
