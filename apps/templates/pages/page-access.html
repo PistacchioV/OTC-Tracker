@@ -49,6 +49,10 @@
 
   /* ── Toolbar ─────────────────────────────────────────────── */
   #pa-page .pa-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 4px; }
+  /* Compact, uniform toolbar buttons (Save was oversized vs. the rest). */
+  #pa-page .pa-toolbar .btn { padding: .3rem .72rem !important; font-size: .78rem !important; font-weight: 600 !important;
+      line-height: 1.35 !important; border-radius: 8px !important; }
+  #pa-page .pa-toolbar .btn i { font-size: .9rem; }
   #pa-page .pa-search { position: relative; flex: 1; min-width: 180px; }
   #pa-page .pa-search input { padding-left: 30px; }
   #pa-page .pa-search i { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color); }
