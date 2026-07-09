@@ -9,6 +9,13 @@
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
 <style>
+  /* ti-spin: Tabler webfont 3.31 não anima .ti-spin E .ti não seta display:inline-block
+     (transform/rotate é ignorado em display:inline). Sem isto, o spinner do botão de
+     mapping fica estático. !important garante sobre app.min.css (carrega depois). */
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
+
   /* Status 'Sent' — teal escurecido (diferencia do New; não tão escuro quanto Approved). */
   .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
 
