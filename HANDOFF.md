@@ -3962,3 +3962,142 @@ Varredura em todo o projeto (incl. minificados/binários e `Docs/`): **0** ocorr
 "UBold Flask" → "OTC Tracker Flask"; raiz da árvore `UBold/` → `OTC Tracker/`). A única outra ocorrência
 é a linha 3093 deste HANDOFF ("boilerplate UBold original") — **referência histórica** ao template de
 origem, mantida (descreve o estado pré-rename; §8 proíbe sobrescrever sem permissão).
+
+## 77. Sessão 2026-07-08 — Quoted in Cents (tolerante) + Settlement Forecast (Tipo "02") + Bullet/Cashflow + LOB/prêmios
+
+### 77.1 Quoted in Cents tolerante (New Deals Opt Comm / NDF Comm) — `284198b`, `1ac135b`
+"Quoted in Cents" ⇔ `Fator Conversao == 0.01` do `Subjacente.json`. O parse estrito `=== 0.01` falhava quando
+o fator vinha como string / com vírgula / float com ruído. Novo helper `isCentsFactor()` (aceita
+string/vírgula/float), `parseFator()` e `_mergeSubjEntry()` (em conflito de códigos, prioriza a entrada
+"cents"). Aplicado em `otc-fileupload.js` e `deals-processing-table.js`. Gotcha: o mock do `Subjacente.json`
+tem fator float limpo `0.01`, então o bug só aparecia em códigos de conflito (HOH7, BOQ6).
+
+### 77.2 Settlement Forecast: contar swaps com Tipo de Contrato "02" — `17c66e7`
+A contagem de swaps liquidando (Dashboard › Settlement Forecast, por CEMHYB/EDG/CEM) não pegava swaps cujo
+"Tipo de Contrato" (coluna A do deposição swap) vinha como `02`/`01` (com zero à esquerda). `_forecast_collect`
+(count_where) normaliza `if cwv.isdigit(): cwv = str(int(cwv))` (`02`→`2`) nos dois consumidores.
+
+### 77.3 Bullet/Cashflow por Tipo de Contrato — `655ca38`
+Convenção confirmada pelo usuário: **`02` = Bullet, `01` = Cashflow**. Corrigido nas swap-characteristics
+(`'Bullet' if rv=='2' else 'Cashflow' if rv=='1'`) e nos widgets (`if tv=='2': bullet / elif tv=='1': cashflow`).
+
+### 77.4 Classificação de prêmios (DAGENDAPREMIOS) + LOB sem match — `cfd2b80`, `4270a1a`
+Prêmios do `DAGENDAPREMIOS` classificados via join por contrato (`_swap_contract_ident_map`,
+`_fcst_norm_contract`, novo modo `lob_join`). `_fcst_lob` deixa de assumir `CEMHYB` como default → retorna
+`None`; linhas sem LOB reconhecido saem da contagem ("melhor ficar sem classificação do que classificar errado";
+`if pmode in ('lob','lob_join') and product is None: continue`).
+
+---
+
+## 78. Sessão 2026-07-08 — Notificações: live toast + Intrag (notif de ação + linha extra)
+
+### 78.1 Live toast espelhando o sino — `b7ab46b`, `6d61789`, `ee51dde`
+Toda notificação do sino agora também aparece como **live toast**. Localização final: **top-right**, abaixo da
+topbar (`#otc-toast-container { top: var(--ins-topbar-height,64px) }`). Mesmo texto/funcionalidade do sino
+(`buildNotif`/`notifBodyHtml`/`showToast`/`toastNew` em `partials/topbar.html`). **Filtro:** não dispara para
+ações do próprio usuário (`CURRENT_USER_SID`/`isOwnAction`).
+
+### 78.2 Intrag: notificações de ação + linha extra — `5be4063`
+As páginas Intrag NDF/Option não trigavam notificação nas ações → adicionado `_create_notification` em edit
+('Deal Updated'), approve ('Status Updated') e send-file ('Intrag Sent'). Removida a "linha extra" inútil do
+header dessas páginas. `ACTION_META`/`PAGE_URL` no topbar ganham 'Intrag Sent' e as URLs Intrag Option/NDF.
+
+---
+
+## 79. Sessão 2026-07-08 — Reconciliation Pay/Rec: Net Type + End Process (justificar) + e-mail
+
+### 79.1 Batimento por Net Type da contraparte — `e13930d`
+O batimento agora respeita o tipo de net da contraparte. Fonte: join `RefData.json` (COUNTERPARTY→SPN) →
+`CounterpartyDetails.json` (SPN→`NET.value` ∈ Total Net / Pay/Rec / No Net). Regras: **Total Net** = 1 registro
+líquido; **Pay/Rec** = 2 pernas; **No Net** = trade a trade. Sem classificação → **descarta** a linha (não vira
+CEMHYB default). Helpers em `apps/pages/recon_payrec.py` (`_load_net_type_map`, `_net_type_for`, `_emit_records`;
+`_jpm_settlement`/`_jpm_cashflows`/`_jpm_fxo` recebem `net_map`).
+
+### 79.2 End Process: verificar pendências e justificar — `2fb1629`, `a235835`
+Ao clicar **End Process**, se houver status `pending` nas tabelas (summary / pending receive / pending payment)
+→ SweetAlert (EN + `data-lang`) oferecendo **justificar** ou **rodar de novo**. Justificar → habilita coluna de
+comentário + Actions (edit/confirm) só nas linhas pendentes; justificativa preenchida → status **Justified**
+(persistido, re-`justify_row`). Fechar / rodar de novo → só fecha. **A coluna Comment na TELA foi revertida em
+`a235835`** ("na tela ficou feio") — fica só no modo justificar e no e-mail. Rota `/reconciliation-payrec/justify`.
+
+### 79.3 E-mail End Process: coluna Comment + badges coloridos + fix linter — `de969b8`, `993dca3`, `723bffb`
+E-mail inclui coluna **Comments** quando houver justificativas no dia (`has_comments` calculado em
+`send_payrec_email`). Badges de Status/Check saem **coloridos** também no e-mail (macros Jinja `status_badge`/
+`check_badge` em `email-template-recon-payrec.html`). Erros do linter CSS do VS Code (Jinja dentro de `style=""`)
+eliminados movendo os `{% if %}` para **fora** dos atributos de estilo.
+
+---
+
+## 80. Sessão 2026-07-08/09 — Page Access (admin): controle de acesso por página
+
+Nova página **/page-access** (só admin) para escolher quais páginas cada usuário acessa. Enforcement escolhido
+pelo usuário: **esconder no menu + bloquear URL**; default = **acesso total até o admin restringir**. —
+`827ab2d`, `0e0c23d`, `506994f`, `a5723de`, `7158e04`, `2cdc044`, `938f268`, `6c48fe4`
+
+**Backend:** coluna `users.Page_Access` (JSON de URLs; vazio = não-configurado = acesso total; migração
+`ALTER TABLE users ADD COLUMN Page_Access`). `_load_nav_urls()` faz parse do sidenav (fonte única das páginas
+controláveis). `_ALWAYS_ALLOWED_PATHS = {/dashboard, /dashboard-2, /users-profile, /page-access}`.
+`enforce_page_access` (before_request) redireciona `/dashboard` se a página configurada não está no allowlist.
+`/api/me/access` (sidebar) e `/api/page-access/<sid>` (GET/POST admin; POST valida `u in _NAV_URLS`). Filtro de
+notificações por página acessível (`_NOTIF_PAGE_URL`).
+
+**Frontend:** link "Page Access" no sidenav (server-render p/ admin). Página redesenhada no padrão
+**emil-design-eng** (motion, avatares reais via `<ASSETS>/images/users/<sid>.jpg`, botão Save compacto). Skill
+`emil-design-eng` habilitada em `.claude/skills/` (`.gitignore`: `.claude/*` + `!.claude/skills/`). Agrupamento
+das páginas na tela: **hierárquico completo** — breadcrumb `Seção › Grupo › Subgrupo` derivado do sidenav em
+document-order (`compareDocumentPosition` protege contra motores que não devolvem os matches em ordem de
+documento; descoberto porque o jsdom agrupa por seletor).
+
+### Arquivos (sessão 80)
+```
+apps/pages/routes.py                       ← Page_Access, _load_nav_urls, enforce_page_access, /page-access, /api/me/access, /api/page-access
+apps/templates/pages/page-access.html      ← NOVA página admin (buildPages hierárquico, renderSections, motion Emil)
+apps/templates/partials/sidenav.html       ← link Page Access + script de hiding por acesso
+.claude/skills/emil-design-eng/SKILL.md    ← skill copiada de .agents/skills/ p/ discovery do Claude Code
+```
+
+---
+
+## 81. Sessão 2026-07-09 — Categoria Master + sidenav (remove Menu Levels/Disabled Menu)
+
+### 81.1 Categoria Master — `c2ce1fb`
+Novo perfil **Master** (apenas SID **E930179**), acima de admin. **Fixado por SID** (`_MASTER_SIDS`), não por
+role no banco — não dá pra conceder a mais ninguém via gestão de usuários. `_session_is_master()` (SID);
+`_session_is_admin()` = role ADMIN **ou** master. Master é sempre isento de restrições (enforce_page_access,
+filtro de notificações, sidebar) e é o **único** que pode alterar o acesso de **admins** (ou de outro master):
+`_target_needs_master(sid)` → POST `/api/page-access` retorna **403** e o GET marca `locked`; a tela trava os
+alvos admin/master em read-only (`lockEditor`). Restrição aplicada pelo Master a um admin passa a valer de fato
+(admins deixaram de ser isentos por padrão). Login fixa `session['user_role']='MASTER'` por SID; `MASTER` em
+`ROLE_META` (ícone `ti-crown`); herda todos os poderes de admin (link Page Access, editar/excluir usuários) e
+aparece como "Master". Conta Master protegida: só o próprio Master a edita/exclui.
+
+### 81.2 Sidenav: remove Menu Levels + Disabled Menu — `c2ce1fb`
+Removida a seção "Menu Items" (Menu Levels / Disabled Menu) — eram itens de demonstração do tema sem rota
+navegável (`javascript:void(0)` / `href="#!"`), logo não controláveis por acesso.
+
+---
+
+## 82. Sessão 2026-07-09 — Control Panel: acesso por card + descrição do card Daily Settlement
+
+### 82.1 Control Panel em seção própria (acesso por card) — `f6ef4cd`
+Na tela de Page Access, o Control Panel saiu do grupo normal e virou **seção dedicada**, com um item por
+**card/rotina**: `Save CETIP Files` (cetip), `Save Daily Settlement Files` (daily), `Settlement Forecast`
+(forecast), `Update Contacts` (contacts). Tokens `/control-panel#<id>` guardados no mesmo allowlist das páginas.
+**Enforcement:** a página abre se houver **≥1 card** concedido (`_cp_page_allowed`); cada endpoint de rotina
+exige o seu card (`enforce_control_panel_cards` before_request + `_CP_ENDPOINT_CARD`; **403** caso contrário).
+Retrocompat: grant legado da página inteira `/control-panel` libera **todos** os cards. Cliente esconde os cards
+não concedidos (e a coluna inteira quando fica vazia). Registros `_CONTROL_PANEL_CARDS` / `_CP_CARD_TOKENS` /
+`_cp_card_allowed`; `data-cp-card` em cada `.cp-card`; `PA_CP_CARDS` no page-access injeta a seção.
+
+### 82.2 Descrição do card Daily Settlement — `0b9a277`
+A rotina de save já está pronta → removida a nota "Saving logic in progress" do **fallback HTML** do card (as
+traduções `en/br/es` já traziam a descrição final; o `data-lang` já substituía em runtime).
+
+### Arquivos (sessões 81–82)
+```
+apps/pages/routes.py                       ← _MASTER_SIDS/_session_is_master, MASTER em ROLE_META, control-panel cards + enforcement, guards master
+apps/templates/partials/sidenav.html       ← remove Menu Items; link Page Access p/ ADMIN|MASTER; hiding card-aware do Control Panel
+apps/templates/pages/page-access.html      ← is_master (lock admin/master), seção Control Panel por card (PA_CP_CARDS)
+apps/templates/pages/control-panel.html    ← data-cp-card + hiding por card; descrição do card Daily Settlement
+apps/templates/pages/users-roles.html      ← edit/delete de usuários liberado p/ MASTER
+```

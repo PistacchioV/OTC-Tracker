@@ -60,6 +60,15 @@ Authentication is SID-based (internal JPMorgan employees), not username/password
 
 Session keys set after auth: `authenticated`, `user_sid`, `user_name`, `user_email`, `user_role`.
 
+### Access control (roles + per-page/per-card)
+
+Authorization lives in `apps/pages/routes.py` and is enforced in three layers (before_request, sidebar JS, notification feed):
+
+- **Roles.** `user_role` comes from the DB (`ADMIN`, `BO`, `MO`, `FO`, `INSTITUTIONAL`, `HUB`). **Master** is a superuser pinned by SID (`_MASTER_SIDS`, currently `E930179`) — it is *not* a grantable DB role, so it can't be assigned through user management. `_session_is_master()` is SID-based; `_session_is_admin()` = role `ADMIN` **or** master. Only the master can change an admin's (or another master's) page access; only the master is exempt from every page restriction.
+- **Per-page access.** Column `users.Page_Access` holds a JSON array of allowed sidebar URLs. Empty/absent = *unconfigured* = full access. `_load_nav_urls()` parses `partials/sidenav.html` for the set of controllable pages. `enforce_page_access` (before_request) redirects to `/dashboard` when a configured user hits a page not in their allowlist. `_ALWAYS_ALLOWED_PATHS` (dashboard, users-profile, page-access) is never restricted. Admins are enforced too *if the master configured them*; unconfigured users (incl. admins) keep full access.
+- **Per-card access (Control Panel).** The Control Panel is card-gated: allowlist tokens `"/control-panel#<id>"` (registry `_CONTROL_PANEL_CARDS`) grant individual routine cards. The page opens if ≥1 card is granted (`_cp_page_allowed`); `enforce_control_panel_cards` (before_request) blocks each routine's API endpoint unless its card is granted (`_CP_ENDPOINT_CARD`). A legacy whole-page `/control-panel` grant implies all cards.
+- **Admin UI.** `/page-access` (admin/master only) is the editor; `/api/page-access/<sid>` GET/POST persists the allowlist. The Page Access checklist is built client-side from the live sidebar DOM, grouped by full menu hierarchy, with Control Panel exploded into its own card section.
+
 ### Database
 
 Two separate databases are in use:
