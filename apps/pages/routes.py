@@ -564,6 +564,14 @@ def init_db():
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                endpoint   VARCHAR PRIMARY KEY,
+                sid        VARCHAR NOT NULL DEFAULT '',
+                role       VARCHAR DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
         log.info("[init_db] Schema ready")
     except Exception:
@@ -657,6 +665,22 @@ def _migrate_schema():
             """)
             conn.commit()
             log.info("[migrate] notifications table created")
+
+        # Ensure push_subscriptions table exists (Web Push)
+        try:
+            conn.execute("SELECT 1 FROM push_subscriptions LIMIT 1")
+        except Exception:
+            log.warning("[migrate] push_subscriptions table missing — creating")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    endpoint   VARCHAR PRIMARY KEY,
+                    sid        VARCHAR NOT NULL DEFAULT '',
+                    role       VARCHAR DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+            log.info("[migrate] push_subscriptions table created")
     finally:
         conn.close()
 
@@ -672,8 +696,54 @@ def _create_notification(actor_sid, actor_name, action, page, detail='', target_
             conn.commit()
         finally:
             conn.close()
+        # Wake subscribers' devices via Web Push (best-effort, off the request path).
+        try:
+            import threading
+            threading.Thread(target=_push_notify,
+                             args=(actor_sid or '', target_role or ''),
+                             daemon=True).start()
+        except Exception:
+            pass
     except Exception:
         log.error("[_create_notification] FAILED:\n%s", traceback.format_exc())
+
+
+def _push_notify(actor_sid, target_role):
+    """Send a payloadless Web Push to every subscriber matching the
+    notification's target_role (empty = everyone), except the actor. The
+    Service Worker then fetches /api/notifications and shows it. Runs in a
+    background thread; HTTP sends happen with no DB lock held."""
+    try:
+        from apps.pages import webpush
+        if not webpush.is_enabled():
+            return
+        conn = get_db_connection()
+        try:
+            if target_role:
+                rows = conn.execute(
+                    "SELECT endpoint FROM push_subscriptions WHERE role = ? AND sid <> ?",
+                    [target_role, actor_sid]).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT endpoint FROM push_subscriptions WHERE sid <> ?",
+                    [actor_sid]).fetchall()
+        finally:
+            conn.close()
+        dead = []
+        for (endpoint,) in rows:
+            code = webpush.send_push(endpoint)
+            if code in (404, 410):   # subscription expired/unsubscribed
+                dead.append(endpoint)
+        if dead:
+            conn = get_db_connection()
+            try:
+                for ep in dead:
+                    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [ep])
+                conn.commit()
+            finally:
+                conn.close()
+    except Exception:
+        log.error("[_push_notify] FAILED:\n%s", traceback.format_exc())
 
 
 def _nd_token(value):
@@ -13387,6 +13457,68 @@ def api_create_notification():
         action, page, detail, target_role
     )
     return jsonify({"success": True})
+
+
+# ── Web Push (Service Worker) ─────────────────────────────────────────────────
+@blueprint.route('/sw.js')
+def service_worker():
+    """Serve the Service Worker at the root scope so it controls the whole app.
+    The Service-Worker-Allowed header lets a /static-hosted script claim '/'."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'static', 'js', 'sw-push.js')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            js = f.read()
+    except Exception:
+        return ('', 404)
+    resp = make_response(js)
+    resp.headers['Content-Type'] = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@blueprint.route('/api/push/public-key', methods=['GET'])
+def api_push_public_key():
+    from apps.pages import webpush
+    return jsonify({'enabled': webpush.is_enabled(), 'key': webpush.get_public_key()})
+
+
+@blueprint.route('/api/push/subscribe', methods=['POST'])
+def api_push_subscribe():
+    if not session.get('authenticated'):
+        return jsonify({'success': False}), 401
+    data = request.get_json(silent=True) or {}
+    sub = data.get('subscription') or data
+    endpoint = str((sub or {}).get('endpoint') or '').strip()
+    if not endpoint:
+        return jsonify({'success': False, 'message': 'no endpoint'}), 400
+    conn = get_db_connection()
+    try:
+        conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint])
+        conn.execute(
+            "INSERT INTO push_subscriptions (endpoint, sid, role) VALUES (?, ?, ?)",
+            [endpoint, session.get('user_sid', '') or '', session.get('user_role', '') or ''])
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/push/unsubscribe', methods=['POST'])
+def api_push_unsubscribe():
+    if not session.get('authenticated'):
+        return jsonify({'success': False}), 401
+    data = request.get_json(silent=True) or {}
+    endpoint = str(data.get('endpoint') or '').strip()
+    if endpoint:
+        conn = get_db_connection()
+        try:
+            conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint])
+            conn.commit()
+        finally:
+            conn.close()
+    return jsonify({'success': True})
 
 
 # ==============================================================================

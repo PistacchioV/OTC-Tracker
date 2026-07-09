@@ -661,8 +661,57 @@
             function requestNotifPermission() {
                 if (!('Notification' in window)) return;
                 if (Notification.permission === 'default') {
-                    try { Notification.requestPermission(); } catch (e) {}
+                    try {
+                        Notification.requestPermission().then(function (p) {
+                            if (p === 'granted') initWebPush();
+                        });
+                    } catch (e) { /* older browsers: callback form */ }
+                } else if (Notification.permission === 'granted') {
+                    initWebPush();
                 }
+            }
+
+            // Web Push: register the Service Worker and subscribe so the OS can
+            // raise notifications even when NO app tab is open (the browser must
+            // still be running in the background). Payloadless — the SW fetches
+            // the details itself. No-ops gracefully if the server has no VAPID
+            // keys configured, or the browser lacks push support.
+            var _pushInit = false;
+            function initWebPush() {
+                if (_pushInit) return;
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                _pushInit = true;
+                function _key2arr(k) {
+                    var pad = '='.repeat((4 - k.length % 4) % 4);
+                    var s = (k + pad).replace(/-/g, '+').replace(/_/g, '/');
+                    var raw = atob(s), arr = new Uint8Array(raw.length);
+                    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                    return arr;
+                }
+                function _sendSub(sub) {
+                    fetch('/api/push/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subscription: sub })
+                    }).catch(function () {});
+                }
+                navigator.serviceWorker.register('/sw.js').then(function (reg) {
+                    fetch('/api/push/public-key').then(function (r) { return r.json(); })
+                        .then(function (cfg) {
+                            if (!cfg || !cfg.enabled || !cfg.key) { _pushInit = false; return; }
+                            reg.pushManager.getSubscription().then(function (existing) {
+                                if (existing) { _sendSub(existing); return; }
+                                reg.pushManager.subscribe({
+                                    userVisibleOnly: true,
+                                    applicationServerKey: _key2arr(cfg.key)
+                                }).then(_sendSub).catch(function (e) {
+                                    _pushInit = false;
+                                    console.warn('[push] subscribe failed', e);
+                                });
+                            });
+                        }).catch(function () { _pushInit = false; });
+                }).catch(function (e) { _pushInit = false; console.warn('[push] SW register failed', e); });
             }
             function maybeNativeNotify(n) {
                 if (!('Notification' in window) || Notification.permission !== 'granted') return;
