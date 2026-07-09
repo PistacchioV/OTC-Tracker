@@ -53,9 +53,13 @@
   #pa-page .pa-toolbar .btn { padding: .3rem .72rem !important; font-size: .78rem !important; font-weight: 600 !important;
       line-height: 1.35 !important; border-radius: 8px !important; }
   #pa-page .pa-toolbar .btn i { font-size: .9rem; }
-  #pa-page .pa-search { position: relative; flex: 1; min-width: 180px; }
-  #pa-page .pa-search input { padding-left: 30px; }
-  #pa-page .pa-search i { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color); }
+  #pa-page .pa-search { position: relative; flex: 1; min-width: 180px; display: flex; align-items: center; }
+  #pa-page .pa-search input { width: 100%; padding-left: 30px; }
+  /* Lucide swaps the <i data-lucide> for an <svg>, so target both and keep it
+     vertically centered inside the field (not floating above it). */
+  #pa-page .pa-search i, #pa-page .pa-search svg { position: absolute; left: 9px; top: 50%;
+      transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color);
+      pointer-events: none; }
 
   /* ── Section cards ───────────────────────────────────────── */
   #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden;
@@ -190,14 +194,21 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" />
+<!-- Server data as a JSON island: keeps the script below 100% Jinja-free so the
+     editor's JS language service doesn't flag template tags as syntax errors. -->
+<script type="application/json" id="pa-bootstrap">
+{{ {'assets': config.ASSETS_ROOT, 'isMaster': is_master, 'cards': cp_cards} | tojson }}
+</script>
 <script>
 (function () {
   'use strict';
+  var PA_BOOT = {};
+  try { PA_BOOT = JSON.parse(document.getElementById('pa-bootstrap').textContent || '{}'); } catch (e) {}
   var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
-  var PA_ASSETS = '{{ config.ASSETS_ROOT }}';   // user photos: <ASSETS>/images/users/<sid>.jpg
-  var PA_IS_MASTER = {{ 'true' if is_master else 'false' }};   // master can restrict admins
-  // Control Panel routine cards — granted individually in their own section.
-  var PA_CP_CARDS = [{% for c in cp_cards %}{ url: '/control-panel#{{ c.id }}', label: {{ c.label | tojson }} }{{ ',' if not loop.last }}{% endfor %}];
+  var PA_ASSETS = PA_BOOT.assets || '';   // user photos: <ASSETS>/images/users/<sid>.jpg
+  var PA_IS_MASTER = !!PA_BOOT.isMaster;  // master can restrict admins
+  // Control Panel routine cards — granted individually, grouped under "Apps › Control Panel".
+  var PA_CP_CARDS = (PA_BOOT.cards || []).map(function (c) { return { url: '/control-panel#' + c.id, label: c.label }; });
   var current = null;
 
   // Avatar markup: user photo with initials fallback (same path as User-roles).
@@ -246,17 +257,19 @@
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
       var href = el.getAttribute('href');
       if (!href || ALWAYS[href] || seen[href]) return;
-      // Control Panel is exploded into its own card-level section below.
-      if (href === '/control-panel') { seen[href] = 1; return; }
+      // Control Panel is exploded into its routine cards, in place — grouped as a
+      // sub-section of wherever the link sits in the menu (e.g. "Apps › Control Panel").
+      if (href === '/control-panel') {
+        seen[href] = 1;
+        var cpSec = [section].concat(groupPath(el)).concat('Control Panel').filter(Boolean).join(PATH_SEP);
+        (PA_CP_CARDS || []).forEach(function (c) { out.push({ url: c.url, label: c.label, section: cpSec }); });
+        return;
+      }
       seen[href] = 1;
       var lbl = el.querySelector('.menu-text');
       var path = [section].concat(groupPath(el)).filter(Boolean);
       out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href,
                  section: path.join(PATH_SEP) });
-    });
-    // Dedicated Control Panel section: one item per routine card.
-    (PA_CP_CARDS || []).forEach(function (c) {
-      out.push({ url: c.url, label: c.label, section: 'Control Panel' });
     });
     return out;
   }
