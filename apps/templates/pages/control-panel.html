@@ -208,6 +208,13 @@
     .cp-reveal { animation: none; opacity: 1; transform: none; }
     .cp-card, .cp-run-btn, .cp-card .form-control { transition: none; }
 }
+
+/* ── Card grid: each card fills its cell so paired cards share a row height ──── */
+/* The .col cells are d-flex; the reveal + card stretch to fill, and Bootstrap's
+   align-items:stretch makes both cards in a wrapped row equal height. */
+.cp-cards .cp-reveal { flex: 1; display: flex; }
+.cp-cards .cp-reveal > .cp-card { width: 100%; }
+
 </style>
 {% endblock extra_css %}
 
@@ -221,18 +228,34 @@
         Central de rotinas operacionais
     </p>
 
-    <!-- ═══ ROTINAS (2 colunas: File-Saving | Forecasts & Reports) ═══ -->
-    <div class="row g-3 g-xl-4 mb-4">
-
-        <!-- ── Coluna esquerda: Daily Settlements / File-Saving ── -->
-        <div class="col-12 col-lg-6 d-flex flex-column">
-            <div class="cp-reveal mb-3">
+    <!-- ═══ ROTINAS (grade 2×2: cada linha de cards tem altura igual) ═══ -->
+    <!-- Cabeçalhos das seções (linha própria, alinhados com as colunas de cards) -->
+    <div class="row g-3 g-xl-4">
+        <div class="col-12 col-lg-6">
+            <div class="cp-reveal mb-3" data-cp-hdr="filesaving">
                 <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
                 <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
                 <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
                     Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
                 </p>
             </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="cp-reveal mb-3" data-cp-hdr="reporting">
+                <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
+                <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
+                <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
+                    Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards em grade: cetip+forecast (linha 1) · daily+contacts (linha 2).
+         Cada par compartilha a altura da linha (align-items:stretch do Bootstrap). -->
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="filesaving">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="cetip">
                     <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
@@ -270,7 +293,42 @@
                     </div>
                 </div>
             </div>
-            <div class="cp-reveal mt-3">
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="forecast">
+                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
+                        Reads the CETIP position files, projects the upcoming settlements by business
+                        day and entity, and e-mails the consolidated forecast report to OTC Ops.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpFcstDateWrap">
+                            <input type="text" id="cp-fcst-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-forecast-run
+                                data-date-input="cp-fcst-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="filesaving">
+            <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="daily">
                     <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
@@ -303,45 +361,8 @@
             </div>
         </div>
 
-        <!-- ── Coluna direita: Forecasts & Reports / Settlement Forecast ── -->
-        <div class="col-12 col-lg-6 d-flex flex-column">
-            <div class="cp-reveal mb-3">
-                <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
-                <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
-                <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
-                    Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
-                </p>
-            </div>
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="forecast">
-                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
-                        Reads the CETIP position files, projects the upcoming settlements by business
-                        day and entity, and e-mails the consolidated forecast report to OTC Ops.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-ref-date">Reference date</label>
-                        <div class="cp-datefield" id="cpFcstDateWrap">
-                            <input type="text" id="cp-fcst-date" data-input readonly
-                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
-                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
-                        </div>
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
-                        </span>
-                        <button type="button" class="cp-run-btn"
-                                data-forecast-run
-                                data-date-input="cp-fcst-date">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="cp-reveal mt-3">
                 <div class="cp-card" data-cp-card="contacts">
                     <div class="cp-card__icon"><i class="ti ti-address-book"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-contacts-title">Update Contacts</h3>
@@ -637,20 +658,21 @@ document.addEventListener('click', function (e) {
             pages.forEach(function (u) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
+            // Hide the grid cell (column) of each card the user can't reach.
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
-                    var wrap = card.closest('.cp-reveal') || card;
-                    wrap.hidden = true;
+                    var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;
+                    col.hidden = true;
                 }
             });
-            // Hide a whole column (with its header) when none of its cards remain.
-            document.querySelectorAll('.col-12.col-lg-6').forEach(function (col) {
-                var cards = col.querySelectorAll('[data-cp-card]');
-                if (!cards.length) return;
-                var anyVisible = Array.prototype.some.call(cards, function (c) {
-                    var w = c.closest('.cp-reveal') || c; return !w.hidden;
+            // Hide a section header once none of its group's cards remain.
+            document.querySelectorAll('[data-cp-hdr]').forEach(function (hdr) {
+                var g = hdr.getAttribute('data-cp-hdr');
+                var anyVisible = Array.prototype.some.call(document.querySelectorAll('[data-cp-card]'), function (c) {
+                    return CP_GROUP[c.getAttribute('data-cp-card')] === g && allow[c.getAttribute('data-cp-card')];
                 });
-                if (!anyVisible) col.hidden = true;
+                if (!anyVisible) { var col = hdr.closest('.col-12') || hdr; col.hidden = true; }
             });
         })
         .catch(function () {});
