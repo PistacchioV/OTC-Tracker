@@ -1311,6 +1311,10 @@ var COL_TO_JSON_FIELD = {
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
 function dealJsonToRow(deal) {
+    // XSS guard: escape untrusted, imported deal text before DataTables renders
+    // it as HTML. Trusted app-built columns are kept via the `keep` index map.
+    function _esc(v){ v = (v == null) ? '' : String(v); return v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function _escRow(arr, keep){ return arr.map(function(c, i){ return keep[i] ? c : _esc(c); }); }
     var ACTIONS =
         '<div class="d-flex justify-content-center gap-1">' +
         '<a class="btn btn-success btn-sm rounded-circle btn-row-confirm" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
@@ -1358,13 +1362,13 @@ function dealJsonToRow(deal) {
     var commodity = deal.Commodities || (ua ? (_SUBJACENTE_MAP_NDF[ua] || '') : '');
 
     var clientHtml = deal.Client
-        ? deal.Client
+        ? _esc(deal.Client)
         : '<input type="text" class="form-control form-control-sm" value="" placeholder="Client Name">';
     var taxIdHtml  = deal.TaxID
-        ? deal.TaxID
+        ? _esc(deal.TaxID)
         : '<input type="text" class="form-control form-control-sm" value="" placeholder="Tax ID">';
 
-    return [
+    return _escRow([
         '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
         ACTIONS,
         statusHtml,
@@ -1395,7 +1399,7 @@ function dealJsonToRow(deal) {
         deal.OtherBook         || '',
         quotedHtml,
         deal.Maker             || ''
-    ];
+    ], {0:1,1:1,2:1,10:1,11:1,28:1});
 }
 
 $(document).ready(function() {

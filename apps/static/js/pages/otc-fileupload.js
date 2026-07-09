@@ -559,6 +559,13 @@ var OTCFileUpload = (function () {
     // Returns { row: Array(35), data: Object } — row is added to the table,
     // data is the plain-value object saved to the JSON cache.
     // -------------------------------------------------------------------------
+    // Escape untrusted, email-derived cell text before it is handed to
+    // DataTables (which renders array cell data as HTML). Trusted, app-built
+    // markup columns (checkbox, actions, status/quoted badges, client/taxid
+    // inputs) are kept as-is via the `keep` index map.
+    function _escHtml(v){ v = (v == null) ? '' : String(v); return v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function _escRow(arr, keep){ return arr.map(function(c, i){ return keep[i] ? c : _escHtml(c); }); }
+
     function buildRow(deal, refMap, subjacenteIdx, makerSid, rowId, layout) {
         makerSid = makerSid || '';
         rowId    = rowId    || generateUUID();
@@ -662,7 +669,7 @@ var OTCFileUpload = (function () {
                             ? 'MISSING'
                             : isCentsFactor(subjEntry.fatorConversao) ? 'YES' : 'NO';
 
-        var rowArray = [
+        var rowArray = _escRow([
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
             '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
@@ -698,10 +705,10 @@ var OTCFileUpload = (function () {
             quotedCents,                                                                                            // col 32 Quoted in Cents?
             makerSid,                                                                                               // col 33 Maker   (hidden)
             rowId                                                                                                   // col 34 RowID   (hidden)
-        ];
+        ], {0:1,1:1,2:1,10:1,11:1,32:1});
 
         // NDF-specific row (31 cols): no Premium, PremiumPerUnit, PremiumCCY, SpotDate
-        var rowArrayNDF = [
+        var rowArrayNDF = _escRow([
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
             '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
@@ -732,7 +739,7 @@ var OTCFileUpload = (function () {
             otherBook,                                                                                              // col 27 OtherBook
             quotedCents,                                                                                            // col 28 Quoted in Cents?
             makerSid,                                                                                               // col 29 Maker   (hidden)
-        ];
+        ], {0:1,1:1,2:1,10:1,11:1,28:1});
 
         var isNDF = (layout === 'ndf');
 

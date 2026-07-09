@@ -896,9 +896,10 @@ def cleanup_expired_codes():
 # ==============================================================================
 
 def get_client_ip():
-    forwarded_for = request.headers.get('X-Forwarded-For')
-    if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
+    # ProxyFix(x_for=1) (see create_app) already rewrites request.remote_addr to
+    # the real client IP from the single trusted proxy hop. Do NOT read
+    # X-Forwarded-For directly: its leftmost value is fully client-controlled and
+    # could be spoofed to match a user's stored IP, skipping 2FA entirely.
     return request.remote_addr
 
 
@@ -8535,6 +8536,12 @@ def api_update_user():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
 
+    # Changing a user's role/status is an admin-only action. Without this check
+    # any authenticated user could POST their own SID with role=ADMIN and
+    # escalate to full admin on next login.
+    if not _session_is_admin():
+        return jsonify({"success": False, "message": "Only Admin users can modify accounts."}), 403
+
     data = request.get_json()
     sid = data.get('sid', '').strip().upper()
     new_role = data.get('role', '').strip()
@@ -8550,6 +8557,10 @@ def api_update_user():
     # The master account can only be modified by the master.
     if sid in _MASTER_SIDS and not _session_is_master():
         return jsonify({"success": False, "message": "Only the master can modify the master account."}), 403
+    # Granting ADMIN, or modifying an existing admin/master account, requires the
+    # master (mirrors the page-access trust model in _target_needs_master).
+    if (new_role == 'ADMIN' or _target_needs_master(sid)) and not _session_is_master():
+        return jsonify({"success": False, "message": "Only the master can grant or modify Admin accounts."}), 403
     if new_role not in valid_roles:
         return jsonify({"success": False, "message": "Invalid role."}), 400
     if new_status not in valid_statuses:
@@ -9585,6 +9596,8 @@ def api_fxo_import_xlsx():
 
 @blueprint.route('/api/new-deals/opt-fxo/send-conecta', methods=['POST'])
 def api_fxo_send_conecta():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     """B3 Conecta file for FXO. Same layout as opt-commodities with the FXO tweaks:
     Tipo Indicador (f[2])='4', Tipo de Cotação (f[17])='2',
     'Data de fixing do ativo subjacente' (f[19]) = last fixing date when VANILLA (blank ASIAN),
@@ -11327,6 +11340,8 @@ def api_ndf_bulk_patch_deal_cache():
 
 @blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
 def api_ndf_send_conecta():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     from decimal import Decimal
     import datetime as _dt
 
@@ -11944,13 +11959,20 @@ def api_b3_add():
 
 @blueprint.route('/api/parse-msg-html', methods=['POST'])
 def api_parse_msg_html():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     f = request.files.get('file')
     if not f:
         return jsonify({'ok': False, 'error': 'no file'}), 400
+    # Cap the .msg size before handing the bytes to the OLE/CFB parser to avoid
+    # memory-exhaustion DoS from an oversized upload.
+    _MAX_MSG_BYTES = 25 * 1024 * 1024
     try:
         import extract_msg
         import io
-        data = f.read()
+        data = f.read(_MAX_MSG_BYTES + 1)
+        if len(data) > _MAX_MSG_BYTES:
+            return jsonify({'ok': False, 'error': 'file too large'}), 413
         msg = extract_msg.openMsg(io.BytesIO(data))
         html_body = getattr(msg, 'htmlBody', None)
         if html_body:
@@ -11973,6 +11995,8 @@ def api_parse_msg_html():
 
 @blueprint.route('/api/new-deals/opt-commodities/send-conecta', methods=['POST'])
 def api_send_conecta():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     from decimal import Decimal
     import datetime as _dt
 
