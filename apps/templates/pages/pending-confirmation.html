@@ -1052,7 +1052,7 @@
                         <!-- Trade Date -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Trade Date</label>
-                            <input type="date" id="ar_trade_date" class="form-control">
+                            <input type="text" id="ar_trade_date" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                             <div class="invalid-feedback">This field is required.</div>
                         </div>
 
@@ -1090,7 +1090,7 @@
                         <!-- Maturity Date -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Maturity Date</label>
-                            <input type="date" id="ar_maturity_date" class="form-control">
+                            <input type="text" id="ar_maturity_date" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Trade Number -->
@@ -1112,19 +1112,19 @@
                         <!-- EA -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">EA</label>
-                            <input type="date" id="ar_ea" class="form-control">
+                            <input type="text" id="ar_ea" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Send Date -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Send Date</label>
-                            <input type="date" id="ar_send_date" class="form-control">
+                            <input type="text" id="ar_send_date" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Return Date -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Return Date</label>
-                            <input type="date" id="ar_return_date" class="form-control">
+                            <input type="text" id="ar_return_date" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Break Reason -->
@@ -1148,19 +1148,19 @@
                         <!-- Baixa Sem Abono -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Baixa Sem Abono</label>
-                            <input type="date" id="ar_baixa_sem_abono" class="form-control">
+                            <input type="text" id="ar_baixa_sem_abono" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Pendência -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Pendência</label>
-                            <input type="date" id="ar_pendencia" class="form-control">
+                            <input type="text" id="ar_pendencia" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <!-- Abono -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Abono</label>
-                            <input type="date" id="ar_abono" class="form-control">
+                            <input type="text" id="ar_abono" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                     </div><!-- end row g-3 -->
@@ -1377,7 +1377,10 @@ $(document).ready(function() {
                     });
                     document.getElementById('ar_product_type').value = '';
                     document.getElementById('ar_trade_number').value = '';
-                    new bootstrap.Modal(document.getElementById('addRowModal')).show();
+                    arClearDatePickers();
+                    // focus:false so the modal doesn't steal focus back from the
+                    // flatpickr calendar (which lives on <body>) and close it.
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('addRowModal'), { focus: false }).show();
                 });
             }
 
@@ -2096,12 +2099,35 @@ $(document).ready(function() {
         document.getElementById('ar_pending_status').value = v;
     });
 
-    // Trade Date → auto-calc Aging + Status
-    document.getElementById('ar_trade_date').addEventListener('input', function() {
-        var as = arAgingStatus(this.value.trim());
+    // Date pickers — dd/mm/yyyy (BR format) for every date field in the modal.
+    // Native <input type="date"> shows the browser-locale format (mm/dd/yyyy on
+    // en-US); flatpickr with dateFormat d/m/Y forces the Brazilian format and
+    // stores the field value as dd/mm/yyyy (arAgingStatus + the row cells already
+    // handle that format).
+    if (typeof flatpickr !== 'undefined') {
+        document.querySelectorAll('#addRowModal .ar-date').forEach(function (el) {
+            flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+        });
+    }
+    function arSyncDatePickers() {   // reflect programmatic .value into the pickers
+        document.querySelectorAll('#addRowModal .ar-date').forEach(function (el) {
+            if (el._flatpickr) el._flatpickr.setDate(el.value || '', false, 'd/m/Y');
+        });
+    }
+    function arClearDatePickers() {
+        document.querySelectorAll('#addRowModal .ar-date').forEach(function (el) {
+            if (el._flatpickr) el._flatpickr.clear();
+        });
+    }
+
+    // Trade Date → auto-calc Aging + Status (input for typing, change for picking)
+    function arRecalcAging() {
+        var as = arAgingStatus(document.getElementById('ar_trade_date').value.trim());
         document.getElementById('ar_aging').value  = as.aging;
         document.getElementById('ar_status').value = as.status;
-    });
+    }
+    document.getElementById('ar_trade_date').addEventListener('input',  arRecalcAging);
+    document.getElementById('ar_trade_date').addEventListener('change', arRecalcAging);
 
     // Validation helpers
     var AR_REQUIRED = ['ar_lob','ar_spn','ar_client','ar_product_type','ar_trade_date','ar_trade_number'];
@@ -2235,13 +2261,14 @@ $(document).ready(function() {
         document.getElementById('ar_baixa_sem_abono').value = d[21] || '';
         document.getElementById('ar_pendencia').value       = d[22] || '';
         document.getElementById('ar_abono').value           = d[23] || '';
+        arSyncDatePickers();   // reflect the loaded dd/mm/yyyy values into the pickers
 
         arClearErrors();
         document.getElementById('arSaveBtn').innerHTML = '<i class="ti ti-refresh"></i>';
         document.querySelector('#addRowModal .modal-title').innerHTML = '<i class="ti ti-edit me-2"></i>Edit Record — Pending Confirmation';
 
         var modalEl = document.getElementById('addRowModal');
-        (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).show();
+        bootstrap.Modal.getOrCreateInstance(modalEl, { focus: false }).show();
     });
 
     // CONFIRM: mark Pending Status as "Concluded"
