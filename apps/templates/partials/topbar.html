@@ -717,7 +717,49 @@
             setInterval(fetchNotifications, 8000);
         });
         </script>
-  
+
+        <!-- Megamenu ("Pages" dropdown): show only the pages the user can access.
+             Master / unconfigured users see everything. -->
+        <script>
+        (function () {
+            var mm = document.getElementById('megamenu-pages');
+            if (!mm) return;
+            fetch('/api/me/access', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.success || d.is_admin || !d.configured) return;   // full access
+                    var allowed = {};
+                    (d.pages || []).forEach(function (u) { allowed[u] = 1; });
+                    // Control Panel card grant → keep the Control Panel entry visible.
+                    for (var k in allowed) { if (k.indexOf('/control-panel#') === 0) { allowed['/control-panel'] = 1; break; } }
+                    function norm(h) { return h === '/' ? '/dashboard' : h; }   // KPI link is "/"
+                    // Hide each page link the user can't reach.
+                    mm.querySelectorAll('a.dropdown-item[href^="/"]').forEach(function (a) {
+                        if (allowed[norm(a.getAttribute('href'))]) return;
+                        var li = a.closest('li'); if (li) li.hidden = true;
+                    });
+                    // Hide a group (header + list) when none of its real pages remain.
+                    mm.querySelectorAll('.dropdown-header').forEach(function (h) {
+                        var ul = h.nextElementSibling;
+                        while (ul && !(ul.classList && ul.classList.contains('megamenu-list'))) ul = ul.nextElementSibling;
+                        if (!ul) return;
+                        var reals = Array.prototype.filter.call(ul.querySelectorAll('li'), function (li) { return li.querySelector('a[href^="/"]'); });
+                        var anyVisible = reals.some(function (li) { return !li.hidden; });
+                        if (!anyVisible) {
+                            h.hidden = true; ul.hidden = true;
+                            Array.prototype.forEach.call(ul.querySelectorAll('li'), function (li) { li.hidden = true; });
+                        }
+                    });
+                    // Nothing left → drop the whole "Pages" dropdown.
+                    var anyItem = Array.prototype.some.call(mm.querySelectorAll('a.dropdown-item[href^="/"]'), function (a) {
+                        var li = a.closest('li'); return li && !li.hidden;
+                    });
+                    if (!anyItem) mm.hidden = true;
+                })
+                .catch(function () {});
+        })();
+        </script>
+
         <!-- Fullscreen Toggler -->
         <div class="topbar-item d-none d-md-flex" id="fullscreen-toggler">
           <button class="topbar-link" data-toggle="fullscreen" type="button">

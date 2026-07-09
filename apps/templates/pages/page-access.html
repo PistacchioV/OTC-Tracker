@@ -61,6 +61,28 @@
       transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color);
       pointer-events: none; }
 
+  /* ── Block (top-level menu group) ────────────────────────── */
+  #pa-page .pa-block { border: 1px solid var(--pa-line); border-radius: 14px; margin-bottom: 16px; overflow: hidden;
+      animation: pa-rise 260ms var(--pa-ease-out) both; }
+  #pa-page .pa-block:nth-child(1){animation-delay:0ms} #pa-page .pa-block:nth-child(2){animation-delay:40ms}
+  #pa-page .pa-block:nth-child(3){animation-delay:80ms} #pa-page .pa-block:nth-child(4){animation-delay:120ms}
+  #pa-page .pa-block:nth-child(n+5){animation-delay:150ms}
+  #pa-page .pa-block__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 11px 15px; background: rgba(0,102,204,.06); border-bottom: 1px solid var(--pa-line); }
+  [data-bs-theme="dark"] #pa-page .pa-block__head { background: rgba(0,102,204,.12); }
+  #pa-page .pa-block__title { font-size: .8rem; font-weight: 800; letter-spacing: .02em; color: var(--bs-body-color);
+      display: flex; align-items: center; }
+  #pa-page .pa-block__count { font-size: .68rem; font-weight: 700; color: var(--pa-blue); background: var(--ins-secondary-bg,#fff);
+      border: 1px solid var(--pa-line); border-radius: 50rem; padding: 1px 8px; margin-left: 9px; }
+  #pa-page .pa-block__body { padding: 12px; display: flex; flex-direction: column; gap: 0; }
+  #pa-page .pa-block__body .pa-sec { animation: none; margin-bottom: 10px; }
+  #pa-page .pa-block__body .pa-sec:last-child { margin-bottom: 0; }
+  /* A block that wraps a single section drops the inner section chrome (the block
+     head already carries the title + toggle). */
+  #pa-page .pa-block--solo .pa-block__body { padding: 0; }
+  #pa-page .pa-block--solo .pa-sec { border: 0; border-radius: 0; margin: 0; }
+  #pa-page .pa-block--solo .pa-sec__head { display: none; }
+
   /* ── Section cards ───────────────────────────────────────── */
   #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden;
       animation: pa-rise 260ms var(--pa-ease-out) both; }
@@ -284,9 +306,16 @@
   }
 
   function renderSections(allowed) {
-    var bySection = {}, order = [];
-    PAGES.forEach(function (p) { if (!bySection[p.section]) { bySection[p.section] = []; order.push(p.section); } bySection[p.section].push(p); });
-    document.getElementById('pa-sections').innerHTML = order.map(function (sec) {
+    // group pages by section (full breadcrumb), then sections by top-level block.
+    var bySection = {}, secOrder = [];
+    PAGES.forEach(function (p) { if (!bySection[p.section]) { bySection[p.section] = []; secOrder.push(p.section); } bySection[p.section].push(p); });
+    var byBlock = {}, blockOrder = [];
+    secOrder.forEach(function (sec) {
+      var b = sec.split(PATH_SEP)[0];
+      if (!byBlock[b]) { byBlock[b] = []; blockOrder.push(b); }
+      byBlock[b].push(sec);
+    });
+    function secHtml(sec) {
       var items = bySection[sec].map(function (p) {
         var on = (allowed === null || allowed[p.url]) ? 'checked' : '';
         return '<label class="pa-item" data-label="' + esc(p.label.toLowerCase()) + '">' +
@@ -298,27 +327,52 @@
         '<span class="pa-sec__count" data-count>0/0</span></span>' +
         '<div class="form-check form-switch mb-0"><input class="form-check-input pa-sec-all" type="checkbox"></div></div>' +
         '<div class="pa-grid">' + items + '</div></div>';
+    }
+    document.getElementById('pa-sections').innerHTML = blockOrder.map(function (block) {
+      var secs = byBlock[block];
+      // A block with a single same-named section needs no inner section chrome —
+      // the block header/toggle already covers it (pa-block--solo hides that head).
+      var solo = secs.length === 1 && secs[0] === block;
+      return '<div class="pa-block' + (solo ? ' pa-block--solo' : '') + '" data-block="' + esc(block) + '">' +
+        '<div class="pa-block__head"><span class="pa-block__title">' + esc(block) +
+        '<span class="pa-block__count" data-block-count>0/0</span></span>' +
+        '<div class="form-check form-switch mb-0"><input class="form-check-input pa-block-all" type="checkbox" title="Toggle all"></div></div>' +
+        '<div class="pa-block__body">' + secs.map(secHtml).join('') + '</div></div>';
     }).join('');
-    // wire section switches + per-item change → counts
+    // wire section switches
     document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
       var cbs = sec.querySelectorAll('.pa-cb');
-      sec.querySelector('.pa-sec-all').addEventListener('change', function () {
-        cbs.forEach(function (c) { c.checked = this.checked; }, this); updateCounts();
-      });
+      var sw = sec.querySelector('.pa-sec-all');
+      if (sw) sw.addEventListener('change', function () { cbs.forEach(function (c) { c.checked = sw.checked; }); updateCounts(); });
       cbs.forEach(function (c) { c.addEventListener('change', updateCounts); });
+    });
+    // wire block switches (toggle every item in the block at once)
+    document.querySelectorAll('#pa-sections .pa-block').forEach(function (block) {
+      var cbs = block.querySelectorAll('.pa-cb');
+      var sw = block.querySelector('.pa-block-all');
+      if (sw) sw.addEventListener('change', function () { cbs.forEach(function (c) { c.checked = sw.checked; }); updateCounts(); });
     });
     updateCounts();
   }
 
   function updateCounts() {
-    var total = 0, checked = 0;
+    // per-section counts + switch state
     document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
       var cbs = sec.querySelectorAll('.pa-cb'), on = 0;
       cbs.forEach(function (c) { if (c.checked) on++; });
+      var cnt = sec.querySelector('[data-count]'); if (cnt) cnt.textContent = on + '/' + cbs.length;
+      var all = sec.querySelector('.pa-sec-all');
+      if (all) { all.checked = on === cbs.length && cbs.length > 0; all.indeterminate = on > 0 && on < cbs.length; }
+    });
+    // per-block counts + switch state (also the grand total, since every item is in a block)
+    var total = 0, checked = 0;
+    document.querySelectorAll('#pa-sections .pa-block').forEach(function (block) {
+      var cbs = block.querySelectorAll('.pa-cb'), on = 0;
+      cbs.forEach(function (c) { if (c.checked) on++; });
       total += cbs.length; checked += on;
-      sec.querySelector('[data-count]').textContent = on + '/' + cbs.length;
-      var all = sec.querySelector('.pa-sec-all'); all.checked = on === cbs.length && cbs.length > 0;
-      all.indeterminate = on > 0 && on < cbs.length;
+      var cnt = block.querySelector('[data-block-count]'); if (cnt) cnt.textContent = on + '/' + cbs.length;
+      var all = block.querySelector('.pa-block-all');
+      if (all) { all.checked = on === cbs.length && cbs.length > 0; all.indeterminate = on > 0 && on < cbs.length; }
     });
     var sum = document.getElementById('pa-summary');
     if (checked >= total && total > 0) { sum.textContent = 'Full access'; sum.classList.add('is-full'); }
@@ -331,7 +385,7 @@
 
   // Read-only mode: disable every control so a locked target can't be edited.
   function lockEditor(locked) {
-    document.querySelectorAll('#pa-sections .pa-cb, #pa-sections .pa-sec-all').forEach(function (c) { c.disabled = locked; });
+    document.querySelectorAll('#pa-sections .pa-cb, #pa-sections .pa-sec-all, #pa-sections .pa-block-all').forEach(function (c) { c.disabled = locked; });
     ['pa-full', 'pa-none', 'pa-save'].forEach(function (id) { var e = document.getElementById(id); if (e) e.disabled = locked; });
   }
 
@@ -418,6 +472,10 @@
       document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
         var anyVisible = Array.prototype.some.call(sec.querySelectorAll('.pa-item'), function (it) { return it.style.display !== 'none'; });
         sec.style.display = anyVisible ? '' : 'none';
+      });
+      document.querySelectorAll('#pa-sections .pa-block').forEach(function (block) {
+        var anyVisible = Array.prototype.some.call(block.querySelectorAll('.pa-item'), function (it) { return it.style.display !== 'none'; });
+        block.style.display = anyVisible ? '' : 'none';
       });
     });
     if (window.lucide && lucide.createIcons) lucide.createIcons();
