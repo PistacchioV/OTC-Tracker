@@ -4,8 +4,10 @@ awmpy.py
 # Mock dashboard data — visual testing only, NEVER commit
 **/*_mock.json
 
-# Claude Code memory
-.claude/
+# Claude Code memory (local), but SHARE project skills so Claude Code discovers
+# them in the standard location (e.g. /emil-design-eng).
+.claude/*
+!.claude/skills/
 
 # byte-compiled / optimized / DLL files
 __pycache__/
