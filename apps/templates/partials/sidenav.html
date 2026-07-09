@@ -1778,6 +1778,10 @@
       if (!d.configured) return;                       // full access — nothing to hide
       var allowed = {};
       (d.pages || []).forEach(function (u) { allowed[u] = 1; });
+      // Control Panel is card-gated: any granted card keeps its sidebar link visible.
+      if (!allowed['/control-panel']) {
+        for (var k in allowed) { if (k.indexOf('/control-panel#') === 0) { allowed['/control-panel'] = 1; break; } }
+      }
       var nav = document.querySelector('.side-nav');
       if (!nav) return;
       // Hide each link the user can't reach.

@@ -234,7 +234,7 @@
                 </p>
             </div>
             <div class="cp-reveal">
-                <div class="cp-card">
+                <div class="cp-card" data-cp-card="cetip">
                     <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-cetip-title">Save CETIP Files</h3>
                     <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
@@ -271,7 +271,7 @@
                 </div>
             </div>
             <div class="cp-reveal mt-3">
-                <div class="cp-card">
+                <div class="cp-card" data-cp-card="daily">
                     <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
                     <p class="cp-card__desc" data-lang="cp-r-ds-desc">
@@ -312,7 +312,7 @@
                 </p>
             </div>
             <div class="cp-reveal">
-                <div class="cp-card">
+                <div class="cp-card" data-cp-card="forecast">
                     <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
                     <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
@@ -341,7 +341,7 @@
                 </div>
             </div>
             <div class="cp-reveal mt-3">
-                <div class="cp-card">
+                <div class="cp-card" data-cp-card="contacts">
                     <div class="cp-card__icon"><i class="ti ti-address-book"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-contacts-title">Update Contacts</h3>
                     <p class="cp-card__desc" data-lang="cp-r-contacts-desc">
@@ -620,6 +620,39 @@ document.addEventListener('click', function (e) {
             disableMobile: true
         });
     });
+})();
+
+// ── Per-user card access: hide the routine cards this user can't reach ────────
+// Master / unconfigured users see everything. A configured allowlist may grant the
+// whole page ("/control-panel", legacy) or individual cards ("/control-panel#id").
+(function () {
+    fetch('/api/me/access', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success || d.is_admin || !d.configured) return;   // full access
+            var pages = d.pages || [];
+            if (pages.indexOf('/control-panel') !== -1) return;            // legacy: all cards
+            var allow = {};
+            pages.forEach(function (u) {
+                if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
+            });
+            document.querySelectorAll('[data-cp-card]').forEach(function (card) {
+                if (!allow[card.getAttribute('data-cp-card')]) {
+                    var wrap = card.closest('.cp-reveal') || card;
+                    wrap.hidden = true;
+                }
+            });
+            // Hide a whole column (with its header) when none of its cards remain.
+            document.querySelectorAll('.col-12.col-lg-6').forEach(function (col) {
+                var cards = col.querySelectorAll('[data-cp-card]');
+                if (!cards.length) return;
+                var anyVisible = Array.prototype.some.call(cards, function (c) {
+                    var w = c.closest('.cp-reveal') || c; return !w.hidden;
+                });
+                if (!anyVisible) col.hidden = true;
+            });
+        })
+        .catch(function () {});
 })();
 </script>
 {% endblock extra_javascript %}

@@ -148,6 +148,35 @@ def _load_nav_urls():
 
 _NAV_URLS = _load_nav_urls()
 
+# Control Panel is access-controlled at the card level: instead of the single
+# "/control-panel" page grant, each routine card can be granted on its own. Tokens
+# are stored in the same allowlist as page URLs ("/control-panel#<id>").
+_CONTROL_PANEL_CARDS = [
+    {'id': 'cetip',    'label': 'Save CETIP Files'},
+    {'id': 'daily',    'label': 'Save Daily Settlement Files'},
+    {'id': 'forecast', 'label': 'Settlement Forecast'},
+    {'id': 'contacts', 'label': 'Update Contacts'},
+]
+_CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
+# API endpoint → the card it belongs to (for server-side enforcement).
+_CP_ENDPOINT_CARD = {
+    '/api/control-panel/cetip-settlement': 'cetip',
+    '/api/control-panel/daily-settlement-save': 'daily',
+    '/api/control-panel/settlement-forecast/data': 'forecast',
+    '/api/control-panel/settlement-forecast/email': 'forecast',
+    '/api/control-panel/import-contacts': 'contacts',
+}
+
+
+def _cp_page_allowed(allowed):
+    """True if the user may open the Control Panel page at all (any card granted;
+    a legacy whole-page '/control-panel' grant counts as all cards)."""
+    return '/control-panel' in allowed or any(t in allowed for t in _CP_CARD_TOKENS)
+
+
+def _cp_card_allowed(allowed, card_id):
+    return '/control-panel' in allowed or ('/control-panel#' + card_id) in allowed
+
 
 def _get_page_access(sid):
     """(configured, urls_set). configured=False → not set yet (full access);
@@ -212,8 +241,29 @@ def enforce_page_access():
     if path.startswith('/api/') or path.startswith('/static') or path not in _NAV_URLS:
         return
     configured, allowed = _get_page_access(session.get('user_sid', ''))
-    if configured and path not in allowed:
+    if not configured:
+        return
+    # Control Panel is card-gated: the page opens if at least one card is granted.
+    if path == '/control-panel':
+        if not _cp_page_allowed(allowed):
+            return redirect('/dashboard')
+        return
+    if path not in allowed:
         return redirect('/dashboard')
+
+
+@blueprint.before_request
+def enforce_control_panel_cards():
+    """Block a Control Panel routine's API call when the user isn't granted that
+    specific card. Master and unconfigured users pass."""
+    if not session.get('authenticated') or _session_is_master():
+        return
+    card = _CP_ENDPOINT_CARD.get(request.path or '')
+    if not card:
+        return
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    if configured and not _cp_card_allowed(allowed, card):
+        return jsonify({'success': False, 'message': 'Access denied for this routine.'}), 403
 
 
 # ==============================================================================
@@ -8356,7 +8406,8 @@ def page_access():
     if not _session_is_admin():
         return redirect('/dashboard')
     return render_template('pages/page-access.html', segment='page-access',
-                           users=get_all_users(), is_master=_session_is_master())
+                           users=get_all_users(), is_master=_session_is_master(),
+                           cp_cards=_CONTROL_PANEL_CARDS)
 
 
 @blueprint.route('/api/me/access', methods=['GET'])
@@ -8408,8 +8459,8 @@ def api_page_access(sid):
     pages = data.get('pages')
     if not isinstance(pages, list):
         return jsonify({'success': False, 'message': 'pages must be a list'}), 400
-    # Only persist URLs that are real controllable pages (ignore anything else).
-    clean = [u for u in (str(p) for p in pages) if u in _NAV_URLS]
+    # Only persist real controllable items — nav pages or Control Panel card tokens.
+    clean = [u for u in (str(p) for p in pages) if u in _NAV_URLS or u in _CP_CARD_TOKENS]
     _set_page_access(sid, clean)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Page Access Updated', 'Users',
@@ -13201,6 +13252,8 @@ def api_get_notifications():
                 url = _NOTIF_PAGE_URL.get(n.get('page', ''))
                 if not url or url not in _NAV_URLS:
                     return True
+                if url == '/control-panel':
+                    return _cp_page_allowed(allowed)
                 return url in allowed
             notifs = [n for n in notifs if _visible(n)]
     return jsonify({"success": True, "notifications": notifs, "total_today": len(notifs)})

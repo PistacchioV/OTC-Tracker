@@ -196,6 +196,8 @@
   var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
   var PA_ASSETS = '{{ config.ASSETS_ROOT }}';   // user photos: <ASSETS>/images/users/<sid>.jpg
   var PA_IS_MASTER = {{ 'true' if is_master else 'false' }};   // master can restrict admins
+  // Control Panel routine cards — granted individually in their own section.
+  var PA_CP_CARDS = [{% for c in cp_cards %}{ url: '/control-panel#{{ c.id }}', label: {{ c.label | tojson }} }{{ ',' if not loop.last }}{% endfor %}];
   var current = null;
 
   // Avatar markup: user photo with initials fallback (same path as User-roles).
@@ -244,11 +246,17 @@
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
       var href = el.getAttribute('href');
       if (!href || ALWAYS[href] || seen[href]) return;
+      // Control Panel is exploded into its own card-level section below.
+      if (href === '/control-panel') { seen[href] = 1; return; }
       seen[href] = 1;
       var lbl = el.querySelector('.menu-text');
       var path = [section].concat(groupPath(el)).filter(Boolean);
       out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href,
                  section: path.join(PATH_SEP) });
+    });
+    // Dedicated Control Panel section: one item per routine card.
+    (PA_CP_CARDS || []).forEach(function (c) {
+      out.push({ url: c.url, label: c.label, section: 'Control Panel' });
     });
     return out;
   }
