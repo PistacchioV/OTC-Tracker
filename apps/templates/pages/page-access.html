@@ -25,8 +25,11 @@
     #pa-page .pa-user:hover { border-color: var(--pa-blue); background: rgba(0,102,204,.045); transform: translateY(-1px); }
     #pa-page .pa-item:hover span { color: var(--pa-blue); }
   }
-  #pa-page .pa-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center;
-      justify-content: center; font-weight: 700; font-size: .78rem; background: rgba(0,102,204,.12); color: var(--pa-blue); }
+  #pa-page .pa-avatar { position: relative; overflow: hidden; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .78rem;
+      background: rgba(0,102,204,.12); color: var(--pa-blue); }
+  #pa-page .pa-avatar .pa-avatar-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #pa-page .pa-avatar .pa-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #pa-page .pa-user-meta { min-width: 0; display: flex; flex-direction: column; }
   #pa-page .pa-user-name { font-weight: 600; font-size: .86rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #pa-page .pa-user-sub { font-size: .72rem; color: var(--bs-secondary-color); }
@@ -116,7 +119,11 @@
                         {% for u in users %}
                         <button type="button" class="pa-user" data-sid="{{ u.SID }}"
                                 data-name="{{ u.Name or u.SID }}" data-role="{{ u.Role }}">
-                            <span class="pa-avatar" data-initials>{{ (u.Name or u.SID)[:2]|upper }}</span>
+                            <span class="pa-avatar">
+                                <span class="pa-avatar-txt">{{ (u.Name or u.SID)[:2]|upper }}</span>
+                                <img class="pa-avatar-img" alt="" src="{{ config.ASSETS_ROOT }}/images/users/{{ u.SID | lower }}.jpg"
+                                     onerror="this.remove();" />
+                            </span>
                             <span class="pa-user-meta">
                                 <span class="pa-user-name">{{ u.Name or u.SID }}</span>
                                 <span class="pa-user-sub">{{ u.SID }}</span>
@@ -181,7 +188,16 @@
 (function () {
   'use strict';
   var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
+  var PA_ASSETS = '{{ config.ASSETS_ROOT }}';   // user photos: <ASSETS>/images/users/<sid>.jpg
   var current = null;
+
+  // Avatar markup: user photo with initials fallback (same path as User-roles).
+  function avatarHtml(name, sid) {
+    var init = esc((name || sid || '?').slice(0, 2).toUpperCase());
+    var src = PA_ASSETS + '/images/users/' + encodeURIComponent(String(sid || '').toLowerCase()) + '.jpg';
+    return '<span class="pa-avatar-txt">' + init + '</span>' +
+           '<img class="pa-avatar-img" alt="" src="' + src + '" onerror="this.remove();">';
+  }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -256,7 +272,7 @@
     document.getElementById('pa-editor').hidden = false;
     document.getElementById('pa-ed-name').textContent = current.name;
     document.getElementById('pa-ed-sub').textContent = current.sid + (current.role ? ' · ' + current.role : '');
-    document.getElementById('pa-ed-avatar').textContent = (current.name || current.sid).slice(0, 2).toUpperCase();
+    document.getElementById('pa-ed-avatar').innerHTML = avatarHtml(current.name, current.sid);
     var note = document.getElementById('pa-note');
     fetch('/api/page-access/' + encodeURIComponent(current.sid), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
