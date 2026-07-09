@@ -651,6 +651,45 @@
                 t.show();
             }
 
+            // ── Native OS notification ────────────────────────────────────────
+            // The in-app toast above only shows while the OTC Tracker tab is the
+            // active window. To surface activity on the user's monitor even when
+            // they're on another window/tab/monitor, we ALSO raise a Web
+            // Notifications API notification when the tab is hidden or unfocused.
+            // Requires one-time permission (asked on the first user interaction).
+            var _nativeKeep = [];   // keep refs so notifications aren't GC'd early
+            function requestNotifPermission() {
+                if (!('Notification' in window)) return;
+                if (Notification.permission === 'default') {
+                    try { Notification.requestPermission(); } catch (e) {}
+                }
+            }
+            function maybeNativeNotify(n) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                // Only when the app isn't the focused window — otherwise the in-app
+                // toast already covers it (avoid double-notifying).
+                if (document.visibilityState === 'visible' && document.hasFocus()) return;
+                var b = buildNotif(n);
+                var rawDetail = (n.detail || '').replace(/\s*\[ND:\d{4}-\d{2}-\d{2}\]/, '');
+                var title = n.actor_name || n.actor_sid || 'OTC Tracker';
+                var body  = (n.action || '') + ' in ' + (n.page || '') +
+                            (rawDetail ? ' — ' + rawDetail : '');
+                try {
+                    var opts = { body: body, tag: 'otc-' + (Number(n.id) || 0),
+                                 icon: b.imgSrc, badge: '/static/images/favicon.ico' };
+                    var native = new Notification(title, opts);
+                    _nativeKeep.push(native);
+                    if (_nativeKeep.length > 20) _nativeKeep.shift();
+                    native.onclick = function () {
+                        window.focus();
+                        markRead(n.id);
+                        if (b.pageUrl) window.location.href = b.pageUrl;
+                        native.close();
+                    };
+                    setTimeout(function () { try { native.close(); } catch (e) {} }, 12000);
+                } catch (e) { /* some browsers throw when constructing while hidden — ignore */ }
+            }
+
             // Toast every notification that appeared since the last poll (each ID
             // once). The first fetch only baselines the backlog — no toast spam on
             // page load. Applies to ALL notification types.
@@ -669,7 +708,7 @@
                         // Don't toast the current user's own actions (the bell still
                         // lists them; the toast is only for others' activity).
                         if (isOwnAction(n)) return;
-                        if (!isRead(id)) showToast(n);
+                        if (!isRead(id)) { showToast(n); maybeNativeNotify(n); }
                     });
             }
 
@@ -708,6 +747,20 @@
                         bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
                     }
                 });
+            }
+
+            // Ask for OS-notification permission once, on the first user gesture
+            // (browsers require a gesture for the prompt). Also try immediately in
+            // case the browser already allows a gesture-less request.
+            requestNotifPermission();
+            if (('Notification' in window) && Notification.permission === 'default') {
+                var _askOnce = function () {
+                    requestNotifPermission();
+                    document.removeEventListener('click', _askOnce);
+                    document.removeEventListener('keydown', _askOnce);
+                };
+                document.addEventListener('click', _askOnce);
+                document.addEventListener('keydown', _askOnce);
             }
 
             window.fetchNotifications = fetchNotifications;

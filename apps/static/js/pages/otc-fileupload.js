@@ -665,7 +665,7 @@ var OTCFileUpload = (function () {
         var rowArray = [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
-            '<span class="badge badge-label bg-info text-white rounded-pill">New</span>',                       // col 2  Status
+            '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
             dealName,                                                                                               // col 3  Deal
             '',                                                                                                     // col 4  B3 ID (blank — filled manually later)
             tradeDate,                                                                                              // col 5  Trade Date
@@ -704,7 +704,7 @@ var OTCFileUpload = (function () {
         var rowArrayNDF = [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',  // col 0
             ACTIONS,                                                                                                // col 1
-            '<span class="badge badge-label bg-info text-white rounded-pill">New</span>',                       // col 2  Status
+            '<span class="badge bg-info text-white bg-gradient">New</span>',                       // col 2  Status (match dealJsonToRow / filter render)
             dealName,                                                                                               // col 3  Deal
             '',                                                                                                     // col 4  B3 ID
             tradeDate,                                                                                              // col 5  Trade Date
@@ -1067,7 +1067,7 @@ var OTCFileUpload = (function () {
                                 newData.B3_ID = existingB3Id;
 
                                 // Set Amend status badge
-                                newRow[2]      = '<span class="badge badge-label text-bg-warning rounded-pill">Amend</span>';
+                                newRow[2]      = '<span class="badge text-bg-warning bg-gradient">Amend</span>';
                                 newData.Status = 'Amend';
 
                                 // Compute diff: which data columns changed?
