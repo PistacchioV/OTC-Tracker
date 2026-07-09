@@ -3303,7 +3303,8 @@ _DS_IMPORTS = [
     {'key': 'operacoes-mgt', 'label': 'Operações MGT', 'json': 'operacoes-mgt', 'header': 5,
      'match': lambda n: n.startswith('mgt.'),
      'filters': [('digits', 2, {'04880006'}),
-                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})]},
+                 ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})],
+     'opb3': True},                                 # MGT operations ALSO feed the Operations B3 page json
     {'key': 'eventos-swap-jpm', 'label': 'Eventos Swap', 'json': 'eventos-swap-jpm', 'header': 7,
      'match': lambda n: n.startswith('swap-instrumentofinanceiro-consultacontrato'),
      'filters': [('set', 2, {'CONFIRMADO'}), ('digits', 23, {'73760009'})],
@@ -3431,14 +3432,8 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
     if spec.get('otm') or spec.get('ndfc') or spec.get('cog'):   # timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
-        try:                                           # use the FILTERED recs (processed rows), not the raw file
-            b3_rows = _opb3_map_recs(recs)
-            b3_updated = _opb3_updated_from(_ds_read_rows(raw))
-            b3_jp = _opb3_json_path(ref)
-            os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
-            with open(b3_jp, 'w', encoding='utf-8') as fh:
-                json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
-            _ds_write_updated(b3_jp, b3_updated or ref.strftime('%H:%M:%S'))
+        try:                                           # use the FILTERED recs (processed rows), not the raw file;
+            _opb3_side_write(recs, raw, ref, spec['key'])   # merge by source so JPM + MGT coexist
         except Exception:
             log.warning("[ds] operations-b3 side-write failed for %s:\n%s", name, traceback.format_exc())
 
@@ -5377,6 +5372,55 @@ def _opb3_map_recs(recs):
     return [{c: (rec.get(idx[c], '') if idx[c] else '') for c in _OPB3_COLUMNS} for rec in recs]
 
 
+def _opb3_merge(existing, new_recs, src_key):
+    """Merge freshly-mapped rows from ONE source (e.g. operacoes-jpm / operacoes-mgt)
+    into the day's Operations B3 records WITHOUT clobbering rows from the other
+    sources. Rows carry a hidden `_ob_src` tag: re-processing a source replaces only
+    its own rows (idempotent) and preserves maker/checker meta per Num Ctrl Operação.
+    Legacy untagged rows are treated as operacoes-jpm (the only source that fed this
+    page before MGT was added). Manually-added rows (_ob_src='manual') are kept."""
+    existing = existing or []
+    _opb3_ensure_meta(existing)
+    for rec in existing:                                # migrate legacy rows (no source tag)
+        if not rec.get('_ob_src'):
+            rec['_ob_src'] = 'operacoes-jpm'
+    old_by_ctrl = {}
+    for rec in existing:
+        if rec.get('_ob_src') == src_key:
+            k = str(rec.get('Num Ctrl Operação', '') or '').strip()
+            if k:
+                old_by_ctrl[k] = rec
+    result = [r for r in existing if r.get('_ob_src') != src_key]
+    for rec in new_recs:
+        rec['_ob_src'] = src_key
+        prev = old_by_ctrl.get(str(rec.get('Num Ctrl Operação', '') or '').strip())
+        if prev:                                        # carry status/maker/checker/id forward
+            for m in _OPB3_META_KEYS:
+                rec[m] = prev.get(m, '')
+        else:
+            _opb3_ensure_meta([rec])
+        result.append(rec)
+    return result
+
+
+def _opb3_side_write(recs, raw, ref, src_key):
+    """Write/merge the FILTERED operacoes recs into the day's Operations B3 json."""
+    b3_new = _opb3_map_recs(recs)
+    b3_jp = _opb3_json_path(ref)
+    existing = []
+    if os.path.isfile(b3_jp):
+        try:
+            with open(b3_jp, encoding='utf-8') as fh:
+                existing = json.load(fh) or []
+        except Exception:
+            existing = []
+    b3_rows = _opb3_merge(existing, b3_new, src_key)
+    os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
+    with open(b3_jp, 'w', encoding='utf-8') as fh:
+        json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
+    _ds_write_updated(b3_jp, _opb3_updated_from(_ds_read_rows(raw)) or ref.strftime('%H:%M:%S'))
+
+
 def _opb3_updated_from(rows):
     return _ds_cell(rows[1], 0) if len(rows) >= 2 else ''
 
@@ -5385,38 +5429,36 @@ def _opb3_import(ref=None):
     ref = ref or datetime.now()
     if not os.path.isdir(OPB3_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(OPB3_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(OPB3_SOURCE_ROOT)
-                     if f.lower().startswith('operacoes') and os.path.isfile(os.path.join(OPB3_SOURCE_ROOT, f)))
-    if not matches:
-        return {'success': False, 'error': 'No Operacoes* file found in {}'.format(OPB3_SOURCE_ROOT)}
-    src_path = os.path.join(OPB3_SOURCE_ROOT, matches[0])
-    try:
-        with open(src_path, 'rb') as fh:
-            raw = fh.read()
-        rows = _ds_read_rows(raw)
-    except Exception:
-        log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
-        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
-    # Show ONLY the processed rows (house account + operation-type filter), not the raw
-    # file: reuse the operacoes-jpm _ds_process filter, then map to the 14 columns.
-    spec = _opb3_spec()
-    if spec:
+    # Pick up every source that feeds this page (operacoes* → JPM, mgt.* → MGT). Each
+    # is filtered by its own spec (house account + operation-type) and MERGED into the
+    # day's json so the two counterparties coexist instead of overwriting each other.
+    files = sorted(f for f in os.listdir(OPB3_SOURCE_ROOT)
+                   if os.path.isfile(os.path.join(OPB3_SOURCE_ROOT, f)))
+    handled, total_rows, last_updated = [], 0, ''
+    for name in files:
+        spec = _ds_match_spec(name)
+        if not spec or not spec.get('opb3'):
+            continue
+        src_path = os.path.join(OPB3_SOURCE_ROOT, name)
+        try:
+            with open(src_path, 'rb') as fh:
+                raw = fh.read()
+        except Exception:
+            log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
+            continue
         filtered, _tot = _ds_process(raw, spec)
-        recs = _opb3_map_recs(filtered)
-    else:
-        recs, _u = _opb3_extract(rows)
-    updated = _opb3_updated_from(rows)
-    jp = _opb3_json_path(ref)
-    os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(recs, fh, ensure_ascii=False, indent=2)
-    _ds_write_updated(jp, updated or ref.strftime('%H:%M:%S'))
-    try:
-        os.remove(src_path)
-    except OSError:
-        log.warning("[opb3] could not delete source %s", src_path)
-    return {'success': True, 'file': matches[0], 'rows': len(recs),
-            'updated': updated, 'date': ref.strftime('%Y-%m-%d')}
+        _opb3_side_write(filtered, raw, ref, spec['key'])
+        handled.append(name)
+        total_rows += len(filtered)
+        last_updated = _opb3_updated_from(_ds_read_rows(raw)) or last_updated
+        try:
+            os.remove(src_path)
+        except OSError:
+            log.warning("[opb3] could not delete source %s", src_path)
+    if not handled:
+        return {'success': False, 'error': 'No Operacoes*/MGT* file found in {}'.format(OPB3_SOURCE_ROOT)}
+    return {'success': True, 'file': ', '.join(handled), 'rows': total_rows,
+            'updated': last_updated, 'date': ref.strftime('%Y-%m-%d')}
 
 
 def _opb3_breakdown(data, col):
@@ -5523,6 +5565,7 @@ def api_opb3_row_add():
     rec = {c: (str(cells[i]).strip() if i < len(cells) and cells[i] is not None else '')
            for i, c in enumerate(_OPB3_COLUMNS)}
     rec['_ob_status'], rec['_ob_maker'], rec['_ob_checker'], rec['_ob_id'] = 'New', sid, '', _otm_new_id()
+    rec['_ob_src'] = 'manual'                           # keep manual rows across re-imports (merge preserves them)
     data.append(rec)
     try:
         _otm_save(jp, data)
