@@ -4,15 +4,27 @@
 
 {% block extra_css %}
 <style>
-  #pa-page { --pa-line: rgba(0,0,0,.08); --pa-blue: #0066cc; }
+  #pa-page { --pa-line: rgba(0,0,0,.08); --pa-blue: #0066cc; --pa-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
   [data-bs-theme="dark"] #pa-page { --pa-line: rgba(255,255,255,.10); }
+
+  /* Entrance (staggered, transform+opacity only) */
+  @keyframes pa-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ── Users panel ─────────────────────────────────────────── */
   #pa-page .pa-users { max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
   #pa-page .pa-user { position: relative; text-align: left; border: 1px solid var(--pa-line); background: var(--ins-secondary-bg, #fff);
-      border-radius: 12px; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: .14s var(--pr-ease, ease); }
-  #pa-page .pa-user:hover { border-color: var(--pa-blue); background: rgba(0,102,204,.045); transform: translateY(-1px); }
+      border-radius: 12px; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+      transition: transform 160ms var(--pa-ease-out), border-color 160ms var(--pa-ease-out), background-color 160ms var(--pa-ease-out);
+      animation: pa-rise 300ms var(--pa-ease-out) both; }
+  #pa-page .pa-user:active { transform: scale(0.985); }
   #pa-page .pa-user.active { border-color: var(--pa-blue); background: rgba(0,102,204,.09); box-shadow: inset 3px 0 0 var(--pa-blue); }
+  #pa-page .pa-users .pa-user:nth-child(1){animation-delay:0ms} #pa-page .pa-users .pa-user:nth-child(2){animation-delay:35ms}
+  #pa-page .pa-users .pa-user:nth-child(3){animation-delay:70ms} #pa-page .pa-users .pa-user:nth-child(4){animation-delay:105ms}
+  #pa-page .pa-users .pa-user:nth-child(5){animation-delay:140ms} #pa-page .pa-users .pa-user:nth-child(n+6){animation-delay:170ms}
+  @media (hover:hover) and (pointer:fine) {
+    #pa-page .pa-user:hover { border-color: var(--pa-blue); background: rgba(0,102,204,.045); transform: translateY(-1px); }
+    #pa-page .pa-item:hover span { color: var(--pa-blue); }
+  }
   #pa-page .pa-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center;
       justify-content: center; font-weight: 700; font-size: .78rem; background: rgba(0,102,204,.12); color: var(--pa-blue); }
   #pa-page .pa-user-meta { min-width: 0; display: flex; flex-direction: column; }
@@ -39,7 +51,11 @@
   #pa-page .pa-search i { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color); }
 
   /* ── Section cards ───────────────────────────────────────── */
-  #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+  #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden;
+      animation: pa-rise 260ms var(--pa-ease-out) both; }
+  #pa-page .pa-sec:nth-child(1){animation-delay:0ms} #pa-page .pa-sec:nth-child(2){animation-delay:40ms}
+  #pa-page .pa-sec:nth-child(3){animation-delay:80ms} #pa-page .pa-sec:nth-child(4){animation-delay:120ms}
+  #pa-page .pa-sec:nth-child(5){animation-delay:160ms} #pa-page .pa-sec:nth-child(n+6){animation-delay:190ms}
   #pa-page .pa-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
       padding: 9px 14px; background: var(--bs-tertiary-bg); border-bottom: 1px solid var(--pa-line); }
   #pa-page .pa-sec__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); }
@@ -57,6 +73,21 @@
   [data-bs-theme="dark"] #pa-page .pa-note--info { background: rgba(33,150,243,.18); color: #90caf9; }
   [data-bs-theme="dark"] #pa-page .pa-note--admin { background: rgba(255,193,7,.18); color: #ffd54f; }
   #pa-page .pa-empty { text-align: center; color: var(--bs-secondary-color); padding: 60px 20px; }
+  #pa-page #pa-note { animation: pa-rise 240ms var(--pa-ease-out) both; }
+
+  /* Press feedback (Emil): buttons + toggles feel responsive */
+  #pa-page .btn { transition: transform 150ms var(--pa-ease-out), box-shadow 150ms var(--pa-ease-out); }
+  #pa-page .btn:active { transform: scale(0.97); }
+  #pa-page .form-check-input { transition: background-color 150ms var(--pa-ease-out), border-color 150ms var(--pa-ease-out); }
+  /* Focus: Action Blue ring */
+  #pa-page .pa-user:focus-visible, #pa-page input:focus-visible, #pa-page .form-check-input:focus-visible {
+      outline: none; border-color: var(--pa-blue); box-shadow: 0 0 0 3px rgba(0,102,204,.18); }
+
+  @media (prefers-reduced-motion: reduce) {
+    #pa-page .pa-user, #pa-page .pa-sec, #pa-page #pa-note { animation: none !important; }
+    #pa-page *, #pa-page .btn, #pa-page .form-check-input { transition: none !important; }
+    #pa-page .pa-user:active, #pa-page .btn:active { transform: none; }
+  }
 </style>
 {% endblock extra_css %}
 
