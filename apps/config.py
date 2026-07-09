@@ -1,4 +1,4 @@
-import os, random, string
+import os, secrets
 from datetime import timedelta
 
 class Config(object):
@@ -8,10 +8,13 @@ class Config(object):
     # Assets Management
     ASSETS_ROOT = os.getenv('ASSETS_ROOT', '/static')  
     
-    # Set up the App SECRET_KEY
+    # Set up the App SECRET_KEY. Fall back to a cryptographically secure random
+    # key (only suitable for dev — production must set SECRET_KEY; enforced in
+    # create_app). random.choice()/ascii_lowercase was neither strong nor
+    # stable across restarts.
     SECRET_KEY  = os.getenv('SECRET_KEY', None)
     if not SECRET_KEY:
-        SECRET_KEY = ''.join(random.choice( string.ascii_lowercase  ) for i in range( 32 ))
+        SECRET_KEY = secrets.token_hex(32)
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 

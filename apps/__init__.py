@@ -53,6 +53,12 @@ def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
 
+    # Refuse to boot a production instance without an explicit SECRET_KEY: the
+    # config falls back to an ephemeral random key otherwise, which silently
+    # invalidates every session cookie on each restart and hides a misconfig.
+    if not app.config.get('DEBUG', False) and not os.getenv('SECRET_KEY'):
+        raise RuntimeError('SECRET_KEY environment variable is required in production')
+
     # Single reverse proxy in front of the app (127.0.0.1:9443). Trust exactly
     # one X-Forwarded-For hop so get_client_ip() reads the real client IP from
     # the rightmost trusted value instead of a client-spoofable header. Without

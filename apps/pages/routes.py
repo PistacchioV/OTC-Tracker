@@ -108,6 +108,25 @@ def add_no_store_on_authed_pages(response):
     return response
 
 
+@blueprint.after_request
+def add_security_headers(response):
+    """Baseline security headers on every response. A restrictive
+    Content-Security-Policy is intentionally left out here: the app relies on
+    inline scripts/handlers, so CSP needs a dedicated report-only rollout."""
+    try:
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        # HSTS is only meaningful over HTTPS; request.is_secure reflects the
+        # proxy's X-Forwarded-Proto via ProxyFix.
+        if request.is_secure:
+            response.headers.setdefault(
+                'Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    except Exception:
+        pass
+    return response
+
+
 # ==============================================================================
 # PER-USER PAGE ACCESS
 # An admin grants each user a subset of the sidebar pages. Users with no
@@ -8453,6 +8472,10 @@ def logout():
 def users_roles():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
+    # User management is admin-only; hide it (404) from everyone else so a
+    # non-admin can't enumerate every SID/role/status/email.
+    if not _session_is_admin():
+        return render_template('pages/error-404.html'), 404
     users = get_all_users()
     role_groups = get_role_groups()
     role_display = {k: v['display'] for k, v in ROLE_META.items()}
@@ -9695,8 +9718,10 @@ def api_fxo_send_conecta():
         # ANBIMA calendar (file name is case-insensitive on the FS we run on)
         _deal_holidays = set()
         if not vanilla and fx_holiday_sched:
-            _sched_file = fx_holiday_sched.replace('-', '_').lower()
-            holiday_path = os.path.join(_B3_DATA_DIR, '{}.json'.format(_sched_file))
+            # Strip anything but word chars so a crafted FXHolidaySchedule
+            # (e.g. '../../secret') can't escape the data dir (path traversal).
+            _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_').lower())
+            holiday_path = os.path.join(_B3_DATA_DIR, '{}.json'.format(_sched_file)) if _sched_file else None
             try:
                 with open(holiday_path, encoding='utf-8') as _hf:
                     _raw = _json.load(_hf)
@@ -11468,11 +11493,13 @@ def api_ndf_send_conecta():
 
         _deal_holidays = set()
         if not vanilla and fx_holiday_sched:
-            _sched_file = fx_holiday_sched.replace('-', '_')
+            # Strip anything but word chars so a crafted FXHolidaySchedule
+            # (e.g. '../../secret') can't escape the data dir (path traversal).
+            _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
             holiday_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 '..', 'static', 'data', f'{_sched_file}.json'
-            )
+            ) if _sched_file else None
             try:
                 with open(holiday_path, encoding='utf-8') as _hf:
                     _raw = _json.load(_hf)
@@ -13538,6 +13565,10 @@ def reconciliation_payrec_end():
 
 @blueprint.route('/<template>')
 def route_template(template):
+    # Catch-all page renderer — require authentication so unauthenticated
+    # visitors can't load internal templates and bypass the page-access gate.
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
     try:
         if not template.endswith('.html'):
             template += '.html'

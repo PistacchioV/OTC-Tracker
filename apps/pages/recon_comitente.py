@@ -704,7 +704,11 @@ def _outlook_download(inbox, subject_filter, tmpdir, exact=True):
         if not exact and subject_filter.lower() not in str(msg.Subject).lower():
             continue
         att = msg.Attachments.Item(1)
-        dest = os.path.join(tmpdir, att.FileName)
+        # Use only the basename: an attacker-supplied attachment name could
+        # contain path separators ('..\\..\\evil') and escape tmpdir. Strip
+        # both separators regardless of the host OS.
+        _safe_name = str(att.FileName or '').replace('\\', '/').split('/')[-1].strip() or 'attachment'
+        dest = os.path.join(tmpdir, _safe_name)
         att.SaveAsFile(dest)
         return dest
     raise FileNotFoundError(f"Email '{subject_filter}' não encontrado na Inbox.")
