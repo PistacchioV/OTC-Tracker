@@ -4,50 +4,93 @@
 
 {% block extra_css %}
 <style>
-  #page-access-page .pa-user-list { max-height: 66vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-  #page-access-page .pa-user { text-align: left; border: 1px solid var(--bs-border-color); background: var(--ins-secondary-bg, #fff);
-      border-radius: 10px; padding: 8px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; transition: .12s; }
-  #page-access-page .pa-user:hover { border-color: #0066cc; background: rgba(0,102,204,.05); }
-  #page-access-page .pa-user.active { border-color: #0066cc; background: rgba(0,102,204,.10); }
-  #page-access-page .pa-user-name { font-weight: 600; font-size: .85rem; }
-  #page-access-page .pa-user-sub { font-size: .72rem; color: var(--bs-secondary-color); }
-  #page-access-page .pa-section { margin-bottom: 14px; }
-  #page-access-page .pa-section__head { display: flex; align-items: center; justify-content: space-between;
-      font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color);
-      border-bottom: 1px solid var(--bs-border-color); padding-bottom: 4px; margin-bottom: 6px; }
-  #page-access-page .pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
-  #page-access-page .pa-item { display: flex; align-items: center; gap: 8px; font-size: .82rem; padding: 2px 0; }
-  #page-access-page .pa-note { font-size: .78rem; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
-  #page-access-page .pa-note--info { background: #e3f2fd; color: #0d47a1; }
-  #page-access-page .pa-note--admin { background: #fff8e1; color: #7b5e00; }
-  [data-bs-theme="dark"] #page-access-page .pa-note--info { background: rgba(33,150,243,.18); color: #90caf9; }
-  [data-bs-theme="dark"] #page-access-page .pa-note--admin { background: rgba(255,193,7,.18); color: #ffd54f; }
+  #pa-page { --pa-line: rgba(0,0,0,.08); --pa-blue: #0066cc; }
+  [data-bs-theme="dark"] #pa-page { --pa-line: rgba(255,255,255,.10); }
+
+  /* ── Users panel ─────────────────────────────────────────── */
+  #pa-page .pa-users { max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+  #pa-page .pa-user { position: relative; text-align: left; border: 1px solid var(--pa-line); background: var(--ins-secondary-bg, #fff);
+      border-radius: 12px; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: .14s var(--pr-ease, ease); }
+  #pa-page .pa-user:hover { border-color: var(--pa-blue); background: rgba(0,102,204,.045); transform: translateY(-1px); }
+  #pa-page .pa-user.active { border-color: var(--pa-blue); background: rgba(0,102,204,.09); box-shadow: inset 3px 0 0 var(--pa-blue); }
+  #pa-page .pa-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center;
+      justify-content: center; font-weight: 700; font-size: .78rem; background: rgba(0,102,204,.12); color: var(--pa-blue); }
+  #pa-page .pa-user-meta { min-width: 0; display: flex; flex-direction: column; }
+  #pa-page .pa-user-name { font-weight: 600; font-size: .86rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #pa-page .pa-user-sub { font-size: .72rem; color: var(--bs-secondary-color); }
+
+  /* ── Role badge ──────────────────────────────────────────── */
+  #pa-page .pa-role { font-size: .62rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      padding: 1px 7px; border-radius: 50rem; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  #pa-page .pa-role.is-admin { background: rgba(0,102,204,.14); color: var(--pa-blue); }
+
+  /* ── Editor header ───────────────────────────────────────── */
+  #pa-page .pa-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #pa-page .pa-head .pa-avatar { width: 42px; height: 42px; font-size: .9rem; }
+  #pa-page .pa-summary { font-size: .74rem; font-weight: 600; color: var(--pa-blue); background: rgba(0,102,204,.10);
+      border-radius: 50rem; padding: 3px 11px; }
+  #pa-page .pa-summary.is-full { color: #1b5e20; background: #e8f5e9; }
+  [data-bs-theme="dark"] #pa-page .pa-summary.is-full { color: #a5d6a7; background: rgba(76,175,80,.18); }
+
+  /* ── Toolbar ─────────────────────────────────────────────── */
+  #pa-page .pa-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 4px; }
+  #pa-page .pa-search { position: relative; flex: 1; min-width: 180px; }
+  #pa-page .pa-search input { padding-left: 30px; }
+  #pa-page .pa-search i { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color); }
+
+  /* ── Section cards ───────────────────────────────────────── */
+  #pa-page .pa-sec { border: 1px solid var(--pa-line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+  #pa-page .pa-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 9px 14px; background: var(--bs-tertiary-bg); border-bottom: 1px solid var(--pa-line); }
+  #pa-page .pa-sec__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); }
+  #pa-page .pa-sec__count { font-size: .68rem; font-weight: 600; color: var(--bs-secondary-color); background: var(--ins-secondary-bg,#fff);
+      border: 1px solid var(--pa-line); border-radius: 50rem; padding: 1px 8px; margin-left: 8px; }
+  #pa-page .pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 20px; padding: 10px 14px; }
+  #pa-page .pa-item { display: flex; align-items: center; gap: 9px; font-size: .83rem; padding: 4px 0; margin: 0; cursor: pointer; }
+  #pa-page .pa-item .form-check-input { margin: 0; cursor: pointer; flex-shrink: 0; }
+  #pa-page .pa-item .form-check-input:checked { background-color: var(--pa-blue); border-color: var(--pa-blue); }
+  #pa-page .pa-item span { line-height: 1.25; }
+
+  #pa-page .pa-note { font-size: .78rem; border-radius: 10px; padding: 9px 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  #pa-page .pa-note--info { background: #e3f2fd; color: #0d47a1; }
+  #pa-page .pa-note--admin { background: #fff8e1; color: #7b5e00; }
+  [data-bs-theme="dark"] #pa-page .pa-note--info { background: rgba(33,150,243,.18); color: #90caf9; }
+  [data-bs-theme="dark"] #pa-page .pa-note--admin { background: rgba(255,193,7,.18); color: #ffd54f; }
+  #pa-page .pa-empty { text-align: center; color: var(--bs-secondary-color); padding: 60px 20px; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid" id="page-access-page" data-content="">
+<div class="container-fluid" id="pa-page" data-content="">
 
     {% set subtitle='Users' %}
     {% set title='Page Access' %}
     {% include 'partials/page-title.html' %}
 
-    <div class="row">
+    <div class="row g-3">
         <!-- Users -->
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-header border-light">
+        <div class="col-xl-4 col-lg-5">
+            <div class="card h-100">
+                <div class="card-header border-light d-flex align-items-center justify-content-between">
                     <h4 class="card-title mb-0" data-lang="pa-users">Users</h4>
+                    <span class="badge badge-soft-primary" id="pa-user-count">{{ users|length }}</span>
                 </div>
                 <div class="card-body">
-                    <input id="pa-user-search" class="form-control form-control-sm mb-2" type="search"
-                        placeholder="Search user…" data-lang-placeholder="pa-search">
-                    <div id="pa-user-list" class="pa-user-list">
+                    <div class="pa-search mb-2">
+                        <i data-lucide="search"></i>
+                        <input id="pa-user-search" class="form-control form-control-sm" type="search"
+                            placeholder="Search user…" data-lang-placeholder="pa-search">
+                    </div>
+                    <div id="pa-user-list" class="pa-users">
                         {% for u in users %}
                         <button type="button" class="pa-user" data-sid="{{ u.SID }}"
-                                data-name="{{ u.Name }}" data-role="{{ u.Role }}">
-                            <span class="pa-user-name">{{ u.Name or u.SID }}</span>
-                            <span class="pa-user-sub">{{ u.SID }}{% if u.Role %} · {{ u.Role }}{% endif %}</span>
+                                data-name="{{ u.Name or u.SID }}" data-role="{{ u.Role }}">
+                            <span class="pa-avatar" data-initials>{{ (u.Name or u.SID)[:2]|upper }}</span>
+                            <span class="pa-user-meta">
+                                <span class="pa-user-name">{{ u.Name or u.SID }}</span>
+                                <span class="pa-user-sub">{{ u.SID }}</span>
+                            </span>
+                            {% if u.Role %}<span class="pa-role {% if u.Role|upper == 'ADMIN' %}is-admin{% endif %} ms-auto">{{ u.Role }}</span>{% endif %}
                         </button>
                         {% endfor %}
                     </div>
@@ -56,23 +99,41 @@
         </div>
 
         <!-- Access editor -->
-        <div class="col-lg-8">
-            <div class="card" id="pa-empty">
-                <div class="card-body text-center text-muted py-5">
-                    <i data-lucide="lock" style="width:34px;height:34px;opacity:.5"></i>
-                    <p class="mt-2 mb-0" data-lang="pa-pick">Select a user to choose which pages they can access.</p>
+        <div class="col-xl-8 col-lg-7">
+            <div class="card h-100" id="pa-empty-card">
+                <div class="card-body pa-empty">
+                    <i data-lucide="mouse-pointer-click" style="width:38px;height:38px;opacity:.45"></i>
+                    <p class="mt-3 mb-0" data-lang="pa-pick">Select a user to choose which pages they can access.</p>
                 </div>
             </div>
-            <div class="card" id="pa-editor" hidden>
-                <div class="card-header border-light d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <h4 class="card-title mb-0" id="pa-editor-title">—</h4>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" id="pa-all" type="button" data-lang="pa-all">Select all</button>
+
+            <div class="card h-100" id="pa-editor" hidden>
+                <div class="card-header border-light">
+                    <div class="pa-head">
+                        <span class="pa-avatar" id="pa-ed-avatar">—</span>
+                        <div class="me-auto">
+                            <h4 class="card-title mb-0" id="pa-ed-name">—</h4>
+                            <div class="text-muted" style="font-size:.76rem" id="pa-ed-sub">—</div>
+                        </div>
+                        <span class="pa-summary" id="pa-summary">—</span>
+                    </div>
+                    <div class="pa-toolbar">
+                        <div class="pa-search">
+                            <i data-lucide="search"></i>
+                            <input id="pa-page-search" class="form-control form-control-sm" type="search"
+                                placeholder="Filter pages…" data-lang-placeholder="pa-filter">
+                        </div>
+                        <div class="form-check form-switch mb-0 me-1">
+                            <input class="form-check-input" type="checkbox" id="pa-full">
+                            <label class="form-check-label" for="pa-full" style="font-size:.8rem" data-lang="pa-full">Full access</label>
+                        </div>
                         <button class="btn btn-sm btn-outline-secondary" id="pa-none" type="button" data-lang="pa-none">Clear</button>
-                        <button class="btn btn-sm btn-primary" id="pa-save" type="button"><i class="ti ti-device-floppy me-1"></i><span data-lang="pa-save">Save</span></button>
+                        <button class="btn btn-sm btn-primary" id="pa-save" type="button">
+                            <i class="ti ti-device-floppy me-1"></i><span data-lang="pa-save">Save changes</span>
+                        </button>
                     </div>
                 </div>
-                <div class="card-body">
+                <div class="card-body pt-2">
                     <div id="pa-note" class="pa-note" hidden></div>
                     <div id="pa-sections"></div>
                 </div>
@@ -89,15 +150,14 @@
 (function () {
   'use strict';
   var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
-  var current = null;   // {sid, name, role}
+  var current = null;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  // Enumerate the grantable pages from the live sidebar (real labels + sections).
+  // Grantable pages from the live sidebar (real labels + sections).
   function buildPages() {
-    var nav = document.querySelector('.side-nav');
-    var out = [], seen = {}, section = 'General';
+    var nav = document.querySelector('.side-nav'); var out = [], seen = {}, section = 'General';
     if (!nav) return out;
     nav.querySelectorAll('.side-nav-title, a.side-nav-link[href^="/"]').forEach(function (el) {
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
@@ -110,41 +170,62 @@
     return out;
   }
   var PAGES = buildPages();
+  var TOTAL = PAGES.length;
 
   function renderSections(allowed) {
-    // allowed === null → unconfigured (pre-check everything). Else a set of URLs.
     var bySection = {}, order = [];
-    PAGES.forEach(function (p) {
-      if (!bySection[p.section]) { bySection[p.section] = []; order.push(p.section); }
-      bySection[p.section].push(p);
-    });
-    var html = order.map(function (sec) {
+    PAGES.forEach(function (p) { if (!bySection[p.section]) { bySection[p.section] = []; order.push(p.section); } bySection[p.section].push(p); });
+    document.getElementById('pa-sections').innerHTML = order.map(function (sec) {
       var items = bySection[sec].map(function (p) {
-        var checked = (allowed === null || allowed[p.url]) ? 'checked' : '';
-        return '<label class="pa-item"><input type="checkbox" class="form-check-input pa-cb" value="' +
-          esc(p.url) + '" ' + checked + '><span>' + esc(p.label) + '</span></label>';
+        var on = (allowed === null || allowed[p.url]) ? 'checked' : '';
+        return '<label class="pa-item" data-label="' + esc(p.label.toLowerCase()) + '">' +
+          '<input type="checkbox" class="form-check-input pa-cb" value="' + esc(p.url) + '" ' + on + '>' +
+          '<span>' + esc(p.label) + '</span></label>';
       }).join('');
-      return '<div class="pa-section"><div class="pa-section__head"><span>' + esc(sec) +
-        '</span><a href="javascript:void(0)" class="pa-sec-all" style="font-size:.7rem">all</a></div>' +
+      return '<div class="pa-sec" data-section="' + esc(sec) + '">' +
+        '<div class="pa-sec__head"><span class="pa-sec__title">' + esc(sec) +
+        '<span class="pa-sec__count" data-count>0/0</span></span>' +
+        '<div class="form-check form-switch mb-0"><input class="form-check-input pa-sec-all" type="checkbox"></div></div>' +
         '<div class="pa-grid">' + items + '</div></div>';
     }).join('');
-    document.getElementById('pa-sections').innerHTML = html;
-    // Per-section "all" toggles.
-    document.querySelectorAll('.pa-sec-all').forEach(function (a) {
-      a.addEventListener('click', function () {
-        var grid = this.closest('.pa-section').querySelectorAll('.pa-cb');
-        var allOn = Array.prototype.every.call(grid, function (c) { return c.checked; });
-        grid.forEach(function (c) { c.checked = !allOn; });
+    // wire section switches + per-item change → counts
+    document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
+      var cbs = sec.querySelectorAll('.pa-cb');
+      sec.querySelector('.pa-sec-all').addEventListener('change', function () {
+        cbs.forEach(function (c) { c.checked = this.checked; }, this); updateCounts();
       });
+      cbs.forEach(function (c) { c.addEventListener('change', updateCounts); });
     });
+    updateCounts();
   }
+
+  function updateCounts() {
+    var total = 0, checked = 0;
+    document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
+      var cbs = sec.querySelectorAll('.pa-cb'), on = 0;
+      cbs.forEach(function (c) { if (c.checked) on++; });
+      total += cbs.length; checked += on;
+      sec.querySelector('[data-count]').textContent = on + '/' + cbs.length;
+      var all = sec.querySelector('.pa-sec-all'); all.checked = on === cbs.length && cbs.length > 0;
+      all.indeterminate = on > 0 && on < cbs.length;
+    });
+    var sum = document.getElementById('pa-summary');
+    if (checked >= total && total > 0) { sum.textContent = 'Full access'; sum.classList.add('is-full'); }
+    else { sum.textContent = checked + ' of ' + total + ' pages'; sum.classList.remove('is-full'); }
+    var full = document.getElementById('pa-full');
+    full.checked = checked === total && total > 0; full.indeterminate = checked > 0 && checked < total;
+  }
+
+  function setAll(on) { document.querySelectorAll('#pa-sections .pa-cb').forEach(function (c) { c.checked = on; }); updateCounts(); }
 
   function selectUser(btn) {
     current = { sid: btn.getAttribute('data-sid'), name: btn.getAttribute('data-name'), role: btn.getAttribute('data-role') };
     document.querySelectorAll('.pa-user').forEach(function (b) { b.classList.toggle('active', b === btn); });
-    document.getElementById('pa-empty').hidden = true;
+    document.getElementById('pa-empty-card').hidden = true;
     document.getElementById('pa-editor').hidden = false;
-    document.getElementById('pa-editor-title').textContent = current.name + ' (' + current.sid + ')';
+    document.getElementById('pa-ed-name').textContent = current.name;
+    document.getElementById('pa-ed-sub').textContent = current.sid + (current.role ? ' · ' + current.role : '');
+    document.getElementById('pa-ed-avatar').textContent = (current.name || current.sid).slice(0, 2).toUpperCase();
     var note = document.getElementById('pa-note');
     fetch('/api/page-access/' + encodeURIComponent(current.sid), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
@@ -152,33 +233,39 @@
         var allowed = null;
         if (d && d.success && d.configured) { allowed = {}; (d.pages || []).forEach(function (u) { allowed[u] = 1; }); }
         renderSections(allowed);
-        if (current.role === 'ADMIN') {
+        if (current.role && current.role.toUpperCase() === 'ADMIN') {
           note.hidden = false; note.className = 'pa-note pa-note--admin';
-          note.textContent = 'This user is an admin and always has full access — a restriction here has no effect.';
+          note.innerHTML = '<i data-lucide="shield-check" style="width:16px;height:16px"></i> This user is an admin and always has full access — a restriction here has no effect.';
         } else if (allowed === null) {
           note.hidden = false; note.className = 'pa-note pa-note--info';
-          note.textContent = 'Not restricted yet — this user currently has full access. Saving will start enforcing the selection.';
+          note.innerHTML = '<i data-lucide="info" style="width:16px;height:16px"></i> Not restricted yet — this user currently has full access. Saving will start enforcing the selection.';
         } else { note.hidden = true; }
+        if (window.lucide && lucide.createIcons) lucide.createIcons();
       });
   }
 
   function save() {
     if (!current) return;
     var pages = Array.prototype.map.call(document.querySelectorAll('.pa-cb:checked'), function (c) { return c.value; });
+    var btn = document.getElementById('pa-save'); btn.disabled = true;
     fetch('/api/page-access/' + encodeURIComponent(current.sid), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
       body: JSON.stringify({ pages: pages })
     }).then(function (r) { return r.json(); }).then(function (res) {
+      btn.disabled = false;
       if (res && res.success) {
         var note = document.getElementById('pa-note');
-        if (current.role !== 'ADMIN') { note.hidden = false; note.className = 'pa-note pa-note--info';
-          note.textContent = current.name + ' can now access ' + pages.length + ' page(s).'; }
+        if (!current.role || current.role.toUpperCase() !== 'ADMIN') {
+          note.hidden = false; note.className = 'pa-note pa-note--info';
+          note.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> ' + esc(current.name) + ' can now access ' + pages.length + ' page(s).';
+          if (window.lucide && lucide.createIcons) lucide.createIcons();
+        }
         if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success', title: 'Saved',
-          text: current.name + ' — ' + pages.length + ' page(s) allowed.', timer: 1400, showConfirmButton: false, confirmButtonColor: '#0066cc' });
+          text: current.name + ' — ' + pages.length + ' page(s) allowed.', timer: 1400, showConfirmButton: false });
       } else if (typeof Swal !== 'undefined') {
         Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || 'Could not save.', confirmButtonColor: '#0066cc' });
       }
-    }).catch(function () {
+    }).catch(function () { btn.disabled = false;
       if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error', title: 'Error', text: 'Network error.', confirmButtonColor: '#0066cc' });
     });
   }
@@ -186,15 +273,25 @@
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.pa-user').forEach(function (b) { b.addEventListener('click', function () { selectUser(b); }); });
     document.getElementById('pa-save').addEventListener('click', save);
-    document.getElementById('pa-all').addEventListener('click', function () { document.querySelectorAll('.pa-cb').forEach(function (c) { c.checked = true; }); });
-    document.getElementById('pa-none').addEventListener('click', function () { document.querySelectorAll('.pa-cb').forEach(function (c) { c.checked = false; }); });
-    var search = document.getElementById('pa-user-search');
-    if (search) search.addEventListener('input', function () {
+    document.getElementById('pa-none').addEventListener('click', function () { setAll(false); });
+    document.getElementById('pa-full').addEventListener('change', function () { setAll(this.checked); });
+    var us = document.getElementById('pa-user-search');
+    if (us) us.addEventListener('input', function () {
       var q = this.value.toLowerCase();
-      document.querySelectorAll('.pa-user').forEach(function (b) {
-        b.style.display = (b.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+      document.querySelectorAll('.pa-user').forEach(function (b) { b.style.display = b.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none'; });
+    });
+    var ps = document.getElementById('pa-page-search');
+    if (ps) ps.addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      document.querySelectorAll('#pa-sections .pa-item').forEach(function (it) {
+        it.style.display = (it.getAttribute('data-label') || '').indexOf(q) !== -1 ? '' : 'none';
+      });
+      document.querySelectorAll('#pa-sections .pa-sec').forEach(function (sec) {
+        var anyVisible = Array.prototype.some.call(sec.querySelectorAll('.pa-item'), function (it) { return it.style.display !== 'none'; });
+        sec.style.display = anyVisible ? '' : 'none';
       });
     });
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
   });
 })();
 </script>
