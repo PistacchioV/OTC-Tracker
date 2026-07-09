@@ -716,7 +716,7 @@ def get_all_users():
         rows = conn.execute("""
             SELECT SID, Name, Email, Role_Description, Position, Role, Status, IP_Address, created_at
             FROM users
-            ORDER BY created_at DESC
+            ORDER BY LOWER(COALESCE(Name, SID)) ASC
         """).fetchall()
         users = []
         for r in rows:

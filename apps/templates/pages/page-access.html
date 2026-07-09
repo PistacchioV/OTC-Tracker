@@ -60,6 +60,11 @@
   #pa-page .pa-search i, #pa-page .pa-search svg { position: absolute; left: 9px; top: 50%;
       transform: translateY(-50%); width: 15px; height: 15px; color: var(--bs-secondary-color);
       pointer-events: none; }
+  /* Clone-access control */
+  #pa-page .pa-clone { position: relative; display: flex; align-items: center; }
+  #pa-page .pa-clone select { padding-left: 30px; max-width: 220px; font-size: .8rem; }
+  #pa-page .pa-clone i, #pa-page .pa-clone svg { position: absolute; left: 9px; top: 50%;
+      transform: translateY(-50%); width: 15px; height: 15px; color: var(--pa-blue); pointer-events: none; }
 
   /* ── Block (top-level menu group) ────────────────────────── */
   #pa-page .pa-block { border: 1px solid var(--pa-line); border-radius: 14px; margin-bottom: 16px; overflow: hidden;
@@ -192,6 +197,13 @@
                             <i data-lucide="search"></i>
                             <input id="pa-page-search" class="form-control form-control-sm" type="search"
                                 placeholder="Filter pages…" data-lang-placeholder="pa-filter">
+                        </div>
+                        <div class="pa-clone">
+                            <i data-lucide="copy"></i>
+                            <select id="pa-clone-src" class="form-select form-select-sm"
+                                    title="Copy another user's page access into this selection">
+                                <option value="" data-lang="pa-clone">Clone access from…</option>
+                            </select>
                         </div>
                         <div class="form-check form-switch mb-0 me-1">
                             <input class="form-check-input" type="checkbox" id="pa-full">
@@ -386,12 +398,28 @@
   // Read-only mode: disable every control so a locked target can't be edited.
   function lockEditor(locked) {
     document.querySelectorAll('#pa-sections .pa-cb, #pa-sections .pa-sec-all, #pa-sections .pa-block-all').forEach(function (c) { c.disabled = locked; });
-    ['pa-full', 'pa-none', 'pa-save'].forEach(function (id) { var e = document.getElementById(id); if (e) e.disabled = locked; });
+    ['pa-full', 'pa-none', 'pa-save', 'pa-clone-src'].forEach(function (id) { var e = document.getElementById(id); if (e) e.disabled = locked; });
+  }
+
+  // Build the "Clone access from…" dropdown (alphabetical, excluding the current user).
+  function populateClone() {
+    var sel = document.getElementById('pa-clone-src');
+    if (!sel) return;
+    var here = current ? current.sid : null;
+    var opts = ['<option value="">Clone access from…</option>'];
+    document.querySelectorAll('.pa-user').forEach(function (b) {
+      var sid = b.getAttribute('data-sid'); if (sid === here) return;
+      var name = b.getAttribute('data-name') || sid;
+      opts.push('<option value="' + esc(sid) + '">' + esc(name) + ' · ' + esc(sid) + '</option>');
+    });
+    sel.innerHTML = opts.join('');
+    sel.value = '';
   }
 
   function selectUser(btn) {
     current = { sid: btn.getAttribute('data-sid'), name: btn.getAttribute('data-name'), role: btn.getAttribute('data-role') };
     document.querySelectorAll('.pa-user').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    populateClone();
     document.getElementById('pa-empty-card').hidden = true;
     document.getElementById('pa-editor').hidden = false;
     document.getElementById('pa-ed-name').textContent = current.name;
@@ -458,6 +486,29 @@
     document.getElementById('pa-save').addEventListener('click', save);
     document.getElementById('pa-none').addEventListener('click', function () { setAll(false); });
     document.getElementById('pa-full').addEventListener('change', function () { setAll(this.checked); });
+    // Clone: load another user's access into the current selection (Save then applies it).
+    var clone = document.getElementById('pa-clone-src');
+    if (clone) clone.addEventListener('change', function () {
+      var src = this.value; this.value = '';
+      if (!src || !current || src === current.sid || current.locked) return;
+      var label = src;
+      fetch('/api/page-access/' + encodeURIComponent(src), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.success) return;
+          var full = !d.configured;                 // unconfigured source = full access
+          var allow = {}; (d.pages || []).forEach(function (u) { allow[u] = 1; });
+          document.querySelectorAll('#pa-sections .pa-cb').forEach(function (c) { c.checked = full || !!allow[c.value]; });
+          updateCounts();
+          var srcBtn = document.querySelector('.pa-user[data-sid="' + (window.CSS && CSS.escape ? CSS.escape(src) : src) + '"]');
+          if (srcBtn) label = srcBtn.getAttribute('data-name') || src;
+          var note = document.getElementById('pa-note');
+          note.hidden = false; note.className = 'pa-note pa-note--info';
+          note.innerHTML = '<i data-lucide="copy" style="width:16px;height:16px"></i> Cloned access from ' + esc(label) +
+            '. Review and click <b>Save changes</b> to apply it to ' + esc(current.name) + '.';
+          if (window.lucide && lucide.createIcons) lucide.createIcons();
+        });
+    });
     var us = document.getElementById('pa-user-search');
     if (us) us.addEventListener('input', function () {
       var q = this.value.toLowerCase();
