@@ -206,17 +206,37 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  // Grantable pages from the live sidebar (real labels + sections).
+  // Grantable pages from the live sidebar (real labels + sections). Pages inside a
+  // collapsible menu group (Charts, Tables, Base UI, Icons, Maps…) are grouped
+  // under that group's label instead of being lumped into the top section.
   function buildPages() {
     var nav = document.querySelector('.side-nav'); var out = [], seen = {}, section = 'General';
     if (!nav) return out;
+    // Outermost collapsible-group label wrapping a link (e.g. Charts, Tables).
+    function groupOf(a) {
+      var labels = [], el = a.parentElement;
+      while (el && el !== nav) {
+        if (el.classList && el.classList.contains('side-nav-item')) {
+          var tg = el.querySelector(':scope > a.side-nav-link');
+          if (tg && tg !== a) {
+            var h = tg.getAttribute('href') || '';
+            if (tg.getAttribute('data-bs-toggle') === 'collapse' || h.charAt(0) === '#') {
+              var mt = tg.querySelector('.menu-text'); if (mt) labels.push(mt.textContent.trim());
+            }
+          }
+        }
+        el = el.parentElement;
+      }
+      return labels.length ? labels[labels.length - 1] : '';
+    }
     nav.querySelectorAll('.side-nav-title, a.side-nav-link[href^="/"]').forEach(function (el) {
       if (el.classList.contains('side-nav-title')) { section = (el.textContent || '').trim() || section; return; }
       var href = el.getAttribute('href');
       if (!href || ALWAYS[href] || seen[href]) return;
       seen[href] = 1;
       var lbl = el.querySelector('.menu-text');
-      out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href, section: section });
+      out.push({ url: href, label: (lbl ? lbl.textContent : el.textContent || '').trim() || href,
+                 section: groupOf(el) || section });
     });
     return out;
   }
