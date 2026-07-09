@@ -184,16 +184,29 @@ def _set_page_access(sid, urls):
         conn.close()
 
 
+# Master users: top-of-hierarchy superusers pinned by SID (not by DB role, so the
+# capability can't be granted to anyone else through user management). A master is
+# always exempt from page-access restrictions and is the only one who can change an
+# admin's (or another master's) access.
+_MASTER_SIDS = {'E930179'}
+
+
+def _session_is_master():
+    return (session.get('user_sid') or '').strip().upper() in _MASTER_SIDS
+
+
 def _session_is_admin():
-    return session.get('user_role') == 'ADMIN'
+    """Admin-console privileges. Master is a superset of admin."""
+    return (session.get('user_role') or '').upper() == 'ADMIN' or _session_is_master()
 
 
 @blueprint.before_request
 def enforce_page_access():
-    """Block direct navigation to a page the user isn't allowed to see. Admins and
-    unconfigured users pass; only a configured non-admin is restricted. API and
-    static requests are never blocked here (they keep their own auth)."""
-    if not session.get('authenticated') or _session_is_admin():
+    """Block direct navigation to a page the user isn't allowed to see. Master and
+    unconfigured users pass; anyone with a configured allowlist (including admins
+    restricted by the master) is enforced. API and static requests are never
+    blocked here (they keep their own auth)."""
+    if not session.get('authenticated') or _session_is_master():
         return
     path = request.path or ''
     if path.startswith('/api/') or path.startswith('/static') or path not in _NAV_URLS:
@@ -316,6 +329,7 @@ SMTP_PORT = 25
 CODE_EXPIRY_MINUTES = 10
 
 ROLE_META = {
+    'MASTER':       {'display': 'Master',        'icon': 'ti-crown',                'description': 'Top-level authority — manages page access for everyone, including admins.', 'responsibilities': ['Control All Access', 'Manage Admins', 'Manage Users', 'Configure System']},
     'ADMIN':        {'display': 'Admin',         'icon': 'ti-shield-lock',          'description': 'Full platform administration and user management.',         'responsibilities': ['Manage Users', 'Configure System', 'View All Data', 'Assign Roles']},
     'BO':           {'display': 'Back Office',   'icon': 'ti-briefcase',            'description': 'Back office operations and settlement processing.',         'responsibilities': ['Settlement Processing', 'Position Reconciliation', 'Trade Confirmation', 'Reporting']},
     'MO':           {'display': 'Middle Office', 'icon': 'ti-calculator',           'description': 'Risk management and trade operations oversight.',           'responsibilities': ['Risk Monitoring', 'P&L Attribution', 'Trade Validation', 'Limit Monitoring']},
@@ -1180,7 +1194,8 @@ def _set_session(user, remember_me=False):
     session['user_sid'] = user["SID"]
     session['user_name'] = user["Name"]
     session['user_email'] = user["Email"]
-    session['user_role'] = user["Role"]
+    # Master is pinned by SID and outranks every stored role.
+    session['user_role'] = 'MASTER' if (user["SID"] or '').strip().upper() in _MASTER_SIDS else user["Role"]
     session['remember_me'] = remember_me
     # A freshly established session is never locked.
     session.pop('locked', None)
@@ -8341,20 +8356,32 @@ def page_access():
     if not _session_is_admin():
         return redirect('/dashboard')
     return render_template('pages/page-access.html', segment='page-access',
-                           users=get_all_users())
+                           users=get_all_users(), is_master=_session_is_master())
 
 
 @blueprint.route('/api/me/access', methods=['GET'])
 def api_my_access():
-    """Current user's access, for the sidebar + admin-link visibility. is_admin →
-    everything; configured → the allowlist; otherwise unconfigured (full access)."""
+    """Current user's access, for the sidebar + admin-link visibility. Master →
+    everything; an unconfigured admin → everything; a configured user (admin or
+    not) → their allowlist; an unconfigured user → full access."""
     if not session.get('authenticated'):
         return jsonify({'success': False}), 401
-    if _session_is_admin():
+    if _session_is_master():
         return jsonify({'success': True, 'is_admin': True, 'configured': False, 'pages': []})
+    is_admin_role = (session.get('user_role') or '').upper() == 'ADMIN'
     configured, allowed = _get_page_access(session.get('user_sid', ''))
-    return jsonify({'success': True, 'is_admin': False,
+    # is_admin here only tells the sidebar JS to skip hiding — true for master or an
+    # unrestricted admin; a configured (restricted) user gets their pages hidden.
+    return jsonify({'success': True, 'is_admin': is_admin_role and not configured,
                     'configured': configured, 'pages': sorted(allowed)})
+
+
+def _target_needs_master(sid):
+    """A target whose access only the master may change: admins and other masters."""
+    if (sid or '').strip().upper() in _MASTER_SIDS:
+        return True
+    target = get_user_by_sid((sid or '').strip().upper())
+    return bool(target and (target.get('Role') or '').upper() == 'ADMIN')
 
 
 @blueprint.route('/api/page-access/<sid>', methods=['GET', 'POST'])
@@ -8368,7 +8395,15 @@ def api_page_access(sid):
         return jsonify({'success': False, 'message': 'Missing SID'}), 400
     if request.method == 'GET':
         configured, allowed = _get_page_access(sid)
-        return jsonify({'success': True, 'configured': configured, 'pages': sorted(allowed)})
+        master_target = sid.upper() in _MASTER_SIDS
+        return jsonify({'success': True, 'configured': configured, 'pages': sorted(allowed),
+                        'master_target': master_target,
+                        'admin_target': _target_needs_master(sid) and not master_target,
+                        'locked': _target_needs_master(sid) and not _session_is_master()})
+    # Only the master can change the access of an admin or another master.
+    if _target_needs_master(sid) and not _session_is_master():
+        return jsonify({'success': False,
+                        'message': "Only the master can change an admin's access."}), 403
     data = request.get_json(silent=True) or {}
     pages = data.get('pages')
     if not isinstance(pages, list):
@@ -8400,6 +8435,9 @@ def api_update_user():
 
     if not sid:
         return jsonify({"success": False, "message": "SID is required."}), 400
+    # The master account can only be modified by the master.
+    if sid in _MASTER_SIDS and not _session_is_master():
+        return jsonify({"success": False, "message": "Only the master can modify the master account."}), 403
     if new_role not in valid_roles:
         return jsonify({"success": False, "message": "Invalid role."}), 400
     if new_status not in valid_statuses:
@@ -8432,7 +8470,7 @@ def api_delete_user():
     if not session.get('authenticated'):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
 
-    if session.get('user_role') != 'ADMIN':
+    if not _session_is_admin():
         return jsonify({"success": False, "message": "Only Admin users can delete accounts."}), 403
 
     data = request.get_json()
@@ -8443,6 +8481,10 @@ def api_delete_user():
 
     if sid == session.get('user_sid', '').upper():
         return jsonify({"success": False, "message": "You cannot delete your own account."}), 400
+
+    # The master account can only be removed by the master.
+    if sid in _MASTER_SIDS and not _session_is_master():
+        return jsonify({"success": False, "message": "Only the master can delete the master account."}), 403
 
     if not get_user_by_sid(sid):
         return jsonify({"success": False, "message": "User not found."}), 404
@@ -13149,10 +13191,10 @@ def api_get_notifications():
     finally:
         conn.close()
 
-    # Page-access filter: a configured non-admin only sees notifications for the
-    # pages they can reach. Admins / unconfigured users see everything. A page
-    # label with no known URL, or one that isn't a controllable page, is kept.
-    if not _session_is_admin():
+    # Page-access filter: a configured user only sees notifications for the pages
+    # they can reach. Master / unconfigured users see everything. A page label with
+    # no known URL, or one that isn't a controllable page, is kept.
+    if not _session_is_master():
         configured, allowed = _get_page_access(session.get('user_sid', ''))
         if configured:
             def _visible(n):

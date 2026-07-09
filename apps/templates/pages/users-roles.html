@@ -432,7 +432,7 @@ document.addEventListener('click', function (e) {
     // Edit button
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
-        if (currentUserRole !== 'ADMIN') {
+        if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MASTER') {
             alert('Apenas usuários com perfil Admin podem editar.');
             return;
         }
@@ -484,7 +484,7 @@ document.addEventListener('click', function (e) {
         e.stopPropagation();
         e.preventDefault();
 
-        if (currentUserRole !== 'ADMIN') {
+        if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MASTER') {
             Swal.fire({
                 title: 'Acesso Negado',
                 text: 'Apenas usuários com perfil Admin podem remover usuários.',

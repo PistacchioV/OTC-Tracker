@@ -195,6 +195,7 @@
   'use strict';
   var ALWAYS = { '/dashboard': 1, '/dashboard-2': 1, '/users-profile': 1, '/page-access': 1 };
   var PA_ASSETS = '{{ config.ASSETS_ROOT }}';   // user photos: <ASSETS>/images/users/<sid>.jpg
+  var PA_IS_MASTER = {{ 'true' if is_master else 'false' }};   // master can restrict admins
   var current = null;
 
   // Avatar markup: user photo with initials fallback (same path as User-roles).
@@ -307,6 +308,12 @@
 
   function setAll(on) { document.querySelectorAll('#pa-sections .pa-cb').forEach(function (c) { c.checked = on; }); updateCounts(); }
 
+  // Read-only mode: disable every control so a locked target can't be edited.
+  function lockEditor(locked) {
+    document.querySelectorAll('#pa-sections .pa-cb, #pa-sections .pa-sec-all').forEach(function (c) { c.disabled = locked; });
+    ['pa-full', 'pa-none', 'pa-save'].forEach(function (id) { var e = document.getElementById(id); if (e) e.disabled = locked; });
+  }
+
   function selectUser(btn) {
     current = { sid: btn.getAttribute('data-sid'), name: btn.getAttribute('data-name'), role: btn.getAttribute('data-role') };
     document.querySelectorAll('.pa-user').forEach(function (b) { b.classList.toggle('active', b === btn); });
@@ -322,9 +329,21 @@
         var allowed = null;
         if (d && d.success && d.configured) { allowed = {}; (d.pages || []).forEach(function (u) { allowed[u] = 1; }); }
         renderSections(allowed);
-        if (current.role && current.role.toUpperCase() === 'ADMIN') {
+        var locked = !!(d && d.locked);
+        current.locked = locked;
+        lockEditor(locked);
+        if (d && d.master_target) {
+          // Master account — always has full access; a restriction has no effect.
           note.hidden = false; note.className = 'pa-note pa-note--admin';
-          note.innerHTML = '<i data-lucide="shield-check" style="width:16px;height:16px"></i> This user is an admin and always has full access — a restriction here has no effect.';
+          note.innerHTML = '<i data-lucide="crown" style="width:16px;height:16px"></i> This is the master account — it always has full access.';
+        } else if (locked) {
+          // Non-master admin viewing an admin: read-only.
+          note.hidden = false; note.className = 'pa-note pa-note--admin';
+          note.innerHTML = '<i data-lucide="shield-alert" style="width:16px;height:16px"></i> This user is an admin — only the master can change an admin’s access.';
+        } else if (d && d.admin_target) {
+          // Master editing an admin: restriction is effective.
+          note.hidden = false; note.className = 'pa-note pa-note--admin';
+          note.innerHTML = '<i data-lucide="shield-check" style="width:16px;height:16px"></i> Admin account — as master, the pages you select here will be enforced for this admin.';
         } else if (allowed === null) {
           note.hidden = false; note.className = 'pa-note pa-note--info';
           note.innerHTML = '<i data-lucide="info" style="width:16px;height:16px"></i> Not restricted yet — this user currently has full access. Saving will start enforcing the selection.';
