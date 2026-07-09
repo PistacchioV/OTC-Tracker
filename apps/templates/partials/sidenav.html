@@ -1784,21 +1784,23 @@
       }
       var nav = document.querySelector('.side-nav');
       if (!nav) return;
-      // Hide each link the user can't reach.
+      // Leaf-driven pruning: KEEP only the menu items on a path to a page the user
+      // can actually reach; hide everything else. This is depth-agnostic and also
+      // removes collapsible groups whose only children are "#"-placeholder links
+      // (Advice, Flow, Premium, SPB…) with no real page behind them — the previous
+      // "hide item / collapse empty submenu" pass left those (and their ancestors) up.
+      var keep = new Set();
       nav.querySelectorAll('a.side-nav-link[href^="/"]').forEach(function (a) {
         var href = a.getAttribute('href');
-        if (ALWAYS[href] || allowed[href]) return;
-        var li = a.closest('.side-nav-item');
-        if (li) li.hidden = true;
-      });
-      // Collapse submenu parents left with no visible children.
-      nav.querySelectorAll('.sub-menu').forEach(function (sub) {
-        var anyVisible = Array.prototype.some.call(sub.querySelectorAll('.side-nav-item'),
-          function (li) { return !li.hidden; });
-        if (!anyVisible) {
-          var parentLi = sub.closest('.side-nav-item');
-          if (parentLi) parentLi.hidden = true;
+        if (!(ALWAYS[href] || allowed[href])) return;
+        var el = a;
+        while (el && el !== nav) {
+          if (el.classList && el.classList.contains('side-nav-item')) keep.add(el);
+          el = el.parentElement;
         }
+      });
+      nav.querySelectorAll('.side-nav-item').forEach(function (li) {
+        if (!keep.has(li)) li.hidden = true;
       });
       // Hide section titles with no visible items beneath them (until next title).
       nav.querySelectorAll('.side-nav-title').forEach(function (title) {
