@@ -8,9 +8,11 @@
 (function () {
   'use strict';
 
-  var API = '/api/live-position-swap-characteristics/data';
   var page = document.getElementById('swapchar-page');
   if (!page) return;
+  // Endpoint is per-page (data-api) so the same JS drives Characteristics,
+  // Cashflow and Premium — all share this generic columns/rows table.
+  var API = page.getAttribute('data-api') || '/api/live-position-swap-characteristics/data';
 
   var dt = null;               // jQuery DataTables instance
   var COLS = [];               // [{label, idx}]
@@ -53,12 +55,17 @@
 
   function renderWidgets(w, refFmt) {
     if (!w) return;
-    setVal('sc-w-tipo-total', w.tipo.total); setVal('sc-w-tipo-cashflow', w.tipo.cashflow); setVal('sc-w-tipo-bullet', w.tipo.bullet);
-    setVal('sc-w-lob-total', w.lob.total);
-    ['CEM', 'EDG', 'COMM', 'HYB'].forEach(function (k) { setVal('sc-w-lob-' + k, w.lob[k]); });
-    setVal('sc-w-index-total', w.index.total); setVal('sc-w-index-vcp', w.index.vcp); setVal('sc-w-index-calculado', w.index.calculado);
-    setVal('sc-w-func-total', w.func.total);
-    ['forward_start', 'notional', 'premio', 'arrependimento', 'sem'].forEach(function (k) { setVal('sc-w-func-' + k, w.func[k]); });
+    // Each group is optional — Cashflow/Premium pages only send { total }.
+    if (w.tipo) { setVal('sc-w-tipo-total', w.tipo.total); setVal('sc-w-tipo-cashflow', w.tipo.cashflow); setVal('sc-w-tipo-bullet', w.tipo.bullet); }
+    if (w.lob) {
+      setVal('sc-w-lob-total', w.lob.total);
+      ['CEM', 'EDG', 'COMM', 'HYB'].forEach(function (k) { setVal('sc-w-lob-' + k, w.lob[k]); });
+    }
+    if (w.index) { setVal('sc-w-index-total', w.index.total); setVal('sc-w-index-vcp', w.index.vcp); setVal('sc-w-index-calculado', w.index.calculado); }
+    if (w.func) {
+      setVal('sc-w-func-total', w.func.total);
+      ['forward_start', 'notional', 'premio', 'arrependimento', 'sem'].forEach(function (k) { setVal('sc-w-func-' + k, w.func[k]); });
+    }
     setVal('sc-w-total', w.total);
   }
 

@@ -4218,6 +4218,111 @@ def api_swapchar_data():
     return jsonify(payload)
 
 
+# ── Live Position Swap Cashflow (DFLUXO) & Premium (DAGENDAPREMIOS) ───────────
+#  Same page template as Swap Characteristics, but a fixed subset of columns
+#  pulled POSITIONALLY from the respective headerless position JSON (parsed with
+#  the _B3_SWAP_HEADERS standard for that file). Values are formatted with the
+#  same _swapchar_fmt_cell rules (dates, sign, numeric).
+_SWAPFLUX_LABELS = _B3_SWAP_HEADERS['swap_fluxo']
+# swap_fluxo has 26 cols; drop "Papel Parte"(4), "Papel Contraparte"(7) and the
+# trailing "Data Início Composição da Taxa Contraparte"(25) → the 23 requested.
+_SWAPFLUX_DISPLAY_IDX = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                         17, 18, 19, 20, 21, 22, 23, 24]
+_SWAPFLUX_TYPES = [_swapchar_coltype(l) for l in _SWAPFLUX_LABELS]
+
+_SWAPPREM_LABELS = _B3_SWAP_HEADERS['swap_premio']
+_SWAPPREM_DISPLAY_IDX = list(range(len(_SWAPPREM_LABELS)))   # all 10 columns
+_SWAPPREM_TYPES = [_swapchar_coltype(l) for l in _SWAPPREM_LABELS]
+
+
+def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
+    """Read a headerless Swap position JSON (values in file order) and emit the
+    display-column subset, formatted like Swap Characteristics. Returns
+    {widgets:{total}, columns, rows}. Missing file → empty payload (logged)."""
+    dref = ref.strftime('%y%m%d')
+    disp_labels = [labels[i] for i in display_idx]
+    empty = {'widgets': {'total': 0}, 'columns': disp_labels, 'rows': []}
+    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
+    if not os.path.isfile(path):
+        log.warning("[swap-simple] no %s for %s; page shows 0", file_tpl.format(dref), dref)
+        return empty
+    try:
+        with open(path, encoding='utf-8') as fh:
+            src = json.load(fh)
+    except Exception:
+        return empty
+    if not src:
+        return empty
+    named = {_fcst_norm(k): k for k in src[0].keys()}   # sparse-mock name fallback
+    rows_out = []
+    for row in src:
+        vals = list(row.values())                        # file order (dup headers → _2, _3…)
+        full = len(vals) >= len(labels)
+        disp = []
+        for i in display_idx:
+            if full:
+                raw = vals[i] if i < len(vals) else ''
+            else:
+                key = named.get(_fcst_norm(labels[i]))
+                raw = row.get(key, '') if key else ''
+            disp.append(_swapchar_fmt_cell(raw, types[i]))
+        rows_out.append(disp)
+    return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out}
+
+
+def _swap_simple_ref(request_args):
+    ds = (request_args.get('date') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d').date() if ds else \
+            _prev_anbima_bizday(datetime.now()).date()
+    except ValueError:
+        return _prev_anbima_bizday(datetime.now()).date()
+
+
+@blueprint.route('/live-position-swap-cashflow')
+def live_position_swap_cashflow():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-swap-cashflow.html',
+                           segment='live-position-swap-cashflow', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-swap-cashflow/data')
+def api_swapcash_data():
+    """Swap Cashflow payload (DFLUXO) for a reference date (default D-1 ANBIMA)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = _swap_simple_ref(request.args)
+    payload = _swap_simple_collect(ref, '73760_{}_DFLUXO.json',
+                                   _SWAPFLUX_LABELS, _SWAPFLUX_DISPLAY_IDX, _SWAPFLUX_TYPES)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/live-position-swap-premium')
+def live_position_swap_premium():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    return render_template('pages/live-position-swap-premium.html',
+                           segment='live-position-swap-premium', ref_date=ref_date)
+
+
+@blueprint.route('/api/live-position-swap-premium/data')
+def api_swapprem_data():
+    """Swap Premium payload (DAGENDAPREMIOS) for a reference date (default D-1 ANBIMA)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = _swap_simple_ref(request.args)
+    payload = _swap_simple_collect(ref, '73760_{}_DAGENDAPREMIOS.json',
+                                   _SWAPPREM_LABELS, _SWAPPREM_DISPLAY_IDX, _SWAPPREM_TYPES)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 # ── Other Products › OTM Settlements ─────────────────────────────────────────
 #  Replaces the legacy Excel/VBA "Settlement - OTM" import. A cashflows_*.xlsx
 #  file (actually a TAB-delimited text export, opened by the VBA via OpenText
