@@ -167,19 +167,6 @@ _CPD_PATH = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', '
 _VALID_NET_TYPES = ('Total Net', 'Pay/Rec', 'No Net')
 
 
-def _norm_net_type(val):
-    """Map a raw NET value from the base to a canonical net type, tolerant of
-    naming: 'payrec' / 'PAYREC_NET' / 'Pay/Rec' → 'Pay/Rec';
-    'no net' / 'NO_NET' / 'nonet' → 'No Net'; 'TOTAL_NET' / 'total' → 'Total Net'.
-    Blank/unknown → 'Total Net' (safe default)."""
-    n = _norm(val)
-    if 'payrec' in n:
-        return 'Pay/Rec'
-    if 'nonet' in n:
-        return 'No Net'
-    return 'Total Net'
-
-
 def _load_net_type_map():
     """{normalized counterparty name → net type}. Joins RefData (name→SPN) with
     CounterpartyDetails (SPN→NET.value). Only an Active (approved) net type
@@ -200,8 +187,8 @@ def _load_net_type_map():
             net = r.get('NET') or {}
             val = str(net.get('value', '') or '').strip()
             status = (str(net.get('status', '') or '').strip() or 'Active')
-            if spn and val and status == 'Active':
-                spn_to_net[spn] = _norm_net_type(val)   # tolerant of naming
+            if spn and val in _VALID_NET_TYPES and status == 'Active':
+                spn_to_net[spn] = val
     except Exception:
         pass
     return {nm: spn_to_net.get(spn, 'Total Net') for nm, spn in name_to_spn.items()}
