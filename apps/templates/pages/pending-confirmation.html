@@ -876,9 +876,6 @@
                     <button class="btn btn-primary btn-search" type="button" id="sfSearchBtn">
                         <i class="ti ti-search fs-xl me-1"></i> Search
                     </button>
-                    <button class="btn btn-outline-secondary" type="button" id="sfClearBtn">
-                        <i class="ti ti-filter-off fs-xl me-1"></i> Clear filters
-                    </button>
                 </div>
             </div>
         </div>
@@ -910,6 +907,10 @@
                         <div id="pendColToggleWrap"></div>
                         <div id="pendExportWrap"></div>
                         <div id="pendAddRowWrap"></div>
+                        <button type="button" id="colClearFiltersBtn"
+                                class="btn btn-secondary btn-sm bg-gradient btn-toolbar-all">
+                            <i class="ti ti-filter-off me-1"></i>Clear Filters
+                        </button>
                         <div id="pendCondActionsWrap" class="d-flex align-items-center"></div>
                     </div>
 
@@ -1354,6 +1355,27 @@ $(document).ready(function() {
                     }
                 });
             });
+
+            // ==============================================================
+            // CLEAR FILTERS — limpa a linha de inputs de filtro por coluna
+            // ==============================================================
+            var colClearBtn = document.getElementById('colClearFiltersBtn');
+            if (colClearBtn) {
+                colClearBtn.addEventListener('click', function() {
+                    // Esvaziar os inputs da linha de filtro por coluna
+                    document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
+                        inp.value = '';
+                    });
+                    // Resetar a busca de todas as colunas + busca global e redesenhar
+                    api.columns().search('');
+                    api.search('');
+                    api.draw();
+                    // Manter o smart filter em sincronia (limpa chips/input, se presente)
+                    if (typeof window.pendResetSmartFilter === 'function') {
+                        window.pendResetSmartFilter();
+                    }
+                });
+            }
 
             // ==============================================================
             // ADD ROW BUTTON — opens modal
@@ -1938,16 +1960,15 @@ $(document).ready(function() {
     sfWrapper.addEventListener('click', function(){ sfInput.focus(); });
     document.getElementById('sfSearchBtn').addEventListener('click', function(){ sfApply(); });
 
-    function sfClear() {
+    // Expose a helper so the column-filter "Clear Filters" button can also
+    // reset the smart-filter chips/input, keeping both filter UIs in sync.
+    window.pendResetSmartFilter = function () {
         sfActive = [];
         sfInput.value = '';
         sfDropdown.style.display = 'none';
         sfKbdIdx = -1;
         sfRenderChips();
-        SF_COLS.forEach(function(col){ table.column(col.dtCol).search(''); });
-        table.search('').draw();
-    }
-    document.getElementById('sfClearBtn').addEventListener('click', function(){ sfClear(); });
+    };
 
 
     // ========================================================================
