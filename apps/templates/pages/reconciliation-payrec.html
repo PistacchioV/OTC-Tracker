@@ -94,10 +94,8 @@
 [data-bs-theme="dark"] #payrec-page .badge-settled { background: rgba(76,175,80,.18); color: #a5d6a7; }
 [data-bs-theme="dark"] #payrec-page .badge-justified { background: rgba(33,150,243,.18); color: #90caf9; }
 
-/* Justify columns (Comment + Actions): hidden until the operator chooses to
-   justify pending items from the End-process dialog. */
-#payrec-page .pr-justify-col { display: none; }
-#payrec-page.pr-justify .pr-justify-col { display: table-cell; }
+/* Comment + Actions columns are always visible. The comment is read-only and
+   only becomes editable (Edit → Confirm) for rows that still need justifying. */
 #payrec-page .pr-comment-input { width: 100%; min-width: 160px; font-size: .78rem; padding: 3px 8px;
     border: 1px solid var(--pr-hairline); border-radius: 6px; background: var(--ins-secondary-bg, #fff); color: inherit; }
 #payrec-page .pr-act-btn { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 6px;
@@ -192,6 +190,7 @@
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
+                            <th>LE</th>
                             <th data-lang="pr-c-product">Product</th>
                             <th data-lang="pr-c-jpmcpty">JPM cpty</th>
                             <th data-lang="pr-c-client">Client</th>
@@ -199,8 +198,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
-                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
-                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
+                            <th data-lang="pr-c-comment">Comment</th>
+                            <th data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendPayBody"></tbody>
                     </table>
@@ -216,6 +215,7 @@
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
+                            <th>LE</th>
                             <th data-lang="pr-c-product">Product</th>
                             <th data-lang="pr-c-jpmcpty">JPM cpty</th>
                             <th data-lang="pr-c-client">Client</th>
@@ -223,8 +223,8 @@
                             <th class="pr-num" data-lang="pr-c-jpmval">JPM Value</th>
                             <th class="pr-num" data-lang="pr-c-clival">Client Value</th>
                             <th data-lang="pr-c-status">Status</th>
-                            <th class="pr-justify-col" data-lang="pr-c-comment">Comment</th>
-                            <th class="pr-justify-col" data-lang="pr-c-actions">Actions</th>
+                            <th data-lang="pr-c-comment">Comment</th>
+                            <th data-lang="pr-c-actions">Actions</th>
                         </tr></thead>
                         <tbody id="prPendRecBody"></tbody>
                     </table>
@@ -240,6 +240,7 @@
                 <div class="pr-table-wrap">
                     <table class="pr-table">
                         <thead><tr>
+                            <th>LE</th>
                             <th data-lang="pr-c-product">Product</th>
                             <th data-lang="pr-c-jpmcpty">JPM cpty</th>
                             <th data-lang="pr-c-client">Client</th>
@@ -273,5 +274,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260706c"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260710"></script>
 {% endblock extra_javascript %}

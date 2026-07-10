@@ -114,13 +114,13 @@
     var span = countId ? String(rows ? rows.length : 0) : '';
     if (countId) setText(countId, span);
     if (!rows || !rows.length) {
-      var cols = kind === 'settled' ? 9 : (justifyMode ? 9 : 7);
-      body.innerHTML = '<tr><td colspan="' + cols + '" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" class="pr-empty">' + esc(t('empty')) + '</td></tr>';
       show(cardId, true);
       return;
     }
     body.innerHTML = rows.map(function (r, i) {
       var base =
+        '<td>' + esc(r.le || '') + '</td>' +
         '<td>' + esc(r.product) + '</td>' +
         '<td>' + esc(r.jpm_cpty) + '</td>' +
         '<td>' + esc(r.client) + '</td>' +
@@ -130,17 +130,20 @@
         return '<tr>' + base + '<td>' + esc(r.sistema) + '</td><td>' + statusBadge(r.status) +
           '</td><td>' + esc(r.snumconta) + '</td></tr>';
       }
-      // Pending tables: Status + (Comment + Actions, revealed in justify mode).
-      // Actions (Edit/Confirm) appear only for rows that still need justifying.
+      // Pending tables: the Comment column is always visible. The Edit/Confirm
+      // action buttons (New Deals rounded-circle style) only appear for rows that
+      // still need justifying — that's when the comment becomes editable.
       var needs = isPending(r.status);
       var actions = needs
-        ? '<button type="button" class="pr-act-btn pr-act-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
-          '<button type="button" class="pr-act-btn pr-act-confirm" title="Confirm"><i class="ti ti-check"></i></button>'
+        ? '<div class="d-flex justify-content-center gap-1">' +
+          '<button type="button" class="btn btn-info btn-sm rounded-circle pr-act-edit" title="Edit"><i class="ti ti-edit"></i></button>' +
+          '<button type="button" class="btn btn-success btn-sm rounded-circle pr-act-confirm" title="Confirm"><i class="ti ti-check"></i></button>' +
+          '</div>'
         : '';
       return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '">' + base +
         '<td>' + statusBadge(r.status) + '</td>' +
-        '<td class="pr-justify-col pr-comment-cell">' + esc(r.comment || '') + '</td>' +
-        '<td class="pr-justify-col pr-actions-cell">' + actions + '</td>' +
+        '<td class="pr-comment-cell">' + esc(r.comment || '') + '</td>' +
+        '<td class="pr-actions-cell">' + actions + '</td>' +
         '</tr>';
     }).join('');
     show(cardId, true);

@@ -541,6 +541,7 @@ def _reconcile(jpm, client):
             if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
                 status = 'Settled'
             details.append({
+                'le': 'MGT' if mate['sistema'] == 'SPB - MGT' else 'JPM',
                 'product': j['product'] or mate.get('product') or 'NDF',
                 'jpm_cpty': j['cpty'], 'client': mate['client'], 'pay_receive': j['pay_receive'],
                 'jpm_value': j['value'], 'client_value': mate['value'],
@@ -548,6 +549,7 @@ def _reconcile(jpm, client):
                 'status': status, 'difference': diff})
         else:
             details.append({
+                'le': 'JPM',
                 'product': j['product'], 'jpm_cpty': j['cpty'], 'client': '',
                 'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': '',
                 'sistema': '', 'snumconta': '', 'status': 'Pending', 'difference': -j['value']})
@@ -555,6 +557,7 @@ def _reconcile(jpm, client):
         if id(c) in matched:
             continue
         details.append({
+            'le': 'MGT' if c['sistema'] == 'SPB - MGT' else 'JPM',
             'product': c.get('product') or 'NDF', 'jpm_cpty': '', 'client': c['client'],
             'pay_receive': c['pay_receive'], 'jpm_value': '', 'client_value': c['value'],
             'sistema': c['sistema'], 'snumconta': c['snumconta'],
