@@ -7,10 +7,11 @@ JPM / Cockpit side (3 sources, Union'd):
   cashflows_*.xlsx    → COMM TER / SWAP  (per-client NET sum; Owner Legal Entity='0228')
   FXO Detail*.xlsx    → FXO   (value from ATH SET AMT + Direction)
 
-Client side (3 sources, Union'd):
+Client side (4 sources, Union'd):
   rlctahis.csv        → SDConta interna  (nHistorico allowlist)
   rlDocTed01.csv      → SDConta externa (TED)
-  HistoricoMensagensJPM_*.csv → SPB externa (Descrição Evento contains Derivativos/LMA-COMM-BR)
+  HistoricoMensagensJPM_*.csv → SPB externa (Descrição Evento contains Derivativos/LMA-COMM-BR; always Pay)
+  HistoricoMensagensMGT_*.csv → SPB MGT (same layout; sign of Valor → Pay/Receive; no LMA-COMM)
 
 Match: JPM value ↔ client value, rounded to whole units (value-only join).
 Difference = Client - JPM;  Status = Settled if 0 else Pending (SPB tol > -0.50).
@@ -299,7 +300,10 @@ def _classify_source(name):
     if n.startswith('settlement'):
         return 'settlement'
     if 'historicomensagens' in n:
-        return 'spb'
+        # Same layout for JPM and MGT (name differs only by JPM↔MGT). The MGT
+        # variant carries both payments and receipts (sign of Valor) and no
+        # LMA-COMM, so it gets its own bucket.
+        return 'spb_mgt' if 'mgt' in n else 'spb'
     if 'rldocted' in n:
         return 'sdconta_ted'
     if 'rlctahis' in n:
@@ -487,25 +491,34 @@ def _cli_ted(rows, cols):
     return out
 
 
-def _cli_spb(rows, cols):
-    """SPB externa — Descrição Evento contains Derivativos/LMA-COMM-BR; Pay."""
+def _cli_spb(rows, cols, mgt=False):
+    """SPB externa — Descrição Evento contains Derivativos/LMA-COMM-BR.
+
+    JPM file (HistoricoMensagensJPM): outgoing settlements only → always Pay
+    (value forced negative). MGT file (HistoricoMensagensMGT): carries BOTH
+    payments and receipts, so the SIGN of Valor decides direction (negative →
+    Pay, positive → Receive) and the value is used as-is. The MGT file has no
+    LMA-COMM rows; the 'lma-comm-br' term below is simply never matched there."""
     c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
     c_conta = _resolve(cols, 'sNumConta')
+    sistema = 'SPB - MGT' if mgt else 'SPB - conta externa'
     out = []
     for r in rows:
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
         if 'derivativos' not in en and 'lma-comm-br' not in en:   # Filter[48]
             continue
-        val = -abs(_num(r.get(c_val, '') if c_val else 0))         # SPB → Pay → negative
+        raw = _num(r.get(c_val, '') if c_val else 0)
+        val = raw if mgt else -abs(raw)          # MGT: signed (Pay/Receive); JPM: always Pay
         if abs(val) < 1e-9:
             continue
         titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
         titular = titular.replace('LMA-COMM-BR ', '').strip()    # strip the LMA prefix
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        out.append({'value': val, 'client': titular, 'sistema': 'SPB - conta externa',
-                    'snumconta': conta, 'product': 'NDF', 'pay_receive': 'Pay'})
+        out.append({'value': val, 'client': titular, 'sistema': sistema,
+                    'snumconta': conta, 'product': 'NDF',
+                    'pay_receive': 'Pay' if val < 0 else 'Receive'})
     return out
 
 
@@ -625,6 +638,8 @@ def run_payrec(recon_date, files=None, mode='auto'):
             client += _cli_ted(rows, cols)
         elif bucket == 'spb':
             client += _cli_spb(rows, cols)
+        elif bucket == 'spb_mgt':
+            client += _cli_spb(rows, cols, mgt=True)
 
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
