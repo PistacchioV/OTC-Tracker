@@ -505,13 +505,14 @@ def _cli_ted(rows, cols):
 
 
 def _cli_spb(rows, cols, mgt=False):
-    """SPB externa — Descrição Evento contains Derivativos/LMA-COMM-BR.
+    """SPB externa.
 
-    JPM file (HistoricoMensagensJPM): outgoing settlements only → always Pay
-    (value forced negative). MGT file (HistoricoMensagensMGT): carries BOTH
-    payments and receipts, so the SIGN of Valor decides direction (negative →
-    Pay, positive → Receive) and the value is used as-is. The MGT file has no
-    LMA-COMM rows; the 'lma-comm-br' term below is simply never matched there."""
+    JPM file (HistoricoMensagensJPM): outgoing settlements only → keep only rows
+    whose Descrição Evento contains Derivativos/LMA-COMM-BR, and force Pay
+    (negative). MGT file (HistoricoMensagensMGT): dedicated to MGT payments and
+    receipts (e.g. 'Resposta a Terceiros sobre Transferencia entre contas de
+    clientes'), so NO Descrição filter is applied — every row counts, and the
+    SIGN of Valor decides direction (negative → Pay, positive → Receive)."""
     c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
     c_conta = _resolve(cols, 'sNumConta')
@@ -520,7 +521,7 @@ def _cli_spb(rows, cols, mgt=False):
     for r in rows:
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
-        if 'derivativos' not in en and 'lma-comm-br' not in en:   # Filter[48]
+        if not mgt and 'derivativos' not in en and 'lma-comm-br' not in en:   # Filter[48] (JPM only)
             continue
         raw = _num(r.get(c_val, '') if c_val else 0)
         val = raw if mgt else -abs(raw)          # MGT: signed (Pay/Receive); JPM: always Pay
