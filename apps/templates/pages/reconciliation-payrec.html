@@ -98,10 +98,15 @@
    only becomes editable (Edit → Confirm) for rows that still need justifying. */
 #payrec-page .pr-comment-input { width: 100%; min-width: 160px; font-size: .78rem; padding: 3px 8px;
     border: 1px solid var(--pr-hairline); border-radius: 6px; background: var(--ins-secondary-bg, #fff); color: inherit; }
-#payrec-page .pr-act-btn { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 6px;
-    color: var(--bs-secondary-color); line-height: 1; }
-#payrec-page .pr-act-btn:hover { background: rgba(0,102,204,.10); color: #0066cc; }
-#payrec-page .pr-act-confirm:hover { background: rgba(25,135,84,.12); color: #198754; }
+/* Action buttons (Edit/Confirm) no mesmo padrão das tabelas de New Deals:
+   quadrado arredondado ~28px, sem padding, ícone 13px centralizado
+   (o mesmo estilo de #deals-processing-table .btn-sm.rounded-circle). */
+#payrec-page table.pr-table .pr-actions-cell .btn {
+    width: 28px; height: 28px; padding: 0; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 7px !important;
+}
+#payrec-page table.pr-table .pr-actions-cell .btn i { font-size: 13px; }
 
 #payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
 @keyframes pr-spin { to { transform: rotate(360deg); } }
