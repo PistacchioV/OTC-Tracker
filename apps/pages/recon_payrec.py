@@ -34,7 +34,7 @@ _HISTORY_BASE = os.path.normpath(os.path.join(
     _MODULE_DIR, '..', 'static', 'data', 'cache', 'payrec'))
 
 # Network folder holding the input files.
-_INPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Pay_Rec"
+_INPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\payrec"
 
 # ── E-mail recipients ─────────────────────────────────────────────────────────
 _MAILBOX = 'brazil.otc.ops@jpmorgan.com'
