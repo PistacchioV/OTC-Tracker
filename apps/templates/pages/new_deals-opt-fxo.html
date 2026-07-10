@@ -40,7 +40,7 @@
   #myAwesomeDropzone.dropzone {
     min-height: 0 !important;
     height: auto !important;           /* ← ALTERE A ALTURA AQUI  */
-    padding: 12px !important;          /* ← ALTERE O PADDING AQUI */
+    padding: 4px 12px !important;      /* ← ALTERE O PADDING AQUI (altura pela metade) */
   }
 
   /*
@@ -49,7 +49,7 @@
    */
   #myAwesomeDropzone.dropzone .dz-message {
     margin: 0 !important;
-    padding: 8px 0 !important;
+    padding: 4px 0 !important;
   }
 
   #myAwesomeDropzone.dropzone .dz-message h4 {
@@ -59,6 +59,17 @@
   #myAwesomeDropzone.dropzone .dz-message p {
     font-size: 0.85rem;
   }
+
+  /* Altura reduzida ~pela metade: comprime o ícone, textos e margens verticais
+     do conteúdo do dropzone (largura inalterada). */
+  #myAwesomeDropzone.dropzone .dz-message .avatar-lg {
+    height: 24px !important; width: 24px !important; margin-bottom: 2px !important;
+  }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
+  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
+  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
 
   /* Widgets adjustments */
   .row-cols-xxl-6 .col {
