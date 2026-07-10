@@ -1593,26 +1593,27 @@ def api_dashboard_stats():
 
     def _is_fxo(d):
         return 'fxo' in (d.get('_product') or '').lower()
-    # Commodities/NDF dedupe by the Lawton leg; FXO is one row per deal (count all),
-    # but the Banco J.P. Morgan counterparty leg is never counted.
-    lawton_deals = [d for d in all_deals
-                    if (_is_fxo(d) and not _is_bank(d)) or (not _is_fxo(d) and _is_lawton(d))]
-    client_deals = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
+    # Deal counting rule (ALL products): count every leg that carries a deal,
+    # EXCEPT the Banco J.P. Morgan counterparty leg. Each intragroup deal is
+    # recorded from two views — "Banco x Lawton" and "Lawton x Banco" — which are
+    # the SAME deal; the mirror whose Client is the Banco leg is dropped, so it is
+    # counted only once. The client-facing leg (Client = external client) and the
+    # single remaining intragroup leg are both kept.
+    counted_deals = [d for d in all_deals if not _is_bank(d)]
+    client_deals  = [d for d in all_deals if not _is_lawton(d) and not _is_bank(d)]
 
     def _fam(d):
         # FXO is split out of the OPT bucket so the dashboard can show it apart
         return 'FXO' if _is_fxo(d) else d['_type']
-    ndf_lawton     = [d for d in lawton_deals if _fam(d) == 'NDF']
-    optcomm_lawton = [d for d in lawton_deals if _fam(d) == 'OPT']
-    fxo_lawton     = [d for d in lawton_deals if _fam(d) == 'FXO']
-    swap_lawton    = [d for d in lawton_deals if _fam(d) == 'SWAP']
-    opt_lawton     = optcomm_lawton + fxo_lawton  # all options (stat card)
+    ndf_deals     = [d for d in counted_deals if _fam(d) == 'NDF']
+    optcomm_deals = [d for d in counted_deals if _fam(d) == 'OPT']
+    fxo_deals     = [d for d in counted_deals if _fam(d) == 'FXO']
+    swap_deals    = [d for d in counted_deals if _fam(d) == 'SWAP']
+    opt_deals     = optcomm_deals + fxo_deals  # all options (stat card)
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
-    pending_total = sum(1 for d in lawton_deals if (d.get('Status') or '').strip() in pending_statuses)
+    pending_total = sum(1 for d in counted_deals if (d.get('Status') or '').strip() in pending_statuses)
 
-    # Swap deals counted like NDF/Opt: by the Lawton (intragroup) leg, from any
-    # product folder under new deals whose path starts with "Swap".
-    swap_total = len(swap_lawton)
+    swap_total = len(swap_deals)
 
     client_counts = Counter(
         (d.get('Client') or '').strip()
@@ -1626,7 +1627,7 @@ def api_dashboard_stats():
         )
         top5_clients.append({'label': c, 'count': n, 'by_product': dict(by_product)})
 
-    product_counts = Counter(d['_product'] for d in lawton_deals)
+    product_counts = Counter(d['_product'] for d in counted_deals)
     top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
 
     # Top 5 Underlying Assets — commodities show the Commodity name; FXO (no
@@ -1634,7 +1635,7 @@ def api_dashboard_stats():
     def _underlying_label(d):
         return (d.get('Commodities') or d.get('Commodity') or d.get('UnderlyingAsset') or '').strip()
     underlying_counts = Counter(
-        _underlying_label(d) for d in lawton_deals if _underlying_label(d)
+        _underlying_label(d) for d in counted_deals if _underlying_label(d)
     )
     top5_underlying = [{'label': c, 'count': n} for c, n in underlying_counts.most_common(5)]
 
@@ -1669,14 +1670,15 @@ def api_dashboard_stats():
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
-                    # FXO counts every deal except the Banco J.P. Morgan leg;
-                    # Commodities/NDF dedupe by the Lawton leg
+                    # Same rule as the totals above: count every leg that carries a
+                    # deal except the Banco J.P. Morgan leg — this keeps the client
+                    # leg and one intragroup leg while dropping the mirror view, so
+                    # a deal seen from two sides is counted only once.
                     cnt = sum(
                         1 for d in data
                         if isinstance(d, dict)
                         and (d.get('Deal') or '').strip()
-                        and ((is_fxo_file and not _is_bank(d))
-                             or (not is_fxo_file and 'lawton' in (d.get('Client') or '').lower()))
+                        and not _is_bank(d)
                     )
                     target[fdate.month - 1] += cnt
                 except Exception:
@@ -1697,18 +1699,18 @@ def api_dashboard_stats():
     ]
 
     return jsonify({
-        'ndf_total':     len(ndf_lawton),
-        'opt_total':     len(opt_lawton),
+        'ndf_total':     len(ndf_deals),
+        'opt_total':     len(opt_deals),
         'pending_total': pending_total,
         'swap_total':    swap_total,
-        'total_deals':   len(lawton_deals),
+        'total_deals':   len(counted_deals),
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
         'top5_underlying': top5_underlying,
-        'dist_ndf':      len(ndf_lawton),
-        'dist_opt':      len(optcomm_lawton),
-        'dist_fxo':      len(fxo_lawton),
-        'dist_swap':     len(swap_lawton),
+        'dist_ndf':      len(ndf_deals),
+        'dist_opt':      len(optcomm_deals),
+        'dist_fxo':      len(fxo_deals),
+        'dist_swap':     len(swap_deals),
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
         'monthly_fxo':   monthly_fxo,
