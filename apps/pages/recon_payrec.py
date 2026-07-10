@@ -199,18 +199,29 @@ def _net_type_for(net_map, cpty_name):
     return (net_map or {}).get(_norm(cpty_name), 'Total Net')
 
 
-def _emit_records(product, cpty, values, net_type):
+def _le_from_legal_entity(v):
+    """Legal Entity column (settlement file) → LE. 'JPMorgan Chase Bank, N.A. -
+    São Paulo Branch' → MGT; 'Banco J.P. Morgan S.A.' (and anything else) → JPM."""
+    n = _norm(v)
+    if 'chasebank' in n or 'saopaulo' in n:
+        return 'MGT'
+    return 'JPM'
+
+
+def _emit_records(product, cpty, values, net_type, le='JPM'):
     """Reduce a group's signed values into settlement records per the net type.
       Total Net → 1 record (Pay netted against Receive)
       Pay/Rec   → up to 2 records: Σ receives (>0) and Σ pays (<0), not netted
       No Net    → one record per individual value
-    Sign decides Pay/Receive; near-zero results are dropped."""
+    Sign decides Pay/Receive; near-zero results are dropped. `le` (JPM/MGT) is
+    carried on every emitted record (JPM for cashflows/FXO; per Legal Entity for
+    the settlement file)."""
     cu = str(cpty or '').upper()
     out = []
 
     def _rec(v):
         return {'product': product, 'cpty': cu, 'value': v,
-                'pay_receive': 'Receive' if v > 0 else 'Pay'}
+                'pay_receive': 'Receive' if v > 0 else 'Pay', 'le': le}
 
     if net_type == 'No Net':
         for v in values:
@@ -322,6 +333,7 @@ def _jpm_settlement(rows, cols, net_map=None):
     c_amount = _resolve(cols, 'Amount')
     c_tax = _resolve(cols, 'Tax Income')
     c_net = _resolve(cols, 'Settlement Net')
+    c_le = _resolve(cols, 'Legal Entity')                      # JPM vs MGT (per row)
     groups = {}
     for r in rows:
         client = str(r.get(c_client, '') if c_client else '').strip()
@@ -333,10 +345,11 @@ def _jpm_settlement(rows, cols, net_map=None):
             if sn and sn not in (_norm('TOTAL_NET'), _norm('PAYREC_NET')):
                 continue
         result = _num(r.get(c_tax, '') if c_tax else 0) + _num(r.get(c_amount, '') if c_amount else 0)
-        groups.setdefault(client, []).append(result)
+        le = _le_from_legal_entity(r.get(c_le, '')) if c_le else 'JPM'
+        groups.setdefault((client, le), []).append(result)     # split per Legal Entity
     out = []
-    for client, values in groups.items():
-        out += _emit_records('NDF', client, values, _net_type_for(net_map, client))
+    for (client, le), values in groups.items():
+        out += _emit_records('NDF', client, values, _net_type_for(net_map, client), le=le)
     return out
 
 
@@ -440,7 +453,7 @@ def _cli_finalize(val, desc, titular, conta, sistema):
     if not (val > 1 or val < -1):
         return None
     return {'value': val, 'client': titular, 'sistema': sistema, 'snumconta': str(conta or '').strip(),
-            'product': 'NDF', 'pay_receive': pr}
+            'product': 'NDF', 'pay_receive': pr, 'le': 'JPM'}
 
 
 def _cli_rlctahis(rows, cols):
@@ -518,7 +531,8 @@ def _cli_spb(rows, cols, mgt=False):
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
         out.append({'value': val, 'client': titular, 'sistema': sistema,
                     'snumconta': conta, 'product': 'NDF',
-                    'pay_receive': 'Pay' if val < 0 else 'Receive'})
+                    'pay_receive': 'Pay' if val < 0 else 'Receive',
+                    'le': 'MGT' if mgt else 'JPM'})
     return out
 
 
@@ -541,7 +555,9 @@ def _reconcile(jpm, client):
             if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
                 status = 'Settled'
             details.append({
-                'le': 'MGT' if mate['sistema'] == 'SPB - MGT' else 'JPM',
+                # LE is authoritative on the JPM/Cockpit side: settlement carries
+                # it from the Legal Entity column; cashflows/FXO are always JPM.
+                'le': j.get('le', 'JPM'),
                 'product': j['product'] or mate.get('product') or 'NDF',
                 'jpm_cpty': j['cpty'], 'client': mate['client'], 'pay_receive': j['pay_receive'],
                 'jpm_value': j['value'], 'client_value': mate['value'],
@@ -549,7 +565,7 @@ def _reconcile(jpm, client):
                 'status': status, 'difference': diff})
         else:
             details.append({
-                'le': 'JPM',
+                'le': j.get('le', 'JPM'),
                 'product': j['product'], 'jpm_cpty': j['cpty'], 'client': '',
                 'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': '',
                 'sistema': '', 'snumconta': '', 'status': 'Pending', 'difference': -j['value']})
@@ -557,7 +573,9 @@ def _reconcile(jpm, client):
         if id(c) in matched:
             continue
         details.append({
-            'le': 'MGT' if c['sistema'] == 'SPB - MGT' else 'JPM',
+            # No JPM side to match → fall back to the client record's own LE
+            # (MGT only for the HistoricoMensagensMGT actuals).
+            'le': c.get('le', 'JPM'),
             'product': c.get('product') or 'NDF', 'jpm_cpty': '', 'client': c['client'],
             'pay_receive': c['pay_receive'], 'jpm_value': '', 'client_value': c['value'],
             'sistema': c['sistema'], 'snumconta': c['snumconta'],
