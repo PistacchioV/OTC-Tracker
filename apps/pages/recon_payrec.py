@@ -521,19 +521,30 @@ def _cli_spb(rows, cols, mgt=False):
     for r in rows:
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
-        if not mgt and 'derivativos' not in en and 'lma-comm-br' not in en:   # Filter[48] (JPM only)
-            continue
+        is_deriv = ('derivativos' in en or 'lma-comm-br' in en)
         raw = _num(r.get(c_val, '') if c_val else 0)
         val = raw if mgt else -abs(raw)          # MGT: signed (Pay/Receive); JPM: always Pay
         if abs(val) < 1e-9:
             continue
+        # Descrição filter (Filter[48]): applies to the JPM file AND to MGT
+        # PAYMENTS. MGT RECEIPTS have generic descriptions ("Resposta a
+        # Terceiros…") and no reliable text filter, so they skip the text filter
+        # but are kept ONLY when they match a JPM value (drop_if_unmatched,
+        # consumed in _reconcile) — avoids polluting the tables with every SPB
+        # receipt message.
+        mgt_receipt = mgt and val > 0
+        if not mgt_receipt and not is_deriv:
+            continue
         titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
         titular = titular.replace('LMA-COMM-BR ', '').strip()    # strip the LMA prefix
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        out.append({'value': val, 'client': titular, 'sistema': sistema,
-                    'snumconta': conta, 'product': 'NDF',
-                    'pay_receive': 'Pay' if val < 0 else 'Receive',
-                    'le': 'MGT' if mgt else 'JPM'})
+        rec = {'value': val, 'client': titular, 'sistema': sistema,
+               'snumconta': conta, 'product': 'NDF',
+               'pay_receive': 'Pay' if val < 0 else 'Receive',
+               'le': 'MGT' if mgt else 'JPM'}
+        if mgt_receipt:
+            rec['drop_if_unmatched'] = True
+        out.append(rec)
     return out
 
 
@@ -573,6 +584,10 @@ def _reconcile(jpm, client):
     for c in client:
         if id(c) in matched:
             continue
+        # MGT receipts have no reliable text filter, so an unmatched one is just
+        # SPB noise → drop it instead of listing it as a pending receivement.
+        if c.get('drop_if_unmatched'):
+            continue
         details.append({
             # No JPM side to match → fall back to the client record's own LE
             # (MGT only for the HistoricoMensagensMGT actuals).
@@ -581,7 +596,10 @@ def _reconcile(jpm, client):
             'pay_receive': c['pay_receive'], 'jpm_value': '', 'client_value': c['value'],
             'sistema': c['sistema'], 'snumconta': c['snumconta'],
             'status': 'Pending', 'difference': c['value']})
-    return details, _summary(jpm, client)
+    # Unmatched MGT receipts (drop_if_unmatched) are SPB noise → exclude them
+    # from the summary too, so the counts stay consistent with the tables.
+    client_kept = [c for c in client if id(c) in matched or not c.get('drop_if_unmatched')]
+    return details, _summary(jpm, client_kept)
 
 
 def _summary(jpm, client):
