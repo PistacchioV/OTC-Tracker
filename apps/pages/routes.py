@@ -2667,7 +2667,11 @@ _FORECAST_SOURCES = [
      'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
-     'date': ['vencimento'], 'entity': ['titular', 'contraparte', 'conta'],
+     # Entity = the COUNTERPARTY account ("Contraparte(Conta)"), NOT "Titular"
+     # (which is the holder / the bank, 73760). Listing 'titular' first previously
+     # resolved every option to the holder → unmapped → the option premiums and
+     # exercises showed under by-product but vanished from the by-entity breakdown.
+     'date': ['vencimento'], 'entity': ['contraparte(conta)', 'contraparte', 'conta'],
      'product': ('optclass', ['classe do ativo', 'ativo subjacente', 'classe']),
      # Options (FXO/Comm/EDG) are counted on TWO dates: the maturity (col M,
      # "Data do Vencimento", via 'date') AND the premium settlement (col BN,
