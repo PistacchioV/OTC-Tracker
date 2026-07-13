@@ -84,6 +84,7 @@
                     {% if pending_payment %}
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:22px;">
                         <thead><tr>
+                            <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">LE</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Product</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">JPM cpty</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Client</th>
@@ -95,6 +96,7 @@
                         </tr></thead>
                         <tbody>{% for r in pending_payment %}
                             <tr>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.le }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.product }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.jpm_cpty }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.client }}</td>
@@ -112,6 +114,7 @@
                     {% if pending_receivement %}
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:22px;">
                         <thead><tr>
+                            <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">LE</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Product</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">JPM cpty</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Client</th>
@@ -123,6 +126,7 @@
                         </tr></thead>
                         <tbody>{% for r in pending_receivement %}
                             <tr>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.le }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.product }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.jpm_cpty }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.client }}</td>
@@ -140,6 +144,7 @@
                     {% if settled %}
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;font-size:11.5px;margin-bottom:8px;">
                         <thead><tr>
+                            <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">LE</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Product</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">JPM cpty</th>
                             <th style="background:#1c2b6b;color:#fff;text-align:left;padding:7px 9px;font-weight:600;">Client</th>
@@ -152,6 +157,7 @@
                         </tr></thead>
                         <tbody>{% for r in settled %}
                             <tr>
+                                <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.le }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.product }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.jpm_cpty }}</td>
                                 <td style="padding:6px 9px;border-bottom:1px solid #eee;">{{ r.client }}</td>

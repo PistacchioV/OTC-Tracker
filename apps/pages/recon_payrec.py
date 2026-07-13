@@ -653,6 +653,75 @@ def _gather_sources(files, mode):
     return srcs
 
 
+def _prev_finalized(recon_date):
+    """Most recent finalized-day history strictly BEFORE recon_date.
+    Returns (data, 'YYYY-MM-DD') or None."""
+    try:
+        cur = datetime.strptime((recon_date or '')[:10], '%Y-%m-%d')
+    except Exception:
+        return None
+    best, best_dt = None, None
+    pattern = os.path.join(_HISTORY_BASE, '*', '*', '*', 'payrec_status_*.json')
+    for p in glob.glob(pattern):
+        m = re.search(r'payrec_status_(\d{8})\.json$', os.path.basename(p))
+        if not m:
+            continue
+        try:
+            dt = datetime.strptime(m.group(1), '%Y%m%d')
+        except Exception:
+            continue
+        if dt < cur and (best_dt is None or dt > best_dt):
+            best_dt, best = dt, p
+    if not best:
+        return None
+    try:
+        with open(best, encoding='utf-8') as fh:
+            return json.load(fh), best_dt.strftime('%Y-%m-%d')
+    except Exception:
+        return None
+
+
+def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
+    """Bring forward the previous finalized day's items that the operator marked
+    as 'Pending Payment' / 'Pending Receivement' (and were NOT justified), so they
+    keep showing up until they settle (matched → in today's Settled) or are
+    justified. Matching to today's Settled is value-based (same rule as the
+    engine's own join), so a carried item that settled today is dropped instead of
+    being listed again."""
+    prev = _prev_finalized(recon_date)
+    if not prev:
+        return pend_pay, pend_rec
+    data, prev_date = prev
+    carried = (data.get('pending_payment') or []) + (data.get('pending_receivement') or [])
+    if not carried:
+        return pend_pay, pend_rec
+    # Value keys already settled today (le + whole-unit value on either side).
+    settled_keys = set()
+    for s in settled:
+        for k in ('jpm_value', 'client_value'):
+            v = s.get(k, '')
+            if v not in ('', None):
+                settled_keys.add((s.get('le', 'JPM'), _int_key(v)))
+    for r in carried:
+        st = str(r.get('status', '')).strip().lower()
+        if st == 'pending payment':
+            target = pend_pay
+        elif st == 'pending receivement':
+            target = pend_rec
+        else:
+            continue                                  # plain Pending / Justified / Settled → don't carry
+        v = r.get('jpm_value', '')
+        if v in ('', None):
+            v = r.get('client_value', '')
+        key = (r.get('le', 'JPM'), _int_key(v)) if v not in ('', None) else None
+        if key and key in settled_keys:
+            continue                                  # settled today → represented in Settled
+        row = dict(r)
+        row['carried_from'] = prev_date
+        target.append(row)
+    return pend_pay, pend_rec
+
+
 def run_payrec(recon_date, files=None, mode='auto'):
     srcs = _gather_sources(files, mode)
     if not srcs:
@@ -683,6 +752,9 @@ def run_payrec(recon_date, files=None, mode='auto'):
 
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
+    # Carry forward the previous day's unresolved Pending Payment/Receivement rows
+    # (dropping any that settled today) so they persist until settled or justified.
+    pend_pay, pend_rec = _apply_carry_forward(recon_date, pend_pay, pend_rec, settled)
     payload = {
         'success': True, 'recon_date': recon_date, 'recon_date_fmt': _fmt_date(recon_date),
         'summary': summary, 'pending_payment': pend_pay,
@@ -759,11 +831,18 @@ def finalize_history(recon_date):
         return None
 
 
-def justify_row(recon_date, table, index, comment):
-    """Justify one pending row: set its status to 'Justified' and store the
-    operator's comment, then re-persist the working cache so End process (and the
-    e-mailed situation) reflect it. `table` is 'pay' or 'rec'. Returns the updated
-    payload, or None when the date/row can't be resolved."""
+_CARRY_STATUSES = ('pending payment', 'pending receivement')
+
+
+def justify_row(recon_date, table, index, comment, status=None):
+    """Resolve one pending row from the Edit dialog, then re-persist the working
+    cache so End process (and the e-mailed situation) reflect it. `table` is
+    'pay' or 'rec'. Status logic:
+      • status 'Pending' (or empty) → the row is Justified (comment kept).
+      • status 'Pending Payment' / 'Pending Receivement' → the status is kept as
+        chosen, so the value carries forward to the next days' reconciliations
+        until it settles (OK) or is justified.
+    Returns the updated payload, or None when the date/row can't be resolved."""
     data = _load_flat(recon_date)
     if not data:
         return None
@@ -777,7 +856,11 @@ def justify_row(recon_date, table, index, comment):
         return None
     if not (0 <= index < len(rows)):
         return None
-    rows[index]['status'] = 'Justified'
+    new_status = (status or '').strip()
+    if new_status.lower() in _CARRY_STATUSES:
+        rows[index]['status'] = new_status          # keep it as a carry-forward item
+    else:
+        rows[index]['status'] = 'Justified'         # comment-only on a Pending row
     rows[index]['comment'] = str(comment or '').strip()
     _persist(recon_date, data)
     return data

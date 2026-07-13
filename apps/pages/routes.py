@@ -13758,13 +13758,18 @@ def reconciliation_payrec_justify():
     recon_date = (payload.get('recon_date') or '').strip()
     table      = (payload.get('table') or '').strip()
     comment    = (payload.get('comment') or '').strip()
+    status     = (payload.get('status') or '').strip()
     if table not in ('pay', 'rec'):
         return jsonify({'success': False, 'error': 'Invalid table'}), 400
-    if not comment:
+    # A comment is required only when the row is being justified (status left as
+    # "Pending"). Marking it as a carry-forward "Pending Payment/Receivement"
+    # keeps it pending for the next days, so the comment is optional there.
+    is_carry = status.lower() in ('pending payment', 'pending receivement')
+    if not is_carry and not comment:
         return jsonify({'success': False, 'error': 'A justification comment is required.'}), 400
     try:
         from apps.pages.recon_payrec import justify_row
-        data = justify_row(recon_date, table, payload.get('index'), comment)
+        data = justify_row(recon_date, table, payload.get('index'), comment, status)
         if not data:
             return jsonify({'success': False, 'error': 'Row not found for this date.'}), 404
         return jsonify({'success': True})

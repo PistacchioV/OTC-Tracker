@@ -141,7 +141,7 @@
           '</div>'
         : '';
       return '<tr data-pr-table="' + esc(tableKey || '') + '" data-pr-index="' + i + '">' + base +
-        '<td>' + statusBadge(r.status) + '</td>' +
+        '<td class="pr-status-cell">' + statusBadge(r.status) + '</td>' +
         '<td class="pr-comment-cell">' + esc(r.comment || '') + '</td>' +
         '<td class="pr-actions-cell">' + actions + '</td>' +
         '</tr>';
@@ -289,31 +289,54 @@
         if (!editBtn && !okBtn) return;
         var tr = e.target.closest('tr'); if (!tr) return;
         var cell = tr.querySelector('.pr-comment-cell'); if (!cell) return;
+        var table = tr.getAttribute('data-pr-table');
+        var index = parseInt(tr.getAttribute('data-pr-index'), 10);
+        // The carry-forward status offered depends on the table: Pending Payment
+        // for the payment table, Pending Receivement for the receivement table.
+        var carryStatus = table === 'pay' ? 'Pending Payment' : 'Pending Receivement';
+        var statusCell = tr.querySelector('.pr-status-cell');
         if (editBtn) {
           if (cell.querySelector('input')) return;   // already editing
           var cur = cell.textContent.trim();
           cell.innerHTML = '<input type="text" class="pr-comment-input" value="' +
             cur.replace(/"/g, '&quot;') + '" placeholder="' + esc(t('commentPh')) + '">';
+          // Make the Status column editable too: a dropdown offering the plain
+          // "Pending" (→ justify on confirm) and the carry-forward status.
+          if (statusCell && !statusCell.querySelector('select')) {
+            var arrE = table === 'pay' ? (_lastData.pending_payment || []) : (_lastData.pending_receivement || []);
+            var curStatus = (arrE[index] && arrE[index].status) || 'Pending';
+            var isCarryNow = String(curStatus).toLowerCase() === carryStatus.toLowerCase();
+            statusCell.innerHTML =
+              '<select class="form-select form-select-sm pr-status-input">' +
+                '<option value="Pending"' + (isCarryNow ? '' : ' selected') + '>Pending</option>' +
+                '<option value="' + esc(carryStatus) + '"' + (isCarryNow ? ' selected' : '') + '>' + esc(carryStatus) + '</option>' +
+              '</select>';
+          }
           var inp = cell.querySelector('input'); if (inp) inp.focus();
           return;
         }
-        // Confirm → require a comment, persist, flip the row to Justified.
+        // Confirm → read the chosen status + comment.
+        //  • Status "Pending" + comment  → Justified (comment required).
+        //  • Status "Pending Payment/Receivement" → keep it as a carry-forward
+        //    item (comment optional); it will reappear in the next days' recon
+        //    until it settles (OK) or is justified.
+        var statusSel = statusCell ? statusCell.querySelector('select') : null;
+        var chosenStatus = statusSel ? statusSel.value : 'Pending';
+        var isCarry = /^pending (payment|receivement)$/i.test(chosenStatus);
         var input = cell.querySelector('input');
         var comment = (input ? input.value : cell.textContent).trim();
-        if (!comment) {
+        if (!isCarry && !comment) {
           if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: t('pendTitle'), html: t('commentReq'), confirmButtonColor: '#0066cc' });
           else if (input) input.focus();
           return;
         }
-        var table = tr.getAttribute('data-pr-table');
-        var index = parseInt(tr.getAttribute('data-pr-index'), 10);
         fetch('/reconciliation-payrec/justify', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-          body: JSON.stringify({ recon_date: refDate(), table: table, index: index, comment: comment })
+          body: JSON.stringify({ recon_date: refDate(), table: table, index: index, comment: comment, status: chosenStatus })
         }).then(function (r) { return r.json(); }).then(function (res) {
           if (res && res.success) {
             var arr = table === 'pay' ? (_lastData.pending_payment || []) : (_lastData.pending_receivement || []);
-            if (arr[index]) { arr[index].status = 'Justified'; arr[index].comment = comment; }
+            if (arr[index]) { arr[index].status = isCarry ? chosenStatus : 'Justified'; arr[index].comment = comment; }
             render(_lastData);
           } else if (typeof Swal !== 'undefined') {
             Swal.fire({ icon: 'error', title: t('failTitle'), html: (res && res.error) || t('justifyFail'), confirmButtonColor: '#0066cc' });
