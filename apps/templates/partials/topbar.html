@@ -620,6 +620,41 @@
                 }
                 return c;
             }
+            // Manual auto-hide so toasts can stay PINNED while the page is not in
+            // focus. Bootstrap's built-in autohide timer keeps running in a
+            // background tab, so a toast could silently expire before the user
+            // comes back. Instead we arm an 8s timer ONLY while the page is
+            // focused, and clear it (pinning the toast) the moment focus/visibility
+            // is lost — so activity that arrives while the user is away on another
+            // window/tab/monitor is still waiting for them when they return. This
+            // is the reliable fallback for the (often blocked) native OS alert.
+            var TOAST_AUTOHIDE_MS = 8000;
+            function _pageFocused() {
+                return document.visibilityState === 'visible' && document.hasFocus();
+            }
+            function _armToastAutohide(el) {
+                if (el._ahTimer) { clearTimeout(el._ahTimer); el._ahTimer = null; }
+                if (!_pageFocused()) return;   // not focused → leave it pinned
+                el._ahTimer = setTimeout(function () {
+                    el._ahTimer = null;
+                    var inst = (window.bootstrap && bootstrap.Toast) ? bootstrap.Toast.getInstance(el) : null;
+                    if (inst) inst.hide();
+                }, TOAST_AUTOHIDE_MS);
+            }
+            function _pinOpenToasts() {
+                var c = document.getElementById('otc-toast-container');
+                if (!c) return;
+                c.querySelectorAll('.otc-notif-toast').forEach(function (el) {
+                    if (el._ahTimer) { clearTimeout(el._ahTimer); el._ahTimer = null; }
+                });
+            }
+            // Leaving the page pins whatever is already on screen, so a toast shown
+            // a few seconds before the user switched away also survives.
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) _pinOpenToasts();
+            });
+            window.addEventListener('blur', _pinOpenToasts);
+
             function showToast(n) {
                 if (typeof bootstrap === 'undefined' || !bootstrap.Toast) return;
                 var b = buildNotif(n);
@@ -646,9 +681,15 @@
                     });
                 }
                 if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
-                var t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 8000, autohide: true });
-                toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+                // Autohide is handled by _armToastAutohide (focused → 8s; not
+                // focused → pinned), so Bootstrap must not run its own timer.
+                var t = bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false });
+                toastEl.addEventListener('hidden.bs.toast', function () {
+                    if (toastEl._ahTimer) { clearTimeout(toastEl._ahTimer); toastEl._ahTimer = null; }
+                    toastEl.remove();
+                });
                 t.show();
+                _armToastAutohide(toastEl);
             }
 
             // ── Native OS notification ────────────────────────────────────────
