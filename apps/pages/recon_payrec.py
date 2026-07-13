@@ -772,6 +772,32 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
     return pend_pay, pend_rec
 
 
+def _net_atacama_client(client):
+    """Atacama is Total Net on BOTH sides. The JPM side already emits a single
+    netted Atacama value; collapse the client-side Atacama legs into one netted
+    record per LE too, so they reconcile against it (e.g. the client legs
+    -289,184.94 + 1,520,481.86 net to 1,231,296.92, matching the JPM value)."""
+    atk = [c for c in client if _is_atacama(c.get('client'))]
+    if not atk:
+        return client
+    out = [c for c in client if not _is_atacama(c.get('client'))]
+    by_le = {}
+    for c in atk:
+        by_le.setdefault(c.get('le', 'JPM'), []).append(c)
+    for le, recs in by_le.items():
+        tot = sum(_num(c.get('value', 0)) for c in recs)
+        if abs(tot) < 1e-9:
+            continue
+        rep = recs[0]
+        out.append({
+            'value': tot, 'client': rep.get('client', ''),
+            'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
+            'product': 'EQUITIES', 'le': le,
+            'pay_receive': 'Receive' if tot > 0 else 'Pay',
+        })
+    return out
+
+
 def run_payrec(recon_date, files=None, mode='auto'):
     srcs = _gather_sources(files, mode)
     if not srcs:
@@ -800,6 +826,7 @@ def run_payrec(recon_date, files=None, mode='auto'):
         elif bucket == 'spb_mgt':
             client += _cli_spb(rows, cols, mgt=True)
 
+    client = _net_atacama_client(client)      # Atacama client legs are Total Net too
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
     # Carry forward the previous day's unresolved Pending Payment/Receivement rows
