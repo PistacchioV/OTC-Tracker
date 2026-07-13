@@ -481,6 +481,7 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
     df['Status'] = 'New'
 
     desired = [
+        'Status',
         'Dono do Cadastro','LE','Party Central SPN','B3_Root_CNPJ','B3 CNPJ','Party Central CNPJ',
         'B3 Name','Party Central Name','Name Matching Score (%)',
         'B3 Address','Party Central Address','Address Matching Score (%)',
@@ -489,7 +490,7 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
         'B3 Fins Lucrativos','Party Central Fins Lucrativos','Fins Lucrativos Matching Score (%)',
         'B3 Start Date','Party Central Start Date','Start Date Matching Score (%)',
         'B3 CNAE','Party Central CNAE','CNAE Matching Score (%)','Natureza Fiscal',
-        'Matching Score Averaged','Status'
+        'Matching Score Averaged'
     ]
     df = df[[c for c in desired if c in df.columns]].drop_duplicates(subset=['B3 CNPJ','LE'])
     df = df.sort_values('Matching Score Averaged')
@@ -602,9 +603,44 @@ def _save_to_network(df, recon_date_str):
         filename = f'Comitente_Reconciliation_{year}{mm}{dd}.xlsx'
         filepath = os.path.join(out_dir, filename)
         df.to_excel(filepath, index=False)
+        _color_status_column(filepath, list(df.columns))
         return filepath, filename
     except Exception:
         return None, None
+
+
+# Cores por status — mesmas do badge da tabela (fundo, fonte)
+_STATUS_XLSX_STYLES = {
+    'New':   ('E9ECEF', '495057'),
+    'Check': ('FFF3CD', '856404'),
+    'OK':    ('D1E7DD', '0A3622'),
+    'Amend': ('F8D7DA', '842029'),
+}
+
+
+def _color_status_column(filepath, columns):
+    """Colore a coluna Status do XLSX conforme cada status, mantendo as mesmas
+    cores usadas na tabela da página. Silencioso em caso de falha."""
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.styles import PatternFill, Font
+
+        if 'Status' not in columns:
+            return
+        status_col = columns.index('Status') + 1  # openpyxl é 1-based
+
+        wb = load_workbook(filepath)
+        ws = wb.active
+        for row in range(2, ws.max_row + 1):  # pula o cabeçalho (linha 1)
+            cell  = ws.cell(row=row, column=status_col)
+            style = _STATUS_XLSX_STYLES.get((str(cell.value) if cell.value is not None else '').strip())
+            if style:
+                bg, fg = style
+                cell.fill = PatternFill(start_color=bg, end_color=bg, fill_type='solid')
+                cell.font = Font(color=fg, bold=True)
+        wb.save(filepath)
+    except Exception:
+        pass
 
 
 def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
