@@ -1747,13 +1747,15 @@ _LIVE_PRODUCT_ORDER = {p: i for i, p in enumerate(_LIVE_PLACEHOLDER_PRODUCTS)}
 
 
 def _live_map_entity(raw):
-    """Like _fcst_map_entity but keeps BANCO (holder account) in the breakdown."""
+    """Like _fcst_map_entity but keeps BANCO (holder account) in the breakdown.
+    Accepts the account dotted / plain / embedded (digit-key substring match)."""
     s = (raw or '').strip()
     if not s:
         return None
     digits = ''.join(ch for ch in s if ch.isdigit())
-    if digits in _LIVE_ENTITY_MAP:
-        return _LIVE_ENTITY_MAP[digits]
+    for code, name in _LIVE_ENTITY_MAP.items():
+        if code in digits:
+            return name
     up = s.upper()
     for nm in _LIVE_ENTITY_ORDER:
         if nm in up:
@@ -2733,13 +2735,18 @@ def _fcst_parse_date(s):
 
 
 def _fcst_map_entity(raw):
-    """Map an entity code/name to LAWTON/MGT/ATACAMA, or None if unmapped."""
+    """Map an entity code/name to LAWTON/MGT/ATACAMA, or None if unmapped.
+    The account is accepted in ANY format — dotted (00041.00-7), plain digits
+    (00041007), or embedded in a longer field — by matching the account's digit
+    key as a substring of the row value's digits (each 8-digit account is unique
+    enough that this can't collide with a client code)."""
     s = (raw or '').strip()
     if not s:
         return None
     digits = ''.join(ch for ch in s if ch.isdigit())
-    if digits in _FCST_ENTITY_MAP:
-        return _FCST_ENTITY_MAP[digits]
+    for code, name in _FCST_ENTITY_MAP.items():
+        if code in digits:
+            return name
     up = s.upper()
     for nm in _FCST_ENTITY_ORDER:
         if nm in up:
