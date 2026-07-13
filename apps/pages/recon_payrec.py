@@ -200,8 +200,16 @@ def _load_net_type_map():
     return {nm: spn_to_net.get(spn, 'Total Net') for nm, spn in name_to_spn.items()}
 
 
+def _is_atacama(name):
+    """Atacama counterparty (any name variant)."""
+    return 'atacama' in _norm(name)
+
+
 def _net_type_for(net_map, cpty_name):
-    """Net type for a counterparty name (defaults to Total Net when unmapped)."""
+    """Net type for a counterparty name (defaults to Total Net when unmapped).
+    Atacama is ALWAYS Total Net (business rule), regardless of CounterpartyDetails."""
+    if _is_atacama(cpty_name):
+        return 'Total Net'
     return (net_map or {}).get(_norm(cpty_name), 'Total Net')
 
 
@@ -223,6 +231,8 @@ def _emit_records(product, cpty, values, net_type, le='JPM'):
     carried on every emitted record (JPM for cashflows/FXO; per Legal Entity for
     the settlement file)."""
     cu = str(cpty or '').upper()
+    if _is_atacama(cu):
+        product = 'EQUITIES'          # Atacama is always EQUITIES (business rule)
     out = []
 
     def _rec(v):
@@ -388,7 +398,9 @@ def _jpm_cashflows(rows, cols, net_map=None):
     for rec in recs:
         counts[rec['trade']] = counts.get(rec['trade'], 0) + 1
     for rec in recs:
-        if rec['asset'] == 'INTEREST_RATE':
+        if _is_atacama(rec['cpty']):
+            rec['prod'] = 'EQUITIES'      # Atacama always EQUITIES → one group, netted together
+        elif rec['asset'] == 'INTEREST_RATE':
             rec['prod'] = 'SWAP'
         elif rec['asset'] == 'EQUITIES':
             rec['prod'] = 'EQUITIES'
@@ -621,6 +633,12 @@ def _reconcile(jpm, client):
             'pay_receive': c['pay_receive'], 'jpm_value': '', 'client_value': c['value'],
             'sistema': c['sistema'], 'snumconta': c['snumconta'],
             'status': 'Pending', 'difference': c['value']})
+    # Atacama is always shown as EQUITIES — enforce on the displayed product for
+    # any row facing Atacama (covers unmatched client rows that never pass through
+    # _emit_records).
+    for d in details:
+        if _is_atacama(d.get('jpm_cpty')) or _is_atacama(d.get('client')):
+            d['product'] = 'EQUITIES'
     # Unmatched MGT receipts (drop_if_unmatched) are SPB noise → exclude them
     # from the summary too, so the counts stay consistent with the tables.
     client_kept = [c for c in client if id(c) in matched or not c.get('drop_if_unmatched')]
