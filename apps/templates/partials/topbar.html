@@ -648,12 +648,24 @@
                     if (el._ahTimer) { clearTimeout(el._ahTimer); el._ahTimer = null; }
                 });
             }
-            // Leaving the page pins whatever is already on screen, so a toast shown
-            // a few seconds before the user switched away also survives.
+            // Coming back to the page turns the pinned toasts temporary again:
+            // re-arm the 8s auto-hide so, after the user has had a chance to see
+            // them, they clear on their own.
+            function _rearmOpenToasts() {
+                var c = document.getElementById('otc-toast-container');
+                if (!c) return;
+                c.querySelectorAll('.otc-notif-toast').forEach(function (el) {
+                    _armToastAutohide(el);
+                });
+            }
+            // Leaving the page pins whatever is on screen (so a toast shown a few
+            // seconds before switching away survives); returning makes them
+            // temporary again.
             document.addEventListener('visibilitychange', function () {
-                if (document.hidden) _pinOpenToasts();
+                if (document.hidden) _pinOpenToasts(); else _rearmOpenToasts();
             });
             window.addEventListener('blur', _pinOpenToasts);
+            window.addEventListener('focus', _rearmOpenToasts);
 
             function showToast(n) {
                 if (typeof bootstrap === 'undefined' || !bootstrap.Toast) return;
