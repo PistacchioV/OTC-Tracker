@@ -4044,6 +4044,70 @@ def _swapchar_fmt_value(v):
     return '{:,.2f}'.format(n)
 
 
+def _lp_fmt_dec8(v):
+    """Numeric cell → #,##0.00000000 (1,234.56789000); non-numeric passes through."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    try:
+        n = float(s.replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return s
+    return '{:,.8f}'.format(n)
+
+
+def _lp_fmt_cnpj(v):
+    """All-digit CPF (11) / CNPJ (14) → masked; recovers a dropped leading zero
+    (12-13 digits → CNPJ, 10 → CPF). Anything else passes through unchanged."""
+    s = str(v or '').strip()
+    if not s or not s.isdigit():
+        return '' if v is None else v
+    if 12 <= len(s) <= 14:
+        s = s.zfill(14)
+        return '{}.{}.{}/{}-{}'.format(s[:2], s[2:5], s[5:8], s[8:12], s[12:])
+    if 10 <= len(s) <= 11:
+        s = s.zfill(11)
+        return '{}.{}.{}-{}'.format(s[:3], s[3:6], s[6:9], s[9:])
+    return v
+
+
+def _lp_bool_ptbr(raw):
+    """Swap flag → PT-BR: 01/1.00 → 'Não', 00/0.00 → 'Sim', '' → ''.
+    (Yes, 01=Não / 00=Sim by the business spec.) Unknown values pass through."""
+    s = str(raw or '').strip()
+    if not s:
+        return ''
+    if s.endswith('.00'):
+        s = s[:-3]
+    elif s.endswith('.0'):
+        s = s[:-2]
+    if s.isdigit():
+        s = str(int(s))
+    if s == '1':
+        return 'Não'
+    if s == '0':
+        return 'Sim'
+    return raw
+
+
+_SWAP_AMORT_TYPE = {
+    '0': 'Valor Base Original', '1': 'Valor Base Remanescente',
+    '2': 'Sem Amortização', '3': 'No Vencimento',
+}
+
+
+def _lp_amort_label(raw):
+    """Swap Cashflow "Tipo Amortização" code → label (00/01/02/03)."""
+    s = str(raw or '').strip()
+    if not s:
+        return ''
+    if s.endswith('.0'):
+        s = s[:-2]
+    if s.isdigit():
+        s = str(int(s))
+    return _SWAP_AMORT_TYPE.get(s, raw)
+
+
 # Swap Index (B3 Index Results tab) — Codigo Referencia Externa → Nome Curva.
 _SWAPINDEX_CACHE = {'mtime': None, 'map': {}}
 
@@ -4125,6 +4189,8 @@ _SWAPCHAR_DISPLAY_IDX = [
     76, 77, 78, 79, 126, 127, 132, 133, 134, 144, 145,                   # BY,BZ,CA,CB,DW,DX,EC,ED,EE,EO,EP
 ]
 _SWAPCHAR_DISPLAY_LABELS = [_SWAPCHAR_LABELS[i] for i in _SWAPCHAR_DISPLAY_IDX]
+# Flag columns shown as Sim/Não (01 = Não, 00 = Sim; empty stays empty).
+_SWAPCHAR_BOOL_COLS = {'Reset', 'Amortiza sem Troca de Diferencial', 'Agenda de Prêmio'}
 
 
 def _swapchar_collect(ref):
@@ -4192,6 +4258,8 @@ def _swapchar_collect(ref):
                     rv = str(int(rv))
                 disp.append('Bullet' if rv == '2' else ('Cashflow' if rv == '1'
                             else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
+            elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_BOOL_COLS:
+                disp.append(_lp_bool_ptbr(raw))
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
         rows_out.append(disp)
@@ -4281,7 +4349,10 @@ def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
             else:
                 key = named.get(_fcst_norm(labels[i]))
                 raw = row.get(key, '') if key else ''
-            disp.append(_swapchar_fmt_cell(raw, types[i]))
+            if labels[i] == 'Tipo Amortização':
+                disp.append(_lp_amort_label(raw))
+            else:
+                disp.append(_swapchar_fmt_cell(raw, types[i]))
         rows_out.append(disp)
     return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out}
 
@@ -5899,6 +5970,8 @@ _LPNDF_DATE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Data ')}
 _LPNDF_VALUE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Valor ')}
 # Rate columns → US format (dot decimal), no unnecessary leading zeros, rounded to 8 dp.
 _LPNDF_RATE_COLS = {'Taxa Forward', 'Taxa de Cambio'}
+# Columns shown as #,##0.00000000 (thousands + fixed 8 decimals).
+_LPNDF_DEC8_COLS = {'Taxa de Paridade', 'Cotacao Inicial'}
 # Max number of Asian-average fixing-date columns to surface (a contract can have
 # 100+ fixings; cap to keep the table sane).
 _LPNDF_MAX_ASIAN = 60
@@ -6008,6 +6081,8 @@ def _lpndf_collect(ref):
                         v = _swapchar_fmt_value(v)
                     elif c in _LPNDF_RATE_COLS:
                         v = _lpndf_fmt_rate(v)
+                    elif c in _LPNDF_DEC8_COLS:
+                        v = _lp_fmt_dec8(v)
                     row.append('' if v is None else v)
                 for k in date_keys:                    # one dd/mm/yyyy column per fixing date
                     raw = str(rec.get(k, '') or '').strip()
@@ -6098,6 +6173,10 @@ _LPOPT_COLUMNS = [
 # Date columns → dd/mm/yyyy; value columns → #,##0.00 (derived from the names above).
 _LPOPT_DATE_COLS = {c for c in _LPOPT_COLUMNS if c.startswith('Data ')}
 _LPOPT_VALUE_COLS = {c for c in _LPOPT_COLUMNS if c.startswith('Valor ')}
+# 8-decimal (#,##0.00000000), 2-decimal (#,##0.00) and CPF/CNPJ-masked columns.
+_LPOPT_DEC8_COLS = {'Strike (valor)', 'Prêmio Unitário', 'Cotação Inicial do Ativo (em reais)'}
+_LPOPT_DEC2_COLS = {'Quantidade', 'Quantidade Antecipada'}
+_LPOPT_CNPJ_COLS = {'CPF/CNPJ Cliente Parte', 'CPF/CNPJ Cliente Contraparte'}
 # Max number of dynamic Asian-average fixing-date columns to surface (cap).
 _LPOPT_MAX_ASIAN = 60
 
@@ -6169,6 +6248,12 @@ def _lpopt_collect(ref):
                         v = d.strftime('%d/%m/%Y') if d else (v or '')
                     elif c in _LPOPT_VALUE_COLS:
                         v = _swapchar_fmt_value(v)
+                    elif c in _LPOPT_DEC8_COLS:
+                        v = _lp_fmt_dec8(v)
+                    elif c in _LPOPT_DEC2_COLS:
+                        v = _swapchar_fmt_value(v)
+                    elif c in _LPOPT_CNPJ_COLS:
+                        v = _lp_fmt_cnpj(v)
                     row.append('' if v is None else v)
                 for k in date_keys:
                     raw = str(rec.get(k, '') or '').strip()

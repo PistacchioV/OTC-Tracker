@@ -256,6 +256,7 @@
 {% block page_content %}
 <div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/live-position-swap-cashflow/data" data-ref-date="{{ ref_date }}">
     {% set title='Swap Cashflow' %}
+    {% set crumbs=['OTC Tracker', 'Live Position', 'Swap', 'Cashflow'] %}
     {% include 'partials/page-title.html' %}
 
     <!-- Section 1: widgets + smart filter + reference date -->

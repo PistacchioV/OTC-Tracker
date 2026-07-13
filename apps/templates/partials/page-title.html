@@ -6,11 +6,21 @@
 
     <div class="text-end">
         <ol class="breadcrumb m-0 py-0">
+            {% if crumbs %}
+            {% for c in crumbs %}
+            {% if loop.last %}
+            <li class="breadcrumb-item active">{{ c }}</li>
+            {% else %}
+            <li class="breadcrumb-item"><a href="javascript: void(0);">{{ c }}</a></li>
+            {% endif %}
+            {% endfor %}
+            {% else %}
             <li class="breadcrumb-item"><a href="javascript: void(0);">OTC Tracker</a></li>
             {% if subtitle %}
             <li class="breadcrumb-item"><a href="javascript: void(0);">{{ subtitle }}</a></li>
             {% endif %}
             <li class="breadcrumb-item active">{{ title }}</li>
+            {% endif %}
         </ol>
     </div>
 </div>
