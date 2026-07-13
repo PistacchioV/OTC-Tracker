@@ -481,7 +481,7 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
     df['Status'] = 'New'
 
     desired = [
-        'Status',
+        'Status','Matching Score Averaged',
         'Dono do Cadastro','LE','Party Central SPN','B3_Root_CNPJ','B3 CNPJ','Party Central CNPJ',
         'B3 Name','Party Central Name','Name Matching Score (%)',
         'B3 Address','Party Central Address','Address Matching Score (%)',
@@ -489,8 +489,7 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
         'B3 E-mail','Party Central E-mail','E-mail Matching Score (%)',
         'B3 Fins Lucrativos','Party Central Fins Lucrativos','Fins Lucrativos Matching Score (%)',
         'B3 Start Date','Party Central Start Date','Start Date Matching Score (%)',
-        'B3 CNAE','Party Central CNAE','CNAE Matching Score (%)','Natureza Fiscal',
-        'Matching Score Averaged'
+        'B3 CNAE','Party Central CNAE','CNAE Matching Score (%)','Natureza Fiscal'
     ]
     df = df[[c for c in desired if c in df.columns]].drop_duplicates(subset=['B3 CNPJ','LE'])
     df = df.sort_values('Matching Score Averaged')
@@ -603,7 +602,7 @@ def _save_to_network(df, recon_date_str):
         filename = f'Comitente_Reconciliation_{year}{mm}{dd}.xlsx'
         filepath = os.path.join(out_dir, filename)
         df.to_excel(filepath, index=False)
-        _color_status_column(filepath, list(df.columns))
+        _style_xlsx(filepath, list(df.columns))
         return filepath, filename
     except Exception:
         return None, None
@@ -617,27 +616,57 @@ _STATUS_XLSX_STYLES = {
     'Amend': ('F8D7DA', '842029'),
 }
 
+# Colunas de score que recebem o gradiente vermelho→amarelo→verde da página
+_SCORE_XLSX_COLS = (
+    'Name Matching Score (%)', 'Address Matching Score (%)', 'Phone Matching Score (%)',
+    'E-mail Matching Score (%)', 'Fins Lucrativos Matching Score (%)',
+    'Start Date Matching Score (%)', 'CNAE Matching Score (%)', 'Matching Score Averaged',
+)
 
-def _color_status_column(filepath, columns):
-    """Colore a coluna Status do XLSX conforme cada status, mantendo as mesmas
-    cores usadas na tabela da página. Silencioso em caso de falha."""
+
+def _score_fill_hex(value):
+    """Réplica em Python do scoreColor() da página: gradiente vermelho (0) →
+    amarelo (50) → verde (100). Retorna o hex RRGGBB ou None para valores
+    não numéricos (N/A / vazio)."""
+    try:
+        s = float(value)
+    except (TypeError, ValueError):
+        return None
+    if s <= 50:
+        r, g = 255, round(100 + s * (255 - 100) / 50)
+    else:
+        r, g = round(255 - (s - 50) * (255 - 100) / 50), 255
+    return '%02X%02X%02X' % (max(0, min(255, r)), max(0, min(255, g)), 100)
+
+
+def _style_xlsx(filepath, columns):
+    """Aplica ao XLSX as mesmas cores da tabela da página: badge de Status por
+    status e gradiente nas células de Score. Silencioso em caso de falha."""
     try:
         from openpyxl import load_workbook
         from openpyxl.styles import PatternFill, Font
 
-        if 'Status' not in columns:
-            return
-        status_col = columns.index('Status') + 1  # openpyxl é 1-based
-
         wb = load_workbook(filepath)
         ws = wb.active
+
+        status_col = columns.index('Status') + 1 if 'Status' in columns else None
+        score_cols = [(columns.index(c) + 1) for c in _SCORE_XLSX_COLS if c in columns]
+
         for row in range(2, ws.max_row + 1):  # pula o cabeçalho (linha 1)
-            cell  = ws.cell(row=row, column=status_col)
-            style = _STATUS_XLSX_STYLES.get((str(cell.value) if cell.value is not None else '').strip())
-            if style:
-                bg, fg = style
-                cell.fill = PatternFill(start_color=bg, end_color=bg, fill_type='solid')
-                cell.font = Font(color=fg, bold=True)
+            if status_col:
+                cell  = ws.cell(row=row, column=status_col)
+                style = _STATUS_XLSX_STYLES.get(
+                    (str(cell.value) if cell.value is not None else '').strip())
+                if style:
+                    bg, fg = style
+                    cell.fill = PatternFill(start_color=bg, end_color=bg, fill_type='solid')
+                    cell.font = Font(color=fg, bold=True)
+            for col in score_cols:
+                cell = ws.cell(row=row, column=col)
+                bg = _score_fill_hex(cell.value)
+                if bg:
+                    cell.fill = PatternFill(start_color=bg, end_color=bg, fill_type='solid')
+                    cell.font = Font(color='222222')
         wb.save(filepath)
     except Exception:
         pass

@@ -273,6 +273,7 @@
                     <thead>
                         <tr>
                             <th data-lang="rc-status">Status</th>
+                            <th data-lang="rc-avgscore">Avg Score</th>
                             <th data-lang="rc-dono">Dono Cad.</th>
                             <th>LE</th>
                             <th data-lang="rc-spn">SPN</th>
@@ -301,7 +302,6 @@
                             <th data-lang="rc-pccnae">PC CNAE</th>
                             <th data-lang="rc-cnaescore">CNAE Score</th>
                             <th data-lang="rc-natureza">Natureza Fiscal</th>
-                            <th data-lang="rc-avgscore">Avg Score</th>
                         </tr>
                     </thead>
                 </table>
@@ -440,6 +440,12 @@ const COLS = [
         data: _d('Status'), title:'Status', className:'text-center',
         render: d => sBadge(d)
     },
+    {
+        data: _d('Matching Score Averaged'), title:'Avg Score',
+        className:'text-center',
+        render: d => (!d ? '' : parseFloat(d).toFixed(2)),
+        createdCell: function(td, data) { scoreCell(td, data); td.style.fontWeight='700'; }
+    },
     { data:_d('Dono do Cadastro'),  title:'Dono Cad.',  width:'72px',  className:'text-center' },
     { data:_d('LE'),                title:'LE',          width:'60px',  className:'text-center' },
     { data:_d('Party Central SPN'), title:'SPN',         width:'80px'  },
@@ -467,13 +473,7 @@ const COLS = [
     { data:_d('B3 CNAE'),                   title:'B3 CNAE',     width:'80px' },
     { data:_d('Party Central CNAE'),         title:'PC CNAE',     width:'80px' },
     SC('CNAE Matching Score (%)',           'CNAE Score'),
-    { data:_d('Natureza Fiscal'),           title:'Natureza Fiscal', width:'110px' },
-    {
-        data: _d('Matching Score Averaged'), title:'Avg Score',
-        className:'text-center',
-        render: d => (!d ? '' : parseFloat(d).toFixed(2)),
-        createdCell: function(td, data) { scoreCell(td, data); td.style.fontWeight='700'; }
-    }
+    { data:_d('Natureza Fiscal'),           title:'Natureza Fiscal', width:'110px' }
 ];
 
 let table = null;
