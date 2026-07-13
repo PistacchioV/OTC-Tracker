@@ -2663,7 +2663,10 @@ _FORECAST_SOURCES = [
      # many columns and could carry other "…vencimento…" fields; fall back to a
      # loose 'vencimento' only if the exact name isn't present.
      'date': ['data de vencimento', 'vencimento'],
-     'entity': ['titular', 'contraparte', 'parte', 'conta'],
+     # Entity = the COUNTERPARTY account, NOT "Titular" (the holder / the bank),
+     # same as the options file — else NDF is attributed to the holder and
+     # vanishes from the by-entity breakdown.
+     'entity': ['contraparte(conta)', 'contraparte', 'parte', 'conta'],
      'product': ('ndfclass', ['classe do ativo', 'ativo subjacente', 'mercadoria', 'classe'])},
     {'key': 'opc', 'label': 'Options (OPC)', 'category': 'Option',
      'file': lambda r: '73760_{}_DPOSICAO.json'.format(r),
