@@ -705,9 +705,9 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
     for r in carried:
         st = str(r.get('status', '')).strip().lower()
         if st == 'pending payment':
-            target = pend_pay
+            target, label = pend_pay, 'Pagamento pendente'
         elif st == 'pending receivement':
-            target = pend_rec
+            target, label = pend_rec, 'Recebimento pendente'
         else:
             continue                                  # plain Pending / Justified / Settled → don't carry
         v = r.get('jpm_value', '')
@@ -717,7 +717,14 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
         if key and key in settled_keys:
             continue                                  # settled today → represented in Settled
         row = dict(r)
+        # Original date = the day it first became a carry-forward pending item;
+        # preserved across subsequent carries, falling back on the first carry to
+        # the finalized day it came from (the day it was marked).
+        origin = row.get('carry_origin') or prev_date
+        row['carry_origin'] = origin
         row['carried_from'] = prev_date
+        # Auto comment on the following days, e.g. "Recebimento pendente de 10/07/2026".
+        row['comment'] = '{} de {}'.format(label, _fmt_date(origin))
         target.append(row)
     return pend_pay, pend_rec
 
