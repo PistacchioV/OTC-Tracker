@@ -320,7 +320,7 @@
           // Swap the Edit button for a Cancel button → the row now shows
           // Cancel + Confirm while it's being edited.
           editBtn.classList.remove('pr-act-edit', 'btn-info');
-          editBtn.classList.add('pr-act-cancel', 'btn-secondary');
+          editBtn.classList.add('pr-act-cancel', 'btn-danger');
           editBtn.setAttribute('title', 'Cancel');
           editBtn.innerHTML = '<i class="ti ti-x"></i>';
           var inp = cell.querySelector('input'); if (inp) inp.focus();
