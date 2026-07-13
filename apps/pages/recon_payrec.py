@@ -47,6 +47,10 @@ _SMTP_PORT = 25
 # ── Constants ─────────────────────────────────────────────────────────────────
 _TOL_CHECK_VALUE = 1.0        # Summary per-row |diff| < 1 → OK
 _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
+# COMM OPT (option premiums) settle NET of the ~0.005% IR withheld on the premium,
+# so the JPM (gross) and client (net) sides can differ by up to 0.005%. Match and
+# settle COMM OPT within that relative tolerance instead of the exact whole-unit key.
+_TOL_COMM_OPT_PCT = 0.00005   # 0.005%
 # 0.005% COMM TER fee (IR). Applied to the NETTED value only when the net is a
 # Pay (negative) — Alteryx `if Name='Pay' AND New Field='COMM TER'`. A Receive
 # net (e.g. Lawton +230,927.66) is untouched; a Pay net (AMG -219,047.36) becomes
@@ -561,10 +565,28 @@ def _reconcile(jpm, client):
         for c in pool:
             if id(c) not in matched:
                 mate = c; matched.add(id(c)); break
+        # COMM OPT premiums are settled net of ~0.005% IR, so the exact whole-unit
+        # key can miss. Fall back to the nearest unmatched client value within
+        # 0.005% of the JPM (gross) value.
+        if mate is None and j.get('product') == 'COMM OPT':
+            tol = abs(j['value']) * _TOL_COMM_OPT_PCT
+            best, best_d = None, None
+            for c in client:
+                if id(c) in matched:
+                    continue
+                d = abs(c['value'] - j['value'])
+                if d <= tol and (best_d is None or d < best_d):
+                    best, best_d = c, d
+            if best is not None:
+                mate = best
+                matched.add(id(best))
         if mate:
             diff = mate['value'] - j['value']
             status = 'Settled' if abs(diff) < 0.005 else 'Pending'   # agree to the cent
             if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
+                status = 'Settled'
+            # COMM OPT: premium net of the ~0.005% IR → settle within 0.005%.
+            if j.get('product') == 'COMM OPT' and abs(diff) <= abs(j['value']) * _TOL_COMM_OPT_PCT:
                 status = 'Settled'
             details.append({
                 # LE is authoritative on the JPM/Cockpit side: settlement carries
