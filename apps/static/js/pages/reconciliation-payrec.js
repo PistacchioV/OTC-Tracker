@@ -286,8 +286,13 @@
       body.addEventListener('click', function (e) {
         var editBtn = e.target.closest('.pr-act-edit');
         var okBtn = e.target.closest('.pr-act-confirm');
-        if (!editBtn && !okBtn) return;
+        var cancelBtn = e.target.closest('.pr-act-cancel');
+        if (!editBtn && !okBtn && !cancelBtn) return;
         var tr = e.target.closest('tr'); if (!tr) return;
+        // Cancel → discard the edit and restore the row to its previous state
+        // (no request made). Re-rendering from _lastData reverts the cells and
+        // brings back the original Edit/Confirm buttons.
+        if (cancelBtn) { render(_lastData); return; }
         var cell = tr.querySelector('.pr-comment-cell'); if (!cell) return;
         var table = tr.getAttribute('data-pr-table');
         var index = parseInt(tr.getAttribute('data-pr-index'), 10);
@@ -312,6 +317,12 @@
                 '<option value="' + esc(carryStatus) + '"' + (isCarryNow ? ' selected' : '') + '>' + esc(carryStatus) + '</option>' +
               '</select>';
           }
+          // Swap the Edit button for a Cancel button → the row now shows
+          // Cancel + Confirm while it's being edited.
+          editBtn.classList.remove('pr-act-edit', 'btn-info');
+          editBtn.classList.add('pr-act-cancel', 'btn-secondary');
+          editBtn.setAttribute('title', 'Cancel');
+          editBtn.innerHTML = '<i class="ti ti-x"></i>';
           var inp = cell.querySelector('input'); if (inp) inp.focus();
           return;
         }
