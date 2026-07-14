@@ -4852,6 +4852,40 @@ def api_swap_events_data():
     return jsonify(payload)
 
 
+# ── Other Products › Swap › Athena (BrazilOnshoreSettlementsWarningFile) ──────
+#  Read-only view of the already-processed 'br-onshore-settlements' JSON (header
+#  row 2; LAWTON MULTIMERCADO EXCLUSIVO* already excluded on import). The 9
+#  requested columns; Owner curve / Counterparty curve / BRL Net Amount as #,##0.00.
+_ATHENA_COLUMNS = ['CETIP ID', 'Kapital ID', 'Owner Legal Entity', 'CounterParty',
+                   'SPN', 'Owner curve', 'Counterparty curve', 'BRL Net Amount', 'Direction']
+_ATHENA_VALUE_COLS = {'Owner curve', 'Counterparty curve', 'BRL Net Amount'}
+
+
+@blueprint.route('/other-products-swap-athena')
+def other_products_swap_athena():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-swap-athena.html',
+                           segment='other-products-swap-athena',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-athena/data')
+def api_swap_athena_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ds_display_collect(ref, 'br-onshore-settlements',
+                                  _ATHENA_COLUMNS, _ATHENA_VALUE_COLS)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 @blueprint.route('/otm-settlements')
 def otm_settlements():
     if not session.get('authenticated'):
