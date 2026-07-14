@@ -4911,6 +4911,10 @@ def api_swap_athena_data():
         ref = datetime.now()
     payload = _ds_display_collect(ref, 'br-onshore-settlements',
                                   _ATHENA_COLUMNS, _ATHENA_VALUE_COLS)
+    # Sort by CounterParty A→Z (accent-insensitive); blank names go last.
+    if 'CounterParty' in payload['columns']:
+        ci = payload['columns'].index('CounterParty')
+        payload['rows'].sort(key=lambda r: (str(r[ci]).strip() == '', _fcst_norm(str(r[ci]))))
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
