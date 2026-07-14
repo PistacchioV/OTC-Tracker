@@ -2702,7 +2702,12 @@ _FORECAST_SOURCES = [
      # (index 5) as a fallback when the stored header is positional.
      'date': ['data do evento', 'evento'],
      'date_index': 5,
+     # DAGENDAPREMIOS "Nome Simplificado" is the PARTE (holder), not the
+     # counterparty — resolve the entity by JOINING the contract code to the
+     # DPOSICAO-SWAP position map → Contraparte, so Lawton/MGT/Atacama premium
+     # settlements are counted in the by-entity breakdown.
      'entity': ['nome simplificado', 'parte'],
+     'entity_join': 'cpty',
      # DAGENDAPREMIOS has no "Código Identificador": classify by joining the
      # contract code (col A) to the DPOSICAO-SWAP position map → identifier → LOB.
      'product': ('lob_join', ['codigo do contrato', 'código do contrato', 'contrato'])},
@@ -2900,6 +2905,39 @@ def _swap_contract_ident_map(dref):
     return out
 
 
+def _swap_contract_cpty_map(dref):
+    """Map {Codigo do Contrato → Contraparte} from the DPOSICAO-SWAP position file
+    (the Swap Characteristics source). Used to enrich the Swap Premium page and the
+    Settlement Forecast premium entity breakdown, which only carry the contract
+    code, not the counterparty. Reads positional (real 120+ field file) with a
+    name-resolve fallback for the sparse dev mock. Contrato=idx 2, Contraparte=idx
+    7 in _SWAPCHAR_LABELS."""
+    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                        '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+    out = {}
+    if not os.path.isfile(path):
+        return out
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return out
+    if not rows:
+        return out
+    keys = list(rows[0].keys())
+    contrato_key = _fcst_resolve_key(keys, ['codigo do contrato', 'código do contrato', 'contrato'])
+    cpty_key = _fcst_resolve_key(keys, ['contraparte'])
+    for r in rows:
+        vals = list(r.values())
+        full = len(vals) >= 120
+        contrato = (vals[2] if len(vals) > 2 else '') if full else (r.get(contrato_key, '') if contrato_key else '')
+        cpty = (vals[7] if len(vals) > 7 else '') if full else (r.get(cpty_key, '') if cpty_key else '')
+        ck = _fcst_norm_contract(contrato)
+        if ck:
+            out.setdefault(ck, str(cpty or '').strip())
+    return out
+
+
 def _forecast_collect(dref, spine):
     """Read every JSON source and tally counts into by_product / by_entity
     matrices aligned with the business-day spine. Returns (by_product, by_entity,
@@ -2910,6 +2948,9 @@ def _forecast_collect(dref, spine):
     # {Contrato → Código Identificador} so premium-agenda rows (which lack the
     # identifier column) can be classified by joining on the contract code.
     swap_ident_by_contract = _swap_contract_ident_map(dref)
+    # {Contrato → Contraparte} for sources (swap premium) whose intragroup entity
+    # must be recovered by joining the contract code to the position file.
+    swap_cpty_by_contract = _swap_contract_cpty_map(dref)
     status = []
     for src in _FORECAST_SOURCES:
         path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
@@ -3007,7 +3048,13 @@ def _forecast_collect(dref, spine):
             # product and entity tallies so the totals stay consistent.
             if pmode in ('lob', 'lob_join') and product is None:
                 continue
-            ent = _fcst_map_entity(row.get(ent_key, '')) if ent_key else None
+            if src.get('entity_join') == 'cpty':
+                # Recover the counterparty by joining the contract code (prod_key
+                # holds it for lob_join) to the DPOSICAO-SWAP position map.
+                _cc = _fcst_norm_contract(row.get(prod_key, '') if prod_key else '')
+                ent = _fcst_map_entity(swap_cpty_by_contract.get(_cc, ''))
+            else:
+                ent = _fcst_map_entity(row.get(ent_key, '')) if ent_key else None
             for di in slots:
                 if product:
                     by_product.setdefault(product, [0] * n)[di] += 1
@@ -4397,14 +4444,59 @@ def live_position_swap_premium():
                            segment='live-position-swap-premium', ref_date=ref_date)
 
 
+def _swapprem_collect(ref):
+    """Swap Premium (DAGENDAPREMIOS) with an extra "Contraparte" column inserted
+    right after "Nome Simplificado", joined from the DPOSICAO-SWAP position file by
+    "Codigo do Contrato" (the premium file carries only the contract code)."""
+    dref = ref.strftime('%y%m%d')
+    labels, idx, types = _SWAPPREM_LABELS, _SWAPPREM_DISPLAY_IDX, _SWAPPREM_TYPES
+    disp_labels = [labels[i] for i in idx]
+    ins = disp_labels.index('Nome Simplificado') + 1
+    out_labels = disp_labels[:ins] + ['Contraparte'] + disp_labels[ins:]
+    empty = {'widgets': {'total': 0}, 'columns': out_labels, 'rows': []}
+    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                        '73760_{}_DAGENDAPREMIOS.json'.format(dref))
+    if not os.path.isfile(path):
+        log.warning("[swap-premium] no DAGENDAPREMIOS for %s; page shows 0", dref)
+        return empty
+    try:
+        with open(path, encoding='utf-8') as fh:
+            src = json.load(fh)
+    except Exception:
+        return empty
+    if not src:
+        return empty
+    cpty_map = _swap_contract_cpty_map(dref)
+    named = {_fcst_norm(k): k for k in src[0].keys()}
+    rows_out = []
+    for row in src:
+        vals = list(row.values())
+        full = len(vals) >= len(labels)
+        disp = []
+        for i in idx:
+            if full:
+                raw = vals[i] if i < len(vals) else ''
+            else:
+                key = named.get(_fcst_norm(labels[i]))
+                raw = row.get(key, '') if key else ''
+            disp.append(_swapchar_fmt_cell(raw, types[i]))
+        if full:
+            contrato_raw = vals[0] if vals else ''
+        else:
+            k0 = named.get(_fcst_norm(labels[0]))
+            contrato_raw = row.get(k0, '') if k0 else ''
+        disp.insert(ins, cpty_map.get(_fcst_norm_contract(contrato_raw), ''))
+        rows_out.append(disp)
+    return {'widgets': {'total': len(rows_out)}, 'columns': out_labels, 'rows': rows_out}
+
+
 @blueprint.route('/api/live-position-swap-premium/data')
 def api_swapprem_data():
     """Swap Premium payload (DAGENDAPREMIOS) for a reference date (default D-1 ANBIMA)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     ref = _swap_simple_ref(request.args)
-    payload = _swap_simple_collect(ref, '73760_{}_DAGENDAPREMIOS.json',
-                                   _SWAPPREM_LABELS, _SWAPPREM_DISPLAY_IDX, _SWAPPREM_TYPES)
+    payload = _swapprem_collect(ref)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
