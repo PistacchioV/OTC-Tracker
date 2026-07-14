@@ -4771,6 +4771,87 @@ def _otm_collect(ref):
             'updated': _ds_read_updated(jp)}
 
 
+def _ds_display_json_path(ref, json_key):
+    """Cached daily-settlement JSON path for a non-OTM import key (br-onshore,
+    eventos-swap-jpm, …), same layout _ds_handle writes to."""
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        '{}_{}.json'.format(json_key, ref.strftime('%Y%m%d')))
+
+
+def _ds_value_col(name):
+    """Heuristic: is this a numeric (money/rate) column that should render #,##0.00?
+    IDs/accounts/dates/text are excluded so they are never thousand-separated."""
+    n = _fcst_norm(name)
+    if any(t in n for t in ('codigo', 'conta', 'cnpj', 'cpf', 'data', 'dt ', 'indexador',
+                            'ponta', 'nome', 'tipo', 'continuidade', 'estrategia',
+                            'funcionalidade', 'reset', 'agenda', 'sistema', 'direction',
+                            'spn', 'cetip', 'kapital')):
+        return False
+    return any(t in n for t in ('valor', 'fator', 'pu ', 'percentual', 'diferenca',
+                                'lim.', 'lim inf', 'lim sup', 'taxa', 'amount', 'curve'))
+
+
+def _ds_display_collect(ref, json_key, columns=None, value_cols=None):
+    """Generic read-only settlement view: read the cached JSON for `json_key` and
+    map it to display rows. `columns` None → the file's own columns (keys); else the
+    given ordered list, each resolved to a JSON key. `value_cols` None → the
+    _ds_value heuristic; a set/collection → those exact names get #,##0.00."""
+    jp = _ds_display_json_path(ref, json_key)
+    rows_out, cols = [], list(columns) if columns else []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if data:
+            keys = list(data[0].keys())
+            if not cols:
+                cols = keys
+            keymap = {c: (_fcst_resolve_key(keys, [c]) or c) for c in cols}
+            if value_cols is None:
+                is_val = _ds_value_col
+            else:
+                vset = {_fcst_norm(c) for c in value_cols}
+                is_val = lambda c: _fcst_norm(c) in vset
+            for rec in data:
+                row = []
+                for c in cols:
+                    v = rec.get(keymap[c], '')
+                    if is_val(c):
+                        v = _swapchar_fmt_value(v)
+                    row.append('' if v is None else v)
+                rows_out.append(row)
+    return {'widgets': {'total': len(rows_out)}, 'columns': cols, 'rows': rows_out,
+            'updated': _ds_read_updated(jp)}
+
+
+# ── Other Products › Swap › Events (Swap-InstrumentoFinanceiro-ConsultaContrato) ─
+#  Read-only view of the already-processed 'eventos-swap-jpm' JSON. Values #,##0.00.
+@blueprint.route('/other-products-swap-events')
+def other_products_swap_events():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-swap-events.html',
+                           segment='other-products-swap-events',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-events/data')
+def api_swap_events_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ds_display_collect(ref, 'eventos-swap-jpm')   # file's own columns; heuristic #,##0.00
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 @blueprint.route('/otm-settlements')
 def otm_settlements():
     if not session.get('authenticated'):
