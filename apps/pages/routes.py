@@ -4827,7 +4827,37 @@ def _ds_display_collect(ref, json_key, columns=None, value_cols=None):
 
 
 # ── Other Products › Swap › Events (Swap-InstrumentoFinanceiro-ConsultaContrato) ─
-#  Read-only view of the already-processed 'eventos-swap-jpm' JSON. Values #,##0.00.
+#  Read-only view of the already-processed 'eventos-swap-jpm' JSON. Only the
+#  reporting columns below are shown (the file carries many more); each is
+#  resolved to the JSON key by name and money/rate columns render #,##0.00 via
+#  the _ds_value heuristic.
+_EVENTS_COLUMNS = [
+    'Código do Contrato', 'Continuidade do Contrato', 'Tipo do Contrato', 'Data de Registro',
+    'Dt Última Correção', 'Dt Último Aditamento', 'Valor Base', 'Percentual Índice Termo',
+    'Índice Termo', 'PU Inicial Termo', 'PU Atual Termo', 'Dt PU Atual Termo',
+    'Fator de Atualização Termo', 'Dt Início', 'Dt Vencimento', 'Valor Base Atual',
+    'Valor Amortizado', 'Valor Base Remanescente', 'Valor Antecipado Acumulado',
+    'Código da Estratégia',
+    'PARTE / Conta', 'PARTE / Nome Simplificado', 'PARTE / CPF/CNPJ', 'PARTE / Ponta',
+    'PARTE / Percentual do indexador', 'PARTE / Indexador', 'PARTE / Dt Atualizacao',
+    'PARTE / PU Inicial', 'PARTE / PU Atual', 'PARTE / Fator de Juros',
+    'PARTE / Fator de Correção', 'PARTE / Valor Juros', 'PARTE / Diferença Juros',
+    'PARTE / Valor Amortização', 'PARTE / Diferença Amortização',
+    'PARTE / Valor da Curva Atualizado', 'PARTE / Diferença da Curva',
+    'PARTE / Lim. Inf.', 'PARTE / Lim. Sup.',
+    'CONTRAPARTE / Contraparte', 'CONTRAPARTE / Nome Simplificado', 'CONTRAPARTE / CPF/CNPJ',
+    'CONTRAPARTE / Ponta', 'CONTRAPARTE / Percentual do indexador', 'CONTRAPARTE / Indexador',
+    'CONTRAPARTE / Dt Atualizacao', 'CONTRAPARTE / PU Inicial', 'CONTRAPARTE / PU Atual',
+    'CONTRAPARTE / Fator de Juros', 'CONTRAPARTE / Fator de Correção',
+    'CONTRAPARTE / Valor Juros', 'CONTRAPARTE / Diferença Juros',
+    'CONTRAPARTE / Valor Amortização', 'CONTRAPARTE / Diferença Amortização',
+    'CONTRAPARTE / Valor da Curva Atualizado', 'CONTRAPARTE / Diferença da Curva',
+    'CONTRAPARTE / Lim. Inf.', 'CONTRAPARTE / Lim. Sup.',
+    'Agenda Prêmio', 'Reset', 'Funcionalidades', 'Parte/Contraparte(Terc. Curva)',
+    'Fator/Valor/Taxa(Terc. Curva)',
+]
+
+
 @blueprint.route('/other-products-swap-events')
 def other_products_swap_events():
     if not session.get('authenticated'):
@@ -4846,7 +4876,7 @@ def api_swap_events_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    payload = _ds_display_collect(ref, 'eventos-swap-jpm')   # file's own columns; heuristic #,##0.00
+    payload = _ds_display_collect(ref, 'eventos-swap-jpm', _EVENTS_COLUMNS)   # fixed cols; heuristic #,##0.00
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -4946,8 +4976,10 @@ def _vcp_events_map(ref):
                                           'codigo if', 'código if', 'contrato',
                                           'instrumento financeiro'])
     k_parte_ix = _fcst_resolve_key(keys, ['parte / indexador', 'indexador parte', 'parte indexador'])
-    k_cpty_conta = _fcst_resolve_key(keys, ['contraparte / conta', 'conta contraparte',
-                                            'contraparte conta'])
+    # The counterparty account lives in the "CONTRAPARTE / Contraparte" column
+    # (parallel to the PARTE side's "PARTE / Conta"), not "CONTRAPARTE / Conta".
+    k_cpty_conta = _fcst_resolve_key(keys, ['contraparte / contraparte', 'contraparte / conta',
+                                            'conta contraparte', 'contraparte conta'])
     k_cpty_cnpj = _fcst_resolve_key(keys, ['contraparte / cpf/cnpj', 'contraparte / cnpj',
                                            'cpf/cnpj contraparte', 'cnpj contraparte',
                                            'contraparte cnpj', 'contraparte / cpf'])
@@ -4984,13 +5016,14 @@ def _vcp_collect(ref):
             cpty_conta = ev.get('cpty_conta', '')
             cpty_cnpj = ev.get('cpty_cnpj', '')
             acct_dig = _acc_digits(cpty_conta)
-            name = ''
-            if acct_dig and acct_dig != _VCP_SHARED_ACCT:      # unique account → by account
+            if acct_dig and acct_dig != _VCP_SHARED_ACCT:      # dedicated account → by account
                 name = by_acct.get(acct_dig, '')
-            if not name:                                       # shared omnibus / miss → by Tax ID
+            else:                                              # shared 73760.10-2 omnibus → by Tax ID
                 name = by_taxid.get(_acc_digits(cpty_cnpj), '')
             rows_out.append([name, contrato, parte_conta, ev.get('parte_ix', ''), '',
                              cpty_conta, cpty_cnpj, ev.get('cpty_ix', ''), ''])
+    # Sort by Contraparte A→Z (accent-insensitive); rows with no name go last.
+    rows_out.sort(key=lambda r: (r[0] == '', _fcst_norm(r[0])))
     return {'widgets': {'total': len(rows_out)}, 'columns': list(_VCP_COLUMNS),
             'rows': rows_out, 'updated': _ds_read_updated(_opb3_json_path(ref))}
 
