@@ -3471,8 +3471,10 @@ _DS_IMPORTS = [
      'cog': True, 'filters': [], 'skip_no_data': True},   # feeds the Cognos page
     # Opened via Workbooks.Open in the VBA (real workbook / .txt) — header on row 1.
     {'key': 'br-onshore', 'label': 'BR Onshore Settlements', 'json': 'br-onshore-settlements',
-     'header': 1, 'match': lambda n: n.startswith('brazilonshoresettlementswarningfile'),
-     'filters': []},
+     # Header on ROW 2 (values from row 3). "Owner Legal Entity" (col 3) rows that
+     # are LAWTON MULTIMERCADO EXCLUSIVO* are excluded from the JSON.
+     'header': 2, 'match': lambda n: n.startswith('brazilonshoresettlementswarningfile'),
+     'filters': [('not_startswith', 3, {'LAWTON MULTIMERCADO EXCLUSIVO'})]},
     {'key': 'latam-desk', 'label': 'Latam Desk Position', 'json': 'latam-desk-position',
      'header': 1, 'match': lambda n: n.startswith('fbirptlatamdeskpo'),   # VBA name has a typo ("Postion")
      # Keep a row if col 62 OR col 63 is non-empty (VBA does two <> "" filter passes).
@@ -3527,6 +3529,12 @@ def _ds_process(raw, spec):
         for f in spec['filters']:
             if f[0] == 'nonempty_any':           # keep if ANY of the listed cols is non-empty
                 if not any(_ds_cell(row, c - 1) for c in f[1]):
+                    keep = False
+                    break
+                continue
+            if f[0] == 'not_startswith':          # drop if col starts with ANY listed prefix
+                cell = _ds_cell(row, f[1] - 1).upper()
+                if any(cell.startswith(pfx.upper()) for pfx in f[2]):
                     keep = False
                     break
                 continue
