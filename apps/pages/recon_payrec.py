@@ -66,6 +66,9 @@ _JPM_ENTITIES = ('banco j.p. morgan s.a.', 'jpmorgan chase bank, n.a. - sao paul
 # rlctahis inclusion allowlist (Alteryx TextInput[175]) — the main row-reducer.
 _SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
                        '4413', '9386', '4414', '4406', 'AA', '4409'}
+# rlctahis nHistorico codes that are SWAP settlements (not NDF). Everything else
+# in the allowlist stays NDF. These flows net against the JPM SWAP side.
+_SDCONTA_HIST_SWAP = {'4406', '9385', '4413'}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -452,7 +455,7 @@ def _jpm_fxo(rows, cols, net_map=None):
 
 
 # ── Client side ───────────────────────────────────────────────────────────────
-def _cli_finalize(val, desc, titular, conta, sistema):
+def _cli_finalize(val, desc, titular, conta, sistema, product='NDF'):
     """Merged SDConta post-processing (Filter[35], Formula[27], Filter[29])."""
     titular = str(titular or '').strip().replace('LMA-COMM-BR ', '').strip()
     if titular == '/OTC DERIVATIVES PRODUCTS':
@@ -471,7 +474,7 @@ def _cli_finalize(val, desc, titular, conta, sistema):
     if not (val > 1 or val < -1):
         return None
     return {'value': val, 'client': titular, 'sistema': sistema, 'snumconta': str(conta or '').strip(),
-            'product': 'NDF', 'pay_receive': pr, 'le': 'JPM'}
+            'product': product, 'pay_receive': pr, 'le': 'JPM'}
 
 
 def _cli_rlctahis(rows, cols):
@@ -497,7 +500,9 @@ def _cli_rlctahis(rows, cols):
         titular = str(r.get(c_tit, '') if c_tit else '').strip()
         if val < 1:
             titular = 'ZERAGEM DA CONTA'
-        rec = _cli_finalize(val, desc, titular, conta, sistema='')
+        # nHistorico 4406 / 9385 / 4413 are SWAP flows; the rest of the allowlist is NDF.
+        product = 'SWAP' if hist in _SDCONTA_HIST_SWAP else 'NDF'
+        rec = _cli_finalize(val, desc, titular, conta, sistema='', product=product)
         if rec:
             out.append(rec)
     return out
@@ -798,6 +803,36 @@ def _net_atacama_client(client):
     return out
 
 
+def _net_lawton_client(client):
+    """Lawton is Total Net. The JPM side already nets each Lawton product into a
+    single value; collapse the client-side Lawton legs the SAME way — one netted
+    record per (LE, product) — so e.g. the SWAP legs sum to the JPM SWAP net
+    (-946,428.52) instead of sitting as many unmatched rows. Netting is kept
+    per product (SWAP stays SWAP, NDF stays NDF) to match the JPM per-product
+    rows."""
+    def _is_lawton(nm):
+        return 'LAWTON MULTIMERCADO EXCLUSIVO' in str(nm or '').upper()
+    lw = [c for c in client if _is_lawton(c.get('client'))]
+    if not lw:
+        return client
+    out = [c for c in client if not _is_lawton(c.get('client'))]
+    by_key = {}
+    for c in lw:
+        by_key.setdefault((c.get('le', 'JPM'), c.get('product', 'NDF')), []).append(c)
+    for (le, product), recs in by_key.items():
+        tot = sum(_num(c.get('value', 0)) for c in recs)
+        if abs(tot) < 1e-9:
+            continue
+        rep = recs[0]
+        out.append({
+            'value': tot, 'client': rep.get('client', ''),
+            'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
+            'product': product, 'le': le,
+            'pay_receive': 'Receive' if tot > 0 else 'Pay',
+        })
+    return out
+
+
 def run_payrec(recon_date, files=None, mode='auto'):
     srcs = _gather_sources(files, mode)
     if not srcs:
@@ -827,6 +862,7 @@ def run_payrec(recon_date, files=None, mode='auto'):
             client += _cli_spb(rows, cols, mgt=True)
 
     client = _net_atacama_client(client)      # Atacama client legs are Total Net too
+    client = _net_lawton_client(client)       # Lawton client legs Total Net per product
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
     # Carry forward the previous day's unresolved Pending Payment/Receivement rows
