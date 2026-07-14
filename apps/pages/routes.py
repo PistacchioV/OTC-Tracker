@@ -4886,6 +4886,139 @@ def api_swap_athena_data():
     return jsonify(payload)
 
 
+# ── Other Products › Swap › VCP (AVISO DE INEXISTENCIA DE PU) ─────────────────
+#  Cross-join. Base rows come from the Operations B3 JSON, keeping only
+#  Tipo Operação = "AVISO DE INEXISTENCIA DE PU" (Título → Código do Contrato,
+#  Conta → PARTE / Conta). Each contract is joined to the Events file
+#  (eventos-swap-jpm) to pull PARTE / Indexador and the counterparty account /
+#  CNPJ / indexer. The counterparty NAME is then resolved from RefData.json by
+#  B3 account — or by Tax ID when the account is the shared 73760.10-2 omnibus
+#  (many clients share it). PARTE / Fator and CONTRAPARTE/ Fator are left blank
+#  (formula pending). Fator columns render #,##0.00 once populated.
+_VCP_COLUMNS = ['Contraparte', 'Código do Contrato', 'PARTE / Conta',
+                'PARTE / Indexador', 'PARTE / Fator', 'CONTRAPARTE / Conta',
+                'CONTRAPARTE / CPF/CNPJ', 'CONTRAPARTE / Indexador', 'CONTRAPARTE/ Fator']
+_VCP_VALUE_COLS = {'PARTE / Fator', 'CONTRAPARTE/ Fator'}
+_VCP_AVISO_TYPE = 'AVISO DE INEXISTENCIA DE PU'
+_VCP_SHARED_ACCT = '73760102'                          # 73760.10-2 omnibus (digits only)
+
+
+def _vcp_refdata_maps():
+    """(by_account, by_taxid) → COUNTERPARTY name, keyed on digits-only B3 ACCOUNT
+    and TAX ID. by_account skips the shared 73760.10-2 omnibus (ambiguous — many
+    clients share it; those resolve by Tax ID instead)."""
+    by_acct, by_taxid = {}, {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except (IOError, json.JSONDecodeError):
+        data = []
+    for rec in (data if isinstance(data, list) else []):
+        name = str(rec.get('COUNTERPARTY', '') or '').strip()
+        if not name:
+            continue
+        acct = _acc_digits(rec.get('B3 ACCOUNT', ''))
+        if acct and acct != _VCP_SHARED_ACCT:
+            by_acct.setdefault(acct, name)
+        tax = _acc_digits(rec.get('TAX ID', ''))
+        if tax:
+            by_taxid.setdefault(tax, name)
+    return by_acct, by_taxid
+
+
+def _vcp_events_map(ref):
+    """{contract-digits → leg dict} from the Events file JSON (eventos-swap-jpm):
+    PARTE / Indexador and the CONTRAPARTE account / CPF-CNPJ / Indexador, resolved
+    by header name so a small layout drift still matches."""
+    jp = _ds_display_json_path(ref, 'eventos-swap-jpm')
+    out = {}
+    if not os.path.isfile(jp):
+        return out
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return out
+    if not data:
+        return out
+    keys = list(data[0].keys())
+    k_contract = _fcst_resolve_key(keys, ['codigo do contrato', 'código do contrato',
+                                          'codigo if', 'código if', 'contrato',
+                                          'instrumento financeiro'])
+    k_parte_ix = _fcst_resolve_key(keys, ['parte / indexador', 'indexador parte', 'parte indexador'])
+    k_cpty_conta = _fcst_resolve_key(keys, ['contraparte / conta', 'conta contraparte',
+                                            'contraparte conta'])
+    k_cpty_cnpj = _fcst_resolve_key(keys, ['contraparte / cpf/cnpj', 'contraparte / cnpj',
+                                           'cpf/cnpj contraparte', 'cnpj contraparte',
+                                           'contraparte cnpj', 'contraparte / cpf'])
+    k_cpty_ix = _fcst_resolve_key(keys, ['contraparte / indexador', 'indexador contraparte',
+                                         'contraparte indexador'])
+    for rec in data:
+        cc = _acc_digits(rec.get(k_contract, '')) if k_contract else ''
+        if not cc:
+            continue
+        out.setdefault(cc, {
+            'parte_ix': str(rec.get(k_parte_ix, '') or '').strip() if k_parte_ix else '',
+            'cpty_conta': str(rec.get(k_cpty_conta, '') or '').strip() if k_cpty_conta else '',
+            'cpty_cnpj': str(rec.get(k_cpty_cnpj, '') or '').strip() if k_cpty_cnpj else '',
+            'cpty_ix': str(rec.get(k_cpty_ix, '') or '').strip() if k_cpty_ix else '',
+        })
+    return out
+
+
+def _vcp_collect(ref):
+    """VCP display rows: Operations B3 'AVISO DE INEXISTENCIA DE PU' entries joined
+    to the Events file legs and the RefData counterparty name."""
+    _, ops = _opb3_load(ref)
+    rows_out = []
+    if ops:
+        by_acct, by_taxid = _vcp_refdata_maps()
+        events = _vcp_events_map(ref)
+        aviso = _fcst_norm(_VCP_AVISO_TYPE)
+        for rec in ops:
+            if _fcst_norm(rec.get('Tipo Operação', '')) != aviso:
+                continue
+            contrato = str(rec.get('Título', '') or '').strip()
+            parte_conta = str(rec.get('Conta', '') or '').strip()
+            ev = events.get(_acc_digits(contrato), {})
+            cpty_conta = ev.get('cpty_conta', '')
+            cpty_cnpj = ev.get('cpty_cnpj', '')
+            acct_dig = _acc_digits(cpty_conta)
+            name = ''
+            if acct_dig and acct_dig != _VCP_SHARED_ACCT:      # unique account → by account
+                name = by_acct.get(acct_dig, '')
+            if not name:                                       # shared omnibus / miss → by Tax ID
+                name = by_taxid.get(_acc_digits(cpty_cnpj), '')
+            rows_out.append([name, contrato, parte_conta, ev.get('parte_ix', ''), '',
+                             cpty_conta, cpty_cnpj, ev.get('cpty_ix', ''), ''])
+    return {'widgets': {'total': len(rows_out)}, 'columns': list(_VCP_COLUMNS),
+            'rows': rows_out, 'updated': _ds_read_updated(_opb3_json_path(ref))}
+
+
+@blueprint.route('/other-products-swap-vcp')
+def other_products_swap_vcp():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-swap-vcp.html',
+                           segment='other-products-swap-vcp',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-vcp/data')
+def api_swap_vcp_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _vcp_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
 @blueprint.route('/otm-settlements')
 def otm_settlements():
     if not session.get('authenticated'):
