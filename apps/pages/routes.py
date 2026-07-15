@@ -3440,6 +3440,11 @@ SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT',
 #   filters : list of (kind, col, allowed) applied to each data row (ALL must pass)
 #             kind 'digits' → compare digits-only cell; 'set' → compare UPPER cell
 #   json    : output base name (…_YYYYMMDD.json under the daily-settlement folder)
+# Kapital Hybrids (Other Products › Swap): BANCO_UPCOMING_PAYMENTS.csv is comma-
+# delimited and needs a today()-Settlement-Date filter + per-trade aggregation, so
+# it is handled by its own extractor (_swaphyb_*) rather than the generic tab path.
+_SWAPHYB_JSON = 'swap-kapital-hybrids'
+
 _DS_IMPORTS = [
     # OTM cashflows — same output as the OTM Settlements page (18 columns, its own
     # cleaning); processed here too so the card handles every file. `otm` flag →
@@ -3479,6 +3484,11 @@ _DS_IMPORTS = [
      'header': 1, 'match': lambda n: n.startswith('fbirptlatamdeskpo'),   # VBA name has a typo ("Postion")
      # Keep a row if col 62 OR col 63 is non-empty (VBA does two <> "" filter passes).
      'filters': [('nonempty_any', [62, 63])]},
+    # Kapital Hybrids — BANCO_UPCOMING_PAYMENTS.csv (comma-delimited). Own extractor
+    # (_swaphyb_extract) filters Settlement Date = today; the page aggregates per trade.
+    {'key': 'swap-kapital-hybrids', 'label': 'Swap Kapital Hybrids', 'json': _SWAPHYB_JSON,
+     'match': lambda n: n.startswith('banco_upcoming_payments') and n.endswith('.csv'),
+     'swaphyb': True, 'filters': []},
 ]
 
 
@@ -3581,6 +3591,9 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
             recs, kept = _cog_extract(_cog_read_rows(raw))
             total = kept
             jp = _cog_json_path(ref)
+        elif spec.get('swaphyb'):                       # BANCO_UPCOMING_PAYMENTS.csv → Kapital Hybrids
+            recs, total = _swaphyb_extract(raw, ref)    # filter Settlement Date = today (import date)
+            jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
         else:
             recs, total = _ds_process(raw, spec)
             jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
@@ -3590,7 +3603,7 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
-    if spec.get('otm') or spec.get('ndfc') or spec.get('cog'):   # timestamp = import time (no in-file time)
+    if spec.get('otm') or spec.get('ndfc') or spec.get('cog') or spec.get('swaphyb'):   # timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
         try:                                           # use the FILTERED recs (processed rows), not the raw file;
@@ -4145,22 +4158,24 @@ def _lp_bool_ptbr(raw):
     return raw
 
 
-_SWAP_AMORT_TYPE = {
-    '0': 'Valor Base Original', '1': 'Valor Base Remanescente',
-    '2': 'Sem Amortização', '3': 'No Vencimento',
-}
-
-
 def _lp_amort_label(raw):
-    """Swap Cashflow "Tipo Amortização" code → label (00/01/02/03)."""
+    """Swap Flow "Tipo Amortização" code → label. Uses the SAME nomenclature as the
+    Live Position Swap Characteristics "Tipo de amortização" column
+    (_SWAPCHAR_AMORT_MAP), so both pages read identically."""
     s = str(raw or '').strip()
     if not s:
         return ''
-    if s.endswith('.0'):
+    m = re.search(r'\(([^)]*)\)', s)          # value already carries "NN (text)"
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    if s.endswith('.0'):                       # tolerate a "3.0" style decimal tail
         s = s[:-2]
-    if s.isdigit():
-        s = str(int(s))
-    return _SWAP_AMORT_TYPE.get(s, raw)
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if digits:
+        code = str(int(digits))
+        if code in _SWAPCHAR_AMORT_MAP:
+            return _SWAPCHAR_AMORT_MAP[code]
+    return raw
 
 
 # Swap Index (B3 Index Results tab) — Codigo Referencia Externa → Nome Curva.
@@ -4915,6 +4930,219 @@ def api_swap_athena_data():
     if 'CounterParty' in payload['columns']:
         ci = payload['columns'].index('CounterParty')
         payload['rows'].sort(key=lambda r: (str(r[ci]).strip() == '', _fcst_norm(str(r[ci]))))
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+# ── Other Products › Swap › Kapital Hybrids (BANCO_UPCOMING_PAYMENTS.csv) ─────
+#  Comma-delimited upcoming-payments file. On import (_swaphyb_extract) only rows
+#  whose Settlement Date = today are kept (the file has two Settlement Date
+#  columns, dd/mmm/yyyy and mm/dd/yyyy — same date, either matches). The page
+#  collapses the file's per-leg rows into one row per trade (Kapital ID /
+#  Trade Confirmation ID): Owner curve = Σ positive Amounts, Counterparty curve =
+#  Σ negative Amounts (kept negative), BRL Net Amount = Owner + Counterparty — the
+#  net cashflow (all #,##0.00). The Cetip ID is pulled from mapping_swap-hyb.json
+#  (Kapital ID → b3_id).
+_SWAPHYB_COLUMNS = ['Trade', 'Kapital ID', 'Cetip ID', 'Trade Date', 'Settlement Date',
+                    'Stream Notional', 'Stream Notional Currency', 'Coupon Rate', 'Currency',
+                    'DCF', 'Counterparty SPN', 'Counterparty Name',
+                    'Owner curve', 'Counterparty curve', 'BRL Net Amount']
+
+
+def _swaphyb_read_rows(raw):
+    """BANCO_UPCOMING_PAYMENTS.csv → list of rows (comma-delimited, quoted fields
+    honoured so amounts like "1,234.56" survive)."""
+    import csv as _csv
+    text = raw.decode('utf-8-sig', errors='replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
+    return list(_csv.reader(io.StringIO(text)))
+
+
+def _swaphyb_num(v):
+    """US-formatted amount ('-7,012,145.46', '(123.45)') → float, or None."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    neg = s.startswith('(') and s.endswith(')')
+    if neg:
+        s = s[1:-1]
+    s = s.replace(',', '').replace(' ', '')     # drop thousands separators / spaces
+    try:
+        f = float(s)
+    except ValueError:
+        return None
+    return -f if neg else f
+
+
+def _swaphyb_parse_date(v):
+    """Settlement/Trade date cell (dd/mmm/yyyy or mm/dd/yyyy, plus a few variants)
+    → date, or None."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    for fmt in ('%d/%b/%Y', '%d-%b-%Y', '%d/%B/%Y', '%m/%d/%Y', '%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _swaphyb_extract(raw, ref):
+    """Parse the CSV, keep only rows whose Settlement Date = the import date, and
+    return per-leg dicts (page-oriented keys). Aggregation happens at display time.
+    Returns (records, total_data_rows)."""
+    rows = _swaphyb_read_rows(raw)
+    if len(rows) < 2:
+        return [], 0
+    # Locate the header row (bank files sometimes carry a title/blank line first).
+    hidx = 0
+    for i, r in enumerate(rows[:15]):
+        low = [_fcst_norm(str(c)) for c in r]
+        if any('confirmation' in c for c in low) or \
+           (any('settlement date' in c for c in low) and any(c == 'amount' for c in low)):
+            hidx = i
+            break
+    norm = [_fcst_norm(str(h)) for h in rows[hidx]]
+
+    def first(pred):
+        for i, n in enumerate(norm):
+            if pred(n):
+                return i
+        return None
+
+    def all_idx(pred):
+        return [i for i, n in enumerate(norm) if pred(n)]
+
+    i_trade  = first(lambda n: n == 'trade')
+    i_kap    = first(lambda n: 'confirmation' in n)              # Trade Confirmation ID = Kapital ID
+    i_tdate  = first(lambda n: n == 'trade date')
+    i_settle = all_idx(lambda n: n == 'settlement date' or n.startswith('settlement date'))
+    i_notl   = first(lambda n: n == 'stream notional')
+    i_notlc  = first(lambda n: n == 'stream notional currency')
+    i_coupon = first(lambda n: n == 'coupon rate' or 'coupon' in n)
+    i_ccy    = first(lambda n: n == 'currency')
+    i_dcf    = first(lambda n: n == 'dcf')
+    i_spn    = first(lambda n: 'spn' in n)
+    i_cpty   = first(lambda n: 'counterparty' in n and 'name' in n)
+    i_amt    = first(lambda n: n == 'amount')
+
+    today = ref.date() if hasattr(ref, 'date') else ref
+
+    def cell(row, i):
+        return str(row[i]).strip() if (i is not None and i < len(row) and row[i] is not None) else ''
+
+    out, total = [], 0
+    for row in rows[hidx + 1:]:
+        if not any(str(c).strip() for c in row):
+            continue
+        total += 1
+        sdate = None
+        for si in i_settle:                       # either Settlement Date column may match
+            d = _swaphyb_parse_date(cell(row, si))
+            if d:
+                sdate = d
+                break
+        if sdate != today:                        # keep ONLY today's settlements
+            continue
+        tdate = _swaphyb_parse_date(cell(row, i_tdate))
+        out.append({
+            'Trade': cell(row, i_trade),
+            'Kapital ID': cell(row, i_kap),
+            'Trade Date': tdate.strftime('%d/%m/%Y') if tdate else cell(row, i_tdate),
+            'Settlement Date': sdate.strftime('%d/%m/%Y'),
+            'Stream Notional': cell(row, i_notl),
+            'Stream Notional Currency': cell(row, i_notlc),
+            'Coupon Rate': cell(row, i_coupon),
+            'Currency': cell(row, i_ccy),
+            'DCF': cell(row, i_dcf),
+            'Counterparty SPN': cell(row, i_spn),
+            'Counterparty Name': cell(row, i_cpty),
+            'Amount': cell(row, i_amt),
+        })
+    return out, total
+
+
+def _swaphyb_kap_to_cetip():
+    """{Kapital ID (hybrids_id) → Cetip ID (b3_id)} from mapping_swap-hyb.json."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'static', 'data', 'mapping_swap-hyb.json')
+    out = {}
+    try:
+        with open(path, encoding='utf-8') as fh:
+            for rec in json.load(fh) or []:
+                k = str(rec.get('hybrids_id', '') or '').strip()
+                if k:
+                    out[k] = str(rec.get('b3_id', '') or '').strip()
+    except Exception:
+        pass
+    return out
+
+
+def _swaphyb_collect(ref):
+    """Read the cached JSON and collapse per-leg rows into one row per trade
+    (Kapital ID). Owner curve = Σ positive Amounts, Counterparty curve = Σ negative
+    Amounts (kept negative), BRL Net Amount = Owner + Counterparty (net cashflow).
+    Cetip ID from the mapping."""
+    jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
+    rows_out = []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        cet = _swaphyb_kap_to_cetip()
+        groups, order = {}, []
+        for rec in data:
+            kap = str(rec.get('Kapital ID', '') or '').strip()
+            if kap not in groups:
+                groups[kap] = {'first': rec, 'owner': 0.0, 'cpty': 0.0}
+                order.append(kap)
+            amt = _swaphyb_num(rec.get('Amount', ''))
+            if amt is not None:
+                if amt > 0:
+                    groups[kap]['owner'] += amt
+                elif amt < 0:
+                    groups[kap]['cpty'] += amt
+        for kap in order:
+            g = groups[kap]
+            r = g['first']
+            owner, cpty = g['owner'], g['cpty']
+            net = owner + cpty                     # net cashflow (cpty is the negative sum)
+            rows_out.append([
+                r.get('Trade', ''), kap, cet.get(kap, ''),
+                r.get('Trade Date', ''), r.get('Settlement Date', ''),
+                r.get('Stream Notional', ''), r.get('Stream Notional Currency', ''),
+                r.get('Coupon Rate', ''), r.get('Currency', ''), r.get('DCF', ''),
+                r.get('Counterparty SPN', ''), r.get('Counterparty Name', ''),
+                '{:,.2f}'.format(owner), '{:,.2f}'.format(cpty), '{:,.2f}'.format(net),
+            ])
+    # Sort by Trade A→Z (accent-insensitive); blank Trade goes last.
+    rows_out.sort(key=lambda x: (str(x[0]).strip() == '', _fcst_norm(str(x[0]))))
+    return {'widgets': {'total': len(rows_out)}, 'columns': list(_SWAPHYB_COLUMNS),
+            'rows': rows_out, 'updated': _ds_read_updated(jp)}
+
+
+@blueprint.route('/other-products-swap-kapital-hybrids')
+def other_products_swap_kapital_hybrids():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-swap-kapital-hybrids.html',
+                           segment='other-products-swap-kapital-hybrids',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-kapital-hybrids/data')
+def api_swap_kapital_hybrids_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _swaphyb_collect(ref)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -6360,6 +6588,11 @@ _LPNDF_DEC8_COLS = {'Taxa de Paridade', 'Cotacao Inicial'}
 # Max number of Asian-average fixing-date columns to surface (a contract can have
 # 100+ fixings; cap to keep the table sane).
 _LPNDF_MAX_ASIAN = 60
+# Asian-average fixing dates are a FIXED positional block in dposicao.ter: the
+# first date is source column CW (0-based index 100) and each subsequent date is
+# +3 columns (CZ, DC, …) — every date is followed by a blank + a "0" companion.
+_LPNDF_ASIAN_START = 100   # Excel column CW (0-based)
+_LPNDF_ASIAN_STEP = 3      # CW → CZ → DC → … (skip the blank + "0" companions)
 
 
 def _lpndf_fmt_rate(v):
@@ -6431,17 +6664,20 @@ def _lpndf_collect(ref):
                 s = str(s or '').strip()
                 return len(s) == 8 and s.isdigit()
 
-            # Tipo Média Asiática column + the per-date columns that follow it. The
-            # block repeats as [date, blank, 0] per fixing — keep ONLY the columns
-            # that actually hold a yyyymmdd date (drop the blank/0 companions).
-            tma_key = (resolve('Tipo Media Asiatico') or resolve('Tipo Media Asiatica')
-                       or resolve('Media Asiatica'))
-            tma_pos = keys.index(tma_key) if tma_key in keys else None
-            asian_keys = keys[tma_pos + 1:] if tma_pos is not None else []
-            date_keys = [k for k in asian_keys
-                         if any(is_yyyymmdd(rec.get(k, '')) for rec in data)]
-            date_keys = date_keys[:_LPNDF_MAX_ASIAN]   # cap the number of date columns
-            asian_labels = ['Média Asiática {}'.format(i + 1) for i in range(len(date_keys))]
+            # Asian-average fixing dates: fixed positional block starting at source
+            # column CW (index 100), each date +3 columns (CW, CZ, DC, …). Date N ←
+            # keys[100 + 3*(N-1)]; stop at the first grid slot no record has a date in
+            # (end of the fixing block). CW is always "Média Asiática (data) 1". Same
+            # label text as the Live Position Option page.
+            date_keys = []
+            p = _LPNDF_ASIAN_START
+            while p < len(keys) and len(date_keys) < _LPNDF_MAX_ASIAN:
+                k = keys[p]
+                if not any(is_yyyymmdd(rec.get(k, '')) for rec in data):
+                    break
+                date_keys.append(k)
+                p += _LPNDF_ASIAN_STEP
+            asian_labels = ['Média Asiática (data) {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPNDF_COLUMNS) + asian_labels
 
             # Widgets: mesma classificação dos cards do NDF Summary
@@ -6564,6 +6800,11 @@ _LPOPT_DEC2_COLS = {'Quantidade', 'Quantidade Antecipada'}
 _LPOPT_CNPJ_COLS = {'CPF/CNPJ Cliente Parte', 'CPF/CNPJ Cliente Contraparte'}
 # Max number of dynamic Asian-average fixing-date columns to surface (cap).
 _LPOPT_MAX_ASIAN = 60
+# Asian-average fixing dates are a FIXED positional block in dposicao.opc: the
+# first date is source column CC (0-based index 80) and each subsequent date is
+# +3 columns (CF, CI, …) — every date is followed by a blank + a "0" companion.
+_LPOPT_ASIAN_START = 80    # Excel column CC (0-based)
+_LPOPT_ASIAN_STEP = 3      # CC → CF → CI → … (skip the blank + "0" companions)
 
 
 def _opt_dposicao_path(ref, max_back=10):
@@ -6615,12 +6856,18 @@ def _lpopt_collect(ref):
                 s = str(s or '').strip()
                 return len(s) == 8 and s.isdigit()
 
-            # Dynamic per-date block: any file key NOT mapped to a reporting column
-            # that holds a yyyymmdd date on some record (the repeating fixing block).
-            mapped = {idx[c] for c in _LPOPT_COLUMNS if idx[c]}
-            date_keys = [k for k in keys
-                         if k not in mapped and any(is_yyyymmdd(rec.get(k, '')) for rec in data)]
-            date_keys = date_keys[:_LPOPT_MAX_ASIAN]
+            # Asian-average fixing dates: fixed positional block starting at source
+            # column CC (index 80), each date +3 columns (CC, CF, CI, …). Date N ←
+            # keys[80 + 3*(N-1)]; stop at the first grid slot no record has a date in
+            # (end of the fixing block). CC is always "Média Asiática (data) 1".
+            date_keys = []
+            p = _LPOPT_ASIAN_START
+            while p < len(keys) and len(date_keys) < _LPOPT_MAX_ASIAN:
+                k = keys[p]
+                if not any(is_yyyymmdd(rec.get(k, '')) for rec in data):
+                    break
+                date_keys.append(k)
+                p += _LPOPT_ASIAN_STEP
             asian_labels = ['Média Asiática (data) {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPOPT_COLUMNS) + asian_labels
 

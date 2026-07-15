@@ -1,0 +1,303 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Swap Kapital Hybrids{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#swapchar-page {
+    --sc-hairline: rgba(0,0,0,.08);
+    --sc-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #swapchar-page { --sc-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets (ops-widget model) ─────────────────────────────────────────── */
+#swapchar-page .sc-widgets .col { display: flex; margin-bottom: .5rem; }
+#swapchar-page .sc-widget {
+    flex: 1;
+    border: 1px solid var(--sc-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--sc-ease-out), box-shadow 220ms var(--sc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-page .sc-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#swapchar-page .sc-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
+#swapchar-page .sc-widget__icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
+}
+#swapchar-page .sc-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
+#swapchar-page .sc-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#swapchar-page .sc-widget__subs { border-top: 1px dashed var(--sc-hairline); padding-top: .5rem; margin-top: .1rem; }
+#swapchar-page .sc-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+#swapchar-page .sc-widget__sub .sc-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+#swapchar-page .sc-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#swapchar-page .sc-widget--total .sc-widget__title,
+#swapchar-page .sc-widget--total .sc-widget__value { color: #fff; }
+#swapchar-page .sc-widget--total .sc-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Smart filter (New Deals model) ─────────────────────────────────────── */
+#swapchar-page .smart-filter-wrapper {
+    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    border: 1px solid var(--sc-hairline); border-radius: 0.6875rem;
+    padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#swapchar-page .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+#swapchar-page .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#swapchar-page .smart-filter-chip {
+    display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff;
+    border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+#swapchar-page .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+#swapchar-page .smart-filter-input {
+    border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem;
+    background: transparent; color: var(--ins-body-color); padding: 2px 0;
+}
+#swapchar-page .smart-filter-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055;
+    background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; display: none; padding: 4px 0;
+}
+#swapchar-page .smart-filter-dropdown li {
+    padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center;
+    gap: 8px; list-style: none; color: var(--ins-body-color);
+}
+#swapchar-page .smart-filter-dropdown li:hover,
+#swapchar-page .smart-filter-dropdown li.active { background: rgba(0,102,204,.10); }
+#swapchar-page .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+#swapchar-page .sf-type-text   { background: #6c757d; }
+#swapchar-page .sf-type-date   { background: #0284c7; }
+#swapchar-page .sf-type-value  { background: #b45309; }
+
+/* ── Reference date picker (Live Position model) ────────────────────────── */
+#swapchar-page .sc-datewrap { position: relative; width: 170px; }
+#swapchar-page .sc-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--sc-ease-out), box-shadow 0.16s var(--sc-ease-out);
+}
+#swapchar-page .sc-datewrap input:focus {
+    outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18);
+}
+#swapchar-page .sc-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--bs-secondary-color); cursor: pointer;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#swapchar-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#swapchar-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
+
+/* ── Column widths — nth-child(1)=checkbox (2)=Status (3..17)=data
+   (ordem de _SWAPHYB_COLUMNS). Ajuste conforme necessário. */
+  #swapchar-table th:nth-child(1),  #swapchar-table td:nth-child(1)  { min-width: 38px;  width: 38px;  } /* checkbox */
+  #swapchar-table th:nth-child(2),  #swapchar-table td:nth-child(2)  { min-width: 90px;  width: 90px;  } /* Status */
+  #swapchar-table th:nth-child(3),  #swapchar-table td:nth-child(3)  { min-width: 200px; width: 200px; } /* Trade */
+  #swapchar-table th:nth-child(4),  #swapchar-table td:nth-child(4)  { min-width: 120px; width: 120px; } /* Kapital ID */
+  #swapchar-table th:nth-child(5),  #swapchar-table td:nth-child(5)  { min-width: 120px; width: 120px; } /* Cetip ID */
+  #swapchar-table th:nth-child(6),  #swapchar-table td:nth-child(6)  { min-width: 110px; width: 110px; } /* Trade Date */
+  #swapchar-table th:nth-child(7),  #swapchar-table td:nth-child(7)  { min-width: 120px; width: 120px; } /* Settlement Date */
+  #swapchar-table th:nth-child(8),  #swapchar-table td:nth-child(8)  { min-width: 130px; width: 130px; } /* Stream Notional */
+  #swapchar-table th:nth-child(9),  #swapchar-table td:nth-child(9)  { min-width: 130px; width: 130px; } /* Stream Notional Currency */
+  #swapchar-table th:nth-child(10), #swapchar-table td:nth-child(10) { min-width: 110px; width: 110px; } /* Coupon Rate */
+  #swapchar-table th:nth-child(11), #swapchar-table td:nth-child(11) { min-width: 90px;  width: 90px;  } /* Currency */
+  #swapchar-table th:nth-child(12), #swapchar-table td:nth-child(12) { min-width: 90px;  width: 90px;  } /* DCF */
+  #swapchar-table th:nth-child(13), #swapchar-table td:nth-child(13) { min-width: 120px; width: 120px; } /* Counterparty SPN */
+  #swapchar-table th:nth-child(14), #swapchar-table td:nth-child(14) { min-width: 200px; width: 200px; } /* Counterparty Name */
+  #swapchar-table th:nth-child(15), #swapchar-table td:nth-child(15) { min-width: 140px; width: 140px; } /* Owner curve */
+  #swapchar-table th:nth-child(16), #swapchar-table td:nth-child(16) { min-width: 150px; width: 150px; } /* Counterparty curve */
+  #swapchar-table th:nth-child(17), #swapchar-table td:nth-child(17) { min-width: 140px; width: 140px; } /* BRL Net Amount */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#swapchar-table thead tr.sc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--sc-hairline); }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter {
+    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px;
+    border: 1px solid var(--sc-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms cubic-bezier(0.23,1,0.32,1),
+                box-shadow 150ms cubic-bezier(0.23,1,0.32,1),
+                background-color 150ms cubic-bezier(0.23,1,0.32,1);
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; font-weight: 400; }
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter:focus {
+    outline: none; border-color: #0066cc;
+    background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter.sc-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter { transition: none; }
+}
+#swapchar-page .toggle-vis + label { cursor: pointer; }
+#swapchar-page .btn:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-page * { transition: none !important; animation: none !important; }
+    #swapchar-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background + readable text (project standard).
+   NOT scoped to #swapchar-page: DataTables appends .dt-button-collection to <body>. */
+.dt-button-collection {
+    z-index: 2000;
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: .375rem !important;
+    padding: .25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button,
+.dt-button-collection .dropdown-item {
+    display: flex; align-items: center;
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: .4rem 1rem !important;
+    font-size: .84rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus,
+.dt-button-collection .dropdown-item:hover,
+.dt-button-collection .dropdown-item:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-kapital-hybrids/data" data-ref-date="{{ ref_date }}">
+    {% set title='Swap Kapital Hybrids' %}
+    {% set crumbs=['OTC Tracker', 'Daily Settlements', 'Other Products', 'Swap', 'Kapital Hybrids'] %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Section 1: widgets + smart filter + reference date -->
+    <div class="row sc-widgets row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="sc-widget sc-widget--total">
+                <div class="sc-widget__head">
+                    <span class="sc-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="sc-widget__title" data-lang="sc-w-total">Total</h3>
+                    <span class="sc-widget__value" id="sc-w-total">0</span>
+                </div>
+                <div class="sc-widget__subs" style="border-top-color: rgba(255,255,255,.25);">
+                    <div class="sc-widget__sub" style="color: rgba(255,255,255,.85);">
+                        <i class="ti ti-calendar-event"></i><span data-lang="sc-total-asof">Settlement date as of</span>
+                        <span class="sc-sub-val" id="sc-total-asof" style="color:#fff;">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart filter + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="flex-grow-1 position-relative" style="min-width: 280px;">
+                    <div class="smart-filter-wrapper" id="scSmartFilter">
+                        <div class="smart-filter-chips" id="scChips"></div>
+                        <input type="text" class="smart-filter-input" id="scInput"
+                               placeholder="Filter by column…" data-lang-placeholder="sc-filter-ph" autocomplete="off">
+                        <ul class="smart-filter-dropdown mb-0 ps-0" id="scDropdown"></ul>
+                    </div>
+                </div>
+                <button class="btn btn-secondary bg-gradient btn-search" type="button" id="scSearchBtn">
+                    <i class="ti ti-search fs-xl me-1"></i><span data-lang="sc-search">Search</span>
+                </button>
+                <div class="vr d-none d-md-block"></div>
+                <label for="sc-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="sc-refdate">Reference date</label>
+                <div class="sc-datewrap" id="scDateWrap">
+                    <input type="text" id="sc-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="sc-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: toolbar (Columns + Export) + table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="sc-show">Show</label>
+                        <select class="form-select form-select-sm sc-page-len" style="width:76px;">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="-1" data-lang="sc-all">All</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="sc-entries">entries</label>
+                    </div>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="scExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="sc-showing">Showing</span> <span id="sc-count">0</span> <span>rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="swapchar-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="swapchar-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+{% endblock extra_javascript %}
