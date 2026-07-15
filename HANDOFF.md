@@ -4101,3 +4101,128 @@ apps/templates/pages/page-access.html      ← is_master (lock admin/master), se
 apps/templates/pages/control-panel.html    ← data-cp-card + hiding por card; descrição do card Daily Settlement
 apps/templates/pages/users-roles.html      ← edit/delete de usuários liberado p/ MASTER
 ```
+
+## 83. Sessão 2026-07-15 — New Deals OPT/NDF Commodities: preview do Strike/Prêmio Unitário como #,##0.00000000 (`6d212eb`)
+
+No **preview do duplo clique** (SweetAlert que reproduz o arquivo Conecta) das páginas **New Deals › Opt Commodities**
+e **NDF Commodities**, o Strike (e o Prêmio Unitário no OPT) passou a aparecer formatado como `#,##0.00000000`
+(milhar agrupado + 8 casas) — **só na visualização**, para leitura. O arquivo gerado (backend) continua no formato
+original. **A conversão de "quoted in cents" (÷100) permanece 100% fiel**: a linha `if (div100) n = n / 100;` ficou
+intacta; só a formatação de saída de `_num()` (usada exclusivamente por Strike/Prêmio Unitário no `buildConectaFields`)
+mudou para `n.toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 })`.
+
+- OPT: `f[13]` (Strike, ÷100 se qic) e `f[26]` (Prêmio Unitário, ÷100 se qic).
+- NDF: `f[17]` (Strike, ÷100 se `qic && ccy≠BRL`).
+- Observação: o formato pede **exatamente 8 casas**, então um valor com mais de 8 decimais aparece arredondado no
+  preview (o arquivo real mantém a precisão cheia) — é o padrão do domínio B3.
+
+**Arquivos:** `apps/templates/pages/new_deals-opt-commodities.html`, `apps/templates/pages/new_deals-ndf-commodities.html`.
+
+## 84. Sessão 2026-07-15 — Other Products › Swap: páginas de settlement Events / Athena / VCP / Kapital Hybrids
+
+Quatro páginas **read-only** sob **Daily Settlements › Other Products › Swap**, todas no mesmo padrão do template
+`other-products-swap-athena.html` (`id="swapchar-page"` + `data-api`, reaproveitando o JS genérico
+`live-position-swap-characteristics.js`, que monta colunas/linhas dinamicamente a partir do payload
+`{widgets:{total}, columns, rows, updated}`).
+
+### 84.1 Events / Athena / VCP (`8851379`, `a9e3164`, `47148c2`, `adbeef7`, `145acc5`)
+- **Events** — view do JSON `eventos-swap-jpm`; `_EVENTS_COLUMNS` fixa as **63 colunas** de reporte
+  (`_ds_display_collect(ref, 'eventos-swap-jpm', _EVENTS_COLUMNS)`).
+- **Athena** — view do JSON `br-onshore-settlements`; `_ATHENA_COLUMNS` (9 col.), value cols
+  (`Owner curve`/`Counterparty curve`/`BRL Net Amount`) em `#,##0.00`; **ordenado por CounterParty A→Z**.
+- **VCP** — cross-join Operations B3 (`AVISO DE INEXISTENCIA DE PU`) × Events; nome da contraparte resolvido por
+  **conta no RefData** quando conta ≠ `73760.10-2`, com fallback por **CNPJ** só no omnibus `73760.10-2`; a coluna
+  `CONTRAPARTE / Conta` vem de "CONTRAPARTE / Contraparte" no Events; **ordenado por Contraparte A→Z**.
+
+### 84.2 NOVA página Kapital Hybrids (`ed12dc2`, `f003802`)
+Rota `/other-products-swap-kapital-hybrids` + endpoint `/api/other-products-swap-kapital-hybrids/data`; item no
+sidenav (chave `kapital-hybrids` em en/br/es).
+
+- **Import** — arquivo `BANCO_UPCOMING_PAYMENTS.csv` (**delimitado por vírgula**), processado por extrator próprio
+  (`_swaphyb_*`, não o caminho tab genérico) via flag `swaphyb` no `_DS_IMPORTS` + branch no `_ds_handle`. Filtra
+  **Settlement Date = hoje** (o arquivo tem **duas** colunas "Settlement Date", `dd/mmm/yyyy` e `mm/dd/yyyy` — o mesmo
+  dia; qualquer uma que bata com hoje mantém a linha). Grava JSON `swap-kapital-hybrids_YYYYMMDD.json`.
+- **Display** (`_swaphyb_collect`) — colapsa as linhas por-perna do arquivo em **1 linha por trade** (Kapital ID =
+  Trade Confirmation ID):
+  - **Owner curve** = Σ Amounts positivos;
+  - **Counterparty curve** = Σ Amounts negativos (mantida **negativa**);
+  - **BRL Net Amount** = Owner **+** Counterparty (net de caixa, ex.: −946.428,52) — decisão do usuário
+    (AskUserQuestion): net = soma dos fluxos, não `Owner − Counterparty`;
+  - **Cetip ID** puxado de `mapping_swap-hyb.json` (`hybrids_id` → `b3_id`).
+  - 14 colunas (a coluna **Trade** foi removida em `f003802`); ordenado por **Kapital ID A→Z**.
+- **Colunas:** `Kapital ID, Cetip ID, Trade Date, Settlement Date, Stream Notional, Stream Notional Currency,
+  Coupon Rate, Currency, DCF, Counterparty SPN, Counterparty Name, Owner curve, Counterparty curve, BRL Net Amount`.
+
+**Arquivos:** `apps/pages/routes.py` (`_SWAPHYB_JSON`, spec `_DS_IMPORTS`, branch `_ds_handle`, `_swaphyb_read_rows`,
+`_swaphyb_num`, `_swaphyb_parse_date`, `_swaphyb_extract`, `_swaphyb_kap_to_cetip`, `_swaphyb_collect`, rota+endpoint,
+`_SWAPHYB_COLUMNS`), `apps/templates/pages/other-products-swap-kapital-hybrids.html`, `apps/templates/partials/sidenav.html`,
+`apps/static/data/translations/{en,br,es}.json`. Mapping: `apps/static/data/mapping_swap-hyb.json`.
+
+## 85. Sessão 2026-07-15 — Live Position Option/NDF: datas asiáticas em colunas fixas + Swap Flow amortização (`ed12dc2`)
+
+### 85.1 Datas da Média Asiática por posição FIXA de coluna
+Antes, `_lpopt_collect`/`_lpndf_collect` achavam as datas asiáticas por **heurística** (qualquer coluna não-mapeada
+com um `yyyymmdd`), o que desalinhava. Agora é **posicional determinístico** — o JSON preserva **toda** coluna física
+na ordem do arquivo (import `_b3_export_json`, header por `;`, headers repetidos/vazios ganham sufixo `_2`…), então
+`keys[80]` = coluna Excel **CC** e `keys[100]` = **CW**:
+- **Option (dposicao.opc):** `_LPOPT_ASIAN_START = 80` (CC), passo `_LPOPT_ASIAN_STEP = 3` → CC, CF, CI, … (pula a
+  coluna em branco + a coluna "0" entre cada data).
+- **NDF (dposicao.ter):** `_LPNDF_ASIAN_START = 100` (CW), passo 3 → CW, CZ, DC, …
+- Em cada grade, inclui a data enquanto **algum** registro tiver `yyyymmdd` naquela posição; para no primeiro slot sem
+  data (fim do bloco de fixings). Linhas vanilla (sem asiática) são ignoradas.
+
+### 85.2 Nome das colunas asiáticas **unificado**
+NDF e Option agora usam **exatamente** `Média Asiática (data) 1 … n` (o NDF vinha sem o "(data)").
+
+### 85.3 Live Position Swap Flow — "Tipo Amortização" com a mesma nomenclatura do Swap Characteristics
+`_lp_amort_label` passou a usar o **mesmo mapa** `_SWAPCHAR_AMORT_MAP` (0→Sobre Valor Base Original, 1→Sobre Valor
+Base Remanescente, 3→Na Data de Vencimento, 4→Sem Troca de Amortização) + extração de "NN (texto)" e tolerância a
+".0"; o mapa antigo `_SWAP_AMORT_TYPE` foi removido.
+
+**Arquivos:** `apps/pages/recon_payrec.py` **não**; tudo em `apps/pages/routes.py`
+(`_LPOPT_ASIAN_START/STEP`, `_LPNDF_ASIAN_START/STEP`, `_lpopt_collect`, `_lpndf_collect`, `_lp_amort_label`).
+
+## 86. Sessão 2026-07-15 — Reconciliation Pay/Rec: Total Net do lado cliente (geral), COMM TER trade-level, tolerância de centavos
+
+### 86.1 Colapso Total Net do lado cliente — geral (`28b1fea`)
+Antes, só **Atacama** e **Lawton** (funções dedicadas) tinham as pernas do lado **cliente** somadas; qualquer outra
+contraparte **Total Net** (ex.: **Marfrig**) ficava com várias linhas de cliente que somavam o valor único do JPM,
+sem casar. Novo `_net_total_net_client(client, net_map)` colapsa as pernas do cliente de **toda** contraparte Total
+Net em **1 registro por (contraparte, LE, produto)** — espelhando o lado JPM (que já emite 1 valor netado por grupo
+Total Net). Canoniza variantes de nome via `_norm_cpty`. **Subsume** o antigo `_net_lawton_client` (removido); Atacama
+continua tratado por `_net_atacama_client` (roda antes); contrapartes **Pay/Rec**/**No Net** e o ruído SPB
+(`drop_if_unmatched`) ficam intactos. (Marfrig: 2 pernas SWAP → 1 linha netada → **Settled**.)
+
+### 86.2 COMM TER — imposto (IR 0,005%) é **trade-level** (`c479581`, revisão de `28b1fea`)
+O imposto é retido **por trade**: neta as pernas do cashflows **por Trade Id** primeiro e aplica o fator
+`_COMM_TER_FEE = 1 − 0,00005` **só no net negativo (Pay) de cada trade**; depois soma. Aplicar por-perna crua
+super-tributava estruturas a termo cujas pernas mensais se cancelam dentro da trade (Novelis dava 13.018.447,79 em vez
+de **13.000.851,95**). Uma trade que neta **positivo** e os fundos isentos (Lawton, Atacama) **não** sofrem imposto.
+Ex.: trade +100.000 (receber) e trade −20.000 (pagar) → bruto 80.000, imposto 20.000·0,005% = 1,00, **líquido
+80.001,00** (o valor pago cai pelo imposto, então o recebido sobe).
+
+### 86.3 Tolerância de "Settled" = centavos (< R$1) (`9a5a924`)
+O limite por-linha de Settled era `< 0,005` (meio centavo) — estrito demais; linhas **já pareadas** com poucos
+**centavos** de resíduo (imposto 0,005%; soma de pernas do cliente arredondadas em centavos) ficavam em **Pending**.
+Novo `_TOL_SETTLED = 1,0` (< R$1, alinhado ao `_TOL_CHECK_VALUE` do resumo) + **fallback de pareamento** pelo valor de
+cliente mais próximo dentro de R$1 (para diferenças de centavos que cruzam a fronteira `,50` da chave whole-unit e não
+casavam). Quebras reais (≥ R$1) seguem em **Pending**.
+
+### 86.4 (contexto — mesma leva) rlctahis SWAP hist codes + netting Lawton/Atacama (`f3f6e0b`, `484a19c`)
+No `rlctahis` (SDConta interna) os nHistorico **4406, 9385, 4413** são **SWAP** (não NDF): `_SDCONTA_HIST_SWAP`,
+`product` propagado em `_cli_finalize`. Netting do lado cliente para Atacama (`_net_atacama_client`, EQUITIES por LE)
+e Lawton (agora via `_net_total_net_client`).
+
+**Arquivos:** `apps/pages/recon_payrec.py` (`_TOL_SETTLED`, `_COMM_TER_FEE` doc, `_jpm_cashflows` COMM TER por-trade,
+`_net_total_net_client` [substitui `_net_lawton_client`], call em `run_payrec`, `_reconcile` fallback+tolerância,
+`_SDCONTA_HIST_SWAP`).
+
+### Commits (sessão 2026-07-15)
+```
+6d212eb  new-deals preview Strike/Prêmio Unitário #,##0.00000000
+ed12dc2  Kapital Hybrids page + Live Position asian dates (CC/CW) + amort labels
+f003802  Kapital Hybrids: remove coluna Trade
+28b1fea  recon-payrec: Total Net client collapse geral + COMM TER trade-level (1ª versão)
+c479581  recon-payrec: COMM TER IR fee per-trade-net (não per-leg)
+9a5a924  recon-payrec: Settled dentro de centavos (< R$1) + fallback de match
+```

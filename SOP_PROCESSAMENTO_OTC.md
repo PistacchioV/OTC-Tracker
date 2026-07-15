@@ -311,9 +311,10 @@ Os 29 módulos abaixo estão previstos no menu lateral mas **ainda não foram de
 
 - [ ] **Electronic Inventory** — `/electronic-inventory`
 - [ ] **Latam Desk Position** — `/other-products-swap-latamdeskposition`
-- [ ] **Athena** — `/other-products-swap-athena`
-- [ ] **VCP** — `/other-products-swap-vcp`
-- [ ] **Events** — `/other-products-swap-events`
+- [x] **Athena** — `/other-products-swap-athena` — *implementado* (view read-only do JSON `br-onshore-settlements`; falta só recapturar a tela e mover para a seção 5)
+- [x] **VCP** — `/other-products-swap-vcp` — *implementado* (cross-join Operations B3 × Events; falta recaptura/mover)
+- [x] **Events** — `/other-products-swap-events` — *implementado* (view read-only do JSON `eventos-swap-jpm`, 63 colunas; falta recaptura/mover)
+- [x] **Kapital Hybrids** — `/other-products-swap-kapital-hybrids` — *implementado* (importa `BANCO_UPCOMING_PAYMENTS.csv`, filtra Settlement Date = hoje, agrega por Kapital ID: Owner curve = Σ positivos, Counterparty curve = Σ negativos, BRL Net Amount = Owner + Counterparty; Cetip ID via `mapping_swap-hyb.json`; falta recaptura/mover)
 
 **Documentação (Documentation)**
 
