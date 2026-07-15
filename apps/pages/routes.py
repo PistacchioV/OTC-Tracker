@@ -4939,12 +4939,12 @@ def api_swap_athena_data():
 #  Comma-delimited upcoming-payments file. On import (_swaphyb_extract) only rows
 #  whose Settlement Date = today are kept (the file has two Settlement Date
 #  columns, dd/mmm/yyyy and mm/dd/yyyy — same date, either matches). The page
-#  collapses the file's per-leg rows into one row per trade (Kapital ID /
-#  Trade Confirmation ID): Owner curve = Σ positive Amounts, Counterparty curve =
+#  collapses the file's per-leg rows into one row per trade, keyed by Kapital ID
+#  (Trade Confirmation ID): Owner curve = Σ positive Amounts, Counterparty curve =
 #  Σ negative Amounts (kept negative), BRL Net Amount = Owner + Counterparty — the
 #  net cashflow (all #,##0.00). The Cetip ID is pulled from mapping_swap-hyb.json
 #  (Kapital ID → b3_id).
-_SWAPHYB_COLUMNS = ['Trade', 'Kapital ID', 'Cetip ID', 'Trade Date', 'Settlement Date',
+_SWAPHYB_COLUMNS = ['Kapital ID', 'Cetip ID', 'Trade Date', 'Settlement Date',
                     'Stream Notional', 'Stream Notional Currency', 'Coupon Rate', 'Currency',
                     'DCF', 'Counterparty SPN', 'Counterparty Name',
                     'Owner curve', 'Counterparty curve', 'BRL Net Amount']
@@ -5111,14 +5111,14 @@ def _swaphyb_collect(ref):
             owner, cpty = g['owner'], g['cpty']
             net = owner + cpty                     # net cashflow (cpty is the negative sum)
             rows_out.append([
-                r.get('Trade', ''), kap, cet.get(kap, ''),
+                kap, cet.get(kap, ''),
                 r.get('Trade Date', ''), r.get('Settlement Date', ''),
                 r.get('Stream Notional', ''), r.get('Stream Notional Currency', ''),
                 r.get('Coupon Rate', ''), r.get('Currency', ''), r.get('DCF', ''),
                 r.get('Counterparty SPN', ''), r.get('Counterparty Name', ''),
                 '{:,.2f}'.format(owner), '{:,.2f}'.format(cpty), '{:,.2f}'.format(net),
             ])
-    # Sort by Trade A→Z (accent-insensitive); blank Trade goes last.
+    # Sort by Kapital ID A→Z (accent-insensitive); blank goes last.
     rows_out.sort(key=lambda x: (str(x[0]).strip() == '', _fcst_norm(str(x[0]))))
     return {'widgets': {'total': len(rows_out)}, 'columns': list(_SWAPHYB_COLUMNS),
             'rows': rows_out, 'updated': _ds_read_updated(jp)}
