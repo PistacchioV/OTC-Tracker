@@ -53,13 +53,15 @@ _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
 # exact whole-unit key.
 _TOL_COMM_OPT_PCT = 0.00005   # 0.005%
 _TOL_COMM_OPT_ABS = 0.20      # + 20 cents
-# 0.005% COMM TER fee (IR). It is withheld TRADE-LEVEL on each individual Pay
-# (negative) cashflow, so it is applied to every negative leg BEFORE netting and
-# the legs are summed afterwards. A counterparty whose legs net to a POSITIVE value
-# still owes the fee on its individual pay legs (net-of-fee positive ≠ raw sum), so
-# applying it only to a negative NETTED value would miss it. All-negative groups are
-# unaffected by the change (Σ(vᵢ·f) = f·Σvᵢ), so the AMG Pay net -219,047.36 still
-# becomes -219,036.41. Internal exclusive funds (Lawton, Atacama…) stay exempt.
+# 0.005% COMM TER fee (IR). It is withheld TRADE-LEVEL: the cashflow legs are first
+# netted per Trade Id, then the fee is applied to each trade whose net is a Pay
+# (negative) — the amount paid drops by |trade-net|·0.005%, so the counterparty's
+# total received rises by that much. The fee must NOT be applied per raw leg: a
+# term-structure trade has offsetting monthly legs that cancel, and taxing them
+# individually grossly over-states the IR. A counterparty whose trades net to a
+# positive total still owes the fee on its individual Pay trades. Example: a +100,000
+# receive trade and a −20,000 pay trade → gross 80,000, fee 20,000·0.005% = 1.00,
+# net 80,001.00. Internal exclusive funds (Lawton, Atacama…) stay exempt.
 _COMM_TER_FEE = 1 - 0.00005
 # Internal exclusive funds are EXEMPT from the COMM TER IR fee (Lawton, Atacama…).
 # The fee only hits external corporate clients (e.g. AMG BRASIL).
@@ -414,25 +416,36 @@ def _jpm_cashflows(rows, cols, net_map=None):
         else:
             rec['prod'] = 'COMM OPT'
     # Per-(client, product) contributions (drop Bco J.P. and bilateral bank legs).
+    # COMM TER carries a TRADE-LEVEL 0.005% IR fee, so its legs are first netted per
+    # Trade Id and the fee is applied to each NEGATIVE trade-net (never to raw legs
+    # that cancel out within a trade); every other product keeps its individual legs.
     groups = {}
+    comm_ter = {}                                              # cpty → {trade_id → net}
     for rec in recs:
         cl = rec['cpty'].lower()
         if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112]
             continue
         if 'banco' in cl:                                       # Filter[114] Bilateral
             continue
-        key = (rec['cpty'], rec['prod'])
-        groups.setdefault(key, []).append(rec['amount'])
+        if rec['prod'] == 'COMM TER':
+            per_trade = comm_ter.setdefault(rec['cpty'], {})
+            per_trade[rec['trade']] = per_trade.get(rec['trade'], 0.0) + rec['amount']
+        else:
+            groups.setdefault((rec['cpty'], rec['prod']), []).append(rec['amount'])
+    # Fold each COMM TER trade-net into its group. The 0.005% IR is withheld on a
+    # trade that nets to a Pay (negative): the amount paid drops by the tax, so the
+    # counterparty's total received goes UP by |trade-net|·0.005%. A trade that nets
+    # to a Receive (positive) is untouched, as are the exempt exclusive funds
+    # (Lawton, Atacama…). Netting per trade first is what keeps the fee off legs that
+    # already cancel inside a term structure (per-leg would grossly over-tax).
+    for cpty, trades in comm_ter.items():
+        exempt = cpty.upper() in _IR_EXEMPT_CPTY
+        groups[(cpty, 'COMM TER')] = [
+            (tnet * _COMM_TER_FEE if (not exempt and tnet < 0) else tnet)
+            for tnet in trades.values()
+        ]
     out = []
     for (cpty, prod), values in groups.items():
-        # 0.005% COMM TER IR fee is TRADE-LEVEL: it is withheld on each individual
-        # Pay (negative) cashflow, so hit every negative leg BEFORE the net-type
-        # reduction and let _emit_records sum them. A Total Net counterparty whose
-        # legs net to a positive value still owes the fee on its pay legs — applying
-        # it only to a negative netted value would miss it and not match the received
-        # amount. Exempt internal exclusive funds (Lawton, Atacama…) are untouched.
-        if prod == 'COMM TER' and cpty.upper() not in _IR_EXEMPT_CPTY:
-            values = [v * _COMM_TER_FEE if v < 0 else v for v in values]
         out += _emit_records(prod, cpty, values, _net_type_for(net_map, cpty))
     return out
 
