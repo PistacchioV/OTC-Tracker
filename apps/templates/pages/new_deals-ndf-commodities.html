@@ -4097,9 +4097,10 @@ $(document).ready(function() {
             var n = parseFloat(clean);
             if (isNaN(n)) return clean.replace('.', ',');
             if (div100) n = n / 100;
-            var s = n.toPrecision(15).replace(/\.?0+$/, '');
-            if (s.indexOf('e') !== -1) s = n.toFixed(15).replace(/\.?0+$/, '');
-            return s.replace('.', ',');
+            // Preview-only display: Strike shown as #,##0.00000000 (thousands-grouped,
+            // 8 decimals) for readability — NOT the file format. The ÷100 quoted-in-cents
+            // conversion above stays 100% faithful to the value written to the file.
+            return n.toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
         }
         function _qty(val) {
             val = _sh(String(val || ''));
