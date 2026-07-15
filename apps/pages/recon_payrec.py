@@ -46,6 +46,10 @@ _SMTP_PORT = 25
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 _TOL_CHECK_VALUE = 1.0        # Summary per-row |diff| < 1 → OK
+_TOL_SETTLED = 1.0            # Per-row |JPM − client| < R$1 (cents) → Settled. The
+                             # IR fee (0.005%) and summing cent-rounded client legs
+                             # leave a few centavos of noise; a half-cent threshold
+                             # wrongly parked those matched rows in Pending.
 _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
 # COMM OPT (option premiums) settle NET of the ~0.005% IR withheld on the premium,
 # so the JPM (gross) and client (net) sides can differ by up to 0.005% plus a small
@@ -615,9 +619,24 @@ def _reconcile(jpm, client):
             if best is not None:
                 mate = best
                 matched.add(id(best))
+        # Any product: a cents-level rounding (the COMM TER IR fee, or summing
+        # cent-rounded client legs of a netted counterparty) can straddle the .5
+        # whole-unit boundary and miss the exact-key bucket. Fall back to the nearest
+        # unmatched client value within R$1.
+        if mate is None:
+            best, best_d = None, None
+            for c in client:
+                if id(c) in matched:
+                    continue
+                d = abs(c['value'] - j['value'])
+                if d < _TOL_SETTLED and (best_d is None or d < best_d):
+                    best, best_d = c, d
+            if best is not None:
+                mate = best
+                matched.add(id(best))
         if mate:
             diff = mate['value'] - j['value']
-            status = 'Settled' if abs(diff) < 0.005 else 'Pending'   # agree to the cent
+            status = 'Settled' if abs(diff) < _TOL_SETTLED else 'Pending'   # agree within centavos (< R$1)
             if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
                 status = 'Settled'
             # COMM OPT: premium net of the ~0.005% IR → settle within 0.005% + 20 cents.
