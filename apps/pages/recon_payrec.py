@@ -53,11 +53,13 @@ _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
 # exact whole-unit key.
 _TOL_COMM_OPT_PCT = 0.00005   # 0.005%
 _TOL_COMM_OPT_ABS = 0.20      # + 20 cents
-# 0.005% COMM TER fee (IR). Applied to the NETTED value only when the net is a
-# Pay (negative) — Alteryx `if Name='Pay' AND New Field='COMM TER'`. A Receive
-# net (e.g. Lawton +230,927.66) is untouched; a Pay net (AMG -219,047.36) becomes
-# -219,036.41, matching the SPB side. Applying it per-leg (before netting) would
-# wrongly hit Lawton's pay leg, so it must run AFTER the per-client sum.
+# 0.005% COMM TER fee (IR). It is withheld TRADE-LEVEL on each individual Pay
+# (negative) cashflow, so it is applied to every negative leg BEFORE netting and
+# the legs are summed afterwards. A counterparty whose legs net to a POSITIVE value
+# still owes the fee on its individual pay legs (net-of-fee positive ≠ raw sum), so
+# applying it only to a negative NETTED value would miss it. All-negative groups are
+# unaffected by the change (Σ(vᵢ·f) = f·Σvᵢ), so the AMG Pay net -219,047.36 still
+# becomes -219,036.41. Internal exclusive funds (Lawton, Atacama…) stay exempt.
 _COMM_TER_FEE = 1 - 0.00005
 # Internal exclusive funds are EXEMPT from the COMM TER IR fee (Lawton, Atacama…).
 # The fee only hits external corporate clients (e.g. AMG BRASIL).
@@ -423,14 +425,15 @@ def _jpm_cashflows(rows, cols, net_map=None):
         groups.setdefault(key, []).append(rec['amount'])
     out = []
     for (cpty, prod), values in groups.items():
-        for rec in _emit_records(prod, cpty, values, _net_type_for(net_map, cpty)):
-            # 0.005% COMM TER IR fee: only on a Pay leg, and NOT for the exempt
-            # internal exclusive funds (Lawton, Atacama…). Applied AFTER the
-            # net-type reduction so it hits the aggregated pay, never a raw leg
-            # of a netted client.
-            if prod == 'COMM TER' and rec['value'] < 0 and cpty.upper() not in _IR_EXEMPT_CPTY:
-                rec['value'] *= _COMM_TER_FEE
-            out.append(rec)
+        # 0.005% COMM TER IR fee is TRADE-LEVEL: it is withheld on each individual
+        # Pay (negative) cashflow, so hit every negative leg BEFORE the net-type
+        # reduction and let _emit_records sum them. A Total Net counterparty whose
+        # legs net to a positive value still owes the fee on its pay legs — applying
+        # it only to a negative netted value would miss it and not match the received
+        # amount. Exempt internal exclusive funds (Lawton, Atacama…) are untouched.
+        if prod == 'COMM TER' and cpty.upper() not in _IR_EXEMPT_CPTY:
+            values = [v * _COMM_TER_FEE if v < 0 else v for v in values]
+        out += _emit_records(prod, cpty, values, _net_type_for(net_map, cpty))
     return out
 
 
@@ -803,23 +806,32 @@ def _net_atacama_client(client):
     return out
 
 
-def _net_lawton_client(client):
-    """Lawton is Total Net. The JPM side already nets each Lawton product into a
-    single value; collapse the client-side Lawton legs the SAME way — one netted
-    record per (LE, product) — so e.g. the SWAP legs sum to the JPM SWAP net
-    (-946,428.52) instead of sitting as many unmatched rows. Netting is kept
-    per product (SWAP stays SWAP, NDF stays NDF) to match the JPM per-product
-    rows."""
-    def _is_lawton(nm):
-        return 'LAWTON MULTIMERCADO EXCLUSIVO' in str(nm or '').upper()
-    lw = [c for c in client if _is_lawton(c.get('client'))]
-    if not lw:
-        return client
-    out = [c for c in client if not _is_lawton(c.get('client'))]
-    by_key = {}
-    for c in lw:
-        by_key.setdefault((c.get('le', 'JPM'), c.get('product', 'NDF')), []).append(c)
-    for (le, product), recs in by_key.items():
+def _net_total_net_client(client, net_map):
+    """Collapse the client-side legs of EVERY Total Net counterparty into a single
+    netted record per (counterparty, LE, product) — mirroring the JPM side, which
+    already emits one netted value per Total Net group. This is what makes e.g.
+    Marfrig's two SWAP client legs (107,493,036.20 + 78,616,850.61) net into the
+    single value that reconciles against the JPM SWAP total, and it subsumes the old
+    Lawton-specific rule (Lawton is Total Net → its SWAP legs still sum to
+    -946,428.52). Non-Total-Net counterparties keep their individual legs; Atacama is
+    already collapsed by _net_atacama_client; drop-if-unmatched (SPB noise) legs are
+    left untouched so they can still be dropped. Counterparty-name desk variants are
+    canonicalised (via _norm_cpty) so they group together."""
+    passthrough, groups, order = [], {}, []
+    for c in client:
+        canon = _norm_cpty(c.get('client', ''))
+        if c.get('drop_if_unmatched') or _is_atacama(canon) \
+                or _net_type_for(net_map, canon) != 'Total Net':
+            passthrough.append(c)
+            continue
+        key = (_norm(canon), c.get('le', 'JPM'), c.get('product', 'NDF'))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(c)
+    out = list(passthrough)
+    for key in order:
+        recs = groups[key]
         tot = sum(_num(c.get('value', 0)) for c in recs)
         if abs(tot) < 1e-9:
             continue
@@ -827,7 +839,7 @@ def _net_lawton_client(client):
         out.append({
             'value': tot, 'client': rep.get('client', ''),
             'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
-            'product': product, 'le': le,
+            'product': rep.get('product', 'NDF'), 'le': rep.get('le', 'JPM'),
             'pay_receive': 'Receive' if tot > 0 else 'Pay',
         })
     return out
@@ -862,7 +874,7 @@ def run_payrec(recon_date, files=None, mode='auto'):
             client += _cli_spb(rows, cols, mgt=True)
 
     client = _net_atacama_client(client)      # Atacama client legs are Total Net too
-    client = _net_lawton_client(client)       # Lawton client legs Total Net per product
+    client = _net_total_net_client(client, net_map)   # every Total Net cpty: collapse client legs per product
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
     # Carry forward the previous day's unresolved Pending Payment/Receivement rows
