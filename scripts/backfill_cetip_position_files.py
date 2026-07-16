@@ -94,12 +94,14 @@ def iter_day_dirs(src_root, only_year=None):
                     yield os.path.join(year, month_folder, day), dpath
 
 
-def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats):
+def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats,
+                rebuild_json=False):
     """Fill one date's gaps in the DESTINATION from the source.
 
     For the date, look at what the destination folder already has and save from
     the source ONLY the expected files it is missing (never overwriting). JSONs
-    for days not yet created are then written too. Returns (filled_names, present)
+    for days not yet created are then written too (rebuild_json forces every JSON
+    to be rewritten without re-saving the files). Returns (filled_names, present)
     so the caller can report which dates were missing files.
     """
     files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
@@ -137,12 +139,13 @@ def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats):
                     stats['errors'] += 1
                     continue
 
-            # 3) Export JSON — only for days whose JSON isn't there yet.
+            # 3) Export JSON — only for days whose JSON isn't there yet, unless
+            #    overwrite/rebuild_json forces every JSON to be rewritten.
             if make_json and rule.get('json') and not dry_run:
                 read_from = dest_path if os.path.exists(dest_path) else src_path
                 try:
                     if R._b3_export_json(read_from, rule['json'], dest_name, dref,
-                                         skip_existing=not overwrite):
+                                         skip_existing=not (overwrite or rebuild_json)):
                         stats['json'] += 1
                 except Exception as exc:
                     print('    ! FAIL json {}: {}'.format(name, exc))
@@ -163,6 +166,10 @@ def main():
                     help='Only copy the files; do not build the per-day JSONs.')
     ap.add_argument('--overwrite', action='store_true',
                     help='Re-save files and rebuild JSONs even if they already exist.')
+    ap.add_argument('--rebuild-json', action='store_true',
+                    help='Rebuild every per-day JSON (from the already-saved dest '
+                         'files) WITHOUT re-saving the files — e.g. to refresh the '
+                         'DOPERACOES JSONs on dates already saved.')
     ap.add_argument('--dry-run', action='store_true',
                     help='Preview what would be saved/created; write nothing.')
     args = ap.parse_args()
@@ -186,7 +193,8 @@ def main():
         dest_dir = os.path.join(dest_root, rel)
         days += 1
         filled, present = process_day(day_dir, dest_dir, make_json,
-                                      args.overwrite, args.dry_run, stats)
+                                      args.overwrite, args.dry_run, stats,
+                                      rebuild_json=args.rebuild_json)
         if filled:
             # This date was missing file(s) in the destination — report + fill.
             gap_days += 1
