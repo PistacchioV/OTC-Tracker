@@ -11,6 +11,19 @@ self.addEventListener('activate', function (event) {
     event.waitUntil(self.clients.claim());
 });
 
+// Notification "page" label → the page it deep-links to when clicked. Kept in
+// sync with PAGE_URL in partials/topbar.html so a push click and a bell click
+// land on the same page.
+var PAGE_URL = {
+    'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
+    'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
+    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'Index B3': '/index-b3',
+    'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
+    'Reconciliation': '/reconciliation-payrec', 'Reference Data': '/reference-data',
+    'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
+    'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf'
+};
+
 self.addEventListener('push', function (event) {
     event.waitUntil(
         fetch('/api/notifications', { credentials: 'include' })
@@ -25,6 +38,7 @@ self.addEventListener('push', function (event) {
                     title = n.actor_name || n.actor_sid || 'OTC Tracker';
                     body = (n.action || '') + ' in ' + (n.page || '') +
                            (detail ? ' — ' + detail : '');
+                    url = PAGE_URL[n.page] || '/dashboard';
                 }
                 return self.registration.showNotification(title, {
                     body: body,
