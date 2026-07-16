@@ -207,6 +207,7 @@
       .then(function (res) {
         var b = res.body || {};
         if (res.ok && b.success !== false && !b.error && !b.not_found) {
+          if (mode === 'manual') clearDzFiles();   // uploads are now saved in the folder — clear the dropzone
           resetJustify();
           render(b);
           setText('prMeta', (b.meta || '') + (b.recon_date_fmt ? ('  ·  ' + b.recon_date_fmt) : ''));
@@ -361,6 +362,8 @@
 
   // ── Dropzone (holds files until Run) ────────────────────────────────────────
   var dzFiles = [];
+  var dzRenderChips = function () {};        // set by wireDropzone; used to redraw the chips
+  function clearDzFiles() { dzFiles.length = 0; dzRenderChips(); }
   function wireDropzone() {
     var drop = document.getElementById('prDrop');
     var input = document.getElementById('prFiles');
@@ -376,6 +379,7 @@
     }
     drop.addEventListener('click', function (e) { if (e.target.closest('.pr-dz-x')) return; input.click(); });
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    dzRenderChips = renderChips;             // expose for clearDzFiles() after a run
     input.addEventListener('change', function () { Array.prototype.forEach.call(input.files, function (f) { dzFiles.push(f); }); input.value = ''; renderChips(); });
     ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('pr-dz-over'); }); });
     ['dragleave', 'dragend'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('pr-dz-over'); }); });
