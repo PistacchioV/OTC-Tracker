@@ -926,22 +926,30 @@ def _net_atacama_client(client):
     return out
 
 
-def _net_total_net_client(client, net_map):
-    """Collapse the client-side legs of EVERY Total Net counterparty into a single
-    netted record per (counterparty, LE, product) — mirroring the JPM side, which
-    already emits one netted value per Total Net group. This is what makes e.g.
-    Marfrig's two SWAP client legs (107,493,036.20 + 78,616,850.61) net into the
-    single value that reconciles against the JPM SWAP total, and it subsumes the old
-    Lawton-specific rule (Lawton is Total Net → its SWAP legs still sum to
-    -946,428.52). Non-Total-Net counterparties keep their individual legs; Atacama is
-    already collapsed by _net_atacama_client; drop-if-unmatched (SPB noise) legs are
-    left untouched so they can still be dropped. Counterparty-name desk variants are
-    canonicalised (via _norm_cpty) so they group together."""
+def _net_client(client, net_map):
+    """Apply each counterparty's settlement net type to its CLIENT-side legs so the
+    client side reduces EXACTLY like the JPM side (_emit_records) — the net type is
+    honoured for both payments and receipts, on both ends:
+      Total Net → one netted record per (counterparty, LE, product)  [Pay netted
+                  against Receive]. Makes e.g. Marfrig's two SWAP client legs
+                  (107,493,036.20 + 78,616,850.61) net into the single value that
+                  reconciles against the JPM SWAP total (subsumes the old Lawton
+                  rule: Lawton is Total Net → its SWAP legs still sum to -946,428.52).
+      Pay/Rec   → up to two records per group: Σ receives (>0) and Σ pays (<0), kept
+                  separate (never netted against each other) — mirroring the JPM
+                  Pay/Rec legs so each side settles Pay↔Pay and Receive↔Receive.
+      No Net    → every individual leg kept as-is.
+    Counterparty-name desk variants are canonicalised (via _norm_cpty) so they group
+    together. Atacama is already collapsed to a single EQUITIES record per LE by
+    _net_atacama_client (Total Net), so it passes through this grouping unchanged.
+    Drop-if-unmatched (SPB noise) legs are left untouched so they can still be
+    dropped downstream."""
     passthrough, groups, order = [], {}, []
     for c in client:
         canon = _norm_cpty(c.get('client', ''))
-        if c.get('drop_if_unmatched') or _is_atacama(canon) \
-                or _net_type_for(net_map, canon) != 'Total Net':
+        # No Net (and any leftover drop-if-unmatched noise) keeps its individual
+        # legs; Total Net / Pay/Rec are grouped and reduced below.
+        if c.get('drop_if_unmatched') or _net_type_for(net_map, canon) == 'No Net':
             passthrough.append(c)
             continue
         key = (_norm(canon), c.get('le', 'JPM'), c.get('product', 'NDF'))
@@ -952,16 +960,27 @@ def _net_total_net_client(client, net_map):
     out = list(passthrough)
     for key in order:
         recs = groups[key]
-        tot = sum(_num(c.get('value', 0)) for c in recs)
-        if abs(tot) < 1e-9:
-            continue
         rep = recs[0]
-        out.append({
-            'value': tot, 'client': rep.get('client', ''),
-            'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
-            'product': rep.get('product', 'NDF'), 'le': rep.get('le', 'JPM'),
-            'pay_receive': 'Receive' if tot > 0 else 'Pay',
-        })
+        net_type = _net_type_for(net_map, _norm_cpty(rep.get('client', '')))
+        values = [_num(c.get('value', 0)) for c in recs]
+
+        def _mk(v):
+            return {'value': v, 'client': rep.get('client', ''),
+                    'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
+                    'product': rep.get('product', 'NDF'), 'le': rep.get('le', 'JPM'),
+                    'pay_receive': 'Receive' if v > 0 else 'Pay'}
+
+        if net_type == 'Pay/Rec':
+            recv = sum(v for v in values if v > 0)
+            pay = sum(v for v in values if v < 0)
+            if abs(recv) >= 1e-9:
+                out.append(_mk(recv))
+            if abs(pay) >= 1e-9:
+                out.append(_mk(pay))
+        else:  # Total Net (default)
+            tot = sum(values)
+            if abs(tot) >= 1e-9:
+                out.append(_mk(tot))
     return out
 
 
@@ -994,7 +1013,7 @@ def run_payrec(recon_date, files=None, mode='auto'):
             client += _cli_spb(rows, cols, mgt=True)
 
     client = _net_atacama_client(client)      # Atacama client legs are Total Net too
-    client = _net_total_net_client(client, net_map)   # every Total Net cpty: collapse client legs per product
+    client = _net_client(client, net_map)     # apply each cpty's net type to client legs (Pay/Rec split, Total Net collapse)
     details, summary = _reconcile(jpm, client)
     pend_pay, pend_rec, settled = _split_tables(details)
     # Carry forward the previous day's unresolved Pending Payment/Receivement rows
