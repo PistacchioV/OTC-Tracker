@@ -1234,6 +1234,64 @@ var OTCFileUpload = (function () {
     }
 
     // -------------------------------------------------------------------------
+    // i18n for the box-scan popups. Copy is authored in ENGLISH (rendered inline
+    // so the popup is correct before/without translation) and tagged with
+    // data-lang keys; _applyBoxTrans() then overrides each [data-lang] node from
+    // the active language file (/static/data/translations/<lang>.json — the same
+    // store app.js uses), interpolating {0},{1},… from the node's data-n* attrs.
+    // Dynamic content (email counts, the raw error) stays outside the keys.
+    // -------------------------------------------------------------------------
+    var _BOX_EN = {
+        'nd-box-unavailable-title': 'Box unavailable',
+        'nd-box-unavailable-msg':   'Automatic box scan requires Outlook on the Windows environment.<br><br><small class="text-muted">Drop the files in the dropzone to import manually.</small>',
+        'nd-box-none-title':        'No emails in the box',
+        'nd-box-none-msg':          'No "Brazil Booking Recap" <strong>{0}</strong> email was found in the box.',
+        'nd-box-nodeals-title':     'No Deals Found',
+        'nd-box-nodeals-msg':       'No deal rows were found in the box emails.',
+        'nd-box-complete-title':    'Import Complete',
+        'nd-box-complete-msg':      '{0} deal(s) imported from {1} email(s) in the box.<br><small class="text-muted">{2} email(s) moved to New deals &gt; B2Bs Automatic.</small>',
+        'nd-box-error-title':       'Box scan error',
+        'nd-box-cancel-note':       '<br><br><small class="text-warning"><strong>{0} cancellation email(s) deleted from the box.</strong></small>'
+    };
+    var _boxTransCache = {};
+    function _boxLang() {
+        return (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').toLowerCase();
+    }
+    function _interp(s, args) {
+        return String(s).replace(/\{(\d+)\}/g, function (_m, i) {
+            return (args && args[i] != null) ? args[i] : '';
+        });
+    }
+    // <span data-lang=key data-n0=.. > with the English text already inside.
+    function _bxSpan(key, args) {
+        var attrs = '';
+        (args || []).forEach(function (v, i) {
+            attrs += ' data-n' + i + '="' + String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"';
+        });
+        return '<span data-lang="' + key + '"' + attrs + '>' + _interp(_BOX_EN[key] || '', args) + '</span>';
+    }
+    function _applyBoxTrans(popup) {
+        if (!popup) return;
+        var lang = _boxLang();
+        var apply = function (dict) {
+            popup.querySelectorAll('[data-lang]').forEach(function (el) {
+                var key = el.getAttribute('data-lang');
+                var val = key.split('.').reduce(function (a, k) { return (a && a[k] != null) ? a[k] : null; }, dict);
+                if (val == null) return;
+                var args = [];
+                for (var i = 0; el.getAttribute('data-n' + i) != null; i++) args.push(el.getAttribute('data-n' + i));
+                el.innerHTML = _interp(val, args);
+            });
+        };
+        if (lang === 'en') return;                       // English already inline
+        if (_boxTransCache[lang]) { apply(_boxTransCache[lang]); return; }
+        fetch('/static/data/translations/' + lang + '.json')
+            .then(function (r) { return r.ok ? r.json() : {}; })
+            .catch(function () { return {}; })
+            .then(function (d) { _boxTransCache[lang] = d; apply(d); });
+    }
+
+    // -------------------------------------------------------------------------
     // Automatic route: when the Import button is clicked with an EMPTY dropzone,
     // sweep the shared Outlook box for this page's "Brazil Booking Recap" emails
     // (NDF Comm → Swap, Opt Comm → Option), process each one through the SAME
@@ -1268,10 +1326,10 @@ var OTCFileUpload = (function () {
                     if (data && data.unavailable) {
                         setBtn(false);
                         Swal.fire({
-                            title: 'Box indisponível',
-                            html:  'A varredura automática do box requer o Outlook no ambiente Windows.<br><br>' +
-                                   '<small class="text-muted">Arraste os arquivos no dropzone para importar manualmente.</small>',
-                            icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                            title: _bxSpan('nd-box-unavailable-title'),
+                            html:  _bxSpan('nd-box-unavailable-msg'),
+                            icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d',
+                            didOpen: function (p) { _applyBoxTrans(p); }
                         });
                         return { totalDeals: 0, shownSwal: true };
                     }
@@ -1315,30 +1373,29 @@ var OTCFileUpload = (function () {
                         }
 
                         var cancelNote = cancelled.length
-                            ? '<br><br><small class="text-warning"><strong>' + cancelled.length +
-                              ' e-mail(s) de cancelamento deletado(s) do box.</strong></small>'
+                            ? _bxSpan('nd-box-cancel-note', [cancelled.length])
                             : '';
 
                         if (emails.length === 0) {
                             Swal.fire({
-                                title: 'Nenhum e-mail no box',
-                                html:  'Nenhum e-mail "Brazil Booking Recap" de <strong>' + productLabel +
-                                       '</strong> foi encontrado no box.' + cancelNote,
-                                icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                                title: _bxSpan('nd-box-none-title'),
+                                html:  _bxSpan('nd-box-none-msg', [productLabel]) + cancelNote,
+                                icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d',
+                                didOpen: function (p) { _applyBoxTrans(p); }
                             });
                         } else if (totalDeals === 0) {
                             Swal.fire({
-                                title: 'No Deals Found',
-                                html:  'Nenhuma linha de deal foi encontrada nos e-mails do box.' + cancelNote,
-                                icon:  'warning', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                                title: _bxSpan('nd-box-nodeals-title'),
+                                html:  _bxSpan('nd-box-nodeals-msg') + cancelNote,
+                                icon:  'warning', confirmButtonText: 'OK', confirmButtonColor: '#6c757d',
+                                didOpen: function (p) { _applyBoxTrans(p); }
                             });
                         } else {
                             Swal.fire({
-                                title: 'Import Complete',
-                                html:  totalDeals + ' deal(s) importado(s) de ' + emails.length + ' e-mail(s) do box.' +
-                                       '<br><small class="text-muted">' + archived +
-                                       ' e-mail(s) movido(s) para New deals &gt; B2Bs Automatic.</small>' + cancelNote,
-                                icon:  'success', confirmButtonText: 'OK', confirmButtonColor: '#0dcaf0'
+                                title: _bxSpan('nd-box-complete-title'),
+                                html:  _bxSpan('nd-box-complete-msg', [totalDeals, emails.length, archived]) + cancelNote,
+                                icon:  'success', confirmButtonText: 'OK', confirmButtonColor: '#0dcaf0',
+                                didOpen: function (p) { _applyBoxTrans(p); }
                             });
                         }
                         return { totalDeals: totalDeals, shownSwal: true };
@@ -1349,9 +1406,10 @@ var OTCFileUpload = (function () {
                 console.error('OTCFileUpload: box scan error', err);
                 setBtn(false);
                 Swal.fire({
-                    title: 'Erro na varredura do box',
+                    title: _bxSpan('nd-box-error-title'),
                     text:  err && err.message ? err.message : String(err),
-                    icon:  'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545'
+                    icon:  'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545',
+                    didOpen: function (p) { _applyBoxTrans(p); }
                 });
                 return { totalDeals: 0, shownSwal: true };
             });
