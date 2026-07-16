@@ -682,19 +682,21 @@
                 toastEl.innerHTML =
                     '<div class="toast-body position-relative pe-4">' +
                       '<button type="button" class="btn-close position-absolute top-0 end-0 m-1" data-bs-dismiss="toast" aria-label="Close"></button>' +
-                      '<div class="otc-toast-content"' + (b.pageUrl ? ' style="cursor:pointer"' : '') + '>' +
+                      '<div class="otc-toast-content">' +
                         notifBodyHtml(n, b) +
                       '</div>' +
                     '</div>';
                 container.appendChild(toastEl);
-                var content = toastEl.querySelector('.otc-toast-content');
-                if (content) {
-                    // Same behaviour as the bell item: mark read + deep-link.
-                    content.addEventListener('click', function () {
-                        markRead(n.id);
-                        if (b.pageUrl) window.location.href = b.pageUrl;
-                    });
-                }
+                // Make the WHOLE toast clickable (same deep-link as the bell item),
+                // not just the inner content — the toast-body padding used to be a
+                // dead zone, so a click near the edge did nothing. Only the close
+                // button dismisses without navigating.
+                if (b.pageUrl) toastEl.style.cursor = 'pointer';
+                toastEl.addEventListener('click', function (ev) {
+                    if (ev.target.closest('[data-bs-dismiss="toast"]')) return;
+                    markRead(n.id);
+                    if (b.pageUrl) window.location.href = b.pageUrl;
+                });
                 if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
                 // Autohide is handled by _armToastAutohide (focused → 8s; not
                 // focused → pinned), so Bootstrap must not run its own timer.
