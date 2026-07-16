@@ -153,15 +153,18 @@ def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats,
     return filled, present
 
 
-def main():
+def main(default_src=None, default_dest=None, description=None):
+    """Run the backfill. default_src/default_dest let a thin wrapper (e.g. the
+    Vernacci Batch Conecta variant) point at a different source/destination while
+    reusing all of this logic; both stay overridable on the command line."""
     ap = argparse.ArgumentParser(
-        description='Backfill CETIP position files (incl. DOPERACOES) into the '
-                    'destination tree without overwriting what is already there.')
+        description=description or ('Backfill CETIP position files (incl. DOPERACOES) '
+                    'into the destination tree without overwriting what is already there.'))
     ap.add_argument('--year', help='Limit to a single year subtree (e.g. 2026).')
-    ap.add_argument('--src', default=R.CETIP_SOURCE_ROOT,
-                    help='Source root (default: $CETIP_SOURCE_ROOT / routes.py default).')
-    ap.add_argument('--dest', default=R.CETIP_DEST_ROOT,
-                    help='Destination root (default: $CETIP_DEST_ROOT / routes.py default).')
+    ap.add_argument('--src', default=default_src or R.CETIP_SOURCE_ROOT,
+                    help='Source root (default: %(default)s).')
+    ap.add_argument('--dest', default=default_dest or R.CETIP_DEST_ROOT,
+                    help='Destination root (default: %(default)s).')
     ap.add_argument('--no-json', action='store_true',
                     help='Only copy the files; do not build the per-day JSONs.')
     ap.add_argument('--overwrite', action='store_true',
