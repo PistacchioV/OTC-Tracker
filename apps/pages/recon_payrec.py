@@ -277,15 +277,31 @@ def _read_table(src, sheet_hint=None):
     lower = str(name).lower()
     try:
         if lower.endswith(('.xlsx', '.xls')):
-            handle = src if isinstance(src, str) else src.stream
+            # Read the workbook into memory so the on-disk file is only held open
+            # for the read itself. pd.ExcelFile keeps its handle open until closed,
+            # which on Windows locks the file (can't delete/edit the cashflows
+            # export) — so slurp the bytes, then close the ExcelFile explicitly.
+            import io
+            if isinstance(src, str):
+                with open(src, 'rb') as _fh:
+                    handle = io.BytesIO(_fh.read())
+            else:
+                try:
+                    src.stream.seek(0)
+                except Exception:
+                    pass
+                handle = io.BytesIO(src.stream.read())
             xls = pd.ExcelFile(handle)
-            sheet = xls.sheet_names[0]
-            if sheet_hint:
-                for sn in xls.sheet_names:
-                    if _norm(sheet_hint) in _norm(sn):
-                        sheet = sn
-                        break
-            df = xls.parse(sheet, dtype=str)
+            try:
+                sheet = xls.sheet_names[0]
+                if sheet_hint:
+                    for sn in xls.sheet_names:
+                        if _norm(sheet_hint) in _norm(sn):
+                            sheet = sn
+                            break
+                df = xls.parse(sheet, dtype=str)
+            finally:
+                xls.close()
         else:
             df = _read_csv_any(src)
         df = df.fillna('')
