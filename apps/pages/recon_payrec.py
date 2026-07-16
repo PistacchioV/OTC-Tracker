@@ -254,6 +254,58 @@ def _net_type_for(net_map, cpty_name):
     return (net_map or {}).get(_norm(cpty_name), 'Total Net')
 
 
+# ── Saint-Gobain per-counterparty overrides ───────────────────────────────────
+# Two counterparties settle with a DIRECTION-SPECIFIC net type (hard business rule,
+# independent of CounterpartyDetails), applied on BOTH the JPM and the client side
+# via _reduce_net_values:
+#   Saint-Gobain do Brasil   → No Net on payments AND receipts (every leg on its own).
+#   Saint-Gobain Canalização → No Net on receipts (each receipt on its own) but
+#                              Pay/Rec on payments (all pays collapse into one leg).
+# Matched on the distinctive 'gobain' token (accent/space-insensitive via _norm);
+# Canalização is the more specific match, so 'do Brasil' explicitly excludes it.
+def _is_sg_canal(name):
+    n = _norm(name)
+    return 'gobain' in n and 'canalizacao' in n
+
+
+def _is_sg_brasil(name):
+    n = _norm(name)
+    return 'gobain' in n and 'brasil' in n and 'canalizacao' not in n
+
+
+def _reduce_net_values(cpty, values, net_type):
+    """Signed output values for a counterparty group, honouring its settlement net
+    type. Used identically by the JPM side (_emit_records) and the client side
+    (_net_client) so the net type is applied the same way on both ends. The two
+    Saint-Gobain direction-specific overrides are checked first, then the standard
+    Total Net / Pay/Rec / No Net rules. Near-zero results are dropped."""
+    nz = [v for v in values if abs(v) >= 1e-9]
+    # Saint-Gobain do Brasil: No Net both ways → every leg on its own.
+    if _is_sg_brasil(cpty):
+        return nz
+    # Saint-Gobain Canalização: receipts No Net (individual); payments Pay/Rec
+    # (every pay summed into a single leg).
+    if _is_sg_canal(cpty):
+        out = [v for v in nz if v > 0]
+        pay = sum(v for v in values if v < 0)
+        if abs(pay) >= 1e-9:
+            out.append(pay)
+        return out
+    if net_type == 'No Net':
+        return nz
+    if net_type == 'Pay/Rec':
+        out = []
+        recv = sum(v for v in values if v > 0)
+        pay = sum(v for v in values if v < 0)
+        if abs(recv) >= 1e-9:
+            out.append(recv)
+        if abs(pay) >= 1e-9:
+            out.append(pay)
+        return out
+    tot = sum(values)                                  # Total Net (default)
+    return [tot] if abs(tot) >= 1e-9 else []
+
+
 def _le_from_legal_entity(v):
     """Legal Entity column (settlement file) → LE. 'JPMorgan Chase Bank, N.A. -
     São Paulo Branch' → MGT; 'Banco J.P. Morgan S.A.' (and anything else) → JPM."""
@@ -268,34 +320,19 @@ def _emit_records(product, cpty, values, net_type, le='JPM'):
       Total Net → 1 record (Pay netted against Receive)
       Pay/Rec   → up to 2 records: Σ receives (>0) and Σ pays (<0), not netted
       No Net    → one record per individual value
+      Saint-Gobain do Brasil / Canalização → direction-specific (see _reduce_net_values)
     Sign decides Pay/Receive; near-zero results are dropped. `le` (JPM/MGT) is
     carried on every emitted record (JPM for cashflows/FXO; per Legal Entity for
     the settlement file)."""
     cu = str(cpty or '').upper()
     if _is_atacama(cu):
         product = 'EQUITIES'          # Atacama is always EQUITIES (business rule)
-    out = []
 
     def _rec(v):
         return {'product': product, 'cpty': cu, 'value': v,
                 'pay_receive': 'Receive' if v > 0 else 'Pay', 'le': le}
 
-    if net_type == 'No Net':
-        for v in values:
-            if abs(v) >= 1e-9:
-                out.append(_rec(v))
-    elif net_type == 'Pay/Rec':
-        recv = sum(v for v in values if v > 0)
-        pay = sum(v for v in values if v < 0)
-        if abs(recv) >= 1e-9:
-            out.append(_rec(recv))
-        if abs(pay) >= 1e-9:
-            out.append(_rec(pay))
-    else:  # Total Net (default)
-        tot = sum(values)
-        if abs(tot) >= 1e-9:
-            out.append(_rec(tot))
-    return out
+    return [_rec(v) for v in _reduce_net_values(cpty, values, net_type)]
 
 
 # ── File reading ──────────────────────────────────────────────────────────────
@@ -939,6 +976,9 @@ def _net_client(client, net_map):
                   separate (never netted against each other) — mirroring the JPM
                   Pay/Rec legs so each side settles Pay↔Pay and Receive↔Receive.
       No Net    → every individual leg kept as-is.
+      Saint-Gobain do Brasil / Canalização → direction-specific (see _reduce_net_values):
+                  do Brasil keeps every leg (No Net both ways); Canalização keeps each
+                  receipt (No Net) but collapses all payments into one Pay/Rec leg.
     Counterparty-name desk variants are canonicalised (via _norm_cpty) so they group
     together. Atacama is already collapsed to a single EQUITIES record per LE by
     _net_atacama_client (Total Net), so it passes through this grouping unchanged.
@@ -947,9 +987,20 @@ def _net_client(client, net_map):
     passthrough, groups, order = [], {}, []
     for c in client:
         canon = _norm_cpty(c.get('client', ''))
-        # No Net (and any leftover drop-if-unmatched noise) keeps its individual
-        # legs; Total Net / Pay/Rec are grouped and reduced below.
-        if c.get('drop_if_unmatched') or _net_type_for(net_map, canon) == 'No Net':
+        val = _num(c.get('value', 0))
+        # Individual legs kept as-is (preserving each leg's own metadata):
+        #   drop-if-unmatched noise; Saint-Gobain do Brasil (No Net both ways);
+        #   Saint-Gobain Canalização RECEIPTS (No Net); any standard No Net cpty.
+        # Everything else (incl. Canalização PAYMENTS) is grouped and reduced below.
+        if c.get('drop_if_unmatched') or _is_sg_brasil(canon):
+            passthrough.append(c)
+            continue
+        if _is_sg_canal(canon):
+            if val > 0:                                   # receipt → No Net (keep as-is)
+                passthrough.append(c)
+                continue
+            # payment → grouped so all pays collapse into one Pay/Rec leg
+        elif _net_type_for(net_map, canon) == 'No Net':
             passthrough.append(c)
             continue
         key = (_norm(canon), c.get('le', 'JPM'), c.get('product', 'NDF'))
@@ -961,26 +1012,14 @@ def _net_client(client, net_map):
     for key in order:
         recs = groups[key]
         rep = recs[0]
-        net_type = _net_type_for(net_map, _norm_cpty(rep.get('client', '')))
+        canon = _norm_cpty(rep.get('client', ''))
+        net_type = _net_type_for(net_map, canon)
         values = [_num(c.get('value', 0)) for c in recs]
-
-        def _mk(v):
-            return {'value': v, 'client': rep.get('client', ''),
-                    'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
-                    'product': rep.get('product', 'NDF'), 'le': rep.get('le', 'JPM'),
-                    'pay_receive': 'Receive' if v > 0 else 'Pay'}
-
-        if net_type == 'Pay/Rec':
-            recv = sum(v for v in values if v > 0)
-            pay = sum(v for v in values if v < 0)
-            if abs(recv) >= 1e-9:
-                out.append(_mk(recv))
-            if abs(pay) >= 1e-9:
-                out.append(_mk(pay))
-        else:  # Total Net (default)
-            tot = sum(values)
-            if abs(tot) >= 1e-9:
-                out.append(_mk(tot))
+        for v in _reduce_net_values(canon, values, net_type):
+            out.append({'value': v, 'client': rep.get('client', ''),
+                        'sistema': rep.get('sistema', ''), 'snumconta': rep.get('snumconta', ''),
+                        'product': rep.get('product', 'NDF'), 'le': rep.get('le', 'JPM'),
+                        'pay_receive': 'Receive' if v > 0 else 'Pay'})
     return out
 
 
