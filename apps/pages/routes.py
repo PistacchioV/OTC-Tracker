@@ -2034,7 +2034,16 @@ _CETIP_RULES = [
      'match': lambda n: '_doperacoes.txt' in n,
      'date_start': 8,
      'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r),
-     'json': {'category': 'Operations', 'has_header': False, 'header_key': 'operations'}},
+     # DOPERACOES ships WITH a header row (first line); data from the 2nd line —
+     # like the Save-Settlements "operações" file. Keep only our accounts
+     # (Conta = col B) and the derivative title types (Tipo Titulo = col J).
+     'json': {'category': 'Operations', 'has_header': True,
+              'filters': [
+                  {'column': ['conta'], 'index': 1,
+                   'allowed': ['73760009', '04880006']},
+                  {'column': ['tipo titulo', 'tipo título'], 'index': 9,
+                   'allowed': ['TER', 'SWAP', 'OPC'], 'match': 'text'},
+              ]}},
     {'label': 'COE (DRESUMOEMISSOR-COE)',
      'match': lambda n: '_dresumoemissor-coe.txt' in n,
      'date_start': 8,
@@ -2170,13 +2179,58 @@ def _b3_date_subpath(dref):
     return os.path.join(d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'))
 
 
-def _b3_export_json(src_path, json_cfg, dest_name, dref):
+def _b3_filter_rows(rows, filt):
+    """Keep only rows whose value in one column is in `filt['allowed']`.
+    filt = {'column': [name-substrings], 'index': N, 'allowed': [...],
+            'match': 'digits' (default) | 'text'}. The column is resolved by the
+    first header whose lower-case name contains one of the tokens, falling back to
+    the positional `index`. 'digits' compares digit-only (account numbers);
+    'text' compares trimmed, upper-cased (e.g. Tipo Titulo ∈ TER/SWAP/OPC).
+    Returns rows unchanged if the column can't be resolved (fail-open)."""
+    if not filt or not rows:
+        return rows
+    keys = list(rows[0].keys())
+    col_key = None
+    for tok in filt.get('column', []):
+        for k in keys:
+            if tok in k.lower():
+                col_key = k
+                break
+        if col_key:
+            break
+    if col_key is None and 'index' in filt:
+        ix = filt['index']
+        col_key = keys[ix] if 0 <= ix < len(keys) else None
+    if filt.get('match') == 'text':
+        _norm = lambda s: str(s).strip().upper()
+    else:
+        _norm = lambda s: ''.join(ch for ch in str(s) if ch.isdigit())
+    allowed = set(_norm(a) for a in filt.get('allowed', []))
+    if col_key and allowed:
+        before = len(rows)
+        rows = [r for r in rows if _norm(r.get(col_key, '')) in allowed]
+        log.info("[b3-json] filter on %r (%s) kept %d/%d rows",
+                 col_key, filt.get('match', 'digits'), len(rows), before)
+    elif not col_key:
+        log.warning("[b3-json] filter column not found (tokens=%s, index=%s)",
+                    filt.get('column'), filt.get('index'))
+    return rows
+
+
+def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
     """Parse a saved CETIP file into a list-of-dicts JSON under
     B3 Files/<category>/YYYY/MM/DD/<dest_name>.json. Header files use their own
     first line; headerless files use the stored standard header
     (_B3_SWAP_HEADERS) or positional Field_N names. Best-effort — returns the
-    JSON path on success or None on failure."""
+    JSON path on success or None on failure. When skip_existing is True an
+    already-created JSON for that day is left untouched (used by the backfill)."""
     try:
+        out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'], _b3_date_subpath(dref))
+        json_name = os.path.splitext(dest_name)[0] + '.json'
+        json_path = os.path.join(out_dir, json_name)
+        if skip_existing and os.path.exists(json_path):
+            return json_path
+
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
             lines = [ln for ln in fh.read().splitlines() if ln.strip()]
         if not lines:
@@ -2210,37 +2264,15 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref):
                 row = {'Field_{}'.format(i + 1): v.strip() for i, v in enumerate(fields)}
             rows.append(row)
 
-        # Optional de-dup filter: keep only rows whose <column> value is allowed.
-        filt = json_cfg.get('filter')
-        if filt and rows:
-            keys = list(rows[0].keys())
-            col_key = None
-            for tok in filt.get('column', []):
-                for k in keys:
-                    if tok in k.lower():
-                        col_key = k
-                        break
-                if col_key:
-                    break
-            if col_key is None and 'index' in filt:
-                ix = filt['index']
-                col_key = keys[ix] if ix < len(keys) else None
-            def _digits(s):
-                return ''.join(ch for ch in str(s) if ch.isdigit())
-            allowed = set(_digits(a) for a in filt.get('allowed', []))
-            if col_key and allowed:
-                before = len(rows)
-                rows = [r for r in rows if _digits(r.get(col_key, '')) in allowed]
-                log.info("[b3-json] %s filter on %r kept %d/%d rows",
-                         os.path.basename(dest_name), col_key, len(rows), before)
-            elif not col_key:
-                log.warning("[b3-json] %s filter column not found (tokens=%s, index=%s)",
-                            os.path.basename(dest_name), filt.get('column'), filt.get('index'))
+        # Optional row filters: a single `filter` (back-compat) plus a `filters`
+        # list, all applied as AND (keep only rows allowed by every filter). Each
+        # filter keeps rows whose value in one column is in its `allowed` set —
+        # e.g. DOPERACOES keeps Conta ∈ {73760009, 04880006} AND Tipo Titulo ∈
+        # {TER, SWAP, OPC}.
+        for filt in ([json_cfg['filter']] if json_cfg.get('filter') else []) + list(json_cfg.get('filters') or []):
+            rows = _b3_filter_rows(rows, filt)
 
-        out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'], _b3_date_subpath(dref))
         os.makedirs(out_dir, exist_ok=True)
-        json_name = os.path.splitext(dest_name)[0] + '.json'
-        json_path = os.path.join(out_dir, json_name)
         with open(json_path, 'w', encoding='utf-8') as fh:
             json.dump(rows, fh, ensure_ascii=False, indent=2)
         return json_path
