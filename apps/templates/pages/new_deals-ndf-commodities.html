@@ -1113,7 +1113,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-file-validate-size.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-image-exif-orientation.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-file-encode.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v=20260716"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/choices/choices.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
@@ -1746,7 +1746,7 @@ $(document).ready(function() {
                 importBtn.setAttribute('type', 'button');
                 importBtn.setAttribute('data-bs-toggle', 'tooltip');
                 importBtn.setAttribute('data-bs-placement', 'bottom');
-                importBtn.setAttribute('data-bs-title', 'Process emails from dropzone');
+                importBtn.setAttribute('data-bs-title', 'Process emails from dropzone (or scan the Outlook box if empty)');
                 importBtn.setAttribute('data-bs-custom-class', 'tooltip-teal');
                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importBtnContainer.appendChild(importBtn);

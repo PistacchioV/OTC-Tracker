@@ -1025,6 +1025,122 @@ var OTCFileUpload = (function () {
         return (d.textContent || d.innerText || '').trim();
     }
 
+    // -------------------------------------------------------------------------
+    // Turn one email's HTML into deal rows: parse, add/amend DataTable rows and
+    // persist to the cache. Shared by the dropzone path (processEmailFile) and
+    // the automatic Outlook box scan (processBoxScan) so both routes process an
+    // email identically. Returns the number of deals found.
+    // -------------------------------------------------------------------------
+    function importDealsFromHtml(htmlText, refMap, subjacenteIdx, tableInstance, makerSid, cacheEndpoint, rowLayout) {
+        var deals   = parseEmailHtml(htmlText);
+        var isNDF   = (rowLayout === 'ndf');
+        var dataEnd = isNDF ? 28 : 32; // last data column index
+
+        if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
+
+        deals.forEach(function (deal) {
+            var built   = buildRow(deal, refMap, subjacenteIdx, makerSid, generateUUID(), rowLayout);
+            var newRow  = built.row;
+            var newData = built.data;
+
+            var dealName = newData.Deal;
+            var acronym  = newData.Acronym;
+
+            // Search existing DataTable rows for same Deal + Acronym
+            // Must use {search:'none', page:'all'} — default rows() only checks current page
+            var existingRowApi = null, existingRowData = null;
+            tableInstance.rows({search: 'none', page: 'all'}).every(function () {
+                var d = this.data();
+                if (_stripHtml(String(d[3] || '')) === dealName &&
+                    _stripHtml(String(d[9] || '')) === acronym) {
+                    existingRowApi  = this;
+                    existingRowData = d;
+                    return false; // break
+                }
+            });
+
+            if (existingRowApi && existingRowData) {
+                // ── AMEND: deal already imported, update with new email data ──
+                var existingB3Id = _stripHtml(String(existingRowData[4] || ''));
+
+                // Preserve B3 ID
+                newRow[4]     = existingB3Id;
+                newData.B3_ID = existingB3Id;
+
+                // Set Amend status badge
+                newRow[2]      = '<span class="badge text-bg-warning bg-gradient">Amend</span>';
+                newData.Status = 'Amend';
+
+                // Compute diff: which data columns changed?
+                var changedCols = [];
+                for (var c = 3; c <= dataEnd; c++) {
+                    if (_stripHtml(String(newRow[c]            || '')) !==
+                        _stripHtml(String(existingRowData[c]  || ''))) {
+                        changedCols.push(c);
+                    }
+                }
+
+                // Persist changed columns keyed by Deal name (used by drawCallback)
+                window._OTC_AMEND_CHANGED_COLS[dealName] = changedCols;
+
+                // Update DataTable row and redraw current page
+                existingRowApi.data(newRow);
+                tableInstance.draw(false);
+
+                // Apply light-red background to changed cells on the fresh DOM node
+                var freshNode = existingRowApi.node();
+                if (freshNode && changedCols.length) {
+                    changedCols.forEach(function (col) {
+                        var cellNode = tableInstance.cell(freshNode, col).node();
+                        if (cellNode) cellNode.style.backgroundColor = '#ffe0e0';
+                    });
+                }
+
+                // PATCH the cache — Checker reset to '' intentionally (amended deal needs re-approval)
+                var patchData = Object.assign({}, newData);
+                var existingClient = _stripHtml(String(existingRowData[10] || ''));
+                var patchUrl = isNDF
+                    ? cacheEndpoint + '/' + encodeURIComponent(dealName) + '?client=' + encodeURIComponent(existingClient)
+                    : cacheEndpoint + '/' + String(existingRowData[34] || '');
+                if (!isNDF) {
+                    var existingId = String(existingRowData[34] || '');
+                    if (!existingId) {
+                        // OPT: no UUID — treat as new row
+                        tableInstance.row.add(newRow).draw(false);
+                        fetch(cacheEndpoint, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newData)
+                        }).catch(function (err) { console.warn('OTCFileUpload: cache save failed', err); });
+                        return;
+                    }
+                    newRow[34]   = existingId;
+                    newData.id   = existingId;
+                    patchUrl     = cacheEndpoint + '/' + existingId;
+                }
+                fetch(patchUrl, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(patchData)
+                }).then(function(r) {
+                    if (!r.ok) console.error('OTCFileUpload: cache PATCH failed', r.status, r.statusText, patchUrl);
+                }).catch(function (err) { console.error('OTCFileUpload: cache PATCH error', err); });
+
+            } else {
+                // ── NEW ROW: deal not yet in table ───────────────────────────
+                tableInstance.row.add(newRow).draw(false);
+                fetch(cacheEndpoint, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(newData)
+                }).then(function(r) {
+                    if (!r.ok) console.error('OTCFileUpload: cache POST failed', r.status, r.statusText, newData.Deal);
+                }).catch(function (err) {
+                    console.error('OTCFileUpload: cache POST error', err);
+                });
+            }
+        });
+        return deals.length;
+    }
+
     function processEmailFile(file, tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout) {
         var ext = file.name.split('.').pop().toLowerCase();
         makerSid = makerSid || '';
@@ -1038,113 +1154,8 @@ var OTCFileUpload = (function () {
 
                 return new Promise(function (resolve) {
                     function onText(htmlText) {
-                        var deals = parseEmailHtml(htmlText);
-                        var isNDF   = (rowLayout === 'ndf');
-                        var dataEnd = isNDF ? 28 : 32; // last data column index
-
-                        if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
-
-                        deals.forEach(function (deal) {
-                            var built   = buildRow(deal, refMap, subjacenteIdx, makerSid, generateUUID(), rowLayout);
-                            var newRow  = built.row;
-                            var newData = built.data;
-
-                            var dealName = newData.Deal;
-                            var acronym  = newData.Acronym;
-
-                            // Search existing DataTable rows for same Deal + Acronym
-                            // Must use {search:'none', page:'all'} — default rows() only checks current page
-                            var existingRowApi = null, existingRowData = null;
-                            tableInstance.rows({search: 'none', page: 'all'}).every(function () {
-                                var d = this.data();
-                                if (_stripHtml(String(d[3] || '')) === dealName &&
-                                    _stripHtml(String(d[9] || '')) === acronym) {
-                                    existingRowApi  = this;
-                                    existingRowData = d;
-                                    return false; // break
-                                }
-                            });
-
-                            if (existingRowApi && existingRowData) {
-                                // ── AMEND: deal already imported, update with new email data ──
-                                var existingB3Id = _stripHtml(String(existingRowData[4] || ''));
-
-                                // Preserve B3 ID
-                                newRow[4]     = existingB3Id;
-                                newData.B3_ID = existingB3Id;
-
-                                // Set Amend status badge
-                                newRow[2]      = '<span class="badge text-bg-warning bg-gradient">Amend</span>';
-                                newData.Status = 'Amend';
-
-                                // Compute diff: which data columns changed?
-                                var changedCols = [];
-                                for (var c = 3; c <= dataEnd; c++) {
-                                    if (_stripHtml(String(newRow[c]            || '')) !==
-                                        _stripHtml(String(existingRowData[c]  || ''))) {
-                                        changedCols.push(c);
-                                    }
-                                }
-
-                                // Persist changed columns keyed by Deal name (used by drawCallback)
-                                window._OTC_AMEND_CHANGED_COLS[dealName] = changedCols;
-
-                                // Update DataTable row and redraw current page
-                                existingRowApi.data(newRow);
-                                tableInstance.draw(false);
-
-                                // Apply light-red background to changed cells on the fresh DOM node
-                                var freshNode = existingRowApi.node();
-                                if (freshNode && changedCols.length) {
-                                    changedCols.forEach(function (col) {
-                                        var cellNode = tableInstance.cell(freshNode, col).node();
-                                        if (cellNode) cellNode.style.backgroundColor = '#ffe0e0';
-                                    });
-                                }
-
-                                // PATCH the cache — Checker reset to '' intentionally (amended deal needs re-approval)
-                                var patchData = Object.assign({}, newData);
-                                var existingClient = _stripHtml(String(existingRowData[10] || ''));
-                                var patchUrl = isNDF
-                                    ? cacheEndpoint + '/' + encodeURIComponent(dealName) + '?client=' + encodeURIComponent(existingClient)
-                                    : cacheEndpoint + '/' + String(existingRowData[34] || '');
-                                if (!isNDF) {
-                                    var existingId = String(existingRowData[34] || '');
-                                    if (!existingId) {
-                                        // OPT: no UUID — treat as new row
-                                        tableInstance.row.add(newRow).draw(false);
-                                        fetch(cacheEndpoint, {
-                                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify(newData)
-                                        }).catch(function (err) { console.warn('OTCFileUpload: cache save failed', err); });
-                                        return;
-                                    }
-                                    newRow[34]   = existingId;
-                                    newData.id   = existingId;
-                                    patchUrl     = cacheEndpoint + '/' + existingId;
-                                }
-                                fetch(patchUrl, {
-                                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(patchData)
-                                }).then(function(r) {
-                                    if (!r.ok) console.error('OTCFileUpload: cache PATCH failed', r.status, r.statusText, patchUrl);
-                                }).catch(function (err) { console.error('OTCFileUpload: cache PATCH error', err); });
-
-                            } else {
-                                // ── NEW ROW: deal not yet in table ───────────────────────────
-                                tableInstance.row.add(newRow).draw(false);
-                                fetch(cacheEndpoint, {
-                                    method:  'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body:    JSON.stringify(newData)
-                                }).then(function(r) {
-                                    if (!r.ok) console.error('OTCFileUpload: cache POST failed', r.status, r.statusText, newData.Deal);
-                                }).catch(function (err) {
-                                    console.error('OTCFileUpload: cache POST error', err);
-                                });
-                            }
-                        });
-                        resolve(deals.length);
+                        resolve(importDealsFromHtml(htmlText, refMap, subjacenteIdx,
+                                                    tableInstance, makerSid, cacheEndpoint, rowLayout));
                     }
 
                     if (ext === 'msg') {
@@ -1223,27 +1234,147 @@ var OTCFileUpload = (function () {
     }
 
     // -------------------------------------------------------------------------
+    // Automatic route: when the Import button is clicked with an EMPTY dropzone,
+    // sweep the shared Outlook box for this page's "Brazil Booking Recap" emails
+    // (NDF Comm → Swap, Opt Comm → Option), process each one through the SAME
+    // pipeline as a dropped file, then move it to Inbox > New deals > B2Bs
+    // Automatic. 'Cancel' emails are deleted from the box server-side.
+    // Returns { totalDeals, shownSwal } to match processDropzone's contract.
+    // -------------------------------------------------------------------------
+    function processBoxScan(tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout) {
+        var product = (rowLayout === 'ndf') ? 'ndf' : 'opt';
+        var productLabel = (product === 'ndf') ? 'Swap' : 'Option';
+        var importBtn = document.getElementById('importBtn');
+
+        function setBtn(busy, label) {
+            if (!importBtn) return;
+            importBtn.disabled = busy;
+            importBtn.innerHTML = busy
+                ? '<i class="ti ti-loader-2 ti-spin me-1"></i> ' + (label || 'Scanning box...')
+                : '<i class="ti ti-upload me-1"></i> Import';
+        }
+        setBtn(true, 'Scanning box...');
+
+        return Promise.all([loadRefData(assetsRoot), loadSubjacenteData(assetsRoot)])
+            .then(function (results) {
+                var refMap        = results[0];
+                var subjacenteIdx = results[1];
+                return fetch('/api/new-deals/box-scan', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ product: product })
+                }).then(function (r) { return r.json(); })
+                  .then(function (data) {
+                    if (data && data.unavailable) {
+                        setBtn(false);
+                        Swal.fire({
+                            title: 'Box indisponível',
+                            html:  'A varredura automática do box requer o Outlook no ambiente Windows.<br><br>' +
+                                   '<small class="text-muted">Arraste os arquivos no dropzone para importar manualmente.</small>',
+                            icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                        });
+                        return { totalDeals: 0, shownSwal: true };
+                    }
+                    if (data && data.error) { throw new Error(data.error); }
+
+                    var emails    = (data && data.emails) || [];
+                    var cancelled = (data && data.cancelled) || [];
+                    var totalDeals = 0, archived = 0;
+
+                    // Process emails one at a time (same ordering guarantees as
+                    // the dropzone), archiving each only after its deals import.
+                    var chain = Promise.resolve();
+                    emails.forEach(function (em) {
+                        chain = chain.then(function () {
+                            var count = importDealsFromHtml(em.html, refMap, subjacenteIdx,
+                                                            tableInstance, makerSid, cacheEndpoint, rowLayout);
+                            totalDeals += (count || 0);
+                            if (count > 0 && em.entry_id) {
+                                return fetch('/api/new-deals/box-archive', {
+                                    method:  'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body:    JSON.stringify({ entry_id: em.entry_id })
+                                }).then(function (r) { return r.json(); })
+                                  .then(function (res) { if (res && res.ok) archived++; })
+                                  .catch(function () {});
+                            }
+                        });
+                    });
+
+                    return chain.then(function () {
+                        setBtn(false);
+                        if (totalDeals > 0) {
+                            var _pageName = (cacheEndpoint || '').indexOf('ndf-commodities') !== -1 ? 'NDF Comm' : 'Opt Comm';
+                            fetch('/api/notifications', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    action: 'New Deals', page: _pageName,
+                                    detail: totalDeals + ' deal' + (totalDeals !== 1 ? 's' : '') + ' imported (box)'
+                                })
+                            }).catch(function () {});
+                        }
+
+                        var cancelNote = cancelled.length
+                            ? '<br><br><small class="text-warning"><strong>' + cancelled.length +
+                              ' e-mail(s) de cancelamento deletado(s) do box.</strong></small>'
+                            : '';
+
+                        if (emails.length === 0) {
+                            Swal.fire({
+                                title: 'Nenhum e-mail no box',
+                                html:  'Nenhum e-mail "Brazil Booking Recap" de <strong>' + productLabel +
+                                       '</strong> foi encontrado no box.' + cancelNote,
+                                icon:  'info', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                            });
+                        } else if (totalDeals === 0) {
+                            Swal.fire({
+                                title: 'No Deals Found',
+                                html:  'Nenhuma linha de deal foi encontrada nos e-mails do box.' + cancelNote,
+                                icon:  'warning', confirmButtonText: 'OK', confirmButtonColor: '#6c757d'
+                            });
+                        } else {
+                            Swal.fire({
+                                title: 'Import Complete',
+                                html:  totalDeals + ' deal(s) importado(s) de ' + emails.length + ' e-mail(s) do box.' +
+                                       '<br><small class="text-muted">' + archived +
+                                       ' e-mail(s) movido(s) para New deals &gt; B2Bs Automatic.</small>' + cancelNote,
+                                icon:  'success', confirmButtonText: 'OK', confirmButtonColor: '#0dcaf0'
+                            });
+                        }
+                        return { totalDeals: totalDeals, shownSwal: true };
+                    });
+                  });
+            })
+            .catch(function (err) {
+                console.error('OTCFileUpload: box scan error', err);
+                setBtn(false);
+                Swal.fire({
+                    title: 'Erro na varredura do box',
+                    text:  err && err.message ? err.message : String(err),
+                    icon:  'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545'
+                });
+                return { totalDeals: 0, shownSwal: true };
+            });
+    }
+
+    // -------------------------------------------------------------------------
     // Process ALL files in the Dropzone and clear it afterwards.
     // Called by the Import button.
     // subjectBlockWords: string[] — files whose subject contains any of these
     //   words (case-insensitive) are silently skipped.
     // -------------------------------------------------------------------------
     function processDropzone(tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout, subjectBlockWords) {
-        var dz = window.myDropzone;
-        if (!dz || !dz.files || dz.files.length === 0) {
-            Swal.fire({
-                title: 'No Files',
-                text:  'Please drop email files (.msg, .eml, .html) into the dropzone first.',
-                icon:  'warning',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#6c757d'
-            });
-            return;
-        }
         makerSid = makerSid || '';
         cacheEndpoint = cacheEndpoint || '/api/new-deals/opt-commodities/cache';
         rowLayout = rowLayout || 'opt';
         subjectBlockWords = subjectBlockWords || [];
+
+        var dz = window.myDropzone;
+        if (!dz || !dz.files || dz.files.length === 0) {
+            // Empty dropzone → automatic route: scan the shared Outlook box for
+            // this page's booking-recap emails and process them identically.
+            return processBoxScan(tableInstance, assetsRoot, makerSid, cacheEndpoint, rowLayout);
+        }
 
         var importBtn = document.getElementById('importBtn');
         if (importBtn) {
@@ -1369,6 +1500,7 @@ var OTCFileUpload = (function () {
 
     return {
         processDropzone:        processDropzone,
+        processBoxScan:         processBoxScan,
         processEmailFile:       processEmailFile,
         calculateB3Id:          calculateB3Id,
         parseEmailHtml:         parseEmailHtml,

@@ -12927,6 +12927,54 @@ def api_parse_msg_html():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@blueprint.route('/api/new-deals/box-scan', methods=['POST'])
+def api_new_deals_box_scan():
+    """Sweep the shared Outlook box for booking-recap emails of one product.
+
+    Triggered when the New Deals Import button is clicked with an empty dropzone.
+    Returns each matching email's HTML body so the client can run it through the
+    same parse pipeline as a dropped file. 'Cancel' emails are deleted from the
+    box. product = 'ndf' (Swap emails) or 'opt' (Option emails).
+    """
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    product = (request.get_json(silent=True) or {}).get('product', '')
+    try:
+        from apps.pages.otc_boxscan import scan_new_deals_box
+        return jsonify(scan_new_deals_box(product))
+    except EnvironmentError as e:
+        # win32com/Outlook absent (e.g. non-Windows host) — let the client fall
+        # back to the manual dropzone.
+        return jsonify({'unavailable': True, 'detail': str(e)})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        log.error('[api_new_deals_box_scan] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/api/new-deals/box-archive', methods=['POST'])
+def api_new_deals_box_archive():
+    """Move a processed booking-recap email to Inbox > New deals > B2Bs Automatic.
+
+    Called by the client after an email scanned via /box-scan has had its deals
+    imported, so the box keeps only unprocessed emails.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    entry_id = (request.get_json(silent=True) or {}).get('entry_id', '')
+    try:
+        from apps.pages.otc_boxscan import archive_email
+        return jsonify(archive_email(entry_id))
+    except EnvironmentError as e:
+        return jsonify({'unavailable': True, 'detail': str(e)})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        log.error('[api_new_deals_box_archive] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
 # ==============================================================================
 # SEND TO CONECTA — gera arquivo TXT para B3 Batch Conecta
 # ==============================================================================
