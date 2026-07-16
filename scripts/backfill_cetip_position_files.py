@@ -18,10 +18,14 @@ Dest tree:    CETIP_DEST_ROOT\\{YYYY}\\{MM. Month}\\{DD}
                 (default I:\\Confirmation\\Derivativos\\OTC Tracker\\CETIP Files\\
                  Position Files)
 
-Only NEW work is done — nothing already there is touched:
-  - a destination file is written only if it does NOT already exist;
+How it works — it fills the DESTINATION's gaps from the source:
+  - for each date it looks at what the destination folder already has and, for
+    the files it is MISSING, pulls them from the matching source date and saves
+    them (a destination file is written only if it does NOT already exist);
   - a per-day JSON is created only for days whose JSON does NOT already exist.
-Pass --overwrite to force re-saving files and rebuilding JSONs.
+It reports which dates were missing files (empty or incomplete). Dates whose
+destination is already complete are left untouched. Pass --overwrite to force
+re-saving files and rebuilding JSONs.
 
 The daily routine's VCP indexer refresh (vcp_update) and its flat network-share
 secondary copies (extra_dest) are intentionally SKIPPED here: they mutate
@@ -91,11 +95,17 @@ def iter_day_dirs(src_root, only_year=None):
 
 
 def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats):
-    """Save every matched position file for one day (skipping ones already saved)
-    and export its JSON (skipping days already created), mirroring the daily loop."""
+    """Fill one date's gaps in the DESTINATION from the source.
+
+    For the date, look at what the destination folder already has and save from
+    the source ONLY the expected files it is missing (never overwriting). JSONs
+    for days not yet created are then written too. Returns (filled_names, present)
+    so the caller can report which dates were missing files.
+    """
     files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
     if not files:
-        return
+        return [], 0
+    filled, present = [], 0
     for rule in R._CETIP_RULES:
         for name in files:
             if not rule['match'](name.lower()):
@@ -108,35 +118,36 @@ def process_day(src_dir, dest_dir, make_json, overwrite, dry_run, stats):
             dest_path = os.path.join(dest_dir, dest_name)
             src_path = os.path.join(src_dir, name)
 
-            # 1) Save the file — only when it isn't already there (no overwrite).
+            # 1) The destination already has this file → nothing to fill.
             if os.path.exists(dest_path) and not overwrite:
+                present += 1
                 stats['file_exists'] += 1
+            # 2) Missing in the destination → save it from the source.
             elif dry_run:
-                print('  SAVE  {:<40} -> {}'.format(name, dest_name))
+                filled.append(dest_name)
                 stats['file_saved'] += 1
             else:
                 try:
                     os.makedirs(dest_dir, exist_ok=True)
                     R._cetip_save_file(src_path, dest_path)
+                    filled.append(dest_name)
                     stats['file_saved'] += 1
                 except Exception as exc:
-                    print('  FAIL save {}: {}'.format(name, exc))
+                    print('    ! FAIL save {}: {}'.format(name, exc))
                     stats['errors'] += 1
                     continue
 
-            # 2) Export JSON — only for days not yet created (skip_existing).
-            if make_json and rule.get('json'):
-                if dry_run:
-                    stats['json'] += 1
-                    continue
+            # 3) Export JSON — only for days whose JSON isn't there yet.
+            if make_json and rule.get('json') and not dry_run:
                 read_from = dest_path if os.path.exists(dest_path) else src_path
                 try:
                     if R._b3_export_json(read_from, rule['json'], dest_name, dref,
                                          skip_existing=not overwrite):
                         stats['json'] += 1
                 except Exception as exc:
-                    print('  FAIL json {}: {}'.format(name, exc))
+                    print('    ! FAIL json {}: {}'.format(name, exc))
                     stats['errors'] += 1
+    return filled, present
 
 
 def main():
@@ -169,23 +180,39 @@ def main():
     print('-' * 78)
 
     stats = {'file_saved': 0, 'file_exists': 0, 'json': 0, 'bad_date': 0, 'errors': 0}
-    days = 0
+    days = gap_days = complete_days = empty_src_days = 0
+    verb = 'would fill' if args.dry_run else 'filled'
     for rel, day_dir in iter_day_dirs(src_root, only_year=args.year):
         dest_dir = os.path.join(dest_root, rel)
         days += 1
-        print('[{}]'.format(rel))
-        process_day(day_dir, dest_dir, make_json, args.overwrite, args.dry_run, stats)
+        filled, present = process_day(day_dir, dest_dir, make_json,
+                                      args.overwrite, args.dry_run, stats)
+        if filled:
+            # This date was missing file(s) in the destination — report + fill.
+            gap_days += 1
+            tail = '(destination had {})'.format(present) if present else '(destination was empty)'
+            print('MISSING  [{}]  {} {} file(s)  {}'.format(rel, verb, len(filled), tail))
+            for nm in filled:
+                print('             + {}'.format(nm))
+        elif present:
+            complete_days += 1        # destination already complete for this date
+        else:
+            empty_src_days += 1       # no matching files in the source either
 
     print('-' * 78)
-    print('Day folders scanned          : {}'.format(days))
-    print('Files {:<24}: {}'.format('to save' if args.dry_run else 'saved', stats['file_saved']))
-    print('Files already present (kept) : {}'.format(stats['file_exists']))
-    if make_json:
-        print('JSONs {:<24}: {}'.format('to create' if args.dry_run else 'created/kept', stats['json']))
+    print('Day folders scanned            : {}'.format(days))
+    print('Dates missing files ({:<9}: {}'.format('to fill)' if args.dry_run else 'filled)', gap_days))
+    print('Files {:<25}: {}'.format('to fill' if args.dry_run else 'filled', stats['file_saved']))
+    print('Dates already complete         : {}'.format(complete_days))
+    print('Files already present (kept)   : {}'.format(stats['file_exists']))
+    if empty_src_days:
+        print('Dates with no source files     : {}'.format(empty_src_days))
+    if make_json and not args.dry_run:
+        print('JSONs created/kept             : {}'.format(stats['json']))
     if stats['bad_date']:
-        print('Files with unparseable date  : {}'.format(stats['bad_date']))
+        print('Files with unparseable date    : {}'.format(stats['bad_date']))
     if stats['errors']:
-        print('Errors                       : {}'.format(stats['errors']))
+        print('Errors                         : {}'.format(stats['errors']))
 
 
 if __name__ == '__main__':
