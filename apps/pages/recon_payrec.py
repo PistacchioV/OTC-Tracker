@@ -7,11 +7,17 @@ JPM / Cockpit side (3 sources, Union'd):
   cashflows_*.xlsx    → COMM TER / SWAP  (per-client NET sum; Owner Legal Entity='0228')
   FXO Detail*.xlsx    → FXO   (value from ATH SET AMT + Direction)
 
-Client side (4 sources, Union'd):
+Client side (Union'd):
   rlctahis.csv        → SDConta interna  (nHistorico allowlist)
-  rlDocTed01.csv      → SDConta externa (TED)
-  HistoricoMensagensJPM_*.csv → SPB externa (Descrição Evento contains Derivativos/LMA-COMM-BR; always Pay)
-  HistoricoMensagensMGT_*.csv → SPB MGT (same layout; sign of Valor → Pay/Receive; no LMA-COMM)
+  RLDOCREC.csv        → TEDs RECEBIDAS (JPM + MGT). Credited to agência 98 / house
+                        account (JPM 5116003, MGT 5181643); LE from nNumEmpresaDestino
+                        (39=JPM, 1315=MGT). Every kept row is a Receive.
+  HistoricoMensagensJPM_*.csv → SPB externa — TEDs ENVIADAS (pagas) only
+                        (Descrição Evento contains Derivativos/LMA-COMM-BR; always Pay)
+  HistoricoMensagensMGT_*.csv → SPB MGT — TEDs ENVIADAS (pagas) only (same layout; always Pay)
+
+Received TEDs come exclusively from RLDOCREC; the HistoricoMensagens files are
+payments only. (The legacy rlDocTed01 received-TED source has been retired.)
 
 Match: JPM value ↔ client value, rounded to whole units (value-only join).
 Difference = Client - JPM;  Status = Settled if 0 else Pending (SPB tol > -0.50).
@@ -79,6 +85,13 @@ _SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
 # rlctahis nHistorico codes that are SWAP settlements (not NDF). Everything else
 # in the allowlist stays NDF. These flows net against the JPM SWAP side.
 _SDCONTA_HIST_SWAP = {'4406', '9385', '4413'}
+
+# RLDOCREC — received-TED report. Keep only rows credited to agência 98 and one of
+# the two house accounts (nCtCredtd); the receiving Legal Entity is read from
+# nNumEmpresaDestino (falling back to the account when that column is blank).
+_RLDOCREC_AG = '98'
+_RLDOCREC_CTA_LE = {'5116003': 'JPM', '5181643': 'MGT'}     # nCtCredtd → LE
+_RLDOCREC_EMP_LE = {'39': 'JPM', '1315': 'MGT'}             # nNumEmpresaDestino → LE
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -160,6 +173,21 @@ def _resolve(cols, *names):
             if n and n in kn:
                 return orig
     return None
+
+
+def _digits(v):
+    """Digits only, leading zeros stripped, for stable account/agency compares."""
+    d = re.sub(r'\D', '', str(v or ''))
+    return str(int(d)) if d else ''
+
+
+def _rec_col(cols, name, idx):
+    """Resolve a column by header name, falling back to its 0-based position
+    (Excel column letter) when the header doesn't match."""
+    c = _resolve(cols, name)
+    if c is not None:
+        return c
+    return cols[idx] if 0 <= idx < len(cols) else None
 
 
 def _norm_cpty(name):
@@ -355,13 +383,13 @@ def _classify_source(name):
         return 'jpm_fxo'
     if n.startswith('settlement'):
         return 'settlement'
+    if 'rldocrec' in n:
+        return 'sdconta_rec'                    # received TEDs (JPM + MGT)
     if 'historicomensagens' in n:
-        # Same layout for JPM and MGT (name differs only by JPM↔MGT). The MGT
-        # variant carries both payments and receipts (sign of Valor) and no
-        # LMA-COMM, so it gets its own bucket.
+        # Same layout for JPM and MGT (name differs only by JPM↔MGT). Both are now
+        # payments-only (sent TEDs); received TEDs come from RLDOCREC. MGT still
+        # gets its own bucket for its 'SPB - MGT' sistema label / MGT legal entity.
         return 'spb_mgt' if 'mgt' in n else 'spb'
-    if 'rldocted' in n:
-        return 'sdconta_ted'
     if 'rlctahis' in n:
         return 'sdconta_int'
     if 'pagamentosmgt' in n:
@@ -546,34 +574,51 @@ def _cli_rlctahis(rows, cols):
     return out
 
 
-def _cli_ted(rows, cols):
-    """SDConta externa (TED). value=nValor, titular=sNomeEmissor, conta composed."""
-    c_val = _resolve(cols, 'nValor', 'nVlrLanc')
-    c_tit = _resolve(cols, 'sNomeEmissor', 'sNomeTitular')
-    c_banco = _resolve(cols, 'nBancoEmissor')
-    c_ag = _resolve(cols, 'nAgDebitada')
-    c_cc = _resolve(cols, 'nCcDebitada')
+def _cli_rec(rows, cols):
+    """RLDOCREC — TEDs RECEBIDAS for both JPM and MGT (replaces the receive side
+    that used to come from rlDocTed01 / the MGT SPB receipts).
+
+    Keep only rows credited to agência 98 (nAgCredtd, col C) and one of the two
+    house accounts (nCtCredtd, col D): JPM 5116003 / MGT 5181643. value = nValor
+    (col H) as a Receive (positive); counterparty = sNomeCliDebitado (col N, who
+    sent the TED); the sender's bank/agency/account (cols O/P/Q) compose snumconta;
+    the receiving Legal Entity is nNumEmpresaDestino (col AB: 39=JPM, 1315=MGT),
+    falling back to the credited account when that column is blank."""
+    c_ag = _rec_col(cols, 'nAgCredtd', 2)                # col C
+    c_cta = _rec_col(cols, 'nCtCredtd', 3)               # col D
+    c_val = _rec_col(cols, 'nValor', 7)                  # col H
+    c_nome = _rec_col(cols, 'sNomeCliDebitado', 13)      # col N
+    c_banco = _rec_col(cols, 'nIdBanco', 14)             # col O
+    c_agd = _rec_col(cols, 'nAgDebtd', 15)               # col P
+    c_ctd = _rec_col(cols, 'nCtDebtd', 16)               # col Q
+    c_emp = _rec_col(cols, 'nNumEmpresaDestino', 27)     # col AB
     out = []
     for r in rows:
+        ag = _digits(r.get(c_ag, '') if c_ag else '')
+        cta = _digits(r.get(c_cta, '') if c_cta else '')
+        if ag != _RLDOCREC_AG or cta not in _RLDOCREC_CTA_LE:
+            continue
         val = abs(_num(r.get(c_val, '') if c_val else 0))
-        titular = str(r.get(c_tit, '') if c_tit else '').strip()
-        conta = '-'.join([str(r.get(c_banco, '')).strip(), str(r.get(c_ag, '')).strip(),
-                          str(r.get(c_cc, '')).strip()]).strip('-') if (c_banco and c_ag and c_cc) else ''
-        rec = _cli_finalize(val, 'DEBITO NDF', titular, conta, sistema='SDConta - conta externa')
-        if rec:
-            out.append(rec)
+        if val <= 1:                                     # drop sub-R$1 noise (as SDConta)
+            continue
+        emp = _digits(r.get(c_emp, '') if c_emp else '')
+        le = _RLDOCREC_EMP_LE.get(emp) or _RLDOCREC_CTA_LE.get(cta, 'JPM')
+        titular = str(r.get(c_nome, '') if c_nome else '').strip()
+        conta = '-'.join(x for x in [
+            _digits(r.get(c_banco, '') if c_banco else ''),
+            _digits(r.get(c_agd, '') if c_agd else ''),
+            _digits(r.get(c_ctd, '') if c_ctd else '')] if x)
+        out.append({'value': val, 'client': titular, 'sistema': 'SDConta - conta externa',
+                    'snumconta': conta, 'product': 'NDF',
+                    'pay_receive': 'Receive', 'le': le})
     return out
 
 
 def _cli_spb(rows, cols, mgt=False):
-    """SPB externa.
-
-    JPM file (HistoricoMensagensJPM): outgoing settlements only → keep only rows
-    whose Descrição Evento contains Derivativos/LMA-COMM-BR, and force Pay
-    (negative). MGT file (HistoricoMensagensMGT): dedicated to MGT payments and
-    receipts (e.g. 'Resposta a Terceiros sobre Transferencia entre contas de
-    clientes'), so NO Descrição filter is applied — every row counts, and the
-    SIGN of Valor decides direction (negative → Pay, positive → Receive)."""
+    """SPB externa — TEDs ENVIADAS (pagas) only, for both the JPM
+    (HistoricoMensagensJPM) and MGT (HistoricoMensagensMGT) files. Keep only rows
+    whose Descrição Evento contains Derivativos/LMA-COMM-BR and force Pay
+    (negative). Received TEDs are handled separately by RLDOCREC (_cli_rec)."""
     c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
     c_conta = _resolve(cols, 'sNumConta')
@@ -582,30 +627,17 @@ def _cli_spb(rows, cols, mgt=False):
     for r in rows:
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
-        is_deriv = ('derivativos' in en or 'lma-comm-br' in en)
-        raw = _num(r.get(c_val, '') if c_val else 0)
-        val = raw if mgt else -abs(raw)          # MGT: signed (Pay/Receive); JPM: always Pay
-        if abs(val) < 1e-9:
+        if not ('derivativos' in en or 'lma-comm-br' in en):     # Descrição filter (Filter[48])
             continue
-        # Descrição filter (Filter[48]): applies to the JPM file AND to MGT
-        # PAYMENTS. MGT RECEIPTS have generic descriptions ("Resposta a
-        # Terceiros…") and no reliable text filter, so they skip the text filter
-        # but are kept ONLY when they match a JPM value (drop_if_unmatched,
-        # consumed in _reconcile) — avoids polluting the tables with every SPB
-        # receipt message.
-        mgt_receipt = mgt and val > 0
-        if not mgt_receipt and not is_deriv:
+        val = -abs(_num(r.get(c_val, '') if c_val else 0))       # sent settlement → Pay (negative)
+        if abs(val) < 1e-9:
             continue
         titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
         titular = titular.replace('LMA-COMM-BR ', '').strip()    # strip the LMA prefix
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        rec = {'value': val, 'client': titular, 'sistema': sistema,
-               'snumconta': conta, 'product': 'NDF',
-               'pay_receive': 'Pay' if val < 0 else 'Receive',
-               'le': 'MGT' if mgt else 'JPM'}
-        if mgt_receipt:
-            rec['drop_if_unmatched'] = True
-        out.append(rec)
+        out.append({'value': val, 'client': titular, 'sistema': sistema,
+                    'snumconta': conta, 'product': 'NDF',
+                    'pay_receive': 'Pay', 'le': 'MGT' if mgt else 'JPM'})
     return out
 
 
@@ -954,8 +986,8 @@ def run_payrec(recon_date, files=None, mode='auto'):
             jpm += _jpm_fxo(rows, cols, net_map)
         elif bucket == 'sdconta_int':
             client += _cli_rlctahis(rows, cols)
-        elif bucket == 'sdconta_ted':
-            client += _cli_ted(rows, cols)
+        elif bucket == 'sdconta_rec':
+            client += _cli_rec(rows, cols)        # RLDOCREC — received TEDs (JPM + MGT)
         elif bucket == 'spb':
             client += _cli_spb(rows, cols)
         elif bucket == 'spb_mgt':
