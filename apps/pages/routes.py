@@ -5982,6 +5982,9 @@ def _cog_collect(ref):
                 _cog_save(jp, data)
             except Exception:
                 pass
+        # Display sorted A→Z by Counterparty Name (case-insensitive; blanks last).
+        data = sorted(data, key=lambda r: (str(r.get('Counterparty Name', '') or '').strip() == '',
+                                           str(r.get('Counterparty Name', '') or '').strip().lower()))
         for rec in data:
             row = []
             for c in _COG_COLUMNS:
