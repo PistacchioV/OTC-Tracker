@@ -21,9 +21,11 @@ import os
 import re
 import json
 import glob
+import logging
 import unicodedata
 from datetime import datetime
 
+_LOG = logging.getLogger(__name__)
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Working cache (latest run per date + _last).
 _CACHE_DIR = os.path.normpath(os.path.join(
@@ -736,10 +738,48 @@ def _split_tables(details):
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+def _persist_uploads(files):
+    """Save the dropzone uploads into the same folder the 'import from folder'
+    button reads from (_INPUT_BASE), so a manual run leaves the input folder in
+    the same state as a folder run. Returns [(name, path-or-FileStorage)]: the
+    saved on-disk path when the write succeeds, else the in-memory FileStorage so
+    the reconciliation still runs even when the folder is unreachable/read-only."""
+    items = []
+    can_save = False
+    try:
+        os.makedirs(_INPUT_BASE, exist_ok=True)
+        can_save = os.path.isdir(_INPUT_BASE)
+    except Exception as e:
+        _LOG.warning('[payrec] could not access input folder %s: %s', _INPUT_BASE, e)
+    for f in files:
+        name = getattr(f, 'filename', '')
+        if not name:
+            continue
+        if can_save:
+            try:
+                dest = os.path.join(_INPUT_BASE, os.path.basename(name))
+                try:
+                    f.stream.seek(0)
+                except Exception:
+                    pass
+                with open(dest, 'wb') as out:
+                    out.write(f.stream.read())
+                items.append((name, dest))          # read back from the saved copy
+                continue
+            except Exception as e:
+                _LOG.warning('[payrec] could not save upload %s: %s', name, e)
+                try:
+                    f.stream.seek(0)
+                except Exception:
+                    pass
+        items.append((name, f))                     # fall back to the in-memory upload
+    return items
+
+
 def _gather_sources(files, mode):
     srcs = []
     if mode == 'manual' and files:
-        items = [(f.filename, f) for f in files if getattr(f, 'filename', '')]
+        items = _persist_uploads(files)
     else:
         if not os.path.isdir(_INPUT_BASE):
             raise FileNotFoundError('Pay/Rec input folder not found: %s' % _INPUT_BASE)
