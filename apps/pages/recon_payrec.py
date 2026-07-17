@@ -502,7 +502,11 @@ def _jpm_cashflows(rows, cols, net_map=None):
             rec['prod'] = 'COMM TER'
         else:
             rec['prod'] = 'COMM OPT'
-    # Per-(client, product) contributions (drop Bco J.P. and bilateral bank legs).
+    # Per-(client, product) contributions. Drop ONLY J.P. Morgan's own bank leg
+    # (Filter[112]); bilateral legs from OTHER banks are now KEPT so their
+    # settlement values are reconciled too — the former Filter[114] "banco" drop
+    # was removed. The Owner Legal Entity = 0228 filter above already scopes which
+    # rows of the cashflows file are in play.
     # COMM TER carries a TRADE-LEVEL 0.005% IR fee, so its legs are first netted per
     # Trade Id and the fee is applied to each NEGATIVE trade-net (never to raw legs
     # that cancel out within a trade); every other product keeps its individual legs.
@@ -510,9 +514,7 @@ def _jpm_cashflows(rows, cols, net_map=None):
     comm_ter = {}                                              # cpty → {trade_id → net}
     for rec in recs:
         cl = rec['cpty'].lower()
-        if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112]
-            continue
-        if 'banco' in cl:                                       # Filter[114] Bilateral
+        if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112] (JPM's own leg)
             continue
         if rec['prod'] == 'COMM TER':
             per_trade = comm_ter.setdefault(rec['cpty'], {})
