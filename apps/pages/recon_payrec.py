@@ -12,12 +12,16 @@ Client side (Union'd):
   RLDOCREC.csv        → TEDs RECEBIDAS (JPM + MGT). Credited to agência 98 / house
                         account (JPM 5116003, MGT 5181643); LE from nNumEmpresaDestino
                         (39=JPM, 1315=MGT). Every kept row is a Receive.
-  HistoricoMensagensJPM_*.csv → SPB externa — TEDs ENVIADAS (pagas) only
-                        (Descrição Evento contains Derivativos/LMA-COMM-BR; always Pay)
-  HistoricoMensagensMGT_*.csv → SPB MGT — TEDs ENVIADAS (pagas) only (same layout; always Pay)
+  HistoricoMensagensJPM_*.csv / MGT_*.csv → SPB externa. Two capture paths:
+                        (a) derivatives clients — Descrição Evento contains
+                            Derivativos/LMA-COMM-BR → always a Pay (sent TED);
+                        (b) OTHER BANKS (Safra, Bradesco, Caterpillar…) — no client
+                            info: status (col A) = 'Sucesso' and message code
+                            (col F) LTR0004 (JP paying → Pay) / LTR0005 (JP
+                            receiving → Receive); matched by VALUE within R$20.
 
-Received TEDs come exclusively from RLDOCREC; the HistoricoMensagens files are
-payments only. (The legacy rlDocTed01 received-TED source has been retired.)
+Received derivative TEDs come exclusively from RLDOCREC. (The legacy rlDocTed01
+received-TED source has been retired.)
 
 Match: JPM value ↔ client value, rounded to whole units (value-only join).
 Difference = Client - JPM;  Status = Settled if 0 else Pending (SPB tol > -0.50).
@@ -65,6 +69,13 @@ _TOL_SPB_SETTLED = -0.50      # SPB: diff > -0.50 → Settled
 # exact whole-unit key.
 _TOL_COMM_OPT_PCT = 0.00005   # 0.005%
 _TOL_COMM_OPT_ABS = 0.20      # + 20 cents
+# Interbank settlements captured from the HistoricoMensagens SPB file (other banks
+# — Safra, Bradesco, Caterpillar…) carry NO client/counterparty info, only the
+# LTR0004/LTR0005 message code + 'Sucesso' status + the value, so they are matched
+# to the JPM/Cockpit side by VALUE within R$20.
+_TOL_BANK = 20.0
+_LTR_PAY = 'LTR0004'          # JP is PAYING  → Pay  (negative)
+_LTR_RECEIVE = 'LTR0005'      # JP is RECEIVING → Receive (positive)
 # 0.005% COMM TER fee (IR). It is withheld TRADE-LEVEL: the cashflow legs are first
 # netted per Trade Id, then the fee is applied to each trade whose net is a Pay
 # (negative) — the amount paid drops by |trade-net|·0.005%, so the counterparty's
@@ -654,29 +665,62 @@ def _cli_rec(rows, cols):
 
 
 def _cli_spb(rows, cols, mgt=False):
-    """SPB externa — TEDs ENVIADAS (pagas) only, for both the JPM
-    (HistoricoMensagensJPM) and MGT (HistoricoMensagensMGT) files. Keep only rows
-    whose Descrição Evento contains Derivativos/LMA-COMM-BR and force Pay
-    (negative). Received TEDs are handled separately by RLDOCREC (_cli_rec)."""
+    """SPB externa — two capture paths on the HistoricoMensagens (JPM or MGT) file:
+
+    1) DERIVATIVES clients (LMA): rows whose Descrição Evento contains
+       Derivativos/LMA-COMM-BR → the counterparty name is in the description and
+       the leg is always a Pay (sent TED). (Received derivative TEDs come from
+       RLDOCREC / _cli_rec.)
+    2) OTHER BANKS (Safra, Bradesco, Caterpillar…): interbank settlements that
+       carry NO client info. Keep rows whose status (col A) = 'Sucesso' and whose
+       message code (col F) is LTR0004 (JP paying → Pay) or LTR0005 (JP receiving
+       → Receive). These have no name to join on, so they are flagged (bank=True,
+       tol=_TOL_BANK) to be reconciled against the JPM side by VALUE within R$20.
+    """
     c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
     c_conta = _resolve(cols, 'sNumConta')
+    c_status = _rec_col(cols, 'Status', 0)                    # col A — 'Sucesso'
+    c_ltr = _rec_col(cols, 'LTR', 5)                          # col F — LTR0004/LTR0005
     sistema = 'SPB - MGT' if mgt else 'SPB - conta externa'
+    sistema_bank = 'SPB - outros bancos MGT' if mgt else 'SPB - outros bancos'
+    le = 'MGT' if mgt else 'JPM'
     out = []
     for r in rows:
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
-        if not ('derivativos' in en or 'lma-comm-br' in en):     # Descrição filter (Filter[48])
+        conta = str(r.get(c_conta, '') if c_conta else '').strip()
+
+        # 1) Derivatives client TED (sent → Pay).
+        if 'derivativos' in en or 'lma-comm-br' in en:       # Descrição filter (Filter[48])
+            val = -abs(_num(r.get(c_val, '') if c_val else 0))
+            if abs(val) < 1e-9:
+                continue
+            titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
+            titular = titular.replace('LMA-COMM-BR ', '').strip()
+            out.append({'value': val, 'client': titular, 'sistema': sistema,
+                        'snumconta': conta, 'product': 'NDF',
+                        'pay_receive': 'Pay', 'le': le})
             continue
-        val = -abs(_num(r.get(c_val, '') if c_val else 0))       # sent settlement → Pay (negative)
+
+        # 2) Interbank settlement (other banks) — status 'Sucesso' + LTR code in
+        #    col F decides direction. No client info → matched by value (±R$20).
+        status = _norm(r.get(c_status, '') if c_status else '')
+        ltr = str(r.get(c_ltr, '') if c_ltr else '').strip().upper()
+        if 'sucesso' not in status:
+            continue
+        if _LTR_PAY in ltr:
+            pr, sign = 'Pay', -1                             # JP paying
+        elif _LTR_RECEIVE in ltr:
+            pr, sign = 'Receive', 1                          # JP receiving
+        else:
+            continue
+        val = sign * abs(_num(r.get(c_val, '') if c_val else 0))
         if abs(val) < 1e-9:
             continue
-        titular = re.sub(r'(?i)operacao de derivativos-', '', evt).strip()
-        titular = titular.replace('LMA-COMM-BR ', '').strip()    # strip the LMA prefix
-        conta = str(r.get(c_conta, '') if c_conta else '').strip()
-        out.append({'value': val, 'client': titular, 'sistema': sistema,
-                    'snumconta': conta, 'product': 'NDF',
-                    'pay_receive': 'Pay', 'le': 'MGT' if mgt else 'JPM'})
+        out.append({'value': val, 'client': '', 'sistema': sistema_bank,
+                    'snumconta': conta, 'product': 'NDF', 'pay_receive': pr,
+                    'le': le, 'bank': True, 'tol': _TOL_BANK})
     return out
 
 
@@ -711,14 +755,16 @@ def _reconcile(jpm, client):
         # Any product: a cents-level rounding (the COMM TER IR fee, or summing
         # cent-rounded client legs of a netted counterparty) can straddle the .5
         # whole-unit boundary and miss the exact-key bucket. Fall back to the nearest
-        # unmatched client value within R$1.
+        # unmatched client value within R$1 — or within the client record's own
+        # tolerance when it carries one (interbank SPB actuals: ±R$20).
         if mate is None:
             best, best_d = None, None
             for c in client:
                 if id(c) in matched:
                     continue
                 d = abs(c['value'] - j['value'])
-                if d < _TOL_SETTLED and (best_d is None or d < best_d):
+                c_tol = max(_TOL_SETTLED, c.get('tol', 0.0))
+                if d < c_tol and (best_d is None or d < best_d):
                     best, best_d = c, d
             if best is not None:
                 mate = best
@@ -727,6 +773,10 @@ def _reconcile(jpm, client):
             diff = mate['value'] - j['value']
             status = 'Settled' if abs(diff) < _TOL_SETTLED else 'Pending'   # agree within centavos (< R$1)
             if mate['sistema'] == 'SPB - conta externa' and diff > _TOL_SPB_SETTLED:
+                status = 'Settled'
+            # Interbank SPB actual matched to the JPM side by value → settled
+            # within its own tolerance (±R$20).
+            if mate.get('tol') and abs(diff) <= mate['tol']:
                 status = 'Settled'
             # COMM OPT: premium net of the ~0.005% IR → settle within 0.005% + 20 cents.
             if j.get('product') == 'COMM OPT' and \
