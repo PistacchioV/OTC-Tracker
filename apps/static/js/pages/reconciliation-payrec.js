@@ -73,6 +73,10 @@
       '<i class="ti ' + (ok ? 'ti-check' : 'ti-alert-triangle') + '"></i>' + esc(v) + '</span>';
   }
   function isPending(v) { return String(v || '').toLowerCase().indexOf('pend') !== -1; }
+  // Only the plain, initial "Pending" (a break) blocks End process — the
+  // carry-forward "Pending Payment"/"Pending Receivement" items are meant to
+  // finalize and be brought forward to the next day.
+  function isPlainPending(v) { return String(v || '').trim().toLowerCase() === 'pending'; }
   function isJustified(v) { return String(v || '').toLowerCase().indexOf('justif') !== -1; }
   function statusBadge(v) {
     var s = String(v || '').toLowerCase();
@@ -261,13 +265,16 @@
     } else { go(); }
   }
 
-  // Count pending rows across the two pending tables (Summary has no per-row
-  // status; "status Pending" lives only in the pending tables).
+  // Count the rows that must block End process: only the plain, initial
+  // "Pending" (a break needing justification). "Pending Payment"/"Pending
+  // Receivement" are carry-forward items — they finalize and reappear the next
+  // day, so they do NOT block. (Summary has no per-row status; "status Pending"
+  // lives only in the pending tables.)
   function pendingCount() {
     if (!_lastData) return 0;
     var n = 0;
-    (_lastData.pending_payment || []).forEach(function (r) { if (isPending(r.status)) n++; });
-    (_lastData.pending_receivement || []).forEach(function (r) { if (isPending(r.status)) n++; });
+    (_lastData.pending_payment || []).forEach(function (r) { if (isPlainPending(r.status)) n++; });
+    (_lastData.pending_receivement || []).forEach(function (r) { if (isPlainPending(r.status)) n++; });
     return n;
   }
 
