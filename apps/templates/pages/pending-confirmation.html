@@ -1372,11 +1372,19 @@ $(document).ready(function() {
                     e.stopPropagation();
                 });
 
+                // Debounce so a full DataTable re-filter/redraw (+ widget recount)
+                // does NOT fire on every keystroke — that froze the page on large
+                // datasets. Apply the search ~250ms after the user stops typing.
+                var searchTimer = null;
                 input.addEventListener('keyup', function() {
+                    var value = this.value;
                     var columnIndex = input.closest('th').cellIndex;
-                    if (api.column(columnIndex).search() !== this.value) {
-                        api.column(columnIndex).search(this.value).draw();
-                    }
+                    if (searchTimer) clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function() {
+                        if (api.column(columnIndex).search() !== value) {
+                            api.column(columnIndex).search(value).draw();
+                        }
+                    }, 250);
                 });
             });
 
@@ -1817,10 +1825,17 @@ $(document).ready(function() {
     // ========================================================================
     // WIDGET UPDATER — counts table rows and refreshes the 6 widget cards
     // ========================================================================
+    // Reuse a single scratch element: updateWidgets() calls this twice per row on
+    // every draw, and allocating a fresh <div> each time (thousands of rows ×
+    // keystrokes) was a big part of the typing lag. Fast-path plain strings that
+    // carry no markup so most cells skip the DOM round-trip entirely.
+    var _pcStripEl = document.createElement('div');
     function _pcStrip(v) {
-        var d = document.createElement('div');
-        d.innerHTML = (v == null ? '' : String(v));
-        return (d.textContent || d.innerText || '').trim();
+        if (v == null) return '';
+        var s = String(v);
+        if (s.indexOf('<') === -1 && s.indexOf('&') === -1) return s.trim();
+        _pcStripEl.innerHTML = s;
+        return (_pcStripEl.textContent || _pcStripEl.innerText || '').trim();
     }
     // Aging (days) → widget band. Matches the card titles (< 10, 10–20, 20–30,
     // 30–60, 60–90, > 90 days of pending).
@@ -1880,8 +1895,13 @@ $(document).ready(function() {
     // Call once on init (table may already have server-loaded rows)
     updateWidgets();
 
-    // Re-run after every DataTable draw (filters, pagination, etc.)
-    table.on('draw', function() { updateWidgets(); });
+    // Re-run after every DataTable draw (filters, pagination, etc.), but coalesce
+    // bursts of draws into a single recount so rapid filtering stays responsive.
+    var _widgetTimer = null;
+    table.on('draw', function() {
+        if (_widgetTimer) clearTimeout(_widgetTimer);
+        _widgetTimer = setTimeout(updateWidgets, 60);
+    });
 
     // ========================================================================
     // SMART FILTER — client-side DataTable column search
