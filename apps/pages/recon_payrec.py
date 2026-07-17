@@ -824,10 +824,22 @@ def _reconcile(jpm, client):
     # Unmatched MGT receipts (drop_if_unmatched) are SPB noise → exclude them
     # from the summary too, so the counts stay consistent with the tables.
     client_kept = [c for c in client if id(c) in matched or not c.get('drop_if_unmatched')]
-    return details, _summary(jpm, client_kept)
+    return details, _summary(jpm, client_kept, details)
 
 
-def _summary(jpm, client):
+def _summary(jpm, client, details=None):
+    """Summary value check now honours the per-match tolerances. The flat R$1
+    threshold flagged the aggregate as 'Not OK' whenever several rows settled
+    within their OWN tolerance (LTR ±R$20, COMM OPT 0.005%+R$0.20, cents rounding)
+    because the small per-row diffs added up past R$1. So the per-direction check
+    allows a slack = the sum of the |difference| of the rows that actually SETTLED;
+    a genuine pending leg adds its full value to the difference but no slack, so it
+    still flags 'Not OK'. Falls back to the flat floors when no details are given."""
+    slack = {'Pay': 0.0, 'Receive': 0.0}
+    for d in (details or []):
+        if d.get('status') == 'Settled' and d.get('pay_receive') in slack:
+            slack[d['pay_receive']] += abs(_num(d.get('difference', 0)))
+
     def agg(recs, label):
         return {'qty': sum(1 for r in recs if r['pay_receive'] == label),
                 'sum': sum(r['value'] for r in recs if r['pay_receive'] == label)}
@@ -835,17 +847,21 @@ def _summary(jpm, client):
     tot = {'jq': 0, 'cq': 0, 'jv': 0.0, 'cv': 0.0}
     for label in ('Pay', 'Receive'):
         j = agg(jpm, label); c = agg(client, label)
+        diff = j['sum'] - c['sum']
+        tol = max(_TOL_CHECK_VALUE, slack[label])
         rows.append({
             'pay_receive': label, 'jpm_qty': j['qty'], 'client_qty': c['qty'],
             'check_qty': 'OK' if j['qty'] == c['qty'] else 'Not OK',
-            'jpm_value': j['sum'], 'client_value': c['sum'], 'difference': j['sum'] - c['sum'],
-            'check_value': 'OK' if abs(j['sum'] - c['sum']) < _TOL_CHECK_VALUE else 'Not OK'})
+            'jpm_value': j['sum'], 'client_value': c['sum'], 'difference': diff,
+            'check_value': 'OK' if abs(diff) <= tol else 'Not OK'})
         tot['jq'] += j['qty']; tot['cq'] += c['qty']; tot['jv'] += j['sum']; tot['cv'] += c['sum']
+    tot_diff = tot['jv'] - tot['cv']
+    tot_tol = max(0.005, slack['Pay'] + slack['Receive'])
     rows.append({
         'pay_receive': 'TOTAL', 'jpm_qty': tot['jq'], 'client_qty': tot['cq'],
         'check_qty': 'OK' if tot['jq'] == tot['cq'] else 'Not OK',
-        'jpm_value': tot['jv'], 'client_value': tot['cv'], 'difference': tot['jv'] - tot['cv'],
-        'check_value': 'OK' if abs(tot['jv'] - tot['cv']) < 0.005 else 'Not OK'})
+        'jpm_value': tot['jv'], 'client_value': tot['cv'], 'difference': tot_diff,
+        'check_value': 'OK' if abs(tot_diff) <= tot_tol else 'Not OK'})
     return rows
 
 
