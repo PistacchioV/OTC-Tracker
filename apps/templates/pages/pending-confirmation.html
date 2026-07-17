@@ -271,6 +271,7 @@
         font-size: 0.7rem;
         white-space: nowrap;
         vertical-align: middle;
+        text-align: center;               /* center the column headers */
     }
     #pending-confirmation-table td {
         font-size: 0.8rem;
@@ -292,6 +293,21 @@
     .dataTables_scrollHeadInner thead th {
         font-size: 0.7rem;
         vertical-align: middle;
+        text-align: center;               /* center the (scrollX) column headers */
+    }
+    /* DataTables 2.x lays the sortable header out as flex — center its content
+       (title + sort icon) so the label sits in the middle of the column. */
+    #pending-confirmation-table thead th.dt-orderable-asc,
+    #pending-confirmation-table thead th.dt-orderable-desc,
+    #pending-confirmation-table thead th.dt-ordering-asc,
+    #pending-confirmation-table thead th.dt-ordering-desc,
+    .dt-scroll-head thead th.dt-orderable-asc,
+    .dt-scroll-head thead th.dt-orderable-desc {
+        justify-content: center;
+    }
+    #pending-confirmation-table thead th .dt-column-title,
+    .dt-scroll-head thead th .dt-column-title {
+        text-align: center;
     }
 
     .table-centered th,
