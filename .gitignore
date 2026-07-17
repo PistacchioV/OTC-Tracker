@@ -69,6 +69,9 @@ scripts/Codigo_VBA_TratarArquivos*
 apps/static/data/cache/payrec/**/*.json
 apps/static/data/cache/reconciliation/payrec/**/*.json
 
+# Generated Pending Confirmation daily snapshots
+apps/static/data/cache/pending-confirmation/**/*.json
+
 # SOP local dev launcher (contém o bypass /dev-login — NUNCA versionar)
 /devrun.py
 devrun.py

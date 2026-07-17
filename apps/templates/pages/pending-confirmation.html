@@ -278,6 +278,14 @@
         text-overflow: ellipsis;
         overflow: hidden;
         vertical-align: middle;
+        text-align: center;               /* center table values */
+    }
+    /* Center the per-column filter inputs and their placeholders */
+    #column-search-inputs th input {
+        text-align: center;
+    }
+    #column-search-inputs th input::placeholder {
+        text-align: center;
     }
     .dt-scroll-head thead th,
     .dt-scroll-headInner thead th,
@@ -1640,14 +1648,17 @@ $(document).ready(function() {
             if (!result.isConfirmed) return;
 
             // Atualizar o <select> de Pending Status (coluna 11, 0-indexed — SPN added at 3)
-            // em cada row selecionada
+            // em cada row selecionada — atualiza o dado da DataTable (col 11) e
+            // persiste no DB (sem recarregar a cada uma; recarrega uma vez no fim)
+            var _persists = [];
             checkedRows.forEach(function(row) {
-                // Coluna 11 = Pending Status
-                var pendingStatusCell = $(row).find('td').eq(11);
-                var selectEl = pendingStatusCell.find('select');
-                if (selectEl.length) {
-                    selectEl.val(selectedStatus);
-                }
+                var dtRow = table.row(row);
+                var d = dtRow.data();
+                if (!d) return;
+                d = d.slice();
+                d[11] = selectedStatus;
+                dtRow.data(d);
+                _persists.push(pcPersistRow(d, false));
             });
 
             // Resetar checkboxes
@@ -1660,8 +1671,10 @@ $(document).ready(function() {
             // Esconder botões condicionais
             toggleActionButtons(false);
 
-            // Redesenhar tabela (mantém paginação atual)
+            // Redesenhar tabela e, após persistir tudo, recarregar do DB (rows que
+            // viraram Concluded migram para o db ok).
             table.draw(false);
+            Promise.all(_persists).then(function(){ sfApply(); });
         });
     });
 
@@ -1700,6 +1713,8 @@ $(document).ready(function() {
             if (!result.isConfirmed) return;
 
             checkedRows.forEach(function(row) {
+                var d = table.row(row).data();
+                if (d) pcDeleteRow(_pcStrip(d[10]));   // remove from the DB too
                 table.row(row).remove();
             });
 
@@ -1957,6 +1972,35 @@ $(document).ready(function() {
         SF_COLS.forEach(function(col) { cells.push(sfEscape(row[col.label] == null ? '' : String(row[col.label]))); });
         return cells;
     }
+
+    // A DataTable row array (cells 2–23) → a {column: value} dict for the API.
+    function pcArrayToRow(d) {
+        var row = {};
+        SF_COLS.forEach(function(col) { row[col.label] = _pcStrip(d[col.dtCol]); });
+        return row;
+    }
+    // Persist a row change to the DB, then reload so a row that moved DB (e.g.
+    // Concluded → ok, or past 12 months → backlog) relocates in the view.
+    function pcPersistRow(d, reload) {
+        var p = fetch('/api/pending-confirmation/upsert', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row: pcArrayToRow(d) })
+        }).then(function(r){ return r.json(); })
+          .catch(function(err){ console.error('pending upsert error', err); });
+        if (reload !== false) p = p.then(function(){ sfApply(); });   // reload unless caller batches
+        return p;
+    }
+    function pcDeleteRow(tradeNumber) {
+        if (!tradeNumber) return Promise.resolve();
+        return fetch('/api/pending-confirmation/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trade_number: tradeNumber })
+        }).then(function(r){ return r.json(); })
+          .catch(function(err){ console.error('pending delete error', err); });
+    }
+    // expose for the Add-Row / mass-update handlers defined later in this scope
+    window._pcPersistRow = pcPersistRow;
+    window._pcDeleteRow  = pcDeleteRow;
 
     // Apply the active chips server-side: the Status chip picks the DB
     // (Pending / Ok / Backlog) and the rest filter the rows. Replaces the table
@@ -2267,6 +2311,7 @@ $(document).ready(function() {
             // ADD MODE — append new row
             table.row.add(rowArray).draw(false);
         }
+        pcPersistRow(rowArray);   // persist to the DB (routes to pending/ok/backlog)
 
         bootstrap.Modal.getInstance(document.getElementById('addRowModal')).hide();
         arClearErrors();
@@ -2296,8 +2341,11 @@ $(document).ready(function() {
             confirmButtonColor: '#dc3545'
         }).then(function(result) {
             if (!result.isConfirmed) return;
+            var d = table.row(tr).data();
+            var tn = d ? _pcStrip(d[10]) : '';
             table.row(tr).remove().draw(false);
             updateWidgets();
+            pcDeleteRow(tn);   // remove from the DB too
         });
     });
 
@@ -2341,7 +2389,7 @@ $(document).ready(function() {
         bootstrap.Modal.getOrCreateInstance(modalEl, { focus: false }).show();
     });
 
-    // CONFIRM: mark Pending Status as "Concluded"
+    // CONFIRM: mark Pending Status as "Concluded" → resolved (moves to the ok DB)
     $('#pending-confirmation-table tbody').on('click', '.ar-confirm', function() {
         var tr = $(this).closest('tr')[0];
         var dtRow = table.row(tr);
@@ -2349,6 +2397,7 @@ $(document).ready(function() {
         d[11] = 'Concluded';
         dtRow.data(d).draw(false);
         updateWidgets();
+        pcPersistRow(d);   // persist + relocate to the ok DB
     });
 
 }); // end $(document).ready

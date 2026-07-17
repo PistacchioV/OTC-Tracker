@@ -9798,6 +9798,9 @@ _PC_COLUMNS = [
     'Return Date', 'Break Reason', 'Comments', 'Economic Group', 'Signature Type',
     'FepWeb ID', 'Baixa Sem Abono', 'Pendência', 'Abono',
 ]
+# Daily JSON snapshots of the pending DB (YYYY/MM/DD), for a future metrics page.
+_PC_SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'data',
+                                'cache', 'pending-confirmation')
 
 
 def _pc_norm(s):
@@ -9848,7 +9851,10 @@ def _pc_load_rows(category):
     try:
         cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
         rows = con.execute('SELECT {} FROM {}'.format(cols, _PC_TABLE)).fetchall()
-        return [dict(zip(_PC_COLUMNS, r)) for r in rows]
+        out = [dict(zip(_PC_COLUMNS, r)) for r in rows]
+        for r in out:                       # keep Aging/Status current at read time
+            _pc_refresh_aging_status(r)
+        return out
     except Exception:
         log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
         return []
@@ -9858,20 +9864,54 @@ def _pc_load_rows(category):
 
 @blueprint.route('/api/pending-confirmation/search', methods=['POST'])
 def api_pending_confirmation_search():
-    """Return Pending Confirmation rows from the DB the Status chip selects
-    (default: pending), filtered by the remaining chips via _deal_matches."""
+    """Return Pending Confirmation rows filtered by the smart-filter chips. A
+    Status chip (Pending / Ok / Backlog) narrows the search to that one DB;
+    without it, all three DBs are searched. Every other chip filters the rows via
+    _deal_matches."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', []) or []
-    category = _pc_category_from_filters(filters)
-    rows = _pc_load_rows(category)
-    # The Status chip only chose the DB; apply every OTHER chip to the rows.
+    has_status = any(_pc_norm(f.get('field', '')) == 'status' for f in filters)
+    cats = [_pc_category_from_filters(filters)] if has_status else ['backlog', 'pending', 'ok']
+    rows = []
+    for cat in cats:
+        rows += _pc_load_rows(cat)
+    # The Status chip only chose the DB(s); apply every OTHER chip to the rows.
     other = [f for f in filters if _pc_norm(f.get('field', '')) != 'status']
     if other:
         rows = [r for r in rows if _deal_matches(r, other)]
-    return jsonify({'success': True, 'category': category, 'rows': rows,
+    return jsonify({'success': True, 'categories': cats, 'rows': rows,
                     'columns': _PC_COLUMNS})
+
+
+@blueprint.route('/api/pending-confirmation/upsert', methods=['POST'])
+def api_pending_confirmation_upsert():
+    """Persist a row edited/confirmed on the page. Refreshes aging/status and
+    routes it to the right DB (pending / ok when resolved / backlog past 12
+    months), removing any stale copy from the other DBs."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    body = request.get_json(silent=True) or {}
+    src = body.get('row') or {}
+    if not str(src.get('Trade Number', '') or '').strip():
+        return jsonify({'success': False, 'message': 'Trade Number required'}), 400
+    row = {c: str(src.get(c, '') or '') for c in _PC_COLUMNS}
+    target = _pc_upsert_row(row)
+    return jsonify({'success': True, 'category': target})
+
+
+@blueprint.route('/api/pending-confirmation/delete', methods=['POST'])
+def api_pending_confirmation_delete():
+    """Delete a row (by Trade Number) from all three DBs."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    tn = str((request.get_json(silent=True) or {}).get('trade_number', '') or '').strip()
+    if not tn:
+        return jsonify({'success': False, 'message': 'Trade Number required'}), 400
+    for cat in ('backlog', 'pending', 'ok'):
+        _pc_delete_tn(cat, tn)
+    return jsonify({'success': True})
 
 
 # ── Pending Confirmation — populate on New Deals Success+mapped ────────────────
@@ -9910,10 +9950,47 @@ def _pc_banker_for_spn(spn):
         return ''
 
 
-def _pc_insert_pending(row):
-    """Upsert one row into the pending DB by Trade Number (read-write, retried
-    around the brief read-only search connections)."""
-    path = os.path.join(_PC_DB_DIR, _PC_DBS['pending'])
+# Pending Status values that mean the confirmation is RESOLVED → the row moves to
+# the 'ok' DB. (Set by the "Mark Concluded" action / mass update.)
+_PC_OK_STATUSES = {'concluded'}
+
+
+def _pc_is_ok_status(v):
+    return _pc_norm(v) in _PC_OK_STATUSES
+
+
+def _pc_cutoff_date():
+    """Trade dates strictly before this go to the 12-month backlog."""
+    from dateutil.relativedelta import relativedelta
+    return datetime.now().date() - relativedelta(months=12)
+
+
+def _pc_refresh_aging_status(row):
+    """Recompute Aging (today - Trade Date) and the Status band label in place —
+    so both stay current every day without a stored value going stale."""
+    td = _parse_date_any(row.get('Trade Date', ''))
+    if td:
+        aging = (datetime.now().date() - td).days
+        row['Aging'] = str(aging)
+        row['Status'] = _pc_aging_band_label(aging)
+    return row
+
+
+def _pc_target_category(row):
+    """The DB a row belongs to NOW: backlog if Trade Date > 12 months; ok if its
+    Pending Status is resolved; otherwise pending."""
+    td = _parse_date_any(row.get('Trade Date', ''))
+    if td and td < _pc_cutoff_date():
+        return 'backlog'
+    if _pc_is_ok_status(row.get('Pending Status', '')):
+        return 'ok'
+    return 'pending'
+
+
+def _pc_write_exec(category, ops):
+    """Run (sql, params) ops in one read-write connection to a DB, retried around
+    the brief read-only search connections."""
+    path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
     _pc_ensure_db(path)
     for attempt in range(6):
         try:
@@ -9922,20 +9999,42 @@ def _pc_insert_pending(row):
             time.sleep(0.05 * (2 ** attempt))
             continue
         try:
-            tn = row.get('Trade Number', '')
-            if tn:
-                con.execute('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])
-            placeholders = ', '.join('?' for _ in _PC_COLUMNS)
-            con.execute('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, placeholders),
-                        [row.get(c, '') for c in _PC_COLUMNS])
+            for sql, params in ops:
+                con.execute(sql, params)
             return True
         except Exception:
-            log.warning('[pending-confirmation] insert failed:\n%s', traceback.format_exc())
+            log.warning('[pending-confirmation] write failed on %s:\n%s', category, traceback.format_exc())
             return False
         finally:
             con.close()
-    log.warning('[pending-confirmation] insert gave up (DB busy): %s', row.get('Trade Number', ''))
+    log.warning('[pending-confirmation] write gave up (DB busy) on %s', category)
     return False
+
+
+def _pc_delete_tn(category, tn):
+    if not tn:
+        return
+    _pc_write_exec(category, [('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])])
+
+
+def _pc_insert_into(category, row):
+    placeholders = ', '.join('?' for _ in _PC_COLUMNS)
+    _pc_write_exec(category, [('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, placeholders),
+                              [row.get(c, '') for c in _PC_COLUMNS])])
+
+
+def _pc_upsert_row(row):
+    """Persist one row: refresh aging/status, remove its Trade Number from ALL
+    three DBs, then insert it into the DB it now belongs to (this is what moves a
+    row pending→ok when confirmed, or →backlog past 12 months). Returns the
+    target category."""
+    _pc_refresh_aging_status(row)
+    tn = str(row.get('Trade Number', '') or '')
+    target = _pc_target_category(row)
+    for cat in ('backlog', 'pending', 'ok'):
+        _pc_delete_tn(cat, tn)
+    _pc_insert_into(target, row)
+    return target
 
 
 def _pc_save_from_deal(deal, product_type):
@@ -9960,7 +10059,7 @@ def _pc_save_from_deal(deal, product_type):
         row['Trade Number'] = str(deal.get('Deal', '') or '')
         row['Pending Status'] = 'Pending OTC'
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
-        _pc_insert_pending(row)
+        _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
     except Exception:
         log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
 
