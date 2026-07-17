@@ -24,7 +24,6 @@ Usage
     python scripts/pending_confirmation_daily.py --dry-run       # report only
 """
 import argparse
-import json
 import os
 import sys
 from datetime import datetime
@@ -43,35 +42,7 @@ except ImportError:
     _stub.get_phonebook_data = lambda *a, **k: {}
     sys.modules['awmpy'] = _stub
 
-import duckdb
 from apps.pages import routes as R
-
-
-def _rewrite_db(category, rows):
-    path = os.path.join(R._PC_DB_DIR, R._PC_DBS[category])
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    cols_ddl = ', '.join('"{}" VARCHAR'.format(c) for c in R._PC_COLUMNS)
-    con = duckdb.connect(path)
-    try:
-        con.execute('DROP TABLE IF EXISTS {}'.format(R._PC_TABLE))
-        con.execute('CREATE TABLE {} ({})'.format(R._PC_TABLE, cols_ddl))
-        if rows:
-            placeholders = ', '.join('?' for _ in R._PC_COLUMNS)
-            con.executemany(
-                'INSERT INTO {} VALUES ({})'.format(R._PC_TABLE, placeholders),
-                [[r.get(c, '') for c in R._PC_COLUMNS] for r in rows])
-    finally:
-        con.close()
-
-
-def _snapshot(rows_pending, today):
-    y, m, dd = today.strftime('%Y'), today.strftime('%m'), today.strftime('%d')
-    out_dir = os.path.join(R._PC_SNAPSHOT_DIR, y, m, dd)
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, 'pending-confirmation_{}.json'.format(today.strftime('%Y%m%d')))
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(rows_pending, fh, ensure_ascii=False, indent=2)
-    return path
 
 
 def main():
@@ -81,39 +52,31 @@ def main():
     args = ap.parse_args()
 
     today = datetime.now().date()
-
-    # Collect every row (deduped by Trade Number), refreshed, then re-routed.
-    seen, all_rows = set(), []
-    for cat in ('backlog', 'pending', 'ok'):
-        for r in R._pc_load_rows(cat):        # _pc_load_rows already refreshes Aging/Status
-            tn = str(r.get('Trade Number', '') or '')
-            key = tn or ('#' + str(len(all_rows)))
-            if key in seen:
-                continue
-            seen.add(key)
-            all_rows.append(r)
-
-    buckets = {'backlog': [], 'pending': [], 'ok': []}
-    for r in all_rows:
-        buckets[R._pc_target_category(r)].append(r)
-
-    print('Today   : {}'.format(today.strftime('%d/%m/%Y')))
-    print('Total   : {} row(s)'.format(len(all_rows)))
-    for cat in ('backlog', 'pending', 'ok'):
-        print('  {:<8}: {}'.format(cat, len(buckets[cat])))
+    print('Today: {}'.format(today.strftime('%d/%m/%Y')))
 
     if args.dry_run:
+        # Report only — mirror the re-route without writing.
+        seen, all_rows = set(), []
+        for cat in ('backlog', 'pending', 'ok'):
+            for r in R._pc_load_rows(cat):
+                tn = str(r.get('Trade Number', '') or '')
+                key = tn or ('#' + str(len(all_rows)))
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_rows.append(r)
+        counts = {'backlog': 0, 'pending': 0, 'ok': 0}
+        for r in all_rows:
+            counts[R._pc_target_category(r)] += 1
+        for cat in ('backlog', 'pending', 'ok'):
+            print('  {:<8}: {}'.format(cat, counts[cat]))
         print('\nDRY-RUN — nothing written.')
         return
 
+    # Reuse the exact maintenance the in-app 11:30 scheduler runs.
+    buckets = R._pc_run_daily_maintenance(snapshot=not args.no_snapshot)
     for cat in ('backlog', 'pending', 'ok'):
-        _rewrite_db(cat, buckets[cat])
-    print('re-routed and rewrote the three DBs.')
-
-    if not args.no_snapshot:
-        path = _snapshot(buckets['pending'], today)
-        print('snapshot: {} ({} rows)'.format(path, len(buckets['pending'])))
-
+        print('  {:<8}: {}'.format(cat, len(buckets[cat])))
     print('\nDone.')
 
 

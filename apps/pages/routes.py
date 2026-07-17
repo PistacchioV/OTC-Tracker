@@ -10037,6 +10037,120 @@ def _pc_upsert_row(row):
     return target
 
 
+def _pc_rewrite_db(category, rows):
+    """Replace a DB's contents with `rows` (used by the daily re-route)."""
+    path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
+    _pc_ensure_db(path)
+    cols_ddl = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
+    for attempt in range(6):
+        try:
+            con = duckdb.connect(path)
+        except Exception:
+            time.sleep(0.05 * (2 ** attempt))
+            continue
+        try:
+            con.execute('DROP TABLE IF EXISTS {}'.format(_PC_TABLE))
+            con.execute('CREATE TABLE {} ({})'.format(_PC_TABLE, cols_ddl))
+            if rows:
+                ph = ', '.join('?' for _ in _PC_COLUMNS)
+                con.executemany('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, ph),
+                                [[r.get(c, '') for c in _PC_COLUMNS] for r in rows])
+            return True
+        except Exception:
+            log.warning('[pending-confirmation] rewrite failed on %s:\n%s', category, traceback.format_exc())
+            return False
+        finally:
+            con.close()
+    return False
+
+
+def _pc_snapshot_pending(rows_pending):
+    """Write a JSON photo of the pending DB under cache/pending-confirmation/
+    YYYY/MM/DD (year/month/day like the other caches) for a metrics page."""
+    today = datetime.now()
+    out_dir = os.path.join(_PC_SNAPSHOT_DIR, today.strftime('%Y'), today.strftime('%m'), today.strftime('%d'))
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, 'pending-confirmation_{}.json'.format(today.strftime('%Y%m%d')))
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(rows_pending, fh, ensure_ascii=False, indent=2)
+    return path
+
+
+def _pc_run_daily_maintenance(snapshot=True):
+    """Re-route every row across the three DBs (refresh aging/status; backlog past
+    12 months; ok when resolved; else pending), rewrite the DBs, and save the
+    pending snapshot. Shared by the in-app 11:30 scheduler and the standalone
+    script. Idempotent."""
+    seen, all_rows = set(), []
+    for cat in ('backlog', 'pending', 'ok'):
+        for r in _pc_load_rows(cat):
+            tn = str(r.get('Trade Number', '') or '')
+            key = tn or ('#' + str(len(all_rows)))
+            if key in seen:
+                continue
+            seen.add(key)
+            all_rows.append(r)
+    buckets = {'backlog': [], 'pending': [], 'ok': []}
+    for r in all_rows:
+        buckets[_pc_target_category(r)].append(r)
+    for cat in ('backlog', 'pending', 'ok'):
+        _pc_rewrite_db(cat, buckets[cat])
+    snap = _pc_snapshot_pending(buckets['pending']) if snapshot else None
+    log.info('[pending-confirmation] daily maintenance: %d backlog / %d pending / %d ok%s',
+             len(buckets['backlog']), len(buckets['pending']), len(buckets['ok']),
+             (' + snapshot ' + os.path.basename(snap)) if snap else '')
+    return buckets
+
+
+# In-app daily scheduler — runs _pc_run_daily_maintenance at a fixed local time
+# (default 11:30). Self-contained (no OS Task Scheduler needed); the maintenance
+# is idempotent so an occasional double-run is harmless.
+_PC_DAILY_TIME = os.getenv('PC_DAILY_TIME', '11:30')
+_pc_scheduler_started = False
+_pc_scheduler_lock = threading.Lock()
+
+
+def _pc_scheduler_loop():
+    try:
+        hh, mm = (int(x) for x in _PC_DAILY_TIME.split(':')[:2])
+    except Exception:
+        hh, mm = 11, 30
+    last_run = None
+    while True:
+        try:
+            now = datetime.now()
+            target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+            time.sleep(max(1.0, (target - now).total_seconds()))
+            today = datetime.now().date()
+            if today != last_run:          # once per calendar day
+                last_run = today
+                _pc_run_daily_maintenance(snapshot=True)
+        except Exception:
+            log.error('[pending-confirmation] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+def _pc_start_scheduler():
+    global _pc_scheduler_started
+    with _pc_scheduler_lock:
+        if _pc_scheduler_started:
+            return
+        _pc_scheduler_started = True
+    threading.Thread(target=_pc_scheduler_loop, name='pc-daily-scheduler', daemon=True).start()
+    log.info('[pending-confirmation] daily scheduler started (runs at %s)', _PC_DAILY_TIME)
+
+
+# Start it on import. The Werkzeug reloader's supervisor sets WERKZEUG_RUN_MAIN
+# only in the child ('true'); starting an extra sleeping thread in the parent is
+# harmless (idempotent), so we don't gate on it here.
+try:
+    _pc_start_scheduler()
+except Exception:
+    log.warning('[pending-confirmation] could not start daily scheduler')
+
+
 def _pc_save_from_deal(deal, product_type):
     """Build and insert a pending row from a Success+mapped New Deals deal.
     product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO)."""
