@@ -9915,6 +9915,129 @@ def api_pending_confirmation_delete():
     return jsonify({'success': True})
 
 
+# ── Pending Update — bulk upsert from the "Pending Update" xlsx ────────────────
+# Sheet columns:
+#   LOB; End Counterparty Desc; Aging; Status; Product Type; Booking Date;
+#   Settlement Date; Deal Name; Pending Status
+# Mapping to page columns: End Counterparty Desc → Client (+ SPN via RefData name),
+# Booking Date → Trade Date, Settlement Date → Maturity Date, Deal Name → Trade
+# Number, Product Type as-is. Status/Pending Status are DERIVED:
+#   • (Settlement − Trade) ≤ 60 days → Pending Status 'Exception Digital Fep Web',
+#     Status 'Ok' (→ ok DB).
+#   • > 60 days → signature type of the counterparty in RefData: DIGITAL → 'Pending
+#     Digital Signature', else MANUAL → 'Pending Original'; Status = aging band.
+_PC_UPDATE_HEADERS = {
+    'lob': 'LOB',
+    'endcounterpartydesc': 'Client',
+    'producttype': 'Product Type',
+    'bookingdate': 'Trade Date',
+    'settlementdate': 'Maturity Date',
+    'dealname': 'Trade Number',
+}
+
+
+def _pc_signature_status(rec, trade_dt, maturity_dt):
+    """(Pending Status, Status) per the Pending Update rules. `rec` is the RefData
+    record for the counterparty (or None)."""
+    diff = (maturity_dt - trade_dt).days if (trade_dt and maturity_dt) else None
+    if diff is not None and diff <= 60:
+        return _PC_PASTDUE_STATUS, 'Ok'          # Exception Digital Fep Web → ok DB
+    # > 60 (or unknown tenor) → depends on the counterparty's signature type.
+    sig = _pc_norm((rec or {}).get('SIGNATURE TYPE', ''))
+    pending_status = 'Pending Digital Signature' if sig == 'digital' else 'Pending Original'
+    aging = (datetime.now().date() - trade_dt).days if trade_dt else None
+    return pending_status, _pc_aging_band_label(aging)
+
+
+def _pc_import_update(raw_bytes):
+    """Parse the Pending Update xlsx and upsert each operation. Returns
+    {updated, skipped}."""
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header = next(rows_iter)
+    except StopIteration:
+        return {'updated': 0, 'skipped': 0}
+    # normalized header name → column index
+    col_idx = {}
+    for i, h in enumerate(header):
+        n = _pc_norm(h)
+        if n and n not in col_idx:
+            col_idx[n] = i
+    # page-column → sheet column index (resolved once)
+    pc_to_i = {}
+    for norm, pc in _PC_UPDATE_HEADERS.items():
+        if norm in col_idx:
+            pc_to_i[pc] = col_idx[norm]
+
+    def cell(row, page_col):
+        i = pc_to_i.get(page_col)
+        if i is None or i >= len(row):
+            return ''
+        v = row[i]
+        return '' if v is None else v
+
+    # RefData maps built once: SPN + signature type by counterparty name.
+    by_name = _pc_refdata_by_name()
+
+    updated, skipped = 0, 0
+    for row in rows_iter:
+        if row is None or not any(v not in (None, '') for v in row):
+            continue
+        client = str(cell(row, 'Client') or '').strip()
+        tn = str(cell(row, 'Trade Number') or '').strip()
+        if tn.endswith('.0'):
+            tn = tn[:-2]
+        if not tn:
+            skipped += 1
+            continue
+        rec = by_name.get(_pc_norm(client))
+        spn = str((rec or {}).get('SPN', '') or '').strip()
+        trade_dt = _parse_date_any(cell(row, 'Trade Date'))
+        maturity_dt = _parse_date_any(cell(row, 'Maturity Date'))
+        pending_status, status = _pc_signature_status(rec, trade_dt, maturity_dt)
+        aging = (datetime.now().date() - trade_dt).days if trade_dt else None
+        r = {c: '' for c in _PC_COLUMNS}
+        r['LOB'] = str(cell(row, 'LOB') or '').strip()
+        r['SPN'] = spn
+        r['Client'] = client
+        r['Aging'] = str(aging) if aging is not None else ''
+        r['Product Type'] = str(cell(row, 'Product Type') or '').strip()
+        r['Trade Date'] = trade_dt.strftime('%d/%m/%Y') if trade_dt else ''
+        r['Maturity Date'] = maturity_dt.strftime('%d/%m/%Y') if maturity_dt else ''
+        r['Trade Number'] = tn
+        r['Status'] = status
+        r['Pending Status'] = pending_status
+        r['Owner'] = _pc_banker_for_spn(spn)
+        _pc_upsert_row(r)
+        updated += 1
+    try:
+        wb.close()
+    except Exception:
+        pass
+    return {'updated': updated, 'skipped': skipped}
+
+
+@blueprint.route('/api/pending-confirmation/import-update', methods=['POST'])
+def api_pending_confirmation_import_update():
+    """Bulk-upsert operations from an uploaded 'Pending Update' xlsx."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'message': 'No file uploaded.'}), 400
+    if not f.filename.lower().endswith('.xlsx'):
+        return jsonify({'success': False, 'message': 'Please upload a .xlsx file.'}), 400
+    try:
+        res = _pc_import_update(f.read())
+    except Exception:
+        log.error('[pending-confirmation] update import failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to process the spreadsheet.'}), 500
+    return jsonify({'success': True, 'updated': res['updated'], 'skipped': res['skipped']})
+
+
 # ── Pending Confirmation — populate on New Deals Success+mapped ────────────────
 # When a New Deals NDF Comm / Opt Comm / FXO deal becomes Status 'Success' and is
 # mapped, it is a fresh outstanding confirmation → insert it into the pending DB.
@@ -9923,6 +10046,39 @@ def api_pending_confirmation_delete():
 def _pc_is_intragroup(client):
     cl = str(client or '').lower()
     return 'banco' in cl and 'morgan' in cl
+
+
+def _pc_refdata_by_name():
+    """{normalized COUNTERPARTY name -> RefData record}, for economic-group /
+    signature-type lookups by counterparty name."""
+    out = {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            data = json.load(fh)
+        for rec in (data if isinstance(data, list) else []):
+            nm = _pc_norm(rec.get('COUNTERPARTY', ''))
+            if nm and nm not in out:
+                out[nm] = rec
+    except (IOError, json.JSONDecodeError):
+        pass
+    return out
+
+
+def _pc_is_internal_counterparty(client, spn=''):
+    """True when the deal's counterparty is an INTERNAL leg (Banco J.P. Morgan or
+    Lawton) — identified by ECONOMIC GROUP == 'INTERNAL' in RefData (by SPN first,
+    then by name). Only external clients should flow to Pending Confirmation, so
+    these bank/Lawton legs are skipped."""
+    rec = None
+    key = _norm_spn(spn)
+    if key:
+        rec = _fxo_refdata_by_spn().get(key)
+    if rec is None:
+        rec = _pc_refdata_by_name().get(_pc_norm(client))
+    if rec is not None:
+        return _pc_norm(rec.get('ECONOMIC GROUP', '')) == 'internal'
+    # No RefData hit → fall back to the intragroup name check (Banco JP Morgan).
+    return _pc_is_intragroup(client)
 
 
 def _pc_aging_band_label(days):
@@ -9975,12 +10131,16 @@ def _pc_apply_auto_rules(row):
     status, so the row then moves to the ok DB."""
     td = _parse_date_any(row.get('Trade Date', ''))
     if td:
-        aging = (datetime.now().date() - td).days
-        row['Aging'] = str(aging)
-        row['Status'] = _pc_aging_band_label(aging)
+        row['Aging'] = str((datetime.now().date() - td).days)
     md = _parse_date_any(row.get('Maturity Date', ''))
     if md and md <= datetime.now().date() and _pc_norm(row.get('Pending Status', '')).startswith('pending'):
         row['Pending Status'] = _PC_PASTDUE_STATUS
+    # Status column: 'Ok' once the confirmation is resolved (an ok Pending Status),
+    # otherwise the aging-band label.
+    if _pc_is_ok_status(row.get('Pending Status', '')):
+        row['Status'] = 'Ok'
+    elif td:
+        row['Status'] = _pc_aging_band_label((datetime.now().date() - td).days)
     return row
 
 
@@ -10168,8 +10328,8 @@ def _pc_save_from_deal(deal, product_type):
     product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO)."""
     try:
         client = str(deal.get('Client', '') or '')
-        if _pc_is_intragroup(client):
-            return          # intragroup → Intrag, not pending
+        if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
+            return          # bank / Lawton / intragroup leg → not a client confirmation
         td = _parse_date_any(deal.get('TradeDate', ''))
         md = _parse_date_any(deal.get('SettlementDate', ''))
         aging = (datetime.now().date() - td).days if td else None

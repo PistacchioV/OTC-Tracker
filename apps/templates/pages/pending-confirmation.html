@@ -218,6 +218,28 @@
         padding: 2px 0;
     }
     .smart-filter-input::placeholder { color: var(--ins-secondary-color); }
+    /* Pending Update dropzone (next to Show entries) */
+    .pend-update-dz {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 12px;
+        border: 1px dashed var(--ins-border-color);
+        border-radius: 8px;
+        font-size: 0.78rem;
+        color: var(--ins-secondary-color);
+        cursor: pointer;
+        transition: border-color .15s, background .15s, color .15s;
+        white-space: nowrap;
+    }
+    .pend-update-dz:hover,
+    .pend-update-dz.dragover {
+        border-color: #0066cc;
+        color: #0066cc;
+        background: rgba(0,102,204,.06);
+    }
+    .pend-update-dz.busy { pointer-events: none; opacity: .7; }
+    .pend-update-dz__label b { font-weight: 600; }
     .smart-filter-dropdown {
         position: absolute;
         top: calc(100% + 2px);
@@ -923,6 +945,17 @@
                                 </select>
                                 <label class="form-label mb-0" data-lang="b3-entries">entries per page</label>
                             </div>
+                            <!-- Pending Update dropzone: drop the "Pending Update" xlsx to
+                                 bulk-upsert operations into the DBs. -->
+                            <div id="pendUpdateDropzone" class="pend-update-dz" title="Pending Update">
+                                <input type="file" id="pendUpdateFile" accept=".xlsx"
+                                       style="display:none;">
+                                <i class="ti ti-file-upload me-1"></i>
+                                <span class="pend-update-dz__label" data-lang="pc-update-dz">Drop <b>Pending Update</b> xlsx here or click</span>
+                                <span class="pend-update-dz__busy" style="display:none;">
+                                    <span class="spinner-border spinner-border-sm"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -1261,6 +1294,7 @@ $(document).ready(function() {
         // every filter draw. orderClasses off avoids touching every cell on sort.
         deferRender: true,
         orderClasses: false,
+        order: [[6, 'asc']],     // sort by Aging (col 6) ascending — lowest aging first
         pageLength: 50,          // match the "Show entries" selector default (was defaulting to 10)
         select: {
             style: 'os',
@@ -2085,6 +2119,79 @@ $(document).ready(function() {
         })
         .catch(function(err) { console.error('pending-confirmation search error', err); });
     }
+
+    // ========================================================================
+    // PENDING UPDATE DROPZONE — bulk-upsert operations from a "Pending Update"
+    // xlsx (LOB, End Counterparty Desc, Product Type, Booking/Settlement dates,
+    // Deal Name; SPN + status derived server-side).
+    // ========================================================================
+    (function wirePendingUpdateDropzone() {
+        var dz = document.getElementById('pendUpdateDropzone');
+        var fileInput = document.getElementById('pendUpdateFile');
+        if (!dz || !fileInput) return;
+        var busy = dz.querySelector('.pend-update-dz__busy');
+        var labelEl = dz.querySelector('.pend-update-dz__label');
+
+        function setBusy(on) {
+            dz.classList.toggle('busy', on);
+            if (busy) busy.style.display = on ? '' : 'none';
+            if (labelEl) labelEl.style.display = on ? 'none' : '';
+        }
+
+        function upload(file) {
+            if (!file) return;
+            if (!/\.xlsx$/i.test(file.name)) {
+                if (typeof Swal !== 'undefined') Swal.fire({ icon: 'warning',
+                    title: 'Invalid file', text: 'Please drop a .xlsx file.',
+                    confirmButtonColor: '#0066cc' });
+                return;
+            }
+            var fd = new FormData();
+            fd.append('file', file);
+            setBusy(true);
+            fetch('/api/pending-confirmation/import-update', { method: 'POST', body: fd })
+                .then(function(r){ return r.json(); })
+                .then(function(res){
+                    setBusy(false);
+                    if (!res || !res.success) {
+                        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error',
+                            title: 'Update failed', text: (res && res.message) || 'Could not process the file.',
+                            confirmButtonColor: '#0066cc' });
+                        return;
+                    }
+                    if (typeof Swal !== 'undefined') Swal.fire({ icon: 'success',
+                        title: 'Pending Update applied',
+                        html: (res.updated || 0) + ' operation(s) updated' +
+                              (res.skipped ? '<br>' + res.skipped + ' row(s) skipped' : ''),
+                        confirmButtonColor: '#0066cc', timer: 2600, showConfirmButton: true });
+                    pcNotify('Pending Bulk Update', (res.updated || 0) + ' row(s) from Pending Update');
+                    sfApply();   // reload the table from the DBs
+                })
+                .catch(function(err){
+                    setBusy(false);
+                    console.error('pending-update import error', err);
+                    if (typeof Swal !== 'undefined') Swal.fire({ icon: 'error',
+                        title: 'Update failed', text: 'Network error while uploading.',
+                        confirmButtonColor: '#0066cc' });
+                });
+        }
+
+        dz.addEventListener('click', function(){ fileInput.click(); });
+        fileInput.addEventListener('change', function(){
+            if (this.files && this.files[0]) upload(this.files[0]);
+            this.value = '';   // allow re-dropping the same file
+        });
+        ['dragenter','dragover'].forEach(function(ev){
+            dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); });
+        });
+        ['dragleave','drop'].forEach(function(ev){
+            dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); });
+        });
+        dz.addEventListener('drop', function(e){
+            var dt = e.dataTransfer;
+            if (dt && dt.files && dt.files[0]) upload(dt.files[0]);
+        });
+    })();
 
     sfInput.addEventListener('input', function(){ sfRenderDropdown(this.value.trim()); });
     sfInput.addEventListener('keydown', function(e) {

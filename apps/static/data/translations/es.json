@@ -1282,5 +1282,6 @@
   "cog-add-save": "Agregar",
   "cog-cancel": "Cancelar",
   "cog-w-call": "Call",
-  "cog-w-put": "Put"
+  "cog-w-put": "Put",
+  "pc-update-dz": "Suelte el xlsx <b>Pending Update</b> aquí o haga clic"
 }
