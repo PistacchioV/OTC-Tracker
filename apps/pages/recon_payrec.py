@@ -763,8 +763,11 @@ def _reconcile(jpm, client):
                 if id(c) in matched:
                     continue
                 d = abs(c['value'] - j['value'])
-                c_tol = max(_TOL_SETTLED, c.get('tol', 0.0))
-                if d < c_tol and (best_d is None or d < best_d):
+                tol = c.get('tol', 0.0)
+                # Interbank SPB actuals match by value up to their own tolerance
+                # (equal or within R$20); everything else within the cents slack.
+                within = (d <= tol) if tol else (d < _TOL_SETTLED)
+                if within and (best_d is None or d < best_d):
                     best, best_d = c, d
             if best is not None:
                 mate = best
@@ -1041,10 +1044,12 @@ def _net_client(client, net_map):
         canon = _norm_cpty(c.get('client', ''))
         val = _num(c.get('value', 0))
         # Individual legs kept as-is (preserving each leg's own metadata):
-        #   drop-if-unmatched noise; Saint-Gobain do Brasil (No Net both ways);
-        #   Saint-Gobain Canalização RECEIPTS (No Net); any standard No Net cpty.
+        #   drop-if-unmatched noise; interbank SPB actuals (each LTR message is
+        #   ALREADY netted — never sum them, and they have no name to group by);
+        #   Saint-Gobain do Brasil (No Net both ways); Saint-Gobain Canalização
+        #   RECEIPTS (No Net); any standard No Net cpty.
         # Everything else (incl. Canalização PAYMENTS) is grouped and reduced below.
-        if c.get('drop_if_unmatched') or _is_sg_brasil(canon):
+        if c.get('drop_if_unmatched') or c.get('bank') or _is_sg_brasil(canon):
             passthrough.append(c)
             continue
         if _is_sg_canal(canon):
