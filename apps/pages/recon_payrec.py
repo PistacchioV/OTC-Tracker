@@ -799,18 +799,11 @@ def _reconcile(jpm, client):
                 'sistema': mate['sistema'], 'snumconta': mate['snumconta'],
                 'status': status, 'difference': diff})
         else:
-            # Unmatched settlement leg (JP has a payment/receipt with no client
-            # side) → it is a genuine pending settlement, so tag it as 'Pending
-            # Payment'/'Pending Receivement' and let it carry forward to the next
-            # days until it settles or is justified. (A matched-but-different row
-            # above keeps the plain 'Pending' = break status instead.)
             details.append({
                 'le': j.get('le', 'JPM'),
                 'product': j['product'], 'jpm_cpty': j['cpty'], 'client': '',
                 'pay_receive': j['pay_receive'], 'jpm_value': j['value'], 'client_value': '',
-                'sistema': '', 'snumconta': '',
-                'status': 'Pending Payment' if j['pay_receive'] == 'Pay' else 'Pending Receivement',
-                'difference': -j['value']})
+                'sistema': '', 'snumconta': '', 'status': 'Pending', 'difference': -j['value']})
     for c in client:
         if id(c) in matched:
             continue
@@ -820,14 +813,12 @@ def _reconcile(jpm, client):
             continue
         details.append({
             # No JPM side to match → fall back to the client record's own LE
-            # (MGT only for the HistoricoMensagensMGT actuals). Unmatched client
-            # leg is a pending settlement too → carry-forward status.
+            # (MGT only for the HistoricoMensagensMGT actuals).
             'le': c.get('le', 'JPM'),
             'product': c.get('product') or 'NDF', 'jpm_cpty': '', 'client': c['client'],
             'pay_receive': c['pay_receive'], 'jpm_value': '', 'client_value': c['value'],
             'sistema': c['sistema'], 'snumconta': c['snumconta'],
-            'status': 'Pending Payment' if c['pay_receive'] == 'Pay' else 'Pending Receivement',
-            'difference': c['value']})
+            'status': 'Pending', 'difference': c['value']})
     # Atacama is always shown as EQUITIES — enforce on the displayed product for
     # any row facing Atacama (covers unmatched client rows that never pass through
     # _emit_records).
@@ -1226,13 +1217,11 @@ _CARRY_STATUSES = ('pending payment', 'pending receivement')
 def justify_row(recon_date, table, index, comment, status=None):
     """Resolve one pending row from the Edit dialog, then re-persist the working
     cache so End process (and the e-mailed situation) reflect it. `table` is
-    'pay' or 'rec'. The action is driven by the row's CURRENT status (not any
-    UI choice):
-      • status 'Pending Payment' / 'Pending Receivement' → keep the status as-is
-        so the value carries forward to the next days' reconciliations (the
-        comment is just an annotation); it reappears until it settles or is
-        justified.
-      • status 'Pending' (a break) → the row becomes 'Justified' (comment kept).
+    'pay' or 'rec'. The operator chooses the status in the Edit dialog:
+      • 'Pending Payment' / 'Pending Receivement' → the status is kept as chosen
+        so the value carries forward to the next days' reconciliations until it
+        settles (OK) or is justified (the comment is just an annotation).
+      • 'Pending' (the default) → the row becomes 'Justified' (comment kept).
     Returns the updated payload, or None when the date/row can't be resolved."""
     data = _load_flat(recon_date)
     if not data:
@@ -1247,11 +1236,11 @@ def justify_row(recon_date, table, index, comment, status=None):
         return None
     if not (0 <= index < len(rows)):
         return None
-    cur_status = str(rows[index].get('status', '') or '').strip().lower()
-    if cur_status in _CARRY_STATUSES:
-        pass                                        # keep Pending Payment/Receivement → carries forward
+    new_status = (status or '').strip()
+    if new_status.lower() in _CARRY_STATUSES:
+        rows[index]['status'] = new_status          # keep it as a carry-forward item
     else:
-        rows[index]['status'] = 'Justified'         # plain Pending (break) → justified
+        rows[index]['status'] = 'Justified'         # comment-only on a Pending row
     rows[index]['comment'] = str(comment or '').strip()
     _persist(recon_date, data)
     return data
