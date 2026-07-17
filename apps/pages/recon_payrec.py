@@ -704,7 +704,10 @@ def _cli_spb(rows, cols, mgt=False):
             continue
 
         # 2) Interbank settlement (other banks) — status 'Sucesso' + LTR code in
-        #    col F decides direction. No client info → matched by value (±R$20).
+        #    col F decides direction. No client info → used ONLY to confirm a match
+        #    for a JPM bank leg by value (±R$20): a matched LTR settles its JPM leg;
+        #    an LTR with no matching JPM leg is dropped (drop_if_unmatched) and never
+        #    enters the recon as a pending row or in the summary totals.
         status = _norm(r.get(c_status, '') if c_status else '')
         ltr = str(r.get(c_ltr, '') if c_ltr else '').strip().upper()
         if 'sucesso' not in status:
@@ -720,7 +723,8 @@ def _cli_spb(rows, cols, mgt=False):
             continue
         out.append({'value': val, 'client': '', 'sistema': sistema_bank,
                     'snumconta': conta, 'product': 'NDF', 'pay_receive': pr,
-                    'le': le, 'bank': True, 'tol': _TOL_BANK})
+                    'le': le, 'bank': True, 'tol': _TOL_BANK,
+                    'drop_if_unmatched': True})
     return out
 
 
