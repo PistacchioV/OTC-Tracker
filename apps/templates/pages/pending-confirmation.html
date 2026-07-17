@@ -1255,6 +1255,12 @@ $(document).ready(function() {
         scrollX: true,
         scrollY: true,
         autoWidth: false,
+        // deferRender: only build the DOM for the rows on the visible page instead
+        // of every row up front. This is the key fix for the typing freeze — with
+        // a large pending dataset the old config rebuilt thousands of cells on
+        // every filter draw. orderClasses off avoids touching every cell on sort.
+        deferRender: true,
+        orderClasses: false,
         pageLength: 50,          // match the "Show entries" selector default (was defaulting to 10)
         select: {
             style: 'os',
@@ -1382,9 +1388,11 @@ $(document).ready(function() {
                     if (searchTimer) clearTimeout(searchTimer);
                     searchTimer = setTimeout(function() {
                         if (api.column(columnIndex).search() !== value) {
-                            api.column(columnIndex).search(value).draw();
+                            // smart:false → plain substring match (skips DataTables'
+                            // multi-term regex build), a little faster per draw.
+                            api.column(columnIndex).search(value, false, false).draw();
                         }
-                    }, 250);
+                    }, 180);
                 });
             });
 
