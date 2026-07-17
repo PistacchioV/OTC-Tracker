@@ -19,7 +19,8 @@ var PAGE_URL = {
     'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
     'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
-    'Reconciliation': '/reconciliation-payrec', 'Reference Data': '/reference-data',
+    'Reconciliation': '/reconciliation-payrec', 'Pending Confirmation': '/pending-confirmation',
+    'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf'
 };

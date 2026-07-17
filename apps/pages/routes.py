@@ -149,6 +149,7 @@ _NOTIF_PAGE_URL = {
     'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
     'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
     'Intrag NDF': '/intrag-ndf', 'Reconciliation': '/reconciliation-payrec',
+    'Pending Confirmation': '/pending-confirmation',
 }
 
 
@@ -9951,8 +9952,10 @@ def _pc_banker_for_spn(spn):
 
 
 # Pending Status values that mean the confirmation is RESOLVED → the row moves to
-# the 'ok' DB. (Set by the "Mark Concluded" action / mass update.)
-_PC_OK_STATUSES = {'concluded'}
+# the 'ok' DB. (Concluded = Mark Concluded; plus the digitally-resolved states.)
+_PC_OK_STATUSES = {'concluded', 'signeddigitally', 'exceptiondigitalfepweb'}
+# Pending Status set by the past-due auto-rule (settlement date reached).
+_PC_PASTDUE_STATUS = 'Exception Digital Fep Web'
 
 
 def _pc_is_ok_status(v):
@@ -9965,15 +9968,24 @@ def _pc_cutoff_date():
     return datetime.now().date() - relativedelta(months=12)
 
 
-def _pc_refresh_aging_status(row):
-    """Recompute Aging (today - Trade Date) and the Status band label in place —
-    so both stay current every day without a stored value going stale."""
+def _pc_apply_auto_rules(row):
+    """Keep a row current: (1) recompute Aging (today - Trade Date) and the Status
+    band label; (2) once the Maturity/Settlement Date is reached while the row is
+    still pending, auto-resolve it as 'Exception Digital Fep Web' — which is an ok
+    status, so the row then moves to the ok DB."""
     td = _parse_date_any(row.get('Trade Date', ''))
     if td:
         aging = (datetime.now().date() - td).days
         row['Aging'] = str(aging)
         row['Status'] = _pc_aging_band_label(aging)
+    md = _parse_date_any(row.get('Maturity Date', ''))
+    if md and md <= datetime.now().date() and _pc_norm(row.get('Pending Status', '')).startswith('pending'):
+        row['Pending Status'] = _PC_PASTDUE_STATUS
     return row
+
+
+# Back-compat alias (older call sites).
+_pc_refresh_aging_status = _pc_apply_auto_rules
 
 
 def _pc_target_category(row):

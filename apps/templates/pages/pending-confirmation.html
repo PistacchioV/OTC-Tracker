@@ -1660,6 +1660,8 @@ $(document).ready(function() {
                 dtRow.data(d);
                 _persists.push(pcPersistRow(d, false));
             });
+            pcNotify('Pending Bulk Update',
+                     checkedRows.length + ' row(s) → ' + selectedStatus);
 
             // Resetar checkboxes
             $('#pending-confirmation-table tbody input[type="checkbox"]').prop('checked', false);
@@ -1717,6 +1719,7 @@ $(document).ready(function() {
                 if (d) pcDeleteRow(_pcStrip(d[10]));   // remove from the DB too
                 table.row(row).remove();
             });
+            pcNotify('Pending Bulk Delete', checkedRows.length + ' row(s)');
 
             // Resetar checkboxes
             $('#selectAll').prop('checked', false).prop('indeterminate', false);
@@ -1997,6 +2000,16 @@ $(document).ready(function() {
             body: JSON.stringify({ trade_number: tradeNumber })
         }).then(function(r){ return r.json(); })
           .catch(function(err){ console.error('pending delete error', err); });
+    }
+    // Emit a notification for a page action. The bell shows it to everyone with
+    // access to this page; the toast is suppressed for whoever performed it
+    // (handled server/topbar-side by actor + page-access rules).
+    function pcNotify(action, detail) {
+        fetch('/api/notifications', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action, page: 'Pending Confirmation', detail: detail || '' })
+        }).then(function(){ if (window.fetchNotifications) window.fetchNotifications(); })
+          .catch(function(){});
     }
     // expose for the Add-Row / mass-update handlers defined later in this scope
     window._pcPersistRow = pcPersistRow;
@@ -2301,6 +2314,7 @@ $(document).ready(function() {
             econGrp, sigType, fepweb, bAbono, pend, abono
         ];
 
+        var _wasEdit = !!arEditTr;
         if (arEditTr) {
             // UPDATE MODE — replace data in existing row
             table.row(arEditTr).data(rowArray).draw(false);
@@ -2312,6 +2326,8 @@ $(document).ready(function() {
             table.row.add(rowArray).draw(false);
         }
         pcPersistRow(rowArray);   // persist to the DB (routes to pending/ok/backlog)
+        pcNotify(_wasEdit ? 'Pending Updated' : 'Pending Added',
+                 (tradeNo || '') + (client ? ' — ' + client : ''));
 
         bootstrap.Modal.getInstance(document.getElementById('addRowModal')).hide();
         arClearErrors();
@@ -2346,6 +2362,7 @@ $(document).ready(function() {
             table.row(tr).remove().draw(false);
             updateWidgets();
             pcDeleteRow(tn);   // remove from the DB too
+            pcNotify('Pending Deleted', tn + (d ? ' — ' + _pcStrip(d[5]) : ''));
         });
     });
 
@@ -2398,6 +2415,7 @@ $(document).ready(function() {
         dtRow.data(d).draw(false);
         updateWidgets();
         pcPersistRow(d);   // persist + relocate to the ok DB
+        pcNotify('Pending Confirmed', _pcStrip(d[10]) + ' — ' + _pcStrip(d[5]));
     });
 
 }); // end $(document).ready
