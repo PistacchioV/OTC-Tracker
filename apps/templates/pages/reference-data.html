@@ -709,6 +709,7 @@ $(document).ready(function () {
         return data.map(function(r) {
             var idx   = (r._idx !== undefined) ? r._idx : -1;
             var maker = safe(r['MAKER']);
+            _REAL_STATUS[_spnKey(r['SPN'])] = (r['STATUS'] || 'PENDING');
             return [
                 checkboxCell(),
                 actionBtns(idx, maker),
@@ -895,12 +896,19 @@ $(document).ready(function () {
         }
     });
 
+    /* Real (maker/checker) STATUS per SPN, kept so the row badge can be flipped
+       to "Pending" when the counterparty has something awaiting approval in its
+       double-click details, then restored when everything is approved. */
+    var _REAL_STATUS = {};
+    function _spnKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
+
     /* ── Auto-load RefData.json ───────────────────────────────────────── */
     fetch('{{ config.ASSETS_ROOT }}/data/RefData.json')
         .then(function(r){ return r.json(); })
         .then(function(data) {
             data.forEach(function(r,i){ r._idx = i; });
             dt.clear().rows.add(buildRows(data)).draw();
+            decorateAllPending();   // flag rows with pending details (if already loaded)
             // scrollX clones the header into a separate table; resync widths after load.
             setTimeout(function(){ dt.columns.adjust(); }, 100);
         })
@@ -914,8 +922,82 @@ $(document).ready(function () {
             (data || []).forEach(function(c){
                 if (c && c.SPN) _CPDETAILS[String(c.SPN).trim().toUpperCase()] = c;
             });
+            decorateAllPending();   // details are in — reflect their pending state
         })
         .catch(function(e){ console.error('CounterpartyDetails load error:', e); });
+
+    /* A "Pending" badge shown on the main row when the double-click details carry
+       something awaiting approval (so it's visible without opening the popup). */
+    function detailsPendingBadge() {
+        return '<span class="badge rounded-pill pill-badge text-bg-warning" ' +
+               'title="Pending approval in details — double-click to review">Pending</span>';
+    }
+
+    /* True when any detail item (CGD / Net / Contacts / Banking accounts or
+       defaults) for this SPN is not yet approved. */
+    function cpHasPending(spn) {
+        var c = _CPDETAILS[_spnKey(spn)];
+        if (!c) return false;
+        function pend(s){ return !!s && String(s).trim().toLowerCase() !== 'active'; }
+        var i;
+        if (Array.isArray(c.CGD)) {
+            for (i = 0; i < c.CGD.length; i++) {
+                var g = c.CGD[i];
+                if (g && typeof g === 'object' && pend(g.status)) return true;
+            }
+        }
+        if (c.NET && typeof c.NET === 'object' && pend(c.NET.status)) return true;
+        if (Array.isArray(c.CONTACTS)) {
+            for (i = 0; i < c.CONTACTS.length; i++) {
+                var ct = c.CONTACTS[i];
+                if (ct && pend(ct.appr)) return true;   // approval state lives in appr
+            }
+        }
+        var b = c.BANKING;
+        if (b && typeof b === 'object') {
+            if (Array.isArray(b.ACCOUNTS)) {
+                for (i = 0; i < b.ACCOUNTS.length; i++) {
+                    if (b.ACCOUNTS[i] && pend(b.ACCOUNTS[i].status)) return true;
+                }
+            }
+            var slots = ['DEFAULT_PAY', 'DEFAULT_RECEIVE'];
+            for (i = 0; i < slots.length; i++) {
+                var d = b[slots[i]];
+                if (d && d.pending) return true;         // a pending default awaiting approval
+            }
+        }
+        return false;
+    }
+
+    /* Recompute the status badge of every row from its real status + pending
+       details. Idempotent, safe to call after either data load or a detail edit. */
+    function decorateAllPending() {
+        if (!dt) return;
+        dt.rows().every(function() {
+            var d = this.data(); if (!d) return;
+            var key  = _spnKey(_txt(d[9]));
+            var real = _REAL_STATUS[key] || 'PENDING';
+            var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
+            var badge = want ? detailsPendingBadge() : statusBadge(real);
+            if (d[2] !== badge) { d[2] = badge; this.data(d); }
+        });
+        dt.draw(false);
+    }
+
+    /* Update just the one counterparty's badge (used after a detail popup action). */
+    function decorateRowPending(spn) {
+        if (!dt) return;
+        var key = _spnKey(spn);
+        dt.rows().every(function() {
+            var d = this.data(); if (!d) return;
+            if (_spnKey(_txt(d[9])) !== key) return;
+            var real = _REAL_STATUS[key] || 'PENDING';
+            var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
+            var badge = want ? detailsPendingBadge() : statusBadge(real);
+            if (d[2] !== badge) { d[2] = badge; this.data(d); }
+        });
+        dt.draw(false);
+    }
 
     function _txt(html) { return $('<div>').html(html == null ? '' : html).text().trim(); }
 
@@ -1334,7 +1416,8 @@ $(document).ready(function () {
                 .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
                 .then(function(res){
                     if (res.j && res.j.ok) {
-                        if (onOk) onOk(res.j);
+                        if (onOk) onOk(res.j);            // updates model + syncs _CPDETAILS[spn]
+                        decorateRowPending(spn);          // reflect pending-details on the main row badge
                         flashSaved(popup, t('rd-cp-saved', 'Saved'), 'ok');
                         if (window.fetchNotifications) window.fetchNotifications();  // bell updates immediately
                     } else {
@@ -1704,9 +1787,11 @@ $(document).ready(function () {
                 if (res.ok) {
                     var row   = dt.row($(btn).closest('tr'));
                     var cells = row.data();
+                    _REAL_STATUS[_spnKey(_txt(cells[9]))] = res.new_status || 'ACTIVE';
                     cells[2] = statusBadge(res.new_status || 'ACTIVE');
                     cells[1] = actionBtns(idx, '');
                     row.data(cells).draw(false);
+                    decorateRowPending(_txt(cells[9]));   // keep "Pending" if details still await approval
                     Swal.fire({title: t('rd-swal-approved','Approved!'), icon:'success', timer:1200, showConfirmButton:false});
                 } else if (res.error === 'same_user') {
                     Swal.fire(t('rd-swal-not-allowed','Not allowed'), t('rd-swal-not-allowed-text','Cannot approve your own changes.'), 'warning');
@@ -1734,6 +1819,7 @@ $(document).ready(function () {
                 if (res.ok) {
                     var row   = dt.row($(btn).closest('tr'));
                     var cells = row.data();
+                    _REAL_STATUS[_spnKey(_txt(cells[9]))] = 'PENDING INACTIVE';
                     cells[2] = statusBadge('PENDING INACTIVE');
                     cells[1] = actionBtns(idx, CURRENT_USER);
                     row.data(cells).draw(false);
@@ -1812,9 +1898,11 @@ $(document).ready(function () {
                     if (res.ok) {
                         var row   = dt.row(rec.tr);
                         var cells = row.data();
+                        _REAL_STATUS[_spnKey(_txt(cells[9]))] = res.new_status || 'ACTIVE';
                         cells[2] = statusBadge(res.new_status || 'ACTIVE');
                         cells[1] = actionBtns(rec.idx, '');
                         row.data(cells).draw(false);
+                        decorateRowPending(_txt(cells[9]));
                         done++;
                     } else {
                         failed++;
@@ -1872,6 +1960,7 @@ $(document).ready(function () {
                             fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
                         ]).draw(false);
                     }
+                    _REAL_STATUS[_spnKey(fields['SPN'])] = 'PENDING';
                     bootstrap.Modal.getInstance(rdModalEl).hide();
                     Swal.fire({title: t('rd-swal-saved','Saved!'), text: t('rd-swal-saved-text','Status set to Pending.'), icon:'success', timer:1500, showConfirmButton:false});
                 } else {
@@ -1889,6 +1978,7 @@ $(document).ready(function () {
                         fields['CASID'], fields['UCN'], fields['B3 ACCOUNT'],
                         fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
                     ]).draw(false);
+                    _REAL_STATUS[_spnKey(fields['SPN'])] = 'PENDING';
                     bootstrap.Modal.getInstance(rdModalEl).hide();
                     Swal.fire({title: t('rd-swal-saved','Added!'), icon:'success', timer:1200, showConfirmButton:false});
                 } else {

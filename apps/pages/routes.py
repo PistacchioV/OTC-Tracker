@@ -13411,9 +13411,15 @@ def api_b3_update():
 
     _b3_save(path, records)
     # On checker approval of a Reference Data counterparty (→ ACTIVE), make sure
-    # its Electronic Inventory folder tree exists. Best-effort, never blocks.
+    # its Electronic Inventory folder tree exists. This touches a network share
+    # (listdir + makedirs) and can be slow, so run it OFF the request path — the
+    # response (and the on-screen status update + notification) must not wait.
     if table == 'refdata' and action == 'approve' and new_status == 'ACTIVE':
-        _ensure_counterparty_folders(rec.get('COUNTERPARTY', ''))
+        try:
+            threading.Thread(target=_ensure_counterparty_folders,
+                             args=(rec.get('COUNTERPARTY', ''),), daemon=True).start()
+        except Exception:
+            pass
     # Reference Data shares this endpoint but is its own page — name it correctly
     # and carry SPN + counterparty so the bell deep-links to /reference-data?spn=.
     if table == 'refdata':
