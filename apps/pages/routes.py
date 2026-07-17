@@ -9874,6 +9874,97 @@ def api_pending_confirmation_search():
                     'columns': _PC_COLUMNS})
 
 
+# ── Pending Confirmation — populate on New Deals Success+mapped ────────────────
+# When a New Deals NDF Comm / Opt Comm / FXO deal becomes Status 'Success' and is
+# mapped, it is a fresh outstanding confirmation → insert it into the pending DB.
+# (Intragroup deals go to Intrag instead, so they are skipped here — this trigger
+# complements the existing Intrag ones.)
+def _pc_is_intragroup(client):
+    cl = str(client or '').lower()
+    return 'banco' in cl and 'morgan' in cl
+
+
+def _pc_aging_band_label(days):
+    """Same aging-band label the page computes on Add Row (arAgingStatus)."""
+    if days is None:
+        return ''
+    if days < 10:
+        return '< 10 dias de pendência'
+    if days < 20:
+        return '>= 10 e < 20 dias de pendência'
+    if days < 30:
+        return '>= 20 e < 30 dias de pendência'
+    if days < 60:
+        return '>= 30 e < 60 dias de pendência'
+    if days < 90:
+        return '>= 60 e < 90 dias de pendência'
+    return '>= 90 dias de pendência'
+
+
+def _pc_banker_for_spn(spn):
+    """Owner = the RefData BANKER for this deal's SPN ('' when unknown)."""
+    try:
+        rec = _fxo_refdata_by_spn().get(_norm_spn(spn))
+        return str((rec or {}).get('BANKER', '') or '').strip()
+    except Exception:
+        return ''
+
+
+def _pc_insert_pending(row):
+    """Upsert one row into the pending DB by Trade Number (read-write, retried
+    around the brief read-only search connections)."""
+    path = os.path.join(_PC_DB_DIR, _PC_DBS['pending'])
+    _pc_ensure_db(path)
+    for attempt in range(6):
+        try:
+            con = duckdb.connect(path)
+        except Exception:
+            time.sleep(0.05 * (2 ** attempt))
+            continue
+        try:
+            tn = row.get('Trade Number', '')
+            if tn:
+                con.execute('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])
+            placeholders = ', '.join('?' for _ in _PC_COLUMNS)
+            con.execute('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, placeholders),
+                        [row.get(c, '') for c in _PC_COLUMNS])
+            return True
+        except Exception:
+            log.warning('[pending-confirmation] insert failed:\n%s', traceback.format_exc())
+            return False
+        finally:
+            con.close()
+    log.warning('[pending-confirmation] insert gave up (DB busy): %s', row.get('Trade Number', ''))
+    return False
+
+
+def _pc_save_from_deal(deal, product_type):
+    """Build and insert a pending row from a Success+mapped New Deals deal.
+    product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO)."""
+    try:
+        client = str(deal.get('Client', '') or '')
+        if _pc_is_intragroup(client):
+            return          # intragroup → Intrag, not pending
+        td = _parse_date_any(deal.get('TradeDate', ''))
+        md = _parse_date_any(deal.get('SettlementDate', ''))
+        aging = (datetime.now().date() - td).days if td else None
+        row = {c: '' for c in _PC_COLUMNS}
+        row['Status'] = _pc_aging_band_label(aging)
+        row['LOB'] = 'CEM'
+        row['SPN'] = str(deal.get('SPN', '') or '')
+        row['Client'] = client
+        row['Aging'] = str(aging) if aging is not None else ''
+        row['Product Type'] = product_type
+        row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
+        row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
+        row['Trade Number'] = str(deal.get('Deal', '') or '')
+        row['Pending Status'] = 'Pending OTC'
+        row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
+        _pc_insert_pending(row)
+    except Exception:
+        log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
+
+
 @blueprint.route('/api/new-deals/opt-commodities/cache/search', methods=['POST'])
 def api_search_deal_cache():
     if not session.get('authenticated'):
@@ -10930,6 +11021,7 @@ def api_fxo_mapping_b3():
                     pass
             if intrag_candidate is not None:
                 _maybe_save_intrag_fxo(intrag_candidate)
+                _pc_save_from_deal(intrag_candidate, 'OPTION')      # → pending confirmation
 
         results.append({
             'id':     deal_text,
@@ -12775,6 +12867,7 @@ def api_ndf_mapping_b3():
                     _save_intrag_ndf_entry(intrag_candidate)
                 except Exception as exc:
                     log.error('[MAPPING-B3] Intrag save failed for deal=%r: %s', deal_text, exc)
+            _pc_save_from_deal(intrag_candidate, 'NDF COMM')       # → pending confirmation
 
         results.append({
             'id':     deal_text,
@@ -13398,6 +13491,7 @@ def api_mapping_b3():
                         pass
                 if intrag_candidate is not None:
                     _maybe_save_intrag_opt(intrag_candidate)
+                    _pc_save_from_deal(intrag_candidate, 'OPTION COMM')   # → pending confirmation
 
         results.append({
             'id':     deal_text,

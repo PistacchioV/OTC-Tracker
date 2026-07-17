@@ -1231,6 +1231,7 @@ $(document).ready(function() {
         scrollX: true,
         scrollY: true,
         autoWidth: false,
+        pageLength: 50,          // match the "Show entries" selector default (was defaulting to 10)
         select: {
             style: 'os',
             items: 'cell',
@@ -1782,18 +1783,25 @@ $(document).ready(function() {
     // ========================================================================
     // WIDGET UPDATER — counts table rows and refreshes the 6 widget cards
     // ========================================================================
+    function _pcStrip(v) {
+        var d = document.createElement('div');
+        d.innerHTML = (v == null ? '' : String(v));
+        return (d.textContent || d.innerText || '').trim();
+    }
+    // Aging (days) → widget band. Matches the card titles (< 10, 10–20, 20–30,
+    // 30–60, 60–90, > 90 days of pending).
+    function _pcAgingBand(days) {
+        if (isNaN(days)) return null;
+        if (days < 10) return 'u10';
+        if (days < 20) return 'r10';
+        if (days < 30) return 'r20';
+        if (days < 60) return 'r30';
+        if (days < 90) return 'r60';
+        return 'r90';
+    }
     function updateWidgets() {
         var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
         var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa'];
-
-        var statusToRange = {
-            '< 10 dias de pendência':         'u10',
-            '>= 10 e < 20 dias de pendência': 'r10',
-            '>= 20 e < 30 dias de pendência': 'r20',
-            '>= 30 e < 60 dias de pendência': 'r30',
-            '>= 60 e < 90 dias de pendência': 'r60',
-            '>= 90 dias de pendência':         'r90'
-        };
         var pendingToType = {
             'Pending Digital Signature': 'ds',
             'Pending FO':                'fo',
@@ -1805,37 +1813,30 @@ $(document).ready(function() {
             'Pending Signature Allowance': 'sa'
         };
 
-        // Zero out counts
         var counts = {};
         RANGE_ORDER.forEach(function(r) {
             counts[r] = { total: 0 };
             TYPE_ORDER.forEach(function(t) { counts[r][t] = 0; });
         });
 
-        // Iterate ALL rows (not just visible)
-        table.rows().nodes().each(function(row) {
-            var cells = row.querySelectorAll('td');
-            if (cells.length < 12) return;
-            var statusText = cells[2].textContent.trim();
-            var range = statusToRange[statusText];
-            if (!range) return;
-            counts[range]['total']++;
-
-            // Pending Status (col 11) — may be a <select> or plain text
-            var psSel = cells[11].querySelector('select');
-            var psVal = psSel ? psSel.value : cells[11].textContent.trim();
-            var pType = pendingToType[psVal];
-            if (pType) counts[range][pType]++;
+        // Count the currently FILTERED rows, banded by Aging (col 6); sub-typed by
+        // Pending Status (col 11).
+        table.rows({ search: 'applied' }).data().each(function(d) {
+            if (!d || d.length < 12) return;
+            var days  = parseInt(_pcStrip(d[6]).replace(/[^0-9-]/g, ''), 10);
+            var band  = _pcAgingBand(days);
+            if (!band) return;
+            counts[band].total++;
+            var pType = pendingToType[_pcStrip(d[11])];
+            if (pType) counts[band][pType]++;
         });
 
         // Update widget cards in DOM order (matches RANGE_ORDER)
         document.querySelectorAll('.pending-widgets-row .card-body').forEach(function(cardBody, i) {
             var range = RANGE_ORDER[i];
             if (!range) return;
-            // Total value
             var totalEl = cardBody.querySelector('.pending-widget-value');
             if (totalEl) totalEl.textContent = counts[range]['total'];
-            // Per-type rows (always in TYPE_ORDER sequence)
             cardBody.querySelectorAll('.float-end b').forEach(function(b, j) {
                 if (TYPE_ORDER[j]) b.textContent = counts[range][TYPE_ORDER[j]];
             });
@@ -1937,12 +1938,21 @@ $(document).ready(function() {
             sfChips.appendChild(chip);
         });
     }
+    // Row action buttons — identical to the Add-Row builder so DB rows get the
+    // same Confirm / Edit / Delete controls (handlers are delegated on the tbody).
+    var PC_ACTIONS_HTML =
+        '<div class="d-flex justify-content-center gap-1">' +
+        '<button type="button" class="btn btn-success btn-sm rounded-circle ar-confirm" title="Mark Concluded"><i class="ti ti-check"></i></button>' +
+        '<button type="button" class="btn btn-info btn-sm rounded-circle ar-edit" title="Edit"><i class="ti ti-edit"></i></button>' +
+        '<button type="button" class="btn btn-danger btn-sm rounded-circle ar-delete" title="Delete"><i class="ti ti-trash"></i></button>' +
+        '</div>';
+
     // Build one table row (24 cells: checkbox, actions, then the 22 columns) from
     // a DB row dict keyed by the page column names.
     function pcRowToArray(row) {
         var cells = [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
-            ''  // Actions (no row actions defined yet)
+            PC_ACTIONS_HTML
         ];
         SF_COLS.forEach(function(col) { cells.push(sfEscape(row[col.label] == null ? '' : String(row[col.label]))); });
         return cells;
