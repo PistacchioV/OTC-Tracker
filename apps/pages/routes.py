@@ -9780,6 +9780,100 @@ def _deal_matches(deal, filters):
     return True
 
 
+# ── Pending Confirmation (DuckDB-backed) ──────────────────────────────────────
+# Data lives in three standalone DuckDB files (built by
+# scripts/import_pending_confirmation.py). The smart filter's Status chip picks
+# which one: Ok → ok, Backlog → backlog, anything else (Pending / non-Ok) →
+# pending. All other chips filter the loaded rows via _deal_matches.
+_PC_DB_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'db')
+_PC_DBS = {
+    'backlog': 'pending-confirmation-backlog.db',
+    'pending': 'pending-confirmation-pending.db',
+    'ok':      'pending-confirmation-ok.db',
+}
+_PC_TABLE = 'pending_confirmation'
+_PC_COLUMNS = [
+    'Status', 'LOB', 'SPN', 'Client', 'Aging', 'Product Type', 'Trade Date',
+    'Maturity Date', 'Trade Number', 'Pending Status', 'Owner', 'EA', 'Send Date',
+    'Return Date', 'Break Reason', 'Comments', 'Economic Group', 'Signature Type',
+    'FepWeb ID', 'Baixa Sem Abono', 'Pendência', 'Abono',
+]
+
+
+def _pc_norm(s):
+    import unicodedata
+    s = unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
+    return re.sub(r'[^a-z0-9]', '', s.lower())
+
+
+def _pc_category_from_filters(filters):
+    """The Status chip selects which DB. Default 'pending'."""
+    for f in (filters or []):
+        if _pc_norm(f.get('field', '')) == 'status':
+            v = _pc_norm(f.get('value', ''))
+            if 'backlog' in v:
+                return 'backlog'
+            if v == 'ok':
+                return 'ok'
+            return 'pending'
+    return 'pending'
+
+
+def _pc_ensure_db(path):
+    """Create an empty pending_confirmation DB (schema only) if the file is
+    missing, so the page works before the first spreadsheet import runs."""
+    if os.path.isfile(path):
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        con = duckdb.connect(path)
+        cols = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
+        con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(_PC_TABLE, cols))
+        con.close()
+        log.info('[pending-confirmation] created empty DB %s', path)
+    except Exception:
+        log.warning('[pending-confirmation] could not create %s', path)
+
+
+def _pc_load_rows(category):
+    path = os.path.join(_PC_DB_DIR, _PC_DBS.get(category, _PC_DBS['pending']))
+    _pc_ensure_db(path)
+    if not os.path.isfile(path):
+        return []
+    try:
+        con = duckdb.connect(path, read_only=True)
+    except Exception:
+        log.warning('[pending-confirmation] could not open %s', path)
+        return []
+    try:
+        cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
+        rows = con.execute('SELECT {} FROM {}'.format(cols, _PC_TABLE)).fetchall()
+        return [dict(zip(_PC_COLUMNS, r)) for r in rows]
+    except Exception:
+        log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
+        return []
+    finally:
+        con.close()
+
+
+@blueprint.route('/api/pending-confirmation/search', methods=['POST'])
+def api_pending_confirmation_search():
+    """Return Pending Confirmation rows from the DB the Status chip selects
+    (default: pending), filtered by the remaining chips via _deal_matches."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    body = request.get_json(silent=True) or {}
+    filters = body.get('filters', []) or []
+    category = _pc_category_from_filters(filters)
+    rows = _pc_load_rows(category)
+    # The Status chip only chose the DB; apply every OTHER chip to the rows.
+    other = [f for f in filters if _pc_norm(f.get('field', '')) != 'status']
+    if other:
+        rows = [r for r in rows if _deal_matches(r, other)]
+    return jsonify({'success': True, 'category': category, 'rows': rows,
+                    'columns': _PC_COLUMNS})
+
+
 @blueprint.route('/api/new-deals/opt-commodities/cache/search', methods=['POST'])
 def api_search_deal_cache():
     if not session.get('authenticated'):

@@ -1196,7 +1196,6 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/pending-confirmation-table.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
@@ -1938,19 +1937,64 @@ $(document).ready(function() {
             sfChips.appendChild(chip);
         });
     }
+    // Build one table row (24 cells: checkbox, actions, then the 22 columns) from
+    // a DB row dict keyed by the page column names.
+    function pcRowToArray(row) {
+        var cells = [
+            '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
+            ''  // Actions (no row actions defined yet)
+        ];
+        SF_COLS.forEach(function(col) { cells.push(sfEscape(row[col.label] == null ? '' : String(row[col.label]))); });
+        return cells;
+    }
+
+    // Apply the active chips server-side: the Status chip picks the DB
+    // (Pending / Ok / Backlog) and the rest filter the rows. Replaces the table
+    // body with what the DB returns (same pattern as the New Deals pages).
     function sfApply() {
-        SF_COLS.forEach(function(col){ table.column(col.dtCol).search(''); });
-        sfActive.forEach(function(f){ table.column(f.col.dtCol).search(f.value); });
-        table.draw();
+        var filters = sfActive.map(function(f) {
+            return {
+                field: f.col.label,
+                type:  f.col.type,
+                value: f.value,
+                mode:  f.mode || (f.col.type === 'date' ? 'exact' : f.col.type)
+            };
+        });
+        fetch('/api/pending-confirmation/search', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ filters: filters })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!res || !res.success) { console.warn('pending-confirmation search failed', res); return; }
+            table.clear();
+            (res.rows || []).forEach(function(row) { table.row.add(pcRowToArray(row)); });
+            table.draw(false);
+        })
+        .catch(function(err) { console.error('pending-confirmation search error', err); });
     }
 
     sfInput.addEventListener('input', function(){ sfRenderDropdown(this.value.trim()); });
     sfInput.addEventListener('keydown', function(e) {
         var items = sfDropdown.querySelectorAll('li');
+        var open  = sfDropdown.style.display !== 'none' && items.length;
+        // Backspace on an empty input removes the last chip (and re-runs).
+        if (e.key==='Backspace' && !this.value && sfActive.length) {
+            e.preventDefault();
+            sfRemoveFilter(sfActive[sfActive.length-1].col.dtCol);
+            return;
+        }
+        // Enter → pick the highlighted suggestion, else run the search.
+        if (e.key==='Enter') {
+            e.preventDefault();
+            if (open && sfKbdIdx>=0 && items[sfKbdIdx]) { items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown')); }
+            else { sfDropdown.style.display='none'; sfApply(); }
+            return;
+        }
         if (!items.length) return;
         if (e.key==='ArrowDown'){ e.preventDefault(); sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1); }
         else if (e.key==='ArrowUp'){ e.preventDefault(); sfKbdIdx=Math.max(sfKbdIdx-1,0); }
-        else if (e.key==='Enter'){ e.preventDefault(); if(sfKbdIdx>=0&&items[sfKbdIdx]) items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown')); return; }
         else if (e.key==='Escape'){ sfDropdown.style.display='none'; return; }
         items.forEach(function(li,i){ li.classList.toggle('sf-kbd-active',i===sfKbdIdx); });
         if (sfKbdIdx>=0&&items[sfKbdIdx]) items[sfKbdIdx].scrollIntoView({block:'nearest'});
@@ -1962,13 +2006,27 @@ $(document).ready(function() {
 
     // Expose a helper so the column-filter "Clear Filters" button can also
     // reset the smart-filter chips/input, keeping both filter UIs in sync.
+    // Clearing falls back to the default (pending) load.
     window.pendResetSmartFilter = function () {
         sfActive = [];
         sfInput.value = '';
         sfDropdown.style.display = 'none';
         sfKbdIdx = -1;
         sfRenderChips();
+        sfApply();
     };
+
+    // Initial load: seed a Status = Pending chip and fetch the pending DB so the
+    // page opens on the outstanding confirmations (typing "Pending" + Status does
+    // the same for any category — Ok / Backlog switch the DB).
+    (function () {
+        var statusCol = SF_COLS.filter(function(c){ return c.label === 'Status'; })[0];
+        if (statusCol) {
+            sfActive.push({ col: statusCol, value: 'Pending' });
+            sfRenderChips();
+        }
+        sfApply();
+    })();
 
 
     // ========================================================================
