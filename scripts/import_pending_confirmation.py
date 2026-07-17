@@ -85,6 +85,17 @@ PAGE_FROM_SHEET = {
     'Abono': 'Abono',
 }
 
+# The spreadsheet's actual column order (as delivered). Resolution is by HEADER
+# NAME first (order-independent); this order is only a POSITIONAL fallback used
+# when a header name can't be matched (e.g. a slightly different wording).
+SHEET_ORDER = [
+    'LOB', 'Client', 'Aging', 'Status', 'Product Type', 'Trade Date',
+    'Maturity Date', 'Trade Number', 'Pending Status', 'Owner', 'EA',
+    'JP sending documentation', 'Client return the document', 'Break Reason',
+    'Overall Comments', 'Economic Group', 'Signature Type',
+    'Trade Number IS FEP WEB', 'Baixa Sem Abono', 'Pendência', 'Abono',
+]
+
 # Columns whose values are dates → stored dd/mm/yyyy for the smart filter.
 DATE_COLUMNS = {'Trade Date', 'Maturity Date', 'EA', 'Send Date', 'Return Date',
                 'Baixa Sem Abono', 'Pendência', 'Abono'}
@@ -152,14 +163,22 @@ def _cell(v):
 
 
 def _resolve_headers(df_columns):
-    """Map each spreadsheet source header name to the actual df column (by
-    normalized name). Returns {source_name: df_column or None}."""
+    """Map each spreadsheet source header name to the actual df column. Resolve by
+    normalized HEADER NAME first (so column order doesn't matter); fall back to the
+    column at that name's position in SHEET_ORDER when the name isn't found.
+    Returns {source_name: df_column or None}."""
+    df_columns = list(df_columns)
     norm_to_col = {}
     for c in df_columns:
         norm_to_col.setdefault(_norm(c), c)
     resolved = {}
     for src in set(PAGE_FROM_SHEET.values()):
-        resolved[src] = norm_to_col.get(_norm(src))
+        col = norm_to_col.get(_norm(src))
+        if col is None and src in SHEET_ORDER:
+            idx = SHEET_ORDER.index(src)
+            if 0 <= idx < len(df_columns):
+                col = df_columns[idx]
+        resolved[src] = col
     return resolved
 
 
