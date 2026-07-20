@@ -1,0 +1,53 @@
+{
+  "_note": "Seed history for the Pending Confirmation metrics page. Volume of confirmations pending >30 days, transcribed from the external monthly report (image) — used until enough internal daily snapshots accumulate. 'monthly' = one point per month (Jun/2023 .. Jun/2026); 'daily' = current-month snapshots (Jul/2026). MoM % is derived by the API. There is no external 'All' (any-aging) history, so that scope is served from internal snapshots only.",
+  "gt30": {
+    "monthly": [
+      { "period": "2023-06", "volume": 73 },
+      { "period": "2023-07", "volume": 48 },
+      { "period": "2023-08", "volume": 26 },
+      { "period": "2023-09", "volume": 30 },
+      { "period": "2023-10", "volume": 56 },
+      { "period": "2023-11", "volume": 59 },
+      { "period": "2023-12", "volume": 82 },
+      { "period": "2024-01", "volume": 59 },
+      { "period": "2024-02", "volume": 80 },
+      { "period": "2024-03", "volume": 57 },
+      { "period": "2024-04", "volume": 79 },
+      { "period": "2024-05", "volume": 132 },
+      { "period": "2024-06", "volume": 82 },
+      { "period": "2024-07", "volume": 80 },
+      { "period": "2024-08", "volume": 36 },
+      { "period": "2024-09", "volume": 39 },
+      { "period": "2024-10", "volume": 59 },
+      { "period": "2024-11", "volume": 72 },
+      { "period": "2024-12", "volume": 78 },
+      { "period": "2025-01", "volume": 103 },
+      { "period": "2025-02", "volume": 127 },
+      { "period": "2025-03", "volume": 163 },
+      { "period": "2025-04", "volume": 81 },
+      { "period": "2025-05", "volume": 25 },
+      { "period": "2025-06", "volume": 62 },
+      { "period": "2025-07", "volume": 41 },
+      { "period": "2025-08", "volume": 71 },
+      { "period": "2025-09", "volume": 115 },
+      { "period": "2025-10", "volume": 38 },
+      { "period": "2025-11", "volume": 89 },
+      { "period": "2025-12", "volume": 61 },
+      { "period": "2026-01", "volume": 129 },
+      { "period": "2026-02", "volume": 171 },
+      { "period": "2026-03", "volume": 171 },
+      { "period": "2026-04", "volume": 144 },
+      { "period": "2026-05", "volume": 71 },
+      { "period": "2026-06", "volume": 118 }
+    ],
+    "daily": [
+      { "date": "2026-07-01", "volume": 109 },
+      { "date": "2026-07-02", "volume": 111 },
+      { "date": "2026-07-03", "volume": 103 },
+      { "date": "2026-07-06", "volume": 123 },
+      { "date": "2026-07-07", "volume": 119 },
+      { "date": "2026-07-08", "volume": 115 },
+      { "date": "2026-07-09", "volume": 128 }
+    ]
+  }
+}

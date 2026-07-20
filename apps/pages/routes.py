@@ -15371,6 +15371,183 @@ def _initiate_2fa(sid, email, name):
     return redirect(url_for('pages_blueprint.two_factor_page'))
 
 
+# ============================================================================
+#  METRICS — Pending Confirmation
+#  Dashboard for confirmations pending > 30 days. Offenders (bankers / clients /
+#  economic groups) come from the daily pending-confirmation snapshot JSON ("photo
+#  of the day"); the >30d volume history is seeded from the external report
+#  (static/data/pending-confirmation-metrics-history.json) until enough internal
+#  snapshots accumulate. Owner holds one or more banker names separated by ';'.
+# ============================================================================
+_PC_METRICS_AGING_THRESHOLD = 30
+_PC_METRICS_HISTORY_FILE = os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'pending-confirmation-metrics-history.json')
+
+
+def _pc_metrics_int(v):
+    try:
+        return int(float(str(v).strip()))
+    except Exception:
+        return None
+
+
+def _pc_latest_snapshot_rows():
+    """Newest daily pending-confirmation snapshot as a list of row dicts. Walks
+    back a few days if today's isn't written yet; falls back to the live pending
+    DB when no snapshot exists at all. Returns (rows, source_label)."""
+    try:
+        for back in range(0, 40):
+            d = datetime.now() - timedelta(days=back)
+            p = os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'),
+                             'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d')))
+            if os.path.isfile(p):
+                with open(p, encoding='utf-8') as fh:
+                    rows = json.load(fh)
+                if isinstance(rows, list):
+                    return rows, d.strftime('%Y-%m-%d')
+    except Exception:
+        log.warning('[pc-metrics] snapshot scan failed:\n%s', traceback.format_exc())
+    try:
+        return _pc_load_rows('pending'), 'live'
+    except Exception:
+        return [], 'none'
+
+
+def _pc_metrics_offenders(rows):
+    """Top-5 offenders among rows aging > 30 days:
+      • bankers       → # of DISTINCT clients each banker (group) has pending
+      • clients       → # of pending confirmations
+      • economic grp  → # of pending confirmations
+    Owner is a fixed banker GROUP (e.g. "A; B; C") — treated as a single name, not
+    split per person, since the group is the same team across a client's deals.
+    """
+    gt30 = [r for r in rows
+            if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD]
+
+    banker_clients, client_count, egroup_count = {}, {}, {}
+    for r in gt30:
+        client = str(r.get('Client', '') or '').strip()
+        egroup = str(r.get('Economic Group', '') or '').strip()
+        banker = str(r.get('Owner', '') or '').strip()     # whole Owner group = one name
+        if banker:
+            banker_clients.setdefault(banker, set())
+            if client:
+                banker_clients[banker].add(client)
+        if client:
+            client_count[client] = client_count.get(client, 0) + 1
+        if egroup:
+            egroup_count[egroup] = egroup_count.get(egroup, 0) + 1
+
+    def top5(d):
+        return [{'label': k, 'value': v}
+                for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:5]]
+
+    return {
+        'bankers':    top5({b: len(cs) for b, cs in banker_clients.items()}),
+        'clients':    top5(client_count),
+        'egroups':    top5(egroup_count),
+        'gt30_total': len(gt30),
+        'all_total':  len(rows),
+    }
+
+
+def _pc_metrics_history():
+    """>30d volume history: seed (external report) merged with any internal daily
+    snapshots. Returns {gt30:{monthly,daily}, all:{monthly,daily}} where each point
+    is {period|date, volume, pct} (pct = MoM/DoD change vs the previous point)."""
+    seed = {}
+    try:
+        with open(_PC_METRICS_HISTORY_FILE, encoding='utf-8') as fh:
+            seed = json.load(fh)
+    except Exception:
+        log.warning('[pc-metrics] could not read history seed')
+    seed_gt30 = (seed.get('gt30') or {})
+    seed_monthly = list(seed_gt30.get('monthly') or [])
+    seed_daily   = list(seed_gt30.get('daily') or [])
+
+    internal_gt30, internal_all = {}, {}     # day 'YYYY-MM-DD' -> volume
+    try:
+        if os.path.isdir(_PC_SNAPSHOT_DIR):
+            for root, _dirs, files in os.walk(_PC_SNAPSHOT_DIR):
+                for fn in files:
+                    if not fn.endswith('.json'):
+                        continue
+                    m = re.search(r'(\d{4})(\d{2})(\d{2})', fn)
+                    if not m:
+                        continue
+                    day = '{}-{}-{}'.format(*m.groups())
+                    try:
+                        with open(os.path.join(root, fn), encoding='utf-8') as fh:
+                            rows = json.load(fh)
+                    except Exception:
+                        continue
+                    if not isinstance(rows, list):
+                        continue
+                    internal_gt30[day] = sum(
+                        1 for r in rows
+                        if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
+                    internal_all[day] = len(rows)
+    except Exception:
+        log.warning('[pc-metrics] internal snapshot scan failed:\n%s', traceback.format_exc())
+
+    def merge_daily(seed_list, internal):
+        by = {d['date']: d['volume'] for d in seed_list}
+        by.update(internal)                     # internal overrides seed for same day
+        return [{'date': k, 'volume': by[k]} for k in sorted(by)]
+
+    def monthly_last(internal):                 # last snapshot value of each month
+        by_month = {}
+        for day in sorted(internal):
+            by_month[day[:7]] = internal[day]
+        return by_month
+
+    gt30_daily   = merge_daily(seed_daily, internal_gt30)
+    gt30_month   = {m['period']: m['volume'] for m in seed_monthly}
+    gt30_month.update(monthly_last(internal_gt30))
+    gt30_monthly = [{'period': k, 'volume': gt30_month[k]} for k in sorted(gt30_month)]
+
+    all_daily    = [{'date': k, 'volume': internal_all[k]} for k in sorted(internal_all)]
+    all_month    = monthly_last(internal_all)
+    all_monthly  = [{'period': k, 'volume': all_month[k]} for k in sorted(all_month)]
+
+    def with_pct(series, key):
+        out, prev = [], None
+        for pt in series:
+            vol = pt['volume']
+            pct = None if prev in (None, 0) else round((vol - prev) * 100.0 / prev)
+            out.append({key: pt[key], 'volume': vol, 'pct': pct})
+            prev = vol
+        return out
+
+    return {
+        'gt30': {'monthly': with_pct(gt30_monthly, 'period'), 'daily': with_pct(gt30_daily, 'date')},
+        'all':  {'monthly': with_pct(all_monthly, 'period'),  'daily': with_pct(all_daily, 'date')},
+    }
+
+
+@blueprint.route('/metrics-pending-confirmation')
+def metrics_pending_confirmation():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/metrics-pending-confirmation.html',
+                           segment='metrics-pending-confirmation')
+
+
+@blueprint.route('/api/metrics-pending-confirmation/offenders')
+def api_pc_metrics_offenders():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    rows, source = _pc_latest_snapshot_rows()
+    return jsonify({'success': True, 'source': source, **_pc_metrics_offenders(rows)})
+
+
+@blueprint.route('/api/metrics-pending-confirmation/history')
+def api_pc_metrics_history():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, **_pc_metrics_history()})
+
+
 def get_segment(request):
     try:
         segment = request.path.split('/')[-1]
