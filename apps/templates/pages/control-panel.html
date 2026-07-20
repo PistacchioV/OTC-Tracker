@@ -390,6 +390,51 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="dailymetric">
+                    <div class="cp-card__icon"><i class="ti ti-mail-check"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-dm-title">Daily Metric — Outstanding Confirmation Brazil OTC</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-dm-desc">
+                        E-mails the Outstanding Confirmation Brazil OTC daily metric to a saved recipient
+                        list. Set the TO / CC / BCC once — they are saved and reused on every run, so you
+                        don't have to retype them. The reference date is always today.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-dm-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com, email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-dm-cc" class="form-control form-control-sm"
+                               placeholder="opcional — separe por vírgula">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-bcc">BCC</label>
+                        <input type="text" id="cp-dm-bcc" class="form-control form-control-sm"
+                               placeholder="opcional — separe por vírgula">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" data-fixed>
+                            <input type="text" id="cp-dm-date" data-input readonly
+                                   class="form-control form-control-sm" value="{{ today_fmt }}">
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-dm-meta">Saved recipients → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-metric-run data-date-input="cp-dm-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
@@ -626,6 +671,82 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// ── Daily Metric card: persisted TO/CC/BCC recipients + Run (e-mails the metric
+//    to the saved list). Recipients load on open, auto-save on blur, and are
+//    saved again right before each Run so the latest values are used. ──────────
+(function () {
+    var toEl   = document.getElementById('cp-dm-to');
+    var ccEl   = document.getElementById('cp-dm-cc');
+    var bccEl  = document.getElementById('cp-dm-bcc');
+    var dateEl = document.getElementById('cp-dm-date');
+    var runBtn = document.querySelector('[data-metric-run]');
+    if (!toEl || !ccEl || !bccEl || !runBtn) return;
+    var REC_URL = '/api/control-panel/daily-metric/recipients';
+    var RUN_URL = '/api/control-panel/daily-metric/run';
+
+    // Load the saved recipients on page open.
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success) return;
+            toEl.value  = d.to  || '';
+            ccEl.value  = d.cc  || '';
+            bccEl.value = d.bcc || '';
+        })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ to: toEl.value, cc: ccEl.value, bcc: bccEl.value })
+        }).catch(function () {});
+    }
+
+    // Persist on blur so the addresses survive even without running.
+    [toEl, ccEl, bccEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+
+    runBtn.addEventListener('click', function () {
+        if (runBtn.disabled) return;
+        var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        runBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+
+        var body = {};
+        if (dateEl && dateEl.value) {
+            var m = dateEl.value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            body.date = m ? (m[3] + '-' + m[2] + '-' + m[1]) : dateEl.value;
+        }
+        // Save the latest recipients first, then run.
+        saveRecipients().then(function () {
+            return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin', body: JSON.stringify(body) });
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success !== false) {
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+            } else {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                            confirmButtonColor: '#0066cc' });
+            }
+        })
+        .catch(function () {
+            Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                        html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+        })
+        .finally(function () {
+            runBtn.disabled = false;
+            if (label) label.textContent = orig;
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
+        });
+    });
+})();
+
 // ── Date pickers: dd/mm/yyyy display, calendar icon, default = D-1 ANBIMA ─────
 // Every .cp-datefield wrap gets its own flatpickr. The ISO default (YYYY-MM-DD)
 // is parsed into a local Date so flatpickr (dateFormat d/m/Y) doesn't misparse it.
@@ -633,7 +754,7 @@ document.addEventListener('click', function (e) {
     if (typeof flatpickr === 'undefined') return;
     var _iso = '{{ cetip_default_date }}'.split('-');
     var _def = _iso.length === 3 ? new Date(+_iso[0], +_iso[1] - 1, +_iso[2]) : null;
-    document.querySelectorAll('.cp-datefield').forEach(function (wrap) {
+    document.querySelectorAll('.cp-datefield:not([data-fixed])').forEach(function (wrap) {
         flatpickr(wrap, {
             wrap: true,             // <input data-input> + <a data-toggle> (the icon)
             dateFormat: 'd/m/Y',    // visible/stored value as dd/mm/yyyy
@@ -659,7 +780,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

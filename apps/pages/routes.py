@@ -174,10 +174,11 @@ _NAV_URLS = _load_nav_urls()
 # "/control-panel" page grant, each routine card can be granted on its own. Tokens
 # are stored in the same allowlist as page URLs ("/control-panel#<id>").
 _CONTROL_PANEL_CARDS = [
-    {'id': 'cetip',    'label': 'Save CETIP Files'},
-    {'id': 'daily',    'label': 'Save Daily Settlement Files'},
-    {'id': 'forecast', 'label': 'Settlement Forecast'},
-    {'id': 'contacts', 'label': 'Update Contacts'},
+    {'id': 'cetip',       'label': 'Save CETIP Files'},
+    {'id': 'daily',       'label': 'Save Daily Settlement Files'},
+    {'id': 'forecast',    'label': 'Settlement Forecast'},
+    {'id': 'contacts',    'label': 'Update Contacts'},
+    {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -187,6 +188,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/settlement-forecast/data': 'forecast',
     '/api/control-panel/settlement-forecast/email': 'forecast',
     '/api/control-panel/import-contacts': 'contacts',
+    '/api/control-panel/daily-metric/recipients': 'dailymetric',
+    '/api/control-panel/daily-metric/run': 'dailymetric',
 }
 
 
@@ -1900,8 +1903,11 @@ def control_panel():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     cetip_default_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    today = datetime.now()
     return render_template('pages/control-panel.html', segment='control-panel',
-                           cetip_default_date=cetip_default_date)
+                           cetip_default_date=cetip_default_date,
+                           today_date=today.strftime('%Y-%m-%d'),
+                           today_fmt=today.strftime('%d/%m/%Y'))
 
 
 # ============================================================================
@@ -3298,6 +3304,129 @@ def api_cp_forecast_email():
                          'Forecast e-mailed to OTC Ops ({})'.format(ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True,
                     'message': 'Settlement Forecast e-mailed to OTC Ops.'})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Daily Metric: Outstanding Confirmation Brazil OTC
+# Emails a daily metric to a SAVED recipient list (TO/CC/BCC persisted on disk,
+# so they don't have to be retyped each run). The reference date is always today.
+# NOTE: the metric body is a placeholder for now — only the delivery plumbing and
+# the persisted-recipients flow are wired; the actual metric content (source +
+# format) is still to be defined.
+# ──────────────────────────────────────────────────────────────────────────
+_DAILY_METRIC_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel'))
+_DAILY_METRIC_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'daily_metric_recipients.json')
+
+
+def _load_daily_metric_recipients():
+    try:
+        with open(_DAILY_METRIC_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or '',
+                    'bcc': d.get('bcc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': '', 'bcc': ''}
+
+
+def _save_daily_metric_recipients(to, cc, bcc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_DAILY_METRIC_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or '', 'bcc': bcc or ''},
+                  fh, ensure_ascii=False, indent=2)
+
+
+def _parse_emails(raw):
+    """Split a free-text address list (comma / semicolon / whitespace / newline)
+    into a clean, de-duplicated list of addresses."""
+    out, seen = [], set()
+    for p in re.split(r'[,;\s]+', str(raw or '').strip()):
+        p = p.strip()
+        if p and p.lower() not in seen:
+            seen.add(p.lower())
+            out.append(p)
+    return out
+
+
+def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
+    """Deliver the 'Daily Metric — Outstanding Confirmation Brazil OTC' e-mail to
+    the saved recipients. Best-effort — returns True or an error string. The body
+    is a minimal shell until the metric content is defined."""
+    try:
+        ref_fmt = ref.strftime('%d/%m/%Y')
+        html = (
+            '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1d1d1f;">'
+            '<h2 style="color:#0066cc;margin:0 0 12px;">Daily Metric — Outstanding Confirmation Brazil OTC</h2>'
+            '<p>Reference date: <b>{}</b></p>'
+            '<p style="color:#6e6e73;">Métrica a ser definida.</p>'
+            '</div>'
+        ).format(ref_fmt)
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'Daily Metric - Outstanding Confirmation Brazil OTC ({})'.format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+        msg.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        msg.attach(MIMEText(html, 'html', 'utf-8'))
+        recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[daily-metric] e-mail sent — to=%s cc=%s bcc=%d', to_list, cc_list, len(bcc_list))
+        return True
+    except Exception as e:
+        log.error('[daily-metric] e-mail FAILED:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/control-panel/daily-metric/recipients', methods=['GET', 'POST'])
+def api_cp_daily_metric_recipients():
+    """GET → the saved TO/CC/BCC; POST → persist them (so they survive across runs)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_daily_metric_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_daily_metric_recipients((payload.get('to') or '').strip(),
+                                      (payload.get('cc') or '').strip(),
+                                      (payload.get('bcc') or '').strip())
+    except Exception as e:
+        log.error('[daily-metric] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/control-panel/daily-metric/run', methods=['POST'])
+def api_cp_daily_metric_run():
+    """Send the Daily Metric e-mail to the saved recipients for today's date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = _load_daily_metric_recipients()
+    to_list, cc_list, bcc_list = (_parse_emails(rec['to']),
+                                  _parse_emails(rec['cc']),
+                                  _parse_emails(rec['bcc']))
+    if not (to_list or cc_list or bcc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC/BCC antes de rodar.'}), 400
+    result = _send_daily_metric_email(ref, to_list, cc_list, bcc_list)
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Daily Metric Sent', 'Control Panel',
+                         'Outstanding Confirmation Brazil OTC e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list) + len(bcc_list)
+    return jsonify({'success': True,
+                    'message': 'Daily Metric enviado para {} destinatário(s).'.format(n)})
 
 
 # ──────────────────────────────────────────────────────────────────────────
