@@ -4226,3 +4226,138 @@ f003802  Kapital Hybrids: remove coluna Trade
 c479581  recon-payrec: COMM TER IR fee per-trade-net (não per-leg)
 9a5a924  recon-payrec: Settled dentro de centavos (< R$1) + fallback de match
 ```
+
+---
+
+## 87. Sessão 2026-07-20 — Ambiente: pasta OFICIAL no Desktop (Python 3.12, awmpy stub, WAL, SSH)
+
+A partir desta sessão a **pasta oficial do projeto** é `/Users/pistacchio/Desktop/OTC Tracker`
+(clone limpo da branch `apple-design` do GitHub). A pasta antiga do iCloud
+(`.../com~apple~CloudDocs/Desktop/OTC Tracker`) tinha arquivos **descarregados na nuvem** (só
+placeholders — `routes.py` nem existia localmente) e um venv quebrado.
+
+Setup para rodar neste Mac (não estava óbvio):
+- **venv `.venv311` recriado com Python 3.12** (Homebrew). O `python@3.11` foi removido da máquina;
+  o venv que veio junto apontava para caminhos de outra máquina/usuário e não abria.
+- **`requirements.txt` ganhou `duckdb` + `flask-minify`** (`ad91911`) — ambos usados no código
+  (duckdb em routes/recon; flask-minify em `run.py`) mas faltavam, quebrando um ambiente novo.
+- **Stub de `awmpy`** criado no site-packages do venv (a lib interna do JPM não existe fora da rede).
+  Consequência: o **login real por SID/phonebook não funciona** localmente — usar `/dev-login`
+  (bloco DEV BYPASS). Dentro da rede JPM o login normal volta a funcionar.
+- **WAL incompatível**: `Users_OTCTracker.db.wal` (gerado por outra versão do DuckDB) impedia abrir o
+  banco (`INTERNAL Error … replaying WAL`). Renomeado para `Users_OTCTracker.db.wal.incompatible-bak`
+  (o `.db` principal está intacto). Se reaparecer após rodar com outra versão do duckdb, repetir.
+- **Porta**: no macOS a **porta 5000 é do AirPlay Receiver** (retorna 403 "AirTunes"). Rodar em **5005**:
+  `flask run --port=5005`.
+- **`DB_PATH` NÃO é mais caminho Windows hardcoded** — hoje é relativo
+  (`static/data/db/Users_OTCTracker.db`). A nota antiga do CLAUDE.md sobre isso ficou desatualizada
+  (corrigida nesta sessão).
+
+**GitHub via SSH**: chave `ed25519` gerada (`~/.ssh/id_ed25519`), pública adicionada em
+github.com/settings/ssh, remote trocado para `git@github.com:PistacchioV/OTC-Tracker.git`. O push por
+HTTPS não funcionava (sem credencial). O processo do **DEV BYPASS** continua: `routes.py` é stripado
+do bloco `/dev-login` antes de cada commit e restaurado depois (ver seção do commit-push).
+
+
+## 88. Sessão 2026-07-20 — Recon Pay/Rec: colapsar pendente carregado com a liquidação efetiva do dia (`f7ee5cd`)
+
+**Sintoma:** um item marcado como `Pending Payment/Receivement` em D-anterior (ex.: JPM esperava
+**receber** 134.006,40 da EVONIK) que **liquidou hoje** (o recebimento efetivo entrou no lado
+cliente/banco) continuava aparecendo como **duas linhas** — o pendente carregado + o atual de hoje —
+mesmo com **valor e contraparte batendo**.
+
+**Causa:** o motor (`_reconcile`) só casa **JPM × cliente do MESMO dia**. O atual de hoje não tinha
+contraparte JPM no dia (a expectativa do JPM foi lançada no dia em que ficou pendente), então virou um
+`Pending` solto do lado cliente; e o `_apply_carry_forward` apenas **reanexava** o item carregado como
+pendente, sem casá-lo contra o atual.
+
+**Fix** (`apps/pages/recon_payrec.py`, `_apply_carry_forward`): antes de reexibir um item carregado,
+tenta casá-lo contra a atualização de hoje — **mesma LE, mesma direção, o lado OPOSTO preenchido, valor
+dentro da tolerância de centavos (< R$1)** — e colapsa os dois numa única linha **Settled**, com
+comentário rastreável (`… — liquidado`). Guardas: só casa contra `Pending` puro (nunca outro item
+carregado); exige exatamente um lado preenchido em cada; não colapsa em mismatch de valor ou direção.
+Validado com 5 cenários (Evonik, M Dias com nome diferente/valor igual, sem-atual, mismatch, direção
+oposta). **Para ver o efeito: reprocessar o Pay/Rec do dia** (ele puxa o histórico finalizado do dia
+anterior).
+
+
+## 89. Sessão 2026-07-20 — Control Panel: card Daily Metric — Outstanding Confirmation Brazil OTC (`3303c03`, `215b263`)
+
+Novo card na seção **Forecasts & Reports** do Control Panel, no padrão dos demais:
+- Campos **TO / CC / BCC** **persistidos** em `apps/static/data/control-panel/daily_metric_recipients.json`
+  (carregam ao abrir, salvam no `blur` e antes de cada Run) — não precisa redigitar.
+- **Reference date fixa = hoje** (readonly, excluída do flatpickr via `.cp-datefield[data-fixed]`).
+- Botão **Run** que salva os destinatários e dispara o e-mail (BCC só no envelope, nunca no cabeçalho).
+- Placeholders em inglês, separador **`;`** (o backend `_parse_emails` aceita `,`/`;`/espaço).
+
+Backend: card id **`dailymetric`** em `_CONTROL_PANEL_CARDS` + `_CP_ENDPOINT_CARD`; endpoints
+`/api/control-panel/daily-metric/recipients` (GET/POST) e `/run`, ambos sob o controle de acesso por card.
+⚠️ **Escopo escolhido = "só o scaffold"**: o **corpo do e-mail é placeholder** ("Métrica a ser
+definida"). Toda a canalização (persistência + envio + destinatários) está pronta; falta definir a
+**fonte/conteúdo da métrica**. JS no `CP_GROUP` do template (`dailymetric: 'reporting'`).
+
+
+## 90. Sessão 2026-07-20 — About: reescrita refletindo TODAS as features atuais (`7b4af78`)
+
+A seção de capabilities do `about.html` foi reescrita para espelhar a navegação real do app (7 grupos,
+**30 cards**). Novidades: grupo **Live Position** (NDF/Swap/Option); Daily Settlement expandido
+(NDF Summary&Cockpit, Swap Athena/VCP/Events/Kapital Hybrids, Option Cognos, Operations B3);
+**Reconciliations** ganha Pay/Rec; **Apps** ganha File Interpreter, Holidays Calendar, Page Access.
+Corrigido o Swap Characteristics (movido para Live Position, onde a rota vive) e o stat de contratos
+(3 · NDF/Opções/Swap). **Só features reais entram** — placeholders (Unwinds, DCE, E-financeira, WHT,
+CGD, Settlement Advice, Manual Confirmation, etc.) ficam de fora. Botões Live Position e Pay/Rec no hero.
+23 chaves novas de tradução em **`br/en/es.json`** (idiomas são br/en/es, padrão `en`; chave ausente
+mantém o texto inline). Motion mantido no padrão emil-design-eng (scroll-reveal + stagger com easing
+custom, hover/press atrás de `@media (hover:hover)`, `prefers-reduced-motion`), stagger estendido p/ 8.
+
+
+## 91. Sessão 2026-07-20 — Metrics: dashboard de Pending Confirmation (>30 dias) (`44bec16`)
+
+Nova página **`/metrics-pending-confirmation`** (link "Metrics" do sidenav repontado de `/metrics`).
+Modelo visual do `dashboards/index.html` (Chart.js) + emil-design-eng.
+
+- **Card KPI**: volume de confirmações pendentes >30d (número grande + tendência + mini-stats). Seed do
+  relatório externo (imagem) até acumular histórico interno.
+- **Gráfico de histórico** (combo: barras de volume + linha de variação %) com **dropdown de escopo**
+  (`>30` default / `All`) e **de range** (Current Year / Last 24 Months / Daily=mês corrente).
+- **Top 5 Offenders** (>30d): **bankers** (por # de clientes distintos), **clients** e **economic groups**
+  (por # de confirmações). Barras horizontais.
+
+Backend (`routes.py`): rota + APIs `/api/metrics-pending-confirmation/offenders` e `/history`; helpers
+`_pc_latest_snapshot_rows` (último snapshot diário; fallback DB de pending ao vivo), `_pc_metrics_offenders`,
+`_pc_metrics_history`. **Gotchas de dados** (confirmados com o usuário):
+- **Owner = o grupo INTEIRO de bankers tratado como UM nome** (não splitar por `;`) — o grupo é o mesmo
+  time; o RefData não tem campo BANKER (0/439). Ranking de banker = # de clientes distintos por grupo.
+- **Aging é numérico**; filtro **`> 30`**.
+- **Fonte = snapshots diários** `static/data/cache/pending-confirmation/YYYY/MM/DD/pending-confirmation_*.json`
+  (a "foto do dia", gerada pela manutenção das 11:30); fallback = DB de pending ao vivo.
+- **Seed do histórico** em `apps/static/data/pending-confirmation-metrics-history.json` (volume mensal
+  Jun/2023→Jun/2026 + diário jul/2026, do relatório externo). O MoM/DoD % é derivado na API.
+- **Estado atual**: offenders e o escopo "All" ficam vazios até os snapshots diários acumularem dados
+  internos (o DB de pending estava vazio); o histórico >30 já vem do seed.
+
+
+### Commits (sessão 2026-07-20)
+```
+f7ee5cd  recon-payrec: casar item pendente carregado com a liquidação efetiva do dia
+ad91911  deps: adicionar duckdb e flask-minify ao requirements
+3303c03  control-panel: card Daily Metric — Outstanding Confirmation Brazil OTC
+215b263  control-panel: placeholders do Daily Metric em inglês + separador ;
+7b4af78  about: refletir todas as features atuais + Live Position, Pay/Rec, Cognos, etc.
+44bec16  metrics: dashboard de Pending Confirmation (>30 dias)
+```
+
+### Arquivos (sessão 2026-07-20)
+```
+apps/pages/recon_payrec.py                             ← _apply_carry_forward: colapso carried × atual do dia
+apps/pages/routes.py                                   ← Daily Metric card (endpoints/persistência) + Metrics PC (rota/APIs/helpers)
+requirements.txt                                       ← + duckdb, flask-minify
+apps/templates/pages/control-panel.html                ← card Daily Metric (UI + JS + acesso)
+apps/static/data/control-panel/daily_metric_recipients.json  ← destinatários persistidos (runtime; não versionar)
+apps/templates/pages/about.html                        ← reescrita das capabilities (30 cards, 7 grupos)
+apps/static/data/translations/{br,en,es}.json          ← +23 chaves about-*
+apps/templates/pages/metrics-pending-confirmation.html ← NOVA página (KPI + histórico + top-5)
+apps/static/js/pages/metrics-pending-confirmation.js   ← NOVO (Chart.js: combo + barras horizontais)
+apps/static/data/pending-confirmation-metrics-history.json  ← NOVO seed do histórico >30d
+apps/templates/partials/sidenav.html                   ← link Metrics → /metrics-pending-confirmation
+```

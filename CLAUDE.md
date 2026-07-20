@@ -73,7 +73,7 @@ Authorization lives in `apps/pages/routes.py` and is enforced in three layers (b
 
 Two separate databases are in use:
 
-- **DuckDB** (`Users_OTCTracker.db`): stores `users` and `verification_codes` tables. Connection is managed manually via `get_db_connection()` / `conn.close()` in every function. The path is currently hardcoded as a Windows absolute path in `apps/pages/routes.py:27` — this must be updated when running on a different machine.
+- **DuckDB** (`Users_OTCTracker.db`): stores `users` and `verification_codes` tables. Connection is managed manually via `get_db_connection()` / `conn.close()` in every function. `DB_PATH` is now a **relative** path (`apps/static/data/db/Users_OTCTracker.db`) resolved from the module dir — no longer a hardcoded Windows path, so it works cross-machine. If DuckDB refuses to open the DB after running under a different duckdb version (`INTERNAL Error … replaying WAL`), rename the stray `Users_OTCTracker.db.wal` aside; the main `.db` is intact.
 - **SQLite** (`apps/db.sqlite3`): managed by Flask-SQLAlchemy. Currently unused by application logic but initialised by `configure_database()` on every request.
 
 ### Template inheritance
@@ -94,7 +94,8 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 
 ### Key non-obvious details
 
-- `awmpy` is an internal JPMorgan library and is not available on PyPI. The app will fail at login/register if it is not installed in the environment.
-- The `DB_PATH` for DuckDB is a hardcoded Windows path — it must be changed to the correct path for the current machine before the auth flow works.
+- `awmpy` is an internal JPMorgan library and is not available on PyPI. The app will fail at login/register (phonebook lookup) if it is not installed. For **local dev off the JPM network**, a tiny `awmpy` stub in the venv lets the server boot — real SID login won't work, so use the `/dev-login` DEV BYPASS route instead (that block is stripped from `routes.py` before every commit; see HANDOFF).
+- `DB_PATH` for DuckDB is a **relative** path resolved from the module dir (see Database section above) — no per-machine editing needed.
+- **Local dev on macOS**: use `flask run --port=5005` — port 5000 is taken by the AirPlay Receiver (returns a 403 "AirTunes"). The venv here is Python 3.12 (`.venv311`); `duckdb` and `flask-minify` are required (both in `requirements.txt`).
 - `flask_login`, `flask_wtf`, and `flask_migrate` are in `requirements.txt` but are not actively used in the current codebase; the app manages sessions and DB directly.
 - SMTP delivery uses `mailhost.jpmchase.net` (internal relay, port 25, no auth) — email sending will silently fail outside the JPMorgan network.
