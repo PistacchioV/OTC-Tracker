@@ -3125,6 +3125,10 @@ def _forecast_payload(ref, days=None):
     dref = ref.strftime('%y%m%d')
     spine = _forecast_spine(ref, count=days)
     by_product, by_entity, status = _forecast_collect(dref, spine)
+    # Keep the standard product set stable: a product with no settlements in the
+    # window (e.g. SWAP CEMHYB) must still render as a 0 series, not disappear.
+    for k in _FCST_PRODUCT_ORDER:
+        by_product.setdefault(k, [0] * len(spine))
     product_rows = _forecast_matrix(by_product, _FCST_PRODUCT_ORDER)
     entity_rows = _forecast_matrix(by_entity, _FCST_ENTITY_ORDER)
     col_tot = [sum(r['values'][i] for r in product_rows) for i in range(len(spine))]
