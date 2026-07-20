@@ -999,11 +999,61 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
         key = (r.get('le', 'JPM'), _int_key(v)) if v not in ('', None) else None
         if key and key in settled_keys:
             continue                                  # settled today → represented in Settled
+
+        origin = r.get('carry_origin') or prev_date
+
+        # The actual settlement often lands TODAY on the opposite book without a
+        # same-day counterparty on the other side (the JPM booking was on the day
+        # it first went pending, not today). The engine only joins same-day
+        # JPM×client, so it leaves today's actual as an unmatched plain 'Pending'
+        # row instead of settling it — the item then shows twice (carried pending
+        # + today's actual) even though value/cpty agree. Reconcile the carried
+        # item against that row here: same LE, same direction, the OTHER side
+        # populated, value within the cents tolerance → collapse both into one
+        # Settled row.
+        carried_has_jpm = r.get('jpm_value', '') not in ('', None)
+        cval = _num(v)
+        mate_i = None
+        for i, p in enumerate(target):
+            if str(p.get('status', '')).strip().lower() != 'pending':
+                continue                              # only fresh same-day pendings (never another carried row)
+            if p.get('le', 'JPM') != r.get('le', 'JPM'):
+                continue
+            p_has_jpm    = p.get('jpm_value', '')    not in ('', None)
+            p_has_client = p.get('client_value', '') not in ('', None)
+            # A carried JPM-side item pairs with a client-only actual, and a carried
+            # client-side item pairs with a JPM-only actual (exactly one side each).
+            if carried_has_jpm and not (p_has_client and not p_has_jpm):
+                continue
+            if not carried_has_jpm and not (p_has_jpm and not p_has_client):
+                continue
+            pv = _num(p.get('client_value', '') if carried_has_jpm else p.get('jpm_value', ''))
+            if abs(pv - cval) < _TOL_SETTLED:
+                mate_i = i
+                break
+        if mate_i is not None:
+            p = target.pop(mate_i)
+            merged = dict(r)
+            if carried_has_jpm:                       # carried = JPM side; take the client side from today's actual
+                merged['client']       = p.get('client', merged.get('client', ''))
+                merged['client_value'] = p.get('client_value', '')
+                merged['sistema']      = p.get('sistema', merged.get('sistema', ''))
+                merged['snumconta']    = p.get('snumconta', merged.get('snumconta', ''))
+            else:                                     # carried = client side; take the JPM side from today's actual
+                merged['jpm_cpty']  = p.get('jpm_cpty', merged.get('jpm_cpty', ''))
+                merged['jpm_value'] = p.get('jpm_value', '')
+            merged['status']       = 'Settled'
+            merged['difference']   = _num(merged.get('client_value', 0)) - _num(merged.get('jpm_value', 0))
+            merged['carry_origin'] = origin
+            merged['carried_from'] = prev_date
+            merged['comment']      = '{} de {} — liquidado'.format(label, _fmt_date(origin))
+            settled.append(merged)
+            continue
+
         row = dict(r)
         # Original date = the day it first became a carry-forward pending item;
         # preserved across subsequent carries, falling back on the first carry to
         # the finalized day it came from (the day it was marked).
-        origin = row.get('carry_origin') or prev_date
         row['carry_origin'] = origin
         row['carried_from'] = prev_date
         # Auto comment on the following days, e.g. "Recebimento pendente de 10/07/2026".
