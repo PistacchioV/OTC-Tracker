@@ -217,9 +217,9 @@
 
     function renderOffenders() {
         const o = OFFENDERS || {};
-        offenderChart('pcm-bankers-chart', o.bankers, '#0066cc', 'Clients');
-        offenderChart('pcm-clients-chart', o.clients, '#10b981', 'Confirmations');
-        offenderChart('pcm-egroups-chart', o.egroups, '#f59e0b', 'Confirmations');
+        offenderChart('pcm-bankers-chart', o.bankers, '#0066cc', 'Contracts');
+        offenderChart('pcm-clients-chart', o.clients, '#10b981', 'Contracts');
+        offenderChart('pcm-egroups-chart', o.egroups, '#f59e0b', 'Contracts');
         const src = document.getElementById('pcm-source');
         if (src && o.source) {
             src.textContent = o.source === 'live' ? 'Source: live pending DB'

@@ -133,7 +133,7 @@
                         <div class="col-xxl-4 col-md-6">
                             <div class="p-3 border-end border-dashed h-100">
                                 <h5 class="fs-sm fw-semibold mb-0">Top 5 Bankers</h5>
-                                <p class="text-muted fs-xs mb-3">By distinct clients pending &gt; 30 days</p>
+                                <p class="text-muted fs-xs mb-3">By contracts pending &gt; 30 days</p>
                                 <div style="height: 280px;"><canvas id="pcm-bankers-chart"></canvas></div>
                             </div>
                             <hr class="d-md-none border-light m-0">
@@ -164,5 +164,5 @@
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/metrics-pending-confirmation.js?v=1"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/metrics-pending-confirmation.js?v=2"></script>
 {% endblock extra_javascript %}

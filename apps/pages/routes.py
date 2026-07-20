@@ -15414,25 +15414,23 @@ def _pc_latest_snapshot_rows():
 
 
 def _pc_metrics_offenders(rows):
-    """Top-5 offenders among rows aging > 30 days:
-      • bankers       → # of DISTINCT clients each banker (group) has pending
-      • clients       → # of pending confirmations
-      • economic grp  → # of pending confirmations
+    """Top-5 offenders among rows aging > 30 days (each row = one contract):
+      • bankers       → # of pending contracts (confirmations)
+      • clients       → # of pending contracts (confirmations)
+      • economic grp  → # of pending contracts (confirmations)
     Owner is a fixed banker GROUP (e.g. "A; B; C") — treated as a single name, not
     split per person, since the group is the same team across a client's deals.
     """
     gt30 = [r for r in rows
             if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD]
 
-    banker_clients, client_count, egroup_count = {}, {}, {}
+    banker_count, client_count, egroup_count = {}, {}, {}
     for r in gt30:
         client = str(r.get('Client', '') or '').strip()
         egroup = str(r.get('Economic Group', '') or '').strip()
         banker = str(r.get('Owner', '') or '').strip()     # whole Owner group = one name
         if banker:
-            banker_clients.setdefault(banker, set())
-            if client:
-                banker_clients[banker].add(client)
+            banker_count[banker] = banker_count.get(banker, 0) + 1
         if client:
             client_count[client] = client_count.get(client, 0) + 1
         if egroup:
@@ -15443,7 +15441,7 @@ def _pc_metrics_offenders(rows):
                 for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:5]]
 
     return {
-        'bankers':    top5({b: len(cs) for b, cs in banker_clients.items()}),
+        'bankers':    top5(banker_count),
         'clients':    top5(client_count),
         'egroups':    top5(egroup_count),
         'gt30_total': len(gt30),
