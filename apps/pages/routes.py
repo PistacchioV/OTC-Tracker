@@ -16056,6 +16056,10 @@ def _pc_metrics_history():
                         continue
                     if not isinstance(rows, list):
                         continue
+                    # Snapshots taken under older rules may still carry rows whose
+                    # Pending Status is now considered OK (any Exception*). Exclude
+                    # them so the >30d history never counts a resolved confirmation.
+                    rows = [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
                     internal_gt30[day] = sum(
                         1 for r in rows
                         if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
