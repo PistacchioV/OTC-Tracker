@@ -46,22 +46,42 @@
                           box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
 
                 <!-- ── Header ─────────────────────────────────────────────────────
-                     Gradient shows via: the CSS linear-gradient (modern clients) and
-                     a gradient IMAGE set as the cell background (Outlook, which honours
-                     the <td background="url"> attribute). Content stays in normal flow,
-                     so it centers natively — no VML, no off-centre bug. Solid #4f8ae2
-                     is the last-resort fallback if images are blocked. ─────────────── -->
+                     Gradient everywhere:
+                       • Outlook desktop → VML rect filled with the gradient IMAGE
+                         (type="frame" stretches it, no banding); content sits in an
+                         mso-only FIXED-WIDTH 820px table with align="center", so Outlook
+                         centres it reliably (the earlier bug was a width:100% textbox table).
+                       • Modern clients → CSS linear-gradient + <td background> image.
+                       • Images blocked → solid #4f8ae2. ─────────────────────────────── -->
                 <tr>
-                    <td background="{{ grad_url }}" bgcolor="#4f8ae2"
+                    <td background="{{ grad_url }}" bgcolor="#4f8ae2" valign="top"
                         style="background:#4f8ae2 url('{{ grad_url }}') no-repeat center center / cover;
-                               background:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);
-                               padding:30px 28px 22px;text-align:center;">
-                        <img src="cid:otc_logo" alt="OTC Tracker" height="60" width="auto"
-                             style="height:60px;width:auto;display:block;margin:0 auto 12px;border:0;"/>
-                        <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
-                            Daily Metric — Outstanding Confirmation Brazil OTC</p>
-                        <p style="color:rgba(255,255,255,0.92);font-size:12px;margin:0;">
-                            Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">{{ ref_date_fmt }}</strong></p>
+                               background:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);padding:0;">
+                        <!--[if gte mso 9]>
+                        <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:820px;height:190px;">
+                            <v:fill type="frame" src="{{ grad_url }}" color="#4f8ae2" />
+                            <v:textbox inset="0,0,0,0">
+                        <![endif]-->
+                        <!--[if mso]>
+                        <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="820" align="center">
+                            <tr><td width="820" align="center" valign="middle" style="width:820px;">
+                        <![endif]-->
+                        <div style="padding:30px 28px 22px;text-align:center;">
+                            <img src="cid:otc_logo" alt="OTC Tracker" height="60" width="auto"
+                                 style="height:60px;width:auto;display:block;margin:0 auto 12px;border:0;"/>
+                            <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
+                                Daily Metric — Outstanding Confirmation Brazil OTC</p>
+                            <p style="color:rgba(255,255,255,0.92);font-size:12px;margin:0;">
+                                Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">{{ ref_date_fmt }}</strong></p>
+                        </div>
+                        <!--[if mso]>
+                            </td></tr>
+                        </table>
+                        <![endif]-->
+                        <!--[if gte mso 9]>
+                            </v:textbox>
+                        </v:rect>
+                        <![endif]-->
                     </td>
                 </tr>
 
@@ -73,28 +93,20 @@
                             Please kindly check the daily analysis over OTC Derivatives pending confirmations.
                             The table below details pending confirmations by economic group, aging, business
                             owners and Ops support contacts.</p>
-                        <!-- Signature-type legend (table-based badges → Outlook-safe) -->
+                        <!-- Signature-type legend (badges only → Outlook-safe) -->
                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:2px 0 0;">
-                            <tr>
-                                <td style="padding:0 8px 6px 0;vertical-align:middle;">
-                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
-                                        <tr><td bgcolor="#5aa469" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;">
-                                            <font color="#ffffff">Digitally signed</font></td></tr>
-                                    </table>
-                                </td>
-                                <td style="padding:0 0 6px;font-size:12.5px;color:#666;line-height:1.5;vertical-align:middle;">
-                                    Economic groups highlighted in green can electronically sign confirmations (FepWeb).
-                                </td>
-                            </tr>
                             <tr>
                                 <td style="padding:0 8px 0 0;vertical-align:middle;">
                                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
-                                        <tr><td bgcolor="#eef1f6" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;border:1px solid #d3d8e0;">
-                                            <font color="#5b6470">Manually signed</font></td></tr>
+                                        <tr><td bgcolor="#5aa469" width="120" align="center" style="width:120px;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-align:center;border:1px solid #5aa469;">
+                                            <font color="#ffffff">Digitally signed</font></td></tr>
                                     </table>
                                 </td>
-                                <td style="padding:0;font-size:12.5px;color:#666;line-height:1.5;vertical-align:middle;">
-                                    All other economic groups require a manually signed confirmation.
+                                <td style="padding:0;vertical-align:middle;">
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
+                                        <tr><td bgcolor="#eef1f6" width="120" align="center" style="width:120px;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-align:center;border:1px solid #d3d8e0;">
+                                            <font color="#5b6470">Manually signed</font></td></tr>
+                                    </table>
                                 </td>
                             </tr>
                         </table>
