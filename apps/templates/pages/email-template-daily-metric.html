@@ -49,8 +49,15 @@
                 <tr>
                     <td bgcolor="#1a2c5e" style="background:#1a2c5e;background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%);
                                padding:30px 28px 22px;text-align:center;">
-                        <img src="cid:otc_logo" alt="OTC Tracker" height="64" width="auto"
-                             style="height:64px;width:auto;display:block;margin:0 auto 12px;border:0;"/>
+                        <!-- Logo on a white plaque so the dark-navy mark stands out on the blue header -->
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 14px;">
+                            <tr>
+                                <td bgcolor="#ffffff" style="background:#ffffff;border-radius:14px;padding:12px 22px;">
+                                    <img src="cid:otc_logo" alt="OTC Tracker" height="52" width="auto"
+                                         style="height:52px;width:auto;display:block;border:0;"/>
+                                </td>
+                            </tr>
+                        </table>
                         <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
                             Daily Metric — Outstanding Confirmation Brazil OTC</p>
                         <p style="color:rgba(255,255,255,0.78);font-size:12px;margin:0;">
@@ -66,11 +73,31 @@
                             Please kindly check the daily analysis over OTC derivatives pending confirmations.
                             The table below details pending confirmations by economic group, aging, business
                             owners and Ops support contacts.</p>
-                        <p style="color:#666;font-size:12.5px;line-height:1.6;margin:0;">
-                            <span style="display:inline-block;width:10px;height:10px;border-radius:2px;
-                                         background:#5aa469;vertical-align:middle;margin-right:5px;"></span>
-                            Economic groups highlighted in <strong style="color:#3f8a54;">green</strong> can
-                            electronically sign confirmations (FepWeb).</p>
+                        <!-- Signature-type legend (table-based badges → Outlook-safe) -->
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:2px 0 0;">
+                            <tr>
+                                <td style="padding:0 8px 6px 0;vertical-align:middle;">
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
+                                        <tr><td bgcolor="#5aa469" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;">
+                                            <font color="#ffffff">Digitally signed</font></td></tr>
+                                    </table>
+                                </td>
+                                <td style="padding:0 0 6px;font-size:12.5px;color:#666;line-height:1.5;vertical-align:middle;">
+                                    Economic groups highlighted in green can electronically sign confirmations (FepWeb).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 8px 0 0;vertical-align:middle;">
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
+                                        <tr><td bgcolor="#eef1f6" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;border:1px solid #d3d8e0;">
+                                            <font color="#5b6470">Manually signed</font></td></tr>
+                                    </table>
+                                </td>
+                                <td style="padding:0;font-size:12.5px;color:#666;line-height:1.5;vertical-align:middle;">
+                                    All other economic groups require a manually signed confirmation.
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                 </tr>
 
@@ -188,7 +215,7 @@
                     <td style="padding:18px 30px 26px;">
                         <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
                             Regards,<br/>
-                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                            <strong>Institutional Services by OTC Tracker</strong>
                         </p>
                     </td>
                 </tr>
