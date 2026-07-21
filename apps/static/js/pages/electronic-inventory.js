@@ -56,8 +56,13 @@
 
     /* ---- share status + clients ----------------------------------------- */
     function loadClients() {
+        var lbl0 = $('eiShareLabel');
         fetch(API + '/clients').then(function (r) { return r.json(); }).then(function (res) {
-            if (!res || !res.success) return;
+            if (!res || !res.success) {
+                $('eiShareDot').className = 'ei-status-dot off';
+                if (lbl0) lbl0.textContent = 'Session expired — please sign in again';
+                return;
+            }
             state.clients = res.clients || [];
             state.rootExists = !!res.root_exists;
             state.subtypes = res.transactional_types || [];
@@ -73,7 +78,11 @@
             var opts = state.subtypes.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
             $('eiUpSubtype').insertAdjacentHTML('beforeend', opts);
             $('eiSubtypeFilter').insertAdjacentHTML('beforeend', opts);
-        }).catch(function (e) { console.error('ei clients error', e); });
+        }).catch(function (e) {
+            console.error('ei clients error', e);
+            $('eiShareDot').className = 'ei-status-dot off';
+            if (lbl0) lbl0.textContent = 'Could not load counterparties';
+        });
     }
 
     /* ---- searchable counterparty combo ---------------------------------- */
