@@ -3473,6 +3473,13 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
         prev_m = monthly[-2] if len(monthly) >= 2 else {}
         latest_d = daily[-1] if daily else {}
 
+        # Absolute URL to the header gradient image (Outlook honours <td background="url">).
+        # Falls back to the inline cid: attachment when there's no request/SERVER_NAME.
+        try:
+            grad_url = url_for('static', filename='images/email-header-gradient.png', _external=True)
+        except Exception:
+            grad_url = 'cid:otc_gradient'
+
         html = render_template(
             'pages/email-template-daily-metric.html',
             ref_date_fmt=ref_fmt,
@@ -3483,7 +3490,7 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
             day_pct=latest_d.get('pct'),
             day_total=latest_d.get('volume'),
             month_bars=month_bars, day_bars=day_bars,
-            pivot=pivot, totals=totals,
+            pivot=pivot, totals=totals, grad_url=grad_url,
             current_year=datetime.now().year)
 
         msg = MIMEMultipart('related')
