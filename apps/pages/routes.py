@@ -3354,32 +3354,111 @@ def _parse_emails(raw):
     return out
 
 
+_DAILY_METRIC_OPERATIONS = 'Priscila Babilonia'   # Ops support contact — fixed for now.
+
+
+def _pc_is_fepweb(r):
+    """Green highlight = the client can electronically sign (FepWeb). Heuristic:
+    the row's Signature Type or Pending Status indicates a digital / FepWeb
+    signature (adjust if the source carries an explicit flag)."""
+    blob = _pc_norm(r.get('Signature Type', '')) + '|' + _pc_norm(r.get('Pending Status', ''))
+    return ('digital' in blob) or ('fepweb' in blob)
+
+
+def _pc_metrics_pivot(rows):
+    """Per-client aging buckets for rows pending >= 30 days: 30-59 / 60-89 / >=90,
+    plus the banker group and the FepWeb (green) flag. Sorted by total desc.
+    Returns (rows[], totals)."""
+    by_client = {}
+    for r in rows:
+        a = _pc_metrics_int(r.get('Aging'))
+        if a is None or a < 30:
+            continue
+        client = str(r.get('Client', '') or '').strip() or '(no client)'
+        d = by_client.setdefault(client, {'b1': 0, 'b2': 0, 'b3': 0, 'bankers': '', 'fepweb': False})
+        if a < 60:
+            d['b1'] += 1
+        elif a < 90:
+            d['b2'] += 1
+        else:
+            d['b3'] += 1
+        if not d['bankers']:
+            d['bankers'] = str(r.get('Owner', '') or '').strip()   # whole banker group
+        if _pc_is_fepweb(r):
+            d['fepweb'] = True
+    out = []
+    for client, d in by_client.items():
+        total = d['b1'] + d['b2'] + d['b3']
+        out.append({'client': client, 'b1': d['b1'], 'b2': d['b2'], 'b3': d['b3'],
+                    'total': total, 'bankers': d['bankers'], 'fepweb': d['fepweb'],
+                    'operations': _DAILY_METRIC_OPERATIONS})
+    out.sort(key=lambda x: (-x['total'], x['client'].lower()))
+    totals = {'b1': sum(x['b1'] for x in out), 'b2': sum(x['b2'] for x in out),
+              'b3': sum(x['b3'] for x in out), 'total': sum(x['total'] for x in out)}
+    return out, totals
+
+
+def _sparkline(vals):
+    """Compact unicode block sparkline (email-safe, no images/JS)."""
+    blocks = '▁▂▃▄▅▆▇█'
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return ''
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1
+    return ''.join(blocks[min(7, int((v - lo) / rng * 7))] for v in vals)
+
+
 def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
     """Deliver the 'Daily Metric — Outstanding Confirmation Brazil OTC' e-mail to
-    the saved recipients. Best-effort — returns True or an error string. The body
-    is a minimal shell until the metric content is defined."""
+    the saved recipients. Best-effort — returns True or an error string. Renders
+    the growth metric (>30d) + the per-client aging pivot from the latest snapshot."""
+    from email.mime.image import MIMEImage
     try:
         ref_fmt = ref.strftime('%d/%m/%Y')
-        html = (
-            '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1d1d1f;">'
-            '<h2 style="color:#0066cc;margin:0 0 12px;">Daily Metric — Outstanding Confirmation Brazil OTC</h2>'
-            '<p>Reference date: <b>{}</b></p>'
-            '<p style="color:#6e6e73;">Métrica a ser definida.</p>'
-            '</div>'
-        ).format(ref_fmt)
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = 'Daily Metric - Outstanding Confirmation Brazil OTC ({})'.format(ref_fmt)
+        rows, source = _pc_latest_snapshot_rows()
+        pivot, totals = _pc_metrics_pivot(rows)
+        monthly = (_pc_metrics_history().get('gt30') or {}).get('monthly') or []
+        recent = monthly[-13:]
+        spark = _sparkline([m['volume'] for m in recent])
+        latest = monthly[-1] if monthly else {}
+        prev = monthly[-2] if len(monthly) >= 2 else {}
+
+        html = render_template(
+            'pages/email-template-daily-metric.html',
+            ref_date_fmt=ref_fmt,
+            current_total=totals['total'],
+            month_total=latest.get('volume'),
+            prev_total=prev.get('volume'),
+            latest_pct=latest.get('pct'),
+            spark=spark, recent=recent,
+            pivot=pivot, totals=totals,
+            current_year=datetime.now().year)
+
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'Daily Metric - Outstanding Confirmation Brazil OTC - {}'.format(ref_fmt)
         msg['From'] = SHARED_MAILBOX
         if to_list:
             msg['To'] = ', '.join(to_list)
         if cc_list:
             msg['Cc'] = ', '.join(cc_list)
-        msg.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
-        msg.attach(MIMEText(html, 'html', 'utf-8'))
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+
         recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
             server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
-        log.info('[daily-metric] e-mail sent — to=%s cc=%s bcc=%d', to_list, cc_list, len(bcc_list))
+        log.info('[daily-metric] e-mail sent — to=%s cc=%s bcc=%d (%d clients, source=%s)',
+                 to_list, cc_list, len(bcc_list), len(pivot), source)
         return True
     except Exception as e:
         log.error('[daily-metric] e-mail FAILED:\n%s', traceback.format_exc())

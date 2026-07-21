@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Daily Metric — Outstanding Confirmation Brazil OTC</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+{# ── period-over-period change → semantic colour (pending should go DOWN) ── #}
+{% set pc = latest_pct %}
+{% if pc is none %}{% set tcolor='#6e6e73' %}{% set tbg='#f1f1f3' %}{% set tarrow='' %}
+{% elif pc < 0 %}{% set tcolor='#16a34a' %}{% set tbg='#e7f6ec' %}{% set tarrow='▼' %}
+{% elif pc > 0 %}{% set tcolor='#dc2626' %}{% set tbg='#fdecec' %}{% set tarrow='▲' %}
+{% else %}{% set tcolor='#6e6e73' %}{% set tbg='#f1f1f3' %}{% set tarrow='►' %}{% endif %}
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="820"
+                   style="max-width:820px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                <tr>
+                    <td bgcolor="#1a2c5e" style="background:#1a2c5e;background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%);
+                               padding:30px 28px 22px;text-align:center;">
+                        <img src="cid:otc_logo" alt="OTC Tracker" height="64" width="auto"
+                             style="height:64px;width:auto;display:block;margin:0 auto 12px;border:0;"/>
+                        <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
+                            Daily Metric — Outstanding Confirmation Brazil OTC</p>
+                        <p style="color:rgba(255,255,255,0.78);font-size:12px;margin:0;">
+                            Reference date &nbsp;·&nbsp; <strong style="color:#7eb3ff;">{{ ref_date_fmt }}</strong></p>
+                    </td>
+                </tr>
+
+                <!-- ── Intro ──────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 6px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">
+                            Please kindly check the daily analysis over OTC derivatives pending confirmations.
+                            The table below details pending confirmations by client, aging, business owners and
+                            Ops support contacts.</p>
+                        <p style="color:#666;font-size:12.5px;line-height:1.6;margin:0;">
+                            <span style="display:inline-block;width:10px;height:10px;border-radius:2px;
+                                         background:#5aa469;vertical-align:middle;margin-right:5px;"></span>
+                            Clients highlighted in <strong style="color:#3f8a54;">green</strong> can electronically
+                            sign confirmations (FepWeb).</p>
+                    </td>
+                </tr>
+
+                <!-- ══ METRIC 1 — Growth of confirmations pending > 30 days ══ -->
+                <tr>
+                    <td style="padding:20px 30px 8px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border:1px solid #eceef2;border-radius:10px;background:#fbfcfe;">
+                            <tr>
+                                <!-- headline number -->
+                                <td width="230" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
+                                    <p style="margin:0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">
+                                        Pending &gt; 30 days</p>
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                                        <td style="font-size:40px;font-weight:700;color:#1a1a2e;line-height:1;letter-spacing:-1px;padding-right:10px;">
+                                            {{ current_total }}</td>
+                                        <td style="vertical-align:middle;">
+                                            <span style="display:inline-block;background:{{ tbg }};color:{{ tcolor }};
+                                                         font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">
+                                                {{ tarrow }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</span>
+                                        </td>
+                                    </tr></table>
+                                    <p style="margin:6px 0 0;font-size:11.5px;color:#8a8f98;">
+                                        month-over-month{% if prev_total is not none %} · prev. {{ prev_total }}{% endif %}</p>
+                                </td>
+                                <!-- trend sparkline -->
+                                <td style="padding:18px 24px;vertical-align:middle;">
+                                    <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">
+                                        Growth trend · last {{ recent|length }} months</p>
+                                    <div style="font-family:'Cascadia Code','Consolas',monospace;font-size:30px;line-height:1;
+                                                color:#0d6efd;letter-spacing:1px;">{{ spark }}</div>
+                                    {% if recent %}
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                        <tr>
+                                            <td style="font-size:10.5px;color:#a0a4ac;text-align:left;">{{ recent[0].period }}</td>
+                                            <td style="font-size:10.5px;color:#a0a4ac;text-align:right;">{{ recent[-1].period }}</td>
+                                        </tr>
+                                    </table>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin:8px 2px 0;font-size:11px;color:#a0a4ac;">
+                            Lower is better — <span style="color:#16a34a;font-weight:600;">▼ green</span> means fewer
+                            pending, <span style="color:#dc2626;font-weight:600;">▲ red</span> means more.</p>
+                    </td>
+                </tr>
+
+                <!-- ══ METRIC 2 — Per-client aging pivot ══ -->
+                <tr>
+                    <td style="padding:16px 30px 6px;">
+                        <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1a1a2e;">
+                            Pending confirmations by client &amp; aging</p>
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" style="background:#e8560f;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Client</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">30-59 days</th>
+                                    <th colspan="2" style="background:#c0392b;color:#fff;text-align:center;padding:4px 8px;border:1px solid #ffffff;font-weight:700;font-size:11px;">Potential DNT</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;">TOTAL</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Business (Banker + F.O)</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Operations</th>
+                                </tr>
+                                <tr>
+                                    <th style="background:#c0392b;color:#fff;text-align:center;padding:6px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">60-89 days</th>
+                                    <th style="background:#c0392b;color:#fff;text-align:center;padding:6px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">&gt;90 days</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in pivot %}
+                                <tr style="background:{% if loop.index0 % 2 == 0 %}#ffffff{% else %}#f5f7fa{% endif %};">
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;
+                                               {% if row.fepweb %}background:#5aa469;color:#ffffff;{% else %}color:#1a1a2e;{% endif %}">
+                                        {{ row.client }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b1 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b2 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b3 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;font-weight:700;color:#1a1a2e;">{{ row.total }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;">{{ row.bankers }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ row.operations }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="7" style="padding:16px;border:1px solid #e6e9ee;text-align:center;color:#8a8f98;">
+                                    No confirmations pending &gt; 30 days in the latest snapshot.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                            {% if pivot %}
+                            <tfoot>
+                                <tr style="background:#eef1f6;">
+                                    <td style="padding:8px 10px;border:1px solid #dfe3ea;font-weight:700;color:#1a1a2e;">Total</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b1 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b2 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b3 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#0d6efd;">{{ totals.total }}</td>
+                                    <td colspan="2" style="border:1px solid #dfe3ea;"></td>
+                                </tr>
+                            </tfoot>
+                            {% endif %}
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:18px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>
