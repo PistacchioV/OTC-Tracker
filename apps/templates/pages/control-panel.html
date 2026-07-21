@@ -425,6 +425,39 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="weeklyescalation">
+                    <div class="cp-card__icon"><i class="ti ti-alert-triangle"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-we-desc">
+                        Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
+                        (CEM / EDG), grouped by banker and broken down by company. Set the TO / CC once —
+                        they are saved and reused on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-we-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-we-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-escalation-run>
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
@@ -733,6 +766,62 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// ── Weekly Escalation card: persisted TO/CC + Run (CEM/EDG > 30 days e-mail) ──
+(function () {
+    var toEl   = document.getElementById('cp-we-to');
+    var ccEl   = document.getElementById('cp-we-cc');
+    var runBtn = document.querySelector('[data-escalation-run]');
+    if (!toEl || !ccEl || !runBtn) return;
+    var REC_URL = '/api/control-panel/weekly-escalation/recipients';
+    var RUN_URL = '/api/control-panel/weekly-escalation/run';
+
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!d || !d.success) return; toEl.value = d.to || ''; ccEl.value = d.cc || ''; })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify({ to: toEl.value, cc: ccEl.value })
+        }).catch(function () {});
+    }
+    [toEl, ccEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+
+    runBtn.addEventListener('click', function () {
+        if (runBtn.disabled) return;
+        var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        runBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        saveRecipients().then(function () {
+            return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin', body: '{}' });
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success !== false) {
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+            } else {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                            confirmButtonColor: '#0066cc' });
+            }
+        })
+        .catch(function () {
+            Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                        html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+        })
+        .finally(function () {
+            runBtn.disabled = false;
+            if (label) label.textContent = orig;
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
+        });
+    });
+})();
+
 // ── Date pickers: dd/mm/yyyy display, calendar icon, default = D-1 ANBIMA ─────
 // Every .cp-datefield wrap gets its own flatpickr. The ISO default (YYYY-MM-DD)
 // is parsed into a local Date so flatpickr (dateFormat d/m/Y) doesn't misparse it.
@@ -766,7 +855,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

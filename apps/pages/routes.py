@@ -179,6 +179,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'forecast',    'label': 'Settlement Forecast'},
     {'id': 'contacts',    'label': 'Update Contacts'},
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
+    {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -190,6 +191,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/import-contacts': 'contacts',
     '/api/control-panel/daily-metric/recipients': 'dailymetric',
     '/api/control-panel/daily-metric/run': 'dailymetric',
+    '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',
+    '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
 }
 
 
@@ -3542,6 +3545,146 @@ def api_cp_daily_metric_run():
     n = len(to_list) + len(cc_list) + len(bcc_list)
     return jsonify({'success': True,
                     'message': 'Daily Metric enviado para {} destinatário(s).'.format(n)})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Pending Confirmation Weekly Escalation (CEM / EDG)
+# A weekly (Friday) escalation e-mail: confirmations pending > 30 days, split by
+# LOB (CEM, EDG), grouped by banker with a per-banker total, and broken down by
+# COMPANY (client name — not the economic group). TO/CC recipients are persisted.
+# ──────────────────────────────────────────────────────────────────────────
+_WEEKLY_ESCALATION_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'weekly_escalation_recipients.json')
+_WEEKLY_ESCALATION_LOBS = ['CEM', 'EDG']
+
+
+def _load_weekly_escalation_recipients():
+    try:
+        with open(_WEEKLY_ESCALATION_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': ''}
+
+
+def _save_weekly_escalation_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_WEEKLY_ESCALATION_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+
+
+def _pc_weekly_escalation(rows):
+    """Rows pending >= 30 days, split by LOB (CEM, EDG). Per LOB: bankers sorted by
+    total desc, each with a total and a company (client name) breakdown sorted by
+    count desc. Banker = RefData BANKER (by SPN, then name), falling back to Owner."""
+    by_spn = _fxo_refdata_by_spn()
+    by_name = _pc_refdata_by_name()
+    data = {lob: {} for lob in _WEEKLY_ESCALATION_LOBS}
+    for r in rows:
+        a = _pc_metrics_int(r.get('Aging'))
+        if a is None or a < 30:
+            continue
+        lob_n = _pc_norm(r.get('LOB', ''))
+        lob = 'CEM' if lob_n == 'cem' else ('EDG' if lob_n == 'edg' else None)
+        if lob is None:
+            continue
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        banker = str(rec.get('BANKER', '') or r.get('Owner', '') or '').strip() or '(no banker)'
+        company = str(r.get('Client', '') or '').strip() or '(no client)'
+        b = data[lob].setdefault(banker, {'total': 0, 'companies': {}})
+        b['total'] += 1
+        b['companies'][company] = b['companies'].get(company, 0) + 1
+    out = []
+    for lob in _WEEKLY_ESCALATION_LOBS:
+        bankers = []
+        for banker, bd in sorted(data[lob].items(), key=lambda kv: (-kv[1]['total'], kv[0].lower())):
+            companies = [{'name': c, 'count': n}
+                         for c, n in sorted(bd['companies'].items(), key=lambda kv: (-kv[1], kv[0].lower()))]
+            bankers.append({'banker': banker, 'total': bd['total'], 'companies': companies})
+        out.append({'lob': lob, 'bankers': bankers, 'total': sum(b['total'] for b in bankers)})
+    return out
+
+
+def _send_weekly_escalation_email(ref, to_list, cc_list):
+    """Deliver the CEM/EDG weekly escalation e-mail to the saved recipients.
+    Best-effort — returns True or an error string."""
+    from email.mime.image import MIMEImage
+    try:
+        ref_fmt = ref.strftime('%d/%m/%Y')
+        rows, source = _pc_latest_snapshot_rows()
+        blocks = _pc_weekly_escalation(rows)
+        html = render_template(
+            'pages/email-template-weekly-escalation.html',
+            ref_date_fmt=ref_fmt, blocks=blocks, current_year=datetime.now().year)
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'Pending Confirmation - Weekly Escalation - CEM/EDG {}'.format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+        recipients = to_list + cc_list
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[weekly-escalation] e-mail sent — to=%s cc=%s (source=%s)', to_list, cc_list, source)
+        return True
+    except Exception as e:
+        log.error('[weekly-escalation] e-mail FAILED:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/control-panel/weekly-escalation/recipients', methods=['GET', 'POST'])
+def api_cp_weekly_escalation_recipients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_weekly_escalation_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_weekly_escalation_recipients((payload.get('to') or '').strip(),
+                                           (payload.get('cc') or '').strip())
+    except Exception as e:
+        log.error('[weekly-escalation] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/control-panel/weekly-escalation/run', methods=['POST'])
+def api_cp_weekly_escalation_run():
+    """Send the CEM/EDG weekly escalation e-mail to the saved recipients."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = _load_weekly_escalation_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC antes de rodar.'}), 400
+    result = _send_weekly_escalation_email(ref, to_list, cc_list)
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Weekly Escalation Sent', 'Control Panel',
+                         'CEM/EDG weekly escalation e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True,
+                    'message': 'Weekly Escalation enviado para {} destinatário(s).'.format(len(to_list) + len(cc_list))})
 
 
 # ──────────────────────────────────────────────────────────────────────────
