@@ -1917,9 +1917,14 @@ $(document).ready(function() {
             var days  = parseInt(_pcStrip(d[6]).replace(/[^0-9-]/g, ''), 10);
             var band  = _pcAgingBand(days);
             if (!band) return;
-            counts[band].total++;
+            // The band TOTAL is the sum of the breakdown: only rows whose Pending
+            // Status is one of the eight known types are counted (so the big number
+            // always equals the eight lines below it). Rows with any other/empty
+            // Pending Status are excluded from the widget.
             var pType = pendingToType[_pcStrip(d[11])];
-            if (pType) counts[band][pType]++;
+            if (!pType) return;
+            counts[band].total++;
+            counts[band][pType]++;
         });
 
         // Update widget cards in DOM order (matches RANGE_ORDER)
