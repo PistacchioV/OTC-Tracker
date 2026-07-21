@@ -10261,11 +10261,32 @@ def api_pending_confirmation_search():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', []) or []
     has_status = any(_pc_norm(f.get('field', '')) == 'status' for f in filters)
-    cats = [_pc_category_from_filters(filters)] if has_status else ['backlog', 'pending', 'ok']
-    rows = []
-    for cat in cats:
-        rows += _pc_load_rows(cat)
-    # The Status chip only chose the DB(s); apply every OTHER chip to the rows.
+    if has_status:
+        # A Status chip means "rows whose CURRENT status is X". Because status is
+        # recomputed at read time (e.g. a now-Exception*/OK row may still physically
+        # sit in the pending DB until the daily re-route), we can't trust the DB a
+        # row lives in — load all three and keep only rows whose recomputed target
+        # category matches the requested one. Prevents e.g. Ok rows leaking into a
+        # Pending filter.
+        want = _pc_category_from_filters(filters)
+        seen, rows = set(), []
+        for cat in ('backlog', 'pending', 'ok'):
+            for r in _pc_load_rows(cat):
+                if _pc_target_category(r) != want:
+                    continue
+                tn = str(r.get('Trade Number', '') or '')
+                key = tn or ('#%d' % len(rows))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(r)
+        cats = [want]
+    else:
+        cats = ['backlog', 'pending', 'ok']
+        rows = []
+        for cat in cats:
+            rows += _pc_load_rows(cat)
+    # The Status chip only chose the category; apply every OTHER chip to the rows.
     other = [f for f in filters if _pc_norm(f.get('field', '')) != 'status']
     if other:
         rows = [r for r in rows if _deal_matches(r, other)]
