@@ -41,11 +41,16 @@
     /* Searchable counterparty combo ----------------------------------- */
     #ei-page .ei-combo { position: relative; }
     #ei-page .ei-combo-menu {
-        position: absolute; z-index: 1055; top: calc(100% + 4px); left: 0; right: 0;
+        position: absolute; z-index: 1080; top: calc(100% + 4px); left: 0; right: 0;
         max-height: 320px; overflow-y: auto; margin: 0; padding: .3rem; list-style: none;
-        background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);
-        border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.16); display: none;
+        background: #ffffff; border: 1px solid var(--bs-border-color);
+        border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.22); display: none;
         transform-origin: top center;
+        -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    }
+    [data-bs-theme=dark] #ei-page .ei-combo-menu {
+        background: #1b1e24; border-color: rgba(255,255,255,.14);
+        box-shadow: 0 14px 40px rgba(0,0,0,.55);
     }
     #ei-page .ei-combo-menu.show { display: block; animation: eiPop .16s var(--ei-ease); }
     @keyframes eiPop { from { opacity: 0; transform: scale(.97) translateY(-2px); } to { opacity: 1; transform: none; } }
