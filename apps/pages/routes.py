@@ -1143,6 +1143,22 @@ def _get_logo_path():
     return None
 
 
+def _get_email_asset(filename):
+    """Resolve an image under static/images (same lookup as the logo) for inline
+    e-mail embedding. Returns the path or None."""
+    from flask import current_app
+    candidates = [
+        os.path.join(current_app.root_path, 'static', 'images', filename),
+        os.path.join(os.path.dirname(current_app.root_path), 'static', 'images', filename),
+        os.path.join(current_app.root_path, '..', 'static', 'images', filename),
+    ]
+    for path in candidates:
+        path = os.path.normpath(path)
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def render_email_template(code, recipient_name):
     return render_template(
         'pages/email-verification.html',
@@ -3488,6 +3504,16 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
             limg.add_header('Content-ID', '<otc_logo>')
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             msg.attach(limg)
+
+        # Header gradient image — referenced by VML so the gradient shows in Outlook
+        # (which ignores CSS gradients). Modern clients keep the CSS linear-gradient.
+        grad_path = _get_email_asset('email-header-gradient.png')
+        if grad_path:
+            with open(grad_path, 'rb') as f:
+                gimg = MIMEImage(f.read())
+            gimg.add_header('Content-ID', '<otc_gradient>')
+            gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+            msg.attach(gimg)
 
         recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
