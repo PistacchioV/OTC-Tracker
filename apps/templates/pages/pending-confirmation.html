@@ -462,6 +462,30 @@
         background: rgba(255,255,255,.08) !important;
         color: #6ea8fe !important;
     }
+
+    /* Add/Edit modal — Aging & Status are auto-computed, so they read as
+       disabled (greyed, no focus/typing). Kept `readonly` in markup so the
+       computed value still submits; this only makes that state visible. */
+    #addRowModal #ar_aging,
+    #addRowModal #ar_status {
+        background-color: var(--bs-secondary-bg, #e9ecef) !important;
+        color: var(--bs-secondary-color, #6c757d) !important;
+        cursor: not-allowed;
+        pointer-events: none;
+        opacity: .9;
+    }
+
+    /* Calendar icon inside every date field (flatpickr opens on click). */
+    #addRowModal .ar-date {
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.7rem center;
+        background-size: 1rem 1rem;
+        padding-right: 2.2rem;
+    }
+    [data-bs-theme="dark"] #addRowModal .ar-date {
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+    }
 </style>
 {% endblock extra_css %}
 
@@ -1310,10 +1334,17 @@ function formatExportData(data, row, column, node) {
 
 $(document).ready(function() {
 
-    // Aging column filter with comparison operators (>, <, >=, <=). When set, this
-    // numeric predicate replaces the plain substring search on the Aging column
-    // (col 6). e.g. ">30" → aging > 30, ">=30" → aging >= 30, "<15" → aging < 15.
-    var agingFilter = null;
+    // ------------------------------------------------------------------
+    // COLUMN FILTERS — unified AND predicate. Every column-input's live
+    // value is combined (logical AND) in ONE DataTables ext.search pass, so
+    // setting a second filter always narrows the first (they are
+    // "interlinked"). The Aging column (col 6) additionally understands
+    // comparison operators (>, <, >=, <=); e.g. ">=20" → aging >= 20.
+    // Everything else is a case-insensitive substring match on the cell.
+    // (Native column().search() is intentionally NOT used for these inputs —
+    // mixing it with a custom predicate is what let a stale/dropped Aging
+    // filter slip through and return rows below the threshold.)
+    // ------------------------------------------------------------------
     function _makeAgingOpFilter(raw) {
         var m = String(raw == null ? '' : raw).trim().match(/^(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)$/);
         if (!m) return null;
@@ -1327,11 +1358,33 @@ $(document).ready(function() {
             return true;
         };
     }
-    // Custom DataTables search: apply the Aging operator predicate to col 6.
+    var PC_COL_INPUTS = null;        // [{col: <dtColIndex>, input: <el>}] — built at initComplete
+    var pcActiveColFilters = [];     // rebuilt from the non-empty inputs on each keystroke
+    function pcRebuildColFilters() {
+        pcActiveColFilters = [];
+        (PC_COL_INPUTS || []).forEach(function (e) {
+            var raw = (e.input.value || '').trim();
+            if (!raw) return;
+            var f = { col: e.col, needle: raw.toLowerCase(), agingFn: null };
+            if (e.col === 6) f.agingFn = _makeAgingOpFilter(raw);   // null → plain substring
+            pcActiveColFilters.push(f);
+        });
+    }
+    // Single ext.search pass: a row survives only if it matches EVERY active
+    // column filter (AND). Reads the pre-built pcActiveColFilters (not the DOM)
+    // so it stays cheap per row.
     $.fn.dataTable.ext.search.push(function (settings, data) {
-        if (settings.nTable.id !== 'pending-confirmation-table' || !agingFilter) return true;
-        var aging = parseInt(String(data[6] == null ? '' : data[6]).replace(/[^0-9-]/g, ''), 10);
-        return agingFilter(aging);
+        if (settings.nTable.id !== 'pending-confirmation-table') return true;
+        for (var i = 0; i < pcActiveColFilters.length; i++) {
+            var f = pcActiveColFilters[i];
+            var cell = String(data[f.col] == null ? '' : data[f.col]);
+            if (f.agingFn) {
+                if (!f.agingFn(parseInt(cell.replace(/[^0-9-]/g, ''), 10))) return false;
+            } else if (cell.toLowerCase().indexOf(f.needle) === -1) {
+                return false;
+            }
+        }
+        return true;
     });
 
     // ========================================================================
@@ -1475,6 +1528,14 @@ $(document).ready(function() {
                 });
             });
 
+            // Build the column→input map once; all filtering runs through the
+            // unified ext.search predicate above, so a keystroke only needs to
+            // rebuild the active-filter list and redraw.
+            PC_COL_INPUTS = [];
+            document.querySelectorAll('#column-search-inputs th').forEach(function(th) {
+                var input = th.querySelector('input');
+                if (input) PC_COL_INPUTS.push({ col: th.cellIndex, input: input });
+            });
             document.querySelectorAll('#column-search-inputs th input').forEach(function(input) {
                 input.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -1482,31 +1543,13 @@ $(document).ready(function() {
 
                 // Debounce so a full DataTable re-filter/redraw (+ widget recount)
                 // does NOT fire on every keystroke — that froze the page on large
-                // datasets. Apply the search ~250ms after the user stops typing.
+                // datasets. Apply the search ~180ms after the user stops typing.
                 var searchTimer = null;
                 input.addEventListener('keyup', function() {
-                    var value = this.value;
-                    var columnIndex = input.closest('th').cellIndex;
                     if (searchTimer) clearTimeout(searchTimer);
                     searchTimer = setTimeout(function() {
-                        // Aging (col 6): support comparison operators (>, <, >=, <=).
-                        if (columnIndex === 6) {
-                            var f = _makeAgingOpFilter(value), had = !!agingFilter;
-                            agingFilter = f;
-                            if (f) {                                  // operator → numeric predicate
-                                if (api.column(6).search()) api.column(6).search('');
-                                api.draw();
-                                return;
-                            }
-                            // No operator → plain substring; force a redraw if we just
-                            // dropped a numeric predicate but the substring is unchanged.
-                            if (had && api.column(6).search() === value) { api.draw(); return; }
-                        }
-                        if (api.column(columnIndex).search() !== value) {
-                            // smart:false → plain substring match (skips DataTables'
-                            // multi-term regex build), a little faster per draw.
-                            api.column(columnIndex).search(value, false, false).draw();
-                        }
+                        pcRebuildColFilters();
+                        table.draw();
                     }, 180);
                 });
             });
@@ -1521,8 +1564,8 @@ $(document).ready(function() {
                     document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
                         inp.value = '';
                     });
-                    // Resetar a busca de todas as colunas + busca global e redesenhar
-                    agingFilter = null;                 // limpa o filtro numérico de Aging (>, <, >=, <=)
+                    // Zerar os filtros de coluna (predicado unificado) + busca global
+                    pcRebuildColFilters();              // -> lista vazia (nenhum filtro ativo)
                     api.columns().search('');
                     api.search('');
                     api.draw();
