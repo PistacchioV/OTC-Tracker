@@ -15587,6 +15587,243 @@ def reconciliation_payrec_end():
 # ROTA GENÉRICA — TEMPLATES (deve ser a ÚLTIMA rota definida)
 # ==============================================================================
 
+# ============================================================================
+#  ELECTRONIC INVENTORY — per-counterparty document library
+#  Root: ELECTRONIC_INVENTORY_ROOT\<Client>\{Confirmations,Transactional,SSI}
+#  Confirmations are foldered by date (YYYY\MM\DD); SSI / Transactional are flat
+#  with a "<TYPE> - <Client> - ddmmyyyy" naming convention. Browsing reads
+#  straight from the network share — offline/empty just yields empty lists,
+#  never a 500. Folder names come from RefData.json COUNTERPARTY (same source
+#  scripts/create_counterparty_folders.py uses), matched tolerantly by
+#  _ei_sanitize so a slightly different on-disk name is still found.
+# ============================================================================
+_EI_TRANSACTIONAL_TYPES = ('CGD', 'CSA', 'ISDA', 'GMRA', 'GMSLA', 'Master Agreement', 'Others')
+_EI_PREVIEWABLE = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
+_EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
+                      '.png', '.jpg', '.jpeg', '.gif', '.txt', '.zip'}
+
+
+def _ei_refdata_clients():
+    """[(name, spn)] from RefData.json. Best-effort: [] if missing/unreadable."""
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return []
+    out = []
+    for r in (rows if isinstance(rows, list) else []):
+        name = (r.get('COUNTERPARTY') or '').strip()
+        if name:
+            out.append((name, (r.get('SPN') or '').strip()))
+    return out
+
+
+def _ei_resolve_client_dir(client, create=False):
+    """Absolute <ROOT>\\<client> path via the tolerant sanitized match. When
+    create=True, ensures the three subfolders exist first."""
+    folder = _ei_sanitize(client)
+    if not folder:
+        return None
+    if create:
+        _ensure_counterparty_folders(client)
+    root, actual, key = ELECTRONIC_INVENTORY_ROOT, folder, folder.upper()
+    try:
+        if os.path.isdir(root):
+            for entry in os.listdir(root):
+                if os.path.isdir(os.path.join(root, entry)) and _ei_sanitize(entry).upper() == key:
+                    actual = entry
+                    break
+    except Exception:
+        pass
+    return os.path.join(root, actual)
+
+
+def _ei_human_size(n):
+    try:
+        n = float(n)
+    except Exception:
+        return ''
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if n < 1024 or unit == 'TB':
+            return ('%d %s' % (int(n), unit)) if unit == 'B' else ('%.1f %s' % (n, unit))
+        n /= 1024.0
+    return ''
+
+
+def _ei_iter_files(base, doctype):
+    """Yield a dict per file under <base>/<doctype>. Confirmations recurses and
+    reads a dd/mm/yyyy date from the YYYY/MM/DD path; Transactional derives a
+    sub-type from the '<TYPE> - ...' filename prefix. rel is POSIX, base-relative."""
+    sub = os.path.join(base, doctype)
+    if not os.path.isdir(sub):
+        return
+    for dirpath, _dirs, files in os.walk(sub):
+        for fn in files:
+            if fn.startswith('.') or fn.startswith('~$'):
+                continue
+            full = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(full)
+            except Exception:
+                continue
+            ext = os.path.splitext(fn)[1].lower()
+            rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
+            parts = [p for p in rel_within.split('/') if p and p != '.']
+            doc_date = ''
+            if (doctype == 'Confirmations' and len(parts) >= 3 and
+                    re.match(r'^\d{4}$', parts[0]) and re.match(r'^\d{2}$', parts[1]) and
+                    re.match(r'^\d{2}$', parts[2])):
+                doc_date = '%s/%s/%s' % (parts[2], parts[1], parts[0])
+            subtype = ''
+            if doctype == 'Transactional':
+                m = re.match(r'^\s*([A-Za-z0-9/&.\- ]+?)\s+-\s+', fn)
+                subtype = (m.group(1).strip().upper() if m else '')
+            yield {
+                'name': fn,
+                'doctype': doctype,
+                'subtype': subtype,
+                'rel': os.path.relpath(full, base).replace('\\', '/'),
+                'ext': ext.lstrip('.').upper(),
+                'previewable': ext in _EI_PREVIEWABLE,
+                'size': st.st_size,
+                'size_h': _ei_human_size(st.st_size),
+                'doc_date': doc_date,
+                'modified': int(st.st_mtime),
+                'modified_h': datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M'),
+            }
+
+
+@blueprint.route('/api/electronic-inventory/clients')
+def api_ei_clients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    root = ELECTRONIC_INVENTORY_ROOT
+    root_exists = os.path.isdir(root)
+    spn_by_key = {}
+    all_ref = _ei_refdata_clients()
+    for name, spn in all_ref:
+        spn_by_key[_ei_sanitize(name).upper()] = (name, spn)
+    clients = {}
+    if root_exists:
+        try:
+            for entry in sorted(os.listdir(root)):
+                if not os.path.isdir(os.path.join(root, entry)):
+                    continue
+                key = _ei_sanitize(entry).upper()
+                ref = spn_by_key.get(key)
+                clients[key] = {'name': entry, 'spn': ref[1] if ref else '', 'on_disk': True}
+        except Exception:
+            log.warning('[ei] listing root failed:\n%s', traceback.format_exc())
+    # Fold in RefData names without a folder yet (still pickable for upload,
+    # which creates the folders on demand).
+    for name, spn in all_ref:
+        key = _ei_sanitize(name).upper()
+        if key not in clients:
+            clients[key] = {'name': name, 'spn': spn, 'on_disk': False}
+    out = sorted(clients.values(), key=lambda c: c['name'].upper())
+    return jsonify({'success': True, 'clients': out, 'root': root,
+                    'root_exists': root_exists,
+                    'transactional_types': list(_EI_TRANSACTIONAL_TYPES)})
+
+
+@blueprint.route('/api/electronic-inventory/documents')
+def api_ei_documents():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client = (request.args.get('client') or '').strip()
+    doctype = (request.args.get('type') or 'all').strip()
+    if not client:
+        return jsonify({'success': False, 'message': 'client required'}), 400
+    base = _ei_resolve_client_dir(client)
+    folder_exists = bool(base) and os.path.isdir(base)
+    docs = []
+    if folder_exists:
+        types = EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)
+        for dt in types:
+            if dt not in EI_SUBFOLDERS:
+                continue
+            try:
+                docs.extend(_ei_iter_files(base, dt))
+            except Exception:
+                log.warning('[ei] iter %s/%s failed:\n%s', client, dt, traceback.format_exc())
+    docs.sort(key=lambda d: d['modified'], reverse=True)
+    return jsonify({'success': True, 'documents': docs, 'client': client,
+                    'folder': base or '', 'folder_exists': folder_exists})
+
+
+@blueprint.route('/api/electronic-inventory/file')
+def api_ei_file():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    from flask import send_file, abort
+    client = (request.args.get('client') or '').strip()
+    rel = (request.args.get('rel') or '').strip()
+    download = request.args.get('download') in ('1', 'true', 'yes')
+    base = _ei_resolve_client_dir(client)
+    if not base or not rel:
+        return abort(404)
+    # Path-traversal guard: the resolved real path must stay inside base.
+    base_real = os.path.realpath(base)
+    full = os.path.realpath(os.path.join(base_real, rel))
+    if not (full == base_real or full.startswith(base_real + os.sep)):
+        return abort(400)
+    if not os.path.isfile(full):
+        return abort(404)
+    try:
+        return send_file(full, as_attachment=download, download_name=os.path.basename(full))
+    except TypeError:   # Flask < 2.0
+        return send_file(full, as_attachment=download, attachment_filename=os.path.basename(full))
+
+
+@blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
+def api_ei_upload():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client  = (request.form.get('client') or '').strip()
+    doctype = (request.form.get('type') or '').strip()
+    subtype = (request.form.get('subtype') or '').strip()
+    date_s  = (request.form.get('date') or '').strip()
+    f = request.files.get('file')
+    if not client or doctype not in EI_SUBFOLDERS or not f or not f.filename:
+        return jsonify({'success': False, 'message': 'client, a valid type and a file are required'}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in _EI_ALLOWED_UPLOAD:
+        return jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
+    if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+        return jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
+    digits = re.sub(r'\D', '', date_s)
+    ddmmyyyy = digits if len(digits) == 8 else datetime.now().strftime('%d%m%Y')
+    dd, mm, yyyy = ddmmyyyy[0:2], ddmmyyyy[2:4], ddmmyyyy[4:8]
+    base = _ei_resolve_client_dir(client, create=True)
+    cname = _ei_sanitize(client)
+    if doctype == 'Confirmations':
+        target_dir = os.path.join(base, 'Confirmations', yyyy, mm, dd)
+        fname = '%s%s' % (_ei_sanitize(os.path.splitext(f.filename)[0]) or 'confirmation', ext)
+    elif doctype == 'SSI':
+        target_dir = os.path.join(base, 'SSI')
+        fname = 'SSI - %s - %s%s' % (cname, ddmmyyyy, ext)
+    else:  # Transactional
+        target_dir = os.path.join(base, 'Transactional')
+        prefix = (_ei_sanitize(subtype).upper() or 'DOC')
+        fname = '%s - %s - %s%s' % (prefix, cname, ddmmyyyy, ext)
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        dest = os.path.join(target_dir, fname)
+        stem, e = os.path.splitext(dest)
+        i = 2
+        while os.path.exists(dest):     # never clobber an existing document
+            dest = '%s (%d)%s' % (stem, i, e)
+            i += 1
+        f.save(dest)
+    except Exception:
+        log.error('[ei] upload failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
+    return jsonify({'success': True, 'saved': {
+        'name': os.path.basename(dest),
+        'rel': os.path.relpath(dest, base).replace('\\', '/'),
+        'doctype': doctype}})
+
+
 @blueprint.route('/<template>')
 def route_template(template):
     # Catch-all page renderer — require authentication so unauthenticated
