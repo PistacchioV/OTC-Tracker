@@ -13,6 +13,17 @@
     const txtColor = () => (isDark() ? '#cbd5e1' : '#475569');
     const gridColor = () => (isDark() ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)');
 
+    // Semantic colour for the period-over-period change: fewer pending is GOOD
+    // (green), flat is neutral (grey), more pending is BAD (red). Pending is a
+    // metric you want to go DOWN, so the scale is inverted vs. a typical KPI.
+    const C_GOOD = '#16a34a', C_NEUTRAL = '#94a3b8', C_BAD = '#dc2626';
+    function changeColor(pct) {
+        if (pct == null) return C_NEUTRAL;
+        if (pct < 0) return C_GOOD;      // decreased → improvement
+        if (pct > 0) return C_BAD;       // increased → worse
+        return C_NEUTRAL;                // unchanged → neutral
+    }
+
     function hexToRgba(hex, a) {
         const h = (hex || '').replace('#', '');
         const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
@@ -96,8 +107,12 @@
             const ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height);
             return;
         }
-        note.textContent = isDaily ? 'Daily snapshots for the current month.'
+        var rangeTxt = isDaily ? 'Daily snapshots for the current month.'
             : (document.getElementById('pcm-range').value === 'cy' ? 'Month-end volume, current year.' : 'Month-end volume, trailing 24 months.');
+        note.innerHTML = rangeTxt + ' &nbsp;·&nbsp; Change: '
+            + '<span style="color:' + C_GOOD + ';font-weight:600">▼ down = fewer pending (good)</span>&nbsp;&nbsp;'
+            + '<span style="color:' + C_NEUTRAL + ';font-weight:600">► flat</span>&nbsp;&nbsp;'
+            + '<span style="color:' + C_BAD + ';font-weight:600">▲ up = more pending (bad)</span>';
         const barColor = '#0066cc';
         charts.history = new Chart(cv, {
             data: {
@@ -113,8 +128,13 @@
                     {
                         type: 'line', label: 'Change', yAxisID: 'y1',
                         data: pts.map(p => (p.pct == null ? null : p.pct)),
-                        borderColor: '#f59e0b', backgroundColor: '#f59e0b',
-                        borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5,
+                        borderColor: C_NEUTRAL, borderWidth: 2, tension: 0.35,
+                        pointRadius: 4, pointHoverRadius: 6,
+                        pointBackgroundColor: (ctx) => changeColor(ctx.raw),
+                        pointBorderColor:     (ctx) => changeColor(ctx.raw),
+                        // Colour each segment by the point it lands on: down → green
+                        // (good), up → red (bad), flat → grey — trend reads at a glance.
+                        segment: { borderColor: (ctx) => changeColor(ctx.p1.parsed.y) },
                         spanGaps: true, order: 1,
                     },
                 ],
@@ -128,7 +148,7 @@
                     tooltip: tooltip({
                         callbacks: {
                             label: (it) => it.dataset.label === 'Change'
-                                ? (it.parsed.y == null ? '' : `Change: ${it.parsed.y > 0 ? '+' : ''}${it.parsed.y}%`)
+                                ? (it.parsed.y == null ? '' : `Change: ${it.parsed.y > 0 ? '▲ +' : (it.parsed.y < 0 ? '▼ ' : '► ')}${it.parsed.y}%`)
                                 : `Volume: ${it.parsed.y}`,
                         },
                     }),
