@@ -398,23 +398,13 @@
                     <h3 class="cp-card__title" data-lang="cp-r-dm-title">Daily Metric — Outstanding Confirmation Brazil OTC</h3>
                     <p class="cp-card__desc" data-lang="cp-r-dm-desc">
                         E-mails the Outstanding Confirmation Brazil OTC daily metric to a saved recipient
-                        list. Set the TO / CC / BCC once — they are saved and reused on every run, so you
+                        list. Set the recipients (TO) once — they are saved and reused on every run, so you
                         don't have to retype them. The reference date is always today.
                     </p>
                     <div class="cp-field">
                         <label data-lang="cp-dm-to">TO</label>
                         <input type="text" id="cp-dm-to" class="form-control form-control-sm"
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-cc">CC</label>
-                        <input type="text" id="cp-dm-cc" class="form-control form-control-sm"
-                               placeholder="optional — separate with ;">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-bcc">BCC</label>
-                        <input type="text" id="cp-dm-bcc" class="form-control form-control-sm"
-                               placeholder="optional — separate with ;">
                     </div>
                     <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
@@ -676,11 +666,9 @@ document.addEventListener('click', function (e) {
 //    saved again right before each Run so the latest values are used. ──────────
 (function () {
     var toEl   = document.getElementById('cp-dm-to');
-    var ccEl   = document.getElementById('cp-dm-cc');
-    var bccEl  = document.getElementById('cp-dm-bcc');
     var dateEl = document.getElementById('cp-dm-date');
     var runBtn = document.querySelector('[data-metric-run]');
-    if (!toEl || !ccEl || !bccEl || !runBtn) return;
+    if (!toEl || !runBtn) return;
     var REC_URL = '/api/control-panel/daily-metric/recipients';
     var RUN_URL = '/api/control-panel/daily-metric/run';
 
@@ -689,9 +677,7 @@ document.addEventListener('click', function (e) {
         .then(function (r) { return r.json(); })
         .then(function (d) {
             if (!d || !d.success) return;
-            toEl.value  = d.to  || '';
-            ccEl.value  = d.cc  || '';
-            bccEl.value = d.bcc || '';
+            toEl.value = d.to || '';
         })
         .catch(function () {});
 
@@ -699,12 +685,12 @@ document.addEventListener('click', function (e) {
         return fetch(REC_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ to: toEl.value, cc: ccEl.value, bcc: bccEl.value })
+            body: JSON.stringify({ to: toEl.value })     // CC/BCC removed — TO only
         }).catch(function () {});
     }
 
     // Persist on blur so the addresses survive even without running.
-    [toEl, ccEl, bccEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+    toEl.addEventListener('blur', saveRecipients);
 
     runBtn.addEventListener('click', function () {
         if (runBtn.disabled) return;
