@@ -130,6 +130,7 @@
     #ei-page .ei-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     #ei-page .ei-status-dot.on  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
     #ei-page .ei-status-dot.off { background: #d0a02a; box-shadow: 0 0 0 3px rgba(208,160,42,.15); }
+    #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
 
     @media (prefers-reduced-motion: reduce) {
         #ei-page *, #ei-page *::before, #ei-page *::after { animation: none !important; transition: none !important; }
@@ -317,5 +318,5 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260721b"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260721c"></script>
 {% endblock extra_javascript %}

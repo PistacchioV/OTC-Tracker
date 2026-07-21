@@ -65,9 +65,15 @@
             }
             state.clients = res.clients || [];
             state.rootExists = !!res.root_exists;
+            state.shareSlow = !!res.share_slow;
             state.subtypes = res.transactional_types || [];
             var dot = $('eiShareDot'), lbl = $('eiShareLabel');
-            if (state.rootExists) {
+            if (state.shareSlow) {
+                // Share too slow to enumerate within the timeout — names still
+                // come from RefData, so the picker works; on-disk badges skipped.
+                dot.className = 'ei-status-dot slow';
+                lbl.textContent = state.clients.length + ' counterparties · share slow to respond';
+            } else if (state.rootExists) {
                 dot.className = 'ei-status-dot on';
                 lbl.textContent = state.clients.filter(function (c) { return c.on_disk; }).length + ' counterparties on the share';
             } else {

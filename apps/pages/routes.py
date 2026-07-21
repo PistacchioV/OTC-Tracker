@@ -15693,27 +15693,58 @@ def _ei_iter_files(base, doctype):
             }
 
 
+def _ei_scan_root(timeout=4.0):
+    """Scan the (network) share for existing counterparty folders, but bounded by
+    a timeout so a slow/unreachable I:\\ drive can never hang the request.
+
+    Returns (root_exists, {SANITIZED_KEY: folder_name}). root_exists is None when
+    the scan did not finish in time — in that case the caller still serves the
+    RefData names, just without the on-disk enrichment. Uses os.scandir so folder
+    detection avoids a separate network stat() per entry (much faster over VPN)."""
+    box = {}
+
+    def work():
+        try:
+            if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+                box['exists'] = False
+                return
+            box['exists'] = True
+            dirs = {}
+            with os.scandir(ELECTRONIC_INVENTORY_ROOT) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir():
+                            dirs[_ei_sanitize(entry.name).upper()] = entry.name
+                    except OSError:
+                        continue
+            box['dirs'] = dirs
+        except Exception:
+            log.warning('[ei] scanning root failed:\n%s', traceback.format_exc())
+            box['error'] = True
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive() or box.get('error') or 'exists' not in box:
+        return (None, {})            # too slow / errored — serve RefData only
+    return (box['exists'], box.get('dirs', {}))
+
+
 @blueprint.route('/api/electronic-inventory/clients')
 def api_ei_clients():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'unauthorized'}), 401
     root = ELECTRONIC_INVENTORY_ROOT
-    root_exists = os.path.isdir(root)
     spn_by_key = {}
     all_ref = _ei_refdata_clients()
     for name, spn in all_ref:
         spn_by_key[_ei_sanitize(name).upper()] = (name, spn)
+    # Time-bounded share scan — never blocks on a slow network drive.
+    root_exists, disk_dirs = _ei_scan_root()
     clients = {}
-    if root_exists:
-        try:
-            for entry in sorted(os.listdir(root)):
-                if not os.path.isdir(os.path.join(root, entry)):
-                    continue
-                key = _ei_sanitize(entry).upper()
-                ref = spn_by_key.get(key)
-                clients[key] = {'name': entry, 'spn': ref[1] if ref else '', 'on_disk': True}
-        except Exception:
-            log.warning('[ei] listing root failed:\n%s', traceback.format_exc())
+    for key, folder in disk_dirs.items():
+        ref = spn_by_key.get(key)
+        clients[key] = {'name': folder, 'spn': ref[1] if ref else '', 'on_disk': True}
     # Fold in RefData names without a folder yet (still pickable for upload,
     # which creates the folders on demand).
     for name, spn in all_ref:
@@ -15722,7 +15753,8 @@ def api_ei_clients():
             clients[key] = {'name': name, 'spn': spn, 'on_disk': False}
     out = sorted(clients.values(), key=lambda c: c['name'].upper())
     return jsonify({'success': True, 'clients': out, 'root': root,
-                    'root_exists': root_exists,
+                    'root_exists': bool(root_exists),
+                    'share_slow': root_exists is None,
                     'transactional_types': list(_EI_TRANSACTIONAL_TYPES)})
 
 
