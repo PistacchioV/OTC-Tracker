@@ -1307,5 +1307,13 @@
   "cog-cancel": "Cancel",
   "cog-w-call": "Call",
   "cog-w-put": "Put",
-  "pc-update-dz": "Drop <b>Pending Update</b> xlsx here or click"
+  "pc-update-dz": "Drop <b>Pending Update</b> xlsx here or click",
+  "cp-r-sc-title": "Pending Signature Confirmations — Collection",
+  "cp-r-sc-desc": "Builds one editable e-mail draft per counterparty for confirmations pending signature (Pending Digital Signature / Pending Original), segregated from the Pending Confirmation base. TO = the counterparty's confirmation contacts; CC = that counterparty's bankers + Brazil OTC Ops + IS Trade Doc. Downloads a .zip of .eml drafts — nothing is sent automatically.",
+  "cp-sc-meta": "One .eml per counterparty → .zip",
+  "cp-sc-generate": "Generate drafts",
+  "cp-sc-loading": "Loading…",
+  "cp-sc-cp": "counterparties",
+  "cp-sc-conf": "confirmations pending signature",
+  "cp-sc-done": "draft(s) downloaded. Open the .eml files in Outlook to review and send."
 }

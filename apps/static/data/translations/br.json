@@ -1307,5 +1307,13 @@
   "cog-cancel": "Cancelar",
   "cog-w-call": "Call",
   "cog-w-put": "Put",
-  "pc-update-dz": "Solte o xlsx <b>Pending Update</b> aqui ou clique"
+  "pc-update-dz": "Solte o xlsx <b>Pending Update</b> aqui ou clique",
+  "cp-r-sc-title": "Confirmações Pendentes de Assinatura — Cobrança",
+  "cp-r-sc-desc": "Gera um rascunho de e-mail editável por contraparte para confirmações pendentes de assinatura (Assinatura Digital / Original), segregadas da base do Pending Confirmation. TO = contatos de confirmação da contraparte; CC = bankers da contraparte + Brazil OTC Ops + IS Trade Doc. Baixa um .zip de rascunhos .eml — nada é enviado automaticamente.",
+  "cp-sc-meta": "Um .eml por contraparte → .zip",
+  "cp-sc-generate": "Gerar rascunhos",
+  "cp-sc-loading": "Carregando…",
+  "cp-sc-cp": "contrapartes",
+  "cp-sc-conf": "confirmações pendentes de assinatura",
+  "cp-sc-done": "rascunho(s) baixado(s). Abra os arquivos .eml no Outlook para revisar e enviar."
 }

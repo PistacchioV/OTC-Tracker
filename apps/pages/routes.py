@@ -180,6 +180,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'contacts',    'label': 'Update Contacts'},
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
     {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
+    {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -193,6 +194,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/daily-metric/run': 'dailymetric',
     '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',
     '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
+    '/api/control-panel/signature-collection/preview': 'signaturecollection',
+    '/api/control-panel/signature-collection/generate': 'signaturecollection',
 }
 
 
@@ -3731,6 +3734,202 @@ def api_cp_weekly_escalation_run():
                          'CEM/EDG weekly escalation e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True,
                     'message': 'Weekly Escalation enviado para {} destinatário(s).'.format(len(to_list) + len(cc_list))})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Control Panel — Pending Signature Confirmations (Collection / "Cobrança")
+# ══════════════════════════════════════════════════════════════════════════
+# Segregates the pending-signature confirmations (base: Pending Confirmation page)
+# by counterparty and builds one editable .eml draft per counterparty (zipped when
+# many). Mirrors the legacy Excel "MassEmail" macro but generates review drafts
+# instead of auto-sending. To = counterparty confirmation contacts (Counterparty
+# Details); Cc = that counterparty's bankers (from signature_collection_bankers.json,
+# matched to the RefData BANKER group) + Brazil OTC Ops + IS Trade Doc.
+_SIGCOLL_FROM = 'is.trade.doc@jpmchase.com'
+_SIGCOLL_CC_FIXED = ['brazil.otc.ops@jpmorgan.com', 'is.trade.doc@jpmchase.com']
+_SIGCOLL_PENDING = {'pendingdigitalsignature', 'pendingoriginal'}
+_SIGCOLL_PORTAL = 'www.jpmorganportaldigital.com'
+_SIGCOLL_TO_KEYWORDS = ('confirmation', 'confirmacao', 'confirmação', 'confirm',
+                        'assinatura', 'signature')
+
+
+def _sig_esc(v):
+    return (str(v if v is not None else '')
+            .replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+
+def _sigcoll_bankers_index():
+    """{ normalized banker name -> e-mail } from signature_collection_bankers.json."""
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'signature_collection_bankers.json'),
+                  encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:
+        return {}
+    idx = {}
+    for c in (data.get('bankers') or []):
+        nm, em = _pc_norm(c.get('name', '')), str(c.get('email', '') or '').strip()
+        if nm and em:
+            idx[nm] = em
+    return idx
+
+
+def _sigcoll_disclaimer(status_norm):
+    return ('Pendente de Assinatura Digital' if status_norm == 'pendingdigitalsignature'
+            else 'Pendente de Assinatura')
+
+
+def _sigcoll_to_emails(cp):
+    """Counterparty confirmation e-mails from CounterpartyDetails; falls back to all
+    of the counterparty's contact e-mails when no rule mentions confirmation."""
+    from apps.pages import otc_emails
+    ems = otc_emails._contacts_emails(cp or {}, _SIGCOLL_TO_KEYWORDS)
+    if not ems:
+        seen = set()
+        for c in ((cp or {}).get('CONTACTS') or []):
+            em = str(c.get('email') or c.get('EMAIL') or '').strip()
+            if em and em.lower() not in seen:
+                seen.add(em.lower())
+                ems.append(em)
+    return ems
+
+
+def _sigcoll_cc_emails(rec, bankers):
+    """Cc = the counterparty's bankers (RefData BANKER group → per-name e-mail) plus
+    the fixed Ops mailboxes. Deduplicated, order preserved."""
+    out, seen = [], set()
+    for name in re.split(r'[;,/&]| e ', str((rec or {}).get('BANKER', '') or '')):
+        em = bankers.get(_pc_norm(name))
+        if em and em.lower() not in seen:
+            seen.add(em.lower())
+            out.append(em)
+    for em in _SIGCOLL_CC_FIXED:
+        if em.lower() not in seen:
+            seen.add(em.lower())
+            out.append(em)
+    return out
+
+
+def _sigcoll_table_html(rows):
+    """Aging | Product Type | Trade Date | Maturity Date | Trade Number — blue header,
+    thin-bordered, centred (matches the legacy confirmation e-mail)."""
+    head = ''.join(
+        '<th style="background:#2E75B6;color:#ffffff;border:1px solid #123c66;'
+        'padding:5px 12px;font-weight:bold;text-align:center;white-space:nowrap;">'
+        + _sig_esc(h) + '</th>'
+        for h in ('Aging', 'Product Type', 'Trade Date', 'Maturity Date', 'Trade Number'))
+    body = []
+    for r in rows:
+        cells = [r.get('Aging', ''), r.get('Product Type', ''), r.get('Trade Date', ''),
+                 r.get('Maturity Date', ''), r.get('Trade Number', '')]
+        body.append('<tr>' + ''.join(
+            '<td style="border:1px solid #000000;padding:4px 12px;text-align:center;'
+            'white-space:nowrap;">' + _sig_esc(c) + '</td>' for c in cells) + '</tr>')
+    return ('<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'
+            'font-family:Arial,sans-serif;font-size:12px;color:#000000;">'
+            '<thead><tr>' + head + '</tr></thead><tbody>' + ''.join(body) + '</tbody></table>')
+
+
+def _sigcoll_signature_html():
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:11px;color:#333333;line-height:1.5;">'
+        'Banco J.P. Morgan S.A. | Av. Brigadeiro Faria Lima, 3729 - 15º andar - São Paulo - SP<br>'
+        '<a href="mailto:is.trade.doc@jpmchase.com" style="color:#1155cc;">is.trade.doc@jpmchase.com</a>'
+        ' | jpmorgan.com | Ouvidoria JPMorgan: Tel.: 0800 – 7700847 / E-mail: '
+        '<a href="mailto:ouvidoria.jp.morgan@jpmorgan.com" style="color:#1155cc;">ouvidoria.jp.morgan@jpmorgan.com</a>'
+        '</div>')
+
+
+def _sigcoll_email_html(rows):
+    P = ('margin:0 0 12px;font-family:Arial,sans-serif;font-size:14px;color:#000000;')
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:14px;color:#000000;">'
+        '<p style="' + P + '">Prezados,</p>'
+        '<p style="' + P + '">Os documentos listados abaixo encontram-se pendentes de '
+        'assinatura por V.Sas. junto ao J.P. Morgan</p>'
+        + _sigcoll_table_html(rows) + '<br>'
+        '<p style="' + P + '">Solicitamos que nos auxiliem na solução das pendências listadas '
+        'acima e reiteramos a importância desse procedimento para o fiel cumprimento do Contrato. '
+        'Sem mais para o momento, agradecemos a atenção e permanecemos à disposição para quaisquer '
+        'esclarecimentos que se fizerem necessários.</p>'
+        '<p style="' + P + '">Acesse o portal em '
+        '<a href="https://' + _SIGCOLL_PORTAL + '" style="color:#1155cc;">' + _SIGCOLL_PORTAL + '</a></p>'
+        '<br>' + _sigcoll_signature_html() + '</div>')
+
+
+def _sigcoll_groups():
+    """Group pending-signature rows by (disclaimer, counterparty). Returns a list of
+    dicts {cp_name, spn, rec, disclaimer, rows} sorted by counterparty."""
+    rows = [r for r in _pc_load_rows('pending')
+            if _pc_norm(r.get('Pending Status', '')) in _SIGCOLL_PENDING]
+    by_spn, by_name = _fxo_refdata_by_spn(), _pc_refdata_by_name()
+    groups = {}
+    for r in rows:
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        cp_name = (str(rec.get('COUNTERPARTY', '') or '').strip()
+                   or str(r.get('Client', '') or '').strip() or 'Counterparty')
+        spn = _norm_spn(r.get('SPN', ''))
+        disc = _sigcoll_disclaimer(_pc_norm(r.get('Pending Status', '')))
+        key = (disc, spn or cp_name.upper())
+        g = groups.setdefault(key, {'cp_name': cp_name, 'spn': spn, 'rec': rec,
+                                    'disclaimer': disc, 'rows': []})
+        g['rows'].append(r)
+    return sorted(groups.values(), key=lambda g: (g['cp_name'].upper(), g['disclaimer']))
+
+
+def _sigcoll_build_drafts():
+    from apps.pages import otc_emails
+    bankers = _sigcoll_bankers_index()
+    cpd = otc_emails._build_cpdetails_index()
+    drafts = []
+    for g in _sigcoll_groups():
+        cp = cpd.get(g['spn']) or {}
+        drafts.append({
+            'subject': 'Important - Confirmação de Operação de Derivativo {} - {}'.format(
+                g['disclaimer'], g['cp_name']),
+            'html': _sigcoll_email_html(g['rows']),
+            'to': '; '.join(_sigcoll_to_emails(cp)),
+            'cc': '; '.join(_sigcoll_cc_emails(g['rec'], bankers)),
+        })
+    return drafts
+
+
+@blueprint.route('/api/control-panel/signature-collection/preview')
+def api_cp_signature_collection_preview():
+    """Summary of what a run would produce: one row per counterparty draft."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    bankers = _sigcoll_bankers_index()
+    items = []
+    for g in _sigcoll_groups():
+        cc = _sigcoll_cc_emails(g['rec'], bankers)
+        items.append({'counterparty': g['cp_name'], 'disclaimer': g['disclaimer'],
+                      'confirmations': len(g['rows']), 'cc_count': len(cc)})
+    return jsonify({'success': True, 'drafts': len(items),
+                    'confirmations': sum(i['confirmations'] for i in items), 'items': items})
+
+
+@blueprint.route('/api/control-panel/signature-collection/generate', methods=['POST'])
+def api_cp_signature_collection_generate():
+    """Build one .eml draft per counterparty and stream them as a download (a single
+    .eml, or a .zip when there is more than one). Opens as editable drafts in Outlook
+    via the X-Unsent header; From = is.trade.doc@jpmchase.com."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    from apps.pages import otc_emails
+    drafts = _sigcoll_build_drafts()
+    if not drafts:
+        return jsonify({'success': False,
+                        'error': 'No pending-signature confirmations found.'}), 404
+    fname, mime, data = otc_emails.build_drafts_download(drafts, _SIGCOLL_FROM)
+    resp = make_response(data)
+    resp.headers['Content-Type'] = mime
+    resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
+    resp.headers['X-Draft-Count'] = str(len(drafts))
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Signature Collection Generated', 'Control Panel',
+                         '{} pending-signature draft(s) generated'.format(len(drafts)))
+    return resp
 
 
 # ──────────────────────────────────────────────────────────────────────────

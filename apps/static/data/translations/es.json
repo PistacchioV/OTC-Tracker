@@ -1306,5 +1306,13 @@
   "cog-cancel": "Cancelar",
   "cog-w-call": "Call",
   "cog-w-put": "Put",
-  "pc-update-dz": "Suelte el xlsx <b>Pending Update</b> aquí o haga clic"
+  "pc-update-dz": "Suelte el xlsx <b>Pending Update</b> aquí o haga clic",
+  "cp-r-sc-title": "Confirmaciones Pendientes de Firma — Cobranza",
+  "cp-r-sc-desc": "Genera un borrador de correo editable por contraparte para confirmaciones pendientes de firma (Firma Digital / Original), segregadas de la base de Pending Confirmation. TO = contactos de confirmación de la contraparte; CC = los bankers de la contraparte + Brazil OTC Ops + IS Trade Doc. Descarga un .zip de borradores .eml — nada se envía automáticamente.",
+  "cp-sc-meta": "Un .eml por contraparte → .zip",
+  "cp-sc-generate": "Generar borradores",
+  "cp-sc-loading": "Cargando…",
+  "cp-sc-cp": "contrapartes",
+  "cp-sc-conf": "confirmaciones pendientes de firma",
+  "cp-sc-done": "borrador(es) descargado(s). Abra los archivos .eml en Outlook para revisar y enviar."
 }
