@@ -554,10 +554,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_under_10 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span class="text-success"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_under_10 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span class="text-success"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -623,10 +628,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_10_19 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_10_19 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -692,10 +702,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_20_29 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_20_29 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -761,10 +776,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_30_59 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_30_59 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -830,10 +850,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_60_89 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_60_89 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -897,10 +922,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_over_90 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span class="text-danger"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_over_90 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span class="text-danger"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -1892,7 +1922,7 @@ $(document).ready(function() {
     }
     function updateWidgets() {
         var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
-        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa'];
+        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa','others'];
         var pendingToType = {
             'Pending Digital Signature': 'ds',
             'Pending FO':                'fo',
@@ -1917,13 +1947,13 @@ $(document).ready(function() {
             var days  = parseInt(_pcStrip(d[6]).replace(/[^0-9-]/g, ''), 10);
             var band  = _pcAgingBand(days);
             if (!band) return;
-            // The band TOTAL is the sum of the breakdown: only rows whose Pending
-            // Status is one of the eight known types are counted (so the big number
-            // always equals the eight lines below it). Rows with any other/empty
-            // Pending Status are excluded from the widget.
-            var pType = pendingToType[_pcStrip(d[11])];
-            if (!pType) return;
+            // The TOTAL counts EVERY pending row in the band, so it matches the
+            // table/Excel exactly. The breakdown maps each row to one of the eight
+            // known Pending Status types, or to 'others' (any other/empty value,
+            // e.g. "Exception Fep Web") — so the eight lines + Others always sum to
+            // the total.
             counts[band].total++;
+            var pType = pendingToType[_pcStrip(d[11])] || 'others';
             counts[band][pType]++;
         });
 
