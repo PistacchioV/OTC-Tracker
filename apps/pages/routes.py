@@ -11075,9 +11075,12 @@ def api_update_deal_cache(deal_id):
         updated_deal = deals[idx].copy()
 
     # Mirror NDF: push to Intrag Option when Status→Success and the counterparty
-    # is Banco J.P. Morgan (intragroup).
+    # is Banco J.P. Morgan (intragroup). External clients instead become a fresh
+    # outstanding confirmation → Pending Confirmation (the manual-mapping twin of
+    # the return-file scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
         _maybe_save_intrag_opt(updated_deal)
+        _pc_save_from_deal(updated_deal, 'OPTION COMM')     # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -11363,9 +11366,12 @@ def api_update_fxo_cache(deal_id):
         updated_deal = deals[idx].copy()
 
     # Mirror opt-comm: push to Intrag Option (FXO overrides) when Status→Success
-    # and the counterparty is Banco J.P. Morgan (intragroup).
+    # and the counterparty is Banco J.P. Morgan (intragroup). External clients
+    # instead flow to Pending Confirmation (manual-mapping twin of the return-file
+    # scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
         _maybe_save_intrag_fxo(updated_deal)
+        _pc_save_from_deal(updated_deal, 'OPTION')          # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -13368,6 +13374,11 @@ def api_ndf_update_deal_cache(deal_id):
             _save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
             log.error('[NDF PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
+    # External clients (non-intragroup) instead become a fresh outstanding
+    # confirmation → Pending Confirmation. Manual-mapping twin of the return-file
+    # scan trigger; _pc_save_from_deal skips internal/intragroup legs itself.
+    if new_status == 'Success':
+        _pc_save_from_deal(updated_deal, 'NDF COMM')        # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
