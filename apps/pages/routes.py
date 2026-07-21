@@ -1159,6 +1159,19 @@ def _get_email_asset(filename):
     return None
 
 
+@blueprint.app_context_processor
+def _inject_email_grad_url():
+    """Expose `grad_url` (absolute URL to the header gradient image) to every
+    template, so the shared e-mail header partial renders the Outlook gradient
+    without each route having to pass it. Falls back to the cid: reference when
+    there's no request context / SERVER_NAME (e.g. a scheduled send)."""
+    try:
+        return {'grad_url': url_for('static', filename='images/email-header-gradient.png',
+                                    _external=True)}
+    except Exception:
+        return {'grad_url': 'cid:otc_gradient'}
+
+
 def render_email_template(code, recipient_name):
     return render_template(
         'pages/email-verification.html',

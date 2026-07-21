@@ -20,17 +20,10 @@
                               box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
 
                     <!-- Header -->
-                    <tr>
-                        <td bgcolor="#4f8ae2" style="background:#4f8ae2;background:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);
-                                   padding:32px 28px 24px;text-align:center;">
-                            <img src="cid:otc_logo" alt="OTC Tracker" height="72" width="auto"
-                                 style="height:72px;width:auto;display:block;margin:0 auto 14px;border:0;"/>
-                            <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 4px;letter-spacing:0.3px;">
-                                Accrual Swap — EOM Final Status</p>
-                            <p style="color:rgba(255,255,255,0.78);font-size:13px;margin:0;">
-                                Generated automatically by OTC Tracker</p>
-                        </td>
-                    </tr>
+                    {% set header_title = 'Accrual Swap — EOM Final Status' %}
+                {% set header_subtitle = 'Generated automatically by OTC Tracker' %}
+                {% set header_logo_height = 72 %}
+                {% include 'partials/email-gradient-header.html' %}
 
                     <!-- Date banner -->
                     <tr>
