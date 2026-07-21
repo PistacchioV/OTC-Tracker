@@ -15693,23 +15693,23 @@ def _ei_iter_files(base, doctype):
             }
 
 
-def _ei_scan_root(timeout=4.0):
-    """Scan the (network) share for existing counterparty folders, but bounded by
-    a timeout so a slow/unreachable I:\\ drive can never hang the request.
+# Cache for the (slow) network-share folder scan. The I:\ drive can take far
+# longer than a request should ever block, so the scan runs in a background
+# thread that fills this cache; requests serve whatever is cached and never wait
+# more than a short grace period. `complete` distinguishes "scanned, folder truly
+# absent" from "not scanned yet" so the UI never shows a false "no folder" badge.
+_EI_ROOT_CACHE = {'ts': 0.0, 'exists': None, 'dirs': {}, 'complete': False, 'scanning': False}
+_EI_ROOT_CACHE_TTL = 300.0       # seconds a completed scan stays fresh
+_EI_ROOT_CACHE_LOCK = threading.Lock()
 
-    Returns (root_exists, {SANITIZED_KEY: folder_name}). root_exists is None when
-    the scan did not finish in time — in that case the caller still serves the
-    RefData names, just without the on-disk enrichment. Uses os.scandir so folder
-    detection avoids a separate network stat() per entry (much faster over VPN)."""
-    box = {}
 
-    def work():
-        try:
-            if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
-                box['exists'] = False
-                return
-            box['exists'] = True
-            dirs = {}
+def _ei_scan_root_worker():
+    """Full (unbounded) share scan → fills _EI_ROOT_CACHE. Runs in a daemon thread
+    so the slow enumeration never blocks the request that triggered it."""
+    exists, dirs, ok = False, {}, False
+    try:
+        exists = os.path.isdir(ELECTRONIC_INVENTORY_ROOT)
+        if exists:
             with os.scandir(ELECTRONIC_INVENTORY_ROOT) as it:
                 for entry in it:
                     try:
@@ -15717,17 +15717,41 @@ def _ei_scan_root(timeout=4.0):
                             dirs[_ei_sanitize(entry.name).upper()] = entry.name
                     except OSError:
                         continue
-            box['dirs'] = dirs
-        except Exception:
-            log.warning('[ei] scanning root failed:\n%s', traceback.format_exc())
-            box['error'] = True
+        ok = True
+    except Exception:
+        log.warning('[ei] scanning root failed:\n%s', traceback.format_exc())
+    with _EI_ROOT_CACHE_LOCK:
+        if ok:
+            _EI_ROOT_CACHE.update(ts=time.time(), exists=exists, dirs=dirs, complete=True)
+        _EI_ROOT_CACHE['scanning'] = False
 
-    t = threading.Thread(target=work, daemon=True)
-    t.start()
-    t.join(timeout)
-    if t.is_alive() or box.get('error') or 'exists' not in box:
-        return (None, {})            # too slow / errored — serve RefData only
-    return (box['exists'], box.get('dirs', {}))
+
+def _ei_scan_root(grace=6.0):
+    """Return (root_exists, dirs, complete). Serves the cached scan when fresh;
+    otherwise kicks off a background rescan and waits up to `grace` seconds for it
+    to finish (so a responsive share fills in on the very first load), then returns
+    the best data available. `complete` is False when the share hasn't been fully
+    scanned yet — the caller must NOT claim a folder is missing in that case."""
+    now = time.time()
+    with _EI_ROOT_CACHE_LOCK:
+        fresh = _EI_ROOT_CACHE['complete'] and (now - _EI_ROOT_CACHE['ts']) < _EI_ROOT_CACHE_TTL
+        if fresh:
+            return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), True)
+        start = not _EI_ROOT_CACHE['scanning']
+        if start:
+            _EI_ROOT_CACHE['scanning'] = True
+    if start:
+        threading.Thread(target=_ei_scan_root_worker, daemon=True).start()
+    # Give the scan a short grace window to complete (short-circuits as soon as done).
+    deadline = now + grace
+    while time.time() < deadline:
+        with _EI_ROOT_CACHE_LOCK:
+            if _EI_ROOT_CACHE['complete'] and _EI_ROOT_CACHE['ts'] >= now - _EI_ROOT_CACHE_TTL:
+                return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), True)
+        time.sleep(0.15)
+    # Still scanning — return any stale data we have, flagged incomplete.
+    with _EI_ROOT_CACHE_LOCK:
+        return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), False)
 
 
 @blueprint.route('/api/electronic-inventory/clients')
@@ -15739,22 +15763,25 @@ def api_ei_clients():
     all_ref = _ei_refdata_clients()
     for name, spn in all_ref:
         spn_by_key[_ei_sanitize(name).upper()] = (name, spn)
-    # Time-bounded share scan — never blocks on a slow network drive.
-    root_exists, disk_dirs = _ei_scan_root()
+    # Cached, background-warmed share scan — never blocks on a slow network drive.
+    root_exists, disk_dirs, complete = _ei_scan_root()
     clients = {}
     for key, folder in disk_dirs.items():
         ref = spn_by_key.get(key)
         clients[key] = {'name': folder, 'spn': ref[1] if ref else '', 'on_disk': True}
-    # Fold in RefData names without a folder yet (still pickable for upload,
-    # which creates the folders on demand).
+    # Fold in RefData names not (yet) matched to a folder. When the scan is still
+    # running we don't know if the folder exists, so on_disk = None (unknown) and
+    # the UI shows no badge; only a COMPLETE scan justifies a "no folder" badge.
     for name, spn in all_ref:
         key = _ei_sanitize(name).upper()
         if key not in clients:
-            clients[key] = {'name': name, 'spn': spn, 'on_disk': False}
+            clients[key] = {'name': name, 'spn': spn,
+                            'on_disk': (False if complete else None)}
     out = sorted(clients.values(), key=lambda c: c['name'].upper())
     return jsonify({'success': True, 'clients': out, 'root': root,
                     'root_exists': bool(root_exists),
-                    'share_slow': root_exists is None,
+                    'scan_complete': complete,
+                    'share_slow': not complete,
                     'transactional_types': list(_EI_TRANSACTIONAL_TYPES)})
 
 

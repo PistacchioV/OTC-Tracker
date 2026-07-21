@@ -55,7 +55,8 @@
     }
 
     /* ---- share status + clients ----------------------------------------- */
-    function loadClients() {
+    var eiSubtypesSeeded = false;
+    function loadClients(isPoll) {
         var lbl0 = $('eiShareLabel');
         fetch(API + '/clients').then(function (r) { return r.json(); }).then(function (res) {
             if (!res || !res.success) {
@@ -65,14 +66,18 @@
             }
             state.clients = res.clients || [];
             state.rootExists = !!res.root_exists;
-            state.shareSlow = !!res.share_slow;
+            state.scanComplete = !!res.scan_complete;
             state.subtypes = res.transactional_types || [];
             var dot = $('eiShareDot'), lbl = $('eiShareLabel');
-            if (state.shareSlow) {
-                // Share too slow to enumerate within the timeout — names still
-                // come from RefData, so the picker works; on-disk badges skipped.
+            if (!state.scanComplete) {
+                // Share not fully enumerated yet — names come from RefData so the
+                // picker works; we withhold "no folder" badges (unknown, not absent)
+                // and poll again shortly to fill in the on-disk state.
                 dot.className = 'ei-status-dot slow';
-                lbl.textContent = state.clients.length + ' counterparties · share slow to respond';
+                lbl.textContent = state.clients.length + ' counterparties · checking share…';
+                if (!state._pollT) {
+                    state._pollT = setTimeout(function () { state._pollT = null; loadClients(true); }, 4000);
+                }
             } else if (state.rootExists) {
                 dot.className = 'ei-status-dot on';
                 lbl.textContent = state.clients.filter(function (c) { return c.on_disk; }).length + ' counterparties on the share';
@@ -80,10 +85,15 @@
                 dot.className = 'ei-status-dot off';
                 lbl.textContent = 'Share offline — browsing unavailable';
             }
-            // seed the transactional sub-type selects
-            var opts = state.subtypes.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
-            $('eiUpSubtype').insertAdjacentHTML('beforeend', opts);
-            $('eiSubtypeFilter').insertAdjacentHTML('beforeend', opts);
+            // If the combo is currently open, re-render so refreshed badges show.
+            if (isPoll && $('eiClientMenu').classList.contains('show')) renderCombo($('eiClientInput').value);
+            // seed the transactional sub-type selects (once)
+            if (!eiSubtypesSeeded && state.subtypes.length) {
+                eiSubtypesSeeded = true;
+                var opts = state.subtypes.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
+                $('eiUpSubtype').insertAdjacentHTML('beforeend', opts);
+                $('eiSubtypeFilter').insertAdjacentHTML('beforeend', opts);
+            }
         }).catch(function (e) {
             console.error('ei clients error', e);
             $('eiShareDot').className = 'ei-status-dot off';
@@ -105,7 +115,7 @@
             menu.innerHTML = list.map(function (c, i) {
                 return '<li data-name="' + esc(c.name) + '"' + (i === comboKbd ? ' class="ei-kbd-active"' : '') + '>' +
                     '<span>' + esc(c.name) + '</span>' +
-                    (c.on_disk ? '' : '<span class="ei-nofolder">no folder</span>') +
+                    (c.on_disk === false ? '<span class="ei-nofolder">no folder</span>' : '') +
                     (c.spn ? '<span class="ei-combo-spn">SPN ' + esc(c.spn) + '</span>' : '') +
                     '</li>';
             }).join('');
