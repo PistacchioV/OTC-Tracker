@@ -62,6 +62,8 @@
     #ei-page .ei-combo-menu li .ei-combo-spn { font-size: .72rem; color: var(--bs-secondary-color); margin-left: auto; }
     #ei-page .ei-combo-menu li.ei-kbd-active, #ei-page .ei-combo-menu li:hover { background: var(--bs-tertiary-bg); }
     #ei-page .ei-combo-menu li .ei-nofolder { font-size: .62rem; color: #b5892b; border: 1px solid rgba(181,137,43,.4); border-radius: 6px; padding: 0 .3rem; }
+    #ei-page .ei-combo-menu li.ei-combo-more { font-size: .68rem; opacity: .7; padding: .35rem .6rem; }
+    #ei-page .ei-combo-menu li.ei-combo-more:hover { background: transparent; }
 
     /* Document list --------------------------------------------------- */
     #ei-page .ei-doc-row {
@@ -350,5 +352,5 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260721e"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260721f"></script>
 {% endblock extra_javascript %}

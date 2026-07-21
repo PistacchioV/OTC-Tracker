@@ -103,24 +103,48 @@
 
     /* ---- searchable counterparty combo ---------------------------------- */
     var comboKbd = -1;
+    var COMBO_PAGE = 60;
+    var comboLimit = COMBO_PAGE;     // grows as the user scrolls the menu
+    function comboFilter(q) {
+        q = (q || '').trim().toLowerCase();
+        return state.clients.filter(function (c) {
+            return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.spn && c.spn.indexOf(q) >= 0);
+        });
+    }
     function renderCombo(q) {
         var menu = $('eiClientMenu');
-        q = (q || '').trim().toLowerCase();
-        var list = state.clients.filter(function (c) {
-            return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.spn && c.spn.indexOf(q) >= 0);
-        }).slice(0, 60);
-        if (!list.length) {
+        var all = comboFilter(q);
+        var list = all.slice(0, comboLimit);
+        if (!all.length) {
             menu.innerHTML = '<li class="text-muted" style="cursor:default">No match</li>';
         } else {
-            menu.innerHTML = list.map(function (c, i) {
+            var html = list.map(function (c, i) {
                 return '<li data-name="' + esc(c.name) + '"' + (i === comboKbd ? ' class="ei-kbd-active"' : '') + '>' +
                     '<span>' + esc(c.name) + '</span>' +
                     (c.on_disk === false ? '<span class="ei-nofolder">no folder</span>' : '') +
                     (c.spn ? '<span class="ei-combo-spn">SPN ' + esc(c.spn) + '</span>' : '') +
                     '</li>';
             }).join('');
+            if (all.length > list.length) {
+                html += '<li class="ei-combo-more text-muted text-center" style="cursor:default">' +
+                        list.length + ' of ' + all.length + ' — scroll for more</li>';
+            }
+            menu.innerHTML = html;
         }
         menu.classList.add('show');
+    }
+    // Grow the rendered slice when the user scrolls near the bottom, preserving the
+    // current scroll position (innerHTML rebuild would otherwise jump to the top).
+    function comboMaybeLoadMore() {
+        var menu = $('eiClientMenu');
+        var total = comboFilter($('eiClientInput').value).length;
+        if (comboLimit >= total) return;
+        if (menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 48) {
+            var keep = menu.scrollTop;
+            comboLimit += COMBO_PAGE;
+            renderCombo($('eiClientInput').value);
+            menu.scrollTop = keep;
+        }
     }
     function closeCombo() { $('eiClientMenu').classList.remove('show'); comboKbd = -1; }
 
@@ -291,15 +315,28 @@
     /* ---- wiring ---------------------------------------------------------- */
     function wire() {
         var input = $('eiClientInput');
-        input.addEventListener('focus', function () { renderCombo(this.value); });
-        input.addEventListener('input', function () { comboKbd = -1; renderCombo(this.value); });
+        input.addEventListener('focus', function () { comboLimit = COMBO_PAGE; renderCombo(this.value); });
+        input.addEventListener('input', function () { comboKbd = -1; comboLimit = COMBO_PAGE; renderCombo(this.value); });
         input.addEventListener('keydown', function (e) {
-            var items = $('eiClientMenu').querySelectorAll('li[data-name]');
-            if (e.key === 'ArrowDown') { e.preventDefault(); comboKbd = Math.min(comboKbd + 1, items.length - 1); renderCombo(this.value); }
+            var menu = $('eiClientMenu');
+            var items = menu.querySelectorAll('li[data-name]');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                // At the bottom of the rendered slice, load the next page first.
+                if (comboKbd + 1 >= items.length && comboLimit < comboFilter(this.value).length) {
+                    comboLimit += COMBO_PAGE; renderCombo(this.value);
+                    items = menu.querySelectorAll('li[data-name]');
+                }
+                comboKbd = Math.min(comboKbd + 1, items.length - 1);
+                renderCombo(this.value);
+            }
             else if (e.key === 'ArrowUp') { e.preventDefault(); comboKbd = Math.max(comboKbd - 1, 0); renderCombo(this.value); }
             else if (e.key === 'Enter') { e.preventDefault(); if (comboKbd >= 0 && items[comboKbd]) selectClient(items[comboKbd].dataset.name); }
-            else if (e.key === 'Escape') { closeCombo(); }
+            else if (e.key === 'Escape') { closeCombo(); return; }
+            var act = menu.querySelector('li.ei-kbd-active');
+            if (act) act.scrollIntoView({ block: 'nearest' });
         });
+        $('eiClientMenu').addEventListener('scroll', comboMaybeLoadMore);
         $('eiClientMenu').addEventListener('mousedown', function (e) {
             var li = e.target.closest('li[data-name]');
             if (li) { e.preventDefault(); selectClient(li.dataset.name); }
