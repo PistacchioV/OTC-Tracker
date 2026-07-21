@@ -1310,6 +1310,30 @@ function formatExportData(data, row, column, node) {
 
 $(document).ready(function() {
 
+    // Aging column filter with comparison operators (>, <, >=, <=). When set, this
+    // numeric predicate replaces the plain substring search on the Aging column
+    // (col 6). e.g. ">30" → aging > 30, ">=30" → aging >= 30, "<15" → aging < 15.
+    var agingFilter = null;
+    function _makeAgingOpFilter(raw) {
+        var m = String(raw == null ? '' : raw).trim().match(/^(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)$/);
+        if (!m) return null;
+        var op = m[1], n = parseFloat(m[2]);
+        return function (aging) {
+            if (isNaN(aging)) return false;
+            if (op === '>')  return aging >  n;
+            if (op === '<')  return aging <  n;
+            if (op === '>=') return aging >= n;
+            if (op === '<=') return aging <= n;
+            return true;
+        };
+    }
+    // Custom DataTables search: apply the Aging operator predicate to col 6.
+    $.fn.dataTable.ext.search.push(function (settings, data) {
+        if (settings.nTable.id !== 'pending-confirmation-table' || !agingFilter) return true;
+        var aging = parseInt(String(data[6] == null ? '' : data[6]).replace(/[^0-9-]/g, ''), 10);
+        return agingFilter(aging);
+    });
+
     // ========================================================================
     // INICIALIZAÇÃO DA DATATABLE
     // ========================================================================
@@ -1332,6 +1356,20 @@ $(document).ready(function() {
             selector: 'td:not(:nth-child(1)):not(:nth-child(2))'
         },
         columnDefs: [
+            {
+                // Date columns (dd/mm/yyyy) sort chronologically via an orthogonal
+                // yyyymmdd key — otherwise DataTables sorts them as plain strings
+                // (by day), so clicking the header never ordered oldest↔newest.
+                // Trade/Maturity/EA/Send/Return/Baixa Sem Abono/Pendência/Abono.
+                targets: [8, 9, 13, 14, 15, 21, 22, 23],
+                render: function (data, type) {
+                    if (type === 'sort' || type === 'type') {
+                        var m = String(data == null ? '' : data).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                        return m ? (m[3] + m[2] + m[1]) : '';
+                    }
+                    return data;
+                }
+            },
             {
                 orderable: false,
                 targets: [0, 1],
@@ -1451,6 +1489,19 @@ $(document).ready(function() {
                     var columnIndex = input.closest('th').cellIndex;
                     if (searchTimer) clearTimeout(searchTimer);
                     searchTimer = setTimeout(function() {
+                        // Aging (col 6): support comparison operators (>, <, >=, <=).
+                        if (columnIndex === 6) {
+                            var f = _makeAgingOpFilter(value), had = !!agingFilter;
+                            agingFilter = f;
+                            if (f) {                                  // operator → numeric predicate
+                                if (api.column(6).search()) api.column(6).search('');
+                                api.draw();
+                                return;
+                            }
+                            // No operator → plain substring; force a redraw if we just
+                            // dropped a numeric predicate but the substring is unchanged.
+                            if (had && api.column(6).search() === value) { api.draw(); return; }
+                        }
                         if (api.column(columnIndex).search() !== value) {
                             // smart:false → plain substring match (skips DataTables'
                             // multi-term regex build), a little faster per draw.
@@ -1471,6 +1522,7 @@ $(document).ready(function() {
                         inp.value = '';
                     });
                     // Resetar a busca de todas as colunas + busca global e redesenhar
+                    agingFilter = null;                 // limpa o filtro numérico de Aging (>, <, >=, <=)
                     api.columns().search('');
                     api.search('');
                     api.draw();
