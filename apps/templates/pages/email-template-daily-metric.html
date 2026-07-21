@@ -14,7 +14,11 @@
     {% elif pc < 0 %}{% set c='#16a34a' %}{% set bg='#e7f6ec' %}{% set ar='▼' %}
     {% elif pc > 0 %}{% set c='#dc2626' %}{% set bg='#fdecec' %}{% set ar='▲' %}
     {% else %}{% set c='#6e6e73' %}{% set bg='#f1f1f3' %}{% set ar='►' %}{% endif %}
-    <span style="display:inline-block;background:{{ bg }};color:{{ c }};font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">{{ ar }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</span>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;"><tr>
+        <td bgcolor="{{ bg }}" style="border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap;">
+            <font color="{{ c }}">{{ ar }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</font>
+        </td>
+    </tr></table>
 {%- endmacro %}
 {# ── email-safe bar chart: value on top, coloured bar, month/day below ── #}
 {% macro barchart(bars, accent) -%}
@@ -24,7 +28,7 @@
             <div style="font-size:10px;font-weight:700;color:#5b6470;margin-bottom:3px;line-height:1;">{{ b.value }}</div>
             <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center"><tr>
                 <td height="{{ b.h }}" width="16" bgcolor="{{ accent }}"
-                    style="height:{{ b.h }}px;width:16px;background:{{ accent }};border-radius:3px 3px 0 0;font-size:1px;line-height:1px;mso-line-height-rule:exactly;">&nbsp;</td>
+                    style="border-radius:3px 3px 0 0;font-size:1px;line-height:1px;mso-line-height-rule:exactly;">&nbsp;</td>
             </tr></table>
             <div style="font-size:9px;color:#9aa0a8;margin-top:4px;line-height:1;white-space:nowrap;">{{ b.label }}</div>
         </td>
@@ -148,10 +152,9 @@
                             </thead>
                             <tbody>
                                 {% for row in pivot %}
-                                <tr style="background:{% if loop.index0 % 2 == 0 %}#ffffff{% else %}#f5f7fa{% endif %};">
-                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;white-space:nowrap;
-                                               {% if row.digital %}background:#5aa469;color:#ffffff;{% else %}color:#1a1a2e;{% endif %}">
-                                        {{ row.group }}</td>
+                                <tr bgcolor="{{ '#ffffff' if loop.index0 % 2 == 0 else '#f5f7fa' }}">
+                                    <td bgcolor="{{ '#5aa469' if row.digital else '' }}" style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;white-space:nowrap;">
+                                        <font color="{{ '#ffffff' if row.digital else '#1a1a2e' }}">{{ row.group }}</font></td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b1 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b2 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b3 or '' }}</td>
