@@ -4361,3 +4361,84 @@ apps/static/js/pages/metrics-pending-confirmation.js   ← NOVO (Chart.js: combo
 apps/static/data/pending-confirmation-metrics-history.json  ← NOVO seed do histórico >30d
 apps/templates/partials/sidenav.html                   ← link Metrics → /metrics-pending-confirmation
 ```
+
+---
+
+## 92. Sessão 2026-07-20/21 — Metrics PC: Top 5 Bankers por contratos + cor semântica do change (`7aca230`, `6277acc`)
+
+- **Top 5 Bankers** passou a contar **nº de contratos/confirmações** por grupo Owner (cada linha = um
+  contrato), não clientes distintos. Rótulo/tooltip = "Contracts".
+- **Cor semântica do "change"** no gráfico de histórico (pendência é métrica que se quer reduzir):
+  linha/pontos ficam **verdes ao cair (bom)**, **cinza estável**, **vermelhos ao subir (ruim)**. Segmentos
+  coloridos pelo ponto de destino, legenda e seta no tooltip. Consistente com o badge do KPI.
+
+
+## 93. Sessão 2026-07-20/21 — Dashboard/Forecast: manter SWAP CEMHYB (e todo produto padrão) em zero (`ec4c6ba`)
+
+`_forecast_matrix` só incluía produtos presentes no `mapping`, então um produto sem liquidação na janela
+(ex.: **SWAP CEMHYB**, sem hybrids nos próximos 30 dias úteis) **sumia** do gráfico e do e-mail. Agora
+`_forecast_payload` faz **seed de `_FCST_PRODUCT_ORDER` com série zero** antes da matriz — o conjunto de
+produtos fica estável e nenhum desaparece.
+
+
+## 94. Sessão 2026-07-20/21 — Pending Confirmation: widgets, filtro Aging e ordenação de datas (`655b43d`, `51fd62d`)
+
+- **Widgets (contagem):** o total de cada faixa de Aging voltou a contar **todas** as linhas pendentes (=
+  tabela/Excel; ex.: >30 = 329), e cada card ganhou uma **linha "Others"** (catch-all no JS: 8 tipos
+  conhecidos + `others`) — a quebra sempre soma o total. Culpado eram linhas com Pending Status fora dos 8
+  tipos (ex.: **"Exception Fep Web"**). A tentativa anterior (total = soma dos 8) subcontava; revertida.
+- **Filtro Aging com operadores** na linha de filtro por coluna: `>30`, `>=30`, `<15`, `<=30` (custom
+  search numérico do DataTables; número puro segue substring). "Clear Filters" reseta.
+- **Ordenação de datas** (Trade/Maturity/EA/Send/Return/Baixa/Pendência/Abono): `columnDef` com `render`
+  ortogonal `yyyymmdd` — antes ordenavam como texto `dd/mm/yyyy` (por dia).
+
+
+## 95. Sessão 2026-07-20/21 — Daily Metric: e-mail real (crescimento >30d + pivot) (`ae7d1db`, `3f0a3b0`, `31a1e90`)
+
+O card Daily Metric passou a enviar um **e-mail real** (`email-template-daily-metric.html`), modelado no
+relatório externo:
+- **Métrica de crescimento >30d** visual e enxuta: número + tendência colorida MoM + **gráfico de barras**
+  (valor em cima, mês/ano embaixo, email-safe via atributos `height`/`bgcolor`) + **2º gráfico diário**
+  (day-over-day, mês corrente).
+- **Pivot por ECONOMIC GROUP** (do **RefData.json**, por SPN→nome), **verde/FepWeb = SIGNATURE TYPE
+  DIGITAL** do grupo, banker do RefData, Operations fixo = **Priscila Babilonia**, Business em linha única.
+- **Gotchas:** o `RefData.json` tem `ECONOMIC GROUP`/`SIGNATURE TYPE`/`BANKER` por contraparte (helpers
+  `_pc_refdata_lookup`, `_pc_metrics_pivot`, `_pc_bar_series`). Colisão de nome: existe outro `_MONTH_ABBR`
+  (dict) no módulo → o do daily-metric é `_DM_MONTH_ABBR`. Jinja **nunca** dentro de `style="..."` (o
+  linter CSS do VSCode reclama) — valores dinâmicos via atributos `bgcolor`/`height`/`<font color>`.
+
+
+## 96. Sessão 2026-07-20/21 — Weekly Escalation CEM/EDG: card + e-mail (`6503e8f`)
+
+Novo card no Control Panel (**TO/CC** persistidos em `weekly_escalation_recipients.json`, mesmo tamanho dos
+demais), para rodar **toda sexta**. Envia `email-template-weekly-escalation.html`: pendentes **>30 dias**
+divididos por **LOB (CEM e EDG)** — match exato normalizado (`cem`/`edg`, evita `CEMHYB`) —, agrupados por
+**banker** (RefData, total por banker) e quebrados por **EMPRESA/cliente** (não grupo econômico). Endpoints
+`/api/control-panel/weekly-escalation/{recipients,run}` sob acesso por card. Run é manual (não há scheduler
+automático de sexta — a cadência é operacional).
+
+
+### Commits (continuação sessão 2026-07-20/21)
+```
+7aca230  metrics: Top 5 Bankers por quantidade de contratos
+ec4c6ba  dashboard/forecast: manter SWAP CEMHYB (produto padrão) em zero
+655b43d  pending-confirmation: total conta todas as linhas + linha Others
+51fd62d  pending-confirmation: filtro Aging (>, <, >=, <=) + ordenação de datas
+6277acc  metrics: cor semântica do change (down=verde/flat=cinza/up=vermelho)
+ae7d1db  daily-metric: template do e-mail (crescimento >30d + pivot)
+3f0a3b0  daily-metric: pivot por grupo econômico (RefData) + barras + day-over-day
+31a1e90  daily-metric: remover Jinja de dentro de style= (linter CSS)
+6503e8f  control-panel: card + e-mail de Weekly Escalation CEM/EDG (>30 dias)
+```
+
+### Arquivos (continuação sessão 2026-07-20/21)
+```
+apps/pages/routes.py                                   ← forecast seed; Daily Metric e-mail (pivot/barras/RefData); Weekly Escalation (card/endpoints/dados)
+apps/templates/pages/metrics-pending-confirmation.html ← (n/a)
+apps/static/js/pages/metrics-pending-confirmation.js   ← Top5 Bankers=contratos; cor semântica do change
+apps/templates/pages/pending-confirmation.html         ← widgets (Others/total); filtro Aging operadores; ordenação datas
+apps/templates/pages/email-template-daily-metric.html  ← NOVO template (crescimento >30d + pivot grupo econômico)
+apps/templates/pages/email-template-weekly-escalation.html ← NOVO template (CEM/EDG por banker/empresa)
+apps/templates/pages/control-panel.html                ← card Weekly Escalation (TO/CC) + JS + acesso
+apps/static/data/control-panel/weekly_escalation_recipients.json ← destinatários TO/CC (runtime; não versionar)
+```
