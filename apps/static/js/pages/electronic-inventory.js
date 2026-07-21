@@ -212,9 +212,22 @@
 
         var body = $('eiPreviewBody');
         if (d.previewable) {
-            body.innerHTML = '<iframe class="ei-preview-frame" id="eiFrame" src="' + fileUrl(rel, false) + '"></iframe>';
+            // Loading veil while the PDF streams from the (possibly slow) network
+            // share — hidden as soon as the iframe fires 'load'.
+            body.innerHTML =
+                '<div class="ei-preview-loading" id="eiPvLoad">' +
+                    '<div class="ei-spin"></div>' +
+                    '<div class="fs-sm">Loading PDF…</div>' +
+                    '<div class="fs-xxs text-muted text-truncate px-3" style="max-width:90%">' + esc(d.name) + '</div>' +
+                '</div>' +
+                '<iframe class="ei-preview-frame" id="eiFrame" title="PDF preview"></iframe>';
             var fr = $('eiFrame');
-            fr.addEventListener('load', function () { fr.classList.add('ready'); });
+            fr.addEventListener('load', function () {
+                fr.classList.add('ready');
+                var ld = $('eiPvLoad'); if (ld) ld.remove();
+            });
+            // Set src AFTER wiring the handler so a fast cache hit still clears the veil.
+            fr.src = fileUrl(rel, false);
         } else {
             body.innerHTML = '<div class="ei-empty"><i class="ti ti-file-download ei-empty-ico"></i>' +
                 '<div class="fw-semibold">No inline preview for .' + esc((d.ext || '').toLowerCase()) + '</div>' +

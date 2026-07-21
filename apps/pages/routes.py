@@ -15631,6 +15631,15 @@ def _ei_resolve_client_dir(client, create=False):
     if create:
         _ensure_counterparty_folders(client)
     root, actual, key = ELECTRONIC_INVENTORY_ROOT, folder, folder.upper()
+    # Fast path: reuse the cached share scan (folder-name map) instead of a fresh
+    # os.listdir() of the whole network share on every documents/file request.
+    try:
+        with _EI_ROOT_CACHE_LOCK:
+            cached = _EI_ROOT_CACHE['dirs'].get(key) if _EI_ROOT_CACHE.get('complete') else None
+    except Exception:
+        cached = None
+    if cached:
+        return os.path.join(root, cached)
     try:
         if os.path.isdir(root):
             for entry in os.listdir(root):
@@ -15665,12 +15674,15 @@ def _ei_iter_files(base, doctype):
         for fn in files:
             if fn.startswith('.') or fn.startswith('~$'):
                 continue
+            ext = os.path.splitext(fn)[1].lower()
+            # Only PDF documents are listed/previewed on this page.
+            if ext != '.pdf':
+                continue
             full = os.path.join(dirpath, fn)
             try:
                 st = os.stat(full)
             except Exception:
                 continue
-            ext = os.path.splitext(fn)[1].lower()
             rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
             parts = [p for p in rel_within.split('/') if p and p != '.']
             doc_date = ''
