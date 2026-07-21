@@ -10502,7 +10502,11 @@ _PC_PASTDUE_STATUS = 'Exception Digital Fep Web'
 
 
 def _pc_is_ok_status(v):
-    return _pc_norm(v) in _PC_OK_STATUSES
+    # ANY "Exception *" status (Exception, Exception FepWeb, Exception Digital Fep
+    # Web, …) counts as resolved/OK — it is NOT an outstanding confirmation, so it
+    # must not feed the pending metrics. Kept alongside the explicit resolved set.
+    n = _pc_norm(v)
+    return n.startswith('exception') or n in _PC_OK_STATUSES
 
 
 def _pc_cutoff_date():
@@ -15949,6 +15953,11 @@ def _pc_latest_snapshot_rows():
     """Newest daily pending-confirmation snapshot as a list of row dicts. Walks
     back a few days if today's isn't written yet; falls back to the live pending
     DB when no snapshot exists at all. Returns (rows, source_label)."""
+    def _pending_only(rows):
+        # Defensive: a snapshot taken under older rules may still contain rows whose
+        # Pending Status is now considered OK (any Exception*). Drop them so the
+        # metrics never count a resolved confirmation as pending.
+        return [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
     try:
         for back in range(0, 40):
             d = datetime.now() - timedelta(days=back)
@@ -15958,11 +15967,11 @@ def _pc_latest_snapshot_rows():
                 with open(p, encoding='utf-8') as fh:
                     rows = json.load(fh)
                 if isinstance(rows, list):
-                    return rows, d.strftime('%Y-%m-%d')
+                    return _pending_only(rows), d.strftime('%Y-%m-%d')
     except Exception:
         log.warning('[pc-metrics] snapshot scan failed:\n%s', traceback.format_exc())
     try:
-        return _pc_load_rows('pending'), 'live'
+        return _pending_only(_pc_load_rows('pending')), 'live'
     except Exception:
         return [], 'none'
 

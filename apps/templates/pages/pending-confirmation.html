@@ -2039,6 +2039,9 @@ $(document).ready(function() {
         // Pending Status (col 11).
         table.rows({ search: 'applied' }).data().each(function(d) {
             if (!d || d.length < 12) return;
+            // Any "Exception *" Pending Status is treated as OK (resolved) — it is
+            // NOT an outstanding confirmation, so it must not feed the widgets.
+            if (/^\s*exception/i.test(_pcStrip(d[11]))) return;
             var days  = parseInt(_pcStrip(d[6]).replace(/[^0-9-]/g, ''), 10);
             var band  = _pcAgingBand(days);
             if (!band) return;
