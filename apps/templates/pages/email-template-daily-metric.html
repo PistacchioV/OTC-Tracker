@@ -177,7 +177,16 @@
                         <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1a1a2e;">
                             Pending confirmations by economic group &amp; aging</p>
                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
-                               style="border-collapse:collapse;font-size:12px;">
+                               style="border-collapse:collapse;font-size:12px;table-layout:fixed;">
+                            <colgroup>
+                                <col style="width:20%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:24%;"/>
+                                <col style="width:24%;"/>
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th rowspan="2" style="background:#e8560f;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Economic Group</th>
@@ -195,14 +204,14 @@
                             <tbody>
                                 {% for row in pivot %}
                                 <tr bgcolor="{{ '#ffffff' if loop.index0 % 2 == 0 else '#f5f7fa' }}">
-                                    <td bgcolor="{{ '#5aa469' if row.digital else '' }}" style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;white-space:nowrap;">
+                                    <td bgcolor="{{ '#5aa469' if row.digital else '' }}" style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;word-break:break-word;">
                                         <font color="{{ '#ffffff' if row.digital else '#1a1a2e' }}">{{ row.group }}</font></td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b1 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b2 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b3 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;font-weight:700;color:#1a1a2e;">{{ row.total }}</td>
-                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ row.banker }}</td>
-                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ row.operations }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;word-break:break-word;">{{ row.banker }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;word-break:break-word;">{{ row.operations }}</td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="7" style="padding:16px;border:1px solid #e6e9ee;text-align:center;color:#8a8f98;">
