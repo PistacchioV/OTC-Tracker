@@ -8,13 +8,30 @@
     <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
     <![endif]-->
 </head>
+{# ── period-over-period change → coloured pill (pending should go DOWN) ── #}
+{% macro trendbadge(pc) -%}
+    {% if pc is none %}{% set c='#6e6e73' %}{% set bg='#f1f1f3' %}{% set ar='' %}
+    {% elif pc < 0 %}{% set c='#16a34a' %}{% set bg='#e7f6ec' %}{% set ar='▼' %}
+    {% elif pc > 0 %}{% set c='#dc2626' %}{% set bg='#fdecec' %}{% set ar='▲' %}
+    {% else %}{% set c='#6e6e73' %}{% set bg='#f1f1f3' %}{% set ar='►' %}{% endif %}
+    <span style="display:inline-block;background:{{ bg }};color:{{ c }};font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">{{ ar }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</span>
+{%- endmacro %}
+{# ── email-safe bar chart: value on top, coloured bar, month/day below ── #}
+{% macro barchart(bars, accent) -%}
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>
+    {% for b in bars %}
+        <td valign="bottom" align="center" style="padding:0 3px;">
+            <div style="font-size:10px;font-weight:700;color:#5b6470;margin-bottom:3px;line-height:1;">{{ b.value }}</div>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center"><tr>
+                <td height="{{ b.h }}" width="16" bgcolor="{{ accent }}"
+                    style="height:{{ b.h }}px;width:16px;background:{{ accent }};border-radius:3px 3px 0 0;font-size:1px;line-height:1px;mso-line-height-rule:exactly;">&nbsp;</td>
+            </tr></table>
+            <div style="font-size:9px;color:#9aa0a8;margin-top:4px;line-height:1;white-space:nowrap;">{{ b.label }}</div>
+        </td>
+    {% endfor %}
+    </tr></table>
+{%- endmacro %}
 <body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
-{# ── period-over-period change → semantic colour (pending should go DOWN) ── #}
-{% set pc = latest_pct %}
-{% if pc is none %}{% set tcolor='#6e6e73' %}{% set tbg='#f1f1f3' %}{% set tarrow='' %}
-{% elif pc < 0 %}{% set tcolor='#16a34a' %}{% set tbg='#e7f6ec' %}{% set tarrow='▼' %}
-{% elif pc > 0 %}{% set tcolor='#dc2626' %}{% set tbg='#fdecec' %}{% set tarrow='▲' %}
-{% else %}{% set tcolor='#6e6e73' %}{% set tbg='#f1f1f3' %}{% set tarrow='►' %}{% endif %}
 
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
        style="background-color:#f4f6f9;padding:40px 0;">
@@ -43,73 +60,81 @@
                         <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
                         <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">
                             Please kindly check the daily analysis over OTC derivatives pending confirmations.
-                            The table below details pending confirmations by client, aging, business owners and
-                            Ops support contacts.</p>
+                            The table below details pending confirmations by economic group, aging, business
+                            owners and Ops support contacts.</p>
                         <p style="color:#666;font-size:12.5px;line-height:1.6;margin:0;">
                             <span style="display:inline-block;width:10px;height:10px;border-radius:2px;
                                          background:#5aa469;vertical-align:middle;margin-right:5px;"></span>
-                            Clients highlighted in <strong style="color:#3f8a54;">green</strong> can electronically
-                            sign confirmations (FepWeb).</p>
+                            Economic groups highlighted in <strong style="color:#3f8a54;">green</strong> can
+                            electronically sign confirmations (FepWeb).</p>
                     </td>
                 </tr>
 
-                <!-- ══ METRIC 1 — Growth of confirmations pending > 30 days ══ -->
+                <!-- ══ METRIC 1 — Growth of confirmations pending > 30 days (monthly) ══ -->
                 <tr>
                     <td style="padding:20px 30px 8px;">
                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
                                style="border:1px solid #eceef2;border-radius:10px;background:#fbfcfe;">
                             <tr>
-                                <!-- headline number -->
-                                <td width="230" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
+                                <td width="210" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
                                     <p style="margin:0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
-                                              text-transform:uppercase;color:#8a8f98;">
-                                        Pending &gt; 30 days</p>
+                                              text-transform:uppercase;color:#8a8f98;">Pending &gt; 30 days</p>
                                     <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
                                         <td style="font-size:40px;font-weight:700;color:#1a1a2e;line-height:1;letter-spacing:-1px;padding-right:10px;">
                                             {{ current_total }}</td>
-                                        <td style="vertical-align:middle;">
-                                            <span style="display:inline-block;background:{{ tbg }};color:{{ tcolor }};
-                                                         font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">
-                                                {{ tarrow }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</span>
-                                        </td>
+                                        <td style="vertical-align:middle;">{{ trendbadge(latest_pct) }}</td>
                                     </tr></table>
                                     <p style="margin:6px 0 0;font-size:11.5px;color:#8a8f98;">
                                         month-over-month{% if prev_total is not none %} · prev. {{ prev_total }}{% endif %}</p>
                                 </td>
-                                <!-- trend sparkline -->
-                                <td style="padding:18px 24px;vertical-align:middle;">
-                                    <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
-                                              text-transform:uppercase;color:#8a8f98;">
-                                        Growth trend · last {{ recent|length }} months</p>
-                                    <div style="font-family:'Cascadia Code','Consolas',monospace;font-size:30px;line-height:1;
-                                                color:#0d6efd;letter-spacing:1px;">{{ spark }}</div>
-                                    {% if recent %}
-                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                                        <tr>
-                                            <td style="font-size:10.5px;color:#a0a4ac;text-align:left;">{{ recent[0].period }}</td>
-                                            <td style="font-size:10.5px;color:#a0a4ac;text-align:right;">{{ recent[-1].period }}</td>
-                                        </tr>
-                                    </table>
-                                    {% endif %}
+                                <td style="padding:16px 22px 14px;vertical-align:bottom;">
+                                    <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Growth trend · last {{ month_bars|length }} months</p>
+                                    {{ barchart(month_bars, '#3b82f6') }}
                                 </td>
                             </tr>
                         </table>
-                        <p style="margin:8px 2px 0;font-size:11px;color:#a0a4ac;">
-                            Lower is better — <span style="color:#16a34a;font-weight:600;">▼ green</span> means fewer
-                            pending, <span style="color:#dc2626;font-weight:600;">▲ red</span> means more.</p>
                     </td>
                 </tr>
 
-                <!-- ══ METRIC 2 — Per-client aging pivot ══ -->
+                <!-- ══ METRIC 2 — Day-over-day (current month) ══ -->
+                {% if day_bars %}
+                <tr>
+                    <td style="padding:8px 30px 8px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border:1px solid #eceef2;border-radius:10px;background:#fbfcfe;">
+                            <tr>
+                                <td width="210" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
+                                    <p style="margin:0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Latest reading</p>
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                                        <td style="font-size:40px;font-weight:700;color:#1a1a2e;line-height:1;letter-spacing:-1px;padding-right:10px;">
+                                            {{ day_total if day_total is not none else current_total }}</td>
+                                        <td style="vertical-align:middle;">{{ trendbadge(day_pct) }}</td>
+                                    </tr></table>
+                                    <p style="margin:6px 0 0;font-size:11.5px;color:#8a8f98;">day-over-day</p>
+                                </td>
+                                <td style="padding:16px 22px 14px;vertical-align:bottom;">
+                                    <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Day-over-day · current month</p>
+                                    {{ barchart(day_bars, '#0ea5e9') }}
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
+
+                <!-- ══ METRIC 3 — Per-economic-group aging pivot ══ -->
                 <tr>
                     <td style="padding:16px 30px 6px;">
                         <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1a1a2e;">
-                            Pending confirmations by client &amp; aging</p>
+                            Pending confirmations by economic group &amp; aging</p>
                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
                                style="border-collapse:collapse;font-size:12px;">
                             <thead>
                                 <tr>
-                                    <th rowspan="2" style="background:#e8560f;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Client</th>
+                                    <th rowspan="2" style="background:#e8560f;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Economic Group</th>
                                     <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">30-59 days</th>
                                     <th colspan="2" style="background:#c0392b;color:#fff;text-align:center;padding:4px 8px;border:1px solid #ffffff;font-weight:700;font-size:11px;">Potential DNT</th>
                                     <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;">TOTAL</th>
@@ -124,14 +149,14 @@
                             <tbody>
                                 {% for row in pivot %}
                                 <tr style="background:{% if loop.index0 % 2 == 0 %}#ffffff{% else %}#f5f7fa{% endif %};">
-                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;
-                                               {% if row.fepweb %}background:#5aa469;color:#ffffff;{% else %}color:#1a1a2e;{% endif %}">
-                                        {{ row.client }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;white-space:nowrap;
+                                               {% if row.digital %}background:#5aa469;color:#ffffff;{% else %}color:#1a1a2e;{% endif %}">
+                                        {{ row.group }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b1 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b2 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b3 or '' }}</td>
                                     <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;font-weight:700;color:#1a1a2e;">{{ row.total }}</td>
-                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;">{{ row.bankers }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ row.banker }}</td>
                                     <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ row.operations }}</td>
                                 </tr>
                                 {% else %}

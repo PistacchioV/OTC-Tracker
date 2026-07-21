@@ -3355,58 +3355,84 @@ def _parse_emails(raw):
 
 
 _DAILY_METRIC_OPERATIONS = 'Priscila Babilonia'   # Ops support contact — fixed for now.
+_DM_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 
-def _pc_is_fepweb(r):
-    """Green highlight = the client can electronically sign (FepWeb). Heuristic:
-    the row's Signature Type or Pending Status indicates a digital / FepWeb
-    signature (adjust if the source carries an explicit flag)."""
-    blob = _pc_norm(r.get('Signature Type', '')) + '|' + _pc_norm(r.get('Pending Status', ''))
-    return ('digital' in blob) or ('fepweb' in blob)
+def _pc_refdata_lookup(r, by_spn, by_name):
+    """RefData.json record for a pending row (by SPN first, then counterparty name)."""
+    spn = r.get('SPN', '')
+    rec = by_spn.get(_norm_spn(spn)) if spn else None
+    if rec is None:
+        rec = by_name.get(_pc_norm(r.get('Client', '')))
+    return rec or {}
 
 
 def _pc_metrics_pivot(rows):
-    """Per-client aging buckets for rows pending >= 30 days: 30-59 / 60-89 / >=90,
-    plus the banker group and the FepWeb (green) flag. Sorted by total desc.
-    Returns (rows[], totals)."""
-    by_client = {}
+    """Per-ECONOMIC-GROUP aging buckets for rows pending >= 30 days (30-59 / 60-89 /
+    >=90), plus the banker group and the digital-signature (FepWeb/green) flag. The
+    economic group, banker and signature type all come from RefData.json (matched by
+    SPN, then counterparty name); a group is green when RefData marks its signature
+    type DIGITAL. Sorted by total desc. Returns (rows[], totals)."""
+    by_spn = _fxo_refdata_by_spn()
+    by_name = _pc_refdata_by_name()
+    groups = {}
     for r in rows:
         a = _pc_metrics_int(r.get('Aging'))
         if a is None or a < 30:
             continue
-        client = str(r.get('Client', '') or '').strip() or '(no client)'
-        d = by_client.setdefault(client, {'b1': 0, 'b2': 0, 'b3': 0, 'bankers': '', 'fepweb': False})
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        group = (str(rec.get('ECONOMIC GROUP', '') or '').strip()
+                 or str(r.get('Economic Group', '') or '').strip()
+                 or str(r.get('Client', '') or '').strip()
+                 or '(no group)')
+        d = groups.setdefault(group, {'b1': 0, 'b2': 0, 'b3': 0, 'banker': '', 'digital': False})
         if a < 60:
             d['b1'] += 1
         elif a < 90:
             d['b2'] += 1
         else:
             d['b3'] += 1
-        if not d['bankers']:
-            d['bankers'] = str(r.get('Owner', '') or '').strip()   # whole banker group
-        if _pc_is_fepweb(r):
-            d['fepweb'] = True
+        if not d['banker']:
+            d['banker'] = str(rec.get('BANKER', '') or r.get('Owner', '') or '').strip()
+        if _pc_norm(rec.get('SIGNATURE TYPE', '')) == 'digital':
+            d['digital'] = True
     out = []
-    for client, d in by_client.items():
+    for group, d in groups.items():
         total = d['b1'] + d['b2'] + d['b3']
-        out.append({'client': client, 'b1': d['b1'], 'b2': d['b2'], 'b3': d['b3'],
-                    'total': total, 'bankers': d['bankers'], 'fepweb': d['fepweb'],
+        out.append({'group': group, 'b1': d['b1'], 'b2': d['b2'], 'b3': d['b3'],
+                    'total': total, 'banker': d['banker'], 'digital': d['digital'],
                     'operations': _DAILY_METRIC_OPERATIONS})
-    out.sort(key=lambda x: (-x['total'], x['client'].lower()))
+    out.sort(key=lambda x: (-x['total'], x['group'].lower()))
     totals = {'b1': sum(x['b1'] for x in out), 'b2': sum(x['b2'] for x in out),
               'b3': sum(x['b3'] for x in out), 'total': sum(x['total'] for x in out)}
     return out, totals
 
 
-def _sparkline(vals):
-    """Compact unicode block sparkline (email-safe, no images/JS)."""
-    blocks = '▁▂▃▄▅▆▇█'
-    vals = [v for v in vals if v is not None]
-    if not vals:
-        return ''
-    lo, hi = min(vals), max(vals)
-    rng = (hi - lo) or 1
-    return ''.join(blocks[min(7, int((v - lo) / rng * 7))] for v in vals)
+def _pc_bar_series(items, keyfield, labelfn, maxpx=60):
+    """Turn a history slice into bar cells with a pixel height proportional to the
+    max value — an email-safe (image/JS-free) bar chart. Each cell: {label,value,h}."""
+    vals = [it.get('volume') or 0 for it in items]
+    hi = max(vals) if vals else 0
+    hi = hi or 1
+    return [{'label': labelfn(it[keyfield]), 'value': it.get('volume') or 0,
+             'h': max(3, int(round((it.get('volume') or 0) * maxpx / hi)))} for it in items]
+
+
+def _fmt_month_lbl(period):     # "2025-07" -> "Jul/25"
+    try:
+        y, m = period.split('-')
+        return '{}/{}'.format(_DM_MONTH_ABBR[int(m)], y[2:])
+    except Exception:
+        return period
+
+
+def _fmt_day_lbl(date):         # "2026-07-01" -> "01/07"
+    try:
+        _, m, dd = date.split('-')
+        return '{}/{}'.format(dd, m)
+    except Exception:
+        return date
 
 
 def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
@@ -3418,20 +3444,26 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
         ref_fmt = ref.strftime('%d/%m/%Y')
         rows, source = _pc_latest_snapshot_rows()
         pivot, totals = _pc_metrics_pivot(rows)
-        monthly = (_pc_metrics_history().get('gt30') or {}).get('monthly') or []
-        recent = monthly[-13:]
-        spark = _sparkline([m['volume'] for m in recent])
-        latest = monthly[-1] if monthly else {}
-        prev = monthly[-2] if len(monthly) >= 2 else {}
+        hist = _pc_metrics_history().get('gt30') or {}
+        monthly = hist.get('monthly') or []
+        daily = hist.get('daily') or []
+        recent_m = monthly[-13:]
+        month_bars = _pc_bar_series(recent_m, 'period', _fmt_month_lbl)
+        day_bars = _pc_bar_series(daily, 'date', _fmt_day_lbl)
+        latest_m = monthly[-1] if monthly else {}
+        prev_m = monthly[-2] if len(monthly) >= 2 else {}
+        latest_d = daily[-1] if daily else {}
 
         html = render_template(
             'pages/email-template-daily-metric.html',
             ref_date_fmt=ref_fmt,
             current_total=totals['total'],
-            month_total=latest.get('volume'),
-            prev_total=prev.get('volume'),
-            latest_pct=latest.get('pct'),
-            spark=spark, recent=recent,
+            month_total=latest_m.get('volume'),
+            prev_total=prev_m.get('volume'),
+            latest_pct=latest_m.get('pct'),
+            day_pct=latest_d.get('pct'),
+            day_total=latest_d.get('volume'),
+            month_bars=month_bars, day_bars=day_bars,
             pivot=pivot, totals=totals,
             current_year=datetime.now().year)
 
