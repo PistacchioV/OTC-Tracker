@@ -3794,11 +3794,11 @@ def _sigcoll_to_emails(cp):
     return ems
 
 
-def _sigcoll_cc_emails(rec, bankers):
-    """Cc = the counterparty's bankers (RefData BANKER group → per-name e-mail) plus
+def _sigcoll_cc_emails(banker_group, bankers):
+    """Cc = the counterparty's bankers (banker-group string → per-name e-mail) plus
     the fixed Ops mailboxes. Deduplicated, order preserved."""
     out, seen = [], set()
-    for name in re.split(r'[;,/&]| e ', str((rec or {}).get('BANKER', '') or '')):
+    for name in re.split(r'[;,/&]| e ', str(banker_group or '')):
         em = bankers.get(_pc_norm(name))
         if em and em.lower() not in seen:
             seen.add(em.lower())
@@ -3870,9 +3870,15 @@ def _sigcoll_groups():
                    or str(r.get('Client', '') or '').strip() or 'Counterparty')
         spn = _norm_spn(r.get('SPN', ''))
         disc = _sigcoll_disclaimer(_pc_norm(r.get('Pending Status', '')))
+        # Banker group: RefData BANKER when present, else the row's Owner column
+        # (which the Pending Confirmation page populates with the banker names).
+        banker = (str((rec or {}).get('BANKER', '') or '').strip()
+                  or str(r.get('Owner', '') or '').strip())
         key = (disc, spn or cp_name.upper())
-        g = groups.setdefault(key, {'cp_name': cp_name, 'spn': spn, 'rec': rec,
+        g = groups.setdefault(key, {'cp_name': cp_name, 'spn': spn, 'banker': banker,
                                     'disclaimer': disc, 'rows': []})
+        if not g['banker'] and banker:
+            g['banker'] = banker
         g['rows'].append(r)
     return sorted(groups.values(), key=lambda g: (g['cp_name'].upper(), g['disclaimer']))
 
@@ -3889,7 +3895,7 @@ def _sigcoll_build_drafts():
                 g['disclaimer'], g['cp_name']),
             'html': _sigcoll_email_html(g['rows']),
             'to': '; '.join(_sigcoll_to_emails(cp)),
-            'cc': '; '.join(_sigcoll_cc_emails(g['rec'], bankers)),
+            'cc': '; '.join(_sigcoll_cc_emails(g['banker'], bankers)),
         })
     return drafts
 
@@ -3902,7 +3908,7 @@ def api_cp_signature_collection_preview():
     bankers = _sigcoll_bankers_index()
     items = []
     for g in _sigcoll_groups():
-        cc = _sigcoll_cc_emails(g['rec'], bankers)
+        cc = _sigcoll_cc_emails(g['banker'], bankers)
         items.append({'counterparty': g['cp_name'], 'disclaimer': g['disclaimer'],
                       'confirmations': len(g['rows']), 'cc_count': len(cc)})
     return jsonify({'success': True, 'drafts': len(items),
