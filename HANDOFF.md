@@ -4442,3 +4442,163 @@ apps/templates/pages/email-template-weekly-escalation.html ← NOVO template (CE
 apps/templates/pages/control-panel.html                ← card Weekly Escalation (TO/CC) + JS + acesso
 apps/static/data/control-panel/weekly_escalation_recipients.json ← destinatários TO/CC (runtime; não versionar)
 ```
+
+
+## 97. Sessão 2026-07-21 — Control Panel duas seções + Live Position ordenação + Pending filtros AND (`661d741`, `11407d4`, `f735916`)
+
+- **Control Panel — duas seções com header** (`661d741`): todos os cards passam a viver sob um bloco
+  header+cards, garantindo que cada card tenha título/agrupamento visível (antes um grupo ficava sem cabeçalho).
+- **Live Position — ordenação cronológica das colunas de data** (`11407d4`): NDF/Swap/Option ordenam as
+  colunas de data por data real (não string), consistente com a Média Asiática (ver §85).
+- **Pending Confirmation — filtros de coluna interligados (AND)** (`f735916`): múltiplos filtros de coluna
+  aplicam em conjunto (AND) + ajustes no modal.
+
+
+## 98. Sessão 2026-07-21 — NOVA página Electronic Inventory (biblioteca de docs por contraparte)
+
+Nova página **Electronic Inventory** — biblioteca de documentos (PDF) por contraparte, lendo do share `I:`.
+Sequência de commits pela ordem em que os problemas apareceram no ambiente JP:
+
+- `c9b9d3f` — página inicial (dropdown de contrapartes + lista de docs + preview).
+- `5676738` — estado visível quando o fetch de contrapartes falha (sessão/rede) + bump de cache do JS.
+- `7cf68db` — **dropdown com fundo opaco** (light/dark, `#ffffff`/`#1b1e24`) + z-index/sombra maiores — não
+  fica mais transparente/confuso (`var(--bs-body-bg)` não era opaco sob o tema glass).
+- `05cdf7e` — **varredura do share `I:` com timeout (4s)** — não trava mais quando o drive de rede está lento;
+  nomes do RefData carregam na hora, status `share slow`.
+- `7ae6668` — **cache + background-warm** da varredura; badge **"no folder" só quando o scan COMPLETO**
+  confirma ausência (tri-state `on_disk`: `False`=ausente, `None`=ainda escaneando), com repolling a cada 4s —
+  não marca mais falso "no folder" enquanto o `I:` ainda está sendo lido.
+- `c611be1` — **PDF viewer em card próprio abaixo da lista**; lista **só PDFs** (`ext != '.pdf': continue`);
+  viewer alto (78vh) com spinner de loading; resolve de pasta usa o **cache do scan** (sem re-`listdir` do
+  share) — muito mais rápido.
+- `cab0a35` — **dropdown pagina ao rolar** (paginação incremental de 60, preservando scroll) — antes limitava
+  em 60 e parava na ~"AUMOVIO"; teclado também avança e faz `scrollIntoView`.
+
+Engine (routes.py): `_ei_scan_root_worker()`/`_ei_scan_root(grace=6.0)` + `_EI_ROOT_CACHE`
+(ts/exists/dirs/complete/scanning) sob `_EI_ROOT_CACHE_LOCK`; `api_ei_clients` devolve
+`scan_complete`/`share_slow` e `on_disk` tri-state; `_ei_resolve_client_dir` usa `_EI_ROOT_CACHE['dirs']`;
+`_ei_iter_files` filtra `.pdf`.
+
+
+## 99. Sessão 2026-07-21 — Pending Confirmation: `Exception *` conta como OK (`1174a94`, `5b11529`, `074f544`)
+
+Regra: linhas com **`Pending Status = Exception *`** passam a contar como **OK (resolvido)** — excluídas de
+todas as métricas de confirmações pendentes — **tanto na base atual quanto em edições futuras**.
+
+- `1174a94` — no upsert/manutenção, `Exception*` é roteado para o **DB `ok`** (não `pending`); widgets,
+  dashboard e e-mail o excluem; filtro defensivo em snapshots antigos.
+- `5b11529` — **Metrics (>30 dias)**: o histórico exclui `Exception*` ao contar dos snapshots JSON — consistente
+  com widgets/dashboard/e-mail.
+- `074f544` — **filtro STATUS** re-agrupa pela **categoria atual recomputada** (`_pc_target_category`) — rows
+  `Exception*`/`OK` não vazam mais para o filtro **Pending** mesmo antes da migração física entre DBs.
+
+Helper central: `_pc_is_ok_status(v)` = `_pc_norm(v).startswith('exception') or n in _PC_OK_STATUSES`.
+No template `pending-confirmation.html`, `updateWidgets()` pula `^\s*exception` (`_pcStrip(d[11])`).
+
+
+## 100. Sessão 2026-07-21 — Upload modal (Electronic Inventory): menos translúcido + ícone de calendário (`590ccf6`)
+
+Modal Upload liquid-glass mais opaco (escopo local: `#eiUploadModal .modal-content.liquid-glass`
+→ `rgba(255,255,255,0.92)`, dark `rgba(26,29,35,0.94)`) + ícone de calendário (SVG background) no campo `#eiUpDate`.
+
+
+## 101. Sessão 2026-07-21 — E-mails: header de gradiente bulletproof (Outlook + modernos), num partial compartilhado
+
+Longa iteração no header do e-mail **Daily Metric** até funcionar no Outlook do JP, depois **refatorado num
+partial** e aplicado a **todos** os templates. Ordem dos commits (cada um resolveu um sintoma real no Outlook):
+
+`fe3fc8c`→`4a29f82`→`fb93f59` (assinatura "Institutional Services by OTC Tracker"; badges Digitally/Manually
+signed; header azul; texto "OTC Derivatives"; primeira tentativa VML) → `33d93b1` (VML quebrava: logo no canto,
+faixa à direita — voltou ao sólido) → `cc9c54c` (gradiente `#6aa2ea→#4f8ae2→#3f63c9`) → `3bcc58d`/`9164280`
+(gradiente no Outlook via **imagem** — `<td background=url>` e VML `type=frame`; PNG anexado por Content-ID
+`otc_gradient`; helper `_get_email_asset`) → `dbf2953`/`d7aae08`/`e779bc8` (badges 120px iguais; `mso-width-percent`
+= % da **página** causou full-width → revertido para 820px fixo + wrapper mso) → `dea2149` (pivot com
+`table-layout:fixed`+`colgroup`+`word-break` — nomes longos estavam esticando o card >820px e empurrando o
+header) → `73a9acb` (**`<center>` + tabela `align=center`/`margin:auto`** centraliza no Outlook — "bingo").
+
+**Refatoração** (`f926866`): header extraído para **`partials/email-gradient-header.html`** (params
+`header_title`, `header_subtitle|safe`, `header_logo_height`, `header_width`), com **context processor**
+`_inject_email_grad_url` expondo `grad_url` app-wide (`url_for(... 'images/email-header-gradient.png',
+_external=True)`, fallback `cid:otc_gradient`). VML `v:rect`+`v:fill type=frame` para Outlook, `<td background>`
++CSS `linear-gradient` para modernos, sólido `#4f8ae2` quando imagens bloqueadas, logo `display:inline-block`.
+Aplicado ao daily-metric e aos 9 templates. Asset novo: **`apps/static/images/email-header-gradient.png`**
+(820×220, gradiente diagonal). A antiga imagem em `static/data/image` deixou de ser usada.
+
+**Fix largura + emenda** (`98b2302`): `header_width` parametriza VML rect + tabela central — corrige a emenda
+quando o container não é 820px (settlement-forecast/recon 760, accrual/mtm/cetip 600-620, weekly 720). A barra de
+data separada foi recolorida `#1a2c5e→#3f63c9`.
+
+**Fix "divisão" do Settlement Forecast** (`5525d6a`): a barra de data separada era a origem da divisão sob o
+header — **removida**; Reference Date movido para o **subtítulo do header** (`header_subtitle = 'Reference Date
+&nbsp;·&nbsp; <strong>' ~ ref_date_fmt ~ '</strong>'`; recon-* usam `recon_date_fmt`). Header único e coeso nos 8.
+
+
+## 102. Sessão 2026-07-21 — NOVO card "Pending Signature Confirmations — Collection" (`ac252de`, `1433dfe`)
+
+Novo card no Control Panel (inglês + data-lang) que **segrega as confirmações pendentes de assinatura por
+contraparte** e gera **1 `.eml` por contraparte** (num zip) como **rascunho** (header `X-Unsent`) para o Downloads.
+Base de referência: página **Pending Confirmation**; escopo: **Pending Digital Signature + Pending Original**.
+
+- **From**: `is.trade.doc@jpmchase.com`.
+- **To**: contatos do **CounterpartyDetails** (via `otc_emails._contacts_emails`, com fallback para todos os
+  contatos da contraparte).
+- **CC**: **bankers da contraparte** + `brazil.otc.ops@jpmorgan.com` + `is.trade.doc@jpmchase.com` (fixos).
+  Os bankers vêm de **`apps/static/data/signature_collection_bankers.json`** (58 contatos, `{name,email}`, domínios
+  `xx→jpmorgan`/`xxxx→jpmchase`, deduplicado por email). **Resolução do banker**: RefData `BANKER` quando existe,
+  **senão a coluna `Owner`** da linha do Pending Confirmation (`1433dfe` — muitas contrapartes, ex. ABB, têm
+  `BANKER=None` no RefData mas `Owner` preenchido; o grupo é splitado por `[;,/&]| e ` e cada nome resolvido via a
+  JSON de bankers).
+- **Corpo/tabela/assinatura**: conforme legado (Prezados… tabela Aging/Product Type/Trade Date/Maturity
+  Date/Trade Number… portal `www.jpmorganportaldigital.com`… assinatura Banco J.P. Morgan S.A. com telefone da 1ª
+  linha removido e `brsp_otc`→`is.trade.doc@jpmchase.com`). Disclaimer varia: digital→"Pendente de Assinatura
+  Digital", senão "Pendente de Assinatura".
+
+Engine (routes.py): `_sigcoll_groups()` (agrupa por `(disclaimer, spn|nome)`), `_sigcoll_build_drafts()`,
+`_sigcoll_cc_emails(banker_group, bankers)`, `_sigcoll_to_emails`, `_sigcoll_email_html/table_html/signature_html`,
+`_sigcoll_bankers_index()`. Endpoints `/api/control-panel/signature-collection/{preview(GET),generate(POST)}` sob
+acesso por card (registry `signaturecollection`, ícone `ti-writing-sign`); `generate` →
+`otc_emails.build_drafts_download(drafts, _SIGCOLL_FROM)` → attachment + `_create_notification`. i18n: 8 chaves em
+`translations/{en,br,es}.json`.
+
+
+### Commits (sessão 2026-07-21)
+```
+661d741  control-panel: duas seções (header + cards) para todo card ter título
+11407d4  live-position: ordenação cronológica das colunas de data (NDF/Swap/Option)
+f735916  pending-confirmation: filtros de coluna interligados (AND) + modal
+c9b9d3f  electronic-inventory: NOVA página (biblioteca de docs por contraparte)
+5676738  electronic-inventory: estado visível quando o fetch falha + bump cache JS
+7cf68db  electronic-inventory: dropdown com fundo opaco (light/dark) + z-index
+05cdf7e  electronic-inventory: varredura do share I: com timeout (4s) + share slow
+7ae6668  electronic-inventory: cache + warm; 'no folder' só com scan completo (tri-state)
+c611be1  electronic-inventory: PDF viewer em card próprio; só PDFs; resolve via cache
+590ccf6  electronic-inventory: modal Upload menos translúcido + ícone de calendário
+cab0a35  electronic-inventory: dropdown pagina ao rolar (60 incremental, preserva scroll)
+1174a94  pending-confirmation: 'Exception *' conta como OK (excluído das métricas)
+5b11529  metrics-pending-confirmation: histórico >30d exclui Exception* (OK)
+074f544  pending-confirmation: filtro STATUS re-agrupa pela categoria recomputada
+fe3fc8c..73a9acb  email-daily-metric: iteração do header (badges/gradiente/VML/centralização)
+9164280,3bcc58d  email-daily-metric: gradiente no Outlook via imagem (PNG cid/url_for)
+f926866  emails: header de gradiente bulletproof num partial + context processor grad_url
+98b2302  emails: header_width parametrizado (VML+tabela) + recolor barra de data
+5525d6a  emails: remove barra de data separada → Reference Date no subtítulo do header
+ac252de  control-panel: card 'Pending Signature Confirmations — Collection' (.eml/zip)
+1433dfe  signature-collection: CC dos bankers via Owner quando RefData BANKER vazio
+```
+
+### Arquivos (sessão 2026-07-21)
+```
+apps/pages/routes.py                                   ← EI scan/cache/endpoints; _pc_is_ok_status + roteamento Exception*→ok;
+                                                          _get_email_asset + context processor grad_url; feature signature-collection
+apps/pages/otc_emails.py                               ← build_drafts_download/build_eml_bytes/_contacts_emails (reuso p/ signature-collection)
+apps/templates/pages/electronic-inventory.html         ← NOVA página (dropdown opaco, doc-list+PDF viewer cards, upload modal)
+apps/static/js/pages/electronic-inventory.js           ← loadClients (poll/share_slow), combo paginado, preview com spinner
+apps/templates/pages/pending-confirmation.html         ← updateWidgets() pula Exception*
+apps/templates/pages/metrics-pending-confirmation.html ← (histórico exclui Exception* — lógica em routes.py)
+apps/templates/partials/email-gradient-header.html     ← NOVO partial do header (VML+CSS, params title/subtitle/logo_height/width)
+apps/static/images/email-header-gradient.png           ← NOVO asset (820×220 gradiente diagonal p/ VML Outlook)
+apps/templates/pages/email-template-*.html             ← 10 templates usam o partial do header (daily-metric + 9)
+apps/templates/pages/control-panel.html                ← card signature-collection (icon ti-writing-sign) + JS preview/generate + CP_GROUP
+apps/static/data/signature_collection_bankers.json     ← NOVO (58 bankers {name,email}, domínios substituídos, dedup)
+apps/static/data/translations/{en,br,es}.json          ← 8 chaves do card signature-collection
+```

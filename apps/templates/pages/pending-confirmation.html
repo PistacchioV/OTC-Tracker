@@ -2183,7 +2183,17 @@ $(document).ready(function() {
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
             PC_ACTIONS_HTML
         ];
-        SF_COLS.forEach(function(col) { cells.push(sfEscape(row[col.label] == null ? '' : String(row[col.label]))); });
+        SF_COLS.forEach(function(col) {
+            var raw = row[col.label] == null ? '' : String(row[col.label]);
+            // Status column: render "Ok" as the standard green gradient pill badge
+            // (white text). Other statuses keep plain text. _pcStrip recovers "Ok"
+            // from the span, so filtering / persistence stay unaffected.
+            if (col.label === 'Status' && raw.trim().toLowerCase() === 'ok') {
+                cells.push('<span class="badge rounded-pill text-bg-success bg-gradient">' + sfEscape(raw.trim()) + '</span>');
+            } else {
+                cells.push(sfEscape(raw));
+            }
+        });
         return cells;
     }
 
