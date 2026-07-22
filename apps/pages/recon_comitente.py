@@ -7,6 +7,7 @@ Modos de execução:
   - run_reconciliation(f1,f2,f3) → arquivos enviados via upload (fallback)
 """
 
+import logging
 import os
 import sqlite3
 import tempfile
@@ -21,6 +22,8 @@ except ImportError:
         from rapidfuzz import fuzz as _fuzz
     except ImportError:
         _fuzz = None
+
+_log = logging.getLogger(__name__)
 
 # ─── Path do banco ────────────────────────────────────────────────────────────
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -573,6 +576,10 @@ _CETIP_DEST_BASE = os.getenv('CETIP_DEST_ROOT',
 _MAILBOX         = 'brazil.otc.ops@jpmorgan.com'
 _SUBJECT_B3_CGD  = 'Base B3 & CGD Consolidada'
 _SUBJECT_PARTY   = '[PROD] - REPORT - Party Central Client Report General'
+# Subpastas da Inbox: o Party Central cai em 'Automatico' por regra do Outlook,
+# e os e-mails consumidos por uma recon bem-sucedida vão para 'Reconciliation'.
+_FOLDER_AUTOMATICO     = 'Automatico'
+_FOLDER_RECONCILIATION = 'Reconciliation'
 
 _MONTH_EN = {
     '01':'January','02':'February','03':'March','04':'April',
@@ -748,12 +755,48 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
         return False
 
 
-def _outlook_download(inbox, subject_filter, tmpdir, exact=True):
+def _outlook_subfolder(parent, name, create=False):
+    """Subpasta `name` de `parent` (case-insensitive). None se não existir e
+    create=False; criada sob demanda quando create=True."""
+    subs = parent.Folders
+    for i in range(1, subs.Count + 1):
+        f = subs.Item(i)
+        if str(f.Name).strip().lower() == name.lower():
+            return f
+    return parent.Folders.Add(name) if create else None
+
+
+def _outlook_move(msgs, inbox, folder_name):
+    """Move as mensagens para Inbox > `folder_name` (criada se faltar).
+
+    Best-effort e por mensagem: falhar em arquivar não pode invalidar uma
+    reconciliação que já rodou e foi salva. Retorna quantas moveram."""
+    moved = 0
+    try:
+        dest = _outlook_subfolder(inbox, folder_name, create=True)
+    except Exception as exc:
+        _log.warning('[recon-comitente] pasta %r indisponível: %s', folder_name, exc)
+        return 0
+    for msg in msgs:
+        if msg is None:
+            continue
+        try:
+            msg.Move(dest)
+            moved += 1
+        except Exception as exc:
+            _log.warning('[recon-comitente] não moveu %r: %s',
+                         getattr(msg, 'Subject', '?'), exc)
+    return moved
+
+
+def _outlook_download(folders, subject_filter, tmpdir, exact=True):
     """
     Baixa o anexo mais recente do email que corresponde ao subject_filter.
+    `folders`: uma pasta ou uma lista delas, varridas em ordem — a primeira
+    que tiver o e-mail vence.
     exact=True  → match exato de subject
     exact=False → subject deve CONTER subject_filter (ignora data/sufixo variável)
-    Retorna o caminho do arquivo salvo ou levanta FileNotFoundError.
+    Retorna (caminho_do_anexo, mensagem) ou levanta FileNotFoundError.
     """
     mapi_prop = "http://schemas.microsoft.com/mapi/proptag/0x0E1D001F"
     if exact:
@@ -762,21 +805,26 @@ def _outlook_download(inbox, subject_filter, tmpdir, exact=True):
         # LIKE para pré-filtrar no MAPI; verificação Python garante o match correto
         restriction = f'@SQL="{mapi_prop}" LIKE \'%{subject_filter}%\''
 
-    messages = inbox.Items.Restrict(restriction)
-    for msg in list(messages):
-        if msg.Class != 43 or msg.Attachments.Count == 0:
+    if not isinstance(folders, (list, tuple)):
+        folders = [folders]
+    for folder in folders:
+        if folder is None:
             continue
-        if not exact and subject_filter.lower() not in str(msg.Subject).lower():
-            continue
-        att = msg.Attachments.Item(1)
-        # Use only the basename: an attacker-supplied attachment name could
-        # contain path separators ('..\\..\\evil') and escape tmpdir. Strip
-        # both separators regardless of the host OS.
-        _safe_name = str(att.FileName or '').replace('\\', '/').split('/')[-1].strip() or 'attachment'
-        dest = os.path.join(tmpdir, _safe_name)
-        att.SaveAsFile(dest)
-        return dest
-    raise FileNotFoundError(f"Email '{subject_filter}' não encontrado na Inbox.")
+        messages = folder.Items.Restrict(restriction)
+        for msg in list(messages):
+            if msg.Class != 43 or msg.Attachments.Count == 0:
+                continue
+            if not exact and subject_filter.lower() not in str(msg.Subject).lower():
+                continue
+            att = msg.Attachments.Item(1)
+            # Use only the basename: an attacker-supplied attachment name could
+            # contain path separators ('..\\..\\evil') and escape tmpdir. Strip
+            # both separators regardless of the host OS.
+            _safe_name = str(att.FileName or '').replace('\\', '/').split('/')[-1].strip() or 'attachment'
+            dest = os.path.join(tmpdir, _safe_name)
+            att.SaveAsFile(dest)
+            return dest, msg
+    raise FileNotFoundError(f"Email '{subject_filter}' não encontrado.")
 
 
 class ReconFilesMissing(FileNotFoundError):
@@ -822,17 +870,23 @@ def run_auto(recon_date_str: str):
             outlook = _win32.Dispatch('Outlook.Application').GetNamespace('MAPI')
             mailbox = outlook.Folders[_MAILBOX]
             inbox   = mailbox.Folders['Inbox']
+            # O Party Central chega em Inbox > Automatico (regra do Outlook).
+            # A Inbox segue como fallback: se a regra ainda não tiver rodado, o
+            # e-mail está lá e a rotina não pode falhar por isso.
+            automatico = _outlook_subfolder(inbox, _FOLDER_AUTOMATICO)
+            party_folders = [f for f in (automatico, inbox) if f is not None]
 
             # Try each source independently so we can report EVERY missing file
             # (which one: B3&CGD e-mail, Party Central e-mail, or DCAD on drive I:\).
             missing = []
             path_b3_cgd = path_party = None
+            msg_b3_cgd = msg_party = None
             try:
-                path_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir, exact=True)
+                path_b3_cgd, msg_b3_cgd = _outlook_download(inbox, _SUBJECT_B3_CGD, tmpdir, exact=True)
             except FileNotFoundError:
                 missing.append('b3_cgd')
             try:
-                path_party = _outlook_download(inbox, _SUBJECT_PARTY, tmpdir, exact=False)
+                path_party, msg_party = _outlook_download(party_folders, _SUBJECT_PARTY, tmpdir, exact=False)
             except FileNotFoundError:
                 missing.append('party')
 
@@ -851,6 +905,13 @@ def run_auto(recon_date_str: str):
             with open(path_b3_cgd, 'rb') as f1, \
                  open(path_dcad, 'rb') as f2, \
                  open(path_party, 'rb') as f3:
-                return run_reconciliation(f1, f2, f3, recon_date_str)
+                result = run_reconciliation(f1, f2, f3, recon_date_str)
+
+            # Só arquiva depois que a recon rodou e foi salva: se algo falhar
+            # acima, os e-mails ficam onde estão para a próxima tentativa.
+            moved = _outlook_move([msg_b3_cgd, msg_party], inbox, _FOLDER_RECONCILIATION)
+            _log.info('[recon-comitente] %d e-mail(s) movidos para Inbox > %s',
+                      moved, _FOLDER_RECONCILIATION)
+            return result
     finally:
         pythoncom.CoUninitialize()
