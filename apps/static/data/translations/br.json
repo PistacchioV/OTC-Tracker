@@ -1315,5 +1315,9 @@
   "cp-sc-loading": "Carregando…",
   "cp-sc-cp": "contrapartes",
   "cp-sc-conf": "confirmações pendentes de assinatura",
-  "cp-sc-done": "rascunho(s) baixado(s). Abra os arquivos .eml no Outlook para revisar e enviar."
+  "cp-sc-done": "rascunho(s) baixado(s). Abra os arquivos .eml no Outlook para revisar e enviar.",
+  "pend-update-confirm-title": "Deseja prosseguir?",
+  "pend-update-confirm-text": "A base de Pending Confirmation será atualizada com este arquivo.",
+  "pend-update-confirm-yes": "Sim",
+  "pend-update-confirm-no": "Não"
 }

@@ -2319,9 +2319,42 @@ $(document).ready(function() {
                 });
         }
 
+        // SweetAlert copy is built in JS, so it cannot ride on [data-lang] like
+        // the static markup. Pull the same dictionary the I18nManager uses.
+        var pendI18n = null;
+        (function () {
+            var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+            fetch('/static/data/translations/' + lang + '.json')
+                .then(function (r) { return r.json(); })
+                .then(function (j) { pendI18n = j; })
+                .catch(function () { /* falls back to the English defaults below */ });
+        })();
+        function pendT(key, fallback) { return (pendI18n && pendI18n[key]) || fallback; }
+
+        // Importing overwrites the pending base — always ask first.
+        function confirmThenUpload(file) {
+            if (typeof Swal === 'undefined') { upload(file); return; }
+            Swal.fire({
+                icon: 'question',
+                title: pendT('pend-update-confirm-title', 'Wish to Proceed?'),
+                html: pendT('pend-update-confirm-text', 'The Pending Confirmation base will be updated with this file.')
+                      + '<div class="mt-2 fw-semibold text-break">' + file.name + '</div>',
+                showCancelButton: true,
+                confirmButtonText: pendT('pend-update-confirm-yes', 'Yes'),
+                cancelButtonText: pendT('pend-update-confirm-no', 'No'),
+                confirmButtonColor: '#0066cc',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true,
+                focusCancel: true
+            }).then(function (res) {
+                if (res.isConfirmed) upload(file);
+                else fileInput.value = '';   // No → discard the attached file
+            });
+        }
+
         dz.addEventListener('click', function(){ fileInput.click(); });
         fileInput.addEventListener('change', function(){
-            if (this.files && this.files[0]) upload(this.files[0]);
+            if (this.files && this.files[0]) confirmThenUpload(this.files[0]);
             this.value = '';   // allow re-dropping the same file
         });
         ['dragenter','dragover'].forEach(function(ev){
@@ -2332,7 +2365,7 @@ $(document).ready(function() {
         });
         dz.addEventListener('drop', function(e){
             var dt = e.dataTransfer;
-            if (dt && dt.files && dt.files[0]) upload(dt.files[0]);
+            if (dt && dt.files && dt.files[0]) confirmThenUpload(dt.files[0]);
         });
     })();
 

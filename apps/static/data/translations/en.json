@@ -1315,5 +1315,9 @@
   "cp-sc-loading": "Loading…",
   "cp-sc-cp": "counterparties",
   "cp-sc-conf": "confirmations pending signature",
-  "cp-sc-done": "draft(s) downloaded. Open the .eml files in Outlook to review and send."
+  "cp-sc-done": "draft(s) downloaded. Open the .eml files in Outlook to review and send.",
+  "pend-update-confirm-title": "Wish to Proceed?",
+  "pend-update-confirm-text": "The Pending Confirmation base will be updated with this file.",
+  "pend-update-confirm-yes": "Yes",
+  "pend-update-confirm-no": "No"
 }
