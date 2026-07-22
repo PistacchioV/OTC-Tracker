@@ -4003,6 +4003,82 @@ def _cc_cell(row, idx):
     return str(v).strip()
 
 
+# ----------------------------------------------------------------------------
+#  Placeholder e-mail filter.
+#  The source spreadsheet is filled by hand, so a contact with no real address
+#  often carries a stand-in instead of a blank cell: 'xxx', 'x-x', 'a definir',
+#  and — the tricky ones — strings that ARE valid e-mail syntax but address
+#  nobody, like 'xx@xx.com'. Sending confirmations to those bounces, so they
+#  are dropped on import and swept out of the stored base.
+# ----------------------------------------------------------------------------
+_CC_EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+
+# Tokens that never name a real mailbox or company, checked against the local
+# part and against the domain's first label ('xx' in 'xx.com.br').
+_CC_PLACEHOLDER_TOKENS = {
+    'ab', 'abc', 'asd', 'asdf', 'qwerty',
+    'na', 'nan', 'n/a', 'none', 'null', 'nulo', 'nil', 'vazio', 'branco',
+    'test', 'teste', 'testing', 'example', 'exemplo', 'sample', 'dummy', 'fake',
+    'email', 'e-mail', 'mail', 'correio', 'sememail', 'sem-email', 'seemail',
+    'naotem', 'nao-tem', 'notem', 'nada', 'adefinir', 'a-definir', 'definir',
+    'tbd', 'todo', 'pendente', 'placeholder', 'nomail', 'no-mail',
+}
+# Domains reserved by RFC 2606 / commonly used as stand-ins.
+_CC_PLACEHOLDER_DOMAINS = {'example.com', 'example.org', 'example.net',
+                           'test.com', 'teste.com', 'email.com', 'mail.com',
+                           'dominio.com', 'empresa.com'}
+
+
+def _cc_is_placeholder_token(tok, min_len=2):
+    """A token that cannot be a real mailbox/company name: a known stand-in word,
+    or filler made of one repeated character.
+
+    Two deliberate escape hatches, because dropping a live address costs far more
+    than keeping a dead one:
+      * `min_len` — 2 for the local part, since a one-letter mailbox is unusual
+        but real ('j@nubank.com.br'); 1 for the domain, where it never is.
+      * repeated letters other than 'x' only count as filler from three
+        characters on — 'bb.com.br' is Banco do Brasil, not a placeholder.
+        'x' is the universal stand-in and digits never name a company."""
+    t = (tok or '').strip().lower()
+    if not t:
+        return True
+    if t in _CC_PLACEHOLDER_TOKENS:
+        return True
+    if len(t) < min_len or len(set(t)) != 1 or not t.isalnum():
+        return False
+    return t[0] == 'x' or t[0].isdigit() or len(t) >= 3
+
+
+def _cc_email_is_usable(email):
+    """True when `email` looks like an address that could actually receive mail.
+    A BLANK e-mail is not a placeholder — the caller decides what to do with a
+    contact that simply has none."""
+    e = (email or '').strip().lower()
+    if not e or not _CC_EMAIL_RE.match(e):
+        return False
+    local, _, domain = e.partition('@')
+    if domain in _CC_PLACEHOLDER_DOMAINS:
+        return False
+    if _cc_is_placeholder_token(local):
+        return False
+    # First domain label: 'xx' in 'xx.com.br', 'amaggi' in 'amaggi.com.br'.
+    return not _cc_is_placeholder_token(domain.split(".")[0], min_len=1)
+
+
+def _cc_drop_placeholder_contacts(contacts):
+    """(kept, dropped[]) — a contact whose e-mail is filled in but unusable is
+    dropped; one with a blank e-mail is left untouched."""
+    kept, dropped = [], []
+    for c in contacts or []:
+        email = str((c or {}).get('email', '') or '').strip()
+        if email and not _cc_email_is_usable(email):
+            dropped.append(c)
+        else:
+            kept.append(c)
+    return kept, dropped
+
+
 def _cc_parse_rules(raw):
     out, seen = [], set()
     for part in str(raw or '').replace('\n', ';').replace('/', ';').replace(',', ';').split(';'):
@@ -4062,6 +4138,7 @@ def _import_client_contacts(filename, raw_bytes):
 
     groups = {}                    # nspn -> {'spn', 'name', 'contacts'[]}
     rows_seen = 0
+    skipped_email = []             # placeholder addresses left out of the import
     for i in range(_CONTACTS_DATA_START_ROW - 1, len(rows)):
         row = rows[i]
         spn_raw = _cc_cell(row, _CC_SPN)
@@ -4079,6 +4156,12 @@ def _import_client_contacts(filename, raw_bytes):
         if not (cname or phone or email or rule):
             continue               # blank contact line
         rows_seen += 1
+        # A filled-in but unusable address ('xxx', 'xx@xx.com') means the row
+        # carries no way to reach anyone — skip it instead of importing a
+        # contact that will bounce.
+        if email and not _cc_email_is_usable(email):
+            skipped_email.append('%s · %s · %s' % (spn_raw.strip(), cname or '(no name)', email))
+            continue
         g = groups.setdefault(nspn, {'spn': spn_raw.strip(), 'name': '', 'contacts': []})
         cp_name = _cc_cell(row, _CC_NAME)
         if cp_name and not g['name']:
@@ -4112,11 +4195,28 @@ def _import_client_contacts(filename, raw_bytes):
                 rec['COUNTERPARTY'] = g['name']
         rec['CONTACTS'] = g['contacts']     # replace contacts for this SPN
 
+    # Sweep the WHOLE base, not just the SPNs in this spreadsheet: placeholders
+    # imported before this filter existed live under counterparties the current
+    # file may not even mention.
+    swept = 0
+    for rec in data:
+        kept, dropped = _cc_drop_placeholder_contacts(rec.get('CONTACTS') or [])
+        if dropped:
+            rec['CONTACTS'] = kept
+            swept += len(dropped)
+            for c in dropped:
+                log.info('[contacts] swept placeholder %s · %s · %s',
+                         rec.get('SPN', ''), c.get('name', ''), c.get('email', ''))
+
     _cpd_save_list(data)
+    if skipped_email:
+        log.info('[contacts] %d placeholder e-mail rows skipped on import:\n  %s',
+                 len(skipped_email), '\n  '.join(skipped_email))
     return {
         'rows': rows_seen, 'spns': len(groups),
         'contacts': sum(len(g['contacts']) for g in groups.values()),
         'matched': matched, 'created': created, 'total': len(data),
+        'skipped_email': len(skipped_email), 'swept': swept,
     }
 
 
@@ -4405,6 +4505,9 @@ def api_cp_import_contacts():
     msg = ('<b>{contacts}</b> contacts imported across <b>{spns}</b> counterparties.'
            '<br>Matched existing: {matched} &middot; New records appended: {created}'
            '<br>Total counterparties: {total}').format(**summary)
+    if summary.get('skipped_email') or summary.get('swept'):
+        msg += ('<br>Placeholder e-mails ignored: {skipped_email} '
+                '&middot; removed from the stored base: {swept}').format(**summary)
     return jsonify({'success': True, 'message': msg})
 
 
