@@ -159,52 +159,62 @@
     #eiUploadModal .modal-content.liquid-glass { background: rgba(255, 255, 255, 0.92) !important; }
     [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass { background: rgba(26, 29, 35, 0.94) !important; }
 
-    /* Confirmations tree (Product › Year › Month) ---------------------- */
-    #ei-page .ei-node-head {
-        display: flex; align-items: center; gap: .55rem; width: 100%;
-        padding: .45rem .6rem; border: 0; background: transparent; border-radius: 9px;
-        color: var(--bs-body-color); text-align: left; cursor: pointer;
-        transition: background-color .18s var(--ei-ease), transform .16s var(--ei-ease);
+    /* Confirmations folder navigator (left rail) ----------------------- */
+    #ei-page .ei-fold-tree { margin-top: .25rem; }
+    #ei-page .ei-fold-item {
+        display: flex; align-items: center; gap: .4rem;
+        padding: .34rem .5rem; border-radius: 8px; cursor: pointer;
+        color: var(--bs-body-color); text-decoration: none;
+        border: 1px solid transparent; font-size: .8rem;
+        transition: background-color .16s var(--ei-ease), color .16s var(--ei-ease),
+                    border-color .16s var(--ei-ease), transform .16s var(--ei-ease);
     }
     @media (hover: hover) and (pointer: fine) {
-        #ei-page .ei-node-head:hover { background: var(--bs-tertiary-bg); }
+        #ei-page .ei-fold-item:not(.is-sel):hover { background: var(--bs-tertiary-bg); }
     }
-    #ei-page .ei-node-head:active { transform: scale(.99); }
-    #ei-page .ei-node-head:focus-visible {
-        outline: none; box-shadow: 0 0 0 3px rgba(0, 102, 204, .15);
+    #ei-page .ei-fold-item:active { transform: scale(.985); }
+    #ei-page .ei-fold-item.is-sel {
+        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
+        color: #0066cc; font-weight: 600;
     }
-    /* Chevron is the only thing that rotates — cheap, and it reads as "opening". */
-    #ei-page .ei-node-chev {
-        font-size: 15px; color: var(--bs-secondary-color); flex: 0 0 auto;
+    [data-bs-theme=dark] #ei-page .ei-fold-item.is-sel {
+        color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30);
+    }
+    #ei-page .ei-fold-chev {
+        width: 12px; flex: 0 0 12px; font-size: 12px; color: var(--bs-secondary-color);
         transition: transform .2s var(--ei-ease);
     }
-    #ei-page .ei-node.is-open > .ei-node-head .ei-node-chev { transform: rotate(90deg); }
-    #ei-page .ei-node-ico { font-size: 16px; color: #0066cc; flex: 0 0 auto; }
-    #ei-page .ei-node[data-depth="1"] .ei-node-ico,
-    #ei-page .ei-node[data-depth="2"] .ei-node-ico { color: var(--bs-secondary-color); }
-    #ei-page .ei-node-label { font-weight: 600; font-size: .82rem; flex: 1 1 auto; min-width: 0; }
-    #ei-page .ei-node[data-depth="1"] .ei-node-label,
-    #ei-page .ei-node[data-depth="2"] .ei-node-label { font-weight: 500; }
-    #ei-page .ei-node-count {
-        flex: 0 0 auto; font-size: .68rem; font-weight: 600; line-height: 1;
-        padding: .22rem .45rem; border-radius: 50rem;
-        background: var(--bs-tertiary-bg); color: var(--bs-secondary-color);
+    #ei-page .ei-fold-item.is-open .ei-fold-chev { transform: rotate(90deg); }
+    #ei-page .ei-fold-ico { font-size: 14px; flex: 0 0 auto; opacity: .75; }
+    #ei-page .ei-fold-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #ei-page .ei-fold-count {
+        flex: 0 0 auto; font-size: .62rem; font-weight: 600; line-height: 1;
+        padding: .16rem .36rem; border-radius: 50rem;
+        background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
     }
-    /* 0fr → 1fr expands to the content's natural height with no JS measuring
-       and no max-height guesswork. */
-    #ei-page .ei-node-panel {
+    #ei-page .ei-fold-item.is-sel .ei-fold-count { background: #0066cc; color: #fff; }
+    /* 0fr -> 1fr expands to the content's natural height: no JS measuring, no
+       max-height guesswork. */
+    #ei-page .ei-fold-panel {
         display: grid; grid-template-rows: 0fr; opacity: 0;
-        transition: grid-template-rows .24s var(--ei-ease), opacity .16s var(--ei-ease);
+        transition: grid-template-rows .22s var(--ei-ease), opacity .15s var(--ei-ease);
     }
-    #ei-page .ei-node.is-open > .ei-node-panel { grid-template-rows: 1fr; opacity: 1; }
-    #ei-page .ei-node-inner { overflow: hidden; min-height: 0; }
-    /* Indent each level; the rail makes the nesting readable without deep padding. */
-    #ei-page .ei-node[data-depth="0"] > .ei-node-panel > .ei-node-inner,
-    #ei-page .ei-node[data-depth="1"] > .ei-node-panel > .ei-node-inner {
-        margin-left: .75rem; padding-left: .6rem;
+    #ei-page .ei-fold-item.is-open + .ei-fold-panel { grid-template-rows: 1fr; opacity: 1; }
+    #ei-page .ei-fold-inner {
+        overflow: hidden; min-height: 0;
+        margin-left: .55rem; padding-left: .45rem;
         border-left: 1px solid var(--bs-border-color);
     }
-    #ei-page .ei-tree .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
+    #ei-page .ei-fold-empty { font-size: .74rem; color: var(--bs-secondary-color); padding: .35rem .5rem; }
+
+    /* Breadcrumb of the folder feeding the list ------------------------ */
+    #ei-page .ei-crumb {
+        display: flex; align-items: center; flex-wrap: wrap; gap: .18rem;
+        font-size: .72rem; color: var(--bs-secondary-color);
+    }
+    #ei-page .ei-crumb-sep { font-size: 11px; opacity: .6; }
+
+    #ei-page .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
     @keyframes eiRowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
     /* The global .btn-primary rule hard-codes padding/font-size, while .btn-sm
@@ -289,6 +299,9 @@
                                 <i class="ti ti-file-check ei-type-ico"></i><span>Confirmations</span>
                                 <span class="ei-type-badge" data-count="Confirmations">0</span>
                             </a>
+                            <!-- Folder navigator: Year › Month › Day › Product,
+                                 mirroring the layout on the share. Filled by JS. -->
+                            <div id="eiConfTree" class="ei-fold-tree d-none"></div>
                             <a class="ei-type-item" data-type="SSI">
                                 <i class="ti ti-building-bank ei-type-ico"></i><span>SSI</span>
                                 <span class="ei-type-badge" data-count="SSI">0</span>
@@ -321,9 +334,13 @@
             <!-- Document list card -->
             <div class="card mb-3">
                 <div class="card-header border-light d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <h4 class="header-title mb-0" id="eiCurrentClient">No counterparty selected</h4>
-                        <span class="badge bg-secondary-subtle text-secondary" id="eiDocCount">0</span>
+                    <div class="d-flex flex-column gap-1 min-w-0">
+                        <div class="d-flex align-items-center gap-2">
+                            <h4 class="header-title mb-0" id="eiCurrentClient">No counterparty selected</h4>
+                            <span class="badge bg-secondary-subtle text-secondary" id="eiDocCount">0</span>
+                        </div>
+                        <!-- Which folder the list below is showing. -->
+                        <div class="ei-crumb d-none" id="eiCrumb"></div>
                     </div>
                     <div class="app-search" style="max-width: 280px;">
                         <input type="search" class="form-control" id="eiDocSearch" placeholder="Search documents…">
@@ -438,5 +455,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- toast() is a no-op without Swal — every warning/success was silently swallowed. -->
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722c"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722d"></script>
 {% endblock extra_javascript %}

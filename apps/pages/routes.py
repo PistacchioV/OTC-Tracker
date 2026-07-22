@@ -15967,22 +15967,33 @@ def _ei_ordinal(n):
     return '%d%s' % (n, {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th'))
 
 
+def _ei_version_prefix(n, style):
+    """Version marker for the n-th copy. Confirmations read as '#2 NDF - …'
+    (a trade count), agreements as '2nd CGD AMENDMENT - …' (a legal ordinal).
+    The first copy carries no marker at all."""
+    if n <= 1:
+        return ''
+    return ('#%d ' % n) if style == 'hash' else ('%s ' % _ei_ordinal(n))
+
+
 def _ei_next_ordinal(target_dir, prefix, cname):
     """Which numbered copy of `<prefix> - <cname> - …` the next upload becomes.
 
     Counts what is already filed in `target_dir` and returns max+1, so a second
     CGD Amendment lands as '2nd CGD AMENDMENT - …' regardless of its date. Max
     (not count) so deleting a middle document never re-issues a taken number.
-    Returns 1 when nothing matches — the first document carries no ordinal."""
+    Matches both marker styles ('#2 ' and '2nd ') so a folder that already holds
+    one convention keeps counting correctly. Returns 1 when nothing matches."""
     pat = re.compile(
-        r'^(?:(\d+)(?:st|nd|rd|th)\s+)?%s\s+-\s+%s\s+-\s+'
+        r'^(?:(?:#(\d+)|(\d+)(?:st|nd|rd|th))\s+)?%s\s+-\s+%s\s+-\s+'
         % (re.escape(prefix), re.escape(cname)), re.IGNORECASE)
     highest = 0
     try:
         for entry in os.listdir(target_dir):
             m = pat.match(entry)
             if m:
-                highest = max(highest, int(m.group(1)) if m.group(1) else 1)
+                seen = m.group(1) or m.group(2)
+                highest = max(highest, int(seen) if seen else 1)
     except Exception:
         return 1        # unreadable/missing dir — caller still writes the file
     return highest + 1
@@ -16029,9 +16040,9 @@ def _ei_iter_files(base, doctype):
                     doc_date = '%s/%s/%s' % (parts[2], mdir.group(1), parts[0])
             subtype = ''
             if doctype in ('Transactional', 'Confirmations'):
-                # Drop the version prefix ('2nd CGD AMENDMENT - …') so the
-                # sub-type filter still matches every copy of the same kind.
-                m = re.match(r'^\s*(?:\d+(?:st|nd|rd|th)\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
+                # Drop the version marker ('2nd CGD AMENDMENT - …', '#2 NDF - …')
+                # so the sub-type still matches every copy of the same kind.
+                m = re.match(r'^\s*(?:(?:#\d+|\d+(?:st|nd|rd|th))\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
                              fn, re.IGNORECASE)
                 subtype = (m.group(1).strip().upper() if m else '')
             yield {
@@ -16231,8 +16242,9 @@ def api_ei_upload():
         # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
         # clobbering the previous or hiding it behind a meaningless " (2)".
         nth = _ei_next_ordinal(target_dir, prefix, cname)
+        style = 'hash' if doctype == 'Confirmations' else 'ordinal'
         fname = '%s%s - %s - %s%s' % (
-            ('%s ' % _ei_ordinal(nth)) if nth > 1 else '', prefix, cname, ddmmyyyy, ext)
+            _ei_version_prefix(nth, style), prefix, cname, ddmmyyyy, ext)
         dest = os.path.join(target_dir, fname)
         stem, e = os.path.splitext(dest)
         i = 2

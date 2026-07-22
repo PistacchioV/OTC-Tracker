@@ -21,8 +21,7 @@
         allDocs: [],          // every document for the current client
         selectedRel: null,
         previewTimer: null,   // bounds the "Loading PDF…" veil (see preview())
-        openNodes: {},        // Confirmations tree: which nodes are expanded
-        treeSeeded: false     // whether the default expansion ran for this client
+        confPath: []          // selected Confirmations folder ['2026','06','18','NDF']
     };
 
     /* ---- tiny helpers ---------------------------------------------------- */
@@ -162,7 +161,7 @@
         state.client = name;
         // Another counterparty's tree is a different tree — drop the open state
         // so the default expansion runs again instead of leaking stale keys.
-        state.openNodes = {}; state.treeSeeded = false;
+        state.confPath = [];
         $('eiClientInput').value = name;
         closeCombo();
         $('eiCurrentClient').textContent = name;
@@ -179,9 +178,10 @@
         fetch(API + '/documents?client=' + encodeURIComponent(state.client) + '&type=all')
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                if (!res || !res.success) { state.allDocs = []; renderDocs(); return; }
+                if (!res || !res.success) { state.allDocs = []; renderConfTree(); renderDocs(); return; }
                 state.allDocs = res.documents || [];
                 updateTypeCounts();
+                renderConfTree();
                 renderDocs();
                 if (!res.folder_exists && !state.rootExists) {
                     list.innerHTML = '<div class="ei-empty"><i class="ti ti-plug-connected-x ei-empty-ico"></i>' +
@@ -199,17 +199,111 @@
         });
     }
 
-    function visibleDocs() {
+    /* ---- Confirmations folder navigation --------------------------------
+     * The rail mirrors the share: Confirmations › Year › Month › Day › Product.
+     * Clicking a level selects it and reveals the level below; the list on the
+     * right shows the documents inside the selected folder (and everything
+     * under it, so a partial path is never a dead end).
+     * ------------------------------------------------------------------- */
+    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+
+    function monthLabel(mm) {
+        var n = parseInt(mm, 10);
+        return MONTHS[n - 1] ? mm + '. ' + MONTHS[n - 1] : mm;
+    }
+
+    // ['2026','06','18','NDF'] for a confirmation; [] when the date is unreadable.
+    function docPath(d) {
+        var p = (d.doc_date || '').split('/');       // dd/mm/yyyy
+        if (p.length !== 3) return [];
+        return [p[2], p[1], p[0], (d.subtype || 'Other').toUpperCase()];
+    }
+
+    function labelFor(seg, depth) { return depth === 1 ? monthLabel(seg) : seg; }
+
+    function matchesSearch(d) {
         var q = ($('eiDocSearch').value || '').trim().toLowerCase();
+        if (!q) return true;
+        return d.name.toLowerCase().indexOf(q) >= 0 || (d.subtype || '').toLowerCase().indexOf(q) >= 0;
+    }
+
+    // Nested counts for the confirmations under the current search, so the rail
+    // never offers a folder that would open empty.
+    function confTree() {
+        var root = {};
+        state.allDocs.forEach(function (d) {
+            if (d.doctype !== 'Confirmations' || !matchesSearch(d)) return;
+            var path = docPath(d);
+            if (!path.length) return;
+            var node = root;
+            path.forEach(function (seg) {
+                node[seg] = node[seg] || { __n: 0, __c: {} };
+                node[seg].__n++;
+                node = node[seg].__c;
+            });
+        });
+        return root;
+    }
+
+    function confBranchHtml(nodes, depth, prefix) {
+        var keys = Object.keys(nodes).sort();
+        // Years, months and days read newest-first; products stay alphabetical.
+        if (depth < 3) keys.reverse();
+        return keys.map(function (seg) {
+            var path = prefix.concat([seg]);
+            var onPath = state.confPath.length > depth && state.confPath[depth] === seg;
+            var isSel = onPath && state.confPath.length === path.length;
+            var kids = nodes[seg].__c;
+            var hasKids = Object.keys(kids).length > 0;
+            return '<div class="ei-fold" data-depth="' + depth + '">' +
+                '<a class="ei-fold-item' + (isSel ? ' is-sel' : '') + (onPath ? ' is-open' : '') + '"' +
+                   ' data-path="' + esc(path.join('/')) + '">' +
+                    (hasKids ? '<i class="ti ti-chevron-right ei-fold-chev"></i>'
+                             : '<span class="ei-fold-chev"></span>') +
+                    '<i class="ti ' + (depth === 3 ? 'ti-file-check' : 'ti-folder') + ' ei-fold-ico"></i>' +
+                    '<span class="ei-fold-label">' + esc(labelFor(seg, depth)) + '</span>' +
+                    '<span class="ei-fold-count">' + nodes[seg].__n + '</span>' +
+                '</a>' +
+                (hasKids ? '<div class="ei-fold-panel"><div class="ei-fold-inner">' +
+                    (onPath ? confBranchHtml(kids, depth + 1, path) : '') +
+                '</div></div>' : '') +
+            '</div>';
+        }).join('');
+    }
+
+    function renderConfTree() {
+        var wrap = $('eiConfTree');
+        if (state.type !== 'Confirmations') { wrap.innerHTML = ''; wrap.classList.add('d-none'); return; }
+        var html = confBranchHtml(confTree(), 0, []);
+        wrap.innerHTML = html || '<div class="ei-fold-empty">No confirmations yet.</div>';
+        wrap.classList.remove('d-none');
+    }
+
+    function visibleDocs() {
         return state.allDocs.filter(function (d) {
             if (state.type !== 'all' && d.doctype !== state.type) return false;
             // Case-insensitive: the filter carries the registry casing ('CGD Amendment')
             // while d.subtype is parsed from the (upper-case) filename.
             if (state.type === 'Transactional' && state.subtype &&
                 (d.subtype || '').toUpperCase() !== state.subtype.toUpperCase()) return false;
-            if (q && d.name.toLowerCase().indexOf(q) < 0 && (d.subtype || '').toLowerCase().indexOf(q) < 0) return false;
+            // Confirmations are scoped to the folder picked in the rail.
+            if (state.type === 'Confirmations' && state.confPath.length) {
+                var path = docPath(d);
+                for (var i = 0; i < state.confPath.length; i++) {
+                    if (path[i] !== state.confPath[i]) return false;
+                }
+            }
+            if (!matchesSearch(d)) return false;
             return true;
         });
+    }
+
+    // 'Confirmations › 2026 › 06. June › 18 › NDF' — where the list is coming from.
+    function crumbHtml() {
+        if (state.type !== 'Confirmations') return '';
+        var parts = ['Confirmations'].concat(state.confPath.map(function (s, i) { return labelFor(s, i); }));
+        return parts.map(esc).join(' <i class="ti ti-chevron-right ei-crumb-sep"></i> ');
     }
 
     function docRowHtml(d, idx) {
@@ -217,7 +311,7 @@
         var meta = [d.doctype + (d.subtype ? ' · ' + esc(d.subtype) : ''),
                     d.doc_date ? d.doc_date : d.modified_h, d.size_h].filter(Boolean).join(' &nbsp;·&nbsp; ');
         // Stagger is capped: past ~8 items the delay would read as lag, not polish.
-        var delay = idx == null ? 0 : Math.min(idx, 8) * 30;
+        var delay = Math.min(idx == null ? 0 : idx, 8) * 30;
         return '<div class="ei-doc-row' + (d.rel === state.selectedRel ? ' is-active' : '') + '"' +
                    ' data-rel="' + esc(d.rel) + '" style="animation-delay:' + delay + 'ms">' +
             '<span class="ei-doc-ico ' + ic.cls + '"><i class="ti ' + ic.i + '"></i></span>' +
@@ -229,106 +323,20 @@
         '</div>';
     }
 
-    /* ---- Confirmations tree ---------------------------------------------- */
-    // A counterparty that trades a lot ends up with hundreds of confirmations.
-    // Flat, that is unsearchable; so Confirmations browse as Product › Year ›
-    // Month, mirroring the folder layout on the share. Newest first, because
-    // that is what people come looking for.
-    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-                  'July', 'August', 'September', 'October', 'November', 'December'];
-
-    function monthLabel(mm) {
-        var n = parseInt(mm, 10);
-        return (MONTHS[n - 1] ? mm + '. ' + MONTHS[n - 1] : mm);
-    }
-
-    // [{key,label,count,children|docs}] — three nested levels, empty nodes omitted.
-    function buildTree(docs) {
-        var byProduct = {};
-        docs.forEach(function (d) {
-            var prod = (d.subtype || 'Other').toUpperCase();
-            // doc_date is dd/mm/yyyy; anything unparseable is grouped, not dropped.
-            var parts = (d.doc_date || '').split('/');
-            var yyyy = parts.length === 3 ? parts[2] : 'Undated';
-            var mm   = parts.length === 3 ? parts[1] : '';
-            (byProduct[prod] = byProduct[prod] || {})[yyyy] =
-                (byProduct[prod][yyyy] || {});
-            (byProduct[prod][yyyy][mm] = byProduct[prod][yyyy][mm] || []).push(d);
-        });
-        return Object.keys(byProduct).sort().map(function (prod) {
-            var years = byProduct[prod];
-            var yNodes = Object.keys(years).sort().reverse().map(function (y) {
-                var months = years[y];
-                var mNodes = Object.keys(months).sort().reverse().map(function (m) {
-                    return { key: prod + '/' + y + '/' + m, label: m ? monthLabel(m) : 'No date',
-                             count: months[m].length, docs: months[m] };
-                });
-                return { key: prod + '/' + y, label: y,
-                         count: mNodes.reduce(function (a, n) { return a + n.count; }, 0),
-                         children: mNodes };
-            });
-            return { key: prod, label: prod,
-                     count: yNodes.reduce(function (a, n) { return a + n.count; }, 0),
-                     children: yNodes };
-        });
-    }
-
-    function nodeHtml(node, depth) {
-        var open = state.openNodes[node.key];
-        var ico = depth === 0 ? 'ti-file-check' : (depth === 1 ? 'ti-calendar' : 'ti-folder');
-        var inner = node.children
-            ? node.children.map(function (c) { return nodeHtml(c, depth + 1); }).join('')
-            : node.docs.map(function (d, i) { return docRowHtml(d, open ? i : null); }).join('');
-        return '<div class="ei-node' + (open ? ' is-open' : '') + '" data-depth="' + depth + '">' +
-            '<button type="button" class="ei-node-head" data-key="' + esc(node.key) + '">' +
-                '<i class="ti ti-chevron-right ei-node-chev"></i>' +
-                '<i class="ti ' + ico + ' ei-node-ico"></i>' +
-                '<span class="ei-node-label">' + esc(node.label) + '</span>' +
-                '<span class="ei-node-count">' + node.count + '</span>' +
-            '</button>' +
-            '<div class="ei-node-panel"><div class="ei-node-inner">' + inner + '</div></div>' +
-        '</div>';
-    }
-
     function renderDocs() {
         var list = $('eiDocList');
         var docs = visibleDocs();
         $('eiDocCount').textContent = docs.length;
+        var crumb = $('eiCrumb');
+        crumb.innerHTML = crumbHtml();
+        crumb.classList.toggle('d-none', state.type !== 'Confirmations');
         if (!docs.length) {
             list.innerHTML = '<div class="ei-empty"><i class="ti ti-folder-off ei-empty-ico"></i>' +
                 '<div class="fw-semibold">No documents</div>' +
                 '<div class="fs-sm">Nothing here yet for this filter. Use <b>Upload Document</b> to add one.</div></div>';
             return;
         }
-        if (state.type === 'Confirmations') {
-            var tree = buildTree(docs);
-            // Searching must reveal its own hits — a collapsed match reads as "not found".
-            if (($('eiDocSearch').value || '').trim()) openAll(tree);
-            else if (!state.treeSeeded) { state.treeSeeded = true; openNewest(tree); }
-            list.innerHTML = '<div class="ei-tree">' +
-                tree.map(function (n) { return nodeHtml(n, 0); }).join('') + '</div>';
-            return;
-        }
         list.innerHTML = docs.map(function (d, i) { return docRowHtml(d, i); }).join('');
-    }
-
-    function openAll(nodes) {
-        nodes.forEach(function (n) {
-            state.openNodes[n.key] = true;
-            if (n.children) openAll(n.children);
-        });
-    }
-
-    // Default: reveal the most recent month of each product — one click deep,
-    // never an empty-looking pane, and no wall of expanded nodes either.
-    function openNewest(nodes) {
-        nodes.forEach(function (p) {
-            state.openNodes[p.key] = true;
-            var y = p.children && p.children[0];
-            if (!y) return;
-            state.openNodes[y.key] = true;
-            if (y.children && y.children[0]) state.openNodes[y.children[0].key] = true;
-        });
     }
 
     /* ---- preview --------------------------------------------------------- */
@@ -568,23 +576,29 @@
                 state.type = a.dataset.type;
                 $('eiSubtypeWrap').classList.toggle('d-none', state.type !== 'Transactional');
                 if (state.type !== 'Transactional') { state.subtype = ''; $('eiSubtypeFilter').value = ''; }
+                // Leaving Confirmations drops the folder selection, so coming
+                // back starts at the top instead of a stale deep path.
+                if (state.type !== 'Confirmations') state.confPath = [];
+                renderConfTree();
                 renderDocs();
             });
         });
         $('eiSubtypeFilter').addEventListener('change', function () { state.subtype = this.value; renderDocs(); });
-        $('eiDocSearch').addEventListener('input', renderDocs);
+        $('eiDocSearch').addEventListener('input', function () { renderConfTree(); renderDocs(); });
 
-        // document click → preview; tree header click → expand/collapse
+        // Confirmations rail: pick a folder (click the selected one to go up).
+        $('eiConfTree').addEventListener('click', function (e) {
+            var item = e.target.closest('.ei-fold-item');
+            if (!item) return;
+            var path = item.dataset.path.split('/');
+            var same = path.join('/') === state.confPath.join('/');
+            state.confPath = same ? path.slice(0, -1) : path;
+            renderConfTree();
+            renderDocs();
+        });
+
+        // document click → preview
         $('eiDocList').addEventListener('click', function (e) {
-            var head = e.target.closest('.ei-node-head');
-            if (head) {
-                var node = head.parentNode, key = head.dataset.key;
-                // Toggle the class directly instead of re-rendering: the CSS
-                // transition then runs, and it stays interruptible mid-flight.
-                state.openNodes[key] = !state.openNodes[key];
-                node.classList.toggle('is-open', state.openNodes[key]);
-                return;
-            }
             var row = e.target.closest('.ei-doc-row');
             if (row) preview(row.dataset.rel);
         });
