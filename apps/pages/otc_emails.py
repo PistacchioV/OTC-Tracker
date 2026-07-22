@@ -26,6 +26,8 @@ Eligibility:
 import os
 import io
 import json
+import base64
+import hashlib
 import zipfile
 import unicodedata
 from datetime import datetime
@@ -48,9 +50,25 @@ FOOTER_HTML = (
 
 # ──────────────────────────────────────────────────────────────────────────
 # HTML e-mail design (corporate, Emil/Apple) — table-based + inline styles so
-# Outlook/Gmail render it reliably. No images: a text wordmark, one Action-Blue
-# accent, hairline tables, generous spacing. Shared by the client-facing drafts.
+# Outlook/Gmail render it reliably. One Action-Blue accent, hairline tables,
+# generous spacing. Shared by the client-facing drafts.
+#
+# The header carries the J.P.Morgan wordmark as an inline (CID) image. It is NOT
+# a data: URI and NOT a remote URL: Outlook desktop refuses to render data: URIs
+# outright, and a remote src would both need the intranet server reachable from
+# the reader's machine and land behind Outlook's "download pictures" block. A
+# multipart/related part with a Content-ID renders unconditionally.
 # ──────────────────────────────────────────────────────────────────────────
+_E_LOGO_CID  = 'jpmwordmark'
+# Trimmed derivative of images/LogoJPMorgan.png. The source is a 400x400 canvas
+# with the wordmark occupying only its middle 318x66 — pasted as-is it would put
+# ~80px of empty space above and below the logo in the header, so the transparent
+# margin is cropped off. Rendered at 140x29, i.e. ~2.3x pixel density for
+# high-DPI screens, matching the footprint of the wordmark it replaces.
+_E_LOGO_FILE = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'images', 'LogoJPMorgan-email.png'))
+_E_LOGO_W, _E_LOGO_H = 140, 29
+
 _E_BLUE  = '#0066cc'
 _E_NAVY  = '#243b53'
 _E_INK   = '#1d1d1f'
@@ -64,33 +82,57 @@ def _esc(s):
 
 
 def _ep(html, muted=False):
-    """A body paragraph."""
+    """A body paragraph. Justified: these are dense legal/settlement paragraphs
+    that wrap over several lines, and a flush right edge reads noticeably
+    tidier. Single-line paragraphs ('Prezados Senhores,') are unaffected."""
     color = '#6c6c72' if muted else '#333333'
-    return ('<p style="margin:0 0 12px;font-size:14px;line-height:1.62;color:' + color +
+    return ('<p style="margin:0 0 12px;font-size:14px;line-height:1.62;text-align:justify;color:' + color +
             ';font-family:' + _E_FONT + ';">' + html + '</p>')
 
 
 def _email_data_table(headers, rows):
-    """A clean hairline table with a navy header and zebra rows."""
+    """A clean hairline table with a navy header and zebra rows, fully centred.
+
+    border-collapse is COLLAPSE, deliberately. With 'separate', Outlook's Word
+    engine draws the table-level border around every cell as well as the cell's
+    own border-top, so each boundary shows two hairlines side by side — very
+    visible on the white zebra rows, invisible on the grey ones. Collapsing
+    merges adjacent borders into the single line the design intends. The cost is
+    border-radius, which collapse disables — Outlook never honoured it anyway."""
     th = ''.join(
-        '<th style="padding:9px 11px;text-align:left;font-size:10.5px;font-weight:600;'
+        '<th align="center" style="padding:9px 11px;text-align:center;font-size:10.5px;font-weight:600;'
         'text-transform:uppercase;letter-spacing:.04em;color:#ffffff;white-space:nowrap;">' + _esc(h) + '</th>'
         for h in headers)
     body = ''
     for i, r in enumerate(rows):
         bg = '#ffffff' if i % 2 == 0 else '#f6f7f9'
         tds = ''.join(
-            '<td style="padding:8px 11px;font-size:12px;color:#1d1d1f;border-top:1px solid #edeef1;'
-            'white-space:nowrap;">' + _esc(c) + '</td>' for c in r)
+            '<td align="center" style="padding:8px 11px;font-size:12px;color:#1d1d1f;text-align:center;'
+            'border-top:1px solid #edeef1;white-space:nowrap;">' + _esc(c) + '</td>' for c in r)
         body += '<tr style="background:' + bg + ';">' + tds + '</tr>'
     return ('<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
-            'style="border-collapse:separate;border-spacing:0;width:100%;border:1px solid #e6e6ea;'
-            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';">'
+            'style="border-collapse:collapse;width:100%;border:1px solid #e6e6ea;'
+            'font-family:' + _E_FONT + ';">'
             '<tr style="background:' + _E_NAVY + ';">' + th + '</tr>' + body + '</table>')
 
 
+def _split_currency(value):
+    """'R$ 1.234,56' -> ('R$', '1.234,56'). Anything without a leading currency
+    token comes back as ('', value), so the caller can pass plain numbers too."""
+    s = str(value or '').strip()
+    for sym in ('R$', 'US$', 'USD', '$'):
+        if s.startswith(sym):
+            return sym, s[len(sym):].strip()
+    return '', s
+
+
 def _email_summary(pairs):
-    """Highlighted totals panel. pairs: list of (label, value, is_total)."""
+    """Highlighted totals panel. pairs: list of (label, value, is_total).
+
+    The currency symbol gets its own column so every 'R$' lands on the same
+    vertical line: right-aligning the whole 'R$ 1.234,56' string only aligns the
+    last character, and a negative rendered as '(1.234,56)' then drags its 'R$'
+    a full parenthesis to the left of the row above it."""
     rows = ''
     for i, (label, value, is_total) in enumerate(pairs):
         top = '' if i == 0 else 'border-top:1px solid #dbe6f3;'
@@ -98,13 +140,20 @@ def _email_summary(pairs):
         valc = _E_BLUE if is_total else _E_INK
         wt = '700' if is_total else '600'
         fs = '15px' if is_total else '13px'
+        cur, num = _split_currency(value)
         rows += ('<tr><td style="padding:8px 14px;font-size:' + fs + ';font-weight:' + wt +
                  ';color:' + lblc + ';' + top + '">' + _esc(label) + '</td>'
-                 '<td align="right" style="padding:8px 14px;font-size:' + fs + ';font-weight:700;color:' +
-                 valc + ';white-space:nowrap;' + top + '">' + _esc(value) + '</td></tr>')
+                 '<td align="right" style="padding:8px 2px 8px 14px;font-size:' + fs +
+                 ';font-weight:700;color:' + valc + ';white-space:nowrap;' + top + '">' +
+                 _esc(cur) + '</td>'
+                 # 6px left padding: the total row is a size larger, so without a
+                 # floor the wider glyphs would butt straight up against the 'R$'.
+                 '<td align="right" style="padding:8px 14px 8px 6px;font-size:' + fs +
+                 ';font-weight:700;color:' + valc + ';white-space:nowrap;' + top + '">' +
+                 _esc(num) + '</td></tr>')
     return ('<table role="presentation" cellpadding="0" cellspacing="0" '
-            'style="border-collapse:separate;border-spacing:0;background:#f3f6fb;border:1px solid #dbe6f3;'
-            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';min-width:280px;">' + rows + '</table>')
+            'style="border-collapse:collapse;background:#f3f6fb;border:1px solid #dbe6f3;'
+            'font-family:' + _E_FONT + ';min-width:280px;">' + rows + '</table>')
 
 
 def _email_kv(title, pairs):
@@ -119,8 +168,18 @@ def _email_kv(title, pairs):
                  '<td style="padding:7px 14px;font-size:12.5px;font-weight:600;color:#1d1d1f;' + top + '">' +
                  _esc(value) + '</td></tr>')
     return (head + '<table role="presentation" cellpadding="0" cellspacing="0" '
-            'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #e6e6ea;'
-            'border-radius:10px;overflow:hidden;font-family:' + _E_FONT + ';min-width:320px;">' + rows + '</table>')
+            'style="border-collapse:collapse;background:#ffffff;border:1px solid #e6e6ea;'
+            'font-family:' + _E_FONT + ';min-width:320px;">' + rows + '</table>')
+
+
+def _email_notice(html):
+    """A bordered 'Importante:' callout — used for the TED/PIX warning that sits
+    above the banking details whenever the client is the one transferring."""
+    return ('<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+            'style="border-collapse:collapse;width:100%;border:1px solid #d9d9de;background:#ffffff;'
+            'font-family:' + _E_FONT + ';">'
+            '<tr><td style="padding:9px 13px;font-size:12.5px;line-height:1.55;color:#1d1d1f;">'
+            '<span style="font-weight:700;">Importante:</span> ' + html + '</td></tr></table>')
 
 
 def _email_shell(title, ref_date, intro_html, body_html):
@@ -137,7 +196,11 @@ def _email_shell(title, ref_date, intro_html, body_html):
         # header
         '<tr><td style="padding:24px 34px 0;">'
         '<table role="presentation" width="100%"><tr>'
-        '<td style="font-size:16px;font-weight:700;letter-spacing:.16em;color:#1d1d1f;">J.P.MORGAN</td>'
+        '<td style="font-size:16px;font-weight:700;letter-spacing:.16em;color:#1d1d1f;">'
+        '<img src="cid:' + _E_LOGO_CID + '" alt="J.P.Morgan" '
+        'width="' + str(_E_LOGO_W) + '" height="' + str(_E_LOGO_H) + '" '
+        'style="display:block;border:0;outline:none;text-decoration:none;'
+        'width:' + str(_E_LOGO_W) + 'px;height:' + str(_E_LOGO_H) + 'px;"></td>'
         '<td align="right" style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:' +
         _E_MUTED + ';">' + _esc(ref_date) + '</td>'
         '</tr></table></td></tr>'
@@ -350,7 +413,8 @@ def _group_by_acronym_commodity(deals):
 # ──────────────────────────────────────────────────────────────────────────
 # PREMIUM (D0) — SpotDate == today
 # ──────────────────────────────────────────────────────────────────────────
-def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES ACCRONYM'):
+def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES ACCRONYM',
+                         cc_comm_sales=True):
     """D0 premium settlement notice.
 
     Eligible counterparties: CETIP account (RefData) == 73760.10-2 AND not Lawton,
@@ -361,6 +425,8 @@ def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES 
     `ref_key` selects the RefData accronym column used to resolve each deal's
     Acronym → ref record: 'COMMODITIES ACCRONYM' (default) or 'FX CASH ACCRONYM'
     (FXO deals carry the FX cash accronym, not the commodities one).
+    `cc_comm_sales` copies the Brazil Comm Sales desk — they own the commodities
+    flow, so the FXO page turns it off and copies Liquidação only.
     """
     ref = _build_refdata_index(ref_key)
     cpd = _build_cpdetails_index()
@@ -381,7 +447,8 @@ def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES 
         if _is_lawton(name, acronym):        # never Lawton
             continue
 
-        drafts.append(_premium_cliente_email(items, name, spn, taxid, cpd, asset_label))
+        drafts.append(_premium_cliente_email(items, name, spn, taxid, cpd, asset_label,
+                                             cc_comm_sales=cc_comm_sales))
 
     return drafts
 
@@ -393,7 +460,8 @@ def _premium_apurado(items):
     return apurado, ir, final
 
 
-def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Commodities'):
+def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Commodities',
+                           cc_comm_sales=True):
     apurado, ir, final = _premium_apurado(items)
     cp = cpd.get(_norm_spn(spn), {})
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
@@ -421,6 +489,10 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
     ])
 
     # Settlement instruction + banking block depend on the sign of the result.
+    # `notice` is the TED-only warning: it only makes sense when the CLIENT is the
+    # one transferring (final > 0, JPMorgan receives). When JPMorgan pays, or when
+    # the result nets to zero and nobody transfers anything, it is left out.
+    notice = ''
     if final < 0:
         instr = _ep('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
                     'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
@@ -439,6 +511,9 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
                     'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
                     'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
                     'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        if final > 0:
+            notice = _email_notice('Não são aceitas transferências via PIX. As transferências devem ser '
+                                   'realizadas exclusivamente por meio de TED.')
         bank = _email_kv('Dados bancários', [
             ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
             ('Nº e nome da agência', '0011'),
@@ -451,7 +526,8 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
 
     body_html = (
         table + _gap(18) + summary +
-        ((_gap(16) + instr) if instr else '') + _gap(6) + bank + _gap(16) +
+        ((_gap(16) + instr) if instr else '') +
+        ((_gap(2) + notice + _gap(12)) if notice else _gap(6)) + bank + _gap(16) +
         _ep('A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
             'Confirmação de Operação de Derivativo em referência.', muted=True))
 
@@ -463,7 +539,7 @@ def _premium_cliente_email(items, contraparte, spn, taxid, cpd, asset_label='Com
     return {
         'subject': '(Pagamento de Prêmio) Liquidação de Operação de Derivativo ({}) - {} - {}'.format(asset_label, _today_br(), contraparte),
         'html': html,
-        'cc': 'Liquidação; Brazil Comm Sales',
+        'cc': 'Liquidação; Brazil Comm Sales' if cc_comm_sales else 'Liquidação',
         'to': to_emails,
     }
 
@@ -666,6 +742,21 @@ def _resolve_recipients(value):
     return '; '.join(out)
 
 
+_LOGO_CACHE = {}
+
+
+def _logo_bytes():
+    """The inline wordmark PNG, read once. Returns None if the asset is missing —
+    the draft is then built without the image part rather than failing."""
+    if 'data' not in _LOGO_CACHE:
+        try:
+            with open(_E_LOGO_FILE, 'rb') as fh:
+                _LOGO_CACHE['data'] = fh.read()
+        except Exception:
+            _LOGO_CACHE['data'] = None
+    return _LOGO_CACHE['data']
+
+
 def _safe_filename(s):
     # Transliterate accents to ASCII (ê→e, ç→c, ã→a…) so the resulting name is
     # pure ASCII. A non-ASCII Content-Disposition filename can be dropped or 500
@@ -707,11 +798,38 @@ def build_eml_bytes(draft, sender_email=None):
     if cc:
         lines.append('Cc: ' + cc)
     lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
-    lines.append('Content-Type: text/html; charset=utf-8')
-    lines.append('Content-Transfer-Encoding: 8bit')
-    header = '\r\n'.join(lines)
     html = draft.get('html', '') or ''
-    return (header + '\r\n\r\n' + html).encode('utf-8')
+
+    logo = _logo_bytes() if ('cid:' + _E_LOGO_CID) in html else None
+    if not logo:
+        # No inline image (or the asset is missing) — keep the simple single-part
+        # message. The header cell still carries the styled alt text, so a draft
+        # built without the logo reads as the old wordmark rather than breaking.
+        lines.append('Content-Type: text/html; charset=utf-8')
+        lines.append('Content-Transfer-Encoding: 8bit')
+        return ('\r\n'.join(lines) + '\r\n\r\n' + html).encode('utf-8')
+
+    # multipart/related is what makes Outlook render the wordmark inline instead
+    # of hanging it off the message as an attachment.
+    boundary = '=_otctracker_related_' + hashlib.md5(subj.encode('utf-8')).hexdigest()[:16]
+    lines.append('Content-Type: multipart/related; type="text/html"; boundary="' + boundary + '"')
+    out = ['\r\n'.join(lines), '']
+    out.append('--' + boundary)
+    out.append('Content-Type: text/html; charset=utf-8')
+    out.append('Content-Transfer-Encoding: 8bit')
+    out.append('')
+    out.append(html)
+    out.append('--' + boundary)
+    out.append('Content-Type: image/png')
+    out.append('Content-Transfer-Encoding: base64')
+    out.append('Content-ID: <' + _E_LOGO_CID + '>')
+    out.append('Content-Disposition: inline; filename="' + os.path.basename(_E_LOGO_FILE) + '"')
+    out.append('')
+    b64 = base64.b64encode(logo).decode('ascii')
+    out.append('\r\n'.join(b64[i:i + 76] for i in range(0, len(b64), 76)))
+    out.append('--' + boundary + '--')
+    out.append('')
+    return '\r\n'.join(out).encode('utf-8')
 
 
 def build_drafts_download(drafts, sender_email=None):
