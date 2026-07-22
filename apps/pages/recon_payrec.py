@@ -1364,6 +1364,12 @@ def send_payrec_email(recon_date):
         settled=_decorate_rows(data.get('settled', [])),
         has_comments=has_comments,
         current_year=current_year,
+        # Reference the inline gradient attached below, not the app-wide external
+        # URL from the context processor: cid: renders offline, isn't blocked by
+        # Outlook's image blocking, and doesn't depend on where the send ran from
+        # (a scheduler send has no request context, so the external URL fails and
+        # the header falls back to a flat colour).
+        grad_url='cid:otc_gradient',
     )
 
     msg = MIMEMultipart('related')
@@ -1386,6 +1392,21 @@ def send_payrec_email(recon_date):
                     img.add_header('Content-ID', '<otc_logo>')
                     img.add_header('Content-Disposition', 'inline', filename='logo.png')
                     msg.attach(img)
+                break
+    except Exception:
+        pass
+
+    # Header gradient — inline so it renders every day regardless of send origin
+    # (referenced as cid:otc_gradient by the shared header partial).
+    try:
+        for gp in [os.path.join(current_app.root_path, 'static', 'images', 'email-header-gradient.png'),
+                   os.path.normpath(os.path.join(current_app.root_path, '..', 'static', 'images', 'email-header-gradient.png'))]:
+            if os.path.exists(gp):
+                with open(gp, 'rb') as f:
+                    gimg = MIMEImage(f.read())
+                    gimg.add_header('Content-ID', '<otc_gradient>')
+                    gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+                    msg.attach(gimg)
                 break
     except Exception:
         pass
