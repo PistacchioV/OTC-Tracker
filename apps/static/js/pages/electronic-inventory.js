@@ -732,8 +732,13 @@
             var item = e.target.closest('.ei-fold-item');
             if (!item) return;
             var path = item.dataset.path.split('/');
-            var same = path.join('/') === state.confPath.join('/');
-            state.confPath = same ? path.slice(0, -1) : path;
+            var depth = path.length - 1;
+            // A node is open when the selected path runs through it — at ANY
+            // depth below, not just when it is the exact selection. Clicking an
+            // open node collapses it in one click (cutting the path above it)
+            // instead of merely trimming one level and leaving it expanded.
+            var isOpen = state.confPath.length > depth && state.confPath[depth] === path[depth];
+            state.confPath = isOpen ? path.slice(0, depth) : path;
             renderConfTree();
             renderDocs();
         });
