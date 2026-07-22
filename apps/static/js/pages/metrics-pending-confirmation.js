@@ -110,9 +110,9 @@
         var rangeTxt = isDaily ? 'Daily snapshots for the current month.'
             : (document.getElementById('pcm-range').value === 'cy' ? 'Month-end volume, current year.' : 'Month-end volume, trailing 24 months.');
         note.innerHTML = rangeTxt + ' &nbsp;·&nbsp; Change: '
-            + '<span style="color:' + C_GOOD + ';font-weight:600">▼ down = fewer pending (good)</span>&nbsp;&nbsp;'
+            + '<span style="color:' + C_GOOD + ';font-weight:600">▼ down = fewer pending</span>&nbsp;&nbsp;'
             + '<span style="color:' + C_NEUTRAL + ';font-weight:600">► flat</span>&nbsp;&nbsp;'
-            + '<span style="color:' + C_BAD + ';font-weight:600">▲ up = more pending (bad)</span>';
+            + '<span style="color:' + C_BAD + ';font-weight:600">▲ up = more pending</span>';
         const barColor = '#0066cc';
         charts.history = new Chart(cv, {
             data: {
