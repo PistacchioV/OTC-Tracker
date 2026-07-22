@@ -3,6 +3,7 @@
 {% block title %}Electronic Inventory{% endblock title %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css">
 <style>
     /* ------------------------------------------------------------------ */
     /*  ELECTRONIC INVENTORY — document library                            */
@@ -169,6 +170,24 @@
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
     }
 
+    /* daterangepicker — the calendar is appended to <body>, so these rules are
+       deliberately NOT scoped under #ei-page. Solid background (it must not go
+       translucent over the glass modal) + Action Blue selection. */
+    .daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--bs-border-color);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, .18); background: #fff; }
+    .daterangepicker td.active, .daterangepicker td.active:hover { background-color: #0066cc; }
+    .daterangepicker .calendar-table { background: transparent; border: 0; }
+    [data-bs-theme=dark] .daterangepicker { background: #2b2f3a; color: var(--bs-body-color); }
+    [data-bs-theme=dark] .daterangepicker td.available:hover,
+    [data-bs-theme=dark] .daterangepicker th.available:hover { background: #3a3f4d; }
+    [data-bs-theme=dark] .daterangepicker td.off,
+    [data-bs-theme=dark] .daterangepicker td.off:hover { background: transparent; color: #6c757d; }
+    [data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
+    [data-bs-theme=dark] .daterangepicker .calendar-table th,
+    [data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--bs-body-color); }
+    [data-bs-theme=dark] .daterangepicker select { background: #2b2f3a; color: var(--bs-body-color);
+        border-color: var(--bs-border-color); }
+
     @media (prefers-reduced-motion: reduce) {
         #ei-page *, #ei-page *::before, #ei-page *::after { animation: none !important; transition: none !important; }
     }
@@ -320,7 +339,9 @@
                         </div>
 
                         <div class="col-md-6 d-none" id="eiUpSubtypeWrap">
-                            <label class="form-label fw-semibold">Transactional Type</label>
+                            <!-- Label + options swap with Document Type (Transactional
+                                 agreements vs. Confirmations by product). -->
+                            <label class="form-label fw-semibold" id="eiUpSubtypeLabel">Transactional Type</label>
                             <select class="form-select" id="eiUpSubtype">
                                 <option value="">— Select —</option>
                             </select>
@@ -352,5 +373,10 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260721f"></script>
+<!-- jQuery MUST come first: the global vendors bundle does not expose a usable
+     jQuery, so daterangepicker would silently fail to register (see HANDOFF). -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722a"></script>
 {% endblock extra_javascript %}

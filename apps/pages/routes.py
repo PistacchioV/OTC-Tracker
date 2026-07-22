@@ -347,6 +347,38 @@ def _ei_sanitize(name):
     return s.rstrip('. ')
 
 
+def _ei_actual_dir_name(folder):
+    """On-disk folder name matching the sanitized `folder`, tolerant to
+    case/whitespace/illegal-char differences. Falls back to `folder` itself.
+
+    Consults the background share scan first (_EI_ROOT_CACHE). Listing the root
+    directly costs one stat per counterparty folder over the network share, so a
+    cache hit is the difference between instant and tens of seconds — that scan
+    is exactly why the cache exists."""
+    key = folder.upper()
+    try:
+        with _EI_ROOT_CACHE_LOCK:
+            complete = bool(_EI_ROOT_CACHE.get('complete'))
+            cached = _EI_ROOT_CACHE['dirs'].get(key) if complete else None
+    except Exception:
+        complete, cached = False, None
+    if cached:
+        return cached
+    if complete:
+        # Scan finished and this counterparty has no folder yet — the caller
+        # creates it under the sanitized name. No point re-listing the share.
+        return folder
+    try:
+        if os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+            for entry in os.listdir(ELECTRONIC_INVENTORY_ROOT):
+                if (os.path.isdir(os.path.join(ELECTRONIC_INVENTORY_ROOT, entry))
+                        and _ei_sanitize(entry).upper() == key):
+                    return entry
+    except Exception:
+        pass
+    return folder
+
+
 def _ensure_counterparty_folders(company):
     """Create ELECTRONIC_INVENTORY_ROOT\\<company>\\{Confirmations,Transactional,SSI}
     if missing. Tolerant existence match (case/whitespace/illegal-char insensitive)
@@ -356,15 +388,7 @@ def _ensure_counterparty_folders(company):
     if not folder:
         return
     try:
-        root = ELECTRONIC_INVENTORY_ROOT
-        key = folder.upper()
-        actual = folder
-        if os.path.isdir(root):
-            for entry in os.listdir(root):
-                if os.path.isdir(os.path.join(root, entry)) and _ei_sanitize(entry).upper() == key:
-                    actual = entry
-                    break
-        parent = os.path.join(root, actual)
+        parent = os.path.join(ELECTRONIC_INVENTORY_ROOT, _ei_actual_dir_name(folder))
         for sub in EI_SUBFOLDERS:
             os.makedirs(os.path.join(parent, sub), exist_ok=True)
     except Exception as exc:
@@ -15884,7 +15908,9 @@ def reconciliation_payrec_end():
 #  scripts/create_counterparty_folders.py uses), matched tolerantly by
 #  _ei_sanitize so a slightly different on-disk name is still found.
 # ============================================================================
-_EI_TRANSACTIONAL_TYPES = ('CGD', 'CSA', 'ISDA', 'GMRA', 'GMSLA', 'Master Agreement', 'Others')
+_EI_TRANSACTIONAL_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
+# Confirmations are filed per trade product, under Confirmations/<yyyy>/<mm>/<dd>.
+_EI_CONFIRMATION_TYPES = ('NDF', 'Option', 'Swap')
 _EI_PREVIEWABLE = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
 _EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
                       '.png', '.jpg', '.jpeg', '.gif', '.txt', '.zip'}
@@ -15913,25 +15939,36 @@ def _ei_resolve_client_dir(client, create=False):
         return None
     if create:
         _ensure_counterparty_folders(client)
-    root, actual, key = ELECTRONIC_INVENTORY_ROOT, folder, folder.upper()
-    # Fast path: reuse the cached share scan (folder-name map) instead of a fresh
-    # os.listdir() of the whole network share on every documents/file request.
+    # Cached share scan first — see _ei_actual_dir_name.
+    return os.path.join(ELECTRONIC_INVENTORY_ROOT, _ei_actual_dir_name(folder))
+
+
+def _ei_ordinal(n):
+    """1 -> '1st', 2 -> '2nd', 3 -> '3rd', 4 -> '4th' … (11/12/13 are 'th')."""
+    if 11 <= (n % 100) <= 13:
+        return '%dth' % n
+    return '%d%s' % (n, {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th'))
+
+
+def _ei_next_ordinal(target_dir, prefix, cname):
+    """Which numbered copy of `<prefix> - <cname> - …` the next upload becomes.
+
+    Counts what is already filed in `target_dir` and returns max+1, so a second
+    CGD Amendment lands as '2nd CGD AMENDMENT - …' regardless of its date. Max
+    (not count) so deleting a middle document never re-issues a taken number.
+    Returns 1 when nothing matches — the first document carries no ordinal."""
+    pat = re.compile(
+        r'^(?:(\d+)(?:st|nd|rd|th)\s+)?%s\s+-\s+%s\s+-\s+'
+        % (re.escape(prefix), re.escape(cname)), re.IGNORECASE)
+    highest = 0
     try:
-        with _EI_ROOT_CACHE_LOCK:
-            cached = _EI_ROOT_CACHE['dirs'].get(key) if _EI_ROOT_CACHE.get('complete') else None
+        for entry in os.listdir(target_dir):
+            m = pat.match(entry)
+            if m:
+                highest = max(highest, int(m.group(1)) if m.group(1) else 1)
     except Exception:
-        cached = None
-    if cached:
-        return os.path.join(root, cached)
-    try:
-        if os.path.isdir(root):
-            for entry in os.listdir(root):
-                if os.path.isdir(os.path.join(root, entry)) and _ei_sanitize(entry).upper() == key:
-                    actual = entry
-                    break
-    except Exception:
-        pass
-    return os.path.join(root, actual)
+        return 1        # unreadable/missing dir — caller still writes the file
+    return highest + 1
 
 
 def _ei_human_size(n):
@@ -15974,8 +16011,11 @@ def _ei_iter_files(base, doctype):
                     re.match(r'^\d{2}$', parts[2])):
                 doc_date = '%s/%s/%s' % (parts[2], parts[1], parts[0])
             subtype = ''
-            if doctype == 'Transactional':
-                m = re.match(r'^\s*([A-Za-z0-9/&.\- ]+?)\s+-\s+', fn)
+            if doctype in ('Transactional', 'Confirmations'):
+                # Drop the version prefix ('2nd CGD AMENDMENT - …') so the
+                # sub-type filter still matches every copy of the same kind.
+                m = re.match(r'^\s*(?:\d+(?:st|nd|rd|th)\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
+                             fn, re.IGNORECASE)
                 subtype = (m.group(1).strip().upper() if m else '')
             yield {
                 'name': fn,
@@ -16081,7 +16121,8 @@ def api_ei_clients():
                     'root_exists': bool(root_exists),
                     'scan_complete': complete,
                     'share_slow': not complete,
-                    'transactional_types': list(_EI_TRANSACTIONAL_TYPES)})
+                    'transactional_types': list(_EI_TRANSACTIONAL_TYPES),
+                    'confirmation_types': list(_EI_CONFIRMATION_TYPES)})
 
 
 @blueprint.route('/api/electronic-inventory/documents')
@@ -16155,21 +16196,27 @@ def api_ei_upload():
     base = _ei_resolve_client_dir(client, create=True)
     cname = _ei_sanitize(client)
     if doctype == 'Confirmations':
+        # Confirmations are filed by trade date: Confirmations/<yyyy>/<mm>/<dd>.
         target_dir = os.path.join(base, 'Confirmations', yyyy, mm, dd)
-        fname = '%s%s' % (_ei_sanitize(os.path.splitext(f.filename)[0]) or 'confirmation', ext)
+        prefix = (_ei_sanitize(subtype).upper() or 'CONFIRMATION')
     elif doctype == 'SSI':
         target_dir = os.path.join(base, 'SSI')
-        fname = 'SSI - %s - %s%s' % (cname, ddmmyyyy, ext)
+        prefix = 'SSI'
     else:  # Transactional
         target_dir = os.path.join(base, 'Transactional')
         prefix = (_ei_sanitize(subtype).upper() or 'DOC')
-        fname = '%s - %s - %s%s' % (prefix, cname, ddmmyyyy, ext)
     try:
         os.makedirs(target_dir, exist_ok=True)
+        # A counterparty can legitimately have several documents of the same kind
+        # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
+        # clobbering the previous or hiding it behind a meaningless " (2)".
+        nth = _ei_next_ordinal(target_dir, prefix, cname)
+        fname = '%s%s - %s - %s%s' % (
+            ('%s ' % _ei_ordinal(nth)) if nth > 1 else '', prefix, cname, ddmmyyyy, ext)
         dest = os.path.join(target_dir, fname)
         stem, e = os.path.splitext(dest)
         i = 2
-        while os.path.exists(dest):     # never clobber an existing document
+        while os.path.exists(dest):     # same kind AND same date — still never clobber
             dest = '%s (%d)%s' % (stem, i, e)
             i += 1
         f.save(dest)

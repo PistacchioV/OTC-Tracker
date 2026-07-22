@@ -9,6 +9,8 @@
     'use strict';
 
     var API = '/api/electronic-inventory';
+    var UPLOAD_TIMEOUT_MS = 90000;   // hard ceiling on a save to the (slow) I: share
+    var PREVIEW_TIMEOUT_MS = 45000;  // ditto for streaming a PDF into the viewer
     var state = {
         clients: [],          // [{name, spn, on_disk}]
         rootExists: false,
@@ -17,7 +19,8 @@
         type: 'all',          // active doc-type rail
         subtype: '',          // transactional sub-type filter
         allDocs: [],          // every document for the current client
-        selectedRel: null
+        selectedRel: null,
+        previewTimer: null    // bounds the "Loading PDF…" veil (see preview())
     };
 
     /* ---- tiny helpers ---------------------------------------------------- */
@@ -68,6 +71,7 @@
             state.rootExists = !!res.root_exists;
             state.scanComplete = !!res.scan_complete;
             state.subtypes = res.transactional_types || [];
+            state.confTypes = res.confirmation_types || [];
             var dot = $('eiShareDot'), lbl = $('eiShareLabel');
             if (!state.scanComplete) {
                 // Share not fully enumerated yet — names come from RefData so the
@@ -87,12 +91,13 @@
             }
             // If the combo is currently open, re-render so refreshed badges show.
             if (isPoll && $('eiClientMenu').classList.contains('show')) renderCombo($('eiClientInput').value);
-            // seed the transactional sub-type selects (once)
+            // seed the transactional sub-type selects (once). The upload modal's
+            // select is repopulated per Document Type — see fillSubtypeOptions.
             if (!eiSubtypesSeeded && state.subtypes.length) {
                 eiSubtypesSeeded = true;
                 var opts = state.subtypes.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
-                $('eiUpSubtype').insertAdjacentHTML('beforeend', opts);
                 $('eiSubtypeFilter').insertAdjacentHTML('beforeend', opts);
+                fillSubtypeOptions($('eiUpType').value);
             }
         }).catch(function (e) {
             console.error('ei clients error', e);
@@ -190,7 +195,10 @@
         var q = ($('eiDocSearch').value || '').trim().toLowerCase();
         return state.allDocs.filter(function (d) {
             if (state.type !== 'all' && d.doctype !== state.type) return false;
-            if (state.type === 'Transactional' && state.subtype && d.subtype !== state.subtype) return false;
+            // Case-insensitive: the filter carries the registry casing ('CGD Amendment')
+            // while d.subtype is parsed from the (upper-case) filename.
+            if (state.type === 'Transactional' && state.subtype &&
+                (d.subtype || '').toUpperCase() !== state.subtype.toUpperCase()) return false;
             if (q && d.name.toLowerCase().indexOf(q) < 0 && (d.subtype || '').toLowerCase().indexOf(q) < 0) return false;
             return true;
         });
@@ -246,10 +254,29 @@
                 '</div>' +
                 '<iframe class="ei-preview-frame" id="eiFrame" title="PDF preview"></iframe>';
             var fr = $('eiFrame');
+            if (state.previewTimer) clearTimeout(state.previewTimer);
             fr.addEventListener('load', function () {
+                clearTimeout(state.previewTimer);
                 fr.classList.add('ready');
                 var ld = $('eiPvLoad'); if (ld) ld.remove();
             });
+            // Chrome's built-in PDF viewer does not always fire 'load' on the
+            // iframe, and the share itself can stall — either way the veil would
+            // sit there forever. Give up after a bound and offer a way out.
+            state.previewTimer = setTimeout(function () {
+                var ld = $('eiPvLoad');
+                if (!ld) return;                       // already loaded
+                fr.classList.add('ready');             // show whatever did render
+                ld.innerHTML =
+                    '<i class="ti ti-cloud-off fs-1 text-muted"></i>' +
+                    '<div class="fw-semibold">Still loading from the share</div>' +
+                    '<div class="fs-sm text-muted px-3 text-center" style="max-width:32ch">' +
+                        'The preview is taking longer than usual. Use Download or Open to view the file.' +
+                    '</div>' +
+                    '<button type="button" class="btn btn-sm btn-light ei-btn" id="eiPvDismiss">Dismiss</button>';
+                var btn = $('eiPvDismiss');
+                if (btn) btn.addEventListener('click', function () { ld.remove(); });
+            }, PREVIEW_TIMEOUT_MS);
             // Set src AFTER wiring the handler so a fast cache hit still clears the veil.
             fr.src = fileUrl(rel, false);
         } else {
@@ -257,6 +284,75 @@
                 '<div class="fw-semibold">No inline preview for .' + esc((d.ext || '').toLowerCase()) + '</div>' +
                 '<div class="fs-sm">Use Download or Open to view this file.</div></div>';
         }
+    }
+
+    /* ---- upload sub-type (Transactional / Confirmation) ------------------- */
+    // One select serves both: Transactional agreements (CGD, Appendix, …) and
+    // Confirmations by product (NDF, Option, Swap). SSI has no sub-type.
+    function fillSubtypeOptions(doctype) {
+        var wrap = $('eiUpSubtypeWrap'), sel = $('eiUpSubtype');
+        var list = doctype === 'Confirmations' ? (state.confTypes || [])
+                 : doctype === 'Transactional' ? (state.subtypes || [])
+                 : [];
+        wrap.classList.toggle('d-none', !list.length);
+        $('eiUpSubtypeLabel').textContent =
+            doctype === 'Confirmations' ? 'Confirmation Type' : 'Transactional Type';
+        sel.innerHTML = '<option value="">— Select —</option>' + list.map(function (t) {
+            return '<option value="' + esc(t) + '">' + esc(t) + '</option>';
+        }).join('');
+    }
+
+    /* ---- date field (dd/mm/yyyy) ----------------------------------------- */
+    // App-wide standard is jQuery daterangepicker in singleDatePicker mode —
+    // never <input type="date"> (inherits the OS locale) and never flatpickr
+    // (proved flaky when loaded from the shared bundle). See HANDOFF.
+    var upPicker = null;
+
+    function todayStr() {
+        var t = new Date();
+        return ('0' + t.getDate()).slice(-2) + '/' + ('0' + (t.getMonth() + 1)).slice(-2) + '/' + t.getFullYear();
+    }
+
+    // Typing mask: keep the digits, re-insert the slashes. Deleting works
+    // naturally because a slash is only appended once a digit follows it.
+    function maskDate(el) {
+        var digits = (el.value.match(/\d/g) || []).join('').slice(0, 8);
+        var out = digits.slice(0, 2);
+        if (digits.length > 2) out += '/' + digits.slice(2, 4);
+        if (digits.length > 4) out += '/' + digits.slice(4, 8);
+        el.value = out;
+        return digits;
+    }
+
+    // Keep the calendar on whatever the user typed, as soon as it is a real date.
+    function syncPickerFromInput(digits) {
+        if (!upPicker || digits.length !== 8 || typeof moment === 'undefined') return;
+        var m = moment(digits, 'DDMMYYYY', true);
+        if (!m.isValid()) return;
+        upPicker.setStartDate(m);
+        upPicker.setEndDate(m);
+    }
+
+    // Reset to today — the modal must never reopen showing the previous upload's date.
+    function resetUpDate() {
+        var el = $('eiUpDate');
+        el.value = todayStr();
+        syncPickerFromInput(el.value.replace(/\D/g, ''));
+    }
+
+    function initDatePicker(tries) {
+        if (!(window.jQuery && window.jQuery.fn && window.jQuery.fn.daterangepicker)) {
+            // Plugin not parsed yet — retry briefly instead of degrading permanently.
+            if ((tries || 0) < 40) return setTimeout(function () { initDatePicker((tries || 0) + 1); }, 50);
+            return;
+        }
+        var $el = window.jQuery('#eiUpDate');
+        $el.daterangepicker({
+            singleDatePicker: true, autoApply: true, showDropdowns: true,
+            locale: { format: 'DD/MM/YYYY' }, startDate: moment()
+        }, function () { updateNamePreview(); });
+        upPicker = $el.data('daterangepicker');
+        resetUpDate();
     }
 
     /* ---- upload ---------------------------------------------------------- */
@@ -269,16 +365,20 @@
         var dd = (($('eiUpDate').value || '').match(/\d+/g) || []).join('');
         if (dd.length !== 8) { var t = new Date(); dd = ('0' + t.getDate()).slice(-2) + ('0' + (t.getMonth() + 1)).slice(-2) + t.getFullYear(); }
         var cname = sanitize(state.client || '');
+        var st = sanitize($('eiUpSubtype').value).toUpperCase();
         var name;
         if (type === 'Confirmations') {
-            name = 'Confirmations/' + dd.slice(4) + '/' + dd.slice(2, 4) + '/' + dd.slice(0, 2) + '/' + f.name;
+            name = 'Confirmations/' + dd.slice(4) + '/' + dd.slice(2, 4) + '/' + dd.slice(0, 2) + '/'
+                 + (st || 'CONFIRMATION') + ' - ' + cname + ' - ' + dd + ext;
         } else if (type === 'SSI') {
             name = 'SSI/SSI - ' + cname + ' - ' + dd + ext;
         } else {
-            var st = sanitize($('eiUpSubtype').value).toUpperCase() || 'DOC';
-            name = 'Transactional/' + st + ' - ' + cname + ' - ' + dd + ext;
+            name = 'Transactional/' + (st || 'DOC') + ' - ' + cname + ' - ' + dd + ext;
         }
-        out.innerHTML = 'Will be saved as: <code>' + esc(name) + '</code>';
+        // The server prefixes an ordinal (2nd, 3rd, …) when a document of the same
+        // kind already exists, so this is the first-copy name.
+        out.innerHTML = 'Will be saved as: <code>' + esc(name) + '</code>'
+            + '<span class="d-block text-muted">Numbered automatically (2nd, 3rd…) if this kind already exists.</span>';
     }
 
     function doUpload() {
@@ -289,14 +389,23 @@
         var fd = new FormData();
         fd.append('client', state.client);
         fd.append('type', type);
-        fd.append('subtype', type === 'Transactional' ? $('eiUpSubtype').value : '');
+        fd.append('subtype', type === 'SSI' ? '' : $('eiUpSubtype').value);
         fd.append('date', $('eiUpDate').value || '');
         fd.append('file', f);
         var btn = $('eiUpSubmit'); btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
-        fetch(API + '/upload', { method: 'POST', body: fd })
+        // The I: share can stall indefinitely. Bound the wait so the button always
+        // comes back instead of spinning forever with no way out.
+        var ctl = window.AbortController ? new AbortController() : null;
+        var timedOut = false;
+        var timer = setTimeout(function () {
+            timedOut = true;
+            if (ctl) ctl.abort();
+        }, UPLOAD_TIMEOUT_MS);
+        fetch(API + '/upload', { method: 'POST', body: fd, signal: ctl && ctl.signal })
             .then(function (r) { return r.json(); })
             .then(function (res) {
+                clearTimeout(timer);
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save to Inventory';
                 if (!res || !res.success) { toast('error', 'Upload failed', res && res.message); return; }
@@ -306,9 +415,13 @@
                 loadDocuments();
             })
             .catch(function (e) {
+                clearTimeout(timer);
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save to Inventory';
-                console.error('ei upload error', e); toast('error', 'Upload failed', 'Network error.');
+                console.error('ei upload error', e);
+                toast('error', 'Upload failed', timedOut
+                    ? 'The share did not respond in time. The file may still have been saved — refresh the list before retrying.'
+                    : 'Network error.');
             });
     }
 
@@ -370,17 +483,21 @@
             if (!state.client) { toast('warning', 'Select a counterparty first', 'Choose one on the left, then upload.'); return; }
             $('eiUpClient').value = state.client;
             $('eiUpType').value = state.type !== 'all' ? state.type : 'Confirmations';
-            $('eiUpType').dispatchEvent(new Event('change'));
+            fillSubtypeOptions($('eiUpType').value);   // also resets the sub-type to "— Select —"
             $('eiUpFile').value = ''; $('eiDropLabel').textContent = 'Drop a file here or click to browse';
             $('eiUpNamePreview').textContent = '';
+            resetUpDate();
             bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).show();
         });
         $('eiUpType').addEventListener('change', function () {
-            $('eiUpSubtypeWrap').classList.toggle('d-none', this.value !== 'Transactional');
+            fillSubtypeOptions(this.value);
             updateNamePreview();
         });
         $('eiUpSubtype').addEventListener('change', updateNamePreview);
-        $('eiUpDate').addEventListener('input', updateNamePreview);
+        $('eiUpDate').addEventListener('input', function () {
+            syncPickerFromInput(maskDate(this));
+            updateNamePreview();
+        });
         $('eiDrop').addEventListener('click', function () { $('eiUpFile').click(); });
         $('eiUpFile').addEventListener('change', function () {
             $('eiDropLabel').textContent = this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
@@ -400,11 +517,7 @@
         });
         $('eiUpSubmit').addEventListener('click', doUpload);
 
-        // date picker (BR format) if flatpickr is present
-        if (typeof flatpickr !== 'undefined') {
-            flatpickr($('eiUpDate'), { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true,
-                onChange: updateNamePreview });
-        }
+        initDatePicker(0);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
