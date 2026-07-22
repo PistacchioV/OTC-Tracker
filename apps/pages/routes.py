@@ -16096,7 +16096,7 @@ def _ei_next_ordinal(target_dir, prefix, cname):
         % (re.escape(prefix), re.escape(cname)), re.IGNORECASE)
     highest = 0
     try:
-        for entry in os.listdir(target_dir):
+        for entry in os.listdir(_ei_long_path(target_dir)):
             m = pat.match(entry)
             if m:
                 seen = m.group(1) or m.group(2)
@@ -16285,6 +16285,23 @@ def api_ei_documents():
                     'folder': base or '', 'folder_exists': folder_exists})
 
 
+def _ei_long_path(path):
+    r"""Windows extended-length form (\\?\...) for paths near MAX_PATH (260).
+
+    The Confirmations tree (<client>/Confirmations/<yyyy>/<mm>. <Month>/<dd>/
+    <product>/<TYPE> - <client> - <ddmmyyyy>.pdf) repeats a counterparty name
+    that can be 50+ chars twice, so a long name lands within a few dozen chars
+    of the limit. Past it every os.path/open call fails with a plain "not
+    found", which is indistinguishable from a missing file. No-op off Windows,
+    on short paths, and on already-prefixed ones. The path must already be
+    absolute and normalised — \\?\ disables all further normalisation."""
+    if os.name != 'nt' or len(path) < 250 or path.startswith('\\\\?\\'):
+        return path
+    if path.startswith('\\\\'):                 # UNC: \\server\share -> \\?\UNC\server\share
+        return '\\\\?\\UNC\\' + path[2:]
+    return '\\\\?\\' + path
+
+
 @blueprint.route('/api/electronic-inventory/file')
 def api_ei_file():
     if not session.get('authenticated'):
@@ -16296,17 +16313,24 @@ def api_ei_file():
     base = _ei_resolve_client_dir(client)
     if not base or not rel:
         return abort(404)
-    # Path-traversal guard: the resolved real path must stay inside base.
-    base_real = os.path.realpath(base)
-    full = os.path.realpath(os.path.join(base_real, rel))
-    if not (full == base_real or full.startswith(base_real + os.sep)):
+    # Path-traversal guard. Deliberately NOT os.path.realpath: on Windows it
+    # resolves the mapped drive (I:) to its UNC target, swapping 3 chars for ~37
+    # and pushing a deep Confirmations path over MAX_PATH — the file then 404s
+    # even though it is right there on the share. normpath collapses '..' and
+    # '.' textually, which is exactly what this guard needs; an absolute or
+    # drive-qualified `rel` escapes base and is caught by the same comparison.
+    base_abs = os.path.normpath(os.path.abspath(base))
+    full = os.path.normpath(os.path.join(base_abs, rel))
+    if not (full == base_abs or full.startswith(base_abs + os.sep)):
         return abort(400)
+    name = os.path.basename(full)
+    full = _ei_long_path(full)
     if not os.path.isfile(full):
         return abort(404)
     try:
-        return send_file(full, as_attachment=download, download_name=os.path.basename(full))
+        return send_file(full, as_attachment=download, download_name=name)
     except TypeError:   # Flask < 2.0
-        return send_file(full, as_attachment=download, attachment_filename=os.path.basename(full))
+        return send_file(full, as_attachment=download, attachment_filename=name)
 
 
 @blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
@@ -16344,7 +16368,7 @@ def api_ei_upload():
         target_dir = os.path.join(base, 'Transactional')
         prefix = (_ei_sanitize(subtype).upper() or 'DOC')
     try:
-        os.makedirs(target_dir, exist_ok=True)
+        os.makedirs(_ei_long_path(target_dir), exist_ok=True)
         # A counterparty can legitimately have several documents of the same kind
         # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
         # clobbering the previous or hiding it behind a meaningless " (2)".
@@ -16355,10 +16379,10 @@ def api_ei_upload():
         dest = os.path.join(target_dir, fname)
         stem, e = os.path.splitext(dest)
         i = 2
-        while os.path.exists(dest):     # same kind AND same date — still never clobber
+        while os.path.exists(_ei_long_path(dest)):   # same kind AND same date — still never clobber
             dest = '%s (%d)%s' % (stem, i, e)
             i += 1
-        f.save(dest)
+        f.save(_ei_long_path(dest))     # `dest` itself stays clean for relpath/basename below
     except Exception:
         log.error('[ei] upload failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
