@@ -707,7 +707,7 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
         )
 
         msg = MIMEMultipart('mixed')
-        msg['Subject'] = f'[OTC Tracker] Comitente Reconciliation - {recon_date_fmt}'
+        msg['Subject'] = f'Comitente Reconciliation - {recon_date_fmt}'
         msg['From']    = SHARED_MAILBOX
         msg['To']      = _MAILBOX
 

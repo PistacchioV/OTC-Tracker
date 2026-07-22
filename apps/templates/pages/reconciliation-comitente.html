@@ -438,7 +438,10 @@ const SC = (key, title) => ({
 const COLS = [
     {
         data: _d('Status'), title:'Status', className:'text-center',
-        render: d => sBadge(d)
+        // Orthogonal: o badge só no display. Devolver HTML em todos os tipos
+        // fazia o DataTables ordenar e buscar pela string do markup — ou seja,
+        // pela classe CSS ('s-amend' < 's-check' < …), não pelo status.
+        render: (d, type) => type === 'display' ? sBadge(d) : (d || '')
     },
     {
         data: _d('Matching Score Averaged'), title:'Avg Score',
@@ -577,7 +580,8 @@ $(document).ready(function() {
             data: [],
             scrollX: true,
             pageLength: 25,
-            order: [[28, 'asc']],
+            // Status (col. 0) A-Z como ordenação padrão, mantida a cada redraw.
+            order: [[0, 'asc']],
             dom: "<'row'<'col-sm-12'tr>>" +
                  "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
             buttons: [
