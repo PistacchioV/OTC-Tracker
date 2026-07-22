@@ -4085,6 +4085,10 @@ def _cc_parse_rules(raw):
         p = part.strip()
         if not p:
             continue
+        # 'Active'/'Inactive' são status do contato, não regra — a planilha
+        # mistura os dois na mesma célula e o valor acabava duplicado na tela.
+        if p.upper() in ('ACTIVE', 'INACTIVE'):
+            continue
         canon = _CONTACT_RULE_MAP.get(p.upper(), p)
         if canon.upper() not in seen:
             seen.add(canon.upper())
