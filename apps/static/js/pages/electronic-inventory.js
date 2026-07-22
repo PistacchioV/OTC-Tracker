@@ -38,7 +38,10 @@
         if (typeof Swal !== 'undefined') {
             Swal.fire({ icon: icon, title: title, text: text || '', confirmButtonColor: '#0066cc',
                 timer: icon === 'success' ? 2400 : undefined, showConfirmButton: icon !== 'success' });
-        } else if (icon === 'error') {
+        } else if (icon !== 'success') {
+            // No SweetAlert2 on the page: still surface anything actionable.
+            // Silently dropping warnings made the Upload button look dead when
+            // no counterparty was selected.
             alert((title || '') + (text ? '\n' + text : ''));
         }
     }
