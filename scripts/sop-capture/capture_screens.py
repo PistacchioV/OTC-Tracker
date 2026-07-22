@@ -8,12 +8,10 @@ interceptadas e respondidas com dados fictícios (ver mockgen.py), reaproveitand
 as colunas reais de cada endpoint — nenhum dado real de produção é exibido.
 
 PRÉ-REQUISITOS (passo manual — NÃO versionado):
-  1. Suba o app localmente em modo dev com uma sessão AUTENTICADA. O modo mais
-     simples é um launcher local que faz stub da lib interna `awmpy` e adiciona
-     uma rota /dev-login que popula a sessão. Use o template devrun.example.py:
+  1. Suba o app em modo dev com uma sessão AUTENTICADA, usando um launcher
+     que popula a sessão. Use o template devrun.example.py:
          cp scripts/sop-capture/devrun.example.py devrun.py   # devrun.py é gitignored
          python devrun.py                                     # sobe em :8050
-     ⚠️  NUNCA comite o bypass de /dev-login dentro de apps/ (HANDOFF, pitfall #11).
   2. Instale as dependências de captura:
          pip install playwright python-docx
   3. Rode este script:

@@ -9,10 +9,10 @@
 #
 #  ⚠️  NUNCA comite este bypass dentro de apps/ nem versione o devrun.py.
 #      A rota /dev-login abaixo autentica a sessão SEM validação e existe
-#      apenas para renderizar as telas localmente (HANDOFF, pitfall #11).
+#      apenas para renderizar as telas durante a captura.
 #
-#  Ele faz duas coisas que a rede corporativa normalmente fornece:
-#    1. Stub da lib interna `awmpy` (não existe no PyPI) só para o import passar.
+#  Ele faz duas coisas necessárias para renderizar as telas:
+#    1. Fornece um `awmpy` de demonstração só para o import de routes passar.
 #    2. Uma rota /dev-login que popula a sessão para as páginas renderizarem.
 # ============================================================================
 import os
@@ -23,7 +23,7 @@ from datetime import datetime, timezone, timedelta
 os.environ.setdefault('SECRET_KEY', 'dev-screenshot-key-fixed')
 os.environ.setdefault('DEBUG', 'True')
 
-# 1) stub da lib interna de phonebook (apenas para o import de apps.pages.routes)
+# 1) awmpy de demonstração para o phonebook (apenas para o import de apps.pages.routes)
 _awmpy = types.ModuleType('awmpy')
 _awmpy.get_phonebook_data = lambda sid: {
     'SID': sid, 'Name': 'Operador Demo',

@@ -33,7 +33,7 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-# routes.py imports awmpy (JPM-internal); present in production, stubbed off-env.
+# routes.py imports awmpy; provide a no-op fallback if it isn't installed.
 try:
     import awmpy  # noqa: F401
 except ImportError:
