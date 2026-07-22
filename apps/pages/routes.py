@@ -3,6 +3,7 @@ import os
 import io
 import re
 import random
+import secrets
 import string
 import smtplib
 import json
@@ -80,7 +81,6 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
-    'pages_blueprint.dev_login',          # DEV BYPASS — reachable while locked (strip before commit)
 }
 
 
@@ -108,15 +108,37 @@ def add_no_store_on_authed_pages(response):
     return response
 
 
+# Content-Security-Policy in REPORT-ONLY mode: the browser blocks nothing, it just
+# posts a report to /csp-report for anything this policy would forbid. The app
+# still relies on inline scripts/handlers, so 'unsafe-inline' stays for now; the
+# external hosts are the CDNs/fonts/embeds the pages actually load. Watch the
+# csp-report logs, tighten the allowlist, then flip the header name to
+# 'Content-Security-Policy' to start enforcing.
+_CSP_REPORT_ONLY = (
+    "default-src 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "frame-ancestors 'self'; "
+    "img-src 'self' data:; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "script-src 'self' 'unsafe-inline' "
+    "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://apexcharts.com; "
+    "connect-src 'self'; "
+    "frame-src 'self' https://www.youtube.com https://player.vimeo.com; "
+    "report-uri /csp-report"
+)
+
+
 @blueprint.after_request
 def add_security_headers(response):
-    """Baseline security headers on every response. A restrictive
-    Content-Security-Policy is intentionally left out here: the app relies on
-    inline scripts/handlers, so CSP needs a dedicated report-only rollout."""
+    """Baseline security headers on every response. CSP ships in report-only mode
+    (see _CSP_REPORT_ONLY) so nothing breaks while violations are collected."""
     try:
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault('Content-Security-Policy-Report-Only', _CSP_REPORT_ONLY)
         # HSTS is only meaningful over HTTPS; request.is_secure reflects the
         # proxy's X-Forwarded-Proto via ProxyFix.
         if request.is_secure:
@@ -125,6 +147,21 @@ def add_security_headers(response):
     except Exception:
         pass
     return response
+
+
+@blueprint.route('/csp-report', methods=['POST'])
+def csp_report():
+    """Collector for Content-Security-Policy-Report-Only violations. Report-only
+    means nothing is blocked yet — these logs show what an enforcing policy would
+    break, so the allowlist can be tuned before the switch. Unauthenticated by
+    design: browsers post these reports without credentials."""
+    try:
+        raw = request.get_data(as_text=True) or ''
+        if raw:
+            log.warning('[csp-report] %s', raw[:2000])
+    except Exception:
+        pass
+    return ('', 204)
 
 
 # ==============================================================================
@@ -299,6 +336,20 @@ def _safe_landing(allowed):
     return '/users-profile'
 
 
+def _user_can_access_page(url):
+    """True if the current session may reach a given sidebar page URL — same rule
+    as enforce_page_access, for API endpoints that back a page. enforce_page_access
+    skips '/api/' paths, so a mutating API behind a page must re-check here or a
+    user without that page granted could call it directly. Master and unconfigured
+    users always pass."""
+    if _session_is_master():
+        return True
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    if not configured:
+        return True
+    return url in allowed
+
+
 @blueprint.before_request
 def enforce_control_panel_cards():
     """Block a Control Panel routine's API call when the user isn't granted that
@@ -449,6 +500,15 @@ SMTP_HOST = "mailhost.jpmchase.net"
 SMTP_PORT = 25
 CODE_EXPIRY_MINUTES = 10
 
+# 2FA hardening. A 6-digit code has a 10^6 space; without a cap on wrong tries it
+# is brute-forceable inside the 10-minute window. MAX_2FA_ATTEMPTS burns a code
+# after that many wrong guesses. The send limits stop an attacker who knows a SID
+# from bombing the victim's inbox (or minting endless fresh codes to keep guessing).
+MAX_2FA_ATTEMPTS = 5              # wrong guesses per code before it is invalidated
+CODE_RESEND_COOLDOWN_SECONDS = 30  # minimum gap between two code emails for a SID
+CODE_WINDOW_MINUTES = 15         # rolling window for the code-issue cap
+MAX_CODES_PER_WINDOW = 5         # max codes emailed to a SID within that window
+
 ROLE_META = {
     'MASTER':       {'display': 'Master',        'icon': 'ti-crown',                'description': 'Top-level authority — manages page access for everyone, including admins.', 'responsibilities': ['Control All Access', 'Manage Admins', 'Manage Users', 'Configure System']},
     'ADMIN':        {'display': 'Admin',         'icon': 'ti-shield-lock',          'description': 'Full platform administration and user management.',         'responsibilities': ['Manage Users', 'Configure System', 'View All Data', 'Assign Roles']},
@@ -578,7 +638,8 @@ def init_db():
                 code       VARCHAR(6) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL,
-                used       BOOLEAN  DEFAULT FALSE
+                used       BOOLEAN  DEFAULT FALSE,
+                attempts   INTEGER  DEFAULT 0
             )
         """)
         conn.execute("""
@@ -632,6 +693,18 @@ def _migrate_schema():
                 conn.commit()
         except Exception:
             log.debug("[migrate] verification_codes check skipped: %s", traceback.format_exc())
+
+        # Add verification_codes.attempts (per-code wrong-guess counter) if missing.
+        try:
+            vc_cols = [c[0] for c in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='verification_codes'"
+            ).fetchall()]
+            if vc_cols and 'attempts' not in vc_cols:
+                log.warning("[migrate] Adding missing column verification_codes.attempts")
+                conn.execute("ALTER TABLE verification_codes ADD COLUMN attempts INTEGER DEFAULT 0")
+                conn.commit()
+        except Exception:
+            log.debug("[migrate] verification_codes.attempts check skipped: %s", traceback.format_exc())
 
         # Fix users: Role -> Role_Description + add Role + add Status
         try:
@@ -972,34 +1045,96 @@ def verify_code(sid, code):
     log.info("[verify_code] Verifying code for SID=%s", sid)
     conn = get_db_connection()
     try:
+        # A match only counts while the code still has attempts left — once the
+        # wrong-guess cap is hit the code is burned and can never validate again.
         result = conn.execute("""
             SELECT id FROM verification_codes
             WHERE SID = ? AND code = ? AND used = FALSE
               AND expires_at > CURRENT_TIMESTAMP
+              AND attempts < ?
             ORDER BY created_at DESC
             LIMIT 1
-        """, [sid, code]).fetchone()
+        """, [sid, code, MAX_2FA_ATTEMPTS]).fetchone()
 
-        if not result:
-            exists = conn.execute(
-                "SELECT 1 FROM verification_codes WHERE SID = ? AND code = ? AND used = FALSE",
-                [sid, code]
-            ).fetchone()
-            if exists:
-                log.warning("[verify_code] Code for SID=%s is EXPIRED", sid)
-                return False, "Verification code has expired. Please request a new one."
-            log.warning("[verify_code] Invalid code attempt for SID=%s", sid)
+        if result:
+            conn.execute("UPDATE verification_codes SET used = TRUE WHERE id = ?", [result[0]])
+            conn.commit()
+            log.info("[verify_code] Code verified OK for SID=%s (row id=%s)", sid, result[0])
+            return True, "Code verified successfully."
+
+        # No match: spend one attempt on the live code so the 6-digit space can't
+        # be brute-forced. At the cap the code is invalidated (used = TRUE).
+        active = conn.execute("""
+            SELECT id, attempts, (expires_at > CURRENT_TIMESTAMP) AS live
+            FROM verification_codes
+            WHERE SID = ? AND used = FALSE
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, [sid]).fetchone()
+
+        if active and active[2]:
+            new_attempts = (active[1] or 0) + 1
+            if new_attempts >= MAX_2FA_ATTEMPTS:
+                conn.execute("UPDATE verification_codes SET used = TRUE, attempts = ? WHERE id = ?",
+                             [new_attempts, active[0]])
+                conn.commit()
+                log.warning("[verify_code] SID=%s hit the attempt cap — code invalidated", sid)
+                return False, "Too many incorrect attempts. Please request a new code."
+            conn.execute("UPDATE verification_codes SET attempts = ? WHERE id = ?",
+                         [new_attempts, active[0]])
+            conn.commit()
+            log.warning("[verify_code] Invalid code attempt %d/%d for SID=%s",
+                        new_attempts, MAX_2FA_ATTEMPTS, sid)
             return False, "Invalid verification code."
 
-        conn.execute("UPDATE verification_codes SET used = TRUE WHERE id = ?", [result[0]])
-        conn.commit()
-        log.info("[verify_code] Code verified OK for SID=%s (row id=%s)", sid, result[0])
-        return True, "Code verified successfully."
+        # No live code at all → it expired (or was already burned / never issued).
+        expired = conn.execute(
+            "SELECT 1 FROM verification_codes WHERE SID = ? AND code = ? AND used = FALSE",
+            [sid, code]
+        ).fetchone()
+        if expired:
+            log.warning("[verify_code] Code for SID=%s is EXPIRED", sid)
+            return False, "Verification code has expired. Please request a new one."
+        log.warning("[verify_code] Invalid code attempt for SID=%s (no live code)", sid)
+        return False, "Invalid verification code."
     except Exception:
         log.error("[verify_code] Error for SID=%s:\n%s", sid, traceback.format_exc())
         raise
     finally:
         conn.close()
+
+
+def _code_send_allowed(sid):
+    """Throttle verification-code emails for a SID. Returns (allowed, message).
+
+    Enforces a short cooldown between sends and a cap per rolling window so a
+    known SID can't be used to flood a mailbox or to mint an endless stream of
+    fresh codes for brute-forcing. Fails open on any DB error — 2FA email must
+    never be bricked by the throttle itself."""
+    try:
+        conn = get_db_connection()
+        try:
+            row = conn.execute(
+                "SELECT "
+                "  SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '%d' SECOND "
+                "           THEN 1 ELSE 0 END), "
+                "  SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '%d' MINUTE "
+                "           THEN 1 ELSE 0 END) "
+                "FROM verification_codes WHERE SID = ?"
+                % (CODE_RESEND_COOLDOWN_SECONDS, CODE_WINDOW_MINUTES),
+                [sid]
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return True, ''
+    just_now = (row[0] if row else 0) or 0
+    recent = (row[1] if row else 0) or 0
+    if just_now > 0:
+        return False, "A verification code was just sent. Please wait a moment before requesting another."
+    if recent >= MAX_CODES_PER_WINDOW:
+        return False, "Too many code requests. Please wait a few minutes and try again."
+    return True, ''
 
 
 def cleanup_expired_codes():
@@ -1027,7 +1162,9 @@ def get_client_ip():
 
 
 def generate_verification_code():
-    return ''.join(random.choices(string.digits, k=6))
+    # 2FA secret: use a cryptographically secure RNG (secrets), never random —
+    # the module-level Mersenne Twister is predictable from observed outputs.
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 
 def get_user_data_from_phonebook(sid):
@@ -1496,6 +1633,15 @@ def resend_code():
             return jsonify({"success": False, "message": "User not found."}), 404
         flash("User not found.", "error")
         return redirect(url_for('pages_blueprint.sign_in_page'))
+
+    # Cooldown + per-window cap: stop the resend button from bombing the mailbox
+    # or minting endless fresh codes.
+    allowed, wait_msg = _code_send_allowed(sid)
+    if not allowed:
+        if request.is_json:
+            return jsonify({"success": False, "message": wait_msg}), 429
+        flash(wait_msg, "warning")
+        return redirect(url_for('pages_blueprint.two_factor_page'))
 
     code = generate_verification_code()
     save_verification_code(sid, code)
@@ -14104,6 +14250,8 @@ def _b3_save(path, records):
 
 @blueprint.route('/api/fx-holiday-schedules', methods=['GET'])
 def api_fx_holiday_schedules():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     _SYSTEM_FILES = {
         'Subjacente.json', 'VCP.json', 'Dominio.json', 'RefData.json',
         'datatables-rendering.json', 'datatables.json',
@@ -14179,6 +14327,8 @@ def api_holidays_save():
 
 @blueprint.route('/api/b3/update', methods=['POST'])
 def api_b3_update():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
@@ -14188,6 +14338,9 @@ def api_b3_update():
 
     if table not in _B3_FILE_MAP or idx is None:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     if not (0 <= int(idx) < len(records)):
@@ -14244,12 +14397,17 @@ def api_b3_update():
 
 @blueprint.route('/api/b3/delete', methods=['POST'])
 def api_b3_delete():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
 
     if table not in _B3_FILE_MAP or idx is None:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     if not (0 <= int(idx) < len(records)):
@@ -14274,6 +14432,8 @@ def api_b3_delete():
 
 @blueprint.route('/api/b3/add', methods=['POST'])
 def api_b3_add():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     fields  = payload.get('fields', {})
@@ -14281,6 +14441,9 @@ def api_b3_add():
 
     if table not in _B3_FILE_MAP:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     fields['STATUS']  = 'PENDING'
@@ -16419,6 +16582,17 @@ def route_template(template):
 
 def _initiate_2fa(sid, email, name):
     log.info("[_initiate_2fa] Generating 2FA code for SID=%s email=%s", sid, email)
+    # Throttle sends: if a code was just emailed (or too many were requested),
+    # don't send another — route the user to the entry page to use the code they
+    # already have. The pending session is still set so they can proceed.
+    allowed, wait_msg = _code_send_allowed(sid)
+    if not allowed:
+        log.warning("[_initiate_2fa] Send throttled for SID=%s: %s", sid, wait_msg)
+        session['pending_sid'] = sid
+        session['masked_email'] = get_masked_email(email)
+        session['masked_phone'] = get_masked_phone()
+        flash(wait_msg, "warning")
+        return redirect(url_for('pages_blueprint.two_factor_page'))
     code = generate_verification_code()
     save_verification_code(sid, code)
 
