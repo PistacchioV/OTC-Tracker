@@ -416,7 +416,6 @@
     // App-wide standard is jQuery daterangepicker in singleDatePicker mode —
     // never <input type="date"> (inherits the OS locale) and never flatpickr
     // (proved flaky when loaded from the shared bundle). See HANDOFF.
-    var upPicker = null;
 
     function todayStr() {
         var t = new Date();
@@ -435,34 +434,37 @@
     }
 
     // Keep the calendar on whatever the user typed, as soon as it is a real date.
-    function syncPickerFromInput(digits) {
-        if (!upPicker || digits.length !== 8 || typeof moment === 'undefined') return;
+    function syncPickerFromInput(el, digits) {
+        if (digits.length !== 8 || typeof moment === 'undefined' || !window.jQuery) return;
+        var pk = window.jQuery(el).data('daterangepicker');
+        if (!pk) return;
         var m = moment(digits, 'DDMMYYYY', true);
         if (!m.isValid()) return;
-        upPicker.setStartDate(m);
-        upPicker.setEndDate(m);
+        pk.setStartDate(m);
+        pk.setEndDate(m);
     }
 
-    // Reset to today — the modal must never reopen showing the previous upload's date.
-    function resetUpDate() {
-        var el = $('eiUpDate');
+    function resetDate(el) {
         el.value = todayStr();
-        syncPickerFromInput(el.value.replace(/\D/g, ''));
+        syncPickerFromInput(el, el.value.replace(/\D/g, ''));
     }
 
-    function initDatePicker(tries) {
+    // Works for the first block and for every block the "+" adds.
+    function attachDatePicker(el, tries) {
         if (!(window.jQuery && window.jQuery.fn && window.jQuery.fn.daterangepicker)) {
             // Plugin not parsed yet — retry briefly instead of degrading permanently.
-            if ((tries || 0) < 40) return setTimeout(function () { initDatePicker((tries || 0) + 1); }, 50);
+            if ((tries || 0) < 40) return setTimeout(function () { attachDatePicker(el, (tries || 0) + 1); }, 50);
             return;
         }
-        var $el = window.jQuery('#eiUpDate');
-        $el.daterangepicker({
+        window.jQuery(el).daterangepicker({
             singleDatePicker: true, autoApply: true, showDropdowns: true,
             locale: { format: 'DD/MM/YYYY' }, startDate: moment()
         }, function () { updateNamePreview(); });
-        upPicker = $el.data('daterangepicker');
-        resetUpDate();
+        el.addEventListener('input', function () {
+            syncPickerFromInput(this, maskDate(this));
+            updateNamePreview();
+        });
+        resetDate(el);
     }
 
     /* ---- upload ---------------------------------------------------------- */
@@ -491,48 +493,187 @@
             + '<span class="d-block text-muted">Numbered automatically (2nd, 3rd…) if this kind already exists.</span>';
     }
 
-    function doUpload() {
-        if (!state.client) { toast('warning', 'Select a counterparty first'); return; }
-        var f = $('eiUpFile').files[0];
-        if (!f) { toast('warning', 'Choose a file to upload'); return; }
-        var type = $('eiUpType').value;
+    /* ---- extra document blocks ------------------------------------------
+     * A batch usually mixes products and dates (a day's NDF and Option
+     * confirmations arrive together), so each block carries its own Type /
+     * Sub-type / Date / File rather than sharing one header.
+     * ------------------------------------------------------------------- */
+    var extraSeq = 0;
+
+    function typeOptionsHtml() {
+        return ['Confirmations', 'SSI', 'Transactional'].map(function (t) {
+            return '<option value="' + t + '">' + t + '</option>';
+        }).join('');
+    }
+
+    function addExtraBlock() {
+        var id = ++extraSeq;
+        var el = document.createElement('div');
+        el.className = 'ei-up-block';
+        el.dataset.block = id;
+        el.innerHTML =
+            '<div class="ei-up-block-head">' +
+                '<span class="ei-up-block-n">Document ' + (id + 1) + '</span>' +
+                '<button type="button" class="btn btn-sm btn-danger ei-btn ei-up-del" title="Remove">' +
+                    '<i class="ti ti-x"></i></button>' +
+            '</div>' +
+            '<div class="row g-2">' +
+                '<div class="col-md-4">' +
+                    '<label class="form-label fw-semibold fs-xxs mb-1">Document Type</label>' +
+                    '<select class="form-select form-select-sm ei-up-type">' + typeOptionsHtml() + '</select>' +
+                '</div>' +
+                '<div class="col-md-4 d-none ei-up-sub-wrap">' +
+                    '<label class="form-label fw-semibold fs-xxs mb-1 ei-up-sub-label">Transactional Type</label>' +
+                    '<select class="form-select form-select-sm ei-up-sub"></select>' +
+                '</div>' +
+                '<div class="col-md-4">' +
+                    '<label class="form-label fw-semibold fs-xxs mb-1">Date</label>' +
+                    '<input type="text" class="form-control form-control-sm ei-up-date" placeholder="dd/mm/yyyy" autocomplete="off">' +
+                '</div>' +
+                '<div class="col-12">' +
+                    '<div class="ei-drop ei-up-drop border border-dashed rounded-3 p-2 text-center">' +
+                        '<i class="ti ti-file-upload text-muted me-1"></i>' +
+                        '<span class="fw-medium fs-sm ei-up-drop-label">Drop a file here or click to browse</span>' +
+                        '<input type="file" class="d-none ei-up-file">' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        $('eiUpExtra').appendChild(el);
+
+        var typeSel = el.querySelector('.ei-up-type');
+        var fill = function () { fillBlockSubtype(el, typeSel.value); };
+        typeSel.value = $('eiUpType').value;   // start where the first block is
+        fill();
+        typeSel.addEventListener('change', fill);
+
+        attachDatePicker(el.querySelector('.ei-up-date'), 0);
+
+        var drop = el.querySelector('.ei-up-drop'), file = el.querySelector('.ei-up-file');
+        drop.addEventListener('click', function () { file.click(); });
+        file.addEventListener('change', function () {
+            el.querySelector('.ei-up-drop-label').textContent =
+                this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
+        });
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); this.classList.add('border-primary'); });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); this.classList.remove('border-primary'); });
+        });
+        drop.addEventListener('drop', function (e) {
+            if (e.dataTransfer && e.dataTransfer.files[0]) {
+                file.files = e.dataTransfer.files;
+                file.dispatchEvent(new Event('change'));
+            }
+        });
+        el.querySelector('.ei-up-del').addEventListener('click', function () {
+            el.remove(); renumberBlocks();
+        });
+        el.querySelector('.ei-up-date').focus();
+    }
+
+    function fillBlockSubtype(el, doctype) {
+        var list = doctype === 'Confirmations' ? (state.confTypes || [])
+                 : doctype === 'Transactional' ? (state.subtypes || []) : [];
+        el.querySelector('.ei-up-sub-wrap').classList.toggle('d-none', !list.length);
+        el.querySelector('.ei-up-sub-label').textContent =
+            doctype === 'Confirmations' ? 'Confirmation Type' : 'Transactional Type';
+        el.querySelector('.ei-up-sub').innerHTML = '<option value="">— Select —</option>' +
+            list.map(function (t) { return '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
+    }
+
+    function renumberBlocks() {
+        var blocks = $('eiUpExtra').querySelectorAll('.ei-up-block');
+        blocks.forEach(function (b, i) { b.querySelector('.ei-up-block-n').textContent = 'Document ' + (i + 2); });
+    }
+
+    function clearExtraBlocks() { $('eiUpExtra').innerHTML = ''; extraSeq = 0; }
+
+    // Every block that actually carries a file, first block included.
+    function collectUploads() {
+        var out = [];
+        var f0 = $('eiUpFile').files[0];
+        if (f0) {
+            out.push({ type: $('eiUpType').value, subtype: $('eiUpSubtype').value,
+                       date: $('eiUpDate').value || '', file: f0 });
+        }
+        $('eiUpExtra').querySelectorAll('.ei-up-block').forEach(function (b) {
+            var f = b.querySelector('.ei-up-file').files[0];
+            if (!f) return;
+            out.push({ type: b.querySelector('.ei-up-type').value,
+                       subtype: b.querySelector('.ei-up-sub').value,
+                       date: b.querySelector('.ei-up-date').value || '', file: f });
+        });
+        return out;
+    }
+
+    // One request per document, sequentially: the share is slow and parallel
+    // writes to it are not faster, and a serial run gives honest progress plus a
+    // clean per-file result.
+    function uploadOne(item) {
         var fd = new FormData();
         fd.append('client', state.client);
-        fd.append('type', type);
-        fd.append('subtype', type === 'SSI' ? '' : $('eiUpSubtype').value);
-        fd.append('date', $('eiUpDate').value || '');
-        fd.append('file', f);
-        var btn = $('eiUpSubmit'); btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
-        // The I: share can stall indefinitely. Bound the wait so the button always
-        // comes back instead of spinning forever with no way out.
+        fd.append('type', item.type);
+        fd.append('subtype', item.type === 'SSI' ? '' : item.subtype);
+        fd.append('date', item.date);
+        fd.append('file', item.file);
         var ctl = window.AbortController ? new AbortController() : null;
         var timedOut = false;
-        var timer = setTimeout(function () {
-            timedOut = true;
-            if (ctl) ctl.abort();
-        }, UPLOAD_TIMEOUT_MS);
-        fetch(API + '/upload', { method: 'POST', body: fd, signal: ctl && ctl.signal })
+        var timer = setTimeout(function () { timedOut = true; if (ctl) ctl.abort(); }, UPLOAD_TIMEOUT_MS);
+        return fetch(API + '/upload', { method: 'POST', body: fd, signal: ctl && ctl.signal })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 clearTimeout(timer);
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save to Inventory';
-                if (!res || !res.success) { toast('error', 'Upload failed', res && res.message); return; }
-                bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).hide();
-                toast('success', 'Document saved', res.saved && res.saved.name);
-                state.selectedRel = res.saved ? res.saved.rel : null;
-                loadDocuments();
+                return (res && res.success)
+                    ? { ok: true, saved: res.saved }
+                    : { ok: false, name: item.file.name, why: (res && res.message) || 'rejected' };
             })
             .catch(function (e) {
                 clearTimeout(timer);
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save to Inventory';
                 console.error('ei upload error', e);
-                toast('error', 'Upload failed', timedOut
-                    ? 'The share did not respond in time. The file may still have been saved — refresh the list before retrying.'
-                    : 'Network error.');
+                return { ok: false, name: item.file.name,
+                         why: timedOut ? 'the share did not respond in time' : 'network error' };
             });
+    }
+
+    function doUpload() {
+        if (!state.client) { toast('warning', 'Select a counterparty first'); return; }
+        var items = collectUploads();
+        if (!items.length) { toast('warning', 'Choose a file to upload'); return; }
+
+        var btn = $('eiUpSubmit'); btn.disabled = true;
+        var done = [], failed = [];
+
+        function step(i) {
+            if (i >= items.length) return finish();
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving' +
+                (items.length > 1 ? ' ' + (i + 1) + ' of ' + items.length : '') + '…';
+            return uploadOne(items[i]).then(function (r) {
+                (r.ok ? done : failed).push(r);
+                return step(i + 1);
+            });
+        }
+
+        function finish() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i> Save to Inventory';
+            if (done.length) {
+                bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).hide();
+                state.selectedRel = done[done.length - 1].saved ? done[done.length - 1].saved.rel : null;
+                loadDocuments();
+            }
+            if (failed.length && done.length) {
+                toast('warning', done.length + ' of ' + items.length + ' saved',
+                      'Not saved: ' + failed.map(function (f) { return f.name + ' (' + f.why + ')'; }).join('; '));
+            } else if (failed.length) {
+                toast('error', 'Upload failed', failed[0].why);
+            } else {
+                toast('success', items.length > 1 ? items.length + ' documents saved' : 'Document saved',
+                      items.length === 1 ? (done[0].saved && done[0].saved.name) : '');
+            }
+        }
+
+        step(0);
     }
 
     /* ---- wiring ---------------------------------------------------------- */
@@ -611,7 +752,8 @@
             fillSubtypeOptions($('eiUpType').value);   // also resets the sub-type to "— Select —"
             $('eiUpFile').value = ''; $('eiDropLabel').textContent = 'Drop a file here or click to browse';
             $('eiUpNamePreview').textContent = '';
-            resetUpDate();
+            clearExtraBlocks();
+            resetDate($('eiUpDate'));
             bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).show();
         });
         $('eiUpType').addEventListener('change', function () {
@@ -619,10 +761,6 @@
             updateNamePreview();
         });
         $('eiUpSubtype').addEventListener('change', updateNamePreview);
-        $('eiUpDate').addEventListener('input', function () {
-            syncPickerFromInput(maskDate(this));
-            updateNamePreview();
-        });
         $('eiDrop').addEventListener('click', function () { $('eiUpFile').click(); });
         $('eiUpFile').addEventListener('change', function () {
             $('eiDropLabel').textContent = this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
@@ -642,7 +780,8 @@
         });
         $('eiUpSubmit').addEventListener('click', doUpload);
 
-        initDatePicker(0);
+        attachDatePicker($('eiUpDate'), 0);
+        $('eiUpAdd').addEventListener('click', addExtraBlock);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
