@@ -15909,8 +15909,9 @@ def reconciliation_payrec_end():
 #  _ei_sanitize so a slightly different on-disk name is still found.
 # ============================================================================
 _EI_TRANSACTIONAL_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
-# Confirmations are filed per trade product, under Confirmations/<yyyy>/<mm>/<dd>.
-_EI_CONFIRMATION_TYPES = ('NDF', 'Option', 'Swap')
+# Confirmations are filed per trade product, under
+# Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>.
+_EI_CONFIRMATION_TYPES = ('NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP')
 _EI_PREVIEWABLE = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
 _EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
                       '.png', '.jpg', '.jpeg', '.gif', '.txt', '.zip'}
@@ -15941,6 +15942,22 @@ def _ei_resolve_client_dir(client, create=False):
         _ensure_counterparty_folders(client)
     # Cached share scan first — see _ei_actual_dir_name.
     return os.path.join(ELECTRONIC_INVENTORY_ROOT, _ei_actual_dir_name(folder))
+
+
+_EI_MONTH_NAMES = ('January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December')
+# Month folder is '<mm>. <Month>' ('06. June') so the share sorts numerically and
+# still reads at a glance in Explorer. Folders written before this convention are
+# plain '<mm>' — _EI_MONTH_DIR_RE matches both so browsing never loses them.
+_EI_MONTH_DIR_RE = re.compile(r'^(\d{2})(?:\.\s*[A-Za-z]+)?$')
+
+
+def _ei_month_folder(mm):
+    """'06' -> '06. June'. Falls back to the bare number if mm is out of range."""
+    try:
+        return '%s. %s' % (mm, _EI_MONTH_NAMES[int(mm) - 1])
+    except Exception:
+        return mm
 
 
 def _ei_ordinal(n):
@@ -16006,10 +16023,10 @@ def _ei_iter_files(base, doctype):
             rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
             parts = [p for p in rel_within.split('/') if p and p != '.']
             doc_date = ''
-            if (doctype == 'Confirmations' and len(parts) >= 3 and
-                    re.match(r'^\d{4}$', parts[0]) and re.match(r'^\d{2}$', parts[1]) and
-                    re.match(r'^\d{2}$', parts[2])):
-                doc_date = '%s/%s/%s' % (parts[2], parts[1], parts[0])
+            if doctype == 'Confirmations' and len(parts) >= 3:
+                mdir = _EI_MONTH_DIR_RE.match(parts[1])
+                if (re.match(r'^\d{4}$', parts[0]) and mdir and re.match(r'^\d{2}$', parts[2])):
+                    doc_date = '%s/%s/%s' % (parts[2], mdir.group(1), parts[0])
             subtype = ''
             if doctype in ('Transactional', 'Confirmations'):
                 # Drop the version prefix ('2nd CGD AMENDMENT - …') so the
@@ -16196,9 +16213,12 @@ def api_ei_upload():
     base = _ei_resolve_client_dir(client, create=True)
     cname = _ei_sanitize(client)
     if doctype == 'Confirmations':
-        # Confirmations are filed by trade date: Confirmations/<yyyy>/<mm>/<dd>.
-        target_dir = os.path.join(base, 'Confirmations', yyyy, mm, dd)
+        # Confirmations: Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>. The
+        # product folder keeps a busy trading day readable instead of dumping
+        # every product's PDFs side by side.
         prefix = (_ei_sanitize(subtype).upper() or 'CONFIRMATION')
+        product_dir = _ei_sanitize(subtype) or 'Other'
+        target_dir = os.path.join(base, 'Confirmations', yyyy, _ei_month_folder(mm), dd, product_dir)
     elif doctype == 'SSI':
         target_dir = os.path.join(base, 'SSI')
         prefix = 'SSI'

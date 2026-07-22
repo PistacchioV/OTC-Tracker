@@ -159,6 +159,54 @@
     #eiUploadModal .modal-content.liquid-glass { background: rgba(255, 255, 255, 0.92) !important; }
     [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass { background: rgba(26, 29, 35, 0.94) !important; }
 
+    /* Confirmations tree (Product › Year › Month) ---------------------- */
+    #ei-page .ei-node-head {
+        display: flex; align-items: center; gap: .55rem; width: 100%;
+        padding: .45rem .6rem; border: 0; background: transparent; border-radius: 9px;
+        color: var(--bs-body-color); text-align: left; cursor: pointer;
+        transition: background-color .18s var(--ei-ease), transform .16s var(--ei-ease);
+    }
+    @media (hover: hover) and (pointer: fine) {
+        #ei-page .ei-node-head:hover { background: var(--bs-tertiary-bg); }
+    }
+    #ei-page .ei-node-head:active { transform: scale(.99); }
+    #ei-page .ei-node-head:focus-visible {
+        outline: none; box-shadow: 0 0 0 3px rgba(0, 102, 204, .15);
+    }
+    /* Chevron is the only thing that rotates — cheap, and it reads as "opening". */
+    #ei-page .ei-node-chev {
+        font-size: 15px; color: var(--bs-secondary-color); flex: 0 0 auto;
+        transition: transform .2s var(--ei-ease);
+    }
+    #ei-page .ei-node.is-open > .ei-node-head .ei-node-chev { transform: rotate(90deg); }
+    #ei-page .ei-node-ico { font-size: 16px; color: #0066cc; flex: 0 0 auto; }
+    #ei-page .ei-node[data-depth="1"] .ei-node-ico,
+    #ei-page .ei-node[data-depth="2"] .ei-node-ico { color: var(--bs-secondary-color); }
+    #ei-page .ei-node-label { font-weight: 600; font-size: .82rem; flex: 1 1 auto; min-width: 0; }
+    #ei-page .ei-node[data-depth="1"] .ei-node-label,
+    #ei-page .ei-node[data-depth="2"] .ei-node-label { font-weight: 500; }
+    #ei-page .ei-node-count {
+        flex: 0 0 auto; font-size: .68rem; font-weight: 600; line-height: 1;
+        padding: .22rem .45rem; border-radius: 50rem;
+        background: var(--bs-tertiary-bg); color: var(--bs-secondary-color);
+    }
+    /* 0fr → 1fr expands to the content's natural height with no JS measuring
+       and no max-height guesswork. */
+    #ei-page .ei-node-panel {
+        display: grid; grid-template-rows: 0fr; opacity: 0;
+        transition: grid-template-rows .24s var(--ei-ease), opacity .16s var(--ei-ease);
+    }
+    #ei-page .ei-node.is-open > .ei-node-panel { grid-template-rows: 1fr; opacity: 1; }
+    #ei-page .ei-node-inner { overflow: hidden; min-height: 0; }
+    /* Indent each level; the rail makes the nesting readable without deep padding. */
+    #ei-page .ei-node[data-depth="0"] > .ei-node-panel > .ei-node-inner,
+    #ei-page .ei-node[data-depth="1"] > .ei-node-panel > .ei-node-inner {
+        margin-left: .75rem; padding-left: .6rem;
+        border-left: 1px solid var(--bs-border-color);
+    }
+    #ei-page .ei-tree .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
+    @keyframes eiRowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
     /* The global .btn-primary rule hard-codes padding/font-size, while .btn-sm
        only redefines the --ins-btn-* variables — so btn-sm alone cannot shrink a
        primary button. Restate the small metrics for this footer (higher
@@ -390,5 +438,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- toast() is a no-op without Swal — every warning/success was silently swallowed. -->
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722b"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722c"></script>
 {% endblock extra_javascript %}
