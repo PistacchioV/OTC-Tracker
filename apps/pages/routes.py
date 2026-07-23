@@ -8517,10 +8517,11 @@ def api_lpopt_data():
 
 
 # ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
-#  Worksheet page modelled on Other Products Summary: two editable tables (Trade
-#  Level + Settlement Summary) with their own columns, plus header cards pulled
-#  from the latest DPOSICAO-TER position JSON (Total real; Vanilla / Other
-#  Publisher / T+0 counting logic pending — user will supply).
+#  Page modelled on Other Products Summary: header cards from the latest
+#  DPOSICAO-TER position JSON + two tables now auto-populated per reference date
+#  (see _ndfsum_collect): Trade Level mirrors the NDF Cockpit display rows and
+#  Settlement Summary nets them per counterparty. Manual Add-row remains for
+#  ad-hoc lines; nothing on this page is persisted.
 @blueprint.route('/ndf-summary')
 def ndf_summary():
     if not session.get('authenticated'):
@@ -8590,6 +8591,148 @@ def api_ndf_summary_cards():
                     'cards': {'vanilla': vanilla, 'other_publisher': other_publisher,
                               't0': t0, 'total': total},
                     'ter_date': dref})
+
+
+# ── NDF Summary data: Trade Level from the Cockpit + Settlement Summary ──────
+#  Trade Level mirrors the NDF Cockpit DISPLAY rows (so the athena-id and
+#  Operations B3 contract rescues apply here for free), joined with the day's
+#  Operations B3 by Título for the B3 settlement leg. Settlement Summary nets
+#  the trades per counterparty according to the CounterpartyDetails net type
+#  and fills the default PAY/RECEIVE bank account. Everything is derived on
+#  each load — this endpoint persists nothing.
+_NDFSUM_TOL = 5.0                    # |SETTLEMENT − SETTLEMENT B3| tolerance (BRL)
+
+
+def _ndfsum_refdata_spn():
+    """{normalized counterparty name → SPN} from RefData.json (recon join rule)."""
+    out = {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except (IOError, json.JSONDecodeError):
+        data = []
+    for rec in (data if isinstance(data, list) else []):
+        nm = _fcst_norm(str(rec.get('COUNTERPARTY', '') or ''))
+        spn = str(rec.get('SPN', '') or '').strip()
+        if nm and spn and nm not in out:
+            out[nm] = spn
+    return out
+
+
+def _ndfsum_net_type(rec_cpd):
+    """Approved NET.value for a CounterpartyDetails record; anything unconfigured
+    or not yet checked falls back to Total Net (same safe rule as the recon)."""
+    net = (rec_cpd or {}).get('NET') or {}
+    val = str(net.get('value', '') or '').strip()
+    status = str(net.get('status', '') or '').strip() or 'Active'
+    return val if (val in ('Total Net', 'Pay/Rec', 'No Net') and status == 'Active') else 'Total Net'
+
+
+def _ndfsum_account_fmt(banking, direction):
+    """Default PAY/RECEIVE account → 'bank/agency/account' (bank = 3-digit code).
+    Only an approved default (slot.current) is used; unset → ''."""
+    slot_key = 'DEFAULT_RECEIVE' if direction == 'RECEIVE' else 'DEFAULT_PAY'
+    slot = (banking or {}).get(slot_key) or {}
+    acc = next((a for a in (banking or {}).get('ACCOUNTS', [])
+                if a.get('id') and a.get('id') == slot.get('current')), None)
+    if not acc:
+        return ''
+    bank = re.sub(r'\D', '', str(acc.get('bank', '') or ''))
+    parts = [bank.zfill(3) if bank else '',
+             str(acc.get('agency', '') or '').strip(),
+             str(acc.get('account', '') or '').strip()]
+    return '/'.join(parts) if any(parts) else ''
+
+
+def _ndfsum_collect(ref):
+    ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
+    # Operations B3 settlement leg per Título: Resgate rows are the settlement
+    # proper, so they win; any other operation type is only a fallback.
+    _, ops = _opb3_load(ref)
+    b3_val, b3_val_any = {}, {}
+    for r in (ops or []):
+        titulo = str(r.get('Título', '') or '').strip().upper()
+        if not titulo:
+            continue
+        if _fcst_norm(str(r.get('Tipo Operação', ''))) == 'resgate':
+            b3_val.setdefault(titulo, r.get('Valor', ''))
+        else:
+            b3_val_any.setdefault(titulo, r.get('Valor', ''))
+    for titulo, v in b3_val_any.items():
+        b3_val.setdefault(titulo, v)
+
+    trade, groups = [], {}
+    for row in _ndfc_collect(ref)['rows']:
+        b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip()
+        if b3 == _NDFC_MISSING_B3:
+            b3 = ''
+        raw_b3 = b3_val.get(b3.upper(), '') if b3 else ''
+        # Cockpit DISPLAY cells are US-formatted (#,##0.00 via _swapchar_fmt_value)
+        # → parse with the US parser; the raw Operations B3 Valor keeps the same
+        # BR/US-tolerant parse the resgates reader uses.
+        settle_n = _mtm_parse_num(row[ci['[PROD] Cockpit.SETTLEMENT']])
+        b3_n = _ndfc_valnum(raw_b3)
+        diff = settle_n - b3_n if (settle_n is not None and b3_n is not None) else None
+        ok = diff is not None and -_NDFSUM_TOL < diff < _NDFSUM_TOL
+        trade.append({
+            'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']],
+                      row[ci['ID_SOURCE_DEAL']], b3,
+                      row[ci['VL_NOTIONAL_FC']], row[ci['CCY_NOTIONAL_FC']],
+                      row[ci['VL_FORWARD_RATE']], row[ci['[PROD] Cockpit.SETTLEMENT']],
+                      _swapchar_fmt_value(raw_b3) if str(raw_b3 or '').strip() else '',
+                      row[ci['VL_STRIKE_PRICE']], row[ci['VL_TAX_INCOME']]],
+            'diff': '{:,.2f}'.format(diff) if diff is not None else '',
+            'ok': ok,
+        })
+        # Settlement Summary accumulation. The IR withheld (VL_TAX_INCOME) always
+        # SHRINKS the cash actually moving — sign-independent, so it is right
+        # regardless of whether the cockpit signs the settlement from the bank's
+        # or the client's point of view (tax is only present on client gains).
+        cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
+        if cpty and settle_n is not None:
+            tax_n = abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0)
+            groups.setdefault(cpty, []).append(
+                settle_n - tax_n if settle_n >= 0 else settle_n + tax_n)
+
+    spn_by_name = _ndfsum_refdata_spn()
+    cpd = _cpd_load()
+    summary = []
+    for cpty in sorted(groups, key=_fcst_norm):
+        vals = groups[cpty]
+        spn = spn_by_name.get(_fcst_norm(cpty), '')
+        rec_cpd = _cpd_find(cpd, spn) if spn else None
+        net_type = _ndfsum_net_type(rec_cpd)
+        recv = sum(v for v in vals if v > 0)
+        pay = sum(v for v in vals if v < 0)
+        total = recv + pay
+        if net_type == 'Total Net':
+            # One netted figure on the side of the final result only.
+            recv, pay = (total, 0.0) if total >= 0 else (0.0, total)
+        direction = 'RECEIVE' if total >= 0 else 'PAY'
+        banking = _bank_norm((rec_cpd or {}).get('BANKING'))
+        summary.append({
+            'counterparty': cpty,
+            'receive': '{:,.2f}'.format(recv) if recv else '',
+            'pay': '{:,.2f}'.format(pay) if pay else '',
+            'net_type': net_type,
+            'direction': direction,
+            'account': _ndfsum_account_fmt(banking, direction),
+        })
+    return {'trade': trade, 'summary': summary}
+
+
+@blueprint.route('/api/ndf-summary/data')
+def api_ndf_summary_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ndfsum_collect(ref)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d')})
+    return jsonify(payload)
 
 
 # ============================================================================

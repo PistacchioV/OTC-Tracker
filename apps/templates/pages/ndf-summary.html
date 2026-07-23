@@ -219,7 +219,7 @@
                                     <th>Pay</th>
                                     <th>Settlement Net</th>
                                     <th>Direction</th>
-                                    <th>Internal Account</th>
+                                    <th>Account</th>
                                     <th>Observação</th>
                                 </tr>
                                 <tr class="ops-filter">
@@ -230,7 +230,7 @@
                                     <th><input type="text" placeholder="Pay"></th>
                                     <th><input type="text" placeholder="Settlement Net"></th>
                                     <th><input type="text" placeholder="Direction"></th>
-                                    <th><input type="text" placeholder="Internal Account"></th>
+                                    <th><input type="text" placeholder="Account"></th>
                                     <th><input type="text" placeholder="Observação"></th>
                                 </tr>
                             </thead>
@@ -275,30 +275,32 @@
                                     <th data-lang="ops-col-actions">Actions</th>
                                     <th data-lang="ops-col-status">Status</th>
                                     <th>LEGAL</th>
-                                    <th>HM COUNTERPARTY</th>
-                                    <th>ID_SOURCE_DEAL</th>
-                                    <th>VL_NOTIONAL_FC</th>
-                                    <th>VL_FORWARD_RATE</th>
-                                    <th>SETTLEMENT</th>
-                                    <th>ID_CETIP</th>
+                                    <th>COUNTERPARTY</th>
+                                    <th>ATHENA ID</th>
+                                    <th>B3 ID</th>
+                                    <th>NOTIONAL FC</th>
                                     <th>CCY</th>
-                                    <th>SETTLEMENT_B3</th>
-                                    <th>VL_FIXING_RATE</th>
+                                    <th>FORWARD RATE</th>
+                                    <th>SETTLEMENT</th>
+                                    <th>SETTLEMENT B3</th>
+                                    <th>FIXING RATE</th>
+                                    <th>TAX</th>
                                     <th>DIFFERENCE</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="LEGAL"></th>
-                                    <th><input type="text" placeholder="HM COUNTERPARTY"></th>
-                                    <th><input type="text" placeholder="ID_SOURCE_DEAL"></th>
-                                    <th><input type="text" placeholder="VL_NOTIONAL_FC"></th>
-                                    <th><input type="text" placeholder="VL_FORWARD_RATE"></th>
-                                    <th><input type="text" placeholder="SETTLEMENT"></th>
-                                    <th><input type="text" placeholder="ID_CETIP"></th>
+                                    <th><input type="text" placeholder="COUNTERPARTY"></th>
+                                    <th><input type="text" placeholder="ATHENA ID"></th>
+                                    <th><input type="text" placeholder="B3 ID"></th>
+                                    <th><input type="text" placeholder="NOTIONAL FC"></th>
                                     <th><input type="text" placeholder="CCY"></th>
-                                    <th><input type="text" placeholder="SETTLEMENT_B3"></th>
-                                    <th><input type="text" placeholder="VL_FIXING_RATE"></th>
+                                    <th><input type="text" placeholder="FORWARD RATE"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT B3"></th>
+                                    <th><input type="text" placeholder="FIXING RATE"></th>
+                                    <th><input type="text" placeholder="TAX"></th>
                                     <th><input type="text" placeholder="DIFFERENCE"></th>
                                 </tr>
                             </thead>
@@ -447,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
-    var dtTrade   = initTable('ops-trade-table', 11, 50); // 11 data cols (LEGAL…DIFFERENCE); default 50/page
+    var dtTrade   = initTable('ops-trade-table', 12, 50); // 12 data cols (LEGAL…DIFFERENCE); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
@@ -468,12 +470,43 @@ document.addEventListener('DOMContentLoaded', function () {
         $('#ndf-c-total').text(c.total || 0);
     }
 
-    // ── Reference date → refresh the header cards (tables are a manual worksheet) ─
+    // ── Derived rows (Trade Level ← NDF Cockpit; Settlement Summary ← net per
+    //    counterparty). Cells are plain text so the column filters/sorting work;
+    //    the Add-row modal still appends inline-editable manual rows.
+    function statusBadge(ok) {
+        return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
+                  : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
+    }
+    function fillTables(j) {
+        var cb = '<input type="checkbox" class="form-check-input ops-cb">';
+        dtTrade.clear();
+        (j.trade || []).forEach(function (r) {
+            var icon = r.ok ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
+                            : '<i class="ti ti-x text-danger fs-5 align-middle"></i>';
+            var diff = (r.diff !== '' ? esc(r.diff) + ' ' : '') + icon;
+            dtTrade.row.add([cb, actionsCell(), statusBadge(r.ok)]
+                .concat((r.cells || []).map(esc)).concat([diff]));
+        });
+        dtTrade.draw();
+        dtSummary.clear();
+        (j.summary || []).forEach(function (r) {
+            dtSummary.row.add([cb, actionsCell(), statusCell('New'),
+                esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
+                esc(r.direction), esc(r.account), inp('')]);
+        });
+        dtSummary.draw();
+    }
+
+    // ── Reference date → refresh the header cards + both derived tables ─────
     function loadDate(ymd) {
         var qs = ymd ? ('?date=' + encodeURIComponent(ymd)) : '';
         fetch('/api/ndf-summary/cards' + qs)
             .then(function (r) { return r.json(); })
             .then(function (j) { if (j && j.success) setCards(j.cards); })
+            .catch(function () {});
+        fetch('/api/ndf-summary/data' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j && j.success) fillTables(j); })
             .catch(function () {});
     }
 
