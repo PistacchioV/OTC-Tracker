@@ -3,7 +3,8 @@ Pay/Rec Reconciliation engine — faithful port of the Alteryx "PayRec" workflow
 verified against the ground-truth daily output.
 
 JPM / Cockpit side (3 sources, Union'd):
-  settlement.csv      → NDF   (value = Tax Income + Amount, per-Client sum, Settlement Net='TOTAL_NET')
+  settlement.csv      → NDF   (value = Tax Income + Amount, per-Client sum; ALL settlement
+                        types are kept — the net type comes from CounterpartyDetails, not the file)
   cashflows_*.xlsx    → COMM TER / SWAP  (per-client NET sum; Owner Legal Entity='0228')
   FXO Detail*.xlsx    → FXO   (value from ATH SET AMT + Direction)
 
@@ -447,13 +448,17 @@ def _classify_source(name):
 
 # ── JPM / Cockpit side ────────────────────────────────────────────────────────
 def _jpm_settlement(rows, cols, net_map=None):
-    """settlement.csv → NDF. Per-Client (Tax Income + Amount), keeping only
-    Settlement Net = 'TOTAL_NET'/'PAYREC_NET' and non-JPM clients. The per-client
-    values are then reduced according to the client's configured net type."""
+    """settlement.csv → NDF. Per-Client (Tax Income + Amount), keeping every
+    non-JPM client row REGARDLESS of the file's own 'Settlement Net' column: how a
+    counterparty settles is decided by CounterpartyDetails (net_map) and the
+    Saint-Gobain overrides, not by the spreadsheet. The old
+    TOTAL_NET/PAYREC_NET allowlist silently dropped every No Net counterparty
+    (e.g. Saint-Gobain do Brasil) from the JPM side, leaving its client-side legs
+    unmatched and its receipts missing entirely. The per-client values are then
+    reduced according to the client's configured net type."""
     c_client = _resolve(cols, 'Client')
     c_amount = _resolve(cols, 'Amount')
     c_tax = _resolve(cols, 'Tax Income')
-    c_net = _resolve(cols, 'Settlement Net')
     c_le = _resolve(cols, 'Legal Entity')                      # JPM vs MGT (per row)
     groups = {}
     for r in rows:
@@ -461,10 +466,6 @@ def _jpm_settlement(rows, cols, net_map=None):
         cl = client.lower()
         if not client or any(e in cl for e in _JPM_ENTITIES):
             continue
-        if c_net:                                              # keep the netted rows
-            sn = _norm(r.get(c_net, ''))
-            if sn and sn not in (_norm('TOTAL_NET'), _norm('PAYREC_NET')):
-                continue
         result = _num(r.get(c_tax, '') if c_tax else 0) + _num(r.get(c_amount, '') if c_amount else 0)
         le = _le_from_legal_entity(r.get(c_le, '')) if c_le else 'JPM'
         groups.setdefault((client, le), []).append(result)     # split per Legal Entity
