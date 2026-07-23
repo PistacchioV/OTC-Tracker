@@ -6742,8 +6742,14 @@ def _ndfc_collect(ref):
                 cd_display = cd
             publisher = str(rec.get('PUBLISHER', '') or '').strip() or pub_map.get(cd.upper(), '')
             lp = contr_map.get(cd.upper(), {}) if cd else {}
-            ccy_fc = str(rec.get('CCY_NOTIONAL_FC', '') or '').strip() or lp.get('ccy_fc', '')
-            ccy_lc = str(rec.get('CCY_NOTIONAL_LC', '') or '').strip() or lp.get('ccy_lc', '')
+            lk_fc, lk_lc = lp.get('ccy_fc', ''), lp.get('ccy_lc', '')
+            # Cross-currency NDF (neither leg is BRL): the TER file carries the
+            # legs swapped relative to the cockpit, so invert the looked-up pair
+            # (e.g. USD/EUR → EUR/USD). Manually typed values are left alone.
+            if lk_fc and lk_lc and lk_fc.upper() != 'BRL' and lk_lc.upper() != 'BRL':
+                lk_fc, lk_lc = lk_lc, lk_fc
+            ccy_fc = str(rec.get('CCY_NOTIONAL_FC', '') or '').strip() or lk_fc
+            ccy_lc = str(rec.get('CCY_NOTIONAL_LC', '') or '').strip() or lk_lc
             row = []
             for c in _NDFC_COLUMNS:
                 v = rec.get(c, '')
