@@ -1329,5 +1329,6 @@
   "nop-clear-filters": "Clear filters",
   "nop-showing": "Showing",
   "nop-actions": "Actions",
-  "nop-status": "Status"
+  "nop-status": "Status",
+  "nop-edit-title": "Edit row"
 }

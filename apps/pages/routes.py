@@ -7021,7 +7021,9 @@ def _ndfop_meta_path(ref):
 
 
 def _ndfop_meta_load(ref):
-    """{B3 ID → {status, maker, checker}} — persisted maker/checker state."""
+    """{B3 ID → {status, maker, checker, cells, deleted}} — the persisted overlay.
+    `cells` holds manual edits (index-aligned to _NDFOP_COLUMNS, only the entries
+    that differ from the derived value) and `deleted` hides the row."""
     p = _ndfop_meta_path(ref)
     try:
         with open(p, encoding='utf-8') as fh:
@@ -7029,6 +7031,12 @@ def _ndfop_meta_load(ref):
         return p, (data if isinstance(data, dict) else {})
     except Exception:
         return p, {}
+
+
+def _ndfop_meta_save(path, meta):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
 
 
 def _ndfop_cockpit_index(ref):
@@ -7066,18 +7074,27 @@ def _ndfop_collect(ref):
         b3 = str(rec.get('Título', '') or '').strip()
         if not b3:
             continue
+        m = meta.get(b3, {})
+        if m.get('deleted'):
+            continue
         ck = cockpit.get(b3.upper(), {})
         lp = contr.get(b3.upper(), {})
-        m = meta.get(b3, {})
-        rows_out.append([
+        cells = [
             b3,
             ck.get('athena', ''),
             _ndfop_fmt8(ck.get('strike', '')),
             _NDFOP_TX_COTADA,
             lp.get('conta_parte', ''),
             lp.get('conta_cparte', ''),
-            m.get('status', 'New'), m.get('maker', ''), m.get('checker', ''), b3,
-        ])
+        ]
+        # A manual edit wins over the derived value, so a fix made here survives
+        # the next load even if the upstream file still disagrees. Column 0 (B3 ID)
+        # is the row identity and therefore not overridable.
+        for i, v in enumerate(m.get('cells') or []):
+            if 0 < i < len(cells) and str(v or '').strip():
+                cells[i] = str(v).strip()
+        rows_out.append(cells + [m.get('status', 'New'), m.get('maker', ''),
+                                 m.get('checker', ''), b3])
     return {'widgets': {'total': len(rows_out)}, 'columns': list(_NDFOP_COLUMNS),
             'rows': rows_out, 'updated': _ds_read_updated(_opb3_json_path(ref))}
 
@@ -7124,13 +7141,76 @@ def api_ndfop_row_confirm():
     entry.update({'status': 'OK', 'checker': sid, 'maker': entry.get('maker', '')})
     meta[rid] = entry
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        _ndfop_meta_save(path, meta)
     except Exception:
         log.error('[ndf-other-publisher] confirm save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Confirmed',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-other-publisher/row/edit', methods=['POST'])
+def api_ndfop_row_edit():
+    """Persist manual cell overrides for a derived row. The edit is an overlay —
+    the row keeps being rebuilt from Operations B3 / Cockpit / Live Position, and
+    only the edited cells are replaced. Editing resets the row to Pending so the
+    checker has to look at it again."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    cells = p.get('cells')
+    if not rid or not isinstance(cells, list):
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'cells': [str(c or '').strip() for c in cells[:len(_NDFOP_COLUMNS)]],
+                  'status': 'Pending', 'maker': sid, 'checker': ''})
+    meta[rid] = entry
+    try:
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Edited',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-other-publisher/row/delete', methods=['POST'])
+def api_ndfop_row_delete():
+    """Hide a derived row. Nothing is removed from the source files, so the delete
+    is recorded as a tombstone in the day's overlay and can be undone by editing
+    the JSON."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'deleted': True, 'deleted_by': sid})
+    meta[rid] = entry
+    try:
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Deleted',
                          'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 

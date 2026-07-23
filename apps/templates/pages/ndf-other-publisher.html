@@ -73,12 +73,27 @@
 #nop-table th:nth-child(1), #nop-table td:nth-child(1) { min-width: 38px;  width: 38px; }   /* checkbox */
 #nop-table th:nth-child(2), #nop-table td:nth-child(2) { min-width: 80px;  width: 80px; }   /* Actions */
 #nop-table th:nth-child(3), #nop-table td:nth-child(3) { min-width: 90px;  width: 90px; }   /* Status */
-#nop-table th:nth-child(4), #nop-table td:nth-child(4) { min-width: 130px; }                /* B3 ID */
-#nop-table th:nth-child(5), #nop-table td:nth-child(5) { min-width: 170px; }                /* ATHENA ID */
-#nop-table th:nth-child(6), #nop-table td:nth-child(6) { min-width: 130px; }                /* TX PARIDADE */
-#nop-table th:nth-child(7), #nop-table td:nth-child(7) { min-width: 120px; }                /* TX COTADA */
-#nop-table th:nth-child(8), #nop-table td:nth-child(8) { min-width: 130px; }                /* CONTA PARTE */
-#nop-table th:nth-child(9), #nop-table td:nth-child(9) { min-width: 150px; }                /* CONTA CONTRAPARTE */
+#nop-table th:nth-child(4), #nop-table td:nth-child(4) { min-width: 130px; width: 130px; }  /* B3 ID */
+#nop-table th:nth-child(5), #nop-table td:nth-child(5) { min-width: 170px; width: 170px; }  /* ATHENA ID */
+#nop-table th:nth-child(6), #nop-table td:nth-child(6) { min-width: 130px; width: 130px; }  /* TX PARIDADE */
+#nop-table th:nth-child(7), #nop-table td:nth-child(7) { min-width: 120px; width: 120px; }  /* TX COTADA */
+#nop-table th:nth-child(8), #nop-table td:nth-child(8) { min-width: 130px; width: 130px; }  /* CONTA PARTE */
+#nop-table th:nth-child(9), #nop-table td:nth-child(9) { min-width: 150px; width: 150px; }  /* CONTA CONTRAPARTE */
+
+/* Actions/Status vêm das traduções em Title Case — o cabeçalho é todo UPPER. */
+#nop-table thead tr:first-child th { text-transform: uppercase; }
+
+/* Edit modal — mesma animação do Cockpit: scale 0.96 + opacity, ease-out 200ms. */
+.nop-edit-modal .modal-content { border-radius: 16px; }
+.nop-edit-modal.fade .modal-dialog {
+    transform: scale(0.96); opacity: 0;
+    transition: transform 200ms var(--nop-ease-out), opacity 200ms var(--nop-ease-out);
+}
+.nop-edit-modal.show .modal-dialog { transform: scale(1); opacity: 1; }
+.nop-edit-modal .form-control:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
+@media (prefers-reduced-motion: reduce) {
+    .nop-edit-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
+}
 
 /* Per-column filter row — New Deals style. */
 #nop-table thead tr.nop-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--nop-hairline); }
@@ -223,6 +238,26 @@
             </div>
         </div>
     </div>
+
+    <!-- Edit modal — same glass sheet as the Cockpit; B3 ID is the row key, so it
+         is shown read-only. -->
+    <div class="modal fade nop-edit-modal" id="nopEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-pencil me-1"></i><span data-lang="nop-edit-title">Edit row</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="nopEditFields"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="nopEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock page_content %}
 
@@ -238,5 +273,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723b"></script>
 {% endblock extra_javascript %}

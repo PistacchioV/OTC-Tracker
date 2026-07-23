@@ -14,17 +14,27 @@
 
   var API = page.getAttribute('data-api') || '/api/ndf-other-publisher/data';
   var CONFIRM_API = '/api/ndf-other-publisher/row/confirm';
+  var EDIT_API = '/api/ndf-other-publisher/row/edit';
+  var DELETE_API = '/api/ndf-other-publisher/row/delete';
   var dt = null;
   var COLS = [];
+  var CURRENT_ROWS = [];       // last-loaded rows (each: [...data..., status, maker, checker, id])
+  var EDIT_ID = null;
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
-    en: { ok: 'OK', pending: 'Pending', newst: 'New', confirm: 'Confirm',
-          confirmed: 'Confirmed', err: 'Action failed.' },
-    br: { ok: 'OK', pending: 'Pendente', newst: 'Novo', confirm: 'Confirmar',
-          confirmed: 'Confirmado', err: 'Falha na ação.' },
-    es: { ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', confirm: 'Confirmar',
-          confirmed: 'Confirmado', err: 'Acción fallida.' },
+    en: { ok: 'OK', pending: 'Pending', newst: 'New', confirm: 'Confirm', edit: 'Edit', del: 'Delete',
+          confirmed: 'Confirmed', saved: 'Saved', deleted: 'Deleted', err: 'Action failed.',
+          delTitle: 'Delete row?', delText: 'This row will be hidden from the page.',
+          yes: 'Yes, delete', cancel: 'Cancel' },
+    br: { ok: 'OK', pending: 'Pendente', newst: 'Novo', confirm: 'Confirmar', edit: 'Editar', del: 'Excluir',
+          confirmed: 'Confirmado', saved: 'Salvo', deleted: 'Excluído', err: 'Falha na ação.',
+          delTitle: 'Excluir linha?', delText: 'Esta linha será ocultada da página.',
+          yes: 'Sim, excluir', cancel: 'Cancelar' },
+    es: { ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', confirm: 'Confirmar', edit: 'Editar', del: 'Eliminar',
+          confirmed: 'Confirmado', saved: 'Guardado', deleted: 'Eliminado', err: 'Acción fallida.',
+          delTitle: '¿Eliminar fila?', delText: 'Esta fila se ocultará de la página.',
+          yes: 'Sí, eliminar', cancel: 'Cancelar' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -48,9 +58,41 @@
     return { status: r[n], maker: r[n + 1], checker: r[n + 2], id: r[n + 3] };
   }
 
+  // Action buttons — standard rounded-square format (global head-css) via btn-row-*.
   function actionsHtml(id) {
-    return '<button class="btn btn-success btn-sm rounded-circle btn-row-confirm" data-id="' +
-      esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>';
+    return '<div class="d-inline-flex gap-1">' +
+      '<button class="btn btn-info btn-sm rounded-circle btn-row-edit" data-id="' + esc(id) + '" title="' + esc(t('edit')) + '"><i class="ti ti-pencil"></i></button>' +
+      '<button class="btn btn-success btn-sm rounded-circle btn-row-confirm" data-id="' + esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>' +
+      '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete" data-id="' + esc(id) + '" title="' + esc(t('del')) + '"><i class="ti ti-trash"></i></button>' +
+      '</div>';
+  }
+
+  function postJSON(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
+  }
+
+  // Glass modal: a field per column; column 0 (B3 ID) is the key, so read-only.
+  function openModal(id, cells) {
+    EDIT_ID = id;
+    document.getElementById('nopEditFields').innerHTML = COLS.map(function (c, i) {
+      var val = (cells && cells[i] != null) ? cells[i] : '';
+      return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' + esc(c) + '</label>' +
+        '<input type="text" class="form-control form-control-sm nop-edit-fld" data-i="' + i + '" value="' +
+        esc(val) + '"' + (i === 0 ? ' readonly' : '') + '></div>';
+    }).join('');
+    if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('nopEditModal')).show();
+  }
+
+  function afterMutation(titleKey) {
+    if (window.bootstrap) {
+      var inst = bootstrap.Modal.getInstance(document.getElementById('nopEditModal'));
+      if (inst) inst.hide();
+    }
+    load(currentDate());
+    if (window.fetchNotifications) window.fetchNotifications();
+    if (window.Swal) Swal.fire({ icon: 'success', title: t(titleKey), timer: 1200, showConfirmButton: false });
   }
 
   function load(dateStr) {
@@ -67,6 +109,7 @@
 
   function buildTable(columns, rows) {
     COLS = columns;
+    CURRENT_ROWS = rows;
     var titleRow =
       '<tr>' +
       '<th class="text-center" style="min-width:38px"><input type="checkbox" id="nopCheckAll" class="form-check-input"></th>' +
@@ -205,32 +248,59 @@
     });
   }
 
-  // Confirm (delegated — survives DataTables redraws).
+  // Edit / Confirm / Delete (delegated — survives DataTables redraws).
   function wireActions() {
     jQuery('#nop-table').off('click.nopact')
+      .on('click.nopact', '.btn-row-edit', function () {
+        var id = this.getAttribute('data-id');
+        var row = CURRENT_ROWS.filter(function (r) { return String(metaOf(r).id) === String(id); })[0];
+        openModal(id, row ? row.slice(0, COLS.length) : null);
+      })
       .on('click.nopact', '.btn-row-confirm', function () {
         var id = this.getAttribute('data-id');
-        fetch(CONFIRM_API, {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: currentDate(), id: id }),
-        }).then(function (r) { return r.json(); })
-          .then(function (j) {
-            if (j && j.success) {
-              load(currentDate());
-              if (window.fetchNotifications) window.fetchNotifications();
-              if (window.Swal) Swal.fire({ icon: 'success', title: t('confirmed'), timer: 1200, showConfirmButton: false });
-            } else if (window.Swal) {
-              Swal.fire({ icon: 'error', title: 'OTM', text: (j && j.error) || t('err') });
-            }
+        postJSON(CONFIRM_API, { date: currentDate(), id: id }).then(function (res) {
+          if (res.ok && res.body && res.body.success) { afterMutation('confirmed'); }
+          else if (window.Swal) { Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') }); }
+        }).catch(function () {});
+      })
+      .on('click.nopact', '.btn-row-delete', function () {
+        var id = this.getAttribute('data-id');
+        function doDelete() {
+          postJSON(DELETE_API, { date: currentDate(), id: id }).then(function (res) {
+            if (res.ok && res.body && res.body.success) { afterMutation('deleted'); }
+            else if (window.Swal) { Swal.fire({ icon: 'error', title: 'OTM', text: t('err') }); }
           }).catch(function () {});
+        }
+        if (window.Swal) {
+          Swal.fire({ icon: 'warning', title: t('delTitle'), text: t('delText'), showCancelButton: true,
+            confirmButtonText: t('yes'), cancelButtonText: t('cancel'), confirmButtonColor: '#dc3545' })
+            .then(function (r) { if (r.isConfirmed) doDelete(); });
+        } else { doDelete(); }
       });
+  }
+
+  function wireEditSave() {
+    var save = document.getElementById('nopEditSave');
+    if (!save) return;
+    save.addEventListener('click', function () {
+      var cells = [];
+      document.querySelectorAll('#nopEditFields .nop-edit-fld').forEach(function (f) {
+        cells[+f.getAttribute('data-i')] = f.value;
+      });
+      save.disabled = true;
+      postJSON(EDIT_API, { date: currentDate(), id: EDIT_ID, cells: cells }).then(function (res) {
+        save.disabled = false;
+        if (res.ok && res.body && res.body.success) { afterMutation('saved'); }
+        else if (window.Swal) { Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') }); }
+      }).catch(function () { save.disabled = false; });
+    });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     wireClear();
     wirePageLen();
     wireActions();
+    wireEditSave();
     wireDatePicker();
     load(page.getAttribute('data-ref-date'));
   });

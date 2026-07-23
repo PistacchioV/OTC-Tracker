@@ -1328,5 +1328,6 @@
   "nop-clear-filters": "Limpiar filtros",
   "nop-showing": "Mostrando",
   "nop-actions": "Acciones",
-  "nop-status": "Status"
+  "nop-status": "Status",
+  "nop-edit-title": "Editar fila"
 }

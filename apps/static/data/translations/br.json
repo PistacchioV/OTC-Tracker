@@ -1329,5 +1329,6 @@
   "nop-clear-filters": "Limpar filtros",
   "nop-showing": "Exibindo",
   "nop-actions": "Ações",
-  "nop-status": "Status"
+  "nop-status": "Status",
+  "nop-edit-title": "Editar linha"
 }
