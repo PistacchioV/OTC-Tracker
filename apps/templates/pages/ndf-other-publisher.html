@@ -265,9 +265,8 @@
                         <i class="ti ti-filter-off me-1"></i><span data-lang="nop-clear-filters">Clear filters</span>
                     </button>
                     <!-- Batch send — only visible with 2+ rows checked (JS). -->
-                    <button class="btn btn-sm btn-primary bg-gradient d-none" type="button" id="nopSendBatch">
-                        <i class="ti ti-brand-telegram me-1"></i><span data-lang="nop-send-selected">Send selected</span>
-                        (<span id="nopSendCount">0</span>)
+                    <button class="btn btn-sm btn-soft-primary d-none" type="button" id="nopSendBatch">
+                        <i class="ti ti-brand-telegram me-1"></i><span data-lang="nop-send">Send</span>
                     </button>
                 </div>
                 <div class="text-muted fs-xs">
@@ -317,5 +316,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723f"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723g"></script>
 {% endblock extra_javascript %}

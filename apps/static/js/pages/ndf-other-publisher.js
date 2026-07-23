@@ -204,11 +204,7 @@
   // by its own row-level button.
   function updateSendBatch() {
     var btn = document.getElementById('nopSendBatch');
-    if (!btn) return;
-    var n = checkedIds().length;
-    btn.classList.toggle('d-none', n < 2);
-    var cnt = document.getElementById('nopSendCount');
-    if (cnt) cnt.textContent = n;
+    if (btn) btn.classList.toggle('d-none', checkedIds().length < 2);
   }
 
   function doSend(ids) {
