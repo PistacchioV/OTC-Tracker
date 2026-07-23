@@ -33,7 +33,10 @@
   }
   /* Live notification toast (top-right, just below the topbar) — mirrors the bell item content. */
   #otc-toast-container { z-index: 1090; top: var(--ins-topbar-height, 64px); }
-  .otc-notif-toast { width: 360px; max-width: calc(100vw - 2rem); }
+  .otc-notif-toast {
+    width: 360px; max-width: calc(100vw - 2rem);
+    --ins-toast-bg: rgba(var(--ins-body-bg-rgb), 0.95);
+  }
   .otc-notif-toast .notification-badge {
     display: flex !important; align-items: center !important; justify-content: center !important;
   }
