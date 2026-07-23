@@ -16782,8 +16782,12 @@ def metrics_pending_confirmation():
 def api_pc_metrics_offenders():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    rows, source = _pc_latest_snapshot_rows()
-    return jsonify({'success': True, 'source': source, **_pc_metrics_offenders(rows)})
+    # Always read the live pending DuckDB (not the daily snapshot) so edits on the
+    # Pending Confirmation page reflect on the dashboard immediately; snapshots
+    # remain history-only (see /history).
+    rows = [r for r in _pc_load_rows('pending')
+            if not _pc_is_ok_status(r.get('Pending Status', ''))]
+    return jsonify({'success': True, 'source': 'live', **_pc_metrics_offenders(rows)})
 
 
 @blueprint.route('/api/metrics-pending-confirmation/history')
