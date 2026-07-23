@@ -15779,7 +15779,7 @@ def api_opt_premium_email():
 
     from apps.pages import otc_emails
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    drafts = otc_emails.build_premium_emails(deals)
+    drafts = otc_emails.build_premium_emails(deals, asset_label='Opção de Commodities')
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     return _email_drafts_response(drafts)
@@ -15792,7 +15792,7 @@ def api_fxo_premium_email():
 
     from apps.pages import otc_emails
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    drafts = otc_emails.build_premium_emails(deals, asset_label='Taxas de Câmbio',
+    drafts = otc_emails.build_premium_emails(deals, asset_label='Opção de Moeda',
                                              ref_key='FX CASH ACCRONYM',
                                              cc_comm_sales=False)   # FX flow — Comm Sales isn't copied
     if not drafts:
