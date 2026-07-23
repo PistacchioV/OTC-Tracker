@@ -73,14 +73,14 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
   }
 
-  // Glass modal: a field per column; column 0 (B3 ID) is the key, so read-only.
+  // Glass modal: a field per column; B3 ID is the row key, so it is read-only.
   function openModal(id, cells) {
     EDIT_ID = id;
     document.getElementById('nopEditFields').innerHTML = COLS.map(function (c, i) {
       var val = (cells && cells[i] != null) ? cells[i] : '';
       return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' + esc(c) + '</label>' +
         '<input type="text" class="form-control form-control-sm nop-edit-fld" data-i="' + i + '" value="' +
-        esc(val) + '"' + (i === 0 ? ' readonly' : '') + '></div>';
+        esc(val) + '"' + (c === 'B3 ID' ? ' readonly' : '') + '></div>';
     }).join('');
     if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('nopEditModal')).show();
   }

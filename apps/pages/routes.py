@@ -6984,22 +6984,28 @@ def api_ndfc_row_confirm():
 #  Derived (read-only) view, VCP-style: the base rows are the day's Operations B3
 #  entries with Tipo Operação = PENDENTE_CAMBIO, each joined to the other NDF
 #  pages by the CETIP contract (the B3 "Título"):
+#    CLIENT           ← that Cockpit row's NM_COUNTERPARTY
 #    B3 ID            ← Operations B3 "Título"
 #    ATHENA ID        ← NDF Cockpit ID_SOURCE_DEAL of the row whose CD_CETIP_RETURN
 #                       is this contract (Cockpit resolution reused as-is, so a
 #                       contract recovered by athena id or by the Operations B3
 #                       rescue counts here too)
+#    CCY FC           ← that Cockpit row's CCY_NOTIONAL_FC
 #    TX PARIDADE      ← that Cockpit row's VL_STRIKE_PRICE, shown 0.00000000
+#    CCY LC           ← always BRL (the quoted leg of a PENDENTE_CAMBIO is local)
 #    TX COTADA        ← always 1.00000000
 #    CONTA PARTE      ← Live Position NDF "Codigo da Parte" for the contract
 #    CONTA CONTRAPARTE← Live Position NDF "Codigo da Contraparte"
 #  Values are recomputed on every load; only the maker/checker meta is persisted
 #  (per day, keyed by B3 ID), so a confirmation survives a reload.
 # ══════════════════════════════════════════════════════════════════════════════
-_NDFOP_COLUMNS = ['B3 ID', 'ATHENA ID', 'TX PARIDADE', 'TX COTADA',
-                  'CONTA PARTE', 'CONTA CONTRAPARTE']
+_NDFOP_COLUMNS = ['CLIENT', 'B3 ID', 'ATHENA ID', 'CCY FC', 'TX PARIDADE',
+                  'CCY LC', 'TX COTADA', 'CONTA PARTE', 'CONTA CONTRAPARTE']
 _NDFOP_OP_TYPE = 'PENDENTE_CAMBIO'
 _NDFOP_TX_COTADA = '1.00000000'
+_NDFOP_CCY_LC = 'BRL'
+# B3 ID is the row identity (and the meta key), so it is never overridable by an edit.
+_NDFOP_KEY_COL = _NDFOP_COLUMNS.index('B3 ID')
 
 
 def _ndfop_key(v):
@@ -7040,9 +7046,10 @@ def _ndfop_meta_save(path, meta):
 
 
 def _ndfop_cockpit_index(ref):
-    """{CD_CETIP_RETURN (upper) → {'athena', 'strike'}} built from the NDF Cockpit
-    DISPLAY rows, so the contract shown here is exactly the one the Cockpit shows
-    (including the ones it recovered via athena id or the Operations B3 rescue)."""
+    """{CD_CETIP_RETURN (upper) → {'athena', 'strike', 'client', 'ccy_fc'}} built from
+    the NDF Cockpit DISPLAY rows, so the contract shown here is exactly the one the
+    Cockpit shows (including the ones it recovered via athena id or the Operations B3
+    rescue)."""
     out = {}
     try:
         payload = _ndfc_collect(ref)
@@ -7050,12 +7057,16 @@ def _ndfop_cockpit_index(ref):
         i_cd = cols.index('CD_CETIP_RETURN')
         i_ath = cols.index('ID_SOURCE_DEAL')
         i_stk = cols.index('VL_STRIKE_PRICE')
+        i_cli = cols.index('NM_COUNTERPARTY')
+        i_fc = cols.index('CCY_NOTIONAL_FC')
         for row in payload.get('rows') or []:
             cd = str(row[i_cd] or '').strip()
             if not cd or cd == _NDFC_MISSING_B3:
                 continue
             out.setdefault(cd.upper(), {'athena': str(row[i_ath] or '').strip(),
-                                        'strike': row[i_stk]})
+                                        'strike': row[i_stk],
+                                        'client': str(row[i_cli] or '').strip(),
+                                        'ccy_fc': str(row[i_fc] or '').strip()})
     except Exception:
         log.warning('[ndf-other-publisher] cockpit index failed:\n%s', traceback.format_exc())
     return out
@@ -7080,18 +7091,21 @@ def _ndfop_collect(ref):
         ck = cockpit.get(b3.upper(), {})
         lp = contr.get(b3.upper(), {})
         cells = [
+            ck.get('client', ''),
             b3,
             ck.get('athena', ''),
+            ck.get('ccy_fc', ''),
             _ndfop_fmt8(ck.get('strike', '')),
+            _NDFOP_CCY_LC,
             _NDFOP_TX_COTADA,
             lp.get('conta_parte', ''),
             lp.get('conta_cparte', ''),
         ]
         # A manual edit wins over the derived value, so a fix made here survives
-        # the next load even if the upstream file still disagrees. Column 0 (B3 ID)
-        # is the row identity and therefore not overridable.
+        # the next load even if the upstream file still disagrees. B3 ID is the row
+        # identity and therefore not overridable.
         for i, v in enumerate(m.get('cells') or []):
-            if 0 < i < len(cells) and str(v or '').strip():
+            if i != _NDFOP_KEY_COL and i < len(cells) and str(v or '').strip():
                 cells[i] = str(v).strip()
         rows_out.append(cells + [m.get('status', 'New'), m.get('maker', ''),
                                  m.get('checker', ''), b3])
