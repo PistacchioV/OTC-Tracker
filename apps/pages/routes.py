@@ -6394,7 +6394,8 @@ NDFC_SOURCE_ROOT = os.getenv('NDFC_SOURCE_ROOT', SETTLEMENTS_ROOT)
 NDFC_JSON_ROOT = OTM_JSON_ROOT
 _NDFC_COLUMNS = [
     'LEGAL', 'NM_COUNTERPARTY', 'ID_SOURCE_DEAL', 'DT_DEAL', 'CD_CETIP_RETURN', 'DT_SETTLEMENT',
-    'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'PUBLISHER',
+    'CCY_NOTIONAL_LC', 'VL_NOTIONAL_LC', 'CCY_NOTIONAL_FC', 'VL_NOTIONAL_FC',
+    'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'PUBLISHER',
     'VL_TAX_INCOME',
     'ID_DEAL', '[PROD] Cockpit.SETTLEMENT', 'NB_BANK', 'CD_BRANCH', 'CD_BANK_ACCOUNT',
 ]
@@ -6556,6 +6557,42 @@ def _ndfc_num(v):
 # Sentinel emitted when a blank CD_CETIP_RETURN has no match in the Live Position
 # NDF file — the front-end renders it as a warning badge ("Missing B3 ID").
 _NDFC_MISSING_B3 = '__MISSING_B3_ID__'
+# Second-chance rescue via Operations B3 (Resgate/TER): BRL tolerance between the
+# B3 "Valor" and the cockpit's [PROD] Cockpit.SETTLEMENT.
+_NDFC_OPB3_VAL_TOL = 5.0
+
+# Sisbacen numeric currency code → ISO 3-letter (keys with leading zeros
+# stripped). Codes not mapped here fall through as the raw number so ops can
+# spot the gap and extend the table.
+_NDFC_SISBACEN_CCY = {
+    '55': 'DKK', '65': 'NOK', '70': 'SEK', '150': 'AUD', '165': 'CAD',
+    '220': 'USD', '245': 'NZD', '425': 'CHF', '470': 'JPY', '540': 'GBP',
+    '706': 'ARS', '715': 'CLP', '720': 'COP', '741': 'MXN', '745': 'UYU',
+    '785': 'ZAR', '790': 'BRL', '795': 'CNY', '978': 'EUR',
+}
+
+
+def _ndfc_ccy_from_sisbacen(code):
+    """'00220' / '220' → 'USD'; unmapped codes return the raw (stripped) code."""
+    digits = _acc_digits(code)
+    if not digits:
+        return ''
+    key = digits.lstrip('0') or '0'
+    return _NDFC_SISBACEN_CCY.get(key, key)
+
+
+def _ndfc_valnum(v):
+    """Value string → float or None. Accepts BR ('1.234.567,89' / '1234,89') and
+    US ('1234567.89') formats — with a comma present, dots are thousands."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    try:
+        if ',' in s:
+            return float(s.replace('.', '').replace(',', '.'))
+        return float(s)
+    except ValueError:
+        return None
 
 
 def _ndfc_b3_maps(ref):
@@ -6565,16 +6602,22 @@ def _ndfc_b3_maps(ref):
                  → "Contrato" (CETIP contract)
       pub_map:   "Contrato" → publisher: "BACEN" when "Nome do Feeder" is BACEN,
                  otherwise the "Tela funcao Consulta" value.
+      contr_map: "Contrato" → {'fwd', 'base', 'cnpj', 'ccy_fc', 'ccy_lc'}:
+                 Taxa Forward, Valor Base no registro and digits-only CPF/CNPJ da
+                 Contraparte (used by the Operations B3 rescue to double-check a
+                 candidate contract), plus Simbolo da Moeda (→ CCY_NOTIONAL_FC)
+                 and Codigo Sisbacen da Moeda Cotada mapped to ISO-3
+                 (→ CCY_NOTIONAL_LC).
     """
-    ident_map, pub_map = {}, {}
+    ident_map, pub_map, contr_map = {}, {}, {}
     try:
         path, _ = _ndf_ter_path(_prev_anbima_bizday(ref))
         if not path:
-            return ident_map, pub_map
+            return ident_map, pub_map, contr_map
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh) or []
         if not data:
-            return ident_map, pub_map
+            return ident_map, pub_map, contr_map
         keys, _seen = [], set()
         for rec in data:
             for k in rec.keys():
@@ -6584,6 +6627,11 @@ def _ndfc_b3_maps(ref):
         k_contr = _fcst_resolve_key(keys, ('Contrato',))
         k_feed  = _fcst_resolve_key(keys, ('Nome do Feeder',))
         k_tela  = _fcst_resolve_key(keys, ('Tela funcao Consulta',))
+        k_fwd   = _fcst_resolve_key(keys, ('Taxa Forward',))
+        k_base  = _fcst_resolve_key(keys, ('Valor Base no registro',))
+        k_cnpj  = _fcst_resolve_key(keys, ('CPF/CNPJ da Contraparte',))
+        k_sym   = _fcst_resolve_key(keys, ('Simbolo da Moeda',))
+        k_cot   = _fcst_resolve_key(keys, ('Codigo Sisbacen da Moeda Cotada',))
         for rec in data:
             contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
             if not contrato:
@@ -6593,10 +6641,68 @@ def _ndfc_b3_maps(ref):
                 ident_map[ident[-14:]] = contrato
             feeder = str(rec.get(k_feed, '') or '').strip() if k_feed else ''
             tela = str(rec.get(k_tela, '') or '').strip() if k_tela else ''
-            pub_map[contrato] = 'BACEN' if feeder.upper() == 'BACEN' else tela
+            pub_map[contrato.upper()] = 'BACEN' if feeder.upper() == 'BACEN' else tela
+            contr_map[contrato.upper()] = {
+                'fwd':  _ndfc_valnum(rec.get(k_fwd, '')) if k_fwd else None,
+                'base': _ndfc_valnum(rec.get(k_base, '')) if k_base else None,
+                'cnpj': _acc_digits(rec.get(k_cnpj, '')) if k_cnpj else '',
+                'ccy_fc': str(rec.get(k_sym, '') or '').strip() if k_sym else '',
+                'ccy_lc': _ndfc_ccy_from_sisbacen(rec.get(k_cot, '')) if k_cot else '',
+            }
     except Exception:
         log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
-    return ident_map, pub_map
+    return ident_map, pub_map, contr_map
+
+
+def _ndfc_opb3_resgates(ref):
+    """(valor, Título) pairs from the day's Operations B3 rows whose Tipo
+    Operação = Resgate and Tipo Título = TER — candidate CETIP contracts for
+    cockpit rows whose CD_CETIP_RETURN is still unresolved."""
+    out = []
+    try:
+        _, ops = _opb3_load(ref)
+        for r in (ops or []):
+            if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
+                continue
+            if _fcst_norm(str(r.get('Tipo Título', ''))) != 'ter':
+                continue
+            valor = _ndfc_valnum(r.get('Valor'))
+            titulo = str(r.get('Título', '') or '').strip()
+            if valor is not None and titulo:
+                out.append((valor, titulo))
+    except Exception:
+        log.warning('[ndfc] opb3 resgates load failed:\n%s', traceback.format_exc())
+    return out
+
+
+def _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid):
+    """Second-chance CD_CETIP_RETURN: find an Operations B3 Resgate/TER whose
+    Valor ≈ [PROD] Cockpit.SETTLEMENT (±_NDFC_OPB3_VAL_TOL BRL), then confirm the
+    candidate Título against Live Position NDF (forward rate and Valor Base no
+    registro must match the cockpit row) and against RefData (the contraparte's
+    CNPJ must resolve to the cockpit's NM_COUNTERPARTY). Returns the confirmed
+    contract or ''."""
+    settle = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+    fwd = _ndfc_valnum(rec.get('VL_FORWARD_RATE', ''))
+    base = _ndfc_valnum(rec.get('VL_NOTIONAL_FC', ''))
+    name = _fcst_norm(str(rec.get('NM_COUNTERPARTY', '') or '').strip())
+    if settle is None or fwd is None or base is None or not name:
+        return ''
+    for valor, titulo in resgates:
+        if abs(valor - settle) > _NDFC_OPB3_VAL_TOL:
+            continue
+        lp = contr_map.get(titulo.upper())
+        if not lp:
+            continue
+        if lp['fwd'] is None or round(lp['fwd'], 6) != round(fwd, 6):
+            continue
+        if lp['base'] is None or abs(lp['base'] - base) > 0.01:
+            continue
+        ref_name = by_taxid.get(lp['cnpj'], '') if lp['cnpj'] else ''
+        if not ref_name or _fcst_norm(ref_name) != name:
+            continue
+        return titulo
+    return ''
 
 
 def _ndfc_collect(ref):
@@ -6615,20 +6721,29 @@ def _ndfc_collect(ref):
                 _ndfc_save(jp, data)
             except Exception:
                 pass
-        ident_map, pub_map = _ndfc_b3_maps(ref)
+        ident_map, pub_map, contr_map = _ndfc_b3_maps(ref)
+        resgates = _ndfc_opb3_resgates(ref)
+        _, by_taxid = _vcp_refdata_maps()
         cpties, sum_notional, sum_settle = set(), 0.0, 0.0
         for rec in data:
             # Display-time lookups vs Live Position NDF: fill a blank
             # CD_CETIP_RETURN from ID_SOURCE_DEAL (right-14 → Contrato), and
-            # derive PUBLISHER from the matched contract's feeder.
+            # derive PUBLISHER from the matched contract's feeder. When the id
+            # lookup misses, try the Operations B3 Resgate/TER rescue before
+            # flagging the row as Missing B3 ID.
             cd = str(rec.get('CD_CETIP_RETURN', '') or '').strip()
             if not cd:
                 src = str(rec.get('ID_SOURCE_DEAL', '') or '').strip()
                 cd = ident_map.get(src[-14:], '') if src else ''
+                if not cd:
+                    cd = _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid)
                 cd_display = cd or _NDFC_MISSING_B3
             else:
                 cd_display = cd
-            publisher = str(rec.get('PUBLISHER', '') or '').strip() or pub_map.get(cd, '')
+            publisher = str(rec.get('PUBLISHER', '') or '').strip() or pub_map.get(cd.upper(), '')
+            lp = contr_map.get(cd.upper(), {}) if cd else {}
+            ccy_fc = str(rec.get('CCY_NOTIONAL_FC', '') or '').strip() or lp.get('ccy_fc', '')
+            ccy_lc = str(rec.get('CCY_NOTIONAL_LC', '') or '').strip() or lp.get('ccy_lc', '')
             row = []
             for c in _NDFC_COLUMNS:
                 v = rec.get(c, '')
@@ -6636,6 +6751,10 @@ def _ndfc_collect(ref):
                     v = cd_display
                 elif c == 'PUBLISHER':
                     v = publisher
+                elif c == 'CCY_NOTIONAL_FC':
+                    v = ccy_fc
+                elif c == 'CCY_NOTIONAL_LC':
+                    v = ccy_lc
                 elif c in _NDFC_DATE_COLS:
                     v = _ndfc_fmt_date(v)
                 elif c in _NDFC_FWD_COLS:
