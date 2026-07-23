@@ -7238,7 +7238,8 @@ def api_ndfop_row_delete():
 #  Rows against Lawton (C.Parte 00041007) are mirrored into a second file with
 #  Participante ↔ C.Parte swapped — the Lawton-side view of the same trade:
 #    TAXA_BANCO.txt  — header TER  00015JPMORGANBM··········yyyymmdd00001 + lines
-#    TAXA_LAWTON.txt — the swapped lines only (no bank header, as in the sheet)
+#    TAXA_LAWTON.txt — header TER  00015INTRAGLAWTONFDO·····yyyymmdd00001 + the
+#                      swapped lines (TCO_LAWTON-style participant header)
 #  Both written to CONECTA_NEW_PATH like the New Deals send-conecta files.
 _NDFOP_CONECTA_LABELS = ['Id do sistema', 'Id tipo linha', 'Código operação',
                          'N Contr Interno', 'Participante', 'Pap. Participante',
@@ -7347,23 +7348,39 @@ def api_ndfop_send():
         banco_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells)))
         if _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON:
             lawton_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells, swap=True)))
-    header = 'TER  00015' + 'JPMORGANBM' + ' ' * 10 + datetime.today().strftime('%Y%m%d') + '00001'
+    # Headers differ by participant name, TCO_* style: both padded to 20 chars
+    # (JPMORGANBM = 10 + 10 spaces, INTRAGLAWTONFDO = 15 + 5 spaces).
+    today = datetime.today().strftime('%Y%m%d')
+    banco_header = 'TER  00015' + 'JPMORGANBM' + ' ' * 10 + today + '00001'
+    lawton_header = 'TER  00015' + 'INTRAGLAWTONFDO' + ' ' * 5 + today + '00001'
     files = []
     try:
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
         fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_BANCO.txt')
         with open(fp, 'w', encoding='utf-8') as fh:
-            fh.write('\n'.join([header] + banco_lines))
+            fh.write('\n'.join([banco_header] + banco_lines))
         files.append({'filename': os.path.basename(fp), 'count': len(banco_lines)})
         if lawton_lines:
             fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_LAWTON.txt')
             with open(fp, 'w', encoding='utf-8') as fh:
-                fh.write('\n'.join(lawton_lines))
+                fh.write('\n'.join([lawton_header] + lawton_lines))
             files.append({'filename': os.path.basename(fp), 'count': len(lawton_lines)})
     except Exception as exc:
         log.error('[ndf-other-publisher] send failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': str(exc)}), 500
     sid = session.get('user_sid', '')
+    # Files are on the share — flip the rows to Sent in the day's overlay (same
+    # as New Deals: checker = whoever sent). Best-effort: a meta write failure
+    # must not report the send itself as failed.
+    try:
+        path, meta = _ndfop_meta_load(ref)
+        for rid in ids:
+            entry = meta.get(rid) or {}
+            entry.update({'status': 'Sent', 'checker': sid})
+            meta[rid] = entry
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] sent-status save failed:\n%s', traceback.format_exc())
     _create_notification(sid, session.get('user_name', ''), 'Sent to B3', 'NDF Other Publisher',
                          str(len(ids)) + ' row' + ('' if len(ids) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'count': len(ids), 'files': files})

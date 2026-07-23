@@ -55,10 +55,12 @@
   }
   function setVal(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 
-  // Standard status badge (project format): OK=success, Pending=warning, New=info.
+  // Standard status badge (project format): OK=success, Pending=warning, New=info,
+  // Sent=badge-sent (global head-css class, same as New Deals).
   function statusBadge(status) {
     var s = String(status || 'New').toLowerCase();
     if (s === 'ok')      return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'sent')    return '<span class="badge badge-sent bg-gradient">' + esc(t('sentOk')) + '</span>';
     if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
     return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
   }
