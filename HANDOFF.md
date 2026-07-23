@@ -4676,3 +4676,179 @@ scripts/sop-capture/capture_screens.py      ← docstring sem menção a stub/de
 scripts/sop-capture/devrun.example.py       ← comentários neutralizados (mantém função)
 docs/SECURITY-PHASE2.md                     ← 2A.1/2A.2 marcados feitos + linha do commit 9ca309a
 ```
+
+## 104. Sessão 2026-07-23 — Metrics offenders live + polish de toasts (`4962acc`, `39aabc7`, `38230db`, `60f022c`)
+
+- **Top 5 Offenders sempre do DuckDB pending live (`39aabc7`).** O endpoint
+  `/api/metrics-pending-confirmation/offenders` usava o snapshot diário, então edições na
+  base de pendentes só apareciam no dashboard no dia seguinte. Agora lê direto do DuckDB
+  pending (mesmo filtro que descarta `Exception*`). Os snapshots seguem alimentando só o
+  histórico, o e-mail Daily Metric e a Weekly Escalation — nada muda nesses fluxos.
+- **Badge de source removido (`60f022c`).** Com a fonte fixa em live, o badge "Source: live
+  pending DB" virou ruído; o endpoint continua retornando `source` no JSON, só não exibe.
+- **Subtítulo do Top 5 Bankers (`38230db`).** "By contracts…" → "By confirmations pending
+  > 30 days", igual aos cards vizinhos.
+- **Toasts de notificação mais opacos (`4962acc`).** `--ins-toast-bg` para 95% só em
+  `.otc-notif-toast` (topbar.html), sem recompilar SCSS e sem afetar os demais toasts.
+
+## 105. Sessão 2026-07-23 — NDF Cockpit: contrato via TER/Operations B3, PUBLISHER, CCY, strike, filtro de legal entity
+
+Cadeia de 6 commits que faz o Cockpit se completar sozinho a partir das outras fontes de
+NDF. **Tudo em tempo de exibição** — nada é persistido no JSON do dia, então mudanças nas
+fontes refletem no próximo load; valor importado/digitado no modal sempre tem precedência.
+
+- **`198b785` — CD_CETIP_RETURN via Live Position NDF + coluna PUBLISHER.** Linha do
+  SETTLEMENT chega sem retorno CETIP; o athena id (ID_SOURCE_DEAL) existe no DPOSICAO-TER
+  como right-14 do `Codigo Identificador`, junto do contrato. Novo `_ndfc_b3_maps` lê o TER
+  mais recente (D-1 ANBIMA, recua até 10 dias) e monta athena→contrato e contrato→publisher
+  (`Nome do Feeder` = BACEN → "BACEN", senão `Tela funcao Consulta`). Sem match → sentinel
+  `_NDFC_MISSING_B3` renderizado como badge warning "Missing B3 ID". Coluna PUBLISHER à
+  direita de VL_FORWARD_RATE; add/edit/import mapeiam células por posição de `_NDFC_COLUMNS`,
+  então o modal ganhou o campo sozinho.
+- **`feaaa86` — resgate via Operations B3 + colunas CCY.** Segunda chance antes do Missing:
+  procura no operations-b3 do dia um Resgate/TER com Valor a ≤5 BRL do SETTLEMENT, aceito só
+  se o DPOSICAO-TER confirmar Taxa Forward = VL_FORWARD_RATE (6 casas) e Valor Base =
+  VL_NOTIONAL_FC (±0,01), e o CNPJ resolver no RefData.json para o mesmo NM_COUNTERPARTY.
+  Novas colunas CCY_NOTIONAL_LC/FC: FC do `Simbolo da Moeda`; LC do `Codigo Sisbacen da
+  Moeda Cotada` via de-para interno (220→USD, 978→EUR, …) — código fora do de-para aparece
+  como o próprio número, de propósito. `_ndfc_valnum` tolera formato BR e US; mapas de
+  contrato em maiúsculas (pub_map era case-sensitive).
+- **`a6c5887` — cross-currency inverte CCY_LC/FC.** Sem BRL nas pontas o TER carrega as
+  moedas invertidas em relação ao cockpit; a inversão vale só para o par derivado do lookup.
+- **`a58c2e7` — VL_STRIKE_PRICE calculado.** Porte da fórmula Excel da mesa: strike =
+  VL_FORWARD_RATE ± |SETTLEMENT| / VL_NOTIONAL_FC, sinal + quando o settlement concorda com
+  a `Descricao` da posição do Participante no TER (COMPRADOR com positivo / VENDEDOR com
+  negativo). **Cross-currency exibe `-` por ora** (settlement em BRL ÷ notional do cross sai
+  na unidade errada; conversão será definida depois — pendência declarada pelo usuário).
+- **`d7a470b` + `8c4dba4` — filtro de legal entity.** Só LEGAL começando com BANCO JP /
+  JPMORGAN CHASE aparece (LAWTON… fora); nada é apagado do JSON e LEGAL em branco continua
+  visível. Widgets contam só as linhas visíveis. O fix `8c4dba4` normaliza pontuação antes
+  de comparar ("BANCO J.P. MORGAN S.A" ≡ "BANCO JP") — o filtro literal só deixava JPMORGAN
+  CHASE passar.
+
+## 106. Sessão 2026-07-23 — Recon Pay/Rec: todos os settlement types + prioridade da perna nomeada (revertida)
+
+- **`0b0e8a3` — todos os settlement types entram.** O lado JPM só aceitava Settlement Net ∈
+  {TOTAL_NET, PAYREC_NET} (porte fiel do Alteryx), mas o netting real vem do
+  CounterpartyDetails/overrides, não da coluna — o filtro derrubava em silêncio toda
+  contraparte No Net (sintoma: Saint-Gobain sem pernas de nenhum lado). Agora toda linha
+  não-JPM entra e a redução por net type decide (No Net mantém pernas, Total Net neta tudo,
+  Pay/Rec separa direções, Canalização mantém recebimentos e soma pagamentos).
+- **`0cce0d8` → revertido por `59f1409` (a pedido).** O `_mate_rank` dava prioridade à perna
+  nomeada (RLDOCREC/SDConta/SPB derivativos) sobre a anônima no match por valor. Com o
+  revert, os três pontos de escolha do `_reconcile` voltam a primeiro-candidato-livre /
+  valor-mais-próximo. **Volta o sintoma conhecido**: como a pasta lê em ordem alfabética
+  (HistoricoMensagens* antes de RLDOCREC.csv), um recebimento que bate com um interbancário
+  anônimo do SPB e com o TED nomeado pode casar com o anônimo — linha liquida com Client
+  vazio e o recebimento nomeado sobra como pendência. Trade-off avisado; decisão do usuário.
+
+## 107. Sessão 2026-07-23 — NOVA página Daily Settlement › NDF › Other Publisher (send TAXA p/ Conecta)
+
+`/ndf-other-publisher` — 7 commits (`cb6e1c3` → `fb1041f`). Página **derivada** (modelo
+Swap VCP): as linhas são recalculadas a cada load e só um **overlay por dia** é persistido
+(JSON ao lado do Cockpit, indexado por B3 ID).
+
+### Derivação (`cb6e1c3`, `799afdf`)
+Operations B3 do dia com Tipo Operação = `PENDENTE_CAMBIO` (filtro tolerante a
+acento/caixa/separador: ≡ "Pendente Câmbio"); cada operação liga às outras páginas de NDF
+pelo contrato CETIP. Colunas: **CLIENT** (NM_COUNTERPARTY do Cockpit) · **B3 ID** (Título)
+· **ATHENA ID** · **CCY FC** (CCY_NOTIONAL_FC) · **TX PARIDADE** (VL_STRIKE_PRICE, 8 casas)
+· **CCY LC** (fixo BRL) · **TX COTADA** (fixo 1.00000000) · **CONTA PARTE / CONTA
+CONTRAPARTE** (Live Position NDF, `contr_map` do `_ndfc_b3_maps` ganhou Codigo da
+Parte/Contraparte). O índice do Cockpit é montado das linhas de **exibição** dele
+(`_ndfop_cockpit_index`), não do JSON cru — contratos recuperados via athena id ou resgate
+Operations B3 (§105) valem aqui de graça. PENDENTE_CAMBIO sem correspondência fica listada
+com campos vazios (esconder o furo seria pior).
+
+### Overlay: edit / delete / status (`ef8a65e`)
+`{B3 ID → {status, maker, checker, cells, deleted}}`. Edit grava só células alteradas em
+`cells` (vencem o derivado no próximo load), linha volta a Pending, editor vira maker.
+Delete é lápide `deleted: true` — nada some da fonte, desfaz-se editando o JSON.
+**Gotcha resolvido em `799afdf`**: a chave do overlay é o B3 ID e o CLIENT entrou na frente
+dele — a proteção da coluna-chave era por índice fixo 0 e passaria a proteger a coluna
+errada; agora resolve por nome (`_NDFOP_KEY_COL = _NDFOP_COLUMNS.index('B3 ID')` no backend,
+`c === 'B3 ID'` readonly no modal).
+
+### Larguras de coluna — ida e volta (`ef8a65e`, `0e52c52`, `799afdf`)
+Diagnóstico real do "width não aplica": table-layout automático (9 colunas cabendo no card →
+browser redistribui a sobra), `style="width:100%"` inline vencendo o CSS, e dois pisos de
+min-width escondidos (120px thead, 96px input de filtro). O fix `table-layout: fixed +
+width: max-content` funcionou mas foi **revertido a pedido** em `799afdf` — larguras voltam
+a ser sugestão, por escolha do usuário. Ficou: padding toolbar↔header no `.table-responsive`
+(não na tabela, senão rola junto no scroll horizontal) e headers em UPPER via
+`text-transform` na 1ª tr do thead (linha de filtros fora, para não subir placeholder).
+
+### Send para o Batch Conecta (`a6e7df8`, `3fe916b`, `fb1041f`)
+- **Dois níveis**: botão por linha (telegram, padrão New Deals) e `#nopSendBatch` na toolbar
+  (btn-soft-primary, só "Send"), que aparece com 2+ checkboxes. Mesmo endpoint
+  `/api/ndf-other-publisher/send`.
+- **Arquivos** em `CONECTA_NEW_PATH` (Batch Conecta\New) via `_unique_filepath`:
+  `TAXA_BANCO.txt` sempre; `TAXA_LAWTON.txt` só com linha contra a Lawton (C.Parte
+  `00041007`), com Participante ↔ C.Parte invertidos.
+- **Linha posicional de 86 chars** portada das fórmulas Excel da mesa
+  (`_ndfop_conecta_fields`): `TER  ` + `1` + `0015` + 10 dígitos aleatórios
+  (MID(RAND();3;10)) + participante `73760009` + espaço + contraparte zfill(8) + contrato
+  ljust(10) + 12 espaços + TX PARIDADE e TX COTADA no posicional 4+8 sem separador
+  (5.55 → `000555000000`) + `000`. TX COTADA sai do valor da linha — edição manual flui
+  para o arquivo.
+- **Headers (43 chars)**: banco `TER  00015` + `JPMORGANBM` + 10 espaços + aaaammdd +
+  `00001`; lawton `TER  00015` + `INTRAGLAWTONFDO` + 5 espaços + aaaammdd + `00001`
+  (`fb1041f` — o arquivo saía sem header; padrão copiado do TCO_LAWTON, participante fecha
+  em 20 chars nos dois). **Atenção**: `INTRAGLAWTONFDO` é herdado do TCO — se o TAXA usar
+  outro nome, é uma constante só a trocar.
+- **Tudo-ou-nada**: TX PARIDADE ausente/inválida em qualquer linha aborta o lote apontando
+  os B3 IDs — nunca sai meio arquivo no share.
+- **Status Sent (`fb1041f`)**: após gerar os arquivos, as linhas ganham `status: Sent` +
+  `checker` = quem enviou no overlay (semântica do New Deals; badge `badge-sent` global do
+  head-css). A gravação é **best-effort de propósito** — os arquivos já estão no share,
+  falha ali loga mas não reporta o envio como erro.
+- **Preview no duplo clique**: popover absoluto no `#nop-page` (transform-origin top left,
+  scale-in), campos do Conecta na vertical; linha Lawton mostra duas colunas — Banco ×
+  Lawton e Lawton × Banco. Preview e arquivo saem da **mesma** `_ndfop_conecta_fields`,
+  então o que se vê é o que sai — exceto o nº interno, que regenera a cada envio como o
+  RAND() da planilha.
+
+### Pendências desta página
+- Validar os arquivos TAXA num envio real no ambiente JPM (nome do participante Lawton).
+- Strike cross-currency no Cockpit adiado (§105) → TX PARIDADE dessas linhas vem vazia e o
+  send delas aborta até lá.
+
+### Commits (sessão 2026-07-23)
+```
+4962acc  style(topbar): toasts de notificação levemente mais opacos
+39aabc7  fix(metrics): top-5 offenders lendo sempre do DuckDB pending live
+38230db  style(metrics): padronizar subtítulo do card Top 5 Bankers
+60f022c  style(metrics): remover badge de source do card Top 5 Offenders
+198b785  feat(ndf-cockpit): preencher CD_CETIP_RETURN via Live Position NDF + coluna PUBLISHER
+feaaa86  feat(ndf-cockpit): resgate via Operations B3 para Missing B3 ID + colunas CCY
+a6c5887  fix(ndf-cockpit): inverter CCY_LC/CCY_FC quando o NDF é cross-currency
+a58c2e7  feat(ndf-cockpit): calcular VL_STRIKE_PRICE a partir do settlement e da posição TER
+d7a470b  feat(ndf-cockpit): exibir só legal entities JPM (BANCO JP / JPMORGAN CHASE)
+8c4dba4  fix(ndf-cockpit): filtro de legal entity ignorando pontuação (BANCO J.P. MORGAN)
+0b0e8a3  fix(recon-payrec): considerar todos os settlement types do settlement.csv
+0cce0d8  fix(recon-payrec): perna nomeada tem prioridade no match, preenchendo o Client
+cb6e1c3  feat(ndf-other-publisher): nova página em Daily Settlement › NDF
+ef8a65e  feat(ndf-other-publisher): edit/delete nas linhas + larguras de coluna e headers UPPER
+0e52c52  fix(ndf-other-publisher): larguras de coluna ignoradas pelo browser + respiro na toolbar
+799afdf  feat(ndf-other-publisher): colunas CLIENT, CCY FC e CCY LC + revert do layout fixo
+59f1409  revert(recon-payrec): volta a prioridade da perna nomeada no match
+a6e7df8  feat(ndf-other-publisher): send para o Batch Conecta (TAXA) + preview no duplo clique
+3fe916b  style(ndf-other-publisher): botão de send em lote no padrão da toolbar
+fb1041f  feat(ndf-other-publisher): status Sent após o envio + header no TAXA_LAWTON
+```
+
+### Arquivos (sessão 2026-07-23)
+```
+apps/pages/routes.py                                ← Cockpit: _ndfc_b3_maps, resgate B3, CCY, strike, filtro legal;
+                                                       Other Publisher: bloco _ndfop_* completo (collect/edit/delete/
+                                                       preview/send); metrics offenders live
+apps/pages/recon_payrec.py                          ← settlement types; _mate_rank (entrou e saiu)
+apps/static/js/pages/ndf-cockpit.js                 ← badge Missing B3 ID / PUBLISHER
+apps/static/js/pages/ndf-other-publisher.js         ← página nova (?v=20260723h): tabela, modal edit, send, preview
+apps/templates/pages/ndf-other-publisher.html       ← template novo (widths, UPPER, popover CSS, batch send)
+apps/templates/partials/sidenav.html                ← item Other Publisher em Daily Settlement › NDF
+apps/templates/partials/topbar.html                 ← opacidade dos toasts
+apps/templates/pages/metrics-pending-confirmation.html  ← subtítulo + badge de source removido
+apps/static/js/pages/metrics-pending-confirmation.js    ← idem
+apps/static/data/translations/{en,br,es}.json       ← chaves nop-* (inclui nop-send, nop-edit-title)
+```
