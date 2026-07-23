@@ -6632,6 +6632,7 @@ def _ndfc_b3_maps(ref):
         k_cnpj  = _fcst_resolve_key(keys, ('CPF/CNPJ da Contraparte',))
         k_sym   = _fcst_resolve_key(keys, ('Simbolo da Moeda',))
         k_cot   = _fcst_resolve_key(keys, ('Codigo Sisbacen da Moeda Cotada',))
+        k_pos   = _fcst_resolve_key(keys, ('Descricao da posicao do Participante',))
         for rec in data:
             contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
             if not contrato:
@@ -6648,6 +6649,7 @@ def _ndfc_b3_maps(ref):
                 'cnpj': _acc_digits(rec.get(k_cnpj, '')) if k_cnpj else '',
                 'ccy_fc': str(rec.get(k_sym, '') or '').strip() if k_sym else '',
                 'ccy_lc': _ndfc_ccy_from_sisbacen(rec.get(k_cot, '')) if k_cot else '',
+                'pos': str(rec.get(k_pos, '') or '').strip() if k_pos else '',
             }
     except Exception:
         log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
@@ -6673,6 +6675,30 @@ def _ndfc_opb3_resgates(ref):
     except Exception:
         log.warning('[ndfc] opb3 resgates load failed:\n%s', traceback.format_exc())
     return out
+
+
+def _ndfc_strike_calc(rec, lp, is_cross):
+    """VL_STRIKE_PRICE display-time calc (port of the ops Excel formula):
+    strike = VL_FORWARD_RATE ± |SETTLEMENT| / VL_NOTIONAL_FC, where the sign is
+    + when the settlement direction agrees with the participant's TER position
+    (COMPRADOR with positive settlement, or VENDEDOR with negative), − otherwise.
+    Only valid for CCY×BRL pairs — a cross-currency NDF settles in BRL but quotes
+    the forward in the cross, so the division is in the wrong unit; those show
+    '-' until the BRL→quote-ccy conversion is defined."""
+    if is_cross:
+        return '-'
+    pos = _fcst_norm(lp.get('pos', ''))
+    if pos not in ('comprador', 'vendedor'):
+        return '-'
+    settle = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+    fwd = _ndfc_valnum(rec.get('VL_FORWARD_RATE', ''))
+    notional = _ndfc_valnum(rec.get('VL_NOTIONAL_FC', ''))
+    if settle is None or fwd is None or not notional:
+        return '-'
+    ratio = settle / notional
+    add = (ratio > 0 and pos == 'comprador') or (ratio < 0 and pos == 'vendedor')
+    delta = abs(settle) / notional
+    return '{:.6f}'.format(fwd + delta if add else fwd - delta)
 
 
 def _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid):
@@ -6750,6 +6776,11 @@ def _ndfc_collect(ref):
                 lk_fc, lk_lc = lk_lc, lk_fc
             ccy_fc = str(rec.get('CCY_NOTIONAL_FC', '') or '').strip() or lk_fc
             ccy_lc = str(rec.get('CCY_NOTIONAL_LC', '') or '').strip() or lk_lc
+            strike = str(rec.get('VL_STRIKE_PRICE', '') or '').strip()
+            if not strike:
+                is_cross = bool(ccy_fc and ccy_lc
+                                and ccy_fc.upper() != 'BRL' and ccy_lc.upper() != 'BRL')
+                strike = _ndfc_strike_calc(rec, lp, is_cross)
             row = []
             for c in _NDFC_COLUMNS:
                 v = rec.get(c, '')
@@ -6761,6 +6792,8 @@ def _ndfc_collect(ref):
                     v = ccy_fc
                 elif c == 'CCY_NOTIONAL_LC':
                     v = ccy_lc
+                elif c == 'VL_STRIKE_PRICE':
+                    v = strike
                 elif c in _NDFC_DATE_COLS:
                     v = _ndfc_fmt_date(v)
                 elif c in _NDFC_FWD_COLS:
