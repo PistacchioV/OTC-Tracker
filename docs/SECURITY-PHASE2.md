@@ -20,14 +20,15 @@ barraria também os scripts legítimos e quebraria telas. Por isso ligamos
 primeiro em **modo observação** (só relata, não bloqueia).
 
 ### Passos
-- [ ] **2A.1 — Ligar CSP em modo report-only.** Em `apps/pages/routes.py`, no
-      `@blueprint.after_request` `add_security_headers`, adicionar o header
-      `Content-Security-Policy-Report-Only` com uma política inicial permissiva
-      (`default-src 'self'`, permitindo por ora `'unsafe-inline'` em scripts/estilos
-      e as origens de fontes/CDN realmente usadas). **Não bloqueia nada** ainda.
-- [ ] **2A.2 — Criar endpoint de coleta de violações.** Uma rota `POST` (ex.:
-      `/api/csp-report`) que recebe os relatórios do navegador e os grava em log.
-      Apontar a diretiva `report-uri`/`report-to` para ela.
+- [x] **2A.1 — Ligar CSP em modo report-only.** *(`9ca309a`)* Header
+      `Content-Security-Policy-Report-Only` (const `_CSP_REPORT_ONLY`) adicionado
+      no `add_security_headers`. Política: `default-src 'self'`, `'unsafe-inline'`
+      mantido em script/style, e as origens realmente carregadas (jsdelivr, cdnjs,
+      apexcharts, Google Fonts, YouTube/Vimeo). **Não bloqueia nada** ainda.
+- [x] **2A.2 — Criar endpoint de coleta de violações.** *(`9ca309a`)* Rota
+      `POST /csp-report` (sem auth, por design — o navegador posta sem credenciais)
+      que loga o relatório e responde `204`. A diretiva `report-uri /csp-report`
+      já aponta para ela.
 - [ ] **2A.3 — Navegar por todas as telas** (login, dashboards, New Deals,
       control-panel, reconciliação, e-mails, users/page-access) e **coletar** o
       que a CSP *teria* bloqueado.
@@ -110,3 +111,8 @@ o mesmo `POST` pela UI real deve funcionar normalmente.
 |--------|----------|
 | `e3526bc` | Críticos/Altos: bypass de 2FA (X-Forwarded-For), escalonamento de privilégio, XSS armazenado, endpoints sem auth, MAX_CONTENT_LENGTH, SameSite, bump de 6 deps Python |
 | `ead2a35` | Fase 1: headers de segurança, /users-roles admin-only, catch-all com auth, 2 path traversals, SECRET_KEY (secrets + exigência em prod) |
+| `9ca309a` | 2ª varredura: 2FA anti-brute-force (coluna `attempts` + cap de 5, cooldown/teto de envio), CSPRNG no código 2FA (`secrets`), auth 401 em `/api/b3/{add,update,delete}` e `/api/fx-holiday-schedules`, autorização por page-access nos endpoints b3, **CSP report-only + `/csp-report`** (2A.1/2A.2) |
+
+> **Nota (2A):** o report-only já está no ar. Falta apenas rodar 2A.3→2A.6 (navegar
+> as telas, ler os logs `[csp-report]`, afinar a allowlist e então virar a chave
+> para `Content-Security-Policy`). A rota ficou `/csp-report` (não `/api/csp-report`).

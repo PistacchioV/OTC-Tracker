@@ -4602,3 +4602,77 @@ apps/templates/pages/control-panel.html                ← card signature-collec
 apps/static/data/signature_collection_bankers.json     ← NOVO (58 bankers {name,email}, domínios substituídos, dedup)
 apps/static/data/translations/{en,br,es}.json          ← 8 chaves do card signature-collection
 ```
+
+
+## 103. Sessão 2026-07-22 — 2ª varredura de segurança + fix do gradiente no e-mail Pay/Rec (`9ca309a`, `e66437e`, `a4e5af9`)
+
+Varredura de segurança para produção (só correções que **não mudam output nem fluxo** de
+usuário legítimo), limpeza de menções a desenvolvimento fora do ambiente JPM, e um fix no
+cabeçalho do e-mail de fim de dia do Pay/Rec. Detalhe do CSP no `docs/SECURITY-PHASE2.md`
+(itens 2A.1/2A.2 marcados como feitos).
+
+### Segurança (`9ca309a`, só `routes.py`)
+- **2FA anti-brute-force.** O código de 6 dígitos (espaço 10⁶) era adivinhável na janela de
+  10 min porque `verify_code` não limitava tentativas. Nova coluna
+  **`verification_codes.attempts`** (migração adiciona em bancos existentes, default 0): cada
+  palpite errado gasta 1 tentativa e ao atingir **`MAX_2FA_ATTEMPTS=5`** o código é queimado
+  (`used=TRUE`) e nunca mais valida. Um código correto dentro do limite segue funcionando.
+- **Anti email-bombing / brute-force por códigos novos.** `_code_send_allowed(sid)` impõe
+  **cooldown de 30s** (`CODE_RESEND_COOLDOWN_SECONDS`) e **teto de 5 códigos/15 min**
+  (`MAX_CODES_PER_WINDOW`/`CODE_WINDOW_MINUTES`), aplicado em `_initiate_2fa` e `/resend-code`.
+  **Fail-open** em erro de DB — o e-mail de 2FA nunca trava por causa do throttle.
+- **CSPRNG no 2FA.** `generate_verification_code` passou de `random` (Mersenne Twister,
+  previsível) para `secrets.choice`. Mesmo formato de 6 dígitos (`import secrets` adicionado).
+- **Auth faltante em endpoints de escrita.** `/api/b3/{add,update,delete}` (gravam/apagam
+  Reference Data e Index B3) e `/api/fx-holiday-schedules` eram alcançáveis **sem sessão** —
+  não há portão global de auth, cada rota se verifica e estas quatro esqueciam. Adicionado o
+  guard `401` (mesmo do `api_holidays_save` vizinho).
+- **Autorização por page-access nos endpoints b3.** `enforce_page_access` ignora paths `/api/`,
+  então quem não tinha a página concedida ainda chamava a API direto. Novo helper
+  **`_user_can_access_page(url)`** replica a regra: `table=='refdata'`→`/reference-data`, senão
+  `/index-b3`. Master e usuários sem allowlist (acesso total) passam — nada muda para quem usa
+  a página legitimamente; só bloqueia o acesso lateral por URL (403).
+- **CSP report-only.** Const `_CSP_REPORT_ONLY` + header `Content-Security-Policy-Report-Only`
+  em toda resposta + coletor **`POST /csp-report`** (sem auth, loga e responde 204). **Não
+  bloqueia nada** — serve para afinar a allowlist antes de virar a chave (ver SECURITY-PHASE2 2A).
+
+**Residual (mudaria comportamento, precisa de decisão):** CSRF por token (Fase 2B), mensagens
+de erro genéricas, `DEBUG` default False, infra hardcoded (SMTP/master SID). Ver SECURITY-PHASE2.
+
+### Limpeza de menções a dev externo (`e66437e`)
+Comentários que expunham desenvolvimento fora do ambiente JPM ("stub off-env", "lib interna que
+não existe no PyPI", "coisas que a rede corporativa normalmente fornece", "strip before commit"
+do DEV BYPASS) reescritos de forma neutra. Sem mudança funcional. Arquivos: `routes.py` (entrada
+`dev_login` removida do `_LOCK_ALLOWED_ENDPOINTS`), `scripts/backfill_cetip_position_files.py`,
+`scripts/pending_confirmation_daily.py`, `scripts/sop-capture/{capture_screens,devrun.example}.py`.
+(Docs markdown — CLAUDE.md/HANDOFF/DESIGN — **não** foram tocados; ainda citam macOS/AirPlay/DEV BYPASS.)
+
+### Fix do gradiente no e-mail Pay/Rec (`a4e5af9`, só `recon_payrec.py`)
+O cabeçalho do e-mail de fim de dia às vezes saía **barra azul sólida** em vez do gradiente.
+Causa-raiz: `send_payrec_email` anexava só o logo e **não passava `grad_url`** nem anexava a
+imagem do gradiente — a variável vinha do context processor global `_inject_email_grad_url`, que
+prefere `url_for(_external=True)`. Quando o envio sai **sem contexto de request** (scheduler), a
+URL externa falha e cai em `cid:otc_gradient`, mas o payrec **nunca anexava** essa imagem → Outlook
+pintava a cor de fallback `#4f8ae2`. Somado ao bloqueio de imagens externas do Outlook, variava dia
+a dia. **Fix:** anexar `email-header-gradient.png` inline (`Content-ID: <otc_gradient>`) e passar
+`grad_url='cid:otc_gradient'` explícito no `render_template` — mesmo padrão do daily-metric. Imagem
+inline renderiza offline, não é bloqueada e independe da origem do envio. Confirmar no próximo envio real.
+
+### Commits (sessão 2026-07-22)
+```
+9ca309a  fix(security): hardening de 2FA, autorização de API e CSP report-only
+e66437e  chore(scripts): remover menções a desenvolvimento fora do ambiente JPM
+a4e5af9  fix(recon-payrec): gradiente do cabeçalho sumindo no e-mail de fim de dia
+```
+
+### Arquivos (sessão 2026-07-22)
+```
+apps/pages/routes.py                        ← 2FA attempts/throttle/secrets, verify_code, _code_send_allowed,
+                                               _user_can_access_page, guards b3/fx, CSP report-only + /csp-report
+apps/pages/recon_payrec.py                  ← send_payrec_email: gradiente inline (cid:otc_gradient) + grad_url
+scripts/backfill_cetip_position_files.py    ← comentário do stub awmpy neutralizado
+scripts/pending_confirmation_daily.py       ← idem
+scripts/sop-capture/capture_screens.py      ← docstring sem menção a stub/dev-login externo
+scripts/sop-capture/devrun.example.py       ← comentários neutralizados (mantém função)
+docs/SECURITY-PHASE2.md                     ← 2A.1/2A.2 marcados feitos + linha do commit 9ca309a
+```
