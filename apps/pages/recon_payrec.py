@@ -730,6 +730,22 @@ def _cli_spb(rows, cols, mgt=False):
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
+def _mate_rank(c, d):
+    """Ranking key when several client legs can settle the same JPM leg: a NAMED
+    leg always wins over an anonymous one, then the closest value.
+
+    The named leg is the one that carries the counterparty: RLDOCREC's
+    sNomeCliDebitado (col N) for received TEDs, the SDConta titular, the SPB
+    derivatives description. The anonymous ones are the interbank SPB actuals
+    (LTR0004/LTR0005), which have no client info and exist only to confirm a JPM
+    leg by value when nothing named matches — they are dropped when unmatched.
+    Without this preference the anonymous leg could win purely because the
+    HistoricoMensagens files sort before RLDOCREC in the input folder, settling
+    the row with an EMPTY Client and leaving the real named receipt behind as a
+    phantom pending row."""
+    return (0 if str(c.get('client', '') or '').strip() else 1, d)
+
+
 def _reconcile(jpm, client):
     buckets = {}
     for c in client:
@@ -739,21 +755,28 @@ def _reconcile(jpm, client):
     for j in jpm:
         pool = buckets.get(_int_key(j['value']), [])
         mate = None
-        for c in pool:
-            if id(c) not in matched:
-                mate = c; matched.add(id(c)); break
+        best_key = None
+        for c in pool:                                 # same value → named leg wins
+            if id(c) in matched:
+                continue
+            key = _mate_rank(c, 0.0)
+            if best_key is None or key < best_key:
+                mate, best_key = c, key
+        if mate is not None:
+            matched.add(id(mate))
         # COMM OPT premiums are settled net of ~0.005% IR, so the exact whole-unit
         # key can miss. Fall back to the nearest unmatched client value within
         # 0.005% of the JPM (gross) value.
         if mate is None and j.get('product') == 'COMM OPT':
             tol = abs(j['value']) * _TOL_COMM_OPT_PCT + _TOL_COMM_OPT_ABS
-            best, best_d = None, None
+            best, best_key = None, None
             for c in client:
                 if id(c) in matched:
                     continue
                 d = abs(c['value'] - j['value'])
-                if d <= tol and (best_d is None or d < best_d):
-                    best, best_d = c, d
+                key = _mate_rank(c, d)
+                if d <= tol and (best_key is None or key < best_key):
+                    best, best_key = c, key
             if best is not None:
                 mate = best
                 matched.add(id(best))
@@ -763,7 +786,7 @@ def _reconcile(jpm, client):
         # unmatched client value within R$1 — or within the client record's own
         # tolerance when it carries one (interbank SPB actuals: ±R$20).
         if mate is None:
-            best, best_d = None, None
+            best, best_key = None, None
             for c in client:
                 if id(c) in matched:
                     continue
@@ -772,8 +795,9 @@ def _reconcile(jpm, client):
                 # Interbank SPB actuals match by value up to their own tolerance
                 # (equal or within R$20); everything else within the cents slack.
                 within = (d <= tol) if tol else (d < _TOL_SETTLED)
-                if within and (best_d is None or d < best_d):
-                    best, best_d = c, d
+                key = _mate_rank(c, d)
+                if within and (best_key is None or key < best_key):
+                    best, best_key = c, key
             if best is not None:
                 mate = best
                 matched.add(id(best))
