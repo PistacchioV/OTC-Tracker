@@ -6752,12 +6752,13 @@ def _ndfc_collect(ref):
         _, by_taxid = _vcp_refdata_maps()
         cpties, sum_notional, sum_settle = set(), 0.0, 0.0
         for rec in data:
-            # Only JPM legal entities are shown (BANCO JP…, JPMORGAN CHASE…):
-            # rows under other legals (e.g. LAWTON…) don't belong to this desk's
-            # settlement. Blank LEGAL stays visible so a hand-added row never
+            # Only JPM legal entities are shown (BANCO J.P. MORGAN…, JPMORGAN
+            # CHASE…): rows under other legals (e.g. LAWTON…) don't belong to
+            # this desk's settlement. Punctuation/spacing-insensitive ("J.P." ≡
+            # "JP"). Blank LEGAL stays visible so a hand-added row never
             # vanishes silently. Display-time only — the JSON keeps every row.
-            legal = str(rec.get('LEGAL', '') or '').strip().upper()
-            if legal and not (legal.startswith('BANCO JP') or legal.startswith('JPMORGAN CHASE')):
+            legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+            if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
                 continue
             # Display-time lookups vs Live Position NDF: fill a blank
             # CD_CETIP_RETURN from ID_SOURCE_DEAL (right-14 → Contrato), and
