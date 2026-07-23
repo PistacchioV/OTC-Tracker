@@ -6636,6 +6636,8 @@ def _ndfc_b3_maps(ref):
         k_pos   = _fcst_resolve_key(keys, ('Descricao da posicao do Participante',))
         k_cparte = _fcst_resolve_key(keys, ('Codigo da Parte',))
         k_ccpty  = _fcst_resolve_key(keys, ('Codigo da Contraparte',))
+        k_emis  = _fcst_resolve_key(keys, ('Data de Emissao',))
+        k_venc  = _fcst_resolve_key(keys, ('Data de Vencimento',))
         for rec in data:
             contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
             if not contrato:
@@ -6655,6 +6657,8 @@ def _ndfc_b3_maps(ref):
                 'pos': str(rec.get(k_pos, '') or '').strip() if k_pos else '',
                 'conta_parte': str(rec.get(k_cparte, '') or '').strip() if k_cparte else '',
                 'conta_cparte': str(rec.get(k_ccpty, '') or '').strip() if k_ccpty else '',
+                'emissao': str(rec.get(k_emis, '') or '').strip() if k_emis else '',
+                'venc': str(rec.get(k_venc, '') or '').strip() if k_venc else '',
             }
     except Exception:
         log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
@@ -8604,7 +8608,8 @@ _NDFSUM_TOL = 5.0                    # |SETTLEMENT − SETTLEMENT B3| tolerance 
 
 
 def _ndfsum_refdata_spn():
-    """{normalized counterparty name → SPN} from RefData.json (recon join rule)."""
+    """{normalized counterparty name → {'spn', 'taxid'}} from RefData.json
+    (recon join rule: first record per name wins)."""
     out = {}
     try:
         with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
@@ -8615,7 +8620,7 @@ def _ndfsum_refdata_spn():
         nm = _fcst_norm(str(rec.get('COUNTERPARTY', '') or ''))
         spn = str(rec.get('SPN', '') or '').strip()
         if nm and spn and nm not in out:
-            out[nm] = spn
+            out[nm] = {'spn': spn, 'taxid': str(rec.get('TAX ID', '') or '').strip()}
     return out
 
 
@@ -8629,8 +8634,8 @@ def _ndfsum_net_type(rec_cpd):
 
 
 def _ndfsum_account_fmt(banking, direction):
-    """Default PAY/RECEIVE account → 'bank/agency/account' (bank = 3-digit code).
-    Only an approved default (slot.current) is used; unset → ''."""
+    """Default PAY/RECEIVE account → 'bco:341/ag:0910/cc:967' (bank = 3-digit
+    code). Only an approved default (slot.current) is used; unset → ''."""
     slot_key = 'DEFAULT_RECEIVE' if direction == 'RECEIVE' else 'DEFAULT_PAY'
     slot = (banking or {}).get(slot_key) or {}
     acc = next((a for a in (banking or {}).get('ACCOUNTS', [])
@@ -8638,10 +8643,9 @@ def _ndfsum_account_fmt(banking, direction):
     if not acc:
         return ''
     bank = re.sub(r'\D', '', str(acc.get('bank', '') or ''))
-    parts = [bank.zfill(3) if bank else '',
-             str(acc.get('agency', '') or '').strip(),
-             str(acc.get('account', '') or '').strip()]
-    return '/'.join(parts) if any(parts) else ''
+    return 'bco:{}/ag:{}/cc:{}'.format(bank.zfill(3) if bank else '',
+                                       str(acc.get('agency', '') or '').strip(),
+                                       str(acc.get('account', '') or '').strip())
 
 
 def _ndfsum_collect(ref):
@@ -8661,11 +8665,19 @@ def _ndfsum_collect(ref):
     for titulo, v in b3_val_any.items():
         b3_val.setdefault(titulo, v)
 
-    trade, groups = [], {}
+    def _ter_date(v):
+        d = _fcst_parse_date(v)
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    _, _, contr_map = _ndfc_b3_maps(ref)
+    trade, raws = [], []
     for row in _ndfc_collect(ref)['rows']:
         b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip()
         if b3 == _NDFC_MISSING_B3:
             b3 = ''
+        lp = contr_map.get(b3.upper(), {}) if b3 else {}
+        trade_date = _ter_date(lp.get('emissao', ''))
+        settle_date = _ter_date(lp.get('venc', ''))
         raw_b3 = b3_val.get(b3.upper(), '') if b3 else ''
         # Cockpit DISPLAY cells are US-formatted (#,##0.00 via _swapchar_fmt_value)
         # → parse with the US parser; the raw Operations B3 Valor keeps the same
@@ -8676,7 +8688,7 @@ def _ndfsum_collect(ref):
         ok = diff is not None and -_NDFSUM_TOL < diff < _NDFSUM_TOL
         trade.append({
             'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']],
-                      row[ci['ID_SOURCE_DEAL']], b3,
+                      row[ci['ID_SOURCE_DEAL']], b3, trade_date, settle_date,
                       row[ci['VL_NOTIONAL_FC']], row[ci['CCY_NOTIONAL_FC']],
                       row[ci['VL_FORWARD_RATE']], row[ci['[PROD] Cockpit.SETTLEMENT']],
                       _swapchar_fmt_value(raw_b3) if str(raw_b3 or '').strip() else '',
@@ -8684,24 +8696,40 @@ def _ndfsum_collect(ref):
             'diff': '{:,.2f}'.format(diff) if diff is not None else '',
             'ok': ok,
         })
-        # Settlement Summary accumulation. The IR withheld (VL_TAX_INCOME) always
-        # SHRINKS the cash actually moving — sign-independent, so it is right
-        # regardless of whether the cockpit signs the settlement from the bank's
-        # or the client's point of view (tax is only present on client gains).
         cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
         if cpty and settle_n is not None:
-            tax_n = abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0)
-            groups.setdefault(cpty, []).append(
-                settle_n - tax_n if settle_n >= 0 else settle_n + tax_n)
+            raws.append({
+                'counterparty': cpty,
+                'legal': str(row[ci['LEGAL']] or '').strip(),
+                'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
+                'trade_date': trade_date,
+                'notional_fc': abs(_mtm_parse_num(row[ci['VL_NOTIONAL_FC']]) or 0.0),
+                'settlement': settle_n,
+                'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
+            })
 
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
+    groups = {}
+    for r in raws:
+        groups.setdefault(r['counterparty'], []).append(r)
     summary = []
     for cpty in sorted(groups, key=_fcst_norm):
-        vals = groups[cpty]
-        spn = spn_by_name.get(_fcst_norm(cpty), '')
+        items = groups[cpty]
+        ref_rec = spn_by_name.get(_fcst_norm(cpty), {})
+        spn = ref_rec.get('spn', '')
         rec_cpd = _cpd_find(cpd, spn) if spn else None
         net_type = _ndfsum_net_type(rec_cpd)
+        for r in items:                     # net type + IDs flow to the notices
+            r['net_type'] = net_type
+            r['spn'] = spn
+            r['taxid'] = ref_rec.get('taxid', '')
+        # Per-trade cash considering tax: the IR withheld always SHRINKS the cash
+        # actually moving — sign-independent, so it is right regardless of whether
+        # the cockpit signs the settlement from the bank's or the client's point
+        # of view (tax is only present on client gains).
+        vals = [(r['settlement'] - r['tax'] if r['settlement'] >= 0
+                 else r['settlement'] + r['tax']) for r in items]
         recv = sum(v for v in vals if v > 0)
         pay = sum(v for v in vals if v < 0)
         total = recv + pay
@@ -8718,7 +8746,7 @@ def _ndfsum_collect(ref):
             'direction': direction,
             'account': _ndfsum_account_fmt(banking, direction),
         })
-    return {'trade': trade, 'summary': summary}
+    return {'trade': trade, 'summary': summary, 'email_trades': raws}
 
 
 @blueprint.route('/api/ndf-summary/data')
@@ -8731,8 +8759,30 @@ def api_ndf_summary_data():
     except ValueError:
         ref = datetime.now()
     payload = _ndfsum_collect(ref)
+    payload.pop('email_trades', None)          # backend-only (settlement notices)
     payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d')})
     return jsonify(payload)
+
+
+@blueprint.route('/api/ndf-summary/settlement-emails', methods=['POST'])
+def api_ndf_summary_settlement_emails():
+    """Generate the NDF settlement notices (.eml drafts) for the reference date.
+    One draft per counterparty group according to its net type — Total Net: one
+    netted notice; Pay/Rec: one per direction; No Net: one per trade. Delivery
+    follows the New Deals premium flow (downloadable .eml/.zip, X-Unsent)."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    ds = str((request.get_json(silent=True) or {}).get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    from apps.pages import otc_emails
+    trades = _ndfsum_collect(ref).get('email_trades') or []
+    drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    return _email_drafts_response(drafts)
 
 
 # ============================================================================

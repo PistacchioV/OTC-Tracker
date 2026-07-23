@@ -185,11 +185,17 @@ def _email_notice(html):
 def _email_shell(title, ref_date, intro_html, body_html):
     """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer."""
     return (
+        # bgcolor ATTRIBUTES alongside the inline styles: Outlook (Word engine and
+        # outlook.com) drops style backgrounds on body/table in some render paths,
+        # which left the area right of the 640px card WHITE when the window is
+        # wider than the card — the attribute form renders everywhere, so the grey
+        # canvas now covers the full viewport.
         '<!doctype html><html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-        '<body style="margin:0;padding:0;background:#f4f4f6;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f4f4f6;">'
-        '<tr><td align="center" style="padding:26px 12px;">'
+        '<body style="margin:0;padding:0;background:#f4f4f6;" bgcolor="#f4f4f6">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#f4f4f6" '
+        'style="background:#f4f4f6;width:100%;">'
+        '<tr><td align="center" bgcolor="#f4f4f6" style="padding:26px 12px;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="640" '
         'style="width:640px;max-width:640px;background:#ffffff;border:1px solid #e6e6ea;border-radius:14px;'
         'font-family:' + _E_FONT + ';">'
@@ -623,6 +629,148 @@ def _premium_participante_email(items, contraparte, b3_account):
         'html': body,
         'cc': 'brazil.otc.ops@jpmorgan.com',
         'to': '',
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# NDF SETTLEMENT NOTICES (Daily Settlement › NDF › Summary "Generate")
+# Same visual template as the D0 premium notice; the data table carries the
+# summary-page fields instead of the deal blotter ones.
+# ──────────────────────────────────────────────────────────────────────────
+def _ndf_legal_class(legal):
+    """'MGT' for the JPMORGAN CHASE legal entity (ex-Morgan Guaranty Trust),
+    'JPM' for BANCO J.P. MORGAN. Punctuation/spacing-insensitive."""
+    l = ''.join(ch for ch in str(legal or '').upper() if ch.isalnum())
+    return 'MGT' if l.startswith('JPMORGANCHASE') else 'JPM'
+
+
+def _ndf_liquido(t):
+    """Resultado Líquido of one trade = settlement − IR withheld."""
+    return float(t.get('settlement') or 0.0) - float(t.get('tax') or 0.0)
+
+
+def build_ndf_settlement_emails(trades, ref_date=None):
+    """NDF settlement notice drafts from the NDF Summary trade rows.
+
+    `trades`: dicts built by routes._ndfsum_collect — counterparty, legal,
+    athena, trade_date, notional_fc, settlement, tax, net_type, spn, taxid.
+
+    Grouped per (counterparty, legal entity) — different legal entities never
+    net together and carry different subjects. Each group then splits by its
+    net type: Total Net → one netted notice; Pay/Rec → one notice per direction
+    (sign of the trade's Resultado Líquido); No Net → one notice per trade.
+    """
+    cpd = _build_cpdetails_index()
+    ref_date = ref_date or _today_br()
+
+    groups = {}
+    for t in trades:
+        name = str(t.get('counterparty', '') or '').strip()
+        if not name or _is_lawton(name) or _is_jpmorgan(name):
+            continue
+        groups.setdefault((name, _ndf_legal_class(t.get('legal'))), []).append(t)
+
+    drafts = []
+    for (name, le), items in sorted(groups.items()):
+        nt = str(items[0].get('net_type', '') or 'Total Net')
+        if nt == 'No Net':
+            batches = [[t] for t in items]
+        elif nt == 'Pay/Rec':
+            recv = [t for t in items if _ndf_liquido(t) >= 0]
+            pay = [t for t in items if _ndf_liquido(t) < 0]
+            batches = [b for b in (recv, pay) if b]
+        else:                                   # Total Net (and the safe default)
+            batches = [items]
+        for batch in batches:
+            drafts.append(_ndf_settlement_email(batch, name, le, ref_date, cpd))
+    return drafts
+
+
+def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
+    apurado = sum(float(t.get('settlement') or 0.0) for t in items)
+    ir = sum(float(t.get('tax') or 0.0) for t in items)
+    final = apurado - ir
+    cp = cpd.get(_norm_spn(items[0].get('spn')), {})
+    taxid = items[0].get('taxid', '')
+    to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
+
+    data_rows = [[
+        t.get('athena', ''),
+        t.get('trade_date', '') or '—',
+        _br(abs(float(t.get('notional_fc') or 0.0))),
+        _br_currency(float(t.get('settlement') or 0.0)),
+        _br(float(t.get('tax') or 0.0)),
+        _br_currency(_ndf_liquido(t)),
+    ] for t in items]
+
+    table = _email_data_table(
+        ['Nº da Confirmação', 'Data de Início da Operação', 'Notional Original da Operação',
+         'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido'],
+        data_rows)
+
+    summary = _email_summary([
+        ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
+        ('IR (0,005%)',       'R$ ' + _br(ir),               False),
+        ('Resultado Final',   'R$ ' + _br_currency(final),   True),
+    ])
+
+    # Same settlement-instruction / banking logic as the premium notice: the
+    # sign of the final result decides who transfers (negative → JPMorgan pays
+    # into the client's default PAY account; positive → debit / TED-only note
+    # with JPMorgan's own details; zero → nobody transfers).
+    notice = ''
+    if final < 0:
+        instr = _ep('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
+                    'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
+                    'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
+                    'Financeira e/ou confirmados por ligação telefônica:')
+        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM pays → PAY details
+        bank = _email_kv('Dados para pagamento', [
+            ('Nome e nº do banco', bank_name or '—'),
+            ('Nº e nome da agência', agency or '—'),
+            ('Conta-corrente nº', account or '—'),
+            ('CNPJ/MF nº', _fmt_cnpj(taxid)),
+        ])
+    else:
+        instr = _ep('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
+                    'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
+                    'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
+                    'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
+                    'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        if final > 0:
+            notice = _email_notice('Não são aceitas transferências via PIX. As transferências devem ser '
+                                   'realizadas exclusivamente por meio de TED.')
+        bank = _email_kv('Dados bancários', [
+            ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
+            ('Nº e nome da agência', '0011'),
+            ('Conta-corrente nº', '5116003'),
+            ('CNPJ/MF nº', '33.172.537/0001-98'),
+        ])
+
+    def _gap(h):
+        return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
+
+    body_html = (
+        table + _gap(18) + summary +
+        ((_gap(16) + instr) if instr else '') +
+        ((_gap(2) + notice + _gap(12)) if notice else _gap(6)) + bank + _gap(16) +
+        _ep('A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
+            'Confirmação de Operação de Derivativo em referência.', muted=True))
+
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
+
+    html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
+
+    subject = 'Liquidação de Operação de Derivativo (Termo de Moeda) - {} - {}'.format(ref_date, contraparte)
+    if le_class == 'MGT':
+        subject += ' x JPMORGAN CHASE'
+
+    return {
+        'subject': subject,
+        'html': html,
+        'cc': 'Liquidação',                    # FX flow — Comm Sales isn't copied
+        'to': to_emails,
     }
 
 

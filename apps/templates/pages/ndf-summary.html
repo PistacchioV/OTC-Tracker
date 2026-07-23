@@ -115,6 +115,7 @@
 #ops-page .ops-filter input {
     width: 100%; border: 1px solid var(--ops-hairline); border-radius: 7px;
     padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
+    text-align: center;          /* centres the typed text AND the placeholder */
 }
 #ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
@@ -183,9 +184,9 @@
         </div>
     </div>
 
-    <!-- Settlement Summary table -->
+    <!-- Settlement Summary table (narrower: few, short columns) -->
     <div class="row mt-2">
-        <div class="col-12">
+        <div class="col-xxl-8 col-xl-10 col-12">
             <div class="card ops-tcard">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
@@ -220,7 +221,6 @@
                                     <th>Settlement Net</th>
                                     <th>Direction</th>
                                     <th>Account</th>
-                                    <th>Observação</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
@@ -231,7 +231,6 @@
                                     <th><input type="text" placeholder="Settlement Net"></th>
                                     <th><input type="text" placeholder="Direction"></th>
                                     <th><input type="text" placeholder="Account"></th>
-                                    <th><input type="text" placeholder="Observação"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -249,6 +248,9 @@
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-trade-title">Trade Level</h4>
                     <div class="ops-toolbar" data-table="ops-trade-table">
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsGenerate">
+                            <i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">Generate</span>
+                        </button>
                         <div class="d-flex align-items-center gap-1 me-1">
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-show">Show</label>
                             <select class="form-select form-select-sm ops-page-len" style="width:76px;">
@@ -278,6 +280,8 @@
                                     <th>COUNTERPARTY</th>
                                     <th>ATHENA ID</th>
                                     <th>B3 ID</th>
+                                    <th>TRADE DATE</th>
+                                    <th>SETTLEMENT DATE</th>
                                     <th>NOTIONAL FC</th>
                                     <th>CCY</th>
                                     <th>FORWARD RATE</th>
@@ -294,6 +298,8 @@
                                     <th><input type="text" placeholder="COUNTERPARTY"></th>
                                     <th><input type="text" placeholder="ATHENA ID"></th>
                                     <th><input type="text" placeholder="B3 ID"></th>
+                                    <th><input type="text" placeholder="TRADE DATE"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT DATE"></th>
                                     <th><input type="text" placeholder="NOTIONAL FC"></th>
                                     <th><input type="text" placeholder="CCY"></th>
                                     <th><input type="text" placeholder="FORWARD RATE"></th>
@@ -343,6 +349,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Minimal i18n (falls back to the data-lang English text already in the DOM).
@@ -448,8 +455,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return dt;
     }
 
-    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
-    var dtTrade   = initTable('ops-trade-table', 12, 50); // 12 data cols (LEGAL…DIFFERENCE); default 50/page
+    var dtSummary = initTable('ops-summary-table', 6);   // 6 data cols (Counterparty…Account)
+    var dtTrade   = initTable('ops-trade-table', 14, 50); // 14 data cols (LEGAL…DIFFERENCE); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
@@ -492,13 +499,15 @@ document.addEventListener('DOMContentLoaded', function () {
         (j.summary || []).forEach(function (r) {
             dtSummary.row.add([cb, actionsCell(), statusCell('New'),
                 esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
-                esc(r.direction), esc(r.account), inp('')]);
+                esc(r.direction), esc(r.account)]);
         });
         dtSummary.draw();
     }
 
     // ── Reference date → refresh the header cards + both derived tables ─────
+    var currentYmd = '{{ today }}';
     function loadDate(ymd) {
+        currentYmd = ymd || currentYmd;
         var qs = ymd ? ('?date=' + encodeURIComponent(ymd)) : '';
         fetch('/api/ndf-summary/cards' + qs)
             .then(function (r) { return r.json(); })
@@ -509,6 +518,52 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (j) { if (j && j.success) fillTables(j); })
             .catch(function () {});
     }
+
+    // ── Generate: settlement notices (.eml drafts) per counterparty ─────────
+    // Same delivery as the New Deals premium notices: the response is either a
+    // JSON "nothing to generate"/error or a downloadable .eml/.zip whose drafts
+    // open in the user's own Outlook (X-Unsent).
+    var genBtn = document.getElementById('opsGenerate');
+    if (genBtn) genBtn.addEventListener('click', function () {
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-generate', 'Generate');
+        fetch('/api/ndf-summary/settlement-emails', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd })
+        }).then(function (r) {
+            var ct = (r.headers.get('Content-Type') || '');
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (res) {
+                    var ok = res && res.ok && (res.count || 0) === 0;
+                    var msg = ok ? t('ops-gen-none', 'No settlements to notify for this date.')
+                                 : ((res && res.error) || t('ops-gen-fail', 'Request failed.'));
+                    if (window.Swal) Swal.fire({ title: ok ? t('ops-gen-none-title', 'Nothing to Generate') : t('swal-err-title', 'Error'),
+                        text: msg, icon: ok ? 'info' : 'error', confirmButtonColor: ok ? '#0066cc' : '#dc3545' });
+                    else alert(msg);
+                });
+            }
+            var count = r.headers.get('X-Draft-Count') || '';
+            var m = /filename="?([^"]+)"?/.exec(r.headers.get('Content-Disposition') || '');
+            var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
+            return r.blob().then(function (blob) {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url; a.download = fname;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+                if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Drafts Downloaded'),
+                    text: count + ' ' + t('ops-gen-ok-text', 'settlement notice draft(s) downloaded. Open the file to edit in your Outlook.'),
+                    icon: 'success', confirmButtonColor: '#0066cc', timer: 4000, timerProgressBar: true });
+            });
+        }).catch(function () {
+            if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
+        }).finally(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">' + t('ops-generate', 'Generate') + '</span>';
+        });
+    });
 
     // Expose the batch loader so the reference-date picker (own <script> below)
     // can trigger a reload.
