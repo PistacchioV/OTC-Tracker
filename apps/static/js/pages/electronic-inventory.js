@@ -464,6 +464,10 @@
             syncPickerFromInput(this, maskDate(this));
             updateNamePreview();
         });
+        // Clicking the date selects it whole — typing a new date replaces the old
+        // one instead of splicing digits into the middle of it.
+        el.addEventListener('focus', function () { this.select(); });
+        el.addEventListener('click', function () { this.select(); });
         resetDate(el);
     }
 
@@ -511,29 +515,34 @@
         var el = document.createElement('div');
         el.className = 'ei-up-block';
         el.dataset.block = id;
+        // Same field sizes and layout as the first (fixed) block: full-size
+        // controls, Type/Date on md-3 columns, sub-type on md-6, and the tall
+        // p-4 dropzone with the large icon.
         el.innerHTML =
             '<div class="ei-up-block-head">' +
                 '<span class="ei-up-block-n">Document ' + (id + 1) + '</span>' +
                 '<button type="button" class="btn btn-sm btn-danger ei-btn ei-up-del" title="Remove">' +
                     '<i class="ti ti-x"></i></button>' +
             '</div>' +
-            '<div class="row g-2">' +
-                '<div class="col-md-4">' +
-                    '<label class="form-label fw-semibold fs-xxs mb-1">Document Type</label>' +
-                    '<select class="form-select form-select-sm ei-up-type">' + typeOptionsHtml() + '</select>' +
+            '<div class="row g-3">' +
+                '<div class="col-md-3">' +
+                    '<label class="form-label fw-semibold">Document Type</label>' +
+                    '<select class="form-select ei-up-type">' + typeOptionsHtml() + '</select>' +
                 '</div>' +
-                '<div class="col-md-4 d-none ei-up-sub-wrap">' +
-                    '<label class="form-label fw-semibold fs-xxs mb-1 ei-up-sub-label">Transactional Type</label>' +
-                    '<select class="form-select form-select-sm ei-up-sub"></select>' +
+                '<div class="col-md-3">' +
+                    '<label class="form-label fw-semibold">Date</label>' +
+                    '<input type="text" class="form-control ei-up-date" placeholder="dd/mm/yyyy" autocomplete="off">' +
                 '</div>' +
-                '<div class="col-md-4">' +
-                    '<label class="form-label fw-semibold fs-xxs mb-1">Date</label>' +
-                    '<input type="text" class="form-control form-control-sm ei-up-date" placeholder="dd/mm/yyyy" autocomplete="off">' +
+                '<div class="col-md-6 d-none ei-up-sub-wrap">' +
+                    '<label class="form-label fw-semibold ei-up-sub-label">Transactional Type</label>' +
+                    '<select class="form-select ei-up-sub"></select>' +
                 '</div>' +
                 '<div class="col-12">' +
-                    '<div class="ei-drop ei-up-drop border border-dashed rounded-3 p-2 text-center">' +
-                        '<i class="ti ti-file-upload text-muted me-1"></i>' +
-                        '<span class="fw-medium fs-sm ei-up-drop-label">Drop a file here or click to browse</span>' +
+                    '<label class="form-label fw-semibold">File</label>' +
+                    '<div class="ei-drop ei-up-drop border border-dashed rounded-3 p-4 text-center" style="cursor:pointer;">' +
+                        '<button type="button" class="btn btn-sm btn-danger rounded-circle ei-drop-clear d-none ei-up-clear" title="Remove attached file"><i class="ti ti-x"></i></button>' +
+                        '<i class="ti ti-file-upload fs-1 text-muted d-block mb-1"></i>' +
+                        '<span class="fw-medium ei-up-drop-label">Drop a file here or click to browse</span>' +
                         '<input type="file" class="d-none ei-up-file">' +
                     '</div>' +
                 '</div>' +
@@ -549,10 +558,19 @@
         attachDatePicker(el.querySelector('.ei-up-date'), 0);
 
         var drop = el.querySelector('.ei-up-drop'), file = el.querySelector('.ei-up-file');
+        var clearBtn = el.querySelector('.ei-up-clear');
         drop.addEventListener('click', function () { file.click(); });
         file.addEventListener('change', function () {
             el.querySelector('.ei-up-drop-label').textContent =
                 this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
+            clearBtn.classList.toggle('d-none', !this.files[0]);
+        });
+        // X on the dropzone: detach a file picked by mistake without reopening
+        // the browse dialog (the click must not bubble to the dropzone).
+        clearBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            file.value = '';
+            file.dispatchEvent(new Event('change'));
         });
         ['dragenter', 'dragover'].forEach(function (ev) {
             drop.addEventListener(ev, function (e) { e.preventDefault(); this.classList.add('border-primary'); });
@@ -679,7 +697,10 @@
     /* ---- wiring ---------------------------------------------------------- */
     function wire() {
         var input = $('eiClientInput');
-        input.addEventListener('focus', function () { comboLimit = COMBO_PAGE; renderCombo(this.value); });
+        // Clicking into the field selects the whole text, so typing replaces the
+        // previous counterparty instead of appending to it.
+        input.addEventListener('focus', function () { this.select(); comboLimit = COMBO_PAGE; renderCombo(this.value); });
+        input.addEventListener('click', function () { this.select(); });
         input.addEventListener('input', function () { comboKbd = -1; comboLimit = COMBO_PAGE; renderCombo(this.value); });
         input.addEventListener('keydown', function (e) {
             var menu = $('eiClientMenu');
@@ -756,6 +777,7 @@
             $('eiUpType').value = state.type !== 'all' ? state.type : 'Confirmations';
             fillSubtypeOptions($('eiUpType').value);   // also resets the sub-type to "— Select —"
             $('eiUpFile').value = ''; $('eiDropLabel').textContent = 'Drop a file here or click to browse';
+            $('eiDropClear').classList.add('d-none');
             $('eiUpNamePreview').textContent = '';
             clearExtraBlocks();
             resetDate($('eiUpDate'));
@@ -769,7 +791,13 @@
         $('eiDrop').addEventListener('click', function () { $('eiUpFile').click(); });
         $('eiUpFile').addEventListener('change', function () {
             $('eiDropLabel').textContent = this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
+            $('eiDropClear').classList.toggle('d-none', !this.files[0]);
             updateNamePreview();
+        });
+        $('eiDropClear').addEventListener('click', function (e) {
+            e.stopPropagation();                       // don't reopen the browse dialog
+            $('eiUpFile').value = '';
+            $('eiUpFile').dispatchEvent(new Event('change'));
         });
         ['dragenter', 'dragover'].forEach(function (ev) {
             $('eiDrop').addEventListener(ev, function (e) { e.preventDefault(); this.classList.add('border-primary'); });

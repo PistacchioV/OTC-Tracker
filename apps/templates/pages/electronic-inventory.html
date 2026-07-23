@@ -226,6 +226,14 @@
         display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
     }
     #eiUploadModal .ei-up-drop { cursor: pointer; }
+    /* X to detach a wrongly attached file — floats on the dropzone's corner. */
+    #eiUploadModal .ei-drop { position: relative; }
+    #eiUploadModal .ei-drop-clear {
+        position: absolute; top: 8px; right: 8px;
+        width: 26px; height: 26px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        line-height: 1; z-index: 2;
+    }
 
     /* Breadcrumb of the folder feeding the list ------------------------ */
     #ei-page .ei-crumb {
@@ -446,6 +454,8 @@
                             <label class="form-label fw-semibold">File</label>
                             <div class="ei-drop border border-dashed rounded-3 p-4 text-center" id="eiDrop"
                                  style="cursor:pointer;">
+                                <button type="button" class="btn btn-sm btn-danger rounded-circle ei-drop-clear d-none"
+                                        id="eiDropClear" title="Remove attached file"><i class="ti ti-x"></i></button>
                                 <i class="ti ti-file-upload fs-1 text-muted d-block mb-1"></i>
                                 <span class="fw-medium" id="eiDropLabel">Drop a file here or click to browse</span>
                                 <input type="file" id="eiUpFile" class="d-none">
@@ -485,5 +495,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- toast() is a no-op without Swal — every warning/success was silently swallowed. -->
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260722f"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260723a"></script>
 {% endblock extra_javascript %}
