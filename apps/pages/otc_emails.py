@@ -190,9 +190,21 @@ def _email_shell(title, ref_date, intro_html, body_html):
         # which left the area right of the 640px card WHITE when the window is
         # wider than the card — the attribute form renders everywhere, so the grey
         # canvas now covers the full viewport.
-        '<!doctype html><html><head><meta charset="utf-8">'
+        '<!doctype html>'
+        '<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">'
+        '<head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
         '<body style="margin:0;padding:0;background:#f4f4f6;" bgcolor="#f4f4f6">'
+        # Word (Outlook desktop, and especially the COMPOSE view these X-Unsent
+        # drafts open in) sizes a width:100% table to its fixed page width, not
+        # the window — wider windows showed a white strip to the right of the
+        # grey canvas, and bgcolor on body/table cannot fix that because the
+        # strip lies OUTSIDE the document's page box. The VML <v:background>
+        # paints the whole canvas at the renderer level, which is the one
+        # mechanism Word applies edge to edge. Other clients skip the MSO
+        # conditional and keep using the body/table background.
+        '<!--[if gte mso 9]><v:background xmlns:v="urn:schemas-microsoft-com:vml" fill="t">'
+        '<v:fill type="tile" color="#f4f4f6"/></v:background><![endif]-->'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#f4f4f6" '
         'style="background:#f4f4f6;width:100%;">'
         '<tr><td align="center" bgcolor="#f4f4f6" style="padding:26px 12px;">'
@@ -301,6 +313,13 @@ def _br_currency(value, dec=2):
     if value < 0:
         return '(' + _br(abs(value), dec) + ')'
     return _br(value, dec)
+
+
+def _brl(value, dec=2):
+    """BR amount WITH the R$ symbol; negatives wrap symbol and all: (R$ 2.500,00)."""
+    if value < 0:
+        return '(R$ ' + _br(abs(value), dec) + ')'
+    return 'R$ ' + _br(value, dec)
 
 
 def _date_br(s):
@@ -697,10 +716,11 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     data_rows = [[
         t.get('athena', ''),
         t.get('trade_date', '') or '—',
-        _br(abs(float(t.get('notional_fc') or 0.0))),
-        _br_currency(float(t.get('settlement') or 0.0)),
-        _br(float(t.get('tax') or 0.0)),
-        _br_currency(_ndf_liquido(t)),
+        ((str(t.get('ccy', '') or '').strip().upper() + ' ') if str(t.get('ccy', '') or '').strip() else '')
+        + _br(abs(float(t.get('notional_fc') or 0.0))),
+        _brl(float(t.get('settlement') or 0.0)),
+        _brl(float(t.get('tax') or 0.0)),
+        _brl(_ndf_liquido(t)),
     ] for t in items]
 
     table = _email_data_table(
@@ -717,7 +737,20 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     # Same settlement-instruction / banking logic as the premium notice: the
     # sign of the final result decides who transfers (negative → JPMorgan pays
     # into the client's default PAY account; positive → debit / TED-only note
-    # with JPMorgan's own details; zero → nobody transfers).
+    # with JPMorgan's own details; zero → nobody transfers). Which JPMorgan
+    # details depends on the legal entity: the Chase entity (MGT) collects in
+    # its own Brasil account, not the Banco's.
+    _JPM_BANK_KV = [
+        ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
+        ('Nº e nome da agência', '0011'),
+        ('Conta-corrente nº', '5116003'),
+        ('CNPJ/MF nº', '33.172.537/0001-98'),
+    ] if le_class != 'MGT' else [
+        ('Nome e nº do banco', 'JPMORGAN CHASE BANK (BRASIL) - 488'),
+        ('Nº e nome da agência', '0001'),
+        ('Conta-corrente nº', '985181643'),
+        ('CNPJ/MF nº', '46.518.205/0001-64'),
+    ]
     notice = ''
     if final < 0:
         instr = _ep('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
@@ -740,12 +773,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         if final > 0:
             notice = _email_notice('Não são aceitas transferências via PIX. As transferências devem ser '
                                    'realizadas exclusivamente por meio de TED.')
-        bank = _email_kv('Dados bancários', [
-            ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
-            ('Nº e nome da agência', '0011'),
-            ('Conta-corrente nº', '5116003'),
-            ('CNPJ/MF nº', '33.172.537/0001-98'),
-        ])
+        bank = _email_kv('Dados bancários', _JPM_BANK_KV)
 
     def _gap(h):
         return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
@@ -771,6 +799,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         'html': html,
         'cc': 'Liquidação',                    # FX flow — Comm Sales isn't copied
         'to': to_emails,
+        'counterparty': contraparte,           # for the caller's per-cpty count; not emitted in the .eml
     }
 
 
@@ -980,11 +1009,12 @@ def build_eml_bytes(draft, sender_email=None):
     return '\r\n'.join(out).encode('utf-8')
 
 
-def build_drafts_download(drafts, sender_email=None):
+def build_drafts_download(drafts, sender_email=None, zip_name=None):
     """Package drafts for the browser to download.
 
     Returns (filename, mimetype, data_bytes). A single draft → one .eml; several
-    → a .zip of .eml files. Returns (None, None, None) when there are no drafts.
+    → a .zip of .eml files (named `zip_name` when given — sanitized, '.zip'
+    appended if missing). Returns (None, None, None) when there are no drafts.
     """
     if not drafts:
         return None, None, None
@@ -1002,4 +1032,10 @@ def build_drafts_download(drafts, sender_email=None):
             seen[base] = n + 1
             entry = base if n == 0 else '{}_{}'.format(base, n + 1)
             zf.writestr(entry + '.eml', build_eml_bytes(d, sender_email))
-    return 'otc_email_drafts.zip', 'application/zip', buf.getvalue()
+    if zip_name:
+        zname = _safe_filename(zip_name)
+        if not zname.lower().endswith('.zip'):
+            zname += '.zip'
+    else:
+        zname = 'otc_email_drafts.zip'
+    return zname, 'application/zip', buf.getvalue()

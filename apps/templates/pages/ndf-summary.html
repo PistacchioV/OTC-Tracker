@@ -184,8 +184,8 @@
         </div>
     </div>
 
-    <!-- Settlement Summary table (narrower: few, short columns) -->
-    <div class="row mt-2">
+    <!-- Settlement Summary table (narrower + centred: few, short columns) -->
+    <div class="row mt-2 justify-content-center">
         <div class="col-xxl-8 col-xl-10 col-12">
             <div class="card ops-tcard">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -484,6 +484,15 @@ document.addEventListener('DOMContentLoaded', function () {
         return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
                   : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
     }
+    // Standard status pill for the Settlement Summary rows (New → Generated).
+    function pill(text, cls) {
+        return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
+    }
+    // 'BCO: 341 | AG: 0910 | CC: 967' with the labels in bold (values are
+    // digits, so bolding after esc() is safe).
+    function accountHtml(v) {
+        return esc(v).replace(/(BCO:|AG:|CC:)/g, '<strong>$1</strong>');
+    }
     function fillTables(j) {
         var cb = '<input type="checkbox" class="form-check-input ops-cb">';
         dtTrade.clear();
@@ -497,9 +506,11 @@ document.addEventListener('DOMContentLoaded', function () {
         dtTrade.draw();
         dtSummary.clear();
         (j.summary || []).forEach(function (r) {
-            dtSummary.row.add([cb, actionsCell(), statusCell('New'),
+            var st = r.status === 'Generated'
+                ? pill('Generated', 'text-bg-success') : pill('New', 'text-bg-info');
+            dtSummary.row.add([cb, actionsCell(), st,
                 esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
-                esc(r.direction), esc(r.account)]);
+                esc(r.direction), accountHtml(r.account)]);
         });
         dtSummary.draw();
     }
@@ -543,7 +554,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     else alert(msg);
                 });
             }
-            var count = r.headers.get('X-Draft-Count') || '';
+            var count = r.headers.get('X-Draft-Count') || '0';
+            var cpties = r.headers.get('X-Counterparty-Count') || '0';
             var m = /filename="?([^"]+)"?/.exec(r.headers.get('Content-Disposition') || '');
             var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
             return r.blob().then(function (blob) {
@@ -552,9 +564,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 a.href = url; a.download = fname;
                 document.body.appendChild(a); a.click(); a.remove();
                 setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-                if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Drafts Downloaded'),
-                    text: count + ' ' + t('ops-gen-ok-text', 'settlement notice draft(s) downloaded. Open the file to edit in your Outlook.'),
-                    icon: 'success', confirmButtonColor: '#0066cc', timer: 4000, timerProgressBar: true });
+                // Every counterparty row on the Summary just had its notice(s)
+                // generated — flip the status pill (display-time only, like the
+                // rest of the page: it resets on the next load).
+                dtSummary.rows().every(function () {
+                    var d = this.data();
+                    d[2] = pill('Generated', 'text-bg-success');
+                    this.data(d);
+                });
+                dtSummary.draw(false);
+                if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Notices Generated'),
+                    text: t('ops-gen-ok-text', '{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook.')
+                        .replace('{n}', count).replace('{c}', cpties),
+                    icon: 'success', confirmButtonColor: '#0066cc', timer: 5000, timerProgressBar: true });
             });
         }).catch(function () {
             if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),

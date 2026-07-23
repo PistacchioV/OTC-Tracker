@@ -8633,9 +8633,35 @@ def _ndfsum_net_type(rec_cpd):
     return val if (val in ('Total Net', 'Pay/Rec', 'No Net') and status == 'Active') else 'Total Net'
 
 
+# Per-day overlay (only thing this page persists): {counterparty name →
+# {'status': 'Generated', 'maker', 'at'}} written when the settlement notices
+# are generated, so the Generated pill survives reloads. Lives next to the
+# cockpit day JSON.
+def _ndfsum_meta_path(ref):
+    return os.path.join(NDFC_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'ndf-summary_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _ndfsum_meta_load(ref):
+    path = _ndfsum_meta_path(ref)
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return path, (data if isinstance(data, dict) else {})
+    except Exception:
+        return path, {}
+
+
+def _ndfsum_meta_save(path, meta):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+
+
 def _ndfsum_account_fmt(banking, direction):
-    """Default PAY/RECEIVE account → 'bco:341/ag:0910/cc:967' (bank = 3-digit
-    code). Only an approved default (slot.current) is used; unset → ''."""
+    """Default PAY/RECEIVE account → 'BCO: 341 | AG: 0910 | CC: 967' (bank =
+    3-digit code; the front bolds the labels). Only an approved default
+    (slot.current) is used; unset → ''."""
     slot_key = 'DEFAULT_RECEIVE' if direction == 'RECEIVE' else 'DEFAULT_PAY'
     slot = (banking or {}).get(slot_key) or {}
     acc = next((a for a in (banking or {}).get('ACCOUNTS', [])
@@ -8643,9 +8669,9 @@ def _ndfsum_account_fmt(banking, direction):
     if not acc:
         return ''
     bank = re.sub(r'\D', '', str(acc.get('bank', '') or ''))
-    return 'bco:{}/ag:{}/cc:{}'.format(bank.zfill(3) if bank else '',
-                                       str(acc.get('agency', '') or '').strip(),
-                                       str(acc.get('account', '') or '').strip())
+    return 'BCO: {} | AG: {} | CC: {}'.format(bank.zfill(3) if bank else '',
+                                              str(acc.get('agency', '') or '').strip(),
+                                              str(acc.get('account', '') or '').strip())
 
 
 def _ndfsum_collect(ref):
@@ -8704,12 +8730,14 @@ def _ndfsum_collect(ref):
                 'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
                 'trade_date': trade_date,
                 'notional_fc': abs(_mtm_parse_num(row[ci['VL_NOTIONAL_FC']]) or 0.0),
+                'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
                 'settlement': settle_n,
                 'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
             })
 
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
+    _, sum_meta = _ndfsum_meta_load(ref)
     groups = {}
     for r in raws:
         groups.setdefault(r['counterparty'], []).append(r)
@@ -8740,6 +8768,7 @@ def _ndfsum_collect(ref):
         banking = _bank_norm((rec_cpd or {}).get('BANKING'))
         summary.append({
             'counterparty': cpty,
+            'status': (sum_meta.get(cpty) or {}).get('status') or 'New',
             'receive': '{:,.2f}'.format(recv) if recv else '',
             'pay': '{:,.2f}'.format(pay) if pay else '',
             'net_type': net_type,
@@ -8782,7 +8811,25 @@ def api_ndf_summary_settlement_emails():
     drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
-    return _email_drafts_response(drafts)
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_NDF'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(
+        len({d.get('counterparty', '') for d in drafts}))
+    # Persist Generated per notified counterparty (day overlay) — best-effort ON
+    # PURPOSE: the drafts are already in the response, so a failure here is
+    # logged but never turns a successful generation into an error.
+    try:
+        path, meta = _ndfsum_meta_load(ref)
+        sid = session.get('user_sid', '')
+        for name in {d.get('counterparty', '') for d in drafts if d.get('counterparty')}:
+            entry = meta.get(name) or {}
+            entry.update({'status': 'Generated', 'maker': sid,
+                          'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            meta[name] = entry
+        _ndfsum_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-summary] generated-status save failed:\n%s', traceback.format_exc())
+    return resp
 
 
 # ============================================================================
@@ -15712,12 +15759,12 @@ def api_mapping_b3():
 # Builds the HTML drafts in apps/pages/otc_emails.py and opens them in Outlook
 # for manual review (win32com — Windows/JPM only; degrades gracefully elsewhere).
 # ==============================================================================
-def _email_drafts_response(drafts):
+def _email_drafts_response(drafts, zip_name=None):
     """Return the drafts as a downloadable .eml / .zip so the file opens in the
     ACTING user's Outlook (server-side Outlook automation would only ever open on
     the server). From = the logged-in user's e-mail (resolved from their SID)."""
     from apps.pages import otc_emails
-    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'))
+    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'), zip_name=zip_name)
     resp = make_response(data)
     resp.headers['Content-Type'] = mime
     resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)

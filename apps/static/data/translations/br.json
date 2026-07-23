@@ -1331,5 +1331,11 @@
   "nop-actions": "Ações",
   "nop-status": "Status",
   "nop-edit-title": "Editar linha",
-  "nop-send": "Enviar"
+  "nop-send": "Enviar",
+  "ops-generate": "Gerar",
+  "ops-gen-none-title": "Nada para gerar",
+  "ops-gen-none": "Nenhuma liquidação para avisar nesta data.",
+  "ops-gen-fail": "A solicitação falhou.",
+  "ops-gen-ok-title": "Avisos gerados",
+  "ops-gen-ok-text": "{n} aviso(s) de liquidação gerado(s) para {c} contraparte(s). Abra o arquivo baixado para revisar no seu Outlook."
 }

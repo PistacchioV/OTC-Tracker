@@ -1331,5 +1331,11 @@
   "nop-actions": "Actions",
   "nop-status": "Status",
   "nop-edit-title": "Edit row",
-  "nop-send": "Send"
+  "nop-send": "Send",
+  "ops-generate": "Generate",
+  "ops-gen-none-title": "Nothing to Generate",
+  "ops-gen-none": "No settlements to notify for this date.",
+  "ops-gen-fail": "Request failed.",
+  "ops-gen-ok-title": "Notices Generated",
+  "ops-gen-ok-text": "{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook."
 }
