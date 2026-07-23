@@ -6602,7 +6602,8 @@ def _ndfc_b3_maps(ref):
                  → "Contrato" (CETIP contract)
       pub_map:   "Contrato" → publisher: "BACEN" when "Nome do Feeder" is BACEN,
                  otherwise the "Tela funcao Consulta" value.
-      contr_map: "Contrato" → {'fwd', 'base', 'cnpj', 'ccy_fc', 'ccy_lc'}:
+      contr_map: "Contrato" → {'fwd', 'base', 'cnpj', 'ccy_fc', 'ccy_lc', 'pos',
+                 'conta_parte', 'conta_cparte'}:
                  Taxa Forward, Valor Base no registro and digits-only CPF/CNPJ da
                  Contraparte (used by the Operations B3 rescue to double-check a
                  candidate contract), plus Simbolo da Moeda (→ CCY_NOTIONAL_FC)
@@ -6633,6 +6634,8 @@ def _ndfc_b3_maps(ref):
         k_sym   = _fcst_resolve_key(keys, ('Simbolo da Moeda',))
         k_cot   = _fcst_resolve_key(keys, ('Codigo Sisbacen da Moeda Cotada',))
         k_pos   = _fcst_resolve_key(keys, ('Descricao da posicao do Participante',))
+        k_cparte = _fcst_resolve_key(keys, ('Codigo da Parte',))
+        k_ccpty  = _fcst_resolve_key(keys, ('Codigo da Contraparte',))
         for rec in data:
             contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
             if not contrato:
@@ -6650,6 +6653,8 @@ def _ndfc_b3_maps(ref):
                 'ccy_fc': str(rec.get(k_sym, '') or '').strip() if k_sym else '',
                 'ccy_lc': _ndfc_ccy_from_sisbacen(rec.get(k_cot, '')) if k_cot else '',
                 'pos': str(rec.get(k_pos, '') or '').strip() if k_pos else '',
+                'conta_parte': str(rec.get(k_cparte, '') or '').strip() if k_cparte else '',
+                'conta_cparte': str(rec.get(k_ccpty, '') or '').strip() if k_ccpty else '',
             }
     except Exception:
         log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
@@ -6971,6 +6976,162 @@ def api_ndfc_row_confirm():
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Confirmed', 'NDF Cockpit',
                          '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  NDF › Other Publisher — Daily Settlement › NDF › Other Publisher
+#  Derived (read-only) view, VCP-style: the base rows are the day's Operations B3
+#  entries with Tipo Operação = PENDENTE_CAMBIO, each joined to the other NDF
+#  pages by the CETIP contract (the B3 "Título"):
+#    B3 ID            ← Operations B3 "Título"
+#    ATHENA ID        ← NDF Cockpit ID_SOURCE_DEAL of the row whose CD_CETIP_RETURN
+#                       is this contract (Cockpit resolution reused as-is, so a
+#                       contract recovered by athena id or by the Operations B3
+#                       rescue counts here too)
+#    TX PARIDADE      ← that Cockpit row's VL_STRIKE_PRICE, shown 0.00000000
+#    TX COTADA        ← always 1.00000000
+#    CONTA PARTE      ← Live Position NDF "Codigo da Parte" for the contract
+#    CONTA CONTRAPARTE← Live Position NDF "Codigo da Contraparte"
+#  Values are recomputed on every load; only the maker/checker meta is persisted
+#  (per day, keyed by B3 ID), so a confirmation survives a reload.
+# ══════════════════════════════════════════════════════════════════════════════
+_NDFOP_COLUMNS = ['B3 ID', 'ATHENA ID', 'TX PARIDADE', 'TX COTADA',
+                  'CONTA PARTE', 'CONTA CONTRAPARTE']
+_NDFOP_OP_TYPE = 'PENDENTE_CAMBIO'
+_NDFOP_TX_COTADA = '1.00000000'
+
+
+def _ndfop_key(v):
+    """Comparison key tolerant to accent/case/separator ('PENDENTE_CAMBIO',
+    'Pendente Câmbio' and 'pendente-cambio' all collapse to the same token)."""
+    return re.sub(r'[^a-z0-9]', '', _fcst_norm(str(v or '')))
+
+
+def _ndfop_fmt8(v):
+    """Rate → 0.00000000 (8 decimals). Non-numeric (e.g. the Cockpit's '-' when
+    the strike can't be computed) passes through untouched."""
+    n = _ndfc_valnum(v)
+    return '{:.8f}'.format(n) if n is not None else str(v or '').strip()
+
+
+def _ndfop_meta_path(ref):
+    return os.path.join(NDFC_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'ndf-other-publisher_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _ndfop_meta_load(ref):
+    """{B3 ID → {status, maker, checker}} — persisted maker/checker state."""
+    p = _ndfop_meta_path(ref)
+    try:
+        with open(p, encoding='utf-8') as fh:
+            data = json.load(fh) or {}
+        return p, (data if isinstance(data, dict) else {})
+    except Exception:
+        return p, {}
+
+
+def _ndfop_cockpit_index(ref):
+    """{CD_CETIP_RETURN (upper) → {'athena', 'strike'}} built from the NDF Cockpit
+    DISPLAY rows, so the contract shown here is exactly the one the Cockpit shows
+    (including the ones it recovered via athena id or the Operations B3 rescue)."""
+    out = {}
+    try:
+        payload = _ndfc_collect(ref)
+        cols = payload.get('columns') or []
+        i_cd = cols.index('CD_CETIP_RETURN')
+        i_ath = cols.index('ID_SOURCE_DEAL')
+        i_stk = cols.index('VL_STRIKE_PRICE')
+        for row in payload.get('rows') or []:
+            cd = str(row[i_cd] or '').strip()
+            if not cd or cd == _NDFC_MISSING_B3:
+                continue
+            out.setdefault(cd.upper(), {'athena': str(row[i_ath] or '').strip(),
+                                        'strike': row[i_stk]})
+    except Exception:
+        log.warning('[ndf-other-publisher] cockpit index failed:\n%s', traceback.format_exc())
+    return out
+
+
+def _ndfop_collect(ref):
+    _, ops = _opb3_load(ref)
+    cockpit = _ndfop_cockpit_index(ref)
+    _, _, contr = _ndfc_b3_maps(ref)
+    _, meta = _ndfop_meta_load(ref)
+    want = _ndfop_key(_NDFOP_OP_TYPE)
+    rows_out = []
+    for rec in (ops or []):
+        if _ndfop_key(rec.get('Tipo Operação', '')) != want:
+            continue
+        b3 = str(rec.get('Título', '') or '').strip()
+        if not b3:
+            continue
+        ck = cockpit.get(b3.upper(), {})
+        lp = contr.get(b3.upper(), {})
+        m = meta.get(b3, {})
+        rows_out.append([
+            b3,
+            ck.get('athena', ''),
+            _ndfop_fmt8(ck.get('strike', '')),
+            _NDFOP_TX_COTADA,
+            lp.get('conta_parte', ''),
+            lp.get('conta_cparte', ''),
+            m.get('status', 'New'), m.get('maker', ''), m.get('checker', ''), b3,
+        ])
+    return {'widgets': {'total': len(rows_out)}, 'columns': list(_NDFOP_COLUMNS),
+            'rows': rows_out, 'updated': _ds_read_updated(_opb3_json_path(ref))}
+
+
+@blueprint.route('/ndf-other-publisher')
+def ndf_other_publisher():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/ndf-other-publisher.html', segment='ndf-other-publisher',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/ndf-other-publisher/data')
+def api_ndfop_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ndfop_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/ndf-other-publisher/row/confirm', methods=['POST'])
+def api_ndfop_row_confirm():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'status': 'OK', 'checker': sid, 'maker': entry.get('maker', '')})
+    meta[rid] = entry
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(meta, fh, ensure_ascii=False, indent=2)
+    except Exception:
+        log.error('[ndf-other-publisher] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Confirmed',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 

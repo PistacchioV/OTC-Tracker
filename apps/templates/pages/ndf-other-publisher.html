@@ -1,0 +1,242 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}NDF Other Publisher{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#nop-page {
+    --nop-hairline: rgba(0,0,0,.08);
+    --nop-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #nop-page { --nop-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets (ops-widget model) ─────────────────────────────────────────── */
+#nop-page .nop-widgets .col { display: flex; margin-bottom: .5rem; }
+#nop-page .nop-widget {
+    flex: 1;
+    border: 1px solid var(--nop-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--nop-ease-out), box-shadow 220ms var(--nop-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #nop-page .nop-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#nop-page .nop-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
+#nop-page .nop-widget__icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
+}
+#nop-page .nop-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
+#nop-page .nop-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#nop-page .nop-widget__subs { border-top: 1px dashed var(--nop-hairline); padding-top: .5rem; margin-top: .1rem; }
+#nop-page .nop-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+#nop-page .nop-widget__sub .nop-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+#nop-page .nop-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#nop-page .nop-widget--total .nop-widget__title,
+#nop-page .nop-widget--total .nop-widget__value { color: #fff; }
+#nop-page .nop-widget--total .nop-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Reference date picker (Live Position model) ────────────────────────── */
+#nop-page .nop-datewrap { position: relative; width: 170px; }
+#nop-page .nop-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--nop-ease-out), box-shadow 0.16s var(--nop-ease-out);
+}
+#nop-page .nop-datewrap input:focus {
+    outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18);
+}
+#nop-page .nop-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--bs-secondary-color); cursor: pointer;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#nop-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#nop-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
+
+/* nth-child(1)=checkbox (2)=Actions (3)=Status (4..9)=dados (_NDFOP_COLUMNS). */
+#nop-table th:nth-child(1), #nop-table td:nth-child(1) { min-width: 38px;  width: 38px; }   /* checkbox */
+#nop-table th:nth-child(2), #nop-table td:nth-child(2) { min-width: 80px;  width: 80px; }   /* Actions */
+#nop-table th:nth-child(3), #nop-table td:nth-child(3) { min-width: 90px;  width: 90px; }   /* Status */
+#nop-table th:nth-child(4), #nop-table td:nth-child(4) { min-width: 130px; }                /* B3 ID */
+#nop-table th:nth-child(5), #nop-table td:nth-child(5) { min-width: 170px; }                /* ATHENA ID */
+#nop-table th:nth-child(6), #nop-table td:nth-child(6) { min-width: 130px; }                /* TX PARIDADE */
+#nop-table th:nth-child(7), #nop-table td:nth-child(7) { min-width: 120px; }                /* TX COTADA */
+#nop-table th:nth-child(8), #nop-table td:nth-child(8) { min-width: 130px; }                /* CONTA PARTE */
+#nop-table th:nth-child(9), #nop-table td:nth-child(9) { min-width: 150px; }                /* CONTA CONTRAPARTE */
+
+/* Per-column filter row — New Deals style. */
+#nop-table thead tr.nop-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--nop-hairline); }
+#nop-table thead tr.nop-th-filter input.nop-col-filter {
+    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px;
+    border: 1px solid var(--nop-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--nop-ease-out), box-shadow 150ms var(--nop-ease-out),
+                background-color 150ms var(--nop-ease-out);
+}
+#nop-table thead tr.nop-th-filter input.nop-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #nop-table thead tr.nop-th-filter input.nop-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#nop-table thead tr.nop-th-filter input.nop-col-filter:focus {
+    outline: none; border-color: #0066cc;
+    background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#nop-table thead tr.nop-th-filter input.nop-col-filter.nop-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+#nop-page .toggle-vis + label { cursor: pointer; }
+#nop-page .btn:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+    #nop-page * { transition: none !important; animation: none !important; }
+    #nop-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — DataTables appends it to <body>, so not scoped. */
+.dt-button-collection {
+    z-index: 2000;
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: .375rem !important;
+    padding: .25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button,
+.dt-button-collection .dropdown-item {
+    display: flex; align-items: center;
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: .4rem 1rem !important;
+    font-size: .84rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus,
+.dt-button-collection .dropdown-item:hover,
+.dt-button-collection .dropdown-item:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="nop-page" class="container-fluid" data-api="/api/ndf-other-publisher/data" data-ref-date="{{ ref_date }}">
+    {% set title='Other Publisher' %}
+    {% set crumbs=['OTC Tracker', 'Daily Settlements', 'NDF', 'Other Publisher'] %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Section 1: widget + reference date -->
+    <div class="row nop-widgets row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="nop-widget nop-widget--total">
+                <div class="nop-widget__head">
+                    <span class="nop-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="nop-widget__title" data-lang="nop-w-total">Total</h3>
+                    <span class="nop-widget__value" id="nop-w-total">0</span>
+                </div>
+                <div class="nop-widget__subs" style="border-top-color: rgba(255,255,255,.25);">
+                    <div class="nop-widget__sub" style="color: rgba(255,255,255,.85);">
+                        <i class="ti ti-calendar-event"></i><span data-lang="nop-total-asof">Settlement date as of</span>
+                        <span class="nop-sub-val" id="nop-total-asof" style="color:#fff;">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <label for="nop-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="nop-refdate">Reference date</label>
+                <div class="nop-datewrap" id="nopDateWrap">
+                    <input type="text" id="nop-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="nop-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: toolbar (Columns + Export) + table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="nop-show">Show</label>
+                        <select class="form-select form-select-sm nop-page-len" style="width:76px;">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="-1" data-lang="nop-all">All</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="nop-entries">entries</label>
+                    </div>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="nopExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="nopClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="nop-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="nop-showing">Showing</span> <span id="nop-count">0</span> <span>rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="nop-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723"></script>
+{% endblock extra_javascript %}

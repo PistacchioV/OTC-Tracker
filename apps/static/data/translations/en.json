@@ -1319,5 +1319,15 @@
   "pend-update-confirm-title": "Wish to Proceed?",
   "pend-update-confirm-text": "The Pending Confirmation base will be updated with this file.",
   "pend-update-confirm-yes": "Yes",
-  "pend-update-confirm-no": "No"
+  "pend-update-confirm-no": "No",
+  "nop-w-total": "Total",
+  "nop-total-asof": "Settlement date as of",
+  "nop-refdate": "Reference date",
+  "nop-show": "Show",
+  "nop-entries": "entries",
+  "nop-all": "All",
+  "nop-clear-filters": "Clear filters",
+  "nop-showing": "Showing",
+  "nop-actions": "Actions",
+  "nop-status": "Status"
 }

@@ -1319,5 +1319,15 @@
   "pend-update-confirm-title": "Deseja prosseguir?",
   "pend-update-confirm-text": "A base de Pending Confirmation será atualizada com este arquivo.",
   "pend-update-confirm-yes": "Sim",
-  "pend-update-confirm-no": "Não"
+  "pend-update-confirm-no": "Não",
+  "nop-w-total": "Total",
+  "nop-total-asof": "Data de liquidação em",
+  "nop-refdate": "Data de referência",
+  "nop-show": "Exibir",
+  "nop-entries": "entradas",
+  "nop-all": "Todos",
+  "nop-clear-filters": "Limpar filtros",
+  "nop-showing": "Exibindo",
+  "nop-actions": "Ações",
+  "nop-status": "Status"
 }
