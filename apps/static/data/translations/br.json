@@ -1330,5 +1330,6 @@
   "nop-showing": "Exibindo",
   "nop-actions": "Ações",
   "nop-status": "Status",
-  "nop-edit-title": "Editar linha"
+  "nop-edit-title": "Editar linha",
+  "nop-send-selected": "Enviar selecionadas"
 }

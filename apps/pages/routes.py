@@ -7229,6 +7229,146 @@ def api_ndfop_row_delete():
     return jsonify({'success': True})
 
 
+# ── Send to Conecta (Batch Conecta TAXA files) ────────────────────────────────
+#  One positional line per row, the ops spreadsheet's columns A..L concatenated
+#  (each field already fixed-width, so the concat IS the record). Ported from the
+#  Excel column formulas: constants TER  /1/0015, random 10-digit internal number
+#  (MID(RAND();3;10)), bank participant 73760009, counterparty account normalised
+#  to 8 digits (41007 → 00041007), rates as 4-digit integer + 8-digit decimals.
+#  Rows against Lawton (C.Parte 00041007) are mirrored into a second file with
+#  Participante ↔ C.Parte swapped — the Lawton-side view of the same trade:
+#    TAXA_BANCO.txt  — header TER  00015JPMORGANBM··········yyyymmdd00001 + lines
+#    TAXA_LAWTON.txt — the swapped lines only (no bank header, as in the sheet)
+#  Both written to CONECTA_NEW_PATH like the New Deals send-conecta files.
+_NDFOP_CONECTA_LABELS = ['Id do sistema', 'Id tipo linha', 'Código operação',
+                         'N Contr Interno', 'Participante', 'Pap. Participante',
+                         'C.Parte', 'Contrato', 'Tx Câmbio', 'Tx Paridade',
+                         'Tx Cotada', 'Quantidade de Datas de Verificação']
+_NDFOP_PARTICIPANT = '73760009'   # bank participant account
+_NDFOP_LAWTON = '00041007'        # Lawton account → triggers the mirrored file
+
+
+def _ndfop_acct8(v):
+    """Account → 8-digit code: digits only, left-padded with zeros
+    (41007 → 00041007, 73760.10-2 → 73760102)."""
+    d = re.sub(r'\D', '', str(v or ''))
+    return d.zfill(8) if d else ''
+
+
+def _ndfop_rate12(v):
+    """Rate → positional 12 chars: 4-digit integer part + 8-digit decimals, no
+    separator (5.55 → 000555000000, 1 → 000100000000). '' when not usable."""
+    n = _ndfc_valnum(v)
+    if n is None or n < 0:
+        return ''
+    ip, dec = '{:.8f}'.format(n).split('.')
+    return (ip.zfill(4) + dec) if len(ip) <= 4 else ''
+
+
+def _ndfop_conecta_fields(cells, swap=False):
+    """[(label, value)] of one Conecta line for a display row (indexed by
+    _NDFOP_COLUMNS). swap=True builds the Lawton-side view: Participante and
+    C.Parte trade places, everything else identical."""
+    idx = {c: i for i, c in enumerate(_NDFOP_COLUMNS)}
+    part, cparte = _NDFOP_PARTICIPANT, _ndfop_acct8(cells[idx['CONTA CONTRAPARTE']])
+    if swap:
+        part, cparte = cparte, part
+    vals = ['TER  ', '1', '0015',
+            ''.join(random.choices('0123456789', k=10)),
+            part, ' ', cparte,
+            str(cells[idx['B3 ID']] or '').strip().ljust(10),
+            ' ' * 12,
+            _ndfop_rate12(cells[idx['TX PARIDADE']]),
+            _ndfop_rate12(cells[idx['TX COTADA']]),
+            '000']
+    return list(zip(_NDFOP_CONECTA_LABELS, vals))
+
+
+def _ndfop_rows_by_id(ref):
+    """{row id → data cells} of the day's display rows (overrides applied)."""
+    n = len(_NDFOP_COLUMNS)
+    return {str(r[n + 3]): r[:n] for r in _ndfop_collect(ref)['rows']}
+
+
+@blueprint.route('/api/ndf-other-publisher/row/preview')
+def api_ndfop_row_preview():
+    """Double-click preview: the Conecta fields of one row, vertically. A Lawton
+    row returns two views (Banco × Lawton and the account-swapped Lawton × Banco)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    rid = (request.args.get('id') or '').strip()
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    cells = _ndfop_rows_by_id(ref).get(rid)
+    if cells is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    lawton = _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON
+    views = [{'title': 'Banco × Lawton' if lawton else 'Banco',
+              'fields': _ndfop_conecta_fields(cells)}]
+    if lawton:
+        views.append({'title': 'Lawton × Banco',
+                      'fields': _ndfop_conecta_fields(cells, swap=True)})
+    return jsonify({'success': True, 'id': rid, 'views': views})
+
+
+@blueprint.route('/api/ndf-other-publisher/send', methods=['POST'])
+def api_ndfop_send():
+    """Row-level or batch send: writes TAXA_BANCO.txt (and TAXA_LAWTON.txt when a
+    Lawton row is included) to the Batch Conecta New folder. All-or-nothing: a row
+    without a usable TX PARIDADE aborts the whole request, so a batch is never
+    half-sent."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ids = [str(i or '').strip() for i in (p.get('ids') or []) if str(i or '').strip()]
+    if not ids:
+        return jsonify({'success': False, 'error': 'No rows selected.'}), 400
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    by_id = _ndfop_rows_by_id(ref)
+    missing = [i for i in ids if i not in by_id]
+    if missing:
+        return jsonify({'success': False,
+                        'error': 'Row(s) not found: ' + ', '.join(missing)}), 404
+    i_stk = _NDFOP_COLUMNS.index('TX PARIDADE')
+    bad = [i for i in ids if not _ndfop_rate12(by_id[i][i_stk])]
+    if bad:
+        return jsonify({'success': False,
+                        'error': 'TX PARIDADE missing/invalid: ' + ', '.join(bad)}), 400
+    banco_lines, lawton_lines = [], []
+    for rid in ids:
+        cells = by_id[rid]
+        banco_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells)))
+        if _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON:
+            lawton_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells, swap=True)))
+    header = 'TER  00015' + 'JPMORGANBM' + ' ' * 10 + datetime.today().strftime('%Y%m%d') + '00001'
+    files = []
+    try:
+        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+        fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_BANCO.txt')
+        with open(fp, 'w', encoding='utf-8') as fh:
+            fh.write('\n'.join([header] + banco_lines))
+        files.append({'filename': os.path.basename(fp), 'count': len(banco_lines)})
+        if lawton_lines:
+            fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_LAWTON.txt')
+            with open(fp, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join(lawton_lines))
+            files.append({'filename': os.path.basename(fp), 'count': len(lawton_lines)})
+    except Exception as exc:
+        log.error('[ndf-other-publisher] send failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    sid = session.get('user_sid', '')
+    _create_notification(sid, session.get('user_name', ''), 'Sent to B3', 'NDF Other Publisher',
+                         str(len(ids)) + ' row' + ('' if len(ids) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'count': len(ids), 'files': files})
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  Cognos — Daily Settlement › Other Products › Option › Cognos
 #  Source: "FXO Detail - Beta.xlsx" (header on ROW 1). Modelled on OTM Settlements:

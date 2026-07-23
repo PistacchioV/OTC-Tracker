@@ -1330,5 +1330,6 @@
   "nop-showing": "Showing",
   "nop-actions": "Actions",
   "nop-status": "Status",
-  "nop-edit-title": "Edit row"
+  "nop-edit-title": "Edit row",
+  "nop-send-selected": "Send selected"
 }

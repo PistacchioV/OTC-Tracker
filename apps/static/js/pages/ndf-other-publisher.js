@@ -16,6 +16,8 @@
   var CONFIRM_API = '/api/ndf-other-publisher/row/confirm';
   var EDIT_API = '/api/ndf-other-publisher/row/edit';
   var DELETE_API = '/api/ndf-other-publisher/row/delete';
+  var SEND_API = '/api/ndf-other-publisher/send';
+  var PREVIEW_API = '/api/ndf-other-publisher/row/preview';
   var dt = null;
   var COLS = [];
   var CURRENT_ROWS = [];       // last-loaded rows (each: [...data..., status, maker, checker, id])
@@ -26,15 +28,24 @@
     en: { ok: 'OK', pending: 'Pending', newst: 'New', confirm: 'Confirm', edit: 'Edit', del: 'Delete',
           confirmed: 'Confirmed', saved: 'Saved', deleted: 'Deleted', err: 'Action failed.',
           delTitle: 'Delete row?', delText: 'This row will be hidden from the page.',
-          yes: 'Yes, delete', cancel: 'Cancel' },
+          yes: 'Yes, delete', cancel: 'Cancel',
+          send: 'Send', sendTitle: 'Send to Conecta?',
+          sendText: '{n} row(s) will be written to the Batch Conecta file.',
+          yesSend: 'Yes, send', sentOk: 'Sent' },
     br: { ok: 'OK', pending: 'Pendente', newst: 'Novo', confirm: 'Confirmar', edit: 'Editar', del: 'Excluir',
           confirmed: 'Confirmado', saved: 'Salvo', deleted: 'Excluído', err: 'Falha na ação.',
           delTitle: 'Excluir linha?', delText: 'Esta linha será ocultada da página.',
-          yes: 'Sim, excluir', cancel: 'Cancelar' },
+          yes: 'Sim, excluir', cancel: 'Cancelar',
+          send: 'Enviar', sendTitle: 'Enviar para o Conecta?',
+          sendText: '{n} linha(s) serão gravadas no arquivo do Batch Conecta.',
+          yesSend: 'Sim, enviar', sentOk: 'Enviado' },
     es: { ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', confirm: 'Confirmar', edit: 'Editar', del: 'Eliminar',
           confirmed: 'Confirmado', saved: 'Guardado', deleted: 'Eliminado', err: 'Acción fallida.',
           delTitle: '¿Eliminar fila?', delText: 'Esta fila se ocultará de la página.',
-          yes: 'Sí, eliminar', cancel: 'Cancelar' },
+          yes: 'Sí, eliminar', cancel: 'Cancelar',
+          send: 'Enviar', sendTitle: '¿Enviar a Conecta?',
+          sendText: '{n} fila(s) se escribirán en el archivo de Batch Conecta.',
+          yesSend: 'Sí, enviar', sentOk: 'Enviado' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -61,6 +72,7 @@
   // Action buttons — standard rounded-square format (global head-css) via btn-row-*.
   function actionsHtml(id) {
     return '<div class="d-inline-flex gap-1">' +
+      '<button class="btn btn-primary btn-sm rounded-circle btn-row-send" data-id="' + esc(id) + '" title="' + esc(t('send')) + '"><i class="ti ti-brand-telegram"></i></button>' +
       '<button class="btn btn-info btn-sm rounded-circle btn-row-edit" data-id="' + esc(id) + '" title="' + esc(t('edit')) + '"><i class="ti ti-pencil"></i></button>' +
       '<button class="btn btn-success btn-sm rounded-circle btn-row-confirm" data-id="' + esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>' +
       '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete" data-id="' + esc(id) + '" title="' + esc(t('del')) + '"><i class="ti ti-trash"></i></button>' +
@@ -128,7 +140,8 @@
 
     var data = rows.map(function (r) {
       var m = metaOf(r);
-      return ['<input type="checkbox" class="form-check-input nop-row-check">', actionsHtml(m.id), statusBadge(m.status)]
+      return ['<input type="checkbox" class="form-check-input nop-row-check" data-id="' + esc(m.id) + '">',
+              actionsHtml(m.id), statusBadge(m.status)]
         .concat(r.slice(0, COLS.length).map(function (v) { return esc(v); }));
     });
 
@@ -175,6 +188,106 @@
     var checkAll = document.getElementById('nopCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
       document.querySelectorAll('#nop-table tbody .nop-row-check').forEach(function (c) { c.checked = checkAll.checked; });
+      updateSendBatch();
+    });
+    updateSendBatch();
+  }
+
+  // ── Send to Conecta ─────────────────────────────────────────────────────────
+  function checkedIds() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('#nop-table tbody .nop-row-check:checked'),
+      function (c) { return c.getAttribute('data-id'); }).filter(Boolean);
+  }
+
+  // The batch button only shows up with 2+ rows checked — a single row is sent
+  // by its own row-level button.
+  function updateSendBatch() {
+    var btn = document.getElementById('nopSendBatch');
+    if (!btn) return;
+    var n = checkedIds().length;
+    btn.classList.toggle('d-none', n < 2);
+    var cnt = document.getElementById('nopSendCount');
+    if (cnt) cnt.textContent = n;
+  }
+
+  function doSend(ids) {
+    if (!ids.length) return;
+    Swal.fire({
+      icon: 'question', title: t('sendTitle'),
+      text: t('sendText').replace('{n}', ids.length),
+      showCancelButton: true, confirmButtonText: t('yesSend'),
+      cancelButtonText: t('cancel'), confirmButtonColor: '#0066cc',
+    }).then(function (r) {
+      if (!r.isConfirmed) return;
+      postJSON(SEND_API, { date: currentDate(), ids: ids }).then(function (res) {
+        if (res.ok && res.body && res.body.success) {
+          var files = (res.body.files || []).map(function (f) {
+            return f.filename + ' (' + f.count + ')';
+          }).join('  ·  ');
+          if (window.fetchNotifications) window.fetchNotifications();
+          Swal.fire({ icon: 'success', title: t('sentOk'), text: files });
+          load(currentDate());
+        } else {
+          Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') });
+        }
+      }).catch(function () {});
+    });
+  }
+
+  // ── Conecta preview (double-click) ──────────────────────────────────────────
+  function closePreview() {
+    var el = page.querySelector('.nop-preview');
+    if (el) el.remove();
+  }
+
+  function showPreview(id, pageX, pageY) {
+    closePreview();
+    fetch(PREVIEW_API + '?date=' + encodeURIComponent(currentDate()) + '&id=' + encodeURIComponent(id),
+          { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success) return;
+        var views = d.views || [];
+        if (!views.length) return;
+        var html = '<div class="nop-preview-head"><i class="ti ti-eye me-1"></i>' + esc(d.id) +
+          '<button type="button" class="btn-close nop-preview-close" aria-label="Close"></button></div>' +
+          '<div class="nop-preview-scroll"><table>';
+        if (views.length > 1) {
+          html += '<tr><th></th>' + views.map(function (v) {
+            return '<th class="nop-preview-vt">' + esc(v.title) + '</th>';
+          }).join('') + '</tr>';
+        }
+        (views[0].fields || []).forEach(function (f, i) {
+          html += '<tr><th>' + esc(f[0]) + '</th>' + views.map(function (v) {
+            return '<td class="nop-preview-val">' + esc(v.fields[i][1]) + '</td>';
+          }).join('') + '</tr>';
+        });
+        html += '</table></div>';
+        var el = document.createElement('div');
+        el.className = 'nop-preview';
+        el.innerHTML = html;
+        page.appendChild(el);
+        // Anchor at the double-click point (page coords → #nop-page coords),
+        // clamped so the popover never leaves the page area.
+        var rect = page.getBoundingClientRect();
+        var left = pageX - (rect.left + window.scrollX);
+        var top = pageY - (rect.top + window.scrollY);
+        left = Math.max(8, Math.min(left, page.clientWidth - el.offsetWidth - 8));
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+        el.querySelector('.nop-preview-close').addEventListener('click', closePreview);
+      })
+      .catch(function () {});
+  }
+
+  function wirePreviewClose() {
+    document.addEventListener('click', function (e) {
+      var el = page.querySelector('.nop-preview');
+      if (el && !el.contains(e.target)) closePreview();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closePreview();
     });
   }
 
@@ -248,9 +361,19 @@
     });
   }
 
-  // Edit / Confirm / Delete (delegated — survives DataTables redraws).
+  // Send / Edit / Confirm / Delete (delegated — survives DataTables redraws).
   function wireActions() {
-    jQuery('#nop-table').off('click.nopact')
+    jQuery('#nop-table').off('click.nopact dblclick.nopact change.nopact')
+      .on('change.nopact', '.nop-row-check', updateSendBatch)
+      .on('dblclick.nopact', 'tbody tr', function (e) {
+        if (e.target.closest('button, a, input')) return;
+        var btn = this.querySelector('.btn-row-confirm');
+        var id = btn && btn.getAttribute('data-id');
+        if (id) showPreview(id, e.pageX, e.pageY);
+      })
+      .on('click.nopact', '.btn-row-send', function () {
+        doSend([this.getAttribute('data-id')]);
+      })
       .on('click.nopact', '.btn-row-edit', function () {
         var id = this.getAttribute('data-id');
         var row = CURRENT_ROWS.filter(function (r) { return String(metaOf(r).id) === String(id); })[0];
@@ -301,6 +424,9 @@
     wirePageLen();
     wireActions();
     wireEditSave();
+    wirePreviewClose();
+    var batch = document.getElementById('nopSendBatch');
+    if (batch) batch.addEventListener('click', function () { doSend(checkedIds()); });
     wireDatePicker();
     load(page.getAttribute('data-ref-date'));
   });

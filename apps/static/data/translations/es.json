@@ -1329,5 +1329,6 @@
   "nop-showing": "Mostrando",
   "nop-actions": "Acciones",
   "nop-status": "Status",
-  "nop-edit-title": "Editar fila"
+  "nop-edit-title": "Editar fila",
+  "nop-send-selected": "Enviar seleccionadas"
 }

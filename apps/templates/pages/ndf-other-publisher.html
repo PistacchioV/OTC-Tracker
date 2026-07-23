@@ -11,6 +11,7 @@
 #nop-page {
     --nop-hairline: rgba(0,0,0,.08);
     --nop-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    position: relative;   /* anchor for the double-click Conecta preview */
 }
 [data-bs-theme="dark"] #nop-page { --nop-hairline: rgba(255,255,255,.10); }
 
@@ -76,7 +77,7 @@
 
 /* nth-child(1)=checkbox (2)=Actions (3)=Status (4..12)=dados (_NDFOP_COLUMNS). */
 #nop-table th:nth-child(1),  #nop-table td:nth-child(1)  { min-width: 38px;  width: 38px; }   /* checkbox */
-#nop-table th:nth-child(2),  #nop-table td:nth-child(2)  { min-width: 80px;  width: 80px; }   /* Actions */
+#nop-table th:nth-child(2),  #nop-table td:nth-child(2)  { min-width: 140px; width: 140px; } /* Actions */
 #nop-table th:nth-child(3),  #nop-table td:nth-child(3)  { min-width: 90px;  width: 90px; }   /* Status */
 #nop-table th:nth-child(4),  #nop-table td:nth-child(4)  { min-width: 200px; width: 200px; }  /* CLIENT */
 #nop-table th:nth-child(5),  #nop-table td:nth-child(5)  { min-width: 130px; width: 130px; }  /* B3 ID */
@@ -90,6 +91,36 @@
 
 /* Actions/Status vêm das traduções em Title Case — o cabeçalho é todo UPPER. */
 #nop-table thead tr:first-child th { text-transform: uppercase; }
+
+/* Conecta preview (double-click) — pops from the click point, top-left origin.
+   Values are positional (fixed-width, trailing spaces matter) → mono + pre. */
+#nop-page .nop-preview {
+    position: absolute; z-index: 2100; max-width: min(720px, calc(100% - 16px));
+    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--nop-hairline);
+    border-radius: 12px; box-shadow: 0 18px 48px rgba(0,0,0,.25);
+    padding: .6rem .8rem .75rem;
+    transform-origin: top left;
+    animation: nopPreviewPop .18s var(--nop-ease-out);
+}
+[data-bs-theme="dark"] #nop-page .nop-preview { box-shadow: 0 18px 52px rgba(0,0,0,.6); }
+@keyframes nopPreviewPop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+#nop-page .nop-preview-head {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .8rem; font-weight: 700; margin-bottom: .4rem;
+}
+#nop-page .nop-preview-head .btn-close { margin-left: auto; font-size: .6rem; }
+#nop-page .nop-preview-scroll { overflow-x: auto; }
+#nop-page .nop-preview table { border-collapse: collapse; }
+#nop-page .nop-preview th, #nop-page .nop-preview td {
+    font-size: .72rem; padding: .16rem .55rem; text-align: left; vertical-align: top;
+    white-space: nowrap; border-bottom: 1px dashed var(--nop-hairline);
+}
+#nop-page .nop-preview tr:last-child th, #nop-page .nop-preview tr:last-child td { border-bottom: 0; }
+#nop-page .nop-preview th.nop-preview-vt { font-size: .68rem; text-transform: uppercase; color: var(--ins-secondary-color); }
+#nop-page .nop-preview td.nop-preview-val {
+    font-family: SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre; background: var(--bs-tertiary-bg, #f8f9fa); border-radius: 4px;
+}
 
 /* Edit modal — mesma animação do Cockpit: scale 0.96 + opacity, ease-out 200ms. */
 .nop-edit-modal .modal-content { border-radius: 16px; }
@@ -233,6 +264,11 @@
                     <button class="btn btn-sm btn-soft-secondary" type="button" id="nopClearFilters">
                         <i class="ti ti-filter-off me-1"></i><span data-lang="nop-clear-filters">Clear filters</span>
                     </button>
+                    <!-- Batch send — only visible with 2+ rows checked (JS). -->
+                    <button class="btn btn-sm btn-primary bg-gradient d-none" type="button" id="nopSendBatch">
+                        <i class="ti ti-brand-telegram me-1"></i><span data-lang="nop-send-selected">Send selected</span>
+                        (<span id="nopSendCount">0</span>)
+                    </button>
                 </div>
                 <div class="text-muted fs-xs">
                     <span data-lang="nop-showing">Showing</span> <span id="nop-count">0</span> <span>rows</span>
@@ -281,5 +317,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723e"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/ndf-other-publisher.js?v=20260723f"></script>
 {% endblock extra_javascript %}
