@@ -6394,7 +6394,8 @@ NDFC_SOURCE_ROOT = os.getenv('NDFC_SOURCE_ROOT', SETTLEMENTS_ROOT)
 NDFC_JSON_ROOT = OTM_JSON_ROOT
 _NDFC_COLUMNS = [
     'LEGAL', 'NM_COUNTERPARTY', 'ID_SOURCE_DEAL', 'DT_DEAL', 'CD_CETIP_RETURN', 'DT_SETTLEMENT',
-    'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'VL_TAX_INCOME',
+    'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'PUBLISHER',
+    'VL_TAX_INCOME',
     'ID_DEAL', '[PROD] Cockpit.SETTLEMENT', 'NB_BANK', 'CD_BRANCH', 'CD_BANK_ACCOUNT',
 ]
 _NDFC_HEADER_ROW = 4                                  # 1-based (data from row 5)
@@ -6552,6 +6553,52 @@ def _ndfc_num(v):
         return 0.0
 
 
+# Sentinel emitted when a blank CD_CETIP_RETURN has no match in the Live Position
+# NDF file — the front-end renders it as a warning badge ("Missing B3 ID").
+_NDFC_MISSING_B3 = '__MISSING_B3_ID__'
+
+
+def _ndfc_b3_maps(ref):
+    """Lookup maps from the newest Live Position NDF file (DPOSICAO-TER, walking
+    back from D-1 ANBIMA of `ref`):
+      ident_map: right-14 of "Codigo Identificador" (athena id registered at B3)
+                 → "Contrato" (CETIP contract)
+      pub_map:   "Contrato" → publisher: "BACEN" when "Nome do Feeder" is BACEN,
+                 otherwise the "Tela funcao Consulta" value.
+    """
+    ident_map, pub_map = {}, {}
+    try:
+        path, _ = _ndf_ter_path(_prev_anbima_bizday(ref))
+        if not path:
+            return ident_map, pub_map
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+        if not data:
+            return ident_map, pub_map
+        keys, _seen = [], set()
+        for rec in data:
+            for k in rec.keys():
+                if k not in _seen:
+                    _seen.add(k); keys.append(k)
+        k_ident = _fcst_resolve_key(keys, ('Codigo Identificador',))
+        k_contr = _fcst_resolve_key(keys, ('Contrato',))
+        k_feed  = _fcst_resolve_key(keys, ('Nome do Feeder',))
+        k_tela  = _fcst_resolve_key(keys, ('Tela funcao Consulta',))
+        for rec in data:
+            contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
+            if not contrato:
+                continue
+            ident = str(rec.get(k_ident, '') or '').strip() if k_ident else ''
+            if ident:
+                ident_map[ident[-14:]] = contrato
+            feeder = str(rec.get(k_feed, '') or '').strip() if k_feed else ''
+            tela = str(rec.get(k_tela, '') or '').strip() if k_tela else ''
+            pub_map[contrato] = 'BACEN' if feeder.upper() == 'BACEN' else tela
+    except Exception:
+        log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
+    return ident_map, pub_map
+
+
 def _ndfc_collect(ref):
     """Read the NDF Cockpit JSON for `ref` → display rows (formatted) + widgets."""
     widgets = {'total': 0, 'counterparties': 0, 'notional': '0.00', 'settlement': '0.00'}
@@ -6568,12 +6615,28 @@ def _ndfc_collect(ref):
                 _ndfc_save(jp, data)
             except Exception:
                 pass
+        ident_map, pub_map = _ndfc_b3_maps(ref)
         cpties, sum_notional, sum_settle = set(), 0.0, 0.0
         for rec in data:
+            # Display-time lookups vs Live Position NDF: fill a blank
+            # CD_CETIP_RETURN from ID_SOURCE_DEAL (right-14 → Contrato), and
+            # derive PUBLISHER from the matched contract's feeder.
+            cd = str(rec.get('CD_CETIP_RETURN', '') or '').strip()
+            if not cd:
+                src = str(rec.get('ID_SOURCE_DEAL', '') or '').strip()
+                cd = ident_map.get(src[-14:], '') if src else ''
+                cd_display = cd or _NDFC_MISSING_B3
+            else:
+                cd_display = cd
+            publisher = str(rec.get('PUBLISHER', '') or '').strip() or pub_map.get(cd, '')
             row = []
             for c in _NDFC_COLUMNS:
                 v = rec.get(c, '')
-                if c in _NDFC_DATE_COLS:
+                if c == 'CD_CETIP_RETURN':
+                    v = cd_display
+                elif c == 'PUBLISHER':
+                    v = publisher
+                elif c in _NDFC_DATE_COLS:
                     v = _ndfc_fmt_date(v)
                 elif c in _NDFC_FWD_COLS:
                     v = _ndfc_fmt_fwd(v)
@@ -6592,7 +6655,9 @@ def _ndfc_collect(ref):
         widgets['counterparties'] = len(cpties)
         widgets['notional'] = '{:,.2f}'.format(sum_notional)
         widgets['settlement'] = '{:,.2f}'.format(sum_settle)
-    return {'widgets': widgets, 'columns': _NDFC_COLUMNS, 'rows': rows_out,
+    # Headers are displayed UPPER; positional order matches _NDFC_COLUMNS, which
+    # the row add/edit endpoints rely on when mapping cells back by index.
+    return {'widgets': widgets, 'columns': [c.upper() for c in _NDFC_COLUMNS], 'rows': rows_out,
             'updated': _ds_read_updated(jp)}
 
 
