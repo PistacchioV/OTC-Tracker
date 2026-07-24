@@ -161,20 +161,27 @@
     border-radius: 10px !important;   /* rounded square — NOT a circle */
 }
 #ops-page .ops-row-act > i { font-size: 1rem; }
-/* Row action + status control feedback */
+/* Page-wide press feedback: EVERY button compresses slightly while pressed.
+   This is the standard for all buttons on this page — new buttons get it for
+   free via the .btn class. */
+#ops-page .btn {
+    transition: transform 120ms var(--ops-ease-out), box-shadow 140ms ease;
+}
+#ops-page .btn:active { transform: scale(0.97); }
+/* Row action + status control feedback (press scale inherited from the page rule) */
 #ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
     transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
 }
-#ops-page .ops-row-del:active, #ops-page .ops-row-confirm:active { transform: scale(0.9); }
 @media (hover: hover) and (pointer: fine) {
     #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
     #ops-page .ops-row-confirm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(25,135,84,.38); }
 }
 #ops-page .ops-row-confirm:disabled { opacity: .5; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
+    #ops-page .btn, #ops-page .btn:active,
     .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
     #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active,
-    #ops-page .ops-row-confirm:hover, #ops-page .ops-row-confirm:active { transform: none; }
+    #ops-page .ops-row-confirm:hover, #ops-page .ops-row-confirm:active { transform: none; transition: none; }
 }
 
 #ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
@@ -279,6 +286,9 @@
                         </div>
                         <button type="button" class="btn btn-sm btn-soft-primary" id="opsGenerate">
                             <i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">Print Advice</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsTeds">
+                            <i class="ti ti-cash me-1"></i><span data-lang="ops-teds">TEDs</span>
                         </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
@@ -758,6 +768,44 @@ document.addEventListener('DOMContentLoaded', function () {
                   text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
           })
           .finally(function () { $btn.prop('disabled', false); });
+    });
+
+    // ── TEDs: e-mail the TED release request (Pay filled, account BCO ≠ 376,
+    //    SSI attached per counterparty) to OTC Ops + Settlements ──────────────
+    var tedBtn = document.getElementById('opsTeds');
+    if (tedBtn) tedBtn.addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-teds', 'TEDs');
+        fetch('/api/ndf-summary/ted-email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res && res.ok && (res.count || 0) === 0) {
+                  Swal.fire({ icon: 'info', title: t('ops-ted-none-title', 'No TEDs'),
+                              text: res.message || t('ops-ted-none', 'Nothing to release for this date.'),
+                              confirmButtonColor: '#0066cc' });
+              } else if (res && res.ok) {
+                  var extra = (res.missing_ssi && res.missing_ssi.length)
+                      ? '<br><span class="text-warning">' + t('ops-ted-nossi', 'SSI not found for:') + ' ' +
+                        res.missing_ssi.map(esc).join(', ') + '</span>' : '';
+                  Swal.fire({ icon: 'success', title: t('ops-ted-ok-title', 'TED release sent'),
+                              html: res.count + ' TED(s) · ' + (res.attached || 0) + ' SSI attachment(s).' + extra,
+                              confirmButtonColor: '#0066cc' });
+              } else {
+                  Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                              text: (res && res.error) || t('ops-gen-fail', 'Request failed.'),
+                              confirmButtonColor: '#dc3545' });
+              }
+          })
+          .catch(function () {
+              Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                          text: t('ops-gen-fail', 'Request failed.'), confirmButtonColor: '#dc3545' });
+          })
+          .finally(function () { btn.disabled = false; btn.innerHTML = orig; });
     });
 
     // Expose the batch loader so the reference-date picker (own <script> below)

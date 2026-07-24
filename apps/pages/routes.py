@@ -9129,6 +9129,140 @@ def api_ndf_summary_mark_sent():
         return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
 
 
+# TED release request (TEDs button on the Settlement Summary) — fixed recipients.
+_TED_EMAIL_TO = ['brazil.otc.ops@jpmorgan.com', 'brazil.otc.settlements@jpmorgan.com']
+
+
+def _ted_ssi_attachment(cpty):
+    """Newest file inside the counterparty's Electronic Inventory SSI folder
+    (ELECTRONIC_INVENTORY_ROOT/<cpty>/SSI), or None when the folder is missing
+    or empty."""
+    try:
+        folder = _ei_actual_dir_name(_ei_sanitize(cpty))
+        ssi_dir = os.path.join(ELECTRONIC_INVENTORY_ROOT, folder, 'SSI')
+        if not os.path.isdir(ssi_dir):
+            return None
+        files = [os.path.join(ssi_dir, f) for f in os.listdir(ssi_dir)
+                 if os.path.isfile(os.path.join(ssi_dir, f))]
+        return max(files, key=os.path.getmtime) if files else None
+    except Exception:
+        return None
+
+
+@blueprint.route('/api/ndf-summary/ted-email', methods=['POST'])
+def api_ndf_summary_ted_email():
+    """TEDs button: e-mail the TED release request to OTC Ops + Settlements.
+    A row qualifies when its netted Pay side is filled AND the counterparty's
+    default PAY account is NOT at Banco J.P. Morgan (BCO 376 → internal book
+    transfer, no TED). Split into two blocks by legal entity (BANCO / MGT);
+    each counterparty's SSI (newest file in Electronic Inventory/<cpty>/SSI)
+    goes attached. From = the shared OTC Tracker mailbox."""
+    from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from apps.pages import otc_emails
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    # Same universe and netting as the Settlement Summary, but grouped per
+    # (legal entity, counterparty) so each LE gets its own e-mail block.
+    trades = _ndfsum_collect(ref).get('email_trades') or []
+    groups = {}
+    for t in trades:
+        name = str(t.get('counterparty', '') or '').strip()
+        if not name or otc_emails._is_lawton(name) or otc_emails._is_jpmorgan(name):
+            continue
+        groups.setdefault((otc_emails._ndf_legal_class(t.get('legal')), name), []).append(t)
+
+    cpd = _cpd_load()
+    blocks = {'JPM': [], 'MGT': []}
+    for (le, name), items in sorted(groups.items()):
+        # Per-trade cash net of IR (sign-aware — same rule as the Summary card).
+        vals = [(r['settlement'] - r['tax'] if r['settlement'] >= 0
+                 else r['settlement'] + r['tax']) for r in items]
+        recv = sum(v for v in vals if v > 0)
+        pay = sum(v for v in vals if v < 0)
+        if str(items[0].get('net_type', '') or 'Total Net') == 'Total Net':
+            total = recv + pay
+            pay = total if total < 0 else 0.0
+        if not pay:                          # Pay column empty → nothing to wire
+            continue
+        spn = items[0].get('spn', '')
+        rec_cpd = _cpd_find(cpd, spn) if spn else None
+        banking = _bank_norm((rec_cpd or {}).get('BANKING'))
+        acct = _ndfsum_account_fmt(banking, 'PAY')     # same source as the ACCOUNT column
+        m = re.match(r'BCO:\s*(\d+)', acct or '')
+        if (m.group(1).lstrip('0') if m else '') == '376':
+            continue                         # account at Banco JPM → book transfer, no TED
+        blocks[le].append({'counterparty': name,
+                           'value': otc_emails._brl(abs(pay)),
+                           'account': acct or '—'})
+
+    rows_all = blocks['JPM'] + blocks['MGT']
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    if not rows_all:
+        return jsonify({'ok': True, 'count': 0,
+                        'message': 'Nenhuma TED a liberar para {} (sem Pay ou contas no BCO 376).'
+                        .format(ref_fmt)})
+
+    # SSI attachment per distinct counterparty (a name may appear in both LEs).
+    attach, missing_ssi = [], []
+    for name in sorted({r['counterparty'] for r in rows_all}, key=_fcst_norm):
+        p = _ted_ssi_attachment(name)
+        (attach.append(p) if p else missing_ssi.append(name))
+
+    html = render_template('pages/email-template-ted-release.html',
+                           ref_date_fmt=ref_fmt,
+                           banco_rows=blocks['JPM'], mgt_rows=blocks['MGT'],
+                           missing_ssi=missing_ssi,
+                           current_year=datetime.now().year)
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = "Liberar TED's - NDF - {}".format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = ', '.join(_TED_EMAIL_TO)
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Liberação de TED — please view in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(limg)
+        _attach_email_gradient(related)
+        msg.attach(related)
+        for p in attach:
+            with open(p, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', 'attachment',
+                            filename=os.path.basename(p))
+            msg.attach(part)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, _TED_EMAIL_TO, msg.as_string())
+    except Exception as e:
+        log.error('[ndf-ted] e-mail FAILED:\n%s', traceback.format_exc())
+        return jsonify({'ok': False,
+                        'error': 'E-mail failed: {}: {}'.format(type(e).__name__, e)}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'TED Release Sent', 'NDF Summary',
+                         '{} TED(s) — {}'.format(len(rows_all), ref.strftime('%Y-%m-%d')))
+    return jsonify({'ok': True, 'count': len(rows_all),
+                    'attached': len(attach), 'missing_ssi': missing_ssi})
+
+
 # ============================================================================
 #  MtM — Swap Mark-to-Market by line of business (+ COE)
 #  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /
