@@ -46,16 +46,20 @@
                         </td>
                     </tr>
 
+                    {# width="712" attribute is REQUIRED: Outlook (Word engine) sizes an
+                       <img> by its natural pixel width when there is no width attribute —
+                       the canvas PNGs are ~1440px wide, which stretched the whole container
+                       past the header's VML rect and left a solid band on its right. #}
                     {% if has_chart_product %}
                     <tr><td style="padding:8px 24px 0;text-align:center;">
-                        <img src="cid:fcst_product" alt="Settlements by Product"
-                             style="width:100%;max-width:720px;height:auto;border:0;display:block;margin:0 auto;"/>
+                        <img src="cid:fcst_product" alt="Settlements by Product" width="712"
+                             style="width:100%;max-width:712px;height:auto;border:0;display:block;margin:0 auto;"/>
                     </td></tr>
                     {% endif %}
                     {% if has_chart_entity %}
                     <tr><td style="padding:14px 24px 4px;text-align:center;">
-                        <img src="cid:fcst_entity" alt="Settlements by Entity"
-                             style="width:100%;max-width:720px;height:auto;border:0;display:block;margin:0 auto;"/>
+                        <img src="cid:fcst_entity" alt="Settlements by Entity" width="712"
+                             style="width:100%;max-width:712px;height:auto;border:0;display:block;margin:0 auto;"/>
                     </td></tr>
                     {% endif %}
 
