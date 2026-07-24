@@ -92,19 +92,24 @@
     border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
     display: grid; row-gap: .18rem;
 }
+/* Fixed columns (not auto): the header and each data row are separate grids, so
+   auto columns sized independently and the OPS/VALUE labels drifted off their
+   numbers. Fixed widths make every grid share the same column geometry. */
 .ops-recon-hdr, .ops-recon-row {
-    display: grid; grid-template-columns: 1fr auto auto; column-gap: .9rem; align-items: baseline;
+    display: grid; grid-template-columns: 1fr 2.75rem 7rem; column-gap: .6rem; align-items: baseline;
 }
 .ops-recon-hdr {
     font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
     color: var(--ins-secondary-color, #8a8a8f); padding-bottom: .1rem;
 }
+/* Right-align the OPS/VALUE headers so they sit over their right-aligned numbers. */
+.ops-recon-hdr span:nth-child(2), .ops-recon-hdr span:nth-child(3) { text-align: right; }
 .ops-recon-row { font-size: .8rem; padding: .1rem 0; }
 .ops-recon-row .ops-recon-side { font-weight: 600; color: var(--ins-secondary-color, #6e6e73); }
 .ops-recon-row [data-recon-b3c], .ops-recon-row [data-recon-intc] {
     font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ins-body-color);
 }
-.ops-recon-row .ops-num { min-width: 92px; font-weight: 700; color: var(--ins-body-color); }
+.ops-recon-row .ops-num { font-weight: 700; color: var(--ins-body-color); }
 /* Unmatched card gets a subtle amber ring — functional (scan the row of cards
    and the odd one out pops), not decorative. */
 .ops-recon.is-unmatched { box-shadow: inset 0 0 0 1px rgba(245,158,11,.5); }
