@@ -1234,6 +1234,7 @@ def send_verification_email(to_email, code, recipient_name):
             msg_related.attach(logo_mime)
         except Exception as e:
             print(f"Warning: Could not attach logo: {e}")
+    _attach_email_gradient(msg_related)
 
     msg.attach(msg_related)
 
@@ -1283,6 +1284,7 @@ def send_account_activated_email(to_email, first_name):
             print(f"Warning: Could not attach logo to activation email: {e}")
     else:
         print("Warning: logo not found, activation email will have no logo.")
+    _attach_email_gradient(msg_related)
 
     msg.attach(msg_related)
 
