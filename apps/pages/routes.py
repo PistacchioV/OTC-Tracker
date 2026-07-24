@@ -8976,13 +8976,11 @@ def api_ndf_summary_settlement_emails():
     drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
-    resp = _email_drafts_response(
-        drafts, zip_name='Avisos_Liquidacao_{}_NDF'.format(ref.strftime('%d%m%y')))
-    resp.headers['X-Counterparty-Count'] = str(
-        len({d.get('counterparty', '') for d in drafts}))
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+
     # Persist Generated per notified counterparty (day overlay) — best-effort ON
-    # PURPOSE: the drafts are already in the response, so a failure here is
-    # logged but never turns a successful generation into an error.
+    # PURPOSE: the drafts are already produced, so a failure here is logged but
+    # never turns a successful generation into an error.
     try:
         path, meta = _ndfsum_meta_load(ref)
         sid = session.get('user_sid', '')
@@ -8994,6 +8992,27 @@ def api_ndf_summary_settlement_emails():
         _ndfsum_meta_save(path, meta)
     except Exception:
         log.error('[ndf-summary] generated-status save failed:\n%s', traceback.format_exc())
+
+    # Up to 2 notices → the individual .eml files (open straight in Outlook, no
+    # unzip step); 3+ → a single .zip. A one-shot HTTP download can only carry one
+    # file, so the ≤2 case ships the .eml bytes as base64 in JSON and the page
+    # saves each one; the zip path is unchanged.
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts),
+                        'counterparties': cp_count, 'files': files})
+
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_NDF'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
     return resp
 
 

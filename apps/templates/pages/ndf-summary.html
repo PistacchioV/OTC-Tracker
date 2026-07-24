@@ -151,6 +151,15 @@
 @media (hover: hover) and (pointer: fine) {
     .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
 }
+/* Standard row-action button: a perfect circle of a fixed size, so every action
+   (Delete, Confirm, …) shares the exact same shape regardless of its icon. New
+   row actions should reuse .ops-row-act to stay on this format. */
+#ops-page .ops-row-act {
+    width: 32px; height: 32px; padding: 0; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+}
+#ops-page .ops-row-act > i { font-size: 1rem; }
 /* Row action + status control feedback */
 #ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
     transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
@@ -431,13 +440,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     // Settlement Summary rows also carry a Confirm action (Generated → Sent).
     function summaryActionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-success btn-sm rounded-circle ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-success btn-sm rounded-circle ops-row-act ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
 
@@ -622,6 +631,18 @@ document.addEventListener('DOMContentLoaded', function () {
     function decodeHtml(s) {
         var el = document.createElement('textarea'); el.innerHTML = String(s || ''); return el.value;
     }
+    function b64ToBlob(b64, mime) {
+        var bin = atob(b64), len = bin.length, bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+        return new Blob([bytes], { type: mime || 'application/octet-stream' });
+    }
+    function saveBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
     var genBtn = document.getElementById('opsGenerate');
     if (genBtn) genBtn.addEventListener('click', function () {
         var btn = this;
@@ -641,6 +662,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 icon: 'info', confirmButtonColor: '#0066cc' });
             return;
         }
+        // Only the selected counterparty rows had their notice(s) generated — flip
+        // just those status pills (display-time only; it resets on the next load).
+        function finishGenerated(count, cpties) {
+            dtSummary.rows(selIdx).every(function () {
+                var d = this.data();
+                d[2] = statusPill('Generated');
+                this.data(d);
+            });
+            dtSummary.draw(false);
+            if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Notices Generated'),
+                text: t('ops-gen-ok-text', '{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook.')
+                    .replace('{n}', count).replace('{c}', cpties),
+                icon: 'success', confirmButtonColor: '#0066cc', timer: 5000, timerProgressBar: true });
+        }
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-generate', 'Print Advice');
         fetch('/api/ndf-summary/settlement-emails', {
@@ -650,6 +685,16 @@ document.addEventListener('DOMContentLoaded', function () {
             var ct = (r.headers.get('Content-Type') || '');
             if (ct.indexOf('application/json') !== -1) {
                 return r.json().then(function (res) {
+                    // Up to 2 notices → individual .eml files (no zip): saved one by
+                    // one so each opens straight in Outlook.
+                    if (res && res.ok && res.files && res.files.length) {
+                        res.files.forEach(function (f, i) {
+                            // stagger the saves so the browser doesn't drop the 2nd
+                            setTimeout(function () { saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename); }, i * 350);
+                        });
+                        finishGenerated(res.count, res.counterparties);
+                        return;
+                    }
                     var ok = res && res.ok && (res.count || 0) === 0;
                     var msg = ok ? t('ops-gen-none', 'No settlements to notify for this date.')
                                  : ((res && res.error) || t('ops-gen-fail', 'Request failed.'));
@@ -658,29 +703,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     else alert(msg);
                 });
             }
+            // 3+ notices → a single .zip download.
             var count = r.headers.get('X-Draft-Count') || '0';
             var cpties = r.headers.get('X-Counterparty-Count') || '0';
             var m = /filename="?([^"]+)"?/.exec(r.headers.get('Content-Disposition') || '');
             var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
             return r.blob().then(function (blob) {
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url; a.download = fname;
-                document.body.appendChild(a); a.click(); a.remove();
-                setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-                // Only the selected counterparty rows had their notice(s)
-                // generated — flip just those status pills (display-time only, like
-                // the rest of the page: it resets on the next load).
-                dtSummary.rows(selIdx).every(function () {
-                    var d = this.data();
-                    d[2] = pill('Generated', 'text-bg-success');
-                    this.data(d);
-                });
-                dtSummary.draw(false);
-                if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Notices Generated'),
-                    text: t('ops-gen-ok-text', '{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook.')
-                        .replace('{n}', count).replace('{c}', cpties),
-                    icon: 'success', confirmButtonColor: '#0066cc', timer: 5000, timerProgressBar: true });
+                saveBlob(blob, fname);
+                finishGenerated(count, cpties);
             });
         }).catch(function () {
             if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
