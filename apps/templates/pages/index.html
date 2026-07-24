@@ -187,6 +187,7 @@
 /* ── HERO HEADER — painel gradiente escuro estilo Nova ── */
 #dash-page .dash-hero {
     position: relative; overflow: visible;
+    z-index: 20; /* acima dos stat cards (que criam stacking context via backdrop-filter) */
     border-radius: 26px;
     padding: 2.8rem 2.4rem;
     margin-bottom: 1.6rem;
