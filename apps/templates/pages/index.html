@@ -236,6 +236,25 @@
     color: #fff; font-size: 1.5rem; margin-bottom: 1.1rem;
     background: linear-gradient(135deg, var(--c1), var(--c2));
     box-shadow: 0 8px 20px color-mix(in oklab, var(--c2) 40%, transparent);
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Ícone anima ao passar o mouse no card (igual ao about) */
+@media (hover: hover) and (pointer: fine) {
+    #dash-page .dash-stat { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+    #dash-page .dash-stat:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 20px 46px color-mix(in oklab, var(--c2) 22%, transparent);
+    }
+    #dash-page .dash-stat:hover .dash-stat__icon {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 12px 26px color-mix(in oklab, var(--c2) 50%, transparent);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    #dash-page .dash-stat, #dash-page .dash-stat__icon { transition: none !important; }
+    #dash-page .dash-stat:hover { transform: none !important; }
+    #dash-page .dash-stat:hover .dash-stat__icon { transform: none !important; }
 }
 #dash-page .dash-stat__num {
     font-size: clamp(2.4rem, 3.4vw, 3.1rem) !important;
@@ -244,10 +263,12 @@
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 #dash-page .dash-stat__label { font-weight: 600; font-size: .92rem; margin: .4rem 0 0; color: var(--ins-secondary-color); }
-#dash-page .dash-stat--ndf   { --c1: #0066cc; --c2: #3b82f6; }
-#dash-page .dash-stat--opt   { --c1: #1a8a4a; --c2: #10b981; }
-#dash-page .dash-stat--swap  { --c1: #e0910f; --c2: #f59e0b; }
-#dash-page .dash-stat--total { --c1: #5e5ce6; --c2: #8b5cf6; }
+/* Paleta harmônica alinhada ao gradiente da marca: azul → índigo → violeta →
+   magenta (sem o amarelo que quebrava a harmonia no meio). */
+#dash-page .dash-stat--ndf   { --c1: #1866dc; --c2: #3d8bfd; }
+#dash-page .dash-stat--opt   { --c1: #4f46e5; --c2: #7c73ff; }
+#dash-page .dash-stat--swap  { --c1: #8b3ff0; --c2: #a855f7; }
+#dash-page .dash-stat--total { --c1: #c026d3; --c2: #e455f5; }
 [data-bs-theme="light"] #dash-page .dash-stat {
     background: linear-gradient(162deg, color-mix(in oklab, var(--c2) 9%, #fff), #fff) !important;
     border: 1px solid color-mix(in oklab, var(--c2) 16%, rgba(0,0,0,.05)) !important;
