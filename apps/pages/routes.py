@@ -8808,10 +8808,11 @@ def _ndfsum_account_fmt(banking, direction):
 
 
 def _ndfsum_fx_map(ref):
-    """{CETIP contract (upper) → 'vanilla' | 'other'} for the FX NDFs (Classe do
-    Ativo Subjacente = TAXAS DE CAMBIO) maturing on `ref`, read from the latest
-    Live Position NDF (DPOSICAO-TER). Vanilla = SISBACEN (direct/BACEN — same-day
-    T+0 folds in here), Other Publisher = FEEDER.
+    """{CETIP contract (upper) → 'vanilla' | 't0' | 'other'} for the FX NDFs
+    (Classe do Ativo Subjacente = TAXAS DE CAMBIO) maturing on `ref`, read from
+    the latest Live Position NDF (DPOSICAO-TER). Vanilla = SISBACEN with a
+    non-zero Código da Cotação, T+0 = SISBACEN with Cotação 0 (same-day fixing),
+    Other Publisher = FEEDER.
 
     This is the whitelist that keeps the B3 reconciliation honest: Operations B3
     mixes FX NDFs, commodity NDFs and others, so only contracts in this map count
@@ -8829,7 +8830,7 @@ def _ndfsum_fx_map(ref):
         return out
     fx = _fcst_norm('TAXAS DE CAMBIO')
     want_mat = ref.strftime('%Y%m%d')
-    tipo_key = contr_key = venc_key = classe_key = None
+    tipo_key = contr_key = venc_key = classe_key = cot_key = None
     for k in data[0].keys():
         kn = _fcst_norm(k)
         if kn in ('tipo do contrato', 'tipo de contrato'):
@@ -8840,6 +8841,15 @@ def _ndfsum_fx_map(ref):
             venc_key = k
         elif kn == 'classe do ativo subjacente':
             classe_key = k
+        elif kn in ('codigo da cotacao', 'codigo de cotacao'):
+            cot_key = k
+
+    def _is_zero_cot(rec):
+        v = str(rec.get(cot_key, '') if cot_key else '').strip().replace(',', '.')
+        try:
+            return float(v) == 0
+        except ValueError:
+            return True                          # empty / non-numeric → treated as 0
     for rec in data:
         if classe_key and _fcst_norm(str(rec.get(classe_key, ''))) != fx:
             continue
@@ -8850,7 +8860,10 @@ def _ndfsum_fx_map(ref):
         if not contrato:
             continue
         tipo = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
-        out[contrato] = 'other' if tipo == 'feeder' else 'vanilla'
+        if tipo == 'feeder':
+            out[contrato] = 'other'
+        else:
+            out[contrato] = 't0' if _is_zero_cot(rec) else 'vanilla'
     return out
 
 
@@ -8888,7 +8901,7 @@ def _ndfsum_collect(ref):
     #   B3 (CETIP)    = Operations B3 Resgate rows for those contracts → count + Σ Valor
     fx_map = _ndfsum_fx_map(ref)
     recon_acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
-                 for k in ('vanilla', 'other', 'total')}
+                 for k in ('vanilla', 't0', 'other', 'total')}
 
     _, _, contr_map = _ndfc_b3_maps(ref)
     trade, raws = [], []

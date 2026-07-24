@@ -221,7 +221,7 @@
 
     <!-- Reconciliation cards: B3 (CETIP) × Internal (Cockpit) per category.
          FX whitelist from the Live Position NDF keeps non-FX Operations B3 out. -->
-    <div class="row row-cols-xxl-3 row-cols-md-3 row-cols-1 g-2 ops-widgets">
+    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
         <div class="col">
             <div class="ops-widget ops-recon" data-cat="vanilla">
                 <div class="ops-widget__head">
@@ -241,6 +241,20 @@
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-news"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-other">Other Publisher</h3>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ops-widget ops-recon" data-cat="t0">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-calendar-event"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ndf-c-t0">T+0</h3>
                     <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-recon-grid">
