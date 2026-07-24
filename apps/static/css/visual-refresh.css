@@ -506,7 +506,18 @@ body.vr-nav-pinned .vr-pin-btn {
 
 /* ── Sidebar FIXA (pinned): docka e o conteúdo encolhe para caber ── */
 @media (min-width: 992px) {
-  body.vr-nav-pinned .sidenav-menu { transform: none !important; box-shadow: none; }
+  body.vr-nav-pinned .sidenav-menu {
+    transform: none !important;
+    box-shadow: none;
+    /* trava a largura fixa: neutraliza qualquer resíduo do modo "on-hover"
+       (que colapsava a sidebar e a expandia no hover). */
+    width: var(--ins-sidenav-width, 240px) !important;
+    min-width: var(--ins-sidenav-width, 240px) !important;
+    max-width: var(--ins-sidenav-width, 240px) !important;
+  }
+  /* garante os rótulos/menus sempre visíveis quando dockada */
+  body.vr-nav-pinned .sidenav-menu .menu-text,
+  body.vr-nav-pinned .sidenav-menu .menu-title { opacity: 1 !important; visibility: visible !important; }
   body.vr-nav-pinned .vr-nav-backdrop { opacity: 0 !important; visibility: hidden !important; }
   body.vr-nav-pinned .content-page {
     margin-left: var(--ins-sidenav-width, 240px) !important;
@@ -616,7 +627,7 @@ body.vr-nav-pinned .vr-pin-btn {
 .vr-navcfg {
   position: fixed; z-index: 1301; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: min(420px, calc(100vw - 2rem)); max-height: 82vh;
+  width: min(460px, calc(100vw - 2rem)); max-height: 84vh;
   display: flex; flex-direction: column;
   border-radius: 18px; border: 1px solid var(--vr-card-border);
   background: var(--ins-secondary-bg); box-shadow: var(--vr-card-shadow);
@@ -654,6 +665,28 @@ body.vr-nav-pinned .vr-pin-btn {
 .vr-navcfg__reset { color: var(--ins-secondary-color) !important; }
 .vr-navcfg__save { background: var(--vr-grad) !important; border: 0 !important; color: #fff !important; }
 .vr-navcfg__save:hover { filter: brightness(1.07); }
+.vr-navcfg__count { font-size: .78rem; font-weight: 600; color: var(--ins-secondary-color); margin-right: .35rem; }
+
+/* Grupos (seções) e subgrupos destacados dentro do editor */
+.vr-navcfg__group { margin-bottom: .35rem; }
+.vr-navcfg__group + .vr-navcfg__group { margin-top: .55rem; }
+.vr-navcfg__grouphead {
+  padding: .6rem .55rem .35rem;
+  font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  background: var(--vr-grad);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.vr-navcfg__sub {
+  margin: .3rem 0 .1rem;
+  font-size: .74rem; font-weight: 700; letter-spacing: .02em;
+  color: var(--ins-body-color); opacity: .72;
+  display: flex; align-items: center; gap: .4rem;
+}
+.vr-navcfg__sub::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: linear-gradient(135deg, #5e5ce6, #8b5cf6); flex: 0 0 auto;
+}
 
 /* ── Toasts de notificação — repaginados (glass + acento em gradiente) ── */
 .otc-notif-toast {

@@ -100,16 +100,43 @@
     sidenav.appendChild(pinBtn);
     if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
 
+    // Quando dockada, forçamos a sidebar para tamanho fixo "default" para
+    // neutralizar o modo nativo "on-hover" (que a deixa colapsada/expandindo
+    // no hover) — guardamos o tamanho anterior para restaurar ao desafixar.
+    var PREVSIZEKEY = "otc_nav_prevsize";
+    var htmlEl = document.documentElement;
+    function forceFixedSidenav() {
+      var cur = htmlEl.getAttribute("data-sidenav-size") || "default";
+      if (cur !== "default") {
+        try { localStorage.setItem(PREVSIZEKEY, cur); } catch (e) {}
+      }
+      htmlEl.setAttribute("data-sidenav-size", "default");
+    }
+    function restoreSidenavSize() {
+      var prev = "";
+      try { prev = localStorage.getItem(PREVSIZEKEY) || ""; } catch (e) {}
+      if (prev) htmlEl.setAttribute("data-sidenav-size", prev);
+    }
     function setPinned(on) {
       document.body.classList.toggle("vr-nav-pinned", on);
-      if (on) document.body.classList.remove("vr-nav-open"); // dockada, sem overlay
+      if (on) {
+        document.body.classList.remove("vr-nav-open"); // dockada, sem overlay
+        forceFixedSidenav();
+      } else {
+        restoreSidenavSize();
+      }
       try { localStorage.setItem(PINKEY, on ? "1" : "0"); } catch (e) {}
     }
     pinBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       setPinned(!document.body.classList.contains("vr-nav-pinned"));
     });
-    try { if (localStorage.getItem(PINKEY) === "1") document.body.classList.add("vr-nav-pinned"); } catch (e) {}
+    try {
+      if (localStorage.getItem(PINKEY) === "1") {
+        document.body.classList.add("vr-nav-pinned");
+        forceFixedSidenav();
+      }
+    } catch (e) {}
 
     btn.addEventListener("click", toggle);
     backdrop.addEventListener("click", close);
@@ -158,6 +185,10 @@
     var mt = a.querySelector(".menu-text");
     return (mt ? mt.textContent : a.textContent || "").trim();
   }
+  function langOf(a) {
+    var mt = a.querySelector(".menu-text[data-lang]") || a.querySelector("[data-lang]");
+    return mt ? (mt.getAttribute("data-lang") || "") : "";
+  }
   function parseItem(li) {
     var a = null;
     // âncora direta do item (não das subvias)
@@ -176,7 +207,7 @@
     }
     var href = a ? a.getAttribute("href") : null;
     var isLeaf = !!(href && href.charAt(0) === "/");
-    var node = { text: a ? textOf(a) : "", href: isLeaf ? href : null, children: [] };
+    var node = { text: a ? textOf(a) : "", lang: a ? langOf(a) : "", href: isLeaf ? href : null, children: [] };
     if (submenu) {
       Array.prototype.forEach.call(submenu.children, function (c) {
         if (c.classList && c.classList.contains("side-nav-item")) node.children.push(parseItem(c));
@@ -253,50 +284,105 @@
   }
 
   // ── Nav central PERSONALIZÁVEL: cada usuário escolhe os atalhos ────────────
+  // As opções são construídas a partir da PRÓPRIA sidebar (todas as páginas,
+  // com seus grupos e subgrupos), então o editor sempre reflete o menu real.
   function initTopNavCustom() {
     var nav = document.getElementById("vr-topnav");
     if (!nav) return;
     var SID = (nav.getAttribute("data-sid") || "").trim().toUpperCase();
     var KEY = "otc_topnav_" + (SID || "anon");
     var MAX = 7;
-
-    // label = default EN; lang = chave data-lang (traduzida em br/en/es)
-    var OPTIONS = [
-      { href: "/dashboard", label: "Dashboard", lang: "vr-nav-dashboard" },
-      { href: "/live-position-ndf", label: "Live Position", lang: "vr-nav-liveposition" },
-      { href: "/pending-confirmation", label: "Pending", lang: "vr-nav-pending" },
-      { href: "/reconciliation-payrec", label: "Pay/Rec", lang: "vr-nav-payrec" },
-      { href: "/reconciliation-comitente", label: "Comitente", lang: "vr-nav-comitente" },
-      { href: "/reference-data", label: "Reference Data", lang: "vr-nav-refdata" },
-      { href: "/new_deals-ndf-fwdstart", label: "New Deals", lang: "vr-nav-newdeals" },
-      { href: "/control-panel", label: "Control Panel", lang: "vr-nav-controlpanel" },
-      { href: "/electronic-inventory", label: "Electronic Inventory", lang: "vr-nav-einventory" },
-      { href: "/ndf-summary", label: "NDF Summary", lang: "vr-nav-ndfsummary" },
-      { href: "/otm-settlements", label: "OTM Settlements", lang: "vr-nav-otm" },
-      { href: "/accrual-swap", label: "Accrual", lang: "vr-nav-accrual" },
-      { href: "/mtm-swap", label: "MtM", lang: "vr-nav-mtm" },
-      { href: "/manual-confirmation", label: "Manual Confirmation", lang: "vr-nav-manualconf" },
-      { href: "/cgd", label: "CGD", lang: "vr-nav-cgd" },
-      { href: "/index-b3", label: "Index B3", lang: "vr-nav-indexb3" },
-      { href: "/metrics-pending-confirmation", label: "Metrics", lang: "vr-nav-metrics" },
-      { href: "/users-roles", label: "Users", lang: "vr-nav-users" }
-    ];
     var DEFAULTS = ["/dashboard", "/live-position-ndf", "/pending-confirmation", "/reconciliation-payrec", "/reference-data"];
     var allowed = null; // {href:1} ou null = tudo liberado
 
-    function optOf(h) { for (var i = 0; i < OPTIONS.length; i++) if (OPTIONS[i].href === h) return OPTIONS[i]; return null; }
+    // ── Constrói a árvore de seções/subgrupos/páginas a partir da sidebar ──
+    var SECTIONS = null; // [{ title, lang, nodes:[node,...] }]
+    var OPTMAP = {};     // href -> { href, text, lang }
+    var ORDER = [];      // hrefs em ordem da sidebar (para salvar consistente)
+
+    function pickSource() {
+      var lists = document.querySelectorAll(".sidenav-menu .side-nav");
+      var best = null, bestN = -1;
+      Array.prototype.forEach.call(lists, function (ul) {
+        var n = ul.querySelectorAll("a[href^='/']").length;
+        if (n > bestN) { bestN = n; best = ul; }
+      });
+      return best;
+    }
+
+    function buildSections() {
+      if (SECTIONS) return SECTIONS;
+      SECTIONS = [];
+      OPTMAP = {}; ORDER = [];
+      var src = pickSource();
+      if (!src) return SECTIONS;
+      var current = null, stopped = false;
+      Array.prototype.forEach.call(src.children, function (li) {
+        if (!li.classList) return;
+        if (li.classList.contains("side-nav-title")) {
+          var t = (li.textContent || "").trim();
+          if (/^components/i.test(t) || /componentes/i.test(t)) { stopped = true; current = null; return; }
+          if (stopped) return;
+          current = { title: t, lang: li.getAttribute("data-lang") || "", nodes: [] };
+          SECTIONS.push(current);
+        } else if (!stopped && current && li.classList.contains("side-nav-item")) {
+          current.nodes.push(parseItem(li));
+        }
+      });
+      // indexa todas as folhas (páginas) na ordem da sidebar, guardando o
+      // ramo pai (para desambiguar rótulos genéricos no nav de topo).
+      function walk(node, parent) {
+        if (node.href) {
+          if (!OPTMAP[node.href]) {
+            OPTMAP[node.href] = {
+              href: node.href, text: node.text, lang: node.lang,
+              parentText: parent ? parent.text : "", parentLang: parent ? parent.lang : ""
+            };
+            ORDER.push(node.href);
+          }
+        } else { node.children.forEach(function (c) { walk(c, node); }); }
+      }
+      SECTIONS.forEach(function (s) { s.nodes.forEach(function (n) { walk(n, null); }); });
+      // conta rótulos duplicados para saber quais precisam do contexto do pai
+      var counts = {};
+      ORDER.forEach(function (h) { var t = (OPTMAP[h].text || "").toLowerCase(); counts[t] = (counts[t] || 0) + 1; });
+      // rótulos ambíguos por si só (precisam do nome do grupo pai)
+      var GENERIC = { "main": 1, "summary": 1, "ndf": 1, "option": 1, "options": 1, "swap": 1, "overview": 1, "detail": 1, "list": 1 };
+      ORDER.forEach(function (h) {
+        var o = OPTMAP[h];
+        var t = (o.text || "").toLowerCase();
+        var ambiguous = counts[t] > 1 || GENERIC[t] === 1;
+        // "Main" isolado fica melhor mostrando só o grupo pai (ex.: Pending Confirmation)
+        if (t === "main" && o.parentText) {
+          o.disp = [{ text: o.parentText, lang: o.parentLang }];
+        } else if (ambiguous && o.parentText) {
+          o.disp = [{ text: o.parentText, lang: o.parentLang }, { text: o.text, lang: o.lang }];
+        } else {
+          o.disp = [{ text: o.text, lang: o.lang }];
+        }
+      });
+      return SECTIONS;
+    }
+
+    function optOf(h) { return OPTMAP[h] || null; }
     function isAllowed(h) { return !allowed || allowed[h] === 1; }
     function load() { try { var v = JSON.parse(localStorage.getItem(KEY) || "null"); if (Array.isArray(v)) return v; } catch (e) {} return DEFAULTS.slice(); }
     function saveList(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
 
     function render() {
+      buildSections();
       var chosen = load().filter(function (h) { return optOf(h) && isAllowed(h); });
-      if (!chosen.length) chosen = DEFAULTS.filter(isAllowed);
+      if (!chosen.length) chosen = DEFAULTS.filter(function (h) { return optOf(h) && isAllowed(h); });
       var path = window.location.pathname || "/";
       var html = chosen.map(function (h) {
         var o = optOf(h);
         var active = (path === h || path.indexOf(h) === 0);
-        return '<a href="' + esc(h) + '" data-lang="' + o.lang + '"' + (active ? ' class="vr-active"' : "") + ">" + esc(o.label) + "</a>";
+        var disp = o.disp || [{ text: o.text, lang: o.lang }];
+        var inner = disp.map(function (d, i) {
+          var langAttr = d.lang ? ' data-lang="' + esc(d.lang) + '"' : "";
+          return (i ? " " : "") + "<span" + langAttr + ">" + esc(d.text) + "</span>";
+        }).join("");
+        return '<a href="' + esc(h) + '"' + (active ? ' class="vr-active"' : "") + ">" + inner + "</a>";
       }).join("");
       html += '<button class="vr-nav-edit" id="vr-nav-edit" type="button" title="Customize menu" aria-label="Customize menu"><i data-lucide="sliders-horizontal"></i></button>';
       nav.innerHTML = html;
@@ -306,9 +392,35 @@
       if (eb) eb.addEventListener("click", openEditor);
     }
 
+    // Renderiza um nó do editor: folha => checkbox; ramo => subgrupo destacado.
+    function renderEditNode(node, current, depth) {
+      if (node.href) {
+        if (!isAllowed(node.href)) return "";
+        var on = current.indexOf(node.href) !== -1;
+        var langAttr = node.lang ? ' data-lang="' + esc(node.lang) + '"' : "";
+        return '<label class="vr-navcfg__item" style="padding-left:' + (10 + depth * 14) + 'px">' +
+                 '<input type="checkbox" value="' + esc(node.href) + '"' + (on ? " checked" : "") + ">" +
+                 "<span" + langAttr + ">" + esc(node.text) + "</span></label>";
+      }
+      if (!node.children.length) return "";
+      var inner = node.children.map(function (c) { return renderEditNode(c, current, depth + 1); }).join("");
+      if (!inner) return "";
+      var langAttr2 = node.lang ? ' data-lang="' + esc(node.lang) + '"' : "";
+      return '<div class="vr-navcfg__sub" style="padding-left:' + (10 + depth * 14) + 'px"' + langAttr2 + ">" + esc(node.text) + "</div>" + inner;
+    }
+
     function openEditor() {
+      buildSections();
       var current = load();
-      var opts = OPTIONS.filter(function (o) { return isAllowed(o.href); });
+      var groupsHtml = SECTIONS.map(function (sec) {
+        var body = sec.nodes.map(function (n) { return renderEditNode(n, current, 0); }).join("");
+        if (!body) return "";
+        var langAttr = sec.lang ? ' data-lang="' + esc(sec.lang) + '"' : "";
+        var label = sec.title || "Menu";
+        if (/^main$/i.test(label)) label = "Home";
+        return '<div class="vr-navcfg__group"><div class="vr-navcfg__grouphead"' + langAttr + ">" + esc(label) + "</div>" + body + "</div>";
+      }).join("");
+
       var backdrop = document.createElement("div");
       backdrop.className = "vr-navcfg-backdrop";
       var panel = document.createElement("div");
@@ -316,22 +428,20 @@
       panel.innerHTML =
         '<div class="vr-navcfg__head"><span data-lang="vr-cfg-title">Customize menu</span><button class="vr-navcfg__x" type="button" aria-label="Close">&times;</button></div>' +
         '<div class="vr-navcfg__hint" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max ' + MAX + ").</div>" +
-        '<div class="vr-navcfg__body">' +
-          opts.map(function (o) {
-            var on = current.indexOf(o.href) !== -1;
-            return '<label class="vr-navcfg__item"><input type="checkbox" value="' + esc(o.href) + '"' + (on ? " checked" : "") + '><span data-lang="' + o.lang + '">' + esc(o.label) + "</span></label>";
-          }).join("") +
-        "</div>" +
-        '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button" data-lang="vr-cfg-reset">Default</button><span class="vr-navcfg__spacer"></span><button class="vr-navcfg__cancel" type="button" data-lang="vr-cfg-cancel">Cancel</button><button class="vr-navcfg__save" type="button" data-lang="vr-cfg-save">Save</button></div>';
+        '<div class="vr-navcfg__body">' + groupsHtml + "</div>" +
+        '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button" data-lang="vr-cfg-reset">Default</button><span class="vr-navcfg__spacer"></span><span class="vr-navcfg__count"></span><button class="vr-navcfg__cancel" type="button" data-lang="vr-cfg-cancel">Cancel</button><button class="vr-navcfg__save" type="button" data-lang="vr-cfg-save">Save</button></div>';
       document.body.appendChild(backdrop);
       document.body.appendChild(panel);
       applyI18n();
 
+      var countEl = panel.querySelector(".vr-navcfg__count");
       function close() { backdrop.remove(); panel.remove(); document.removeEventListener("keydown", onKey); }
       function onKey(e) { if (e.key === "Escape") close(); }
       function syncMax() {
-        var atMax = panel.querySelectorAll("input[type=checkbox]:checked").length >= MAX;
+        var n = panel.querySelectorAll("input[type=checkbox]:checked").length;
+        var atMax = n >= MAX;
         panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) { if (!cb.checked) cb.disabled = atMax; });
+        if (countEl) countEl.textContent = n + "/" + MAX;
       }
       document.addEventListener("keydown", onKey);
       backdrop.addEventListener("click", close);
@@ -344,9 +454,9 @@
       });
       panel.querySelector(".vr-navcfg__save").addEventListener("click", function () {
         var chosen = [];
-        OPTIONS.forEach(function (o) {
-          var cb = panel.querySelector('input[value="' + o.href + '"]');
-          if (cb && cb.checked) chosen.push(o.href);
+        ORDER.forEach(function (h) {
+          var cb = panel.querySelector('input[value="' + h + '"]');
+          if (cb && cb.checked) chosen.push(h);
         });
         saveList(chosen);
         render();
