@@ -155,9 +155,21 @@
     #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
 
     /* Upload modal — make the liquid-glass panel less translucent (more readable)
-       than the shared component default, scoped to this modal only. */
-    #eiUploadModal .modal-content.liquid-glass { background: rgba(255, 255, 255, 0.92) !important; }
-    [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass { background: rgba(26, 29, 35, 0.94) !important; }
+       than the shared component default, scoped to this modal only. The theme's
+       backdrop-filter blur is also disabled here (panel + full-screen backdrop):
+       on weak corporate GPUs it made opening this modal take several seconds
+       with just a blurred screen showing. The panel is 92% opaque anyway. */
+    #eiUploadModal .modal-content.liquid-glass {
+        background: rgba(255, 255, 255, 0.92) !important;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
+    [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass {
+        background: rgba(26, 29, 35, 0.94) !important;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
+    body.ei-upload-open .modal-backdrop {
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
 
     /* Confirmations folder navigator (left rail) ----------------------- */
     #ei-page .ei-fold-tree { margin-top: .25rem; }
@@ -495,5 +507,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- toast() is a no-op without Swal — every warning/success was silently swallowed. -->
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260724a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260724b"></script>
 {% endblock extra_javascript %}

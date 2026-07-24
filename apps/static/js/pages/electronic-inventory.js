@@ -778,8 +778,13 @@
         // that now covers the Upload button's position, and the OS file picker
         // opens "directly" — which is exactly what some users reported.
         upModalReady = false;
+        // body.ei-upload-open scopes the backdrop-filter kill-switch (see the
+        // template CSS) to this modal only — added on 'show' so the backdrop is
+        // already blur-free on its very first paint.
+        $('eiUploadModal').addEventListener('show.bs.modal', function () { document.body.classList.add('ei-upload-open'); });
         $('eiUploadModal').addEventListener('shown.bs.modal', function () { upModalReady = true; });
         $('eiUploadModal').addEventListener('hide.bs.modal', function () { upModalReady = false; });
+        $('eiUploadModal').addEventListener('hidden.bs.modal', function () { document.body.classList.remove('ei-upload-open'); });
         $('eiUploadBtn').addEventListener('click', function () {
             if (!state.client) { toast('warning', 'Select a counterparty first', 'Choose one on the left, then upload.'); return; }
             $('eiUpClient').value = state.client;
