@@ -18,19 +18,17 @@
             <td align="center">
 
                 <!-- Email Container -->
+                <!--[if mso]>
+                <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="600"><tr><td width="600" style="width:600px;">
+                <![endif]-->
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); overflow: hidden;">
 
-                    <!-- Header -->
-                    <tr>
-                        <td style="background-color: #6658dd; padding: 28px; text-align: center;">
-                            <a href="#">
-                                <img alt="OTC Tracker"
-                                    height="80"
-                                    src="cid:otc_logo"
-                                    style="height: 80px; width: auto; display: inline-block; border: 0;" />
-                            </a>
-                        </td>
-                    </tr>
+                    <!-- ── Header ─────────────────────────────────── -->
+                    {% set header_title = 'Verification Code' %}
+                    {% set header_subtitle = 'Sign-in security &nbsp;·&nbsp; <strong style="color:#ffffff;">OTC Tracker</strong>' %}
+                    {% set header_logo_height = 72 %}
+                    {% set header_width = 600 %}
+                    {% include 'partials/email-gradient-header.html' %}
 
                     <!-- Body -->
                     <tr>
@@ -91,6 +89,9 @@
                     </tr>
 
                 </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
 
             </td>
         </tr>

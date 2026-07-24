@@ -1,0 +1,236 @@
+{
+  "bankers": [
+    {
+      "name": "Ana Katayama",
+      "email": "ana.katayama@jpmchase.com"
+    },
+    {
+      "name": "Andre Regula",
+      "email": "andre.regula@jpmorgan.com"
+    },
+    {
+      "name": "Andre Schwartzman",
+      "email": "andre.schwartzman@jpmorgan.com"
+    },
+    {
+      "name": "Andreia Choi",
+      "email": "andreia.choi@jpmorgan.com"
+    },
+    {
+      "name": "Antonio Mariz",
+      "email": "antonio.v.mariz@jpmchase.com"
+    },
+    {
+      "name": "Arthur Pego",
+      "email": "arthur.pego@jpmorgan.com"
+    },
+    {
+      "name": "Bruno Mello",
+      "email": "bruno.mello@jpmorgan.com"
+    },
+    {
+      "name": "Camila Bludeni",
+      "email": "camila.bludeni@jpmorgan.com"
+    },
+    {
+      "name": "Carolina Pires",
+      "email": "carolinasena.o.pires@jpmorgan.com"
+    },
+    {
+      "name": "Claudio Junior",
+      "email": "claudio.m.junior@jpmorgan.com"
+    },
+    {
+      "name": "Daniel Pineschi",
+      "email": "daniel.pineschi@jpmchase.com"
+    },
+    {
+      "name": "Debora Darin",
+      "email": "debora.darin@jpmorgan.com"
+    },
+    {
+      "name": "Diogo Yoshinaga",
+      "email": "diogo.yoshinaga@jpmorgan.com"
+    },
+    {
+      "name": "Edoardo Freschet",
+      "email": "edoardo.freschet@jpmorgan.com"
+    },
+    {
+      "name": "Erik Pontes",
+      "email": "erik.p.pontes@jpmorgan.com"
+    },
+    {
+      "name": "Fabiano Fernandes",
+      "email": "fabiano.fernandes@jpmchase.com"
+    },
+    {
+      "name": "Felipe Esper",
+      "email": "felipe.esper@jpmorgan.com"
+    },
+    {
+      "name": "Felipe Ferraz",
+      "email": "felipe.ferraz@jpmorgan.com"
+    },
+    {
+      "name": "Fernando Moreira",
+      "email": "fernando.a.moreira@jpmorgan.com"
+    },
+    {
+      "name": "Gabriel Mendes",
+      "email": "gabriel.mendes@jpmorgan.com"
+    },
+    {
+      "name": "Gabriel Sousa",
+      "email": "gabriel.j.sousa@jpmorgan.com"
+    },
+    {
+      "name": "Giovana Alves",
+      "email": "giovana.ds.alves@jpmchase.com"
+    },
+    {
+      "name": "Giulia Menegon",
+      "email": "giulia.menegon@jpmorgan.com"
+    },
+    {
+      "name": "Guilherme Rissi",
+      "email": "guilherme.rissi@jpmorgan.com"
+    },
+    {
+      "name": "Isabela Bacchi",
+      "email": "isabela.p.bacchi@jpmorgan.com"
+    },
+    {
+      "name": "Isabela Ramos",
+      "email": "isabela.ramos@jpmchase.com"
+    },
+    {
+      "name": "Isabella Brunele",
+      "email": "isabella.brunele@jpmchase.com"
+    },
+    {
+      "name": "Isabella Giovanelli",
+      "email": "isabella.giovanelli@jpmorgan.com"
+    },
+    {
+      "name": "Joao Camargo",
+      "email": "joao.camargo@jpmorgan.com"
+    },
+    {
+      "name": "Joao Sousa",
+      "email": "joao.sousa@jpmorgan.com"
+    },
+    {
+      "name": "Julia Chohfi",
+      "email": "julia.chohfi@jpmorgan.com"
+    },
+    {
+      "name": "Lais Zacarias",
+      "email": "lais.zacarias@jpmorgan.com"
+    },
+    {
+      "name": "Liana Pollastri",
+      "email": "liana.pollastri@jpmorgan.com"
+    },
+    {
+      "name": "Lucca Maciel",
+      "email": "lucca.maciel@jpmorgan.com"
+    },
+    {
+      "name": "Luciana Filoni",
+      "email": "luciana.filoni@jpmorgan.com"
+    },
+    {
+      "name": "Luciana Furtado",
+      "email": "luciana.furtado@jpmorgan.com"
+    },
+    {
+      "name": "Lucianna Lorenzo",
+      "email": "lucianna.lorenzo@jpmorgan.com"
+    },
+    {
+      "name": "Marcelo Afonseca",
+      "email": "marcelo.afonseca@jpmorgan.com"
+    },
+    {
+      "name": "Marcilio Zanoni",
+      "email": "marcilio.zanonijunior@jpmorgan.com"
+    },
+    {
+      "name": "Michel Maluf",
+      "email": "michel.berbari@jpmorgan.com"
+    },
+    {
+      "name": "Nathalia Ferreira",
+      "email": "nathalia.ferreira@jpmorgan.com"
+    },
+    {
+      "name": "Nathalia Ramos",
+      "email": "nathalia.ramos@jpmorgan.com"
+    },
+    {
+      "name": "Nicolas Belmonte",
+      "email": "nicolas.belmonte@jpmorgan.com"
+    },
+    {
+      "name": "Nicolas Guevara",
+      "email": "nicolas.a.guevara@jpmorgan.com"
+    },
+    {
+      "name": "Nikolas Dorto",
+      "email": "nikolas.dorto@jpmorgan.com"
+    },
+    {
+      "name": "Paulo Samelo",
+      "email": "paulo.samelo@jpmchase.com"
+    },
+    {
+      "name": "Rafael Matos",
+      "email": "rafael.matos@jpmchase.com"
+    },
+    {
+      "name": "Rafaela Negrão",
+      "email": "rafaela.negrao@jpmorgan.com"
+    },
+    {
+      "name": "Raone Turco",
+      "email": "raone.turco@jpmorgan.com"
+    },
+    {
+      "name": "Rhadur Domingos",
+      "email": "rhadur.domingos@jpmorgan.com"
+    },
+    {
+      "name": "Roberto Michels",
+      "email": "roberto.michels@jpmorgan.com"
+    },
+    {
+      "name": "Rodrigo Carmo",
+      "email": "rodrigo.carmo@jpmorgan.com"
+    },
+    {
+      "name": "Rodrigo Choi",
+      "email": "rodrigo.h.choi@jpmorgan.com"
+    },
+    {
+      "name": "Thaina Picado",
+      "email": "thaina.picado@jpmchase.com"
+    },
+    {
+      "name": "Thiago Eloy",
+      "email": "thiago.eloy@jpmorgan.com"
+    },
+    {
+      "name": "Thiago Martinez",
+      "email": "thiago.martinez@jpmorgan.com"
+    },
+    {
+      "name": "Vinicius Almeida",
+      "email": "vinicius.almeida@jpmorgan.com"
+    },
+    {
+      "name": "Willian Melo",
+      "email": "willian.hara@jpmorgan.com"
+    }
+  ]
+}

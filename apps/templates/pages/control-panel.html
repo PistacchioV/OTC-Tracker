@@ -41,7 +41,10 @@
     border-radius: 18px;
     padding: 1.5rem 1.5rem 1.35rem;
     height: 100%;
-    min-height: 290px;
+    /* Floor sized to the tallest card (Settlement Forecast: TO + CC + Reference
+       date). Every card shares it so the grid stays visually uniform even though
+       cards carry a different number of fields. */
+    min-height: 480px;
     display: flex;
     flex-direction: column;
     transition: transform 240ms var(--cp-ease),
@@ -228,31 +231,15 @@
         Central de rotinas operacionais
     </p>
 
-    <!-- ═══ ROTINAS (grade 2×2: cada linha de cards tem altura igual) ═══ -->
-    <!-- Cabeçalhos das seções (linha própria, alinhados com as colunas de cards) -->
-    <div class="row g-3 g-xl-4">
-        <div class="col-12 col-lg-6">
-            <div class="cp-reveal mb-3" data-cp-hdr="filesaving">
-                <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
-                <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
-                <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
-                    Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
-                </p>
-            </div>
-        </div>
-        <div class="col-12 col-lg-6">
-            <div class="cp-reveal mb-3" data-cp-hdr="reporting">
-                <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
-                <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
-                <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
-                    Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
-                </p>
-            </div>
-        </div>
+    <!-- ═══ ROTINAS — duas seções: header full-width + os cards da seção ═══ -->
+    <!-- ── Section: File-Saving Routines ────────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="filesaving">
+        <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
+            Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
+        </p>
     </div>
-
-    <!-- Cards em grade: cetip+forecast (linha 1) · daily+contacts (linha 2).
-         Cada par compartilha a altura da linha (align-items:stretch do Bootstrap). -->
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="filesaving">
@@ -263,7 +250,21 @@
                     <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
                         Reads the raw CETIP files from the B3 daily download folder, renames them to the
                         standard convention and saves them into the settlement folders used by the KPI.
+                        The TO of each distribution e-mail is editable below (saved for the next runs);
+                        OTC Ops stays in CC.
                     </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-cetip-ss-to">TO — Sales Support</label>
+                        <input type="text" id="cp-cetip-ss-to" data-payload-key="ss_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-cetip-cem-to">TO — CEM Latam BA</label>
+                        <input type="text" id="cp-cetip-cem-to" data-payload-key="cem_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
                         <div class="cp-datefield" id="cpDateWrap">
@@ -290,38 +291,6 @@
                                 <span data-lang="cp-cetip-run-dist">Send to other areas</span>
                             </button>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="forecast">
-                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
-                        Reads the CETIP position files, projects the upcoming settlements by business
-                        day and entity, and e-mails the consolidated forecast report to OTC Ops.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-ref-date">Reference date</label>
-                        <div class="cp-datefield" id="cpFcstDateWrap">
-                            <input type="text" id="cp-fcst-date" data-input readonly
-                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
-                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
-                        </div>
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
-                        </span>
-                        <button type="button" class="cp-run-btn"
-                                data-forecast-run
-                                data-date-input="cp-fcst-date">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -360,6 +329,60 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ── Section: Settlement Reporting ────────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="reporting">
+        <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
+            Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
+        </p>
+    </div>
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="forecast">
+                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
+                        Reads the CETIP position files, projects the upcoming settlements by business
+                        day and entity, and e-mails the forecast report. Set the TO / CC once — they
+                        are saved and reused on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-fcst-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-fcst-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpFcstDateWrap">
+                            <input type="text" id="cp-fcst-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-fcst-meta">CETIP positions → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-forecast-run
+                                data-date-input="cp-fcst-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
@@ -385,6 +408,102 @@
                                 data-file-input="cp-contacts-file">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="dailymetric">
+                    <div class="cp-card__icon"><i class="ti ti-mail-check"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-dm-title">Daily Metric — Outstanding Confirmation Brazil OTC</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-dm-desc">
+                        E-mails the Outstanding Confirmation Brazil OTC daily metric to a saved recipient
+                        list. Set the recipients (TO) once — they are saved and reused on every run, so you
+                        don't have to retype them. The reference date is always today.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-dm-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" data-fixed>
+                            <input type="text" id="cp-dm-date" data-input readonly
+                                   class="form-control form-control-sm" value="{{ today_fmt }}">
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-dm-meta">Saved recipients → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-metric-run data-date-input="cp-dm-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="weeklyescalation">
+                    <div class="cp-card__icon"><i class="ti ti-alert-triangle"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-we-desc">
+                        Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
+                        (CEM / EDG), grouped by banker and broken down by company. Set the TO / CC once —
+                        they are saved and reused on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-we-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-we-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-escalation-run>
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="signaturecollection">
+                    <div class="cp-card__icon"><i class="ti ti-writing-sign"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-sc-title">Pending Signature Confirmations — Collection</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-sc-desc">
+                        Builds one editable e-mail draft per counterparty for confirmations pending
+                        signature (Pending Digital Signature / Pending Original), segregated from the
+                        Pending Confirmation base. TO = the counterparty's confirmation contacts;
+                        CC = that counterparty's bankers + Brazil OTC Ops + IS Trade Doc. Downloads a
+                        .zip of .eml drafts — nothing is sent automatically.
+                    </p>
+                    <div class="cp-field">
+                        <span class="cp-card__meta" id="cp-sc-summary" data-lang="cp-sc-loading">Loading…</span>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-download"></i><span data-lang="cp-sc-meta">One .eml per counterparty → .zip</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-sigcoll-generate>
+                            <i class="ti ti-download"></i>
+                            <span data-lang="cp-sc-generate">Generate drafts</span>
                         </button>
                     </div>
                 </div>
@@ -476,6 +595,13 @@ function cpRunRoutine(btn) {
     // (e.g. Save CETIP Files: 'save' vs 'distribute').
     var stage = btn.getAttribute('data-stage');
     if (stage) body.stage = stage;
+    // Optional extra fields: any input in the same card carrying data-payload-key
+    // is sent under that key (e.g. the CETIP distribution TO lists) — the values
+    // travel with the run itself, so no blur/save race.
+    var cardEl = btn.closest('.cp-card');
+    if (cardEl) cardEl.querySelectorAll('[data-payload-key]').forEach(function (el) {
+        body[el.getAttribute('data-payload-key')] = el.value || '';
+    });
 
     fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(body) })
@@ -626,6 +752,217 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// ── Daily Metric card: persisted TO/CC/BCC recipients + Run (e-mails the metric
+//    to the saved list). Recipients load on open, auto-save on blur, and are
+//    saved again right before each Run so the latest values are used. ──────────
+(function () {
+    var toEl   = document.getElementById('cp-dm-to');
+    var dateEl = document.getElementById('cp-dm-date');
+    var runBtn = document.querySelector('[data-metric-run]');
+    if (!toEl || !runBtn) return;
+    var REC_URL = '/api/control-panel/daily-metric/recipients';
+    var RUN_URL = '/api/control-panel/daily-metric/run';
+
+    // Load the saved recipients on page open.
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success) return;
+            toEl.value = d.to || '';
+        })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ to: toEl.value })     // CC/BCC removed — TO only
+        }).catch(function () {});
+    }
+
+    // Persist on blur so the addresses survive even without running.
+    toEl.addEventListener('blur', saveRecipients);
+
+    runBtn.addEventListener('click', function () {
+        if (runBtn.disabled) return;
+        var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        runBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+
+        var body = {};
+        if (dateEl && dateEl.value) {
+            var m = dateEl.value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            body.date = m ? (m[3] + '-' + m[2] + '-' + m[1]) : dateEl.value;
+        }
+        // Save the latest recipients first, then run.
+        saveRecipients().then(function () {
+            return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin', body: JSON.stringify(body) });
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success !== false) {
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+            } else {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                            confirmButtonColor: '#0066cc' });
+            }
+        })
+        .catch(function () {
+            Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                        html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+        })
+        .finally(function () {
+            runBtn.disabled = false;
+            if (label) label.textContent = orig;
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
+        });
+    });
+})();
+
+// ── Save CETIP Files card: persisted TO per distribution e-mail ──────────────
+// Sales Support / CEM Latam TO lists load from the server (defaults = the old
+// hardcoded addresses) and save on blur; the Run buttons also send them in the
+// POST payload via data-payload-key, so the run always uses what's on screen.
+(function () {
+    var ssEl  = document.getElementById('cp-cetip-ss-to');
+    var cemEl = document.getElementById('cp-cetip-cem-to');
+    if (!ssEl || !cemEl) return;
+    var REC_URL = '/api/control-panel/cetip-settlement/recipients';
+
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!d || !d.success) return;
+                             ssEl.value = d.ss_to || ''; cemEl.value = d.cem_to || ''; })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ ss_to: ssEl.value, cem_to: cemEl.value })
+        }).catch(function () {});
+    }
+    [ssEl, cemEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+})();
+
+// ── Weekly Escalation card: persisted TO/CC + Run (CEM/EDG > 30 days e-mail) ──
+(function () {
+    var toEl   = document.getElementById('cp-we-to');
+    var ccEl   = document.getElementById('cp-we-cc');
+    var runBtn = document.querySelector('[data-escalation-run]');
+    if (!toEl || !ccEl || !runBtn) return;
+    var REC_URL = '/api/control-panel/weekly-escalation/recipients';
+    var RUN_URL = '/api/control-panel/weekly-escalation/run';
+
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!d || !d.success) return; toEl.value = d.to || ''; ccEl.value = d.cc || ''; })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify({ to: toEl.value, cc: ccEl.value })
+        }).catch(function () {});
+    }
+    [toEl, ccEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+
+    runBtn.addEventListener('click', function () {
+        if (runBtn.disabled) return;
+        var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        runBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        saveRecipients().then(function () {
+            return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin', body: '{}' });
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success !== false) {
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+            } else {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                            confirmButtonColor: '#0066cc' });
+            }
+        })
+        .catch(function () {
+            Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                        html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+        })
+        .finally(function () {
+            runBtn.disabled = false;
+            if (label) label.textContent = orig;
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
+        });
+    });
+})();
+
+// ── Pending Signature Confirmations — Collection (download .eml/.zip drafts) ──
+(function () {
+    var btn = document.querySelector('[data-sigcoll-generate]');
+    if (!btn) return;
+    var sum = document.getElementById('cp-sc-summary');
+    var PREVIEW = '/api/control-panel/signature-collection/preview';
+    var GEN = '/api/control-panel/signature-collection/generate';
+
+    fetch(PREVIEW, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!sum) return;
+            if (!d || !d.success) { sum.textContent = ''; return; }
+            sum.textContent = d.drafts + ' ' + t('cp-sc-cp', 'counterparties') + ' · ' +
+                              d.confirmations + ' ' + t('cp-sc-conf', 'confirmations pending signature');
+        })
+        .catch(function () { if (sum) sum.textContent = ''; });
+
+    btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        var label = btn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = btn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        btn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        fetch(GEN, { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error) || 'Failed'); });
+                var cd = r.headers.get('Content-Disposition') || '';
+                var m = /filename="?([^"]+)"?/.exec(cd);
+                var fname = m ? m[1] : 'otc_signature_drafts.zip';
+                var count = r.headers.get('X-Draft-Count') || '';
+                return r.blob().then(function (blob) { return { blob: blob, fname: fname, count: count }; });
+            })
+            .then(function (res) {
+                var url = URL.createObjectURL(res.blob);
+                var a = document.createElement('a');
+                a.href = url; a.download = res.fname; document.body.appendChild(a); a.click();
+                a.remove(); URL.revokeObjectURL(url);
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: (res.count || '?') + ' ' +
+                                  t('cp-sc-done', 'draft(s) downloaded. Open the .eml files in Outlook to review and send.'),
+                            confirmButtonColor: '#0066cc' });
+            })
+            .catch(function (e) {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (e && e.message) || t('cp-err-net', 'Network error.'),
+                            confirmButtonColor: '#0066cc' });
+            })
+            .finally(function () {
+                btn.disabled = false;
+                if (label) label.textContent = orig;
+                if (icon) icon.className = origIcon || 'ti ti-download';
+            });
+    });
+})();
+
 // ── Date pickers: dd/mm/yyyy display, calendar icon, default = D-1 ANBIMA ─────
 // Every .cp-datefield wrap gets its own flatpickr. The ISO default (YYYY-MM-DD)
 // is parsed into a local Date so flatpickr (dateFormat d/m/Y) doesn't misparse it.
@@ -633,7 +970,7 @@ document.addEventListener('click', function (e) {
     if (typeof flatpickr === 'undefined') return;
     var _iso = '{{ cetip_default_date }}'.split('-');
     var _def = _iso.length === 3 ? new Date(+_iso[0], +_iso[1] - 1, +_iso[2]) : null;
-    document.querySelectorAll('.cp-datefield').forEach(function (wrap) {
+    document.querySelectorAll('.cp-datefield:not([data-fixed])').forEach(function (wrap) {
         flatpickr(wrap, {
             wrap: true,             // <input data-input> + <a data-toggle> (the icon)
             dateFormat: 'd/m/Y',    // visible/stored value as dd/mm/yyyy
@@ -659,7 +996,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

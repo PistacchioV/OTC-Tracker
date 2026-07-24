@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Daily Metric — Outstanding Confirmation Brazil OTC</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+{# ── period-over-period change → coloured pill (pending should go DOWN) ── #}
+{% macro trendbadge(pc) -%}
+    {% if pc is none %}{% set c='#6e6e73' %}{% set bg='#f1f1f3' %}{% set ar='' %}
+    {% elif pc < 0 %}{% set c='#16a34a' %}{% set bg='#e7f6ec' %}{% set ar='▼' %}
+    {% elif pc > 0 %}{% set c='#dc2626' %}{% set bg='#fdecec' %}{% set ar='▲' %}
+    {% else %}{% set c='#6e6e73' %}{% set bg='#f1f1f3' %}{% set ar='►' %}{% endif %}
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;"><tr>
+        <td bgcolor="{{ bg }}" style="border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap;">
+            <font color="{{ c }}">{{ ar }} {% if pc is not none %}{% if pc > 0 %}+{% endif %}{{ pc }}%{% else %}—{% endif %}</font>
+        </td>
+    </tr></table>
+{%- endmacro %}
+{# ── email-safe bar chart: value on top, coloured bar, month/day below ── #}
+{% macro barchart(bars, accent) -%}
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>
+    {% for b in bars %}
+        <td valign="bottom" align="center" style="padding:0 3px;">
+            <div style="font-size:10px;font-weight:700;color:#5b6470;margin-bottom:3px;line-height:1;">{{ b.value }}</div>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center"><tr>
+                <td height="{{ b.h }}" width="16" bgcolor="{{ accent }}"
+                    style="border-radius:3px 3px 0 0;font-size:1px;line-height:1px;mso-line-height-rule:exactly;">&nbsp;</td>
+            </tr></table>
+            <div style="font-size:9px;color:#9aa0a8;margin-top:4px;line-height:1;white-space:nowrap;">{{ b.label }}</div>
+        </td>
+    {% endfor %}
+    </tr></table>
+{%- endmacro %}
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="820"><tr><td width="820" style="width:820px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="820"
+                   style="max-width:820px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header (shared bulletproof gradient partial) ─────────────── -->
+                {% set header_title = 'Daily Metric — Outstanding Confirmation Brazil OTC' %}
+                {% set header_subtitle = 'Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Intro ──────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 6px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">
+                            Please kindly check the daily analysis over OTC Derivatives pending confirmations.
+                            The table below details pending confirmations by economic group, aging, business
+                            owners and Ops support contacts.</p>
+                        <!-- Signature-type legend (badges only → Outlook-safe) -->
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:2px 0 0;">
+                            <tr>
+                                <td style="padding:0 8px 0 0;vertical-align:middle;">
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
+                                        <tr><td bgcolor="#5aa469" width="120" align="center" style="width:120px;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-align:center;border:1px solid #5aa469;">
+                                            <font color="#ffffff">Digitally signed</font></td></tr>
+                                    </table>
+                                </td>
+                                <td style="padding:0;vertical-align:middle;">
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="display:inline-table;">
+                                        <tr><td bgcolor="#eef1f6" width="120" align="center" style="width:120px;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-align:center;border:1px solid #d3d8e0;">
+                                            <font color="#5b6470">Manually signed</font></td></tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ══ METRIC 1 — Growth of confirmations pending > 30 days (monthly) ══ -->
+                <tr>
+                    <td style="padding:20px 30px 8px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border:1px solid #eceef2;border-radius:10px;background:#fbfcfe;">
+                            <tr>
+                                <td width="210" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
+                                    <p style="margin:0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Pending &gt; 30 days</p>
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                                        <td style="font-size:40px;font-weight:700;color:#1a1a2e;line-height:1;letter-spacing:-1px;padding-right:10px;">
+                                            {{ current_total }}</td>
+                                        <td style="vertical-align:middle;">{{ trendbadge(latest_pct) }}</td>
+                                    </tr></table>
+                                    <p style="margin:6px 0 0;font-size:11.5px;color:#8a8f98;">
+                                        month-over-month{% if prev_total is not none %} · prev. {{ prev_total }}{% endif %}</p>
+                                </td>
+                                <td style="padding:16px 22px 14px;vertical-align:bottom;">
+                                    <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Growth trend · last {{ month_bars|length }} months</p>
+                                    {{ barchart(month_bars, '#3b82f6') }}
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ══ METRIC 2 — Day-over-day (current month) ══ -->
+                {% if day_bars %}
+                <tr>
+                    <td style="padding:8px 30px 8px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border:1px solid #eceef2;border-radius:10px;background:#fbfcfe;">
+                            <tr>
+                                <td width="210" style="padding:20px 8px 20px 24px;vertical-align:middle;border-right:1px solid #eef0f4;">
+                                    <p style="margin:0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Latest reading</p>
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                                        <td style="font-size:40px;font-weight:700;color:#1a1a2e;line-height:1;letter-spacing:-1px;padding-right:10px;">
+                                            {{ day_total if day_total is not none else current_total }}</td>
+                                        <td style="vertical-align:middle;">{{ trendbadge(day_pct) }}</td>
+                                    </tr></table>
+                                    <p style="margin:6px 0 0;font-size:11.5px;color:#8a8f98;">day-over-day</p>
+                                </td>
+                                <td style="padding:16px 22px 14px;vertical-align:bottom;">
+                                    <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+                                              text-transform:uppercase;color:#8a8f98;">Day-over-day · current month</p>
+                                    {{ barchart(day_bars, '#0ea5e9') }}
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
+
+                <!-- ══ METRIC 3 — Per-economic-group aging pivot ══ -->
+                <tr>
+                    <td style="padding:16px 30px 6px;">
+                        <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1a1a2e;">
+                            Pending confirmations by economic group &amp; aging</p>
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:12px;table-layout:fixed;">
+                            <colgroup>
+                                <col style="width:20%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:8%;"/>
+                                <col style="width:24%;"/>
+                                <col style="width:24%;"/>
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" style="background:#e8560f;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Economic Group</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">30-59 days</th>
+                                    <th colspan="2" style="background:#c0392b;color:#fff;text-align:center;padding:4px 8px;border:1px solid #ffffff;font-weight:700;font-size:11px;">Potential DNT</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:center;padding:7px 8px;border:1px solid #ffffff;font-weight:700;">TOTAL</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Business (Banker + F.O)</th>
+                                    <th rowspan="2" style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Operations</th>
+                                </tr>
+                                <tr>
+                                    <th style="background:#c0392b;color:#fff;text-align:center;padding:6px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">60-89 days</th>
+                                    <th style="background:#c0392b;color:#fff;text-align:center;padding:6px 8px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">&gt;90 days</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in pivot %}
+                                <tr bgcolor="{{ '#ffffff' if loop.index0 % 2 == 0 else '#f5f7fa' }}">
+                                    <td bgcolor="{{ '#5aa469' if row.digital else '' }}" style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;word-break:break-word;">
+                                        <font color="{{ '#ffffff' if row.digital else '#1a1a2e' }}">{{ row.group }}</font></td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b1 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b2 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;color:#333;">{{ row.b3 or '' }}</td>
+                                    <td style="padding:6px 8px;border:1px solid #e6e9ee;text-align:center;font-weight:700;color:#1a1a2e;">{{ row.total }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;word-break:break-word;">{{ row.banker }}</td>
+                                    <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;word-break:break-word;">{{ row.operations }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="7" style="padding:16px;border:1px solid #e6e9ee;text-align:center;color:#8a8f98;">
+                                    No confirmations pending &gt; 30 days in the latest snapshot.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                            {% if pivot %}
+                            <tfoot>
+                                <tr style="background:#eef1f6;">
+                                    <td style="padding:8px 10px;border:1px solid #dfe3ea;font-weight:700;color:#1a1a2e;">Total</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b1 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b2 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#1a1a2e;">{{ totals.b3 }}</td>
+                                    <td style="padding:8px 8px;border:1px solid #dfe3ea;text-align:center;font-weight:700;color:#0d6efd;">{{ totals.total }}</td>
+                                    <td colspan="2" style="border:1px solid #dfe3ea;"></td>
+                                </tr>
+                            </tfoot>
+                            {% endif %}
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:18px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>Institutional Services by OTC Tracker</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>

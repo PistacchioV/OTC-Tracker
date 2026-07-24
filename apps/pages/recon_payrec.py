@@ -3,7 +3,8 @@ Pay/Rec Reconciliation engine — faithful port of the Alteryx "PayRec" workflow
 verified against the ground-truth daily output.
 
 JPM / Cockpit side (3 sources, Union'd):
-  settlement.csv      → NDF   (value = Tax Income + Amount, per-Client sum, Settlement Net='TOTAL_NET')
+  settlement.csv      → NDF   (value = Tax Income + Amount, per-Client sum; ALL settlement
+                        types are kept — the net type comes from CounterpartyDetails, not the file)
   cashflows_*.xlsx    → COMM TER / SWAP  (per-client NET sum; Owner Legal Entity='0228')
   FXO Detail*.xlsx    → FXO   (value from ATH SET AMT + Direction)
 
@@ -447,13 +448,17 @@ def _classify_source(name):
 
 # ── JPM / Cockpit side ────────────────────────────────────────────────────────
 def _jpm_settlement(rows, cols, net_map=None):
-    """settlement.csv → NDF. Per-Client (Tax Income + Amount), keeping only
-    Settlement Net = 'TOTAL_NET'/'PAYREC_NET' and non-JPM clients. The per-client
-    values are then reduced according to the client's configured net type."""
+    """settlement.csv → NDF. Per-Client (Tax Income + Amount), keeping every
+    non-JPM client row REGARDLESS of the file's own 'Settlement Net' column: how a
+    counterparty settles is decided by CounterpartyDetails (net_map) and the
+    Saint-Gobain overrides, not by the spreadsheet. The old
+    TOTAL_NET/PAYREC_NET allowlist silently dropped every No Net counterparty
+    (e.g. Saint-Gobain do Brasil) from the JPM side, leaving its client-side legs
+    unmatched and its receipts missing entirely. The per-client values are then
+    reduced according to the client's configured net type."""
     c_client = _resolve(cols, 'Client')
     c_amount = _resolve(cols, 'Amount')
     c_tax = _resolve(cols, 'Tax Income')
-    c_net = _resolve(cols, 'Settlement Net')
     c_le = _resolve(cols, 'Legal Entity')                      # JPM vs MGT (per row)
     groups = {}
     for r in rows:
@@ -461,10 +466,6 @@ def _jpm_settlement(rows, cols, net_map=None):
         cl = client.lower()
         if not client or any(e in cl for e in _JPM_ENTITIES):
             continue
-        if c_net:                                              # keep the netted rows
-            sn = _norm(r.get(c_net, ''))
-            if sn and sn not in (_norm('TOTAL_NET'), _norm('PAYREC_NET')):
-                continue
         result = _num(r.get(c_tax, '') if c_tax else 0) + _num(r.get(c_amount, '') if c_amount else 0)
         le = _le_from_legal_entity(r.get(c_le, '')) if c_le else 'JPM'
         groups.setdefault((client, le), []).append(result)     # split per Legal Entity
@@ -999,11 +1000,61 @@ def _apply_carry_forward(recon_date, pend_pay, pend_rec, settled):
         key = (r.get('le', 'JPM'), _int_key(v)) if v not in ('', None) else None
         if key and key in settled_keys:
             continue                                  # settled today → represented in Settled
+
+        origin = r.get('carry_origin') or prev_date
+
+        # The actual settlement often lands TODAY on the opposite book without a
+        # same-day counterparty on the other side (the JPM booking was on the day
+        # it first went pending, not today). The engine only joins same-day
+        # JPM×client, so it leaves today's actual as an unmatched plain 'Pending'
+        # row instead of settling it — the item then shows twice (carried pending
+        # + today's actual) even though value/cpty agree. Reconcile the carried
+        # item against that row here: same LE, same direction, the OTHER side
+        # populated, value within the cents tolerance → collapse both into one
+        # Settled row.
+        carried_has_jpm = r.get('jpm_value', '') not in ('', None)
+        cval = _num(v)
+        mate_i = None
+        for i, p in enumerate(target):
+            if str(p.get('status', '')).strip().lower() != 'pending':
+                continue                              # only fresh same-day pendings (never another carried row)
+            if p.get('le', 'JPM') != r.get('le', 'JPM'):
+                continue
+            p_has_jpm    = p.get('jpm_value', '')    not in ('', None)
+            p_has_client = p.get('client_value', '') not in ('', None)
+            # A carried JPM-side item pairs with a client-only actual, and a carried
+            # client-side item pairs with a JPM-only actual (exactly one side each).
+            if carried_has_jpm and not (p_has_client and not p_has_jpm):
+                continue
+            if not carried_has_jpm and not (p_has_jpm and not p_has_client):
+                continue
+            pv = _num(p.get('client_value', '') if carried_has_jpm else p.get('jpm_value', ''))
+            if abs(pv - cval) < _TOL_SETTLED:
+                mate_i = i
+                break
+        if mate_i is not None:
+            p = target.pop(mate_i)
+            merged = dict(r)
+            if carried_has_jpm:                       # carried = JPM side; take the client side from today's actual
+                merged['client']       = p.get('client', merged.get('client', ''))
+                merged['client_value'] = p.get('client_value', '')
+                merged['sistema']      = p.get('sistema', merged.get('sistema', ''))
+                merged['snumconta']    = p.get('snumconta', merged.get('snumconta', ''))
+            else:                                     # carried = client side; take the JPM side from today's actual
+                merged['jpm_cpty']  = p.get('jpm_cpty', merged.get('jpm_cpty', ''))
+                merged['jpm_value'] = p.get('jpm_value', '')
+            merged['status']       = 'Settled'
+            merged['difference']   = _num(merged.get('client_value', 0)) - _num(merged.get('jpm_value', 0))
+            merged['carry_origin'] = origin
+            merged['carried_from'] = prev_date
+            merged['comment']      = '{} de {} — liquidado'.format(label, _fmt_date(origin))
+            settled.append(merged)
+            continue
+
         row = dict(r)
         # Original date = the day it first became a carry-forward pending item;
         # preserved across subsequent carries, falling back on the first carry to
         # the finalized day it came from (the day it was marked).
-        origin = row.get('carry_origin') or prev_date
         row['carry_origin'] = origin
         row['carried_from'] = prev_date
         # Auto comment on the following days, e.g. "Recebimento pendente de 10/07/2026".
@@ -1314,6 +1365,12 @@ def send_payrec_email(recon_date):
         settled=_decorate_rows(data.get('settled', [])),
         has_comments=has_comments,
         current_year=current_year,
+        # Reference the inline gradient attached below, not the app-wide external
+        # URL from the context processor: cid: renders offline, isn't blocked by
+        # Outlook's image blocking, and doesn't depend on where the send ran from
+        # (a scheduler send has no request context, so the external URL fails and
+        # the header falls back to a flat colour).
+        grad_url='cid:otc_gradient',
     )
 
     msg = MIMEMultipart('related')
@@ -1336,6 +1393,21 @@ def send_payrec_email(recon_date):
                     img.add_header('Content-ID', '<otc_logo>')
                     img.add_header('Content-Disposition', 'inline', filename='logo.png')
                     msg.attach(img)
+                break
+    except Exception:
+        pass
+
+    # Header gradient — inline so it renders every day regardless of send origin
+    # (referenced as cid:otc_gradient by the shared header partial).
+    try:
+        for gp in [os.path.join(current_app.root_path, 'static', 'images', 'email-header-gradient.png'),
+                   os.path.normpath(os.path.join(current_app.root_path, '..', 'static', 'images', 'email-header-gradient.png'))]:
+            if os.path.exists(gp):
+                with open(gp, 'rb') as f:
+                    gimg = MIMEImage(f.read())
+                    gimg.add_header('Content-ID', '<otc_gradient>')
+                    gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+                    msg.attach(gimg)
                 break
     except Exception:
         pass

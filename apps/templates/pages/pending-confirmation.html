@@ -462,6 +462,30 @@
         background: rgba(255,255,255,.08) !important;
         color: #6ea8fe !important;
     }
+
+    /* Add/Edit modal — Aging & Status are auto-computed, so they read as
+       disabled (greyed, no focus/typing). Kept `readonly` in markup so the
+       computed value still submits; this only makes that state visible. */
+    #addRowModal #ar_aging,
+    #addRowModal #ar_status {
+        background-color: var(--bs-secondary-bg, #e9ecef) !important;
+        color: var(--bs-secondary-color, #6c757d) !important;
+        cursor: not-allowed;
+        pointer-events: none;
+        opacity: .9;
+    }
+
+    /* Calendar icon inside every date field (flatpickr opens on click). */
+    #addRowModal .ar-date {
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.7rem center;
+        background-size: 1rem 1rem;
+        padding-right: 2.2rem;
+    }
+    [data-bs-theme="dark"] #addRowModal .ar-date {
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+    }
 </style>
 {% endblock extra_css %}
 
@@ -554,10 +578,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_under_10 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span class="text-success"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_under_10 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span class="text-success"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -623,10 +652,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_10_19 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_10_19 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -692,10 +726,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_20_29 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_20_29 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -761,10 +800,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_30_59 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_30_59 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -830,10 +874,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_60_89 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_60_89 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -897,10 +946,15 @@
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_over_90 or 0 }}</b></span>
                         </div>
-                        <div class="mb-0">
+                        <div class="mb-1">
                             <span class="text-danger"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_over_90 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span class="text-danger"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
                         </div>
                     </div>
                 </div>
@@ -1280,6 +1334,59 @@ function formatExportData(data, row, column, node) {
 
 $(document).ready(function() {
 
+    // ------------------------------------------------------------------
+    // COLUMN FILTERS — unified AND predicate. Every column-input's live
+    // value is combined (logical AND) in ONE DataTables ext.search pass, so
+    // setting a second filter always narrows the first (they are
+    // "interlinked"). The Aging column (col 6) additionally understands
+    // comparison operators (>, <, >=, <=); e.g. ">=20" → aging >= 20.
+    // Everything else is a case-insensitive substring match on the cell.
+    // (Native column().search() is intentionally NOT used for these inputs —
+    // mixing it with a custom predicate is what let a stale/dropped Aging
+    // filter slip through and return rows below the threshold.)
+    // ------------------------------------------------------------------
+    function _makeAgingOpFilter(raw) {
+        var m = String(raw == null ? '' : raw).trim().match(/^(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)$/);
+        if (!m) return null;
+        var op = m[1], n = parseFloat(m[2]);
+        return function (aging) {
+            if (isNaN(aging)) return false;
+            if (op === '>')  return aging >  n;
+            if (op === '<')  return aging <  n;
+            if (op === '>=') return aging >= n;
+            if (op === '<=') return aging <= n;
+            return true;
+        };
+    }
+    var PC_COL_INPUTS = null;        // [{col: <dtColIndex>, input: <el>}] — built at initComplete
+    var pcActiveColFilters = [];     // rebuilt from the non-empty inputs on each keystroke
+    function pcRebuildColFilters() {
+        pcActiveColFilters = [];
+        (PC_COL_INPUTS || []).forEach(function (e) {
+            var raw = (e.input.value || '').trim();
+            if (!raw) return;
+            var f = { col: e.col, needle: raw.toLowerCase(), agingFn: null };
+            if (e.col === 6) f.agingFn = _makeAgingOpFilter(raw);   // null → plain substring
+            pcActiveColFilters.push(f);
+        });
+    }
+    // Single ext.search pass: a row survives only if it matches EVERY active
+    // column filter (AND). Reads the pre-built pcActiveColFilters (not the DOM)
+    // so it stays cheap per row.
+    $.fn.dataTable.ext.search.push(function (settings, data) {
+        if (settings.nTable.id !== 'pending-confirmation-table') return true;
+        for (var i = 0; i < pcActiveColFilters.length; i++) {
+            var f = pcActiveColFilters[i];
+            var cell = String(data[f.col] == null ? '' : data[f.col]);
+            if (f.agingFn) {
+                if (!f.agingFn(parseInt(cell.replace(/[^0-9-]/g, ''), 10))) return false;
+            } else if (cell.toLowerCase().indexOf(f.needle) === -1) {
+                return false;
+            }
+        }
+        return true;
+    });
+
     // ========================================================================
     // INICIALIZAÇÃO DA DATATABLE
     // ========================================================================
@@ -1302,6 +1409,20 @@ $(document).ready(function() {
             selector: 'td:not(:nth-child(1)):not(:nth-child(2))'
         },
         columnDefs: [
+            {
+                // Date columns (dd/mm/yyyy) sort chronologically via an orthogonal
+                // yyyymmdd key — otherwise DataTables sorts them as plain strings
+                // (by day), so clicking the header never ordered oldest↔newest.
+                // Trade/Maturity/EA/Send/Return/Baixa Sem Abono/Pendência/Abono.
+                targets: [8, 9, 13, 14, 15, 21, 22, 23],
+                render: function (data, type) {
+                    if (type === 'sort' || type === 'type') {
+                        var m = String(data == null ? '' : data).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                        return m ? (m[3] + m[2] + m[1]) : '';
+                    }
+                    return data;
+                }
+            },
             {
                 orderable: false,
                 targets: [0, 1],
@@ -1407,6 +1528,14 @@ $(document).ready(function() {
                 });
             });
 
+            // Build the column→input map once; all filtering runs through the
+            // unified ext.search predicate above, so a keystroke only needs to
+            // rebuild the active-filter list and redraw.
+            PC_COL_INPUTS = [];
+            document.querySelectorAll('#column-search-inputs th').forEach(function(th) {
+                var input = th.querySelector('input');
+                if (input) PC_COL_INPUTS.push({ col: th.cellIndex, input: input });
+            });
             document.querySelectorAll('#column-search-inputs th input').forEach(function(input) {
                 input.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -1414,18 +1543,13 @@ $(document).ready(function() {
 
                 // Debounce so a full DataTable re-filter/redraw (+ widget recount)
                 // does NOT fire on every keystroke — that froze the page on large
-                // datasets. Apply the search ~250ms after the user stops typing.
+                // datasets. Apply the search ~180ms after the user stops typing.
                 var searchTimer = null;
                 input.addEventListener('keyup', function() {
-                    var value = this.value;
-                    var columnIndex = input.closest('th').cellIndex;
                     if (searchTimer) clearTimeout(searchTimer);
                     searchTimer = setTimeout(function() {
-                        if (api.column(columnIndex).search() !== value) {
-                            // smart:false → plain substring match (skips DataTables'
-                            // multi-term regex build), a little faster per draw.
-                            api.column(columnIndex).search(value, false, false).draw();
-                        }
+                        pcRebuildColFilters();
+                        table.draw();
                     }, 180);
                 });
             });
@@ -1440,7 +1564,8 @@ $(document).ready(function() {
                     document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
                         inp.value = '';
                     });
-                    // Resetar a busca de todas as colunas + busca global e redesenhar
+                    // Zerar os filtros de coluna (predicado unificado) + busca global
+                    pcRebuildColFilters();              // -> lista vazia (nenhum filtro ativo)
                     api.columns().search('');
                     api.search('');
                     api.draw();
@@ -1892,7 +2017,7 @@ $(document).ready(function() {
     }
     function updateWidgets() {
         var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
-        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa'];
+        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa','others'];
         var pendingToType = {
             'Pending Digital Signature': 'ds',
             'Pending FO':                'fo',
@@ -1914,12 +2039,20 @@ $(document).ready(function() {
         // Pending Status (col 11).
         table.rows({ search: 'applied' }).data().each(function(d) {
             if (!d || d.length < 12) return;
+            // Any "Exception *" Pending Status is treated as OK (resolved) — it is
+            // NOT an outstanding confirmation, so it must not feed the widgets.
+            if (/^\s*exception/i.test(_pcStrip(d[11]))) return;
             var days  = parseInt(_pcStrip(d[6]).replace(/[^0-9-]/g, ''), 10);
             var band  = _pcAgingBand(days);
             if (!band) return;
+            // The TOTAL counts EVERY pending row in the band, so it matches the
+            // table/Excel exactly. The breakdown maps each row to one of the eight
+            // known Pending Status types, or to 'others' (any other/empty value,
+            // e.g. "Exception Fep Web") — so the eight lines + Others always sum to
+            // the total.
             counts[band].total++;
-            var pType = pendingToType[_pcStrip(d[11])];
-            if (pType) counts[band][pType]++;
+            var pType = pendingToType[_pcStrip(d[11])] || 'others';
+            counts[band][pType]++;
         });
 
         // Update widget cards in DOM order (matches RANGE_ORDER)
@@ -2050,7 +2183,17 @@ $(document).ready(function() {
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
             PC_ACTIONS_HTML
         ];
-        SF_COLS.forEach(function(col) { cells.push(sfEscape(row[col.label] == null ? '' : String(row[col.label]))); });
+        SF_COLS.forEach(function(col) {
+            var raw = row[col.label] == null ? '' : String(row[col.label]);
+            // Status column: render "Ok" as the standard green gradient pill badge
+            // (white text). Other statuses keep plain text. _pcStrip recovers "Ok"
+            // from the span, so filtering / persistence stay unaffected.
+            if (col.label === 'Status' && raw.trim().toLowerCase() === 'ok') {
+                cells.push('<span class="badge rounded-pill text-bg-success bg-gradient">' + sfEscape(raw.trim()) + '</span>');
+            } else {
+                cells.push(sfEscape(raw));
+            }
+        });
         return cells;
     }
 
@@ -2176,9 +2319,42 @@ $(document).ready(function() {
                 });
         }
 
+        // SweetAlert copy is built in JS, so it cannot ride on [data-lang] like
+        // the static markup. Pull the same dictionary the I18nManager uses.
+        var pendI18n = null;
+        (function () {
+            var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+            fetch('/static/data/translations/' + lang + '.json')
+                .then(function (r) { return r.json(); })
+                .then(function (j) { pendI18n = j; })
+                .catch(function () { /* falls back to the English defaults below */ });
+        })();
+        function pendT(key, fallback) { return (pendI18n && pendI18n[key]) || fallback; }
+
+        // Importing overwrites the pending base — always ask first.
+        function confirmThenUpload(file) {
+            if (typeof Swal === 'undefined') { upload(file); return; }
+            Swal.fire({
+                icon: 'question',
+                title: pendT('pend-update-confirm-title', 'Wish to Proceed?'),
+                html: pendT('pend-update-confirm-text', 'The Pending Confirmation base will be updated with this file.')
+                      + '<div class="mt-2 fw-semibold text-break">' + file.name + '</div>',
+                showCancelButton: true,
+                confirmButtonText: pendT('pend-update-confirm-yes', 'Yes'),
+                cancelButtonText: pendT('pend-update-confirm-no', 'No'),
+                confirmButtonColor: '#0066cc',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true,
+                focusCancel: true
+            }).then(function (res) {
+                if (res.isConfirmed) upload(file);
+                else fileInput.value = '';   // No → discard the attached file
+            });
+        }
+
         dz.addEventListener('click', function(){ fileInput.click(); });
         fileInput.addEventListener('change', function(){
-            if (this.files && this.files[0]) upload(this.files[0]);
+            if (this.files && this.files[0]) confirmThenUpload(this.files[0]);
             this.value = '';   // allow re-dropping the same file
         });
         ['dragenter','dragover'].forEach(function(ev){
@@ -2189,7 +2365,7 @@ $(document).ready(function() {
         });
         dz.addEventListener('drop', function(e){
             var dt = e.dataTransfer;
-            if (dt && dt.files && dt.files[0]) upload(dt.files[0]);
+            if (dt && dt.files && dt.files[0]) confirmThenUpload(dt.files[0]);
         });
     })();
 

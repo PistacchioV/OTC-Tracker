@@ -357,13 +357,6 @@
                     </li>
         
                     <li class="side-nav-item">
-                        <a href="/file-interpreter" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="folder-open-dot"></i></span>
-                            <span class="menu-text" data-lang="file-interpreter"> File Interpreter </span>
-                        </a>
-                    </li>
-        
-                    <li class="side-nav-item">
                         <a href="/electronic-inventory" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="package-check"></i></span>
                             <span class="menu-text" data-lang="electronic-inventory"> Electronic Inventory </span>
@@ -404,6 +397,11 @@
                                             <li class="side-nav-item">
                                                 <a href="/ndf-cockpit" class="side-nav-link">
                                                     <span class="menu-text" data-lang="nav-cockpit">Cockpit</span>
+                                                </a>
+                                            </li>
+                                            <li class="side-nav-item">
+                                                <a href="/ndf-other-publisher" class="side-nav-link">
+                                                    <span class="menu-text" data-lang="nav-other-publisher">Other Publisher</span>
                                                 </a>
                                             </li>
                                         </ul>
@@ -627,7 +625,7 @@
                                     </a>
                                 </li>
                                 <li class="side-nav-item">
-                                    <a href="/metrics" class="side-nav-link">
+                                    <a href="/metrics-pending-confirmation" class="side-nav-link">
                                         <span class="menu-text">Metrics</span>
                                     </a>
                                 </li>
@@ -646,67 +644,6 @@
                         <a href="/cgd" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="building-2"></i></span>
                             <span class="menu-text" data-lang="nav-cgd">CGD</span>
-                        </a>
-                    </li>
-        
-                    <!-- Nova seção para Regulatory -->
-                    <li class="side-nav-title" data-lang="regulatory-title">Regulatory</li>
-        
-                    <!-- E-financeira -->
-                    <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#regulatoryEfinanceira" aria-expanded="false" 
-                           aria-controls="regulatoryEfinanceira" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="file-text"></i></span>
-                            <span class="menu-text" data-lang="nav-e-financeira">E-financeira</span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="regulatoryEfinanceira">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="/regulatory/e-financeira/kapital" class="side-nav-link">
-                                        <span class="menu-text" data-lang="nav-kapital">KAPITAL</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/regulatory/e-financeira/athena-ndf" class="side-nav-link">
-                                        <span class="menu-text" data-lang="nav-athena-ndf">ATHENA-NDF</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/regulatory/e-financeira/athena-fxo" class="side-nav-link">
-                                        <span class="menu-text" data-lang="nav-athena-fxo">ATHENA-FXO</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="/regulatory/e-financeira/pyramid" class="side-nav-link">
-                                        <span class="menu-text" data-lang="nav-pyramid">PYRAMID</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-        
-                    <!-- Accrual -->
-                    <li class="side-nav-item">
-                        <a href="/accrual-swap" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="calculator"></i></span>
-                            <span class="menu-text" data-lang="nav-accrual">Accrual</span>
-                        </a>
-                    </li>
-        
-                    <!-- MtM -->
-                    <li class="side-nav-item">
-                        <a href="/mtm-swap" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="trending-up"></i></span>
-                            <span class="menu-text" data-lang="nav-mtm">MtM</span>
-                        </a>
-                    </li>
-        
-                    <!-- WHT -->
-                    <li class="side-nav-item">
-                        <a href="/regulatory/wht" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="percent"></i></span>
-                            <span class="menu-text" data-lang="nav-wht">WHT</span>
                         </a>
                     </li>
         
@@ -1016,6 +953,67 @@
                             </ul>
                         </div>
                     </li>
+                    <!-- Nova seção para Regulatory -->
+                    <li class="side-nav-title" data-lang="regulatory-title">Regulatory</li>
+        
+                    <!-- E-financeira -->
+                    <li class="side-nav-item">
+                        <a data-bs-toggle="collapse" href="#regulatoryEfinanceira" aria-expanded="false" 
+                           aria-controls="regulatoryEfinanceira" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="file-text"></i></span>
+                            <span class="menu-text" data-lang="nav-e-financeira">E-financeira</span>
+                            <span class="menu-arrow"></span>
+                        </a>
+                        <div class="collapse" id="regulatoryEfinanceira">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/kapital" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-kapital">KAPITAL</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/athena-ndf" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-athena-ndf">ATHENA-NDF</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/athena-fxo" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-athena-fxo">ATHENA-FXO</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/regulatory/e-financeira/pyramid" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-pyramid">PYRAMID</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+        
+                    <!-- Accrual -->
+                    <li class="side-nav-item">
+                        <a href="/accrual-swap" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="calculator"></i></span>
+                            <span class="menu-text" data-lang="nav-accrual">Accrual</span>
+                        </a>
+                    </li>
+        
+                    <!-- MtM -->
+                    <li class="side-nav-item">
+                        <a href="/mtm-swap" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="trending-up"></i></span>
+                            <span class="menu-text" data-lang="nav-mtm">MtM</span>
+                        </a>
+                    </li>
+        
+                    <!-- WHT -->
+                    <li class="side-nav-item">
+                        <a href="/regulatory/wht" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="percent"></i></span>
+                            <span class="menu-text" data-lang="nav-wht">WHT</span>
+                        </a>
+                    </li>
+        
                     <!-- Nova seção para Data Base -->
                     <li class="side-nav-title" data-lang="data-base-title">Data Base</li>
                       <!-- Nova seção para Reference Data -->

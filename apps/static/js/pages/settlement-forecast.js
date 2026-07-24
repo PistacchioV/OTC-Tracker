@@ -68,16 +68,43 @@
   var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0, 2);
   var TXT = {
     en: { running: 'Running…', sending: 'Sending e-mail…', noData: 'No data',
-          okTitle: 'Forecast sent', okMsg: 'Settlement Forecast e-mailed to OTC Ops.',
-          errTitle: 'Forecast failed', net: 'Network error.' },
+          okTitle: 'Forecast sent', okMsg: 'Settlement Forecast e-mailed to the saved recipients.',
+          errTitle: 'Forecast failed', net: 'Network error.',
+          noRcpt: 'Fill in TO / CC before running.' },
     br: { running: 'Executando…', sending: 'Enviando e-mail…', noData: 'Sem dados',
-          okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por e-mail para a OTC Ops.',
-          errTitle: 'Falha no forecast', net: 'Erro de rede.' },
+          okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por e-mail aos destinatários salvos.',
+          errTitle: 'Falha no forecast', net: 'Erro de rede.',
+          noRcpt: 'Preencha TO / CC antes de rodar.' },
     es: { running: 'Ejecutando…', sending: 'Enviando correo…', noData: 'Sin datos',
-          okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por correo a OTC Ops.',
-          errTitle: 'Error en el forecast', net: 'Error de red.' }
+          okTitle: 'Forecast enviado', okMsg: 'Settlement Forecast enviado por correo a los destinatarios guardados.',
+          errTitle: 'Error en el forecast', net: 'Error de red.',
+          noRcpt: 'Completa TO / CC antes de ejecutar.' }
   };
   function tr(k) { return (TXT[LANG] || TXT.en)[k] || TXT.en[k] || k; }
+
+  // ── Persisted TO/CC recipients (saved once, reused on every run) ────────────
+  var REC_URL = '/api/control-panel/settlement-forecast/recipients';
+  function fcstToEl() { return document.getElementById('cp-fcst-to'); }
+  function fcstCcEl() { return document.getElementById('cp-fcst-cc'); }
+  function saveRecipients() {
+    var to = fcstToEl(), cc = fcstCcEl();
+    if (!to && !cc) return Promise.resolve();
+    return fetch(REC_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ to: to ? to.value : '', cc: cc ? cc.value : '' })
+    }).catch(function () {});
+  }
+  (function initRecipients() {
+    var to = fcstToEl(), cc = fcstCcEl();
+    if (!to && !cc) return;
+    fetch(REC_URL, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d || !d.success) return;
+                           if (to) to.value = d.to || ''; if (cc) cc.value = d.cc || ''; })
+      .catch(function () {});
+    [to, cc].forEach(function (el) { if (el) el.addEventListener('blur', saveRecipients); });
+  })();
 
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -252,6 +279,14 @@
   }
 
   function runForecast(btn) {
+    var toEl = fcstToEl(), ccEl = fcstCcEl();
+    var hasRcpt = (toEl && toEl.value.trim()) || (ccEl && ccEl.value.trim());
+    if (!hasRcpt) {
+      Swal.fire({ icon: 'warning', title: tr('errTitle'), html: tr('noRcpt'),
+                  confirmButtonColor: '#0066cc' });
+      return;
+    }
+
     var label = btn.querySelector('span');
     var icon = btn.querySelector('i');
     var orig = label ? label.textContent : '';
@@ -261,10 +296,14 @@
 
     var date = isoDateFrom(btn.getAttribute('data-date-input'));
 
-    fetch('/api/control-panel/settlement-forecast/data', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: date })
-    })
+    // Persist the latest TO/CC first, so the server e-mails the current recipients.
+    saveRecipients()
+      .then(function () {
+        return fetch('/api/control-panel/settlement-forecast/data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: date })
+        });
+      })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
       .then(function (res) {
         if (!res.ok || !res.body || res.body.success === false) {

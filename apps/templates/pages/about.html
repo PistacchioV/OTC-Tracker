@@ -46,6 +46,8 @@
 .ab-sg > .ab-rv:nth-child(4) { transition-delay: 195ms; }
 .ab-sg > .ab-rv:nth-child(5) { transition-delay: 260ms; }
 .ab-sg > .ab-rv:nth-child(6) { transition-delay: 325ms; }
+.ab-sg > .ab-rv:nth-child(7) { transition-delay: 390ms; }
+.ab-sg > .ab-rv:nth-child(8) { transition-delay: 455ms; }
 
 /* ── HERO ───────────────────────────────────────────────────── */
 .ab-hero {
@@ -596,6 +598,14 @@
                         <i class="ti ti-news"></i>
                         <span>NDF Other Publisher</span>
                     </a>
+                    <a href="/live-position-ndf" class="ab-btn-o">
+                        <i class="ti ti-chart-line"></i>
+                        <span>Live Position</span>
+                    </a>
+                    <a href="/reconciliation-payrec" class="ab-btn-o">
+                        <i class="ti ti-arrows-exchange"></i>
+                        <span>Pay/Rec</span>
+                    </a>
                     <a href="/reconciliation-comitente" class="ab-btn-o">
                         <i class="ti ti-git-compare"></i>
                         <span>Reconciliation</span>
@@ -613,8 +623,8 @@
                     <div class="col-6 col-md-3 ab-rv">
                         <div class="ab-stat">
                             <span class="ab-stat__label" data-lang="about-stat-contracts">Tipos de Contrato</span>
-                            <span class="ab-stat__val">2</span>
-                            <span class="ab-stat__sub" data-lang="about-stat-contracts-sub">NDF &amp; Opções</span>
+                            <span class="ab-stat__val">3</span>
+                            <span class="ab-stat__sub" data-lang="about-stat-contracts-sub">NDF · Opções · Swap</span>
                         </div>
                     </div>
                     <div class="col-6 col-md-3 ab-rv">
@@ -749,14 +759,27 @@
                 <div class="row g-3 ab-sg mb-2">
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-swapchar-title">Swap Characteristics</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-swapchar-desc">
-                                Foto do book de swap em custódia por data de referência (D-1 ANBIMA): widgets por Tipo de
-                                Contrato, LOB, Indexador e Funcionalidade, filtro por coluna e exportação, a partir do
-                                arquivo de posição DPOSICAO-SWAP.
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-layout-dashboard"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-dsndf-title">NDF Summary &amp; Cockpit</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-dsndf-desc">
+                                Aggregated NDF settlement cards (Summary) plus a per-counterparty Cockpit with an
+                                editable grid — import, add/edit/delete and confirm rows.
                             </p>
-                            <a href="/live-position-swap-characteristics" class="ab-feat__link">
+                            <a href="/ndf-cockpit" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-opssum-title">Other Products Summary</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-opssum-desc">
+                                Batch de liquidação por data: cards de contagem (NDF Commodities, Swap Flow/Maturity/Premium,
+                                Options, COE) a partir dos arquivos de posição da B3, com tabelas editáveis e exportação.
+                            </p>
+                            <a href="/other-products-summary" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -779,13 +802,85 @@
                     </div>
                     <div class="col-xl-4 col-md-6 ab-rv">
                         <div class="ab-feat">
-                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></div>
-                            <div class="ab-feat__title" data-lang="about-feat-opssum-title">Other Products Summary</div>
-                            <p class="ab-feat__desc" data-lang="about-feat-opssum-desc">
-                                Batch de liquidação por data: cards de contagem (NDF Commodities, Swap Flow/Maturity/Premium,
-                                Options, COE) a partir dos arquivos de posição da B3, com tabelas editáveis e exportação.
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-building-bank"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-dsswap-title">Swap Settlements</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-dsswap-desc">
+                                Swap positions and settlements by engine — Athena and VCP totals, Swap Events and
+                                Kapital Hybrids — with per-column filtering and export.
                             </p>
-                            <a href="/other-products-summary" class="ab-feat__link">
+                            <a href="/other-products-swap-athena" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-table"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-cognos-title">Option — Cognos</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-cognos-desc">
+                                Option settlement (Cognos) with an editable grid — import, add/edit/delete and confirm —
+                                and Call/Put/Total widgets.
+                            </p>
+                            <a href="/cognos" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-files"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-opsb3-title">Operations B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-opsb3-desc">
+                                B3 operations files by operation type (JPM + MGT) with an editable grid — import, CRUD
+                                and confirm rows.
+                            </p>
+                            <a href="/operations-b3" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="ab-cap-group ab-rv" data-lang="about-cap-liveposition">Live Position</div>
+                <div class="row g-3 ab-sg mb-2">
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-chart-line"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-lpndf-title">NDF</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-lpndf-desc">
+                                Live NDF position with classification widgets (Vanilla, Commodities, T+0, Other Publisher)
+                                and per-column filtering.
+                            </p>
+                            <a href="/live-position-ndf" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-description"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-lpswap-title">Swap</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-lpswap-desc">
+                                Swap book in custody: characteristics by contract type, cashflows (DFLUXO) and premiums
+                                (DAGENDAPREMIOS), with widgets, breadcrumbs and export.
+                            </p>
+                            <a href="/live-position-swap-characteristics" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-lpopt-title">Option</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-lpopt-desc">
+                                Live Option position with settlement/status widgets and per-column filtering.
+                            </p>
+                            <a href="/live-position-option" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -853,6 +948,21 @@
                             </a>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-arrows-exchange"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-payrec-title">Reconciliation Pay/Rec</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-payrec-desc">
+                                Reconciles JPM/MGT payments and receipts against bank statements and SPB actuals, per
+                                counterparty Net Type, with break justification, dated carry-forward and an
+                                end-of-process e-mail.
+                            </p>
+                            <a href="/reconciliation-payrec" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="ab-cap-group ab-rv" data-lang="apps-title">Apps</div>
                 <div class="row g-3 ab-sg mb-2">
@@ -908,6 +1018,47 @@
                                 aprovação de novos usuários e gestão de perfis e roles.
                             </p>
                             <a href="/users-roles" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-file-search"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-fileint-title">File Interpreter</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-fileint-desc">
+                                Parses e-mail messages (.msg / HTML) to extract structured trade data from Outlook exports.
+                            </p>
+                            <a href="/file-interpreter" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-calendar"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-holidays-title">Holidays Calendar</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-holidays-desc">
+                                Editable, persisted market-holiday calendar (ANBIMA and FX schedules) used across the app
+                                for business-day math.
+                            </p>
+                            <a href="/holidays-calendar" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-danger-subtle text-danger"><i class="ti ti-lock-access"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-pageaccess-title">Page Access</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-pageaccess-desc">
+                                Per-page and per-card access control (including Control Panel cards), with access cloning
+                                between users and role management.
+                            </p>
+                            <a href="/page-access" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>

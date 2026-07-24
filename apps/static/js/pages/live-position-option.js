@@ -8,6 +8,21 @@
 (function () {
   'use strict';
 
+  // dd/mm/yyyy chronological sort — DataTables orders strings by default, so date
+  // columns were sorted as text (by day). This type detector makes any date column
+  // sort oldest↔newest correctly on header click.
+  if (jQuery.fn.dataTable && !jQuery.fn.dataTable.ext.type.order['date-dmy-pre']) {
+    var _DMY = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    jQuery.fn.dataTable.ext.type.detect.unshift(function (d) {
+      if (d === null || d === '') return 'date-dmy';
+      return (typeof d === 'string' && _DMY.test(d.trim())) ? 'date-dmy' : null;
+    });
+    jQuery.fn.dataTable.ext.type.order['date-dmy-pre'] = function (d) {
+      var m = String(d == null ? '' : d).trim().match(_DMY);
+      return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0;
+    };
+  }
+
   var API = '/api/live-position-option/data';
   var page = document.getElementById('live-position-option-page');
   if (!page) return;

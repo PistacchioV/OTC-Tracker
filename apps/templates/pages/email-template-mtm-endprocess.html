@@ -15,33 +15,21 @@
         <tr>
             <td align="center">
 
+                <!--[if mso]>
+                <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="620"><tr><td width="620" style="width:620px;">
+                <![endif]-->
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="620"
                        style="max-width:620px;background-color:#ffffff;border-radius:8px;
                               box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
 
                     <!-- Header -->
-                    <tr>
-                        <td bgcolor="#1a2c5e" style="background:#1a2c5e;background:linear-gradient(135deg,#0d6efd 0%,#34369b 100%);
-                                   padding:32px 28px 24px;text-align:center;">
-                            <img src="cid:otc_logo" alt="OTC Tracker" height="72" width="auto"
-                                 style="height:72px;width:auto;display:block;margin:0 auto 14px;border:0;"/>
-                            <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 4px;letter-spacing:0.3px;">
-                                MtM Swap — EOM Final Status</p>
-                            <p style="color:rgba(255,255,255,0.78);font-size:13px;margin:0;">
-                                Generated automatically by OTC Tracker</p>
-                        </td>
-                    </tr>
+                    {% set header_title = 'MtM Swap — EOM Final Status' %}
+                {% set header_subtitle = 'Reference Date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 72 %}
+                {% set header_width = 620 %}
+                {% include 'partials/email-gradient-header.html' %}
 
-                    <!-- Date banner -->
-                    <tr>
-                        <td style="background-color:#1a2c5e;padding:12px 28px;text-align:center;">
-                            <p style="color:#ffffff;font-size:13px;font-weight:500;margin:0;letter-spacing:0.5px;">
-                                Reference Date &nbsp;·&nbsp; <strong style="color:#7eb3ff;">{{ ref_date_fmt }}</strong>
-                            </p>
-                        </td>
-                    </tr>
-
-                    <!-- Body -->
+<!-- Body -->
                     <tr>
                         <td style="padding:32px 32px 24px;">
 
@@ -119,6 +107,9 @@
                     </tr>
 
                 </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
             </td>
         </tr>
     </table>

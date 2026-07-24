@@ -509,6 +509,7 @@
               <option value="">— Select —</option>
               <option value="DIGITAL">DIGITAL</option>
               <option value="MANUAL">MANUAL</option>
+              <option value="INTERNAL">INTERNAL</option>
             </select>
           </div>
           <div class="col-md-4">
@@ -1011,7 +1012,12 @@ $(document).ready(function () {
         'BANCO CITIBANK S/A - 745',
         'BOFA MERRILL LYNCH BM S/A - 755'
     ];
-    var CP_RULES = ['Negotiation', 'Repurchase', 'Settlement', 'Confirmation Letter', 'Settlement Advice', 'Contact Confirmation', 'IOF'];
+    // Inclui os rótulos que vieram verbatim da planilha de origem ('NEGOTIATION
+    // LETTER', 'Only for …'). Sem eles na lista, o multiselect não os oferecia e
+    // salvar um contato APAGAVA silenciosamente essas regras.
+    var CP_RULES = ['Negotiation', 'NEGOTIATION LETTER', 'Repurchase', 'Only for Repurchase',
+                    'Settlement', 'Confirmation Letter', 'Only for Confirmation',
+                    'Settlement Advice', 'Contact Confirmation', 'IOF'];
     var CP_STATUSES = ['Active', 'Inactive'];
     var CP_NET_TYPES = ['Total Net', 'Pay/Rec', 'No Net'];
 
@@ -1170,7 +1176,12 @@ $(document).ready(function () {
             var sub = [];
             if (it.phone) sub.push(_esc(it.phone));
             if (it.email) sub.push(_esc(it.email));
-            var chips = (it.rules || []).map(function(r){ return '<span class="cp-def-chip cp-chip-pay">' + _esc(r) + '</span>'; });
+            // 'Active'/'Inactive' são status, não regra: importações antigas
+            // gravaram esse valor junto das rules e ele aparecia duas vezes na
+            // linha. O chip de status logo abaixo é a única fonte da verdade.
+            var chips = (it.rules || []).filter(function(r){
+                return !/^(active|inactive)$/i.test(String(r).trim());
+            }).map(function(r){ return '<span class="cp-def-chip cp-chip-pay">' + _esc(r) + '</span>'; });
             var inactive = String(it.status).toLowerCase() === 'inactive';
             chips.push('<span class="cp-def-chip ' + (inactive ? 'cp-chip-pend' : 'cp-chip-rec') + '">' + _esc(it.status || 'Active') + '</span>');
             return '<div class="cp-acc-row"><div class="cp-acc-main">' +

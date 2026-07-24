@@ -5,6 +5,9 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<!-- SweetAlert2 CSS: without it Swal.fire renders unstyled (the Generate dialog
+     looked broken). Same include the New Deals / Electronic Inventory pages use. -->
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ── Apple/Emil tokens ─────────────────────────────────────── */
 #ops-page {
@@ -72,6 +75,58 @@
 .ops-widget__sub .ops-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
 .ops-widget--soon { opacity: .6; }
 
+/* ── Reconciliation cards (B3 × Internal) ──────────────────── */
+.ops-recon .ops-widget__head { margin-bottom: .7rem; }
+/* The matched pill sits where the big number used to; calm green when tied,
+   attention-amber ("Verificar") when not. Color only — these render on every
+   load, so no entrance animation of their own (the card stagger is enough). */
+.ops-recon-badge {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+    padding: .16rem .5rem; border-radius: 999px; white-space: nowrap;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
+}
+.ops-recon-badge.is-ok    { background: rgba(34,197,94,.16);  color: #16a34a; }
+.ops-recon-badge.is-check { background: rgba(245,158,11,.18); color: #b45309; }
+.ops-recon-grid {
+    border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
+    display: grid; row-gap: .18rem;
+}
+/* Fixed columns (not auto): the header and each data row are separate grids, so
+   auto columns sized independently and the OPS/VALUE labels drifted off their
+   numbers. Fixed widths make every grid share the same column geometry. */
+.ops-recon-hdr, .ops-recon-row {
+    display: grid; grid-template-columns: 1fr 2.75rem 7rem; column-gap: .6rem; align-items: baseline;
+}
+.ops-recon-hdr {
+    font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ins-secondary-color, #8a8a8f); padding-bottom: .1rem;
+}
+/* Right-align the OPS/VALUE headers so they sit over their right-aligned numbers. */
+.ops-recon-hdr span:nth-child(2), .ops-recon-hdr span:nth-child(3) { text-align: right; }
+.ops-recon-row { font-size: .8rem; padding: .1rem 0; }
+.ops-recon-row .ops-recon-side { font-weight: 600; color: var(--ins-secondary-color, #6e6e73); }
+.ops-recon-row [data-recon-b3c], .ops-recon-row [data-recon-intc] {
+    font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ins-body-color);
+}
+.ops-recon-row .ops-num { font-weight: 700; color: var(--ins-body-color); }
+/* Unmatched card gets a subtle amber ring — functional (scan the row of cards
+   and the odd one out pops), not decorative. */
+.ops-recon.is-unmatched { box-shadow: inset 0 0 0 1px rgba(245,158,11,.5); }
+
+/* Total card: dark gradient, so recon text/hairline go light. */
+.ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+.ops-recon--total .ops-widget__title,
+.ops-recon--total .ops-recon-row,
+.ops-recon--total .ops-recon-row .ops-recon-side,
+.ops-recon--total .ops-recon-row [data-recon-b3c],
+.ops-recon--total .ops-recon-row [data-recon-intc],
+.ops-recon--total .ops-recon-row .ops-num { color: #fff; }
+.ops-recon--total .ops-recon-hdr { color: rgba(255,255,255,.75); }
+.ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
+.ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
+.ops-recon--total.is-unmatched { box-shadow: inset 0 0 0 2px rgba(245,158,11,.9); }
+
 /* Staggered widget entrance */
 @keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: no-preference) {
@@ -96,17 +151,37 @@
 @media (hover: hover) and (pointer: fine) {
     .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
 }
-/* Row action + status control feedback */
-#ops-page .ops-row-del, #ops-page .ops-status-sel {
+/* Standard row-action button: fixed-size rounded square (the Delete button's
+   shape), so every action (Delete, Confirm, …) shares the exact same format
+   regardless of its icon. New row actions should reuse .ops-row-act. */
+#ops-page .ops-row-act {
+    width: 32px; height: 32px; padding: 0; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    border-radius: 10px !important;   /* rounded square — NOT a circle */
+}
+#ops-page .ops-row-act > i { font-size: 1rem; }
+/* Page-wide press feedback: EVERY button compresses slightly while pressed.
+   This is the standard for all buttons on this page — new buttons get it for
+   free via the .btn class. */
+#ops-page .btn {
+    transition: transform 120ms var(--ops-ease-out), box-shadow 140ms ease;
+}
+#ops-page .btn:active { transform: scale(0.97); }
+/* Row action + status control feedback (press scale inherited from the page rule) */
+#ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
     transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
 }
-#ops-page .ops-row-del:active { transform: scale(0.9); }
 @media (hover: hover) and (pointer: fine) {
     #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+    #ops-page .ops-row-confirm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(25,135,84,.38); }
 }
+#ops-page .ops-row-confirm:disabled { opacity: .5; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
+    #ops-page .btn, #ops-page .btn:active,
     .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
-    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active { transform: none; }
+    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active,
+    #ops-page .ops-row-confirm:hover, #ops-page .ops-row-confirm:active { transform: none; transition: none; }
 }
 
 #ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
@@ -115,6 +190,7 @@
 #ops-page .ops-filter input {
     width: 100%; border: 1px solid var(--ops-hairline); border-radius: 7px;
     padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
+    text-align: center;          /* centres the typed text AND the placeholder */
 }
 #ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
@@ -143,49 +219,70 @@
         </div>
     </div>
 
-    <!-- Cards: Vanilla / Other Publisher / T+0 / Total (from latest DPOSICAO-TER) -->
+    <!-- Reconciliation cards: B3 (CETIP) × Internal (Cockpit) per category.
+         FX whitelist from the Live Position NDF keeps non-FX Operations B3 out. -->
     <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="vanilla">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-primary-subtle text-primary"><i class="ti ti-exchange"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-vanilla">Vanilla</h3>
-                    <span class="ops-widget__value" id="ndf-c-vanilla">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="other">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-news"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-other">Other Publisher</h3>
-                    <span class="ops-widget__value" id="ndf-c-other">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="t0">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-calendar-event"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-t0">T+0</h3>
-                    <span class="ops-widget__value" id="ndf-c-t0">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget" style="background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0;">
+            <div class="ops-widget ops-recon ops-recon--total" data-cat="total">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon" style="background: rgba(255,255,255,.18); color:#fff;"><i class="ti ti-sum"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-total" style="color:#fff;">Total</h3>
-                    <span class="ops-widget__value" id="ndf-c-total" style="color:#fff;">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Settlement Summary table -->
-    <div class="row mt-2">
-        <div class="col-12">
+    <!-- Settlement Summary table (narrower + centred: few, short columns) -->
+    <div class="row mt-2 justify-content-center">
+        <div class="col-xxl-8 col-xl-10 col-12">
             <div class="card ops-tcard">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
@@ -201,6 +298,12 @@
                             </select>
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
                         </div>
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsGenerate">
+                            <i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">Print Advice</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsTeds">
+                            <i class="ti ti-cash me-1"></i><span data-lang="ops-teds">TEDs</span>
+                        </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
@@ -219,8 +322,7 @@
                                     <th>Pay</th>
                                     <th>Settlement Net</th>
                                     <th>Direction</th>
-                                    <th>Internal Account</th>
-                                    <th>Observação</th>
+                                    <th>Account</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
@@ -230,8 +332,7 @@
                                     <th><input type="text" placeholder="Pay"></th>
                                     <th><input type="text" placeholder="Settlement Net"></th>
                                     <th><input type="text" placeholder="Direction"></th>
-                                    <th><input type="text" placeholder="Internal Account"></th>
-                                    <th><input type="text" placeholder="Observação"></th>
+                                    <th><input type="text" placeholder="Account"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -275,30 +376,36 @@
                                     <th data-lang="ops-col-actions">Actions</th>
                                     <th data-lang="ops-col-status">Status</th>
                                     <th>LEGAL</th>
-                                    <th>HM COUNTERPARTY</th>
-                                    <th>ID_SOURCE_DEAL</th>
-                                    <th>VL_NOTIONAL_FC</th>
-                                    <th>VL_FORWARD_RATE</th>
-                                    <th>SETTLEMENT</th>
-                                    <th>ID_CETIP</th>
+                                    <th>COUNTERPARTY</th>
+                                    <th>ATHENA ID</th>
+                                    <th>B3 ID</th>
+                                    <th>TRADE DATE</th>
+                                    <th>SETTLEMENT DATE</th>
+                                    <th>NOTIONAL FC</th>
                                     <th>CCY</th>
-                                    <th>SETTLEMENT_B3</th>
-                                    <th>VL_FIXING_RATE</th>
+                                    <th>FORWARD RATE</th>
+                                    <th>SETTLEMENT</th>
+                                    <th>SETTLEMENT B3</th>
+                                    <th>FIXING RATE</th>
+                                    <th>TAX</th>
                                     <th>DIFFERENCE</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="LEGAL"></th>
-                                    <th><input type="text" placeholder="HM COUNTERPARTY"></th>
-                                    <th><input type="text" placeholder="ID_SOURCE_DEAL"></th>
-                                    <th><input type="text" placeholder="VL_NOTIONAL_FC"></th>
-                                    <th><input type="text" placeholder="VL_FORWARD_RATE"></th>
-                                    <th><input type="text" placeholder="SETTLEMENT"></th>
-                                    <th><input type="text" placeholder="ID_CETIP"></th>
+                                    <th><input type="text" placeholder="COUNTERPARTY"></th>
+                                    <th><input type="text" placeholder="ATHENA ID"></th>
+                                    <th><input type="text" placeholder="B3 ID"></th>
+                                    <th><input type="text" placeholder="TRADE DATE"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT DATE"></th>
+                                    <th><input type="text" placeholder="NOTIONAL FC"></th>
                                     <th><input type="text" placeholder="CCY"></th>
-                                    <th><input type="text" placeholder="SETTLEMENT_B3"></th>
-                                    <th><input type="text" placeholder="VL_FIXING_RATE"></th>
+                                    <th><input type="text" placeholder="FORWARD RATE"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT"></th>
+                                    <th><input type="text" placeholder="SETTLEMENT B3"></th>
+                                    <th><input type="text" placeholder="FIXING RATE"></th>
+                                    <th><input type="text" placeholder="TAX"></th>
                                     <th><input type="text" placeholder="DIFFERENCE"></th>
                                 </tr>
                             </thead>
@@ -341,6 +448,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Minimal i18n (falls back to the data-lang English text already in the DOM).
@@ -357,7 +465,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
+    // Settlement Summary rows also carry a Confirm action (Generated → Sent).
+    function summaryActionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a href="#" class="btn btn-success btn-sm ops-row-act ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
 
@@ -446,8 +560,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return dt;
     }
 
-    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
-    var dtTrade   = initTable('ops-trade-table', 11, 50); // 11 data cols (LEGAL…DIFFERENCE); default 50/page
+    var dtSummary = initTable('ops-summary-table', 6);   // 6 data cols (Counterparty…Account)
+    var dtTrade   = initTable('ops-trade-table', 14, 50); // 14 data cols (LEGAL…DIFFERENCE); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
@@ -459,23 +573,254 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.bootstrap) bootstrap.Modal.getInstance(document.getElementById('opsAddModal')).hide();
     });
 
-    // ── Cards: Vanilla / Other Publisher / T+0 / Total (from the latest TER) ──
-    function setCards(c) {
-        c = c || {};
-        $('#ndf-c-vanilla').text(c.vanilla || 0);
-        $('#ndf-c-other').text(c.other_publisher || 0);
-        $('#ndf-c-t0').text(c.t0 || 0);
-        $('#ndf-c-total').text(c.total || 0);
+    // ── Reconciliation cards: B3 (CETIP) × Internal (Cockpit), per category ──
+    function setRecon(recon) {
+        recon = recon || {};
+        document.querySelectorAll('.ops-recon').forEach(function (card) {
+            var r = recon[card.dataset.cat] || {};
+            card.querySelector('[data-recon-b3c]').textContent = r.b3_count != null ? r.b3_count : 0;
+            card.querySelector('[data-recon-b3v]').textContent = r.b3_value || '0.00';
+            card.querySelector('[data-recon-intc]').textContent = r.int_count != null ? r.int_count : 0;
+            card.querySelector('[data-recon-intv]').textContent = r.int_value || '0.00';
+            var badge = card.querySelector('[data-recon-badge]');
+            var ok = !!r.matched;
+            badge.className = 'ops-recon-badge ' + (ok ? 'is-ok' : 'is-check');
+            badge.innerHTML = ok
+                ? '<i class="ti ti-check"></i>' + t('ndf-r-ok', 'OK')
+                : '<i class="ti ti-alert-triangle"></i>' + t('ndf-r-check', 'Check');
+            card.classList.toggle('is-unmatched', !ok);
+        });
     }
 
-    // ── Reference date → refresh the header cards (tables are a manual worksheet) ─
+    // ── Derived rows (Trade Level ← NDF Cockpit; Settlement Summary ← net per
+    //    counterparty). Cells are plain text so the column filters/sorting work;
+    //    the Add-row modal still appends inline-editable manual rows.
+    function statusBadge(ok) {
+        return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
+                  : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
+    }
+    // Standard status pill for the Settlement Summary rows (New → Generated → Sent).
+    function pill(text, cls) {
+        return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
+    }
+    function statusPill(status) {
+        if (status === 'Sent')      return pill('Sent', 'text-bg-primary');
+        if (status === 'Generated') return pill('Generated', 'text-bg-success');
+        return pill('New', 'text-bg-info');
+    }
+    // 'BCO: 341 | AG: 0910 | CC: 967' with the labels in bold (values are
+    // digits, so bolding after esc() is safe).
+    function accountHtml(v) {
+        return esc(v).replace(/(BCO:|AG:|CC:)/g, '<strong>$1</strong>');
+    }
+    function fillTables(j) {
+        var cb = '<input type="checkbox" class="form-check-input ops-cb">';
+        dtTrade.clear();
+        (j.trade || []).forEach(function (r) {
+            var icon = r.ok ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
+                            : '<i class="ti ti-x text-danger fs-5 align-middle"></i>';
+            var diff = (r.diff !== '' ? esc(r.diff) + ' ' : '') + icon;
+            dtTrade.row.add([cb, actionsCell(), statusBadge(r.ok)]
+                .concat((r.cells || []).map(esc)).concat([diff]));
+        });
+        dtTrade.draw();
+        dtSummary.clear();
+        (j.summary || []).forEach(function (r) {
+            var st = statusPill(r.status);
+            dtSummary.row.add([cb, summaryActionsCell(), st,
+                esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
+                esc(r.direction), accountHtml(r.account)]);
+        });
+        dtSummary.draw();
+    }
+
+    // ── Reference date → refresh the header cards + both derived tables ─────
+    var currentYmd = '{{ today }}';
     function loadDate(ymd) {
+        currentYmd = ymd || currentYmd;
         var qs = ymd ? ('?date=' + encodeURIComponent(ymd)) : '';
-        fetch('/api/ndf-summary/cards' + qs)
+        // The reconciliation cards + both tables all come from /data (Cockpit,
+        // Operations B3 and the FX whitelist), so a single call feeds everything.
+        fetch('/api/ndf-summary/data' + qs)
             .then(function (r) { return r.json(); })
-            .then(function (j) { if (j && j.success) setCards(j.cards); })
+            .then(function (j) { if (j && j.success) { fillTables(j); setRecon(j.recon); } })
             .catch(function () {});
     }
+
+    // ── Generate: settlement notices (.eml drafts) per counterparty ─────────
+    // Same delivery as the New Deals premium notices: the response is either a
+    // JSON "nothing to generate"/error or a downloadable .eml/.zip whose drafts
+    // open in the user's own Outlook (X-Unsent).
+    // Decode the HTML-escaped counterparty cell back to its raw name (esc() ran on
+    // it when the row was built) so the backend matches the exact cockpit name.
+    function decodeHtml(s) {
+        var el = document.createElement('textarea'); el.innerHTML = String(s || ''); return el.value;
+    }
+    function b64ToBlob(b64, mime) {
+        var bin = atob(b64), len = bin.length, bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+        return new Blob([bytes], { type: mime || 'application/octet-stream' });
+    }
+    function saveBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
+    var genBtn = document.getElementById('opsGenerate');
+    if (genBtn) genBtn.addEventListener('click', function () {
+        var btn = this;
+        // Only the rows whose checkbox is ticked (same selector the Delete uses).
+        var sel = dtSummary.rows(function (idx, data, node) {
+            return node ? $(node).find('.ops-cb').prop('checked') : false;
+        });
+        var names = [];
+        sel.data().each(function (d) {
+            var name = decodeHtml(d[3]).trim();
+            if (name) names.push(name);
+        });
+        var selIdx = sel.indexes();
+        if (!names.length) {
+            if (window.Swal) Swal.fire({ title: t('ops-gen-nosel-title', 'No Selection'),
+                text: t('ops-gen-nosel', 'Select at least one counterparty to generate its notices.'),
+                icon: 'info', confirmButtonColor: '#0066cc' });
+            return;
+        }
+        // Only the selected counterparty rows had their notice(s) generated — flip
+        // just those status pills (display-time only; it resets on the next load).
+        function finishGenerated(count, cpties) {
+            dtSummary.rows(selIdx).every(function () {
+                var d = this.data();
+                d[2] = statusPill('Generated');
+                this.data(d);
+            });
+            dtSummary.draw(false);
+            if (window.Swal) Swal.fire({ title: t('ops-gen-ok-title', 'Notices Generated'),
+                text: t('ops-gen-ok-text', '{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook.')
+                    .replace('{n}', count).replace('{c}', cpties),
+                icon: 'success', confirmButtonColor: '#0066cc', timer: 5000, timerProgressBar: true });
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-generate', 'Print Advice');
+        fetch('/api/ndf-summary/settlement-emails', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparties: names })
+        }).then(function (r) {
+            var ct = (r.headers.get('Content-Type') || '');
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (res) {
+                    // Up to 2 notices → individual .eml files (no zip): saved one by
+                    // one so each opens straight in Outlook.
+                    if (res && res.ok && res.files && res.files.length) {
+                        res.files.forEach(function (f, i) {
+                            // stagger the saves so the browser doesn't drop the 2nd
+                            setTimeout(function () { saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename); }, i * 350);
+                        });
+                        finishGenerated(res.count, res.counterparties);
+                        return;
+                    }
+                    var ok = res && res.ok && (res.count || 0) === 0;
+                    var msg = ok ? t('ops-gen-none', 'No settlements to notify for this date.')
+                                 : ((res && res.error) || t('ops-gen-fail', 'Request failed.'));
+                    if (window.Swal) Swal.fire({ title: ok ? t('ops-gen-none-title', 'Nothing to Generate') : t('swal-err-title', 'Error'),
+                        text: msg, icon: ok ? 'info' : 'error', confirmButtonColor: ok ? '#0066cc' : '#dc3545' });
+                    else alert(msg);
+                });
+            }
+            // 3+ notices → a single .zip download.
+            var count = r.headers.get('X-Draft-Count') || '0';
+            var cpties = r.headers.get('X-Counterparty-Count') || '0';
+            var m = /filename="?([^"]+)"?/.exec(r.headers.get('Content-Disposition') || '');
+            var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
+            return r.blob().then(function (blob) {
+                saveBlob(blob, fname);
+                finishGenerated(count, cpties);
+            });
+        }).catch(function () {
+            if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
+        }).finally(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">' + t('ops-generate', 'Print Advice') + '</span>';
+        });
+    });
+
+    // ── Confirm action: flip a Settlement Summary row Generated → Sent ────────
+    // Only a generated notice can be confirmed; the new status is persisted (day
+    // overlay) so it survives a reload, just like Generated.
+    $('#ops-summary-table tbody').on('click', '.ops-row-confirm', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) return;
+        var rowApi = dtSummary.row($btn.closest('tr'));
+        var d = rowApi.data();
+        if (!d) return;
+        if (!/>Generated</.test(d[2] || '')) {
+            if (window.Swal) Swal.fire({ title: t('ops-confirm-na-title', 'Not Generated'),
+                text: t('ops-confirm-na', 'Only a generated notice can be marked as Sent.'),
+                icon: 'info', confirmButtonColor: '#0066cc' });
+            return;
+        }
+        var name = decodeHtml(d[3]).trim();
+        $btn.prop('disabled', true);
+        fetch('/api/ndf-summary/mark-sent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparties: [name] })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res && res.ok && res.updated) {
+                  d[2] = statusPill('Sent'); rowApi.data(d); dtSummary.draw(false);
+              } else {
+                  if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                      text: (res && res.error) || t('ops-gen-fail', 'Request failed.'),
+                      icon: 'error', confirmButtonColor: '#dc3545' });
+              }
+          })
+          .catch(function () {
+              if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                  text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
+          })
+          .finally(function () { $btn.prop('disabled', false); });
+    });
+
+    // ── TEDs: e-mail the TED release request (Pay filled, account BCO ≠ 376,
+    //    SSI attached per counterparty) to OTC Ops + Settlements ──────────────
+    var tedBtn = document.getElementById('opsTeds');
+    if (tedBtn) tedBtn.addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-teds', 'TEDs');
+        fetch('/api/ndf-summary/ted-email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res && res.ok && (res.count || 0) === 0) {
+                  Swal.fire({ icon: 'info', title: t('ops-ted-none-title', 'No TEDs'),
+                              text: res.message || t('ops-ted-none', 'Nothing to release for this date.'),
+                              confirmButtonColor: '#0066cc' });
+              } else if (res && res.ok) {
+                  var extra = (res.missing_ssi && res.missing_ssi.length)
+                      ? '<br><span class="text-warning">' + t('ops-ted-nossi', 'SSI not found for:') + ' ' +
+                        res.missing_ssi.map(esc).join(', ') + '</span>' : '';
+                  Swal.fire({ icon: 'success', title: t('ops-ted-ok-title', 'TED release sent'),
+                              html: res.count + ' TED(s) · ' + (res.attached || 0) + ' SSI attachment(s).' + extra,
+                              confirmButtonColor: '#0066cc' });
+              } else {
+                  Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                              text: (res && res.error) || t('ops-gen-fail', 'Request failed.'),
+                              confirmButtonColor: '#dc3545' });
+              }
+          })
+          .catch(function () {
+              Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                          text: t('ops-gen-fail', 'Request failed.'), confirmButtonColor: '#dc3545' });
+          })
+          .finally(function () { btn.disabled = false; btn.innerHTML = orig; });
+    });
 
     // Expose the batch loader so the reference-date picker (own <script> below)
     // can trigger a reload.

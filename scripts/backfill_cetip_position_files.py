@@ -59,11 +59,10 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-# routes.py imports `awmpy` (a JPM-internal module). It's present on the JPM
-# environment where this backfill actually runs; off-environment we install a
-# minimal stub so the module still imports — the backfill only uses routes.py's
-# pure file helpers (_CETIP_RULES / _cetip_save_file / _b3_export_json), never
-# the phonebook, so the stub is never exercised.
+# routes.py imports `awmpy`. If it isn't installed, install a minimal no-op
+# fallback so the module still imports — the backfill only uses routes.py's pure
+# file helpers (_CETIP_RULES / _cetip_save_file / _b3_export_json), never the
+# phonebook, so the fallback is never exercised.
 try:
     import awmpy  # noqa: F401
 except ImportError:

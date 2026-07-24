@@ -4226,3 +4226,748 @@ f003802  Kapital Hybrids: remove coluna Trade
 c479581  recon-payrec: COMM TER IR fee per-trade-net (não per-leg)
 9a5a924  recon-payrec: Settled dentro de centavos (< R$1) + fallback de match
 ```
+
+---
+
+## 87. Sessão 2026-07-20 — Ambiente: pasta OFICIAL no Desktop (Python 3.12, awmpy stub, WAL, SSH)
+
+A partir desta sessão a **pasta oficial do projeto** é `/Users/pistacchio/Desktop/OTC Tracker`
+(clone limpo da branch `apple-design` do GitHub). A pasta antiga do iCloud
+(`.../com~apple~CloudDocs/Desktop/OTC Tracker`) tinha arquivos **descarregados na nuvem** (só
+placeholders — `routes.py` nem existia localmente) e um venv quebrado.
+
+Setup para rodar neste Mac (não estava óbvio):
+- **venv `.venv311` recriado com Python 3.12** (Homebrew). O `python@3.11` foi removido da máquina;
+  o venv que veio junto apontava para caminhos de outra máquina/usuário e não abria.
+- **`requirements.txt` ganhou `duckdb` + `flask-minify`** (`ad91911`) — ambos usados no código
+  (duckdb em routes/recon; flask-minify em `run.py`) mas faltavam, quebrando um ambiente novo.
+- **Stub de `awmpy`** criado no site-packages do venv (a lib interna do JPM não existe fora da rede).
+  Consequência: o **login real por SID/phonebook não funciona** localmente — usar `/dev-login`
+  (bloco DEV BYPASS). Dentro da rede JPM o login normal volta a funcionar.
+- **WAL incompatível**: `Users_OTCTracker.db.wal` (gerado por outra versão do DuckDB) impedia abrir o
+  banco (`INTERNAL Error … replaying WAL`). Renomeado para `Users_OTCTracker.db.wal.incompatible-bak`
+  (o `.db` principal está intacto). Se reaparecer após rodar com outra versão do duckdb, repetir.
+- **Porta**: no macOS a **porta 5000 é do AirPlay Receiver** (retorna 403 "AirTunes"). Rodar em **5005**:
+  `flask run --port=5005`.
+- **`DB_PATH` NÃO é mais caminho Windows hardcoded** — hoje é relativo
+  (`static/data/db/Users_OTCTracker.db`). A nota antiga do CLAUDE.md sobre isso ficou desatualizada
+  (corrigida nesta sessão).
+
+**GitHub via SSH**: chave `ed25519` gerada (`~/.ssh/id_ed25519`), pública adicionada em
+github.com/settings/ssh, remote trocado para `git@github.com:PistacchioV/OTC-Tracker.git`. O push por
+HTTPS não funcionava (sem credencial). O processo do **DEV BYPASS** continua: `routes.py` é stripado
+do bloco `/dev-login` antes de cada commit e restaurado depois (ver seção do commit-push).
+
+
+## 88. Sessão 2026-07-20 — Recon Pay/Rec: colapsar pendente carregado com a liquidação efetiva do dia (`f7ee5cd`)
+
+**Sintoma:** um item marcado como `Pending Payment/Receivement` em D-anterior (ex.: JPM esperava
+**receber** 134.006,40 da EVONIK) que **liquidou hoje** (o recebimento efetivo entrou no lado
+cliente/banco) continuava aparecendo como **duas linhas** — o pendente carregado + o atual de hoje —
+mesmo com **valor e contraparte batendo**.
+
+**Causa:** o motor (`_reconcile`) só casa **JPM × cliente do MESMO dia**. O atual de hoje não tinha
+contraparte JPM no dia (a expectativa do JPM foi lançada no dia em que ficou pendente), então virou um
+`Pending` solto do lado cliente; e o `_apply_carry_forward` apenas **reanexava** o item carregado como
+pendente, sem casá-lo contra o atual.
+
+**Fix** (`apps/pages/recon_payrec.py`, `_apply_carry_forward`): antes de reexibir um item carregado,
+tenta casá-lo contra a atualização de hoje — **mesma LE, mesma direção, o lado OPOSTO preenchido, valor
+dentro da tolerância de centavos (< R$1)** — e colapsa os dois numa única linha **Settled**, com
+comentário rastreável (`… — liquidado`). Guardas: só casa contra `Pending` puro (nunca outro item
+carregado); exige exatamente um lado preenchido em cada; não colapsa em mismatch de valor ou direção.
+Validado com 5 cenários (Evonik, M Dias com nome diferente/valor igual, sem-atual, mismatch, direção
+oposta). **Para ver o efeito: reprocessar o Pay/Rec do dia** (ele puxa o histórico finalizado do dia
+anterior).
+
+
+## 89. Sessão 2026-07-20 — Control Panel: card Daily Metric — Outstanding Confirmation Brazil OTC (`3303c03`, `215b263`)
+
+Novo card na seção **Forecasts & Reports** do Control Panel, no padrão dos demais:
+- Campos **TO / CC / BCC** **persistidos** em `apps/static/data/control-panel/daily_metric_recipients.json`
+  (carregam ao abrir, salvam no `blur` e antes de cada Run) — não precisa redigitar.
+- **Reference date fixa = hoje** (readonly, excluída do flatpickr via `.cp-datefield[data-fixed]`).
+- Botão **Run** que salva os destinatários e dispara o e-mail (BCC só no envelope, nunca no cabeçalho).
+- Placeholders em inglês, separador **`;`** (o backend `_parse_emails` aceita `,`/`;`/espaço).
+
+Backend: card id **`dailymetric`** em `_CONTROL_PANEL_CARDS` + `_CP_ENDPOINT_CARD`; endpoints
+`/api/control-panel/daily-metric/recipients` (GET/POST) e `/run`, ambos sob o controle de acesso por card.
+⚠️ **Escopo escolhido = "só o scaffold"**: o **corpo do e-mail é placeholder** ("Métrica a ser
+definida"). Toda a canalização (persistência + envio + destinatários) está pronta; falta definir a
+**fonte/conteúdo da métrica**. JS no `CP_GROUP` do template (`dailymetric: 'reporting'`).
+
+
+## 90. Sessão 2026-07-20 — About: reescrita refletindo TODAS as features atuais (`7b4af78`)
+
+A seção de capabilities do `about.html` foi reescrita para espelhar a navegação real do app (7 grupos,
+**30 cards**). Novidades: grupo **Live Position** (NDF/Swap/Option); Daily Settlement expandido
+(NDF Summary&Cockpit, Swap Athena/VCP/Events/Kapital Hybrids, Option Cognos, Operations B3);
+**Reconciliations** ganha Pay/Rec; **Apps** ganha File Interpreter, Holidays Calendar, Page Access.
+Corrigido o Swap Characteristics (movido para Live Position, onde a rota vive) e o stat de contratos
+(3 · NDF/Opções/Swap). **Só features reais entram** — placeholders (Unwinds, DCE, E-financeira, WHT,
+CGD, Settlement Advice, Manual Confirmation, etc.) ficam de fora. Botões Live Position e Pay/Rec no hero.
+23 chaves novas de tradução em **`br/en/es.json`** (idiomas são br/en/es, padrão `en`; chave ausente
+mantém o texto inline). Motion mantido no padrão emil-design-eng (scroll-reveal + stagger com easing
+custom, hover/press atrás de `@media (hover:hover)`, `prefers-reduced-motion`), stagger estendido p/ 8.
+
+
+## 91. Sessão 2026-07-20 — Metrics: dashboard de Pending Confirmation (>30 dias) (`44bec16`)
+
+Nova página **`/metrics-pending-confirmation`** (link "Metrics" do sidenav repontado de `/metrics`).
+Modelo visual do `dashboards/index.html` (Chart.js) + emil-design-eng.
+
+- **Card KPI**: volume de confirmações pendentes >30d (número grande + tendência + mini-stats). Seed do
+  relatório externo (imagem) até acumular histórico interno.
+- **Gráfico de histórico** (combo: barras de volume + linha de variação %) com **dropdown de escopo**
+  (`>30` default / `All`) e **de range** (Current Year / Last 24 Months / Daily=mês corrente).
+- **Top 5 Offenders** (>30d): **bankers** (por # de clientes distintos), **clients** e **economic groups**
+  (por # de confirmações). Barras horizontais.
+
+Backend (`routes.py`): rota + APIs `/api/metrics-pending-confirmation/offenders` e `/history`; helpers
+`_pc_latest_snapshot_rows` (último snapshot diário; fallback DB de pending ao vivo), `_pc_metrics_offenders`,
+`_pc_metrics_history`. **Gotchas de dados** (confirmados com o usuário):
+- **Owner = o grupo INTEIRO de bankers tratado como UM nome** (não splitar por `;`) — o grupo é o mesmo
+  time; o RefData não tem campo BANKER (0/439). Ranking de banker = # de clientes distintos por grupo.
+- **Aging é numérico**; filtro **`> 30`**.
+- **Fonte = snapshots diários** `static/data/cache/pending-confirmation/YYYY/MM/DD/pending-confirmation_*.json`
+  (a "foto do dia", gerada pela manutenção das 11:30); fallback = DB de pending ao vivo.
+- **Seed do histórico** em `apps/static/data/pending-confirmation-metrics-history.json` (volume mensal
+  Jun/2023→Jun/2026 + diário jul/2026, do relatório externo). O MoM/DoD % é derivado na API.
+- **Estado atual**: offenders e o escopo "All" ficam vazios até os snapshots diários acumularem dados
+  internos (o DB de pending estava vazio); o histórico >30 já vem do seed.
+
+
+### Commits (sessão 2026-07-20)
+```
+f7ee5cd  recon-payrec: casar item pendente carregado com a liquidação efetiva do dia
+ad91911  deps: adicionar duckdb e flask-minify ao requirements
+3303c03  control-panel: card Daily Metric — Outstanding Confirmation Brazil OTC
+215b263  control-panel: placeholders do Daily Metric em inglês + separador ;
+7b4af78  about: refletir todas as features atuais + Live Position, Pay/Rec, Cognos, etc.
+44bec16  metrics: dashboard de Pending Confirmation (>30 dias)
+```
+
+### Arquivos (sessão 2026-07-20)
+```
+apps/pages/recon_payrec.py                             ← _apply_carry_forward: colapso carried × atual do dia
+apps/pages/routes.py                                   ← Daily Metric card (endpoints/persistência) + Metrics PC (rota/APIs/helpers)
+requirements.txt                                       ← + duckdb, flask-minify
+apps/templates/pages/control-panel.html                ← card Daily Metric (UI + JS + acesso)
+apps/static/data/control-panel/daily_metric_recipients.json  ← destinatários persistidos (runtime; não versionar)
+apps/templates/pages/about.html                        ← reescrita das capabilities (30 cards, 7 grupos)
+apps/static/data/translations/{br,en,es}.json          ← +23 chaves about-*
+apps/templates/pages/metrics-pending-confirmation.html ← NOVA página (KPI + histórico + top-5)
+apps/static/js/pages/metrics-pending-confirmation.js   ← NOVO (Chart.js: combo + barras horizontais)
+apps/static/data/pending-confirmation-metrics-history.json  ← NOVO seed do histórico >30d
+apps/templates/partials/sidenav.html                   ← link Metrics → /metrics-pending-confirmation
+```
+
+---
+
+## 92. Sessão 2026-07-20/21 — Metrics PC: Top 5 Bankers por contratos + cor semântica do change (`7aca230`, `6277acc`)
+
+- **Top 5 Bankers** passou a contar **nº de contratos/confirmações** por grupo Owner (cada linha = um
+  contrato), não clientes distintos. Rótulo/tooltip = "Contracts".
+- **Cor semântica do "change"** no gráfico de histórico (pendência é métrica que se quer reduzir):
+  linha/pontos ficam **verdes ao cair (bom)**, **cinza estável**, **vermelhos ao subir (ruim)**. Segmentos
+  coloridos pelo ponto de destino, legenda e seta no tooltip. Consistente com o badge do KPI.
+
+
+## 93. Sessão 2026-07-20/21 — Dashboard/Forecast: manter SWAP CEMHYB (e todo produto padrão) em zero (`ec4c6ba`)
+
+`_forecast_matrix` só incluía produtos presentes no `mapping`, então um produto sem liquidação na janela
+(ex.: **SWAP CEMHYB**, sem hybrids nos próximos 30 dias úteis) **sumia** do gráfico e do e-mail. Agora
+`_forecast_payload` faz **seed de `_FCST_PRODUCT_ORDER` com série zero** antes da matriz — o conjunto de
+produtos fica estável e nenhum desaparece.
+
+
+## 94. Sessão 2026-07-20/21 — Pending Confirmation: widgets, filtro Aging e ordenação de datas (`655b43d`, `51fd62d`)
+
+- **Widgets (contagem):** o total de cada faixa de Aging voltou a contar **todas** as linhas pendentes (=
+  tabela/Excel; ex.: >30 = 329), e cada card ganhou uma **linha "Others"** (catch-all no JS: 8 tipos
+  conhecidos + `others`) — a quebra sempre soma o total. Culpado eram linhas com Pending Status fora dos 8
+  tipos (ex.: **"Exception Fep Web"**). A tentativa anterior (total = soma dos 8) subcontava; revertida.
+- **Filtro Aging com operadores** na linha de filtro por coluna: `>30`, `>=30`, `<15`, `<=30` (custom
+  search numérico do DataTables; número puro segue substring). "Clear Filters" reseta.
+- **Ordenação de datas** (Trade/Maturity/EA/Send/Return/Baixa/Pendência/Abono): `columnDef` com `render`
+  ortogonal `yyyymmdd` — antes ordenavam como texto `dd/mm/yyyy` (por dia).
+
+
+## 95. Sessão 2026-07-20/21 — Daily Metric: e-mail real (crescimento >30d + pivot) (`ae7d1db`, `3f0a3b0`, `31a1e90`)
+
+O card Daily Metric passou a enviar um **e-mail real** (`email-template-daily-metric.html`), modelado no
+relatório externo:
+- **Métrica de crescimento >30d** visual e enxuta: número + tendência colorida MoM + **gráfico de barras**
+  (valor em cima, mês/ano embaixo, email-safe via atributos `height`/`bgcolor`) + **2º gráfico diário**
+  (day-over-day, mês corrente).
+- **Pivot por ECONOMIC GROUP** (do **RefData.json**, por SPN→nome), **verde/FepWeb = SIGNATURE TYPE
+  DIGITAL** do grupo, banker do RefData, Operations fixo = **Priscila Babilonia**, Business em linha única.
+- **Gotchas:** o `RefData.json` tem `ECONOMIC GROUP`/`SIGNATURE TYPE`/`BANKER` por contraparte (helpers
+  `_pc_refdata_lookup`, `_pc_metrics_pivot`, `_pc_bar_series`). Colisão de nome: existe outro `_MONTH_ABBR`
+  (dict) no módulo → o do daily-metric é `_DM_MONTH_ABBR`. Jinja **nunca** dentro de `style="..."` (o
+  linter CSS do VSCode reclama) — valores dinâmicos via atributos `bgcolor`/`height`/`<font color>`.
+
+
+## 96. Sessão 2026-07-20/21 — Weekly Escalation CEM/EDG: card + e-mail (`6503e8f`)
+
+Novo card no Control Panel (**TO/CC** persistidos em `weekly_escalation_recipients.json`, mesmo tamanho dos
+demais), para rodar **toda sexta**. Envia `email-template-weekly-escalation.html`: pendentes **>30 dias**
+divididos por **LOB (CEM e EDG)** — match exato normalizado (`cem`/`edg`, evita `CEMHYB`) —, agrupados por
+**banker** (RefData, total por banker) e quebrados por **EMPRESA/cliente** (não grupo econômico). Endpoints
+`/api/control-panel/weekly-escalation/{recipients,run}` sob acesso por card. Run é manual (não há scheduler
+automático de sexta — a cadência é operacional).
+
+
+### Commits (continuação sessão 2026-07-20/21)
+```
+7aca230  metrics: Top 5 Bankers por quantidade de contratos
+ec4c6ba  dashboard/forecast: manter SWAP CEMHYB (produto padrão) em zero
+655b43d  pending-confirmation: total conta todas as linhas + linha Others
+51fd62d  pending-confirmation: filtro Aging (>, <, >=, <=) + ordenação de datas
+6277acc  metrics: cor semântica do change (down=verde/flat=cinza/up=vermelho)
+ae7d1db  daily-metric: template do e-mail (crescimento >30d + pivot)
+3f0a3b0  daily-metric: pivot por grupo econômico (RefData) + barras + day-over-day
+31a1e90  daily-metric: remover Jinja de dentro de style= (linter CSS)
+6503e8f  control-panel: card + e-mail de Weekly Escalation CEM/EDG (>30 dias)
+```
+
+### Arquivos (continuação sessão 2026-07-20/21)
+```
+apps/pages/routes.py                                   ← forecast seed; Daily Metric e-mail (pivot/barras/RefData); Weekly Escalation (card/endpoints/dados)
+apps/templates/pages/metrics-pending-confirmation.html ← (n/a)
+apps/static/js/pages/metrics-pending-confirmation.js   ← Top5 Bankers=contratos; cor semântica do change
+apps/templates/pages/pending-confirmation.html         ← widgets (Others/total); filtro Aging operadores; ordenação datas
+apps/templates/pages/email-template-daily-metric.html  ← NOVO template (crescimento >30d + pivot grupo econômico)
+apps/templates/pages/email-template-weekly-escalation.html ← NOVO template (CEM/EDG por banker/empresa)
+apps/templates/pages/control-panel.html                ← card Weekly Escalation (TO/CC) + JS + acesso
+apps/static/data/control-panel/weekly_escalation_recipients.json ← destinatários TO/CC (runtime; não versionar)
+```
+
+
+## 97. Sessão 2026-07-21 — Control Panel duas seções + Live Position ordenação + Pending filtros AND (`661d741`, `11407d4`, `f735916`)
+
+- **Control Panel — duas seções com header** (`661d741`): todos os cards passam a viver sob um bloco
+  header+cards, garantindo que cada card tenha título/agrupamento visível (antes um grupo ficava sem cabeçalho).
+- **Live Position — ordenação cronológica das colunas de data** (`11407d4`): NDF/Swap/Option ordenam as
+  colunas de data por data real (não string), consistente com a Média Asiática (ver §85).
+- **Pending Confirmation — filtros de coluna interligados (AND)** (`f735916`): múltiplos filtros de coluna
+  aplicam em conjunto (AND) + ajustes no modal.
+
+
+## 98. Sessão 2026-07-21 — NOVA página Electronic Inventory (biblioteca de docs por contraparte)
+
+Nova página **Electronic Inventory** — biblioteca de documentos (PDF) por contraparte, lendo do share `I:`.
+Sequência de commits pela ordem em que os problemas apareceram no ambiente JP:
+
+- `c9b9d3f` — página inicial (dropdown de contrapartes + lista de docs + preview).
+- `5676738` — estado visível quando o fetch de contrapartes falha (sessão/rede) + bump de cache do JS.
+- `7cf68db` — **dropdown com fundo opaco** (light/dark, `#ffffff`/`#1b1e24`) + z-index/sombra maiores — não
+  fica mais transparente/confuso (`var(--bs-body-bg)` não era opaco sob o tema glass).
+- `05cdf7e` — **varredura do share `I:` com timeout (4s)** — não trava mais quando o drive de rede está lento;
+  nomes do RefData carregam na hora, status `share slow`.
+- `7ae6668` — **cache + background-warm** da varredura; badge **"no folder" só quando o scan COMPLETO**
+  confirma ausência (tri-state `on_disk`: `False`=ausente, `None`=ainda escaneando), com repolling a cada 4s —
+  não marca mais falso "no folder" enquanto o `I:` ainda está sendo lido.
+- `c611be1` — **PDF viewer em card próprio abaixo da lista**; lista **só PDFs** (`ext != '.pdf': continue`);
+  viewer alto (78vh) com spinner de loading; resolve de pasta usa o **cache do scan** (sem re-`listdir` do
+  share) — muito mais rápido.
+- `cab0a35` — **dropdown pagina ao rolar** (paginação incremental de 60, preservando scroll) — antes limitava
+  em 60 e parava na ~"AUMOVIO"; teclado também avança e faz `scrollIntoView`.
+
+Engine (routes.py): `_ei_scan_root_worker()`/`_ei_scan_root(grace=6.0)` + `_EI_ROOT_CACHE`
+(ts/exists/dirs/complete/scanning) sob `_EI_ROOT_CACHE_LOCK`; `api_ei_clients` devolve
+`scan_complete`/`share_slow` e `on_disk` tri-state; `_ei_resolve_client_dir` usa `_EI_ROOT_CACHE['dirs']`;
+`_ei_iter_files` filtra `.pdf`.
+
+
+## 99. Sessão 2026-07-21 — Pending Confirmation: `Exception *` conta como OK (`1174a94`, `5b11529`, `074f544`)
+
+Regra: linhas com **`Pending Status = Exception *`** passam a contar como **OK (resolvido)** — excluídas de
+todas as métricas de confirmações pendentes — **tanto na base atual quanto em edições futuras**.
+
+- `1174a94` — no upsert/manutenção, `Exception*` é roteado para o **DB `ok`** (não `pending`); widgets,
+  dashboard e e-mail o excluem; filtro defensivo em snapshots antigos.
+- `5b11529` — **Metrics (>30 dias)**: o histórico exclui `Exception*` ao contar dos snapshots JSON — consistente
+  com widgets/dashboard/e-mail.
+- `074f544` — **filtro STATUS** re-agrupa pela **categoria atual recomputada** (`_pc_target_category`) — rows
+  `Exception*`/`OK` não vazam mais para o filtro **Pending** mesmo antes da migração física entre DBs.
+
+Helper central: `_pc_is_ok_status(v)` = `_pc_norm(v).startswith('exception') or n in _PC_OK_STATUSES`.
+No template `pending-confirmation.html`, `updateWidgets()` pula `^\s*exception` (`_pcStrip(d[11])`).
+
+
+## 100. Sessão 2026-07-21 — Upload modal (Electronic Inventory): menos translúcido + ícone de calendário (`590ccf6`)
+
+Modal Upload liquid-glass mais opaco (escopo local: `#eiUploadModal .modal-content.liquid-glass`
+→ `rgba(255,255,255,0.92)`, dark `rgba(26,29,35,0.94)`) + ícone de calendário (SVG background) no campo `#eiUpDate`.
+
+
+## 101. Sessão 2026-07-21 — E-mails: header de gradiente bulletproof (Outlook + modernos), num partial compartilhado
+
+Longa iteração no header do e-mail **Daily Metric** até funcionar no Outlook do JP, depois **refatorado num
+partial** e aplicado a **todos** os templates. Ordem dos commits (cada um resolveu um sintoma real no Outlook):
+
+`fe3fc8c`→`4a29f82`→`fb93f59` (assinatura "Institutional Services by OTC Tracker"; badges Digitally/Manually
+signed; header azul; texto "OTC Derivatives"; primeira tentativa VML) → `33d93b1` (VML quebrava: logo no canto,
+faixa à direita — voltou ao sólido) → `cc9c54c` (gradiente `#6aa2ea→#4f8ae2→#3f63c9`) → `3bcc58d`/`9164280`
+(gradiente no Outlook via **imagem** — `<td background=url>` e VML `type=frame`; PNG anexado por Content-ID
+`otc_gradient`; helper `_get_email_asset`) → `dbf2953`/`d7aae08`/`e779bc8` (badges 120px iguais; `mso-width-percent`
+= % da **página** causou full-width → revertido para 820px fixo + wrapper mso) → `dea2149` (pivot com
+`table-layout:fixed`+`colgroup`+`word-break` — nomes longos estavam esticando o card >820px e empurrando o
+header) → `73a9acb` (**`<center>` + tabela `align=center`/`margin:auto`** centraliza no Outlook — "bingo").
+
+**Refatoração** (`f926866`): header extraído para **`partials/email-gradient-header.html`** (params
+`header_title`, `header_subtitle|safe`, `header_logo_height`, `header_width`), com **context processor**
+`_inject_email_grad_url` expondo `grad_url` app-wide (`url_for(... 'images/email-header-gradient.png',
+_external=True)`, fallback `cid:otc_gradient`). VML `v:rect`+`v:fill type=frame` para Outlook, `<td background>`
++CSS `linear-gradient` para modernos, sólido `#4f8ae2` quando imagens bloqueadas, logo `display:inline-block`.
+Aplicado ao daily-metric e aos 9 templates. Asset novo: **`apps/static/images/email-header-gradient.png`**
+(820×220, gradiente diagonal). A antiga imagem em `static/data/image` deixou de ser usada.
+
+**Fix largura + emenda** (`98b2302`): `header_width` parametriza VML rect + tabela central — corrige a emenda
+quando o container não é 820px (settlement-forecast/recon 760, accrual/mtm/cetip 600-620, weekly 720). A barra de
+data separada foi recolorida `#1a2c5e→#3f63c9`.
+
+**Fix "divisão" do Settlement Forecast** (`5525d6a`): a barra de data separada era a origem da divisão sob o
+header — **removida**; Reference Date movido para o **subtítulo do header** (`header_subtitle = 'Reference Date
+&nbsp;·&nbsp; <strong>' ~ ref_date_fmt ~ '</strong>'`; recon-* usam `recon_date_fmt`). Header único e coeso nos 8.
+
+
+## 102. Sessão 2026-07-21 — NOVO card "Pending Signature Confirmations — Collection" (`ac252de`, `1433dfe`)
+
+Novo card no Control Panel (inglês + data-lang) que **segrega as confirmações pendentes de assinatura por
+contraparte** e gera **1 `.eml` por contraparte** (num zip) como **rascunho** (header `X-Unsent`) para o Downloads.
+Base de referência: página **Pending Confirmation**; escopo: **Pending Digital Signature + Pending Original**.
+
+- **From**: `is.trade.doc@jpmchase.com`.
+- **To**: contatos do **CounterpartyDetails** (via `otc_emails._contacts_emails`, com fallback para todos os
+  contatos da contraparte).
+- **CC**: **bankers da contraparte** + `brazil.otc.ops@jpmorgan.com` + `is.trade.doc@jpmchase.com` (fixos).
+  Os bankers vêm de **`apps/static/data/signature_collection_bankers.json`** (58 contatos, `{name,email}`, domínios
+  `xx→jpmorgan`/`xxxx→jpmchase`, deduplicado por email). **Resolução do banker**: RefData `BANKER` quando existe,
+  **senão a coluna `Owner`** da linha do Pending Confirmation (`1433dfe` — muitas contrapartes, ex. ABB, têm
+  `BANKER=None` no RefData mas `Owner` preenchido; o grupo é splitado por `[;,/&]| e ` e cada nome resolvido via a
+  JSON de bankers).
+- **Corpo/tabela/assinatura**: conforme legado (Prezados… tabela Aging/Product Type/Trade Date/Maturity
+  Date/Trade Number… portal `www.jpmorganportaldigital.com`… assinatura Banco J.P. Morgan S.A. com telefone da 1ª
+  linha removido e `brsp_otc`→`is.trade.doc@jpmchase.com`). Disclaimer varia: digital→"Pendente de Assinatura
+  Digital", senão "Pendente de Assinatura".
+
+Engine (routes.py): `_sigcoll_groups()` (agrupa por `(disclaimer, spn|nome)`), `_sigcoll_build_drafts()`,
+`_sigcoll_cc_emails(banker_group, bankers)`, `_sigcoll_to_emails`, `_sigcoll_email_html/table_html/signature_html`,
+`_sigcoll_bankers_index()`. Endpoints `/api/control-panel/signature-collection/{preview(GET),generate(POST)}` sob
+acesso por card (registry `signaturecollection`, ícone `ti-writing-sign`); `generate` →
+`otc_emails.build_drafts_download(drafts, _SIGCOLL_FROM)` → attachment + `_create_notification`. i18n: 8 chaves em
+`translations/{en,br,es}.json`.
+
+
+### Commits (sessão 2026-07-21)
+```
+661d741  control-panel: duas seções (header + cards) para todo card ter título
+11407d4  live-position: ordenação cronológica das colunas de data (NDF/Swap/Option)
+f735916  pending-confirmation: filtros de coluna interligados (AND) + modal
+c9b9d3f  electronic-inventory: NOVA página (biblioteca de docs por contraparte)
+5676738  electronic-inventory: estado visível quando o fetch falha + bump cache JS
+7cf68db  electronic-inventory: dropdown com fundo opaco (light/dark) + z-index
+05cdf7e  electronic-inventory: varredura do share I: com timeout (4s) + share slow
+7ae6668  electronic-inventory: cache + warm; 'no folder' só com scan completo (tri-state)
+c611be1  electronic-inventory: PDF viewer em card próprio; só PDFs; resolve via cache
+590ccf6  electronic-inventory: modal Upload menos translúcido + ícone de calendário
+cab0a35  electronic-inventory: dropdown pagina ao rolar (60 incremental, preserva scroll)
+1174a94  pending-confirmation: 'Exception *' conta como OK (excluído das métricas)
+5b11529  metrics-pending-confirmation: histórico >30d exclui Exception* (OK)
+074f544  pending-confirmation: filtro STATUS re-agrupa pela categoria recomputada
+fe3fc8c..73a9acb  email-daily-metric: iteração do header (badges/gradiente/VML/centralização)
+9164280,3bcc58d  email-daily-metric: gradiente no Outlook via imagem (PNG cid/url_for)
+f926866  emails: header de gradiente bulletproof num partial + context processor grad_url
+98b2302  emails: header_width parametrizado (VML+tabela) + recolor barra de data
+5525d6a  emails: remove barra de data separada → Reference Date no subtítulo do header
+ac252de  control-panel: card 'Pending Signature Confirmations — Collection' (.eml/zip)
+1433dfe  signature-collection: CC dos bankers via Owner quando RefData BANKER vazio
+```
+
+### Arquivos (sessão 2026-07-21)
+```
+apps/pages/routes.py                                   ← EI scan/cache/endpoints; _pc_is_ok_status + roteamento Exception*→ok;
+                                                          _get_email_asset + context processor grad_url; feature signature-collection
+apps/pages/otc_emails.py                               ← build_drafts_download/build_eml_bytes/_contacts_emails (reuso p/ signature-collection)
+apps/templates/pages/electronic-inventory.html         ← NOVA página (dropdown opaco, doc-list+PDF viewer cards, upload modal)
+apps/static/js/pages/electronic-inventory.js           ← loadClients (poll/share_slow), combo paginado, preview com spinner
+apps/templates/pages/pending-confirmation.html         ← updateWidgets() pula Exception*
+apps/templates/pages/metrics-pending-confirmation.html ← (histórico exclui Exception* — lógica em routes.py)
+apps/templates/partials/email-gradient-header.html     ← NOVO partial do header (VML+CSS, params title/subtitle/logo_height/width)
+apps/static/images/email-header-gradient.png           ← NOVO asset (820×220 gradiente diagonal p/ VML Outlook)
+apps/templates/pages/email-template-*.html             ← 10 templates usam o partial do header (daily-metric + 9)
+apps/templates/pages/control-panel.html                ← card signature-collection (icon ti-writing-sign) + JS preview/generate + CP_GROUP
+apps/static/data/signature_collection_bankers.json     ← NOVO (58 bankers {name,email}, domínios substituídos, dedup)
+apps/static/data/translations/{en,br,es}.json          ← 8 chaves do card signature-collection
+```
+
+
+## 103. Sessão 2026-07-22 — 2ª varredura de segurança + fix do gradiente no e-mail Pay/Rec (`9ca309a`, `e66437e`, `a4e5af9`)
+
+Varredura de segurança para produção (só correções que **não mudam output nem fluxo** de
+usuário legítimo), limpeza de menções a desenvolvimento fora do ambiente JPM, e um fix no
+cabeçalho do e-mail de fim de dia do Pay/Rec. Detalhe do CSP no `docs/SECURITY-PHASE2.md`
+(itens 2A.1/2A.2 marcados como feitos).
+
+### Segurança (`9ca309a`, só `routes.py`)
+- **2FA anti-brute-force.** O código de 6 dígitos (espaço 10⁶) era adivinhável na janela de
+  10 min porque `verify_code` não limitava tentativas. Nova coluna
+  **`verification_codes.attempts`** (migração adiciona em bancos existentes, default 0): cada
+  palpite errado gasta 1 tentativa e ao atingir **`MAX_2FA_ATTEMPTS=5`** o código é queimado
+  (`used=TRUE`) e nunca mais valida. Um código correto dentro do limite segue funcionando.
+- **Anti email-bombing / brute-force por códigos novos.** `_code_send_allowed(sid)` impõe
+  **cooldown de 30s** (`CODE_RESEND_COOLDOWN_SECONDS`) e **teto de 5 códigos/15 min**
+  (`MAX_CODES_PER_WINDOW`/`CODE_WINDOW_MINUTES`), aplicado em `_initiate_2fa` e `/resend-code`.
+  **Fail-open** em erro de DB — o e-mail de 2FA nunca trava por causa do throttle.
+- **CSPRNG no 2FA.** `generate_verification_code` passou de `random` (Mersenne Twister,
+  previsível) para `secrets.choice`. Mesmo formato de 6 dígitos (`import secrets` adicionado).
+- **Auth faltante em endpoints de escrita.** `/api/b3/{add,update,delete}` (gravam/apagam
+  Reference Data e Index B3) e `/api/fx-holiday-schedules` eram alcançáveis **sem sessão** —
+  não há portão global de auth, cada rota se verifica e estas quatro esqueciam. Adicionado o
+  guard `401` (mesmo do `api_holidays_save` vizinho).
+- **Autorização por page-access nos endpoints b3.** `enforce_page_access` ignora paths `/api/`,
+  então quem não tinha a página concedida ainda chamava a API direto. Novo helper
+  **`_user_can_access_page(url)`** replica a regra: `table=='refdata'`→`/reference-data`, senão
+  `/index-b3`. Master e usuários sem allowlist (acesso total) passam — nada muda para quem usa
+  a página legitimamente; só bloqueia o acesso lateral por URL (403).
+- **CSP report-only.** Const `_CSP_REPORT_ONLY` + header `Content-Security-Policy-Report-Only`
+  em toda resposta + coletor **`POST /csp-report`** (sem auth, loga e responde 204). **Não
+  bloqueia nada** — serve para afinar a allowlist antes de virar a chave (ver SECURITY-PHASE2 2A).
+
+**Residual (mudaria comportamento, precisa de decisão):** CSRF por token (Fase 2B), mensagens
+de erro genéricas, `DEBUG` default False, infra hardcoded (SMTP/master SID). Ver SECURITY-PHASE2.
+
+### Limpeza de menções a dev externo (`e66437e`)
+Comentários que expunham desenvolvimento fora do ambiente JPM ("stub off-env", "lib interna que
+não existe no PyPI", "coisas que a rede corporativa normalmente fornece", "strip before commit"
+do DEV BYPASS) reescritos de forma neutra. Sem mudança funcional. Arquivos: `routes.py` (entrada
+`dev_login` removida do `_LOCK_ALLOWED_ENDPOINTS`), `scripts/backfill_cetip_position_files.py`,
+`scripts/pending_confirmation_daily.py`, `scripts/sop-capture/{capture_screens,devrun.example}.py`.
+(Docs markdown — CLAUDE.md/HANDOFF/DESIGN — **não** foram tocados; ainda citam macOS/AirPlay/DEV BYPASS.)
+
+### Fix do gradiente no e-mail Pay/Rec (`a4e5af9`, só `recon_payrec.py`)
+O cabeçalho do e-mail de fim de dia às vezes saía **barra azul sólida** em vez do gradiente.
+Causa-raiz: `send_payrec_email` anexava só o logo e **não passava `grad_url`** nem anexava a
+imagem do gradiente — a variável vinha do context processor global `_inject_email_grad_url`, que
+prefere `url_for(_external=True)`. Quando o envio sai **sem contexto de request** (scheduler), a
+URL externa falha e cai em `cid:otc_gradient`, mas o payrec **nunca anexava** essa imagem → Outlook
+pintava a cor de fallback `#4f8ae2`. Somado ao bloqueio de imagens externas do Outlook, variava dia
+a dia. **Fix:** anexar `email-header-gradient.png` inline (`Content-ID: <otc_gradient>`) e passar
+`grad_url='cid:otc_gradient'` explícito no `render_template` — mesmo padrão do daily-metric. Imagem
+inline renderiza offline, não é bloqueada e independe da origem do envio. Confirmar no próximo envio real.
+
+### Commits (sessão 2026-07-22)
+```
+9ca309a  fix(security): hardening de 2FA, autorização de API e CSP report-only
+e66437e  chore(scripts): remover menções a desenvolvimento fora do ambiente JPM
+a4e5af9  fix(recon-payrec): gradiente do cabeçalho sumindo no e-mail de fim de dia
+```
+
+### Arquivos (sessão 2026-07-22)
+```
+apps/pages/routes.py                        ← 2FA attempts/throttle/secrets, verify_code, _code_send_allowed,
+                                               _user_can_access_page, guards b3/fx, CSP report-only + /csp-report
+apps/pages/recon_payrec.py                  ← send_payrec_email: gradiente inline (cid:otc_gradient) + grad_url
+scripts/backfill_cetip_position_files.py    ← comentário do stub awmpy neutralizado
+scripts/pending_confirmation_daily.py       ← idem
+scripts/sop-capture/capture_screens.py      ← docstring sem menção a stub/dev-login externo
+scripts/sop-capture/devrun.example.py       ← comentários neutralizados (mantém função)
+docs/SECURITY-PHASE2.md                     ← 2A.1/2A.2 marcados feitos + linha do commit 9ca309a
+```
+
+## 104. Sessão 2026-07-23 — Metrics offenders live + polish de toasts (`4962acc`, `39aabc7`, `38230db`, `60f022c`)
+
+- **Top 5 Offenders sempre do DuckDB pending live (`39aabc7`).** O endpoint
+  `/api/metrics-pending-confirmation/offenders` usava o snapshot diário, então edições na
+  base de pendentes só apareciam no dashboard no dia seguinte. Agora lê direto do DuckDB
+  pending (mesmo filtro que descarta `Exception*`). Os snapshots seguem alimentando só o
+  histórico, o e-mail Daily Metric e a Weekly Escalation — nada muda nesses fluxos.
+- **Badge de source removido (`60f022c`).** Com a fonte fixa em live, o badge "Source: live
+  pending DB" virou ruído; o endpoint continua retornando `source` no JSON, só não exibe.
+- **Subtítulo do Top 5 Bankers (`38230db`).** "By contracts…" → "By confirmations pending
+  > 30 days", igual aos cards vizinhos.
+- **Toasts de notificação mais opacos (`4962acc`).** `--ins-toast-bg` para 95% só em
+  `.otc-notif-toast` (topbar.html), sem recompilar SCSS e sem afetar os demais toasts.
+
+## 105. Sessão 2026-07-23 — NDF Cockpit: contrato via TER/Operations B3, PUBLISHER, CCY, strike, filtro de legal entity
+
+Cadeia de 6 commits que faz o Cockpit se completar sozinho a partir das outras fontes de
+NDF. **Tudo em tempo de exibição** — nada é persistido no JSON do dia, então mudanças nas
+fontes refletem no próximo load; valor importado/digitado no modal sempre tem precedência.
+
+- **`198b785` — CD_CETIP_RETURN via Live Position NDF + coluna PUBLISHER.** Linha do
+  SETTLEMENT chega sem retorno CETIP; o athena id (ID_SOURCE_DEAL) existe no DPOSICAO-TER
+  como right-14 do `Codigo Identificador`, junto do contrato. Novo `_ndfc_b3_maps` lê o TER
+  mais recente (D-1 ANBIMA, recua até 10 dias) e monta athena→contrato e contrato→publisher
+  (`Nome do Feeder` = BACEN → "BACEN", senão `Tela funcao Consulta`). Sem match → sentinel
+  `_NDFC_MISSING_B3` renderizado como badge warning "Missing B3 ID". Coluna PUBLISHER à
+  direita de VL_FORWARD_RATE; add/edit/import mapeiam células por posição de `_NDFC_COLUMNS`,
+  então o modal ganhou o campo sozinho.
+- **`feaaa86` — resgate via Operations B3 + colunas CCY.** Segunda chance antes do Missing:
+  procura no operations-b3 do dia um Resgate/TER com Valor a ≤5 BRL do SETTLEMENT, aceito só
+  se o DPOSICAO-TER confirmar Taxa Forward = VL_FORWARD_RATE (6 casas) e Valor Base =
+  VL_NOTIONAL_FC (±0,01), e o CNPJ resolver no RefData.json para o mesmo NM_COUNTERPARTY.
+  Novas colunas CCY_NOTIONAL_LC/FC: FC do `Simbolo da Moeda`; LC do `Codigo Sisbacen da
+  Moeda Cotada` via de-para interno (220→USD, 978→EUR, …) — código fora do de-para aparece
+  como o próprio número, de propósito. `_ndfc_valnum` tolera formato BR e US; mapas de
+  contrato em maiúsculas (pub_map era case-sensitive).
+- **`a6c5887` — cross-currency inverte CCY_LC/FC.** Sem BRL nas pontas o TER carrega as
+  moedas invertidas em relação ao cockpit; a inversão vale só para o par derivado do lookup.
+- **`a58c2e7` — VL_STRIKE_PRICE calculado.** Porte da fórmula Excel da mesa: strike =
+  VL_FORWARD_RATE ± |SETTLEMENT| / VL_NOTIONAL_FC, sinal + quando o settlement concorda com
+  a `Descricao` da posição do Participante no TER (COMPRADOR com positivo / VENDEDOR com
+  negativo). **Cross-currency exibe `-` por ora** (settlement em BRL ÷ notional do cross sai
+  na unidade errada; conversão será definida depois — pendência declarada pelo usuário).
+- **`d7a470b` + `8c4dba4` — filtro de legal entity.** Só LEGAL começando com BANCO JP /
+  JPMORGAN CHASE aparece (LAWTON… fora); nada é apagado do JSON e LEGAL em branco continua
+  visível. Widgets contam só as linhas visíveis. O fix `8c4dba4` normaliza pontuação antes
+  de comparar ("BANCO J.P. MORGAN S.A" ≡ "BANCO JP") — o filtro literal só deixava JPMORGAN
+  CHASE passar.
+
+## 106. Sessão 2026-07-23 — Recon Pay/Rec: todos os settlement types + prioridade da perna nomeada (revertida)
+
+- **`0b0e8a3` — todos os settlement types entram.** O lado JPM só aceitava Settlement Net ∈
+  {TOTAL_NET, PAYREC_NET} (porte fiel do Alteryx), mas o netting real vem do
+  CounterpartyDetails/overrides, não da coluna — o filtro derrubava em silêncio toda
+  contraparte No Net (sintoma: Saint-Gobain sem pernas de nenhum lado). Agora toda linha
+  não-JPM entra e a redução por net type decide (No Net mantém pernas, Total Net neta tudo,
+  Pay/Rec separa direções, Canalização mantém recebimentos e soma pagamentos).
+- **`0cce0d8` → revertido por `59f1409` (a pedido).** O `_mate_rank` dava prioridade à perna
+  nomeada (RLDOCREC/SDConta/SPB derivativos) sobre a anônima no match por valor. Com o
+  revert, os três pontos de escolha do `_reconcile` voltam a primeiro-candidato-livre /
+  valor-mais-próximo. **Volta o sintoma conhecido**: como a pasta lê em ordem alfabética
+  (HistoricoMensagens* antes de RLDOCREC.csv), um recebimento que bate com um interbancário
+  anônimo do SPB e com o TED nomeado pode casar com o anônimo — linha liquida com Client
+  vazio e o recebimento nomeado sobra como pendência. Trade-off avisado; decisão do usuário.
+
+## 107. Sessão 2026-07-23 — NOVA página Daily Settlement › NDF › Other Publisher (send TAXA p/ Conecta)
+
+`/ndf-other-publisher` — 7 commits (`cb6e1c3` → `fb1041f`). Página **derivada** (modelo
+Swap VCP): as linhas são recalculadas a cada load e só um **overlay por dia** é persistido
+(JSON ao lado do Cockpit, indexado por B3 ID).
+
+### Derivação (`cb6e1c3`, `799afdf`)
+Operations B3 do dia com Tipo Operação = `PENDENTE_CAMBIO` (filtro tolerante a
+acento/caixa/separador: ≡ "Pendente Câmbio"); cada operação liga às outras páginas de NDF
+pelo contrato CETIP. Colunas: **CLIENT** (NM_COUNTERPARTY do Cockpit) · **B3 ID** (Título)
+· **ATHENA ID** · **CCY FC** (CCY_NOTIONAL_FC) · **TX PARIDADE** (VL_STRIKE_PRICE, 8 casas)
+· **CCY LC** (fixo BRL) · **TX COTADA** (fixo 1.00000000) · **CONTA PARTE / CONTA
+CONTRAPARTE** (Live Position NDF, `contr_map` do `_ndfc_b3_maps` ganhou Codigo da
+Parte/Contraparte). O índice do Cockpit é montado das linhas de **exibição** dele
+(`_ndfop_cockpit_index`), não do JSON cru — contratos recuperados via athena id ou resgate
+Operations B3 (§105) valem aqui de graça. PENDENTE_CAMBIO sem correspondência fica listada
+com campos vazios (esconder o furo seria pior).
+
+### Overlay: edit / delete / status (`ef8a65e`)
+`{B3 ID → {status, maker, checker, cells, deleted}}`. Edit grava só células alteradas em
+`cells` (vencem o derivado no próximo load), linha volta a Pending, editor vira maker.
+Delete é lápide `deleted: true` — nada some da fonte, desfaz-se editando o JSON.
+**Gotcha resolvido em `799afdf`**: a chave do overlay é o B3 ID e o CLIENT entrou na frente
+dele — a proteção da coluna-chave era por índice fixo 0 e passaria a proteger a coluna
+errada; agora resolve por nome (`_NDFOP_KEY_COL = _NDFOP_COLUMNS.index('B3 ID')` no backend,
+`c === 'B3 ID'` readonly no modal).
+
+### Larguras de coluna — ida e volta (`ef8a65e`, `0e52c52`, `799afdf`)
+Diagnóstico real do "width não aplica": table-layout automático (9 colunas cabendo no card →
+browser redistribui a sobra), `style="width:100%"` inline vencendo o CSS, e dois pisos de
+min-width escondidos (120px thead, 96px input de filtro). O fix `table-layout: fixed +
+width: max-content` funcionou mas foi **revertido a pedido** em `799afdf` — larguras voltam
+a ser sugestão, por escolha do usuário. Ficou: padding toolbar↔header no `.table-responsive`
+(não na tabela, senão rola junto no scroll horizontal) e headers em UPPER via
+`text-transform` na 1ª tr do thead (linha de filtros fora, para não subir placeholder).
+
+### Send para o Batch Conecta (`a6e7df8`, `3fe916b`, `fb1041f`)
+- **Dois níveis**: botão por linha (telegram, padrão New Deals) e `#nopSendBatch` na toolbar
+  (btn-soft-primary, só "Send"), que aparece com 2+ checkboxes. Mesmo endpoint
+  `/api/ndf-other-publisher/send`.
+- **Arquivos** em `CONECTA_NEW_PATH` (Batch Conecta\New) via `_unique_filepath`:
+  `TAXA_BANCO.txt` sempre; `TAXA_LAWTON.txt` só com linha contra a Lawton (C.Parte
+  `00041007`), com Participante ↔ C.Parte invertidos.
+- **Linha posicional de 86 chars** portada das fórmulas Excel da mesa
+  (`_ndfop_conecta_fields`): `TER  ` + `1` + `0015` + 10 dígitos aleatórios
+  (MID(RAND();3;10)) + participante `73760009` + espaço + contraparte zfill(8) + contrato
+  ljust(10) + 12 espaços + TX PARIDADE e TX COTADA no posicional 4+8 sem separador
+  (5.55 → `000555000000`) + `000`. TX COTADA sai do valor da linha — edição manual flui
+  para o arquivo.
+- **Headers (43 chars)**: banco `TER  00015` + `JPMORGANBM` + 10 espaços + aaaammdd +
+  `00001`; lawton `TER  00015` + `INTRAGLAWTONFDO` + 5 espaços + aaaammdd + `00001`
+  (`fb1041f` — o arquivo saía sem header; padrão copiado do TCO_LAWTON, participante fecha
+  em 20 chars nos dois). **Atenção**: `INTRAGLAWTONFDO` é herdado do TCO — se o TAXA usar
+  outro nome, é uma constante só a trocar.
+- **Tudo-ou-nada**: TX PARIDADE ausente/inválida em qualquer linha aborta o lote apontando
+  os B3 IDs — nunca sai meio arquivo no share.
+- **Status Sent (`fb1041f`)**: após gerar os arquivos, as linhas ganham `status: Sent` +
+  `checker` = quem enviou no overlay (semântica do New Deals; badge `badge-sent` global do
+  head-css). A gravação é **best-effort de propósito** — os arquivos já estão no share,
+  falha ali loga mas não reporta o envio como erro.
+- **Preview no duplo clique**: popover absoluto no `#nop-page` (transform-origin top left,
+  scale-in), campos do Conecta na vertical; linha Lawton mostra duas colunas — Banco ×
+  Lawton e Lawton × Banco. Preview e arquivo saem da **mesma** `_ndfop_conecta_fields`,
+  então o que se vê é o que sai — exceto o nº interno, que regenera a cada envio como o
+  RAND() da planilha.
+
+### Pendências desta página
+- Validar os arquivos TAXA num envio real no ambiente JPM (nome do participante Lawton).
+- Strike cross-currency no Cockpit adiado (§105) → TX PARIDADE dessas linhas vem vazia e o
+  send delas aborta até lá.
+
+### Commits (sessão 2026-07-23)
+```
+4962acc  style(topbar): toasts de notificação levemente mais opacos
+39aabc7  fix(metrics): top-5 offenders lendo sempre do DuckDB pending live
+38230db  style(metrics): padronizar subtítulo do card Top 5 Bankers
+60f022c  style(metrics): remover badge de source do card Top 5 Offenders
+198b785  feat(ndf-cockpit): preencher CD_CETIP_RETURN via Live Position NDF + coluna PUBLISHER
+feaaa86  feat(ndf-cockpit): resgate via Operations B3 para Missing B3 ID + colunas CCY
+a6c5887  fix(ndf-cockpit): inverter CCY_LC/CCY_FC quando o NDF é cross-currency
+a58c2e7  feat(ndf-cockpit): calcular VL_STRIKE_PRICE a partir do settlement e da posição TER
+d7a470b  feat(ndf-cockpit): exibir só legal entities JPM (BANCO JP / JPMORGAN CHASE)
+8c4dba4  fix(ndf-cockpit): filtro de legal entity ignorando pontuação (BANCO J.P. MORGAN)
+0b0e8a3  fix(recon-payrec): considerar todos os settlement types do settlement.csv
+0cce0d8  fix(recon-payrec): perna nomeada tem prioridade no match, preenchendo o Client
+cb6e1c3  feat(ndf-other-publisher): nova página em Daily Settlement › NDF
+ef8a65e  feat(ndf-other-publisher): edit/delete nas linhas + larguras de coluna e headers UPPER
+0e52c52  fix(ndf-other-publisher): larguras de coluna ignoradas pelo browser + respiro na toolbar
+799afdf  feat(ndf-other-publisher): colunas CLIENT, CCY FC e CCY LC + revert do layout fixo
+59f1409  revert(recon-payrec): volta a prioridade da perna nomeada no match
+a6e7df8  feat(ndf-other-publisher): send para o Batch Conecta (TAXA) + preview no duplo clique
+3fe916b  style(ndf-other-publisher): botão de send em lote no padrão da toolbar
+fb1041f  feat(ndf-other-publisher): status Sent após o envio + header no TAXA_LAWTON
+```
+
+### Arquivos (sessão 2026-07-23)
+```
+apps/pages/routes.py                                ← Cockpit: _ndfc_b3_maps, resgate B3, CCY, strike, filtro legal;
+                                                       Other Publisher: bloco _ndfop_* completo (collect/edit/delete/
+                                                       preview/send); metrics offenders live
+apps/pages/recon_payrec.py                          ← settlement types; _mate_rank (entrou e saiu)
+apps/static/js/pages/ndf-cockpit.js                 ← badge Missing B3 ID / PUBLISHER
+apps/static/js/pages/ndf-other-publisher.js         ← página nova (?v=20260723h): tabela, modal edit, send, preview
+apps/templates/pages/ndf-other-publisher.html       ← template novo (widths, UPPER, popover CSS, batch send)
+apps/templates/partials/sidenav.html                ← item Other Publisher em Daily Settlement › NDF
+apps/templates/partials/topbar.html                 ← opacidade dos toasts
+apps/templates/pages/metrics-pending-confirmation.html  ← subtítulo + badge de source removido
+apps/static/js/pages/metrics-pending-confirmation.js    ← idem
+apps/static/data/translations/{en,br,es}.json       ← chaves nop-* (inclui nop-send, nop-edit-title)
+```
+
+## 108. Sessão 2026-07-23 — NDF Summary: Trade Level, Settlement Summary, avisos de liquidação e batimento B3 × interno
+
+Página **Daily Settlements › NDF Summary** deixou de ser placeholder e virou a consolidação
+diária dos NDFs de moeda. Tudo é **derivado** (o Cockpit + Operations B3 + TER + CounterpartyDetails)
+— nada persiste no disco exceto o *overlay* de status do dia. Também entraram ajustes menores em
+Electronic Inventory, Reference Data e nos subjects dos avisos de prêmio.
+
+### Trade Level (`ddecf06`, `2fb19dc`)
+`_ndfsum_collect(ref)` em `routes.py` monta as linhas espelhando as linhas de DISPLAY do NDF Cockpit
+e juntando com Operations B3. Ordem final das 13 células:
+`[LEGAL, NM_COUNTERPARTY, ATHENA ID(ID_SOURCE_DEAL), B3 ID(CD_CETIP_RETURN), TRADE DATE, SETTLEMENT DATE,
+NOTIONAL FC(VL_NOTIONAL_FC), CCY_NOTIONAL_FC, FORWARD RATE(VL_FORWARD_RATE), SETTLEMENT, SETTLEMENT B3,
+FIXING RATE(VL_STRIKE_PRICE), TAX(VL_TAX_INCOME)]`.
+- **TRADE/SETTLEMENT DATE** vêm do `contr_map[b3]['emissao'/'venc']` (Data de Emissão / Vencimento do
+  TER), formatadas por `_ter_date`; sem match no TER → em branco.
+- **SETTLEMENT B3**: pega o `Valor` cru do Operations B3 casando por B3 ID; `DIFFERENCE = SETTLEMENT − SETTLEMENT B3`
+  com tolerância `_NDFSUM_TOL = 5.0` → ícone de check (ok) ou X; badge de status OK/Check.
+- **Parsing de valor** (pegadinha que já mordeu antes): as células de DISPLAY do Cockpit são
+  US-formatadas (`1,000.00`) → usar `_mtm_parse_num` (US). O `Valor` cru do Operations B3 usa
+  `_ndfc_valnum` (BR/US-tolerante). **Não** trocar um pelo outro.
+
+### Settlement Summary (`ddecf06`, `2fb19dc`, `bf30c7e`)
+Net por contraparte, guiado pelo *net type* do CounterpartyDetails (`_ndfsum_net_type`):
+Total Net (1 linha netada) · Pay/Rec (1 por direção) · No Net (1 por trade); default Total Net.
+- **Direction** pelo sinal do net; **ACCOUNT** vem do modelo BANKING (`DEFAULT_PAY`/`DEFAULT_RECEIVE` →
+  ACCOUNTS[]), formatado por `_ndfsum_account_fmt` como `BCO: 341 | AG: 0910 | CC: 967` (banco em 3 dígitos
+  zfill; no template BCO:/AG:/CC: ficam em negrito).
+- Coluna **Observação** removida; card centralizado (`col-xxl-8`, `justify-content-center`);
+  placeholders dos filtros centralizados.
+
+### Avisos de liquidação — Generate (`2fb19dc`, `bf30c7e`)
+Botão **Generate** no toolbar do card Settlement Summary. `POST /api/ndf-summary/settlement-emails`
+→ `build_ndf_settlement_emails(trades, ref_date)` em `otc_emails.py` gera drafts `.eml` (X-Unsent →
+rascunho editável no Outlook) num zip `Avisos_Liquidacao_ddmmyy_NDF.zip`.
+- Agrupamento por (contraparte, classe legal via `_ndf_legal_class` = MGT se JPMORGANCHASE senão JPM)
+  × net type. Tabela de dados: `Nº da Confirmação(Athena ID) · Data de Início · Notional Original(com CCY,
+  ex. USD 5.100.000,00) · Resultado Apurado · IR(0,005%) · Resultado Líquido(=Settlement−IR)`.
+- Valores por linha com `R$` e negativos entre parênteses `(R$ 2.500,00)` via `_brl`.
+- **Banco**: MGT positivo → JPMORGAN CHASE BANK (BRASIL) 488/0001/985181643, CNPJ 46.518.205/0001-64;
+  senão BANCO JP MORGAN S/A 376/0011/5116003, CNPJ 33.172.537/0001-98 (`_JPM_BANK_KV`).
+- **Subject**: `Liquidação de Operação de Derivativo (Termo de Moeda) - dd/mm/yyyy - CONTRAPARTE`,
+  com ` x JPMORGAN CHASE` no fim quando MGT.
+- **Status Generated persiste**: overlay `ndf-summary_YYYYMMDD.json` (`_ndfsum_meta_path/load/save`)
+  keyed por contraparte {status, maker, at}; gravado best-effort após a geração, relido no próximo `/data`.
+- SweetAlert em inglês (com `data-lang`) ao final informando nº de avisos × nº de contrapartes
+  (headers `X-Draft-Count` / `X-Counterparty-Count`). **Correção**: o `ndf-summary.html` só incluía o JS
+  do sweetalert2, faltava o CSS → dialog sem estilo; incluído `sweetalert2.min.css` no extra_css.
+
+### Batimento B3 × interno nos cards (`203dfe5`, `a07f971`)
+Os 3 cards do topo (Vanilla / Other Publisher / Total) viraram um **batimento de quantidade e valor**
+entre B3 e interno, por categoria. Decisão de fonte de dados (confirmada com o usuário):
+- **Interno** = `[PROD] Cockpit.SETTLEMENT` cru; **B3** = `Valor` cru do Operations B3 (resgates).
+  É **bruto × bruto** — o IR (`VL_TAX_INCOME`) só entra no Settlement Summary, **nunca** no batimento.
+- O Operations B3 mistura NDF de moeda, de commodity, etc.; então **os dois lados são filtrados** por um
+  whitelist de FX vindo do Live Position NDF (`_ndfsum_fx_map`): contratos com Classe do Ativo Subjacente
+  == TAXAS DE CAMBIO e Vencimento == data de referência; SISBACEN (inclui T+0) → `vanilla`, FEEDER → `other`.
+  Contrato fora do whitelist é ignorado nos dois lados.
+- `recon[cat]` = {b3_count, b3_value, int_count, int_value, diff_value, matched}; `matched` = contagem igual
+  **e** `abs(b3_value − int_value) ≤ _NDFSUM_TOL`. Card sem match ganha anel âmbar (`.ops-recon.is-unmatched`).
+- **Alinhamento OPS/VALUE** (`a07f971`): header e linhas eram grids `auto` independentes → desalinhavam.
+  Fixado para `grid-template-columns: 1fr 2.75rem 7rem` (mesma geometria) + títulos OPS/VALUE à direita.
+- Design conforme `/emil-design-eng`: sem animação por-update (os cards renderizam a cada load),
+  cores semânticas OK/Verificar, `tabular-nums` alinhados à direita.
+
+### Outros (`b0e5fee`, `0d2e6eb`, `4978a71`, `9ab7ab3`)
+- **Electronic Inventory**: select-all ao focar os campos (busca de contraparte + datas de upload);
+  blocos extras de upload no mesmo tamanho/layout do primeiro; X em cada dropzone para remover arquivo
+  anexado por engano. JS bump `?v=20260723a`.
+- **Reference Data**: opção `INTERNAL` no Signature Type (Digital/Manual/Internal).
+- **New Deals (avisos de prêmio)**: `build_premium_emails(deals, asset_label=…)` — FXO usa
+  `Opção de Moeda`, Opt Comm usa `Opção de Commodities`. Subject:
+  `(Pagamento de Prêmio) Liquidação de Operação de Derivativo (<asset_label>) - dd/mm/yyyy - CONTRAPARTE`.
+- **Script** `scripts/export_electronic_inventory_excel.py`: varre `ELECTRONIC_INVENTORY_ROOT`, monta
+  workbook openpyxl com abas Transacionais/SSI/Confirmações (nome do arquivo + contraparte), salva em
+  `~/Downloads`; suporta long_path (MAX_PATH Windows), `--root`/`--out`.
+
+### Faixa branca no e-mail (sem mudança de código)
+O template ganhou fundo full-canvas (body bgcolor + table bgcolor + VML `<v:background>` MSO) — é o único
+mecanismo que o Word pinta de ponta a ponta. A faixa branca que o usuário ainda via é **chrome do cliente**
+(canvas de composição do Word / container do OWA), fora do controle do e-mail; o enviado renderiza correto.
+Perguntado via AskUserQuestion → usuário optou por **manter o cinza como está** (sem alteração).
+
+### Pendências / pontos em aberto (não bloqueantes, sinalizados ao usuário)
+- **T+0** hoje entra dobrado em Vanilla no batimento — fácil de separar em categoria própria se o desk quiser.
+- O whitelist de FX filtra por **Vencimento == data de referência**; se o desk considerar "liquidando" por
+  outra data (ex. data de liquidação financeira ≠ vencimento), trocar o campo em `_ndfsum_fx_map`.
+- As tabelas dos avisos usam os cabeçalhos **sem os dois-pontos** do spec original, para casar com o template
+  do aviso de prêmio; dá pra restaurar se pedirem.
+
+### Commits (sessão 2026-07-23, continuação — NDF Summary)
+```
+ddecf06  feat(ndf-summary): Trade Level do Cockpit + Settlement Summary netado por contraparte
+9ab7ab3  feat(scripts): export do Electronic Inventory para Excel (Downloads)
+b0e5fee  feat(electronic-inventory): select-all nos campos, blocos do upload no padrão do inicial e X nos dropzones
+2fb19dc  feat(ndf-summary): datas do TER, avisos de liquidação (Generate) e ajustes do Settlement Summary
+0d2e6eb  feat(reference-data): opção INTERNAL no Signature Type
+bf30c7e  feat(ndf-summary): refinamentos dos avisos (banco MGT, CCY, R$), status Generated persistido e fundo VML no e-mail
+a0752bc  fix(ndf-summary): botão Generate no card certo + CSS do SweetAlert faltando
+4978a71  feat(new-deals): rótulo do ativo no subject do aviso de prêmio (Opção de Commodities / Opção de Moeda)
+203dfe5  feat(ndf-summary): cards viram batimento B3 × interno por categoria
+a07f971  fix(ndf-summary): alinhar os cabeçalhos OPS/VALUE do batimento com os números
+```
+
+### Arquivos (sessão 2026-07-23, continuação — NDF Summary)
+```
+apps/pages/routes.py                    ← _ndfsum_collect (Trade Level, Settlement Summary, recon), _ndfsum_net_type,
+                                           _ndfsum_refdata_spn, _ndfsum_account_fmt, _ndfsum_meta_*, _ndfsum_fx_map,
+                                           _ndfsum_money, endpoints /api/ndf-summary/{data,settlement-emails};
+                                           build_premium_emails asset_label (FXO/Opt Comm)
+apps/pages/otc_emails.py                ← build_ndf_settlement_emails, _ndf_settlement_email, _ndf_legal_class,
+                                           _JPM_BANK_KV, _brl (R$ + negativos entre parênteses), _email_shell VML
+apps/templates/pages/ndf-summary.html   ← 3 cards de batimento (.ops-recon), Trade Level, Settlement Summary centralizado,
+                                           botão Generate, SweetAlert, sweetalert2 CSS/JS, setRecon(), fillTables()
+apps/templates/pages/reference-data.html ← option INTERNAL no Signature Type
+apps/static/js/pages/electronic-inventory.js ← select-all, blocos extras no padrão, X nos dropzones (?v=20260723a)
+apps/static/data/translations/{en,br,es}.json ← ops-generate, ops-gen-*, ndf-r-ops/value/internal/ok/check
+scripts/export_electronic_inventory_excel.py  ← NOVO: varredura do Electronic Inventory → Excel no Downloads
+```

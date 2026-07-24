@@ -1,0 +1,167 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Metrics — Pending Confirmation{% endblock title %}
+
+{% block extra_css %}
+<style>
+/* ── Pending Confirmation Metrics — Apple/Emil motion + glass ─────────────── */
+#pcm-page { --pcm-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+
+@keyframes pcmFadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.pcm-fade { animation: pcmFadeIn 0.5s var(--pcm-ease-out) both; }
+.pcm-fade-2 { animation-delay: 0.10s; }
+.pcm-fade-3 { animation-delay: 0.20s; }
+
+/* Glassmorphism cards (light / dark) */
+[data-bs-theme="light"] #pcm-page .card {
+    background: rgba(255, 255, 255, 0.82) !important;
+    backdrop-filter: blur(18px) saturate(1.8); -webkit-backdrop-filter: blur(18px) saturate(1.8);
+    box-shadow: 0 4px 24px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04) !important;
+    border: 1px solid rgba(255,255,255,.65) !important;
+}
+[data-bs-theme="dark"] #pcm-page .card {
+    background: rgba(255, 255, 255, 0.09) !important;
+    backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    box-shadow: 0 4px 32px rgba(0,0,0,.45), 0 1px 6px rgba(0,0,0,.22) !important;
+    border: 1px solid rgba(255,255,255,.10) !important;
+}
+#pcm-page .card { transition: box-shadow .25s var(--pcm-ease-out), transform .25s var(--pcm-ease-out), border-color .3s ease; }
+@media (hover: hover) and (pointer: fine) {
+    #pcm-page .card:hover { transform: translateY(-3px); }
+}
+
+/* KPI hero */
+.pcm-kpi__val { font-size: clamp(2.4rem, 5vw, 3.4rem); font-weight: 700; letter-spacing: -1.5px; line-height: 1; color: var(--ins-heading-color, #1d1d1f); }
+[data-bs-theme="dark"] .pcm-kpi__val { color: #f5f5f7; }
+.pcm-kpi__label { font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #6e6e73; }
+.pcm-trend { display: inline-flex; align-items: center; gap: .25rem; font-weight: 600; font-size: .82rem; padding: .2rem .6rem; border-radius: 9999px; }
+.pcm-trend.up   { background: rgba(220,53,69,.12);  color: #dc3545; }   /* more pending = worse → red */
+.pcm-trend.down { background: rgba(25,135,84,.12);  color: #198754; }   /* fewer pending = better → green */
+.pcm-trend.flat { background: rgba(110,110,115,.12); color: #6e6e73; }
+.pcm-mini { text-align: center; }
+.pcm-mini__v { font-size: 1.35rem; font-weight: 700; color: var(--ins-heading-color, #1d1d1f); letter-spacing: -.5px; }
+[data-bs-theme="dark"] .pcm-mini__v { color: #f5f5f7; }
+.pcm-mini__l { font-size: .68rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6e73; }
+
+/* Dropdowns / selects */
+#pcm-page .pcm-select {
+    max-width: 190px; font-size: .82rem; font-weight: 600; border-radius: 10px;
+    transition: box-shadow .18s var(--pcm-ease-out), border-color .18s ease;
+}
+#pcm-page .pcm-select:focus { box-shadow: 0 0 0 3px rgba(0,102,204,.18); border-color: #0066cc; }
+
+.pcm-note { font-size: .74rem; color: #6e6e73; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="pcm-page" class="container-fluid" data-content="">
+
+    {% set title='Metrics — Pending Confirmation' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- ═══ KPI hero (volume data — external report, no internal history yet) ═══ -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card pcm-fade">
+                <div class="card-body">
+                    <div class="row align-items-center g-4">
+                        <div class="col-lg-4">
+                            <div class="pcm-kpi__label mb-2">Confirmations pending &gt; 30 days</div>
+                            <div class="d-flex align-items-end gap-3">
+                                <span class="pcm-kpi__val" id="pcm-kpi-value">—</span>
+                                <span class="pcm-trend flat mb-2" id="pcm-kpi-trend">—</span>
+                            </div>
+                            <div class="pcm-note mt-2" id="pcm-kpi-note">Latest reading</div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="row g-3">
+                                <div class="col-4"><div class="pcm-mini"><div class="pcm-mini__v" id="pcm-mini-prev">—</div><div class="pcm-mini__l">Previous month</div></div></div>
+                                <div class="col-4"><div class="pcm-mini"><div class="pcm-mini__v" id="pcm-mini-avg">—</div><div class="pcm-mini__l">12-month avg</div></div></div>
+                                <div class="col-4"><div class="pcm-mini"><div class="pcm-mini__v" id="pcm-mini-peak">—</div><div class="pcm-mini__l">Peak (24m)</div></div></div>
+                            </div>
+                            <p class="pcm-note mt-3 mb-0">
+                                <i class="ti ti-info-circle"></i>
+                                Volume seeded from the external monthly report — the internal history builds up from the daily snapshots.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ History chart ═══════════════════════════════════════════════════ -->
+    <div class="row mt-1">
+        <div class="col-12">
+            <div class="card pcm-fade pcm-fade-2">
+                <div class="card-header border-dashed d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h4 class="card-title mb-0">Pending Confirmations — History</h4>
+                        <p class="text-muted fs-xs mb-0">Volume over time, with the period-over-period change</p>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <select id="pcm-scope" class="form-select form-select-sm pcm-select">
+                            <option value="gt30" selected>&gt; 30 days</option>
+                            <option value="all">All</option>
+                        </select>
+                        <select id="pcm-range" class="form-select form-select-sm pcm-select">
+                            <option value="cy">Current Year</option>
+                            <option value="l24" selected>Last 24 Months</option>
+                            <option value="daily">Daily (current month)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div dir="ltr"><div style="height: 360px;"><canvas id="pcm-history-chart"></canvas></div></div>
+                    <p class="pcm-note mt-2 mb-0" id="pcm-history-note"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Top 5 Offenders (pending > 30 days) ═════════════════════════════ -->
+    <div class="row mt-1">
+        <div class="col-12">
+            <div class="card pcm-fade pcm-fade-3">
+                <div class="card-header border-dashed">
+                    <h4 class="card-title mb-0">Top 5 Offenders — pending &gt; 30 days</h4>
+                </div>
+                <div class="card-body p-0">
+                    <div class="row g-0">
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 border-end border-dashed h-100">
+                                <h5 class="fs-sm fw-semibold mb-0">Top 5 Bankers</h5>
+                                <p class="text-muted fs-xs mb-3">By confirmations pending &gt; 30 days</p>
+                                <div style="height: 280px;"><canvas id="pcm-bankers-chart"></canvas></div>
+                            </div>
+                            <hr class="d-md-none border-light m-0">
+                        </div>
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 border-end border-dashed h-100">
+                                <h5 class="fs-sm fw-semibold mb-0">Top 5 Clients</h5>
+                                <p class="text-muted fs-xs mb-3">By confirmations pending &gt; 30 days</p>
+                                <div style="height: 280px;"><canvas id="pcm-clients-chart"></canvas></div>
+                            </div>
+                            <hr class="d-xxl-none border-light m-0">
+                        </div>
+                        <div class="col-xxl-4 col-md-6">
+                            <div class="p-3 h-100">
+                                <h5 class="fs-sm fw-semibold mb-0">Top 5 Economic Groups</h5>
+                                <p class="text-muted fs-xs mb-3">By confirmations pending &gt; 30 days</p>
+                                <div style="height: 280px;"><canvas id="pcm-egroups-chart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/metrics-pending-confirmation.js?v=3"></script>
+{% endblock extra_javascript %}

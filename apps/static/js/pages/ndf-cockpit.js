@@ -60,6 +60,13 @@
       .catch(function () {});
   }
 
+  // Server sentinel for a blank CD_CETIP_RETURN with no match in Live Position NDF.
+  var MISSING_B3 = '__MISSING_B3_ID__';
+  function cellHtml(v) {
+    if (v === MISSING_B3) return '<span class="badge text-bg-warning bg-gradient">Missing B3 ID</span>';
+    return esc(v);
+  }
+
   // Standard status badge (project format): OK=success, Pending=warning, New=info.
   function statusBadge(status) {
     var s = String(status || 'OK').toLowerCase();
@@ -105,7 +112,7 @@
     var data = rows.map(function (r) {
       var m = metaOf(r);
       return ['<input type="checkbox" class="form-check-input ndfc-row-check">', actionsHtml(m.id), statusBadge(m.status)]
-        .concat(r.slice(0, COLS.length).map(function (v) { return esc(v); }));
+        .concat(r.slice(0, COLS.length).map(function (v) { return cellHtml(v); }));
     });
 
     if (dt) { dt.destroy(); }
@@ -271,6 +278,7 @@
     if (title) title.textContent = EDIT_ID ? t('editTitle') : t('addTitle');
     document.getElementById('ndfcAddFields').innerHTML = COLS.map(function (c, i) {
       var val = (prefillCells && prefillCells[i] != null) ? prefillCells[i] : '';
+      if (val === MISSING_B3) val = '';       // sentinel is display-only, never editable
       return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' + esc(c) + '</label>' +
         '<input type="text" class="form-control form-control-sm ndfc-add-fld" data-i="' + i + '" value="' + esc(val) + '"></div>';
     }).join('');

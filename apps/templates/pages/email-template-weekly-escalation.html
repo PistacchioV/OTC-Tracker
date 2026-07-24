@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Pending Confirmation Weekly Escalation (CEM/EDG)</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="720"><tr><td width="720" style="width:720px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="720"
+                   style="max-width:720px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                {% set header_title = 'Pending Confirmation — Weekly Escalation — CEM/EDG' %}
+                {% set header_subtitle = 'Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = 720 %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Intro ──────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 4px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
+                            Please find below all <strong>CEM</strong> and <strong>EDG</strong> confirmations that we
+                            have outstanding with more than 30 days.</p>
+                    </td>
+                </tr>
+
+                <!-- ══ One table per LOB (CEM, EDG) ══ -->
+                {% for block in blocks %}
+                <tr>
+                    <td style="padding:16px 30px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:13px;">
+                            <thead>
+                                <tr>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;letter-spacing:0.3px;">{{ block.lob }}</th>
+                                    <th bgcolor="#2e5c9e" align="right" width="120"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;">Confirmations</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in block.bankers %}
+                                <tr>
+                                    <td style="padding:7px 12px;font-weight:700;color:#1a1a2e;border-top:2px solid #cfd6e2;border-bottom:1px solid #eef0f4;">{{ b.banker }}</td>
+                                    <td align="right" style="padding:7px 12px;font-weight:700;color:#1a1a2e;border-top:2px solid #cfd6e2;border-bottom:1px solid #eef0f4;">{{ b.total }}</td>
+                                </tr>
+                                    {% for co in b.companies %}
+                                    <tr>
+                                        <td style="padding:5px 12px 5px 30px;color:#444;border-bottom:1px solid #f2f4f7;">{{ co.name }}</td>
+                                        <td align="right" style="padding:5px 12px;color:#555;border-bottom:1px solid #f2f4f7;">{{ co.count }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                <tr>
+                                    <td colspan="2" style="padding:12px;text-align:center;color:#8a8f98;border-bottom:1px solid #eef0f4;">
+                                        No {{ block.lob }} confirmations pending &gt; 30 days.</td>
+                                </tr>
+                                {% endfor %}
+                                {% if block.bankers %}
+                                <tr>
+                                    <td bgcolor="#eef1f6" style="padding:8px 12px;font-weight:700;color:#1a1a2e;border-top:2px solid #cfd6e2;">Total {{ block.lob }}</td>
+                                    <td bgcolor="#eef1f6" align="right" style="padding:8px 12px;font-weight:700;color:#0d6efd;border-top:2px solid #cfd6e2;">{{ block.total }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:20px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>

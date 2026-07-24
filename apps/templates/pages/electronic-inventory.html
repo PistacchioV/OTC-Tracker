@@ -1,0 +1,511 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Electronic Inventory{% endblock title %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css">
+<link rel="stylesheet" href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css">
+<style>
+    /* ------------------------------------------------------------------ */
+    /*  ELECTRONIC INVENTORY — document library                            */
+    /*  Motion: strong ease-out for entrances, gentle color for hover;     */
+    /*  hover effects gated to fine pointers; all motion killed under      */
+    /*  prefers-reduced-motion.                                            */
+    /* ------------------------------------------------------------------ */
+    #ei-page {
+        --ei-ease: cubic-bezier(0.23, 1, 0.32, 1);
+        --ei-radius: 14px;
+    }
+
+    /* Doc-type rail --------------------------------------------------- */
+    #ei-page .ei-type-item {
+        display: flex; align-items: center; gap: .6rem;
+        padding: .6rem .75rem; border-radius: 10px; cursor: pointer;
+        color: var(--bs-body-color); text-decoration: none;
+        border: 1px solid transparent;
+        transition: background-color .18s var(--ei-ease), border-color .18s var(--ei-ease), color .18s var(--ei-ease);
+    }
+    #ei-page .ei-type-item .ei-type-ico { font-size: 1.15rem; opacity: .8; }
+    #ei-page .ei-type-item .ei-type-badge {
+        margin-left: auto; font-size: .68rem; font-weight: 600;
+        background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
+        padding: .1rem .45rem; border-radius: 999px; min-width: 1.6rem; text-align: center;
+        transition: background-color .18s var(--ei-ease), color .18s var(--ei-ease);
+    }
+    #ei-page .ei-type-item.is-active {
+        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
+        color: #0066cc; font-weight: 600;
+    }
+    #ei-page .ei-type-item.is-active .ei-type-badge { background: #0066cc; color: #fff; }
+    [data-bs-theme=dark] #ei-page .ei-type-item.is-active { color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30); }
+    [data-bs-theme=dark] #ei-page .ei-type-item.is-active .ei-type-badge { background: #2997ff; }
+
+    /* Searchable counterparty combo ----------------------------------- */
+    #ei-page .ei-combo { position: relative; }
+    #ei-page .ei-combo-menu {
+        position: absolute; z-index: 1080; top: calc(100% + 4px); left: 0; right: 0;
+        max-height: 320px; overflow-y: auto; margin: 0; padding: .3rem; list-style: none;
+        background: #ffffff; border: 1px solid var(--bs-border-color);
+        border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.22); display: none;
+        transform-origin: top center;
+        -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    }
+    [data-bs-theme=dark] #ei-page .ei-combo-menu {
+        background: #1b1e24; border-color: rgba(255,255,255,.14);
+        box-shadow: 0 14px 40px rgba(0,0,0,.55);
+    }
+    #ei-page .ei-combo-menu.show { display: block; animation: eiPop .16s var(--ei-ease); }
+    @keyframes eiPop { from { opacity: 0; transform: scale(.97) translateY(-2px); } to { opacity: 1; transform: none; } }
+    #ei-page .ei-combo-menu li {
+        padding: .5rem .6rem; border-radius: 8px; cursor: pointer;
+        display: flex; align-items: baseline; gap: .5rem;
+        transition: background-color .15s var(--ei-ease);
+    }
+    #ei-page .ei-combo-menu li .ei-combo-spn { font-size: .72rem; color: var(--bs-secondary-color); margin-left: auto; }
+    #ei-page .ei-combo-menu li.ei-kbd-active, #ei-page .ei-combo-menu li:hover { background: var(--bs-tertiary-bg); }
+    #ei-page .ei-combo-menu li .ei-nofolder { font-size: .62rem; color: #b5892b; border: 1px solid rgba(181,137,43,.4); border-radius: 6px; padding: 0 .3rem; }
+    #ei-page .ei-combo-menu li.ei-combo-more { font-size: .68rem; opacity: .7; padding: .35rem .6rem; }
+    #ei-page .ei-combo-menu li.ei-combo-more:hover { background: transparent; }
+
+    /* Document list --------------------------------------------------- */
+    #ei-page .ei-doc-row {
+        display: flex; align-items: center; gap: .75rem; padding: .6rem .7rem;
+        border-radius: 10px; cursor: pointer; border: 1px solid transparent;
+        transition: background-color .16s var(--ei-ease), border-color .16s var(--ei-ease);
+    }
+    #ei-page .ei-doc-ico {
+        flex-shrink: 0; width: 40px; height: 40px; border-radius: 9px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--bs-secondary-bg); font-size: 1.25rem;
+    }
+    #ei-page .ei-doc-ico.pdf   { color: #d93636; background: rgba(217,54,54,.10); }
+    #ei-page .ei-doc-ico.img   { color: #0a8f4e; background: rgba(10,143,78,.10); }
+    #ei-page .ei-doc-ico.mail  { color: #2274c9; background: rgba(34,116,201,.10); }
+    #ei-page .ei-doc-ico.sheet { color: #1d7a46; background: rgba(29,122,70,.10); }
+    #ei-page .ei-doc-name { font-weight: 600; font-size: .9rem; line-height: 1.2; word-break: break-word; }
+    #ei-page .ei-doc-meta { font-size: .72rem; color: var(--bs-secondary-color); margin-top: .12rem; }
+    #ei-page .ei-doc-row.is-active { background: rgba(0,102,204,.09); border-color: rgba(0,102,204,.22); }
+    [data-bs-theme=dark] #ei-page .ei-doc-row.is-active { background: rgba(41,151,255,.13); border-color: rgba(41,151,255,.28); }
+    #ei-page .ei-chip {
+        font-size: .64rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+        padding: .08rem .4rem; border-radius: 6px; background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        #ei-page .ei-type-item:not(.is-active):hover { background: var(--bs-tertiary-bg); }
+        #ei-page .ei-doc-row:not(.is-active):hover  { background: var(--bs-tertiary-bg); }
+    }
+
+    /* Buttons feel responsive to press -------------------------------- */
+    #ei-page .ei-btn { transition: transform 160ms ease-out, background-color .18s var(--ei-ease), box-shadow .18s var(--ei-ease); }
+    #ei-page .ei-btn:active { transform: scale(.97); }
+
+    /* Preview pane ---------------------------------------------------- */
+    #ei-page .ei-preview {
+        height: 100%; min-height: 460px; border-radius: var(--ei-radius);
+        border: 1px solid var(--bs-border-color); overflow: hidden;
+        background: var(--bs-tertiary-bg); display: flex; flex-direction: column;
+    }
+    #ei-page .ei-preview-head {
+        display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem;
+        border-bottom: 1px solid var(--bs-border-color); background: var(--bs-body-bg);
+    }
+    #ei-page .ei-preview-body { position: relative; flex: 1; min-height: 380px; background: var(--bs-tertiary-bg); }
+    /* Taller viewer now that the PDF has its own card below the list. */
+    #ei-page .ei-preview-body-lg { min-height: 78vh; }
+    #ei-page .ei-preview-frame {
+        position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff;
+        opacity: 0; transition: opacity .28s var(--ei-ease);
+    }
+    #ei-page .ei-preview-frame.ready { opacity: 1; }
+    /* Lightweight loading veil while a (possibly slow, network-share) PDF streams. */
+    #ei-page .ei-preview-loading {
+        position: absolute; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: .6rem; z-index: 2;
+        color: var(--bs-secondary-color); background: var(--bs-tertiary-bg);
+    }
+    #ei-page .ei-spin {
+        width: 30px; height: 30px; border-radius: 50%;
+        border: 3px solid var(--bs-border-color); border-top-color: #0066cc;
+        animation: eiSpin .7s linear infinite;
+    }
+    @keyframes eiSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #ei-page .ei-spin { animation-duration: 1.6s; } }
+
+    /* Empty / placeholder states (self-explanatory) ------------------- */
+    #ei-page .ei-empty {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: .5rem; height: 100%; min-height: 380px; padding: 2rem;
+        color: var(--bs-secondary-color);
+    }
+    #ei-page .ei-empty .ei-empty-ico {
+        font-size: 2.6rem; opacity: .5; margin-bottom: .3rem;
+        animation: eiFloat .5s var(--ei-ease);
+    }
+    @keyframes eiFloat { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: .5; transform: none; } }
+
+    #ei-page .ei-list-scroll { max-height: 360px; overflow-y: auto; }
+    /* Document list uses the full card width now — flow into responsive columns. */
+    #ei-page .ei-doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: .35rem; align-content: start; }
+    #ei-page .ei-doc-grid .ei-empty { grid-column: 1 / -1; min-height: 220px; }
+
+    #ei-page .ei-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    #ei-page .ei-status-dot.on  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
+    #ei-page .ei-status-dot.off { background: #d0a02a; box-shadow: 0 0 0 3px rgba(208,160,42,.15); }
+    #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
+
+    /* Upload modal — make the liquid-glass panel less translucent (more readable)
+       than the shared component default, scoped to this modal only. The theme's
+       backdrop-filter blur is also disabled here (panel + full-screen backdrop):
+       on weak corporate GPUs it made opening this modal take several seconds
+       with just a blurred screen showing. The panel is 92% opaque anyway. */
+    #eiUploadModal .modal-content.liquid-glass {
+        background: rgba(255, 255, 255, 0.92) !important;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
+    [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass {
+        background: rgba(26, 29, 35, 0.94) !important;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
+    body.ei-upload-open .modal-backdrop {
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    }
+
+    /* Confirmations folder navigator (left rail) ----------------------- */
+    #ei-page .ei-fold-tree { margin-top: .25rem; }
+    #ei-page .ei-fold-item {
+        display: flex; align-items: center; gap: .4rem;
+        padding: .34rem .5rem; border-radius: 8px; cursor: pointer;
+        color: var(--bs-body-color); text-decoration: none;
+        border: 1px solid transparent; font-size: .8rem;
+        transition: background-color .16s var(--ei-ease), color .16s var(--ei-ease),
+                    border-color .16s var(--ei-ease), transform .16s var(--ei-ease);
+    }
+    @media (hover: hover) and (pointer: fine) {
+        #ei-page .ei-fold-item:not(.is-sel):hover { background: var(--bs-tertiary-bg); }
+    }
+    #ei-page .ei-fold-item:active { transform: scale(.985); }
+    #ei-page .ei-fold-item.is-sel {
+        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
+        color: #0066cc; font-weight: 600;
+    }
+    [data-bs-theme=dark] #ei-page .ei-fold-item.is-sel {
+        color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30);
+    }
+    #ei-page .ei-fold-chev {
+        width: 12px; flex: 0 0 12px; font-size: 12px; color: var(--bs-secondary-color);
+        transition: transform .2s var(--ei-ease);
+    }
+    #ei-page .ei-fold-item.is-open .ei-fold-chev { transform: rotate(90deg); }
+    #ei-page .ei-fold-ico { font-size: 14px; flex: 0 0 auto; opacity: .75; }
+    #ei-page .ei-fold-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #ei-page .ei-fold-count {
+        flex: 0 0 auto; font-size: .62rem; font-weight: 600; line-height: 1;
+        padding: .16rem .36rem; border-radius: 50rem;
+        background: var(--bs-secondary-bg); color: var(--bs-secondary-color);
+    }
+    #ei-page .ei-fold-item.is-sel .ei-fold-count { background: #0066cc; color: #fff; }
+    /* 0fr -> 1fr expands to the content's natural height: no JS measuring, no
+       max-height guesswork. */
+    #ei-page .ei-fold-panel {
+        display: grid; grid-template-rows: 0fr; opacity: 0;
+        transition: grid-template-rows .22s var(--ei-ease), opacity .15s var(--ei-ease);
+    }
+    #ei-page .ei-fold-item.is-open + .ei-fold-panel { grid-template-rows: 1fr; opacity: 1; }
+    #ei-page .ei-fold-inner {
+        overflow: hidden; min-height: 0;
+        margin-left: .55rem; padding-left: .45rem;
+        border-left: 1px solid var(--bs-border-color);
+    }
+    #ei-page .ei-fold-empty { font-size: .74rem; color: var(--bs-secondary-color); padding: .35rem .5rem; }
+
+    /* Extra document blocks in the upload modal ------------------------ */
+    #eiUploadModal .ei-up-block {
+        border: 1px solid var(--bs-border-color); border-radius: 12px;
+        padding: .7rem .75rem; background: var(--bs-tertiary-bg);
+        animation: eiBlockIn .22s var(--ei-ease) both;
+    }
+    @keyframes eiBlockIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    #eiUploadModal .ei-up-block-head {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem;
+    }
+    #eiUploadModal .ei-up-block-n {
+        font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+    #eiUploadModal .ei-up-del {
+        width: 24px; height: 24px; padding: 0; border-radius: 7px;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
+    }
+    #eiUploadModal .ei-up-drop { cursor: pointer; }
+    /* X to detach a wrongly attached file — floats on the dropzone's corner. */
+    #eiUploadModal .ei-drop { position: relative; }
+    #eiUploadModal .ei-drop-clear {
+        position: absolute; top: 8px; right: 8px;
+        width: 26px; height: 26px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        line-height: 1; z-index: 2;
+    }
+
+    /* Breadcrumb of the folder feeding the list ------------------------ */
+    #ei-page .ei-crumb {
+        display: flex; align-items: center; flex-wrap: wrap; gap: .18rem;
+        font-size: .72rem; color: var(--bs-secondary-color);
+    }
+    #ei-page .ei-crumb-sep { font-size: 11px; opacity: .6; }
+
+    #ei-page .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
+    @keyframes eiRowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    /* The global .btn-primary rule hard-codes padding/font-size, while .btn-sm
+       only redefines the --ins-btn-* variables — so btn-sm alone cannot shrink a
+       primary button. Restate the small metrics for this footer (higher
+       specificity wins; no !important needed). */
+    #eiUploadModal .modal-footer .btn {
+        padding: 0.3125rem 0.9rem;
+        font-size: 0.775rem;
+    }
+
+    /* Calendar icon inside the Date picker field. */
+    #eiUploadModal #eiUpDate {
+        padding-right: 2.1rem;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.7rem center;
+        background-size: 16px 16px;
+    }
+    [data-bs-theme=dark] #eiUploadModal #eiUpDate {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+    }
+
+    /* daterangepicker — the calendar is appended to <body>, so these rules are
+       deliberately NOT scoped under #ei-page. Solid background (it must not go
+       translucent over the glass modal) + Action Blue selection. */
+    .daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--bs-border-color);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, .18); background: #fff; }
+    .daterangepicker td.active, .daterangepicker td.active:hover { background-color: #0066cc; }
+    .daterangepicker .calendar-table { background: transparent; border: 0; }
+    [data-bs-theme=dark] .daterangepicker { background: #2b2f3a; color: var(--bs-body-color); }
+    [data-bs-theme=dark] .daterangepicker td.available:hover,
+    [data-bs-theme=dark] .daterangepicker th.available:hover { background: #3a3f4d; }
+    [data-bs-theme=dark] .daterangepicker td.off,
+    [data-bs-theme=dark] .daterangepicker td.off:hover { background: transparent; color: #6c757d; }
+    [data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
+    [data-bs-theme=dark] .daterangepicker .calendar-table th,
+    [data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--bs-body-color); }
+    [data-bs-theme=dark] .daterangepicker select { background: #2b2f3a; color: var(--bs-body-color);
+        border-color: var(--bs-border-color); }
+
+    @media (prefers-reduced-motion: reduce) {
+        #ei-page *, #ei-page *::before, #ei-page *::after { animation: none !important; transition: none !important; }
+    }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="ei-page" data-content="">
+
+    {% set subtitle='Apps' %}
+    {% set title='Electronic Inventory' %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="row g-3">
+        <!-- ============================= LEFT RAIL ============================= -->
+        <div class="col-xl-3 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <button class="btn btn-primary bg-gradient fw-medium w-100 ei-btn" id="eiUploadBtn">
+                        <i class="ti ti-cloud-upload me-1"></i> Upload Document
+                    </button>
+
+                    <label class="form-label fw-semibold mt-3 mb-1 fs-sm">Counterparty</label>
+                    <div class="ei-combo" id="eiClientCombo">
+                        <div class="app-search">
+                            <input type="text" class="form-control" id="eiClientInput"
+                                   placeholder="Search counterparty…" autocomplete="off">
+                            <i class="app-search-icon text-muted" data-lucide="search"></i>
+                        </div>
+                        <ul class="ei-combo-menu" id="eiClientMenu"></ul>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="text-uppercase text-muted fw-semibold fs-xxs mb-2 ps-1">Document Type</div>
+                        <div id="eiTypeList" class="d-flex flex-column gap-1">
+                            <a class="ei-type-item is-active" data-type="all">
+                                <i class="ti ti-folders ei-type-ico"></i><span>All Documents</span>
+                                <span class="ei-type-badge" data-count="all">0</span>
+                            </a>
+                            <a class="ei-type-item" data-type="Confirmations">
+                                <i class="ti ti-file-check ei-type-ico"></i><span>Confirmations</span>
+                                <span class="ei-type-badge" data-count="Confirmations">0</span>
+                            </a>
+                            <!-- Folder navigator: Year › Month › Day › Product,
+                                 mirroring the layout on the share. Filled by JS. -->
+                            <div id="eiConfTree" class="ei-fold-tree d-none"></div>
+                            <a class="ei-type-item" data-type="SSI">
+                                <i class="ti ti-building-bank ei-type-ico"></i><span>SSI</span>
+                                <span class="ei-type-badge" data-count="SSI">0</span>
+                            </a>
+                            <a class="ei-type-item" data-type="Transactional">
+                                <i class="ti ti-files ei-type-ico"></i><span>Transactional</span>
+                                <span class="ei-type-badge" data-count="Transactional">0</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Transactional sub-type quick filter (shown only for Transactional) -->
+                    <div class="mt-3 d-none" id="eiSubtypeWrap">
+                        <div class="text-uppercase text-muted fw-semibold fs-xxs mb-2 ps-1">Transactional Type</div>
+                        <select class="form-select form-select-sm" id="eiSubtypeFilter">
+                            <option value="">All types</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 mt-4 pt-2 border-top">
+                        <span class="ei-status-dot off" id="eiShareDot"></span>
+                        <span class="fs-xxs text-muted" id="eiShareLabel">Checking share…</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================= MAIN ============================= -->
+        <div class="col-xl-9 col-lg-8">
+            <!-- Document list card -->
+            <div class="card mb-3">
+                <div class="card-header border-light d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex flex-column gap-1 min-w-0">
+                        <div class="d-flex align-items-center gap-2">
+                            <h4 class="header-title mb-0" id="eiCurrentClient">No counterparty selected</h4>
+                            <span class="badge bg-secondary-subtle text-secondary" id="eiDocCount">0</span>
+                        </div>
+                        <!-- Which folder the list below is showing. -->
+                        <div class="ei-crumb d-none" id="eiCrumb"></div>
+                    </div>
+                    <div class="app-search" style="max-width: 280px;">
+                        <input type="search" class="form-control" id="eiDocSearch" placeholder="Search documents…">
+                        <i class="app-search-icon text-muted" data-lucide="search"></i>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="ei-list-scroll ei-doc-grid pe-1" id="eiDocList">
+                        <div class="ei-empty">
+                            <i class="ti ti-folder-search ei-empty-ico"></i>
+                            <div class="fw-semibold">Select a counterparty</div>
+                            <div class="fs-sm">Pick a counterparty on the left to browse its documents.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PDF viewer card (below the document list) -->
+            <div class="card mb-0">
+                <div class="card-header border-light d-flex align-items-center gap-2">
+                    <i class="ti ti-file-type-pdf text-danger fs-4"></i>
+                    <span class="fw-semibold text-truncate flex-grow-1" id="eiPreviewTitle">PDF Viewer</span>
+                    <a class="btn btn-sm btn-soft-primary ei-btn d-none" id="eiPreviewDownload" href="#" download>
+                        <i class="ti ti-download me-1"></i> Download
+                    </a>
+                    <a class="btn btn-sm btn-soft-secondary ei-btn d-none" id="eiPreviewOpen" href="#" target="_blank" rel="noopener">
+                        <i class="ti ti-external-link me-1"></i> Open
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="ei-preview-body ei-preview-body-lg" id="eiPreviewBody">
+                        <div class="ei-empty">
+                            <i class="ti ti-file-search ei-empty-ico"></i>
+                            <div class="fw-semibold">Nothing to preview</div>
+                            <div class="fs-sm">Select a PDF document above to preview it here.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
+         UPLOAD MODAL
+         =================================================================== -->
+    <div class="modal fade" id="eiUploadModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="ti ti-cloud-upload me-2"></i>Upload Document</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Counterparty</label>
+                            <input type="text" class="form-control" id="eiUpClient" placeholder="Counterparty name" readonly>
+                            <div class="form-text">Selected on the left. Folders are created automatically if missing.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Document Type</label>
+                            <select class="form-select" id="eiUpType">
+                                <option value="Confirmations">Confirmations</option>
+                                <option value="SSI">SSI</option>
+                                <option value="Transactional">Transactional</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Date</label>
+                            <input type="text" class="form-control" id="eiUpDate" placeholder="dd/mm/yyyy" autocomplete="off">
+                        </div>
+
+                        <div class="col-md-6 d-none" id="eiUpSubtypeWrap">
+                            <!-- Label + options swap with Document Type (Transactional
+                                 agreements vs. Confirmations by product). -->
+                            <label class="form-label fw-semibold" id="eiUpSubtypeLabel">Transactional Type</label>
+                            <select class="form-select" id="eiUpSubtype">
+                                <option value="">— Select —</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">File</label>
+                            <div class="ei-drop border border-dashed rounded-3 p-4 text-center" id="eiDrop"
+                                 style="cursor:pointer;">
+                                <button type="button" class="btn btn-sm btn-danger rounded-circle ei-drop-clear d-none"
+                                        id="eiDropClear" title="Remove attached file"><i class="ti ti-x"></i></button>
+                                <i class="ti ti-file-upload fs-1 text-muted d-block mb-1"></i>
+                                <span class="fw-medium" id="eiDropLabel">Drop a file here or click to browse</span>
+                                <input type="file" id="eiUpFile" class="d-none">
+                            </div>
+                            <div class="form-text" id="eiUpNamePreview"></div>
+                        </div>
+
+                        <!-- Batch: each extra block carries its own Type / Sub-type /
+                             Date / File, because a batch usually mixes products and
+                             dates (a day's NDF and Option confirmations arrive together). -->
+                        <div class="col-12">
+                            <div id="eiUpExtra" class="d-flex flex-column gap-2"></div>
+                            <button type="button" class="btn btn-sm btn-light ei-btn mt-2" id="eiUpAdd">
+                                <i class="ti ti-plus me-1"></i> Add another document
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-light ei-btn" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary bg-gradient ei-btn" id="eiUpSubmit">
+                        <i class="ti ti-device-floppy me-1"></i> Save to Inventory
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<!-- jQuery MUST come first: the global vendors bundle does not expose a usable
+     jQuery, so daterangepicker would silently fail to register (see HANDOFF). -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<!-- toast() is a no-op without Swal — every warning/success was silently swallowed. -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/electronic-inventory.js?v=20260724b"></script>
+{% endblock extra_javascript %}

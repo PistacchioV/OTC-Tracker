@@ -3,6 +3,7 @@ import os
 import io
 import re
 import random
+import secrets
 import string
 import smtplib
 import json
@@ -80,7 +81,6 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
-    'pages_blueprint.dev_login',          # DEV BYPASS — reachable while locked (strip before commit)
 }
 
 
@@ -108,15 +108,37 @@ def add_no_store_on_authed_pages(response):
     return response
 
 
+# Content-Security-Policy in REPORT-ONLY mode: the browser blocks nothing, it just
+# posts a report to /csp-report for anything this policy would forbid. The app
+# still relies on inline scripts/handlers, so 'unsafe-inline' stays for now; the
+# external hosts are the CDNs/fonts/embeds the pages actually load. Watch the
+# csp-report logs, tighten the allowlist, then flip the header name to
+# 'Content-Security-Policy' to start enforcing.
+_CSP_REPORT_ONLY = (
+    "default-src 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "frame-ancestors 'self'; "
+    "img-src 'self' data:; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "script-src 'self' 'unsafe-inline' "
+    "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://apexcharts.com; "
+    "connect-src 'self'; "
+    "frame-src 'self' https://www.youtube.com https://player.vimeo.com; "
+    "report-uri /csp-report"
+)
+
+
 @blueprint.after_request
 def add_security_headers(response):
-    """Baseline security headers on every response. A restrictive
-    Content-Security-Policy is intentionally left out here: the app relies on
-    inline scripts/handlers, so CSP needs a dedicated report-only rollout."""
+    """Baseline security headers on every response. CSP ships in report-only mode
+    (see _CSP_REPORT_ONLY) so nothing breaks while violations are collected."""
     try:
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault('Content-Security-Policy-Report-Only', _CSP_REPORT_ONLY)
         # HSTS is only meaningful over HTTPS; request.is_secure reflects the
         # proxy's X-Forwarded-Proto via ProxyFix.
         if request.is_secure:
@@ -125,6 +147,21 @@ def add_security_headers(response):
     except Exception:
         pass
     return response
+
+
+@blueprint.route('/csp-report', methods=['POST'])
+def csp_report():
+    """Collector for Content-Security-Policy-Report-Only violations. Report-only
+    means nothing is blocked yet — these logs show what an enforcing policy would
+    break, so the allowlist can be tuned before the switch. Unauthenticated by
+    design: browsers post these reports without credentials."""
+    try:
+        raw = request.get_data(as_text=True) or ''
+        if raw:
+            log.warning('[csp-report] %s', raw[:2000])
+    except Exception:
+        pass
+    return ('', 204)
 
 
 # ==============================================================================
@@ -174,19 +211,30 @@ _NAV_URLS = _load_nav_urls()
 # "/control-panel" page grant, each routine card can be granted on its own. Tokens
 # are stored in the same allowlist as page URLs ("/control-panel#<id>").
 _CONTROL_PANEL_CARDS = [
-    {'id': 'cetip',    'label': 'Save CETIP Files'},
-    {'id': 'daily',    'label': 'Save Daily Settlement Files'},
-    {'id': 'forecast', 'label': 'Settlement Forecast'},
-    {'id': 'contacts', 'label': 'Update Contacts'},
+    {'id': 'cetip',       'label': 'Save CETIP Files'},
+    {'id': 'daily',       'label': 'Save Daily Settlement Files'},
+    {'id': 'forecast',    'label': 'Settlement Forecast'},
+    {'id': 'contacts',    'label': 'Update Contacts'},
+    {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
+    {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
+    {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
 _CP_ENDPOINT_CARD = {
     '/api/control-panel/cetip-settlement': 'cetip',
+    '/api/control-panel/cetip-settlement/recipients': 'cetip',
     '/api/control-panel/daily-settlement-save': 'daily',
     '/api/control-panel/settlement-forecast/data': 'forecast',
     '/api/control-panel/settlement-forecast/email': 'forecast',
+    '/api/control-panel/settlement-forecast/recipients': 'forecast',
     '/api/control-panel/import-contacts': 'contacts',
+    '/api/control-panel/daily-metric/recipients': 'dailymetric',
+    '/api/control-panel/daily-metric/run': 'dailymetric',
+    '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',
+    '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
+    '/api/control-panel/signature-collection/preview': 'signaturecollection',
+    '/api/control-panel/signature-collection/generate': 'signaturecollection',
 }
 
 
@@ -290,6 +338,20 @@ def _safe_landing(allowed):
     return '/users-profile'
 
 
+def _user_can_access_page(url):
+    """True if the current session may reach a given sidebar page URL — same rule
+    as enforce_page_access, for API endpoints that back a page. enforce_page_access
+    skips '/api/' paths, so a mutating API behind a page must re-check here or a
+    user without that page granted could call it directly. Master and unconfigured
+    users always pass."""
+    if _session_is_master():
+        return True
+    configured, allowed = _get_page_access(session.get('user_sid', ''))
+    if not configured:
+        return True
+    return url in allowed
+
+
 @blueprint.before_request
 def enforce_control_panel_cards():
     """Block a Control Panel routine's API call when the user isn't granted that
@@ -338,6 +400,38 @@ def _ei_sanitize(name):
     return s.rstrip('. ')
 
 
+def _ei_actual_dir_name(folder):
+    """On-disk folder name matching the sanitized `folder`, tolerant to
+    case/whitespace/illegal-char differences. Falls back to `folder` itself.
+
+    Consults the background share scan first (_EI_ROOT_CACHE). Listing the root
+    directly costs one stat per counterparty folder over the network share, so a
+    cache hit is the difference between instant and tens of seconds — that scan
+    is exactly why the cache exists."""
+    key = folder.upper()
+    try:
+        with _EI_ROOT_CACHE_LOCK:
+            complete = bool(_EI_ROOT_CACHE.get('complete'))
+            cached = _EI_ROOT_CACHE['dirs'].get(key) if complete else None
+    except Exception:
+        complete, cached = False, None
+    if cached:
+        return cached
+    if complete:
+        # Scan finished and this counterparty has no folder yet — the caller
+        # creates it under the sanitized name. No point re-listing the share.
+        return folder
+    try:
+        if os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+            for entry in os.listdir(ELECTRONIC_INVENTORY_ROOT):
+                if (os.path.isdir(os.path.join(ELECTRONIC_INVENTORY_ROOT, entry))
+                        and _ei_sanitize(entry).upper() == key):
+                    return entry
+    except Exception:
+        pass
+    return folder
+
+
 def _ensure_counterparty_folders(company):
     """Create ELECTRONIC_INVENTORY_ROOT\\<company>\\{Confirmations,Transactional,SSI}
     if missing. Tolerant existence match (case/whitespace/illegal-char insensitive)
@@ -347,15 +441,7 @@ def _ensure_counterparty_folders(company):
     if not folder:
         return
     try:
-        root = ELECTRONIC_INVENTORY_ROOT
-        key = folder.upper()
-        actual = folder
-        if os.path.isdir(root):
-            for entry in os.listdir(root):
-                if os.path.isdir(os.path.join(root, entry)) and _ei_sanitize(entry).upper() == key:
-                    actual = entry
-                    break
-        parent = os.path.join(root, actual)
+        parent = os.path.join(ELECTRONIC_INVENTORY_ROOT, _ei_actual_dir_name(folder))
         for sub in EI_SUBFOLDERS:
             os.makedirs(os.path.join(parent, sub), exist_ok=True)
     except Exception as exc:
@@ -415,6 +501,15 @@ def _unique_filepath(output_dir, filename):
 SMTP_HOST = "mailhost.jpmchase.net"
 SMTP_PORT = 25
 CODE_EXPIRY_MINUTES = 10
+
+# 2FA hardening. A 6-digit code has a 10^6 space; without a cap on wrong tries it
+# is brute-forceable inside the 10-minute window. MAX_2FA_ATTEMPTS burns a code
+# after that many wrong guesses. The send limits stop an attacker who knows a SID
+# from bombing the victim's inbox (or minting endless fresh codes to keep guessing).
+MAX_2FA_ATTEMPTS = 5              # wrong guesses per code before it is invalidated
+CODE_RESEND_COOLDOWN_SECONDS = 30  # minimum gap between two code emails for a SID
+CODE_WINDOW_MINUTES = 15         # rolling window for the code-issue cap
+MAX_CODES_PER_WINDOW = 5         # max codes emailed to a SID within that window
 
 ROLE_META = {
     'MASTER':       {'display': 'Master',        'icon': 'ti-crown',                'description': 'Top-level authority — manages page access for everyone, including admins.', 'responsibilities': ['Control All Access', 'Manage Admins', 'Manage Users', 'Configure System']},
@@ -545,7 +640,8 @@ def init_db():
                 code       VARCHAR(6) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL,
-                used       BOOLEAN  DEFAULT FALSE
+                used       BOOLEAN  DEFAULT FALSE,
+                attempts   INTEGER  DEFAULT 0
             )
         """)
         conn.execute("""
@@ -599,6 +695,18 @@ def _migrate_schema():
                 conn.commit()
         except Exception:
             log.debug("[migrate] verification_codes check skipped: %s", traceback.format_exc())
+
+        # Add verification_codes.attempts (per-code wrong-guess counter) if missing.
+        try:
+            vc_cols = [c[0] for c in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='verification_codes'"
+            ).fetchall()]
+            if vc_cols and 'attempts' not in vc_cols:
+                log.warning("[migrate] Adding missing column verification_codes.attempts")
+                conn.execute("ALTER TABLE verification_codes ADD COLUMN attempts INTEGER DEFAULT 0")
+                conn.commit()
+        except Exception:
+            log.debug("[migrate] verification_codes.attempts check skipped: %s", traceback.format_exc())
 
         # Fix users: Role -> Role_Description + add Role + add Status
         try:
@@ -939,34 +1047,96 @@ def verify_code(sid, code):
     log.info("[verify_code] Verifying code for SID=%s", sid)
     conn = get_db_connection()
     try:
+        # A match only counts while the code still has attempts left — once the
+        # wrong-guess cap is hit the code is burned and can never validate again.
         result = conn.execute("""
             SELECT id FROM verification_codes
             WHERE SID = ? AND code = ? AND used = FALSE
               AND expires_at > CURRENT_TIMESTAMP
+              AND attempts < ?
             ORDER BY created_at DESC
             LIMIT 1
-        """, [sid, code]).fetchone()
+        """, [sid, code, MAX_2FA_ATTEMPTS]).fetchone()
 
-        if not result:
-            exists = conn.execute(
-                "SELECT 1 FROM verification_codes WHERE SID = ? AND code = ? AND used = FALSE",
-                [sid, code]
-            ).fetchone()
-            if exists:
-                log.warning("[verify_code] Code for SID=%s is EXPIRED", sid)
-                return False, "Verification code has expired. Please request a new one."
-            log.warning("[verify_code] Invalid code attempt for SID=%s", sid)
+        if result:
+            conn.execute("UPDATE verification_codes SET used = TRUE WHERE id = ?", [result[0]])
+            conn.commit()
+            log.info("[verify_code] Code verified OK for SID=%s (row id=%s)", sid, result[0])
+            return True, "Code verified successfully."
+
+        # No match: spend one attempt on the live code so the 6-digit space can't
+        # be brute-forced. At the cap the code is invalidated (used = TRUE).
+        active = conn.execute("""
+            SELECT id, attempts, (expires_at > CURRENT_TIMESTAMP) AS live
+            FROM verification_codes
+            WHERE SID = ? AND used = FALSE
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, [sid]).fetchone()
+
+        if active and active[2]:
+            new_attempts = (active[1] or 0) + 1
+            if new_attempts >= MAX_2FA_ATTEMPTS:
+                conn.execute("UPDATE verification_codes SET used = TRUE, attempts = ? WHERE id = ?",
+                             [new_attempts, active[0]])
+                conn.commit()
+                log.warning("[verify_code] SID=%s hit the attempt cap — code invalidated", sid)
+                return False, "Too many incorrect attempts. Please request a new code."
+            conn.execute("UPDATE verification_codes SET attempts = ? WHERE id = ?",
+                         [new_attempts, active[0]])
+            conn.commit()
+            log.warning("[verify_code] Invalid code attempt %d/%d for SID=%s",
+                        new_attempts, MAX_2FA_ATTEMPTS, sid)
             return False, "Invalid verification code."
 
-        conn.execute("UPDATE verification_codes SET used = TRUE WHERE id = ?", [result[0]])
-        conn.commit()
-        log.info("[verify_code] Code verified OK for SID=%s (row id=%s)", sid, result[0])
-        return True, "Code verified successfully."
+        # No live code at all → it expired (or was already burned / never issued).
+        expired = conn.execute(
+            "SELECT 1 FROM verification_codes WHERE SID = ? AND code = ? AND used = FALSE",
+            [sid, code]
+        ).fetchone()
+        if expired:
+            log.warning("[verify_code] Code for SID=%s is EXPIRED", sid)
+            return False, "Verification code has expired. Please request a new one."
+        log.warning("[verify_code] Invalid code attempt for SID=%s (no live code)", sid)
+        return False, "Invalid verification code."
     except Exception:
         log.error("[verify_code] Error for SID=%s:\n%s", sid, traceback.format_exc())
         raise
     finally:
         conn.close()
+
+
+def _code_send_allowed(sid):
+    """Throttle verification-code emails for a SID. Returns (allowed, message).
+
+    Enforces a short cooldown between sends and a cap per rolling window so a
+    known SID can't be used to flood a mailbox or to mint an endless stream of
+    fresh codes for brute-forcing. Fails open on any DB error — 2FA email must
+    never be bricked by the throttle itself."""
+    try:
+        conn = get_db_connection()
+        try:
+            row = conn.execute(
+                "SELECT "
+                "  SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '%d' SECOND "
+                "           THEN 1 ELSE 0 END), "
+                "  SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '%d' MINUTE "
+                "           THEN 1 ELSE 0 END) "
+                "FROM verification_codes WHERE SID = ?"
+                % (CODE_RESEND_COOLDOWN_SECONDS, CODE_WINDOW_MINUTES),
+                [sid]
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return True, ''
+    just_now = (row[0] if row else 0) or 0
+    recent = (row[1] if row else 0) or 0
+    if just_now > 0:
+        return False, "A verification code was just sent. Please wait a moment before requesting another."
+    if recent >= MAX_CODES_PER_WINDOW:
+        return False, "Too many code requests. Please wait a few minutes and try again."
+    return True, ''
 
 
 def cleanup_expired_codes():
@@ -994,7 +1164,9 @@ def get_client_ip():
 
 
 def generate_verification_code():
-    return ''.join(random.choices(string.digits, k=6))
+    # 2FA secret: use a cryptographically secure RNG (secrets), never random —
+    # the module-level Mersenne Twister is predictable from observed outputs.
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 
 def get_user_data_from_phonebook(sid):
@@ -1062,6 +1234,7 @@ def send_verification_email(to_email, code, recipient_name):
             msg_related.attach(logo_mime)
         except Exception as e:
             print(f"Warning: Could not attach logo: {e}")
+    _attach_email_gradient(msg_related)
 
     msg.attach(msg_related)
 
@@ -1111,6 +1284,7 @@ def send_account_activated_email(to_email, first_name):
             print(f"Warning: Could not attach logo to activation email: {e}")
     else:
         print("Warning: logo not found, activation email will have no logo.")
+    _attach_email_gradient(msg_related)
 
     msg.attach(msg_related)
 
@@ -1135,6 +1309,60 @@ def _get_logo_path():
         if os.path.exists(path):
             return path
     return None
+
+
+def _get_email_asset(filename):
+    """Resolve an image under static/images (same lookup as the logo) for inline
+    e-mail embedding. Returns the path or None."""
+    from flask import current_app
+    candidates = [
+        os.path.join(current_app.root_path, 'static', 'images', filename),
+        os.path.join(os.path.dirname(current_app.root_path), 'static', 'images', filename),
+        os.path.join(current_app.root_path, '..', 'static', 'images', filename),
+    ]
+    for path in candidates:
+        path = os.path.normpath(path)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _attach_email_gradient(container):
+    """Attach the header gradient PNG as an inline cid:otc_gradient part — the
+    shared e-mail header partial's Outlook/VML fallback (daily-metric pattern,
+    now standard for every HTML e-mail). Works with or without an app context
+    (threaded senders resolve the path relative to this module). Best-effort."""
+    from email.mime.image import MIMEImage
+    try:
+        path = _get_email_asset('email-header-gradient.png')
+    except Exception:                     # no app context (background thread)
+        path = os.path.normpath(os.path.join(
+            os.path.dirname(__file__), '..', 'static', 'images', 'email-header-gradient.png'))
+        if not os.path.exists(path):
+            path = None
+    if not path:
+        return
+    try:
+        with open(path, 'rb') as f:
+            gimg = MIMEImage(f.read())
+        gimg.add_header('Content-ID', '<otc_gradient>')
+        gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+        container.attach(gimg)
+    except Exception:
+        log.warning('[email] could not attach header gradient:\n%s', traceback.format_exc())
+
+
+@blueprint.app_context_processor
+def _inject_email_grad_url():
+    """Expose `grad_url` (absolute URL to the header gradient image) to every
+    template, so the shared e-mail header partial renders the Outlook gradient
+    without each route having to pass it. Falls back to the cid: reference when
+    there's no request context / SERVER_NAME (e.g. a scheduled send)."""
+    try:
+        return {'grad_url': url_for('static', filename='images/email-header-gradient.png',
+                                    _external=True)}
+    except Exception:
+        return {'grad_url': 'cid:otc_gradient'}
 
 
 def render_email_template(code, recipient_name):
@@ -1434,6 +1662,15 @@ def resend_code():
             return jsonify({"success": False, "message": "User not found."}), 404
         flash("User not found.", "error")
         return redirect(url_for('pages_blueprint.sign_in_page'))
+
+    # Cooldown + per-window cap: stop the resend button from bombing the mailbox
+    # or minting endless fresh codes.
+    allowed, wait_msg = _code_send_allowed(sid)
+    if not allowed:
+        if request.is_json:
+            return jsonify({"success": False, "message": wait_msg}), 429
+        flash(wait_msg, "warning")
+        return redirect(url_for('pages_blueprint.two_factor_page'))
 
     code = generate_verification_code()
     save_verification_code(sid, code)
@@ -1900,8 +2137,11 @@ def control_panel():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     cetip_default_date = _prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d')
+    today = datetime.now()
     return render_template('pages/control-panel.html', segment='control-panel',
-                           cetip_default_date=cetip_default_date)
+                           cetip_default_date=cetip_default_date,
+                           today_date=today.strftime('%Y-%m-%d'),
+                           today_fmt=today.strftime('%d/%m/%Y'))
 
 
 # ============================================================================
@@ -1931,6 +2171,32 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 # CEM Latam BA (Buenos Aires CIB Ops) — receive the Option Position .OPC file, cc OTC Ops.
+# Editable TO lists for the two distribution e-mails (Sales Support / CEM Latam),
+# persisted from the Save CETIP Files card. Empty/absent → the hardcoded defaults
+# below. The CC (OTC Ops) stays hardcoded on purpose.
+_CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel',
+    'cetip_distribution_recipients.json'))
+
+
+def _load_cetip_recipients():
+    try:
+        with open(_CETIP_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'ss_to': d.get('ss_to', '') or '', 'cem_to': d.get('cem_to', '') or ''}
+    except Exception:
+        pass
+    return {'ss_to': '', 'cem_to': ''}
+
+
+def _save_cetip_recipients(ss_to, cem_to):
+    os.makedirs(os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
+    with open(_CETIP_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'ss_to': ss_to or '', 'cem_to': cem_to or ''},
+                  fh, ensure_ascii=False, indent=2)
+
+
 CETIP_CEM_LATAM_EMAILS    = [e.strip() for e in os.getenv(
     'CETIP_CEM_LATAM_EMAILS',
     'lautaro.larriera@jpmchase.com,sacha.yebrin@jpmchase.com,candela.ferreiro@jpmorgan.com,'
@@ -2418,6 +2684,7 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
 
         for path in attachments:
@@ -2442,11 +2709,14 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
         return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 
-def _cetip_distribute_emails(ref, dest_dir, send_mail):
+def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None):
     """Stage 2 of Save CETIP Files ("Send to other areas"): e-mail Sales Support
     (SIC + Term/Option/SWAP positions) and CEM Latam BA (.OPC) with the files that
     stage 1 already saved to dest_dir — no re-save. Attachment paths are rebuilt
-    from each rule's deterministic dest name for the reference date."""
+    from each rule's deterministic dest name for the reference date. TO lists come
+    from the card (persisted); empty → the hardcoded defaults. CC stays OTC Ops."""
+    ss_to_list  = ss_to_list  or [CETIP_SALES_SUPPORT_EMAIL]
+    cem_to_list = cem_to_list or CETIP_CEM_LATAM_EMAILS
     if not os.path.isdir(dest_dir):
         return jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
@@ -2483,7 +2753,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
                   'The requested position files were not found for the reference date.')
         ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref_yymmdd)
         mail_ss = _send_cetip_email(
-            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
+            ss_to_list, [CETIP_OTC_OPS_EMAIL], ss_subject,
             'Hello, Sales Support.', ss_msg,
             ref_fmt, attach_saved, attachments=attach_paths)
 
@@ -2492,7 +2762,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
                    'The DPOSICAO.OPC file was not found for the reference date.')
         cem_subject = 'CETIP Option Position - CEM Latam - {}'.format(ref_yymmdd)
         mail_cem = _send_cetip_email(
-            CETIP_CEM_LATAM_EMAILS, [CETIP_OTC_OPS_EMAIL], cem_subject,
+            cem_to_list, [CETIP_OTC_OPS_EMAIL], cem_subject,
             'Hello CEM Latam BA,', cem_msg,
             ref_fmt, opc_saved, attachments=opc_paths)
 
@@ -2511,6 +2781,27 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
     return jsonify({'success': True, 'message': msg,
                     'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem},
                     'destination': dest_dir})
+
+
+@blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
+def api_cp_cetip_recipients():
+    """GET → the TO lists for the two distribution e-mails (defaults shown when
+    nothing is saved yet); POST → persist them. CC (OTC Ops) is fixed in code."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        rec = _load_cetip_recipients()
+        return jsonify({'success': True,
+                        'ss_to': rec['ss_to'] or CETIP_SALES_SUPPORT_EMAIL,
+                        'cem_to': rec['cem_to'] or '; '.join(CETIP_CEM_LATAM_EMAILS)})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_cetip_recipients((payload.get('ss_to') or '').strip(),
+                               (payload.get('cem_to') or '').strip())
+    except Exception as e:
+        log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
 
 
 @blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
@@ -2540,8 +2831,20 @@ def api_cp_cetip_settlement():
 
     # Stage 2 ("Send to other areas") — no re-save; e-mail Sales Support + CEM Latam
     # from the already-saved files. Requires stage 1 ("Save CETIP Files") to have run.
+    # TO lists: run payload (what's on the card) > saved > hardcoded default; when
+    # the payload carries them they are persisted for the next runs.
     if stage == 'distribute':
-        return _cetip_distribute_emails(ref, dest_dir, send_mail)
+        rec = _load_cetip_recipients()
+        if 'ss_to' in payload or 'cem_to' in payload:
+            rec = {'ss_to': (payload.get('ss_to') or '').strip(),
+                   'cem_to': (payload.get('cem_to') or '').strip()}
+            try:
+                _save_cetip_recipients(rec['ss_to'], rec['cem_to'])
+            except Exception:
+                log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
+        return _cetip_distribute_emails(ref, dest_dir, send_mail,
+                                        _parse_emails(rec['ss_to']),
+                                        _parse_emails(rec['cem_to']))
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
@@ -3119,6 +3422,10 @@ def _forecast_payload(ref, days=None):
     dref = ref.strftime('%y%m%d')
     spine = _forecast_spine(ref, count=days)
     by_product, by_entity, status = _forecast_collect(dref, spine)
+    # Keep the standard product set stable: a product with no settlements in the
+    # window (e.g. SWAP CEMHYB) must still render as a 0 series, not disappear.
+    for k in _FCST_PRODUCT_ORDER:
+        by_product.setdefault(k, [0] * len(spine))
     product_rows = _forecast_matrix(by_product, _FCST_PRODUCT_ORDER)
     entity_rows = _forecast_matrix(by_entity, _FCST_ENTITY_ORDER)
     col_tot = [sum(r['values'][i] for r in product_rows) for i in range(len(spine))]
@@ -3170,10 +3477,10 @@ def _decode_data_uri(d):
         return None
 
 
-def _send_forecast_email(payload, images):
-    """Render the Settlement Forecast HTML report and e-mail it to OTC Ops with
-    the chart PNGs embedded (cid). `images` maps cid → raw PNG bytes. Best-effort
-    — returns True on success or an error string."""
+def _send_forecast_email(payload, images, to_list, cc_list):
+    """Render the Settlement Forecast HTML report and e-mail it to the saved
+    recipients (TO/CC) with the chart PNGs embedded (cid). `images` maps cid → raw
+    PNG bytes. Best-effort — returns True on success or an error string."""
     from email.mime.image import MIMEImage
     try:
         html = render_template(
@@ -3192,8 +3499,10 @@ def _send_forecast_email(payload, images):
         msg = MIMEMultipart('mixed')
         msg['Subject'] = 'Settlement Forecast'
         msg['From'] = SHARED_MAILBOX
-        msg['To'] = CETIP_OTC_OPS_EMAIL
-        msg['Cc'] = ', '.join(_ACC_ENDPROC_CC)     # Renato + Danilo (same cc as accrual / MTM swap)
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
 
         related = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
@@ -3208,6 +3517,8 @@ def _send_forecast_email(payload, images):
             limg.add_header('Content-ID', '<otc_logo>')
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(limg)
+
+        _attach_email_gradient(related)      # Outlook/VML gradient fallback (cid)
 
         for cid, data in images.items():
             if not data:
@@ -3269,10 +3580,27 @@ def api_cp_forecast_data():
     return jsonify({'success': True, **data})
 
 
+@blueprint.route('/api/control-panel/settlement-forecast/recipients', methods=['GET', 'POST'])
+def api_cp_forecast_recipients():
+    """GET → the saved TO/CC; POST → persist them (so they survive across runs)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_forecast_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_forecast_recipients((payload.get('to') or '').strip(),
+                                  (payload.get('cc') or '').strip())
+    except Exception as e:
+        log.error('[forecast] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
 @blueprint.route('/api/control-panel/settlement-forecast/email', methods=['POST'])
 def api_cp_forecast_email():
     """Receive the client-rendered chart PNGs (data URIs), rebuild the report
-    tables server-side and e-mail the Settlement Forecast to OTC Ops."""
+    tables server-side and e-mail the Settlement Forecast to the saved TO/CC."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
@@ -3283,21 +3611,636 @@ def api_cp_forecast_email():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
+    rec = _load_forecast_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC antes de rodar.'}), 400
+
     data = _forecast_payload(ref)
     imgs = payload.get('images') or {}
     images = {
         'fcst_product': _decode_data_uri(imgs.get('by_product')),
         'fcst_entity':  _decode_data_uri(imgs.get('by_entity')),
     }
-    result = _send_forecast_email(data, images)
+    result = _send_forecast_email(data, images, to_list, cc_list)
     if result is not True:
         return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Settlement Forecast Sent', 'Control Panel',
-                         'Forecast e-mailed to OTC Ops ({})'.format(ref.strftime('%Y-%m-%d')))
+                         'Forecast e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list)
     return jsonify({'success': True,
-                    'message': 'Settlement Forecast e-mailed to OTC Ops.'})
+                    'message': 'Settlement Forecast enviado para {} destinatário(s).'.format(n)})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Daily Metric: Outstanding Confirmation Brazil OTC
+# Emails a daily metric to a SAVED recipient list (TO/CC/BCC persisted on disk,
+# so they don't have to be retyped each run). The reference date is always today.
+# NOTE: the metric body is a placeholder for now — only the delivery plumbing and
+# the persisted-recipients flow are wired; the actual metric content (source +
+# format) is still to be defined.
+# ──────────────────────────────────────────────────────────────────────────
+_DAILY_METRIC_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel'))
+_DAILY_METRIC_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'daily_metric_recipients.json')
+# Settlement Forecast keeps its own saved TO/CC (same folder, no BCC) so the card
+# recipients replace the previously hardcoded OTC Ops / accrual-cc addresses.
+_FORECAST_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'settlement_forecast_recipients.json')
+
+
+def _load_forecast_recipients():
+    try:
+        with open(_FORECAST_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': ''}
+
+
+def _save_forecast_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_FORECAST_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+
+
+def _load_daily_metric_recipients():
+    try:
+        with open(_DAILY_METRIC_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or '',
+                    'bcc': d.get('bcc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': '', 'bcc': ''}
+
+
+def _save_daily_metric_recipients(to, cc, bcc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_DAILY_METRIC_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or '', 'bcc': bcc or ''},
+                  fh, ensure_ascii=False, indent=2)
+
+
+def _parse_emails(raw):
+    """Split a free-text address list (comma / semicolon / whitespace / newline)
+    into a clean, de-duplicated list of addresses."""
+    out, seen = [], set()
+    for p in re.split(r'[,;\s]+', str(raw or '').strip()):
+        p = p.strip()
+        if p and p.lower() not in seen:
+            seen.add(p.lower())
+            out.append(p)
+    return out
+
+
+_DAILY_METRIC_OPERATIONS = 'Priscila Babilonia'   # Ops support contact — fixed for now.
+_DM_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _pc_refdata_lookup(r, by_spn, by_name):
+    """RefData.json record for a pending row (by SPN first, then counterparty name)."""
+    spn = r.get('SPN', '')
+    rec = by_spn.get(_norm_spn(spn)) if spn else None
+    if rec is None:
+        rec = by_name.get(_pc_norm(r.get('Client', '')))
+    return rec or {}
+
+
+def _pc_metrics_pivot(rows):
+    """Per-ECONOMIC-GROUP aging buckets for rows pending >= 30 days (30-59 / 60-89 /
+    >=90), plus the banker group and the digital-signature (FepWeb/green) flag. The
+    economic group, banker and signature type all come from RefData.json (matched by
+    SPN, then counterparty name); a group is green when RefData marks its signature
+    type DIGITAL. Sorted by total desc. Returns (rows[], totals)."""
+    by_spn = _fxo_refdata_by_spn()
+    by_name = _pc_refdata_by_name()
+    groups = {}
+    for r in rows:
+        a = _pc_metrics_int(r.get('Aging'))
+        if a is None or a < 30:
+            continue
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        group = (str(rec.get('ECONOMIC GROUP', '') or '').strip()
+                 or str(r.get('Economic Group', '') or '').strip()
+                 or str(r.get('Client', '') or '').strip()
+                 or '(no group)')
+        d = groups.setdefault(group, {'b1': 0, 'b2': 0, 'b3': 0, 'banker': '', 'digital': False})
+        if a < 60:
+            d['b1'] += 1
+        elif a < 90:
+            d['b2'] += 1
+        else:
+            d['b3'] += 1
+        if not d['banker']:
+            d['banker'] = str(rec.get('BANKER', '') or r.get('Owner', '') or '').strip()
+        if _pc_norm(rec.get('SIGNATURE TYPE', '')) == 'digital':
+            d['digital'] = True
+    out = []
+    for group, d in groups.items():
+        total = d['b1'] + d['b2'] + d['b3']
+        out.append({'group': group, 'b1': d['b1'], 'b2': d['b2'], 'b3': d['b3'],
+                    'total': total, 'banker': d['banker'], 'digital': d['digital'],
+                    'operations': _DAILY_METRIC_OPERATIONS})
+    out.sort(key=lambda x: (-x['total'], x['group'].lower()))
+    totals = {'b1': sum(x['b1'] for x in out), 'b2': sum(x['b2'] for x in out),
+              'b3': sum(x['b3'] for x in out), 'total': sum(x['total'] for x in out)}
+    return out, totals
+
+
+def _pc_bar_series(items, keyfield, labelfn, maxpx=60):
+    """Turn a history slice into bar cells with a pixel height proportional to the
+    max value — an email-safe (image/JS-free) bar chart. Each cell: {label,value,h}."""
+    vals = [it.get('volume') or 0 for it in items]
+    hi = max(vals) if vals else 0
+    hi = hi or 1
+    return [{'label': labelfn(it[keyfield]), 'value': it.get('volume') or 0,
+             'h': max(3, int(round((it.get('volume') or 0) * maxpx / hi)))} for it in items]
+
+
+def _fmt_month_lbl(period):     # "2025-07" -> "Jul/25"
+    try:
+        y, m = period.split('-')
+        return '{}/{}'.format(_DM_MONTH_ABBR[int(m)], y[2:])
+    except Exception:
+        return period
+
+
+def _fmt_day_lbl(date):         # "2026-07-01" -> "01/07"
+    try:
+        _, m, dd = date.split('-')
+        return '{}/{}'.format(dd, m)
+    except Exception:
+        return date
+
+
+def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
+    """Deliver the 'Daily Metric — Outstanding Confirmation Brazil OTC' e-mail to
+    the saved recipients. Best-effort — returns True or an error string. Renders
+    the growth metric (>30d) + the per-client aging pivot from the latest snapshot."""
+    from email.mime.image import MIMEImage
+    try:
+        ref_fmt = ref.strftime('%d/%m/%Y')
+        rows, source = _pc_latest_snapshot_rows()
+        pivot, totals = _pc_metrics_pivot(rows)
+        hist = _pc_metrics_history().get('gt30') or {}
+        monthly = hist.get('monthly') or []
+        daily = hist.get('daily') or []
+        recent_m = monthly[-13:]
+        month_bars = _pc_bar_series(recent_m, 'period', _fmt_month_lbl)
+        day_bars = _pc_bar_series(daily, 'date', _fmt_day_lbl)
+        latest_m = monthly[-1] if monthly else {}
+        prev_m = monthly[-2] if len(monthly) >= 2 else {}
+        latest_d = daily[-1] if daily else {}
+
+        # Absolute URL to the header gradient image (Outlook honours <td background="url">).
+        # Falls back to the inline cid: attachment when there's no request/SERVER_NAME.
+        try:
+            grad_url = url_for('static', filename='images/email-header-gradient.png', _external=True)
+        except Exception:
+            grad_url = 'cid:otc_gradient'
+
+        html = render_template(
+            'pages/email-template-daily-metric.html',
+            ref_date_fmt=ref_fmt,
+            current_total=totals['total'],
+            month_total=latest_m.get('volume'),
+            prev_total=prev_m.get('volume'),
+            latest_pct=latest_m.get('pct'),
+            day_pct=latest_d.get('pct'),
+            day_total=latest_d.get('volume'),
+            month_bars=month_bars, day_bars=day_bars,
+            pivot=pivot, totals=totals, grad_url=grad_url,
+            current_year=datetime.now().year)
+
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'Daily Metric - Outstanding Confirmation Brazil OTC - {}'.format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+
+        # Header gradient — referenced by VML so the gradient shows in Outlook
+        # (which ignores CSS gradients). Modern clients keep the CSS linear-gradient.
+        _attach_email_gradient(msg)
+
+        recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[daily-metric] e-mail sent — to=%s cc=%s bcc=%d (%d clients, source=%s)',
+                 to_list, cc_list, len(bcc_list), len(pivot), source)
+        return True
+    except Exception as e:
+        log.error('[daily-metric] e-mail FAILED:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/control-panel/daily-metric/recipients', methods=['GET', 'POST'])
+def api_cp_daily_metric_recipients():
+    """GET → the saved TO/CC/BCC; POST → persist them (so they survive across runs)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_daily_metric_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_daily_metric_recipients((payload.get('to') or '').strip(),
+                                      (payload.get('cc') or '').strip(),
+                                      (payload.get('bcc') or '').strip())
+    except Exception as e:
+        log.error('[daily-metric] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/control-panel/daily-metric/run', methods=['POST'])
+def api_cp_daily_metric_run():
+    """Send the Daily Metric e-mail to the saved recipients for today's date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = _load_daily_metric_recipients()
+    to_list, cc_list, bcc_list = (_parse_emails(rec['to']),
+                                  _parse_emails(rec['cc']),
+                                  _parse_emails(rec['bcc']))
+    if not (to_list or cc_list or bcc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC/BCC antes de rodar.'}), 400
+    result = _send_daily_metric_email(ref, to_list, cc_list, bcc_list)
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Daily Metric Sent', 'Control Panel',
+                         'Outstanding Confirmation Brazil OTC e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list) + len(bcc_list)
+    return jsonify({'success': True,
+                    'message': 'Daily Metric enviado para {} destinatário(s).'.format(n)})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Pending Confirmation Weekly Escalation (CEM / EDG)
+# A weekly (Friday) escalation e-mail: confirmations pending > 30 days, split by
+# LOB (CEM, EDG), grouped by banker with a per-banker total, and broken down by
+# COMPANY (client name — not the economic group). TO/CC recipients are persisted.
+# ──────────────────────────────────────────────────────────────────────────
+_WEEKLY_ESCALATION_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'weekly_escalation_recipients.json')
+_WEEKLY_ESCALATION_LOBS = ['CEM', 'EDG']
+
+
+def _load_weekly_escalation_recipients():
+    try:
+        with open(_WEEKLY_ESCALATION_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': ''}
+
+
+def _save_weekly_escalation_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_WEEKLY_ESCALATION_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+
+
+def _pc_weekly_escalation(rows):
+    """Rows pending >= 30 days, split by LOB (CEM, EDG). Per LOB: bankers sorted by
+    total desc, each with a total and a company (client name) breakdown sorted by
+    count desc. Banker = RefData BANKER (by SPN, then name), falling back to Owner."""
+    by_spn = _fxo_refdata_by_spn()
+    by_name = _pc_refdata_by_name()
+    data = {lob: {} for lob in _WEEKLY_ESCALATION_LOBS}
+    for r in rows:
+        a = _pc_metrics_int(r.get('Aging'))
+        if a is None or a < 30:
+            continue
+        lob_n = _pc_norm(r.get('LOB', ''))
+        lob = 'CEM' if lob_n == 'cem' else ('EDG' if lob_n == 'edg' else None)
+        if lob is None:
+            continue
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        banker = str(rec.get('BANKER', '') or r.get('Owner', '') or '').strip() or '(no banker)'
+        company = str(r.get('Client', '') or '').strip() or '(no client)'
+        b = data[lob].setdefault(banker, {'total': 0, 'companies': {}})
+        b['total'] += 1
+        b['companies'][company] = b['companies'].get(company, 0) + 1
+    out = []
+    for lob in _WEEKLY_ESCALATION_LOBS:
+        bankers = []
+        for banker, bd in sorted(data[lob].items(), key=lambda kv: (-kv[1]['total'], kv[0].lower())):
+            companies = [{'name': c, 'count': n}
+                         for c, n in sorted(bd['companies'].items(), key=lambda kv: (-kv[1], kv[0].lower()))]
+            bankers.append({'banker': banker, 'total': bd['total'], 'companies': companies})
+        out.append({'lob': lob, 'bankers': bankers, 'total': sum(b['total'] for b in bankers)})
+    return out
+
+
+def _send_weekly_escalation_email(ref, to_list, cc_list):
+    """Deliver the CEM/EDG weekly escalation e-mail to the saved recipients.
+    Best-effort — returns True or an error string."""
+    from email.mime.image import MIMEImage
+    try:
+        ref_fmt = ref.strftime('%d/%m/%Y')
+        rows, source = _pc_latest_snapshot_rows()
+        blocks = _pc_weekly_escalation(rows)
+        html = render_template(
+            'pages/email-template-weekly-escalation.html',
+            ref_date_fmt=ref_fmt, blocks=blocks, current_year=datetime.now().year)
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'Pending Confirmation - Weekly Escalation - CEM/EDG {}'.format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+        _attach_email_gradient(msg)
+        recipients = to_list + cc_list
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
+        log.info('[weekly-escalation] e-mail sent — to=%s cc=%s (source=%s)', to_list, cc_list, source)
+        return True
+    except Exception as e:
+        log.error('[weekly-escalation] e-mail FAILED:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/control-panel/weekly-escalation/recipients', methods=['GET', 'POST'])
+def api_cp_weekly_escalation_recipients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_weekly_escalation_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_weekly_escalation_recipients((payload.get('to') or '').strip(),
+                                           (payload.get('cc') or '').strip())
+    except Exception as e:
+        log.error('[weekly-escalation] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/control-panel/weekly-escalation/run', methods=['POST'])
+def api_cp_weekly_escalation_run():
+    """Send the CEM/EDG weekly escalation e-mail to the saved recipients."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(date_str, '%Y-%m-%d') if date_str else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = _load_weekly_escalation_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC antes de rodar.'}), 400
+    result = _send_weekly_escalation_email(ref, to_list, cc_list)
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Weekly Escalation Sent', 'Control Panel',
+                         'CEM/EDG weekly escalation e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True,
+                    'message': 'Weekly Escalation enviado para {} destinatário(s).'.format(len(to_list) + len(cc_list))})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Control Panel — Pending Signature Confirmations (Collection / "Cobrança")
+# ══════════════════════════════════════════════════════════════════════════
+# Segregates the pending-signature confirmations (base: Pending Confirmation page)
+# by counterparty and builds one editable .eml draft per counterparty (zipped when
+# many). Mirrors the legacy Excel "MassEmail" macro but generates review drafts
+# instead of auto-sending. To = counterparty confirmation contacts (Counterparty
+# Details); Cc = that counterparty's bankers (from signature_collection_bankers.json,
+# matched to the RefData BANKER group) + Brazil OTC Ops + IS Trade Doc.
+_SIGCOLL_FROM = 'is.trade.doc@jpmchase.com'
+_SIGCOLL_CC_FIXED = ['brazil.otc.ops@jpmorgan.com', 'is.trade.doc@jpmchase.com']
+_SIGCOLL_PENDING = {'pendingdigitalsignature', 'pendingoriginal'}
+_SIGCOLL_PORTAL = 'www.jpmorganportaldigital.com'
+_SIGCOLL_TO_KEYWORDS = ('confirmation', 'confirmacao', 'confirmação', 'confirm',
+                        'assinatura', 'signature')
+
+
+def _sig_esc(v):
+    return (str(v if v is not None else '')
+            .replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+
+def _sigcoll_bankers_index():
+    """{ normalized banker name -> e-mail } from signature_collection_bankers.json."""
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'signature_collection_bankers.json'),
+                  encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:
+        return {}
+    idx = {}
+    for c in (data.get('bankers') or []):
+        nm, em = _pc_norm(c.get('name', '')), str(c.get('email', '') or '').strip()
+        if nm and em:
+            idx[nm] = em
+    return idx
+
+
+def _sigcoll_disclaimer(status_norm):
+    return ('Pendente de Assinatura Digital' if status_norm == 'pendingdigitalsignature'
+            else 'Pendente de Assinatura')
+
+
+def _sigcoll_to_emails(cp):
+    """Counterparty confirmation e-mails from CounterpartyDetails; falls back to all
+    of the counterparty's contact e-mails when no rule mentions confirmation."""
+    from apps.pages import otc_emails
+    ems = otc_emails._contacts_emails(cp or {}, _SIGCOLL_TO_KEYWORDS)
+    if not ems:
+        seen = set()
+        for c in ((cp or {}).get('CONTACTS') or []):
+            em = str(c.get('email') or c.get('EMAIL') or '').strip()
+            if em and em.lower() not in seen:
+                seen.add(em.lower())
+                ems.append(em)
+    return ems
+
+
+def _sigcoll_cc_emails(banker_group, bankers):
+    """Cc = the counterparty's bankers (banker-group string → per-name e-mail) plus
+    the fixed Ops mailboxes. Deduplicated, order preserved."""
+    out, seen = [], set()
+    for name in re.split(r'[;,/&]| e ', str(banker_group or '')):
+        em = bankers.get(_pc_norm(name))
+        if em and em.lower() not in seen:
+            seen.add(em.lower())
+            out.append(em)
+    for em in _SIGCOLL_CC_FIXED:
+        if em.lower() not in seen:
+            seen.add(em.lower())
+            out.append(em)
+    return out
+
+
+def _sigcoll_table_html(rows):
+    """Aging | Product Type | Trade Date | Maturity Date | Trade Number — blue header,
+    thin-bordered, centred (matches the legacy confirmation e-mail)."""
+    head = ''.join(
+        '<th style="background:#2E75B6;color:#ffffff;border:1px solid #123c66;'
+        'padding:5px 12px;font-weight:bold;text-align:center;white-space:nowrap;">'
+        + _sig_esc(h) + '</th>'
+        for h in ('Aging', 'Product Type', 'Trade Date', 'Maturity Date', 'Trade Number'))
+    body = []
+    for r in rows:
+        cells = [r.get('Aging', ''), r.get('Product Type', ''), r.get('Trade Date', ''),
+                 r.get('Maturity Date', ''), r.get('Trade Number', '')]
+        body.append('<tr>' + ''.join(
+            '<td style="border:1px solid #000000;padding:4px 12px;text-align:center;'
+            'white-space:nowrap;">' + _sig_esc(c) + '</td>' for c in cells) + '</tr>')
+    return ('<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'
+            'font-family:Arial,sans-serif;font-size:12px;color:#000000;">'
+            '<thead><tr>' + head + '</tr></thead><tbody>' + ''.join(body) + '</tbody></table>')
+
+
+def _sigcoll_signature_html():
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:11px;color:#333333;line-height:1.5;">'
+        'Banco J.P. Morgan S.A. | Av. Brigadeiro Faria Lima, 3729 - 15º andar - São Paulo - SP<br>'
+        '<a href="mailto:is.trade.doc@jpmchase.com" style="color:#1155cc;">is.trade.doc@jpmchase.com</a>'
+        ' | jpmorgan.com | Ouvidoria JPMorgan: Tel.: 0800 – 7700847 / E-mail: '
+        '<a href="mailto:ouvidoria.jp.morgan@jpmorgan.com" style="color:#1155cc;">ouvidoria.jp.morgan@jpmorgan.com</a>'
+        '</div>')
+
+
+def _sigcoll_email_html(rows):
+    P = ('margin:0 0 12px;font-family:Arial,sans-serif;font-size:14px;color:#000000;')
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:14px;color:#000000;">'
+        '<p style="' + P + '">Prezados,</p>'
+        '<p style="' + P + '">Os documentos listados abaixo encontram-se pendentes de '
+        'assinatura por V.Sas. junto ao J.P. Morgan</p>'
+        + _sigcoll_table_html(rows) + '<br>'
+        '<p style="' + P + '">Solicitamos que nos auxiliem na solução das pendências listadas '
+        'acima e reiteramos a importância desse procedimento para o fiel cumprimento do Contrato. '
+        'Sem mais para o momento, agradecemos a atenção e permanecemos à disposição para quaisquer '
+        'esclarecimentos que se fizerem necessários.</p>'
+        '<p style="' + P + '">Acesse o portal em '
+        '<a href="https://' + _SIGCOLL_PORTAL + '" style="color:#1155cc;">' + _SIGCOLL_PORTAL + '</a></p>'
+        '<br>' + _sigcoll_signature_html() + '</div>')
+
+
+def _sigcoll_groups():
+    """Group pending-signature rows by (disclaimer, counterparty). Returns a list of
+    dicts {cp_name, spn, rec, disclaimer, rows} sorted by counterparty."""
+    rows = [r for r in _pc_load_rows('pending')
+            if _pc_norm(r.get('Pending Status', '')) in _SIGCOLL_PENDING]
+    by_spn, by_name = _fxo_refdata_by_spn(), _pc_refdata_by_name()
+    groups = {}
+    for r in rows:
+        rec = _pc_refdata_lookup(r, by_spn, by_name)
+        cp_name = (str(rec.get('COUNTERPARTY', '') or '').strip()
+                   or str(r.get('Client', '') or '').strip() or 'Counterparty')
+        spn = _norm_spn(r.get('SPN', ''))
+        disc = _sigcoll_disclaimer(_pc_norm(r.get('Pending Status', '')))
+        # Banker group: RefData BANKER when present, else the row's Owner column
+        # (which the Pending Confirmation page populates with the banker names).
+        banker = (str((rec or {}).get('BANKER', '') or '').strip()
+                  or str(r.get('Owner', '') or '').strip())
+        key = (disc, spn or cp_name.upper())
+        g = groups.setdefault(key, {'cp_name': cp_name, 'spn': spn, 'banker': banker,
+                                    'disclaimer': disc, 'rows': []})
+        if not g['banker'] and banker:
+            g['banker'] = banker
+        g['rows'].append(r)
+    return sorted(groups.values(), key=lambda g: (g['cp_name'].upper(), g['disclaimer']))
+
+
+def _sigcoll_build_drafts():
+    from apps.pages import otc_emails
+    bankers = _sigcoll_bankers_index()
+    cpd = otc_emails._build_cpdetails_index()
+    drafts = []
+    for g in _sigcoll_groups():
+        cp = cpd.get(g['spn']) or {}
+        drafts.append({
+            'subject': 'Important - Confirmação de Operação de Derivativo {} - {}'.format(
+                g['disclaimer'], g['cp_name']),
+            'html': _sigcoll_email_html(g['rows']),
+            'to': '; '.join(_sigcoll_to_emails(cp)),
+            'cc': '; '.join(_sigcoll_cc_emails(g['banker'], bankers)),
+        })
+    return drafts
+
+
+@blueprint.route('/api/control-panel/signature-collection/preview')
+def api_cp_signature_collection_preview():
+    """Summary of what a run would produce: one row per counterparty draft."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    bankers = _sigcoll_bankers_index()
+    items = []
+    for g in _sigcoll_groups():
+        cc = _sigcoll_cc_emails(g['banker'], bankers)
+        items.append({'counterparty': g['cp_name'], 'disclaimer': g['disclaimer'],
+                      'confirmations': len(g['rows']), 'cc_count': len(cc)})
+    return jsonify({'success': True, 'drafts': len(items),
+                    'confirmations': sum(i['confirmations'] for i in items), 'items': items})
+
+
+@blueprint.route('/api/control-panel/signature-collection/generate', methods=['POST'])
+def api_cp_signature_collection_generate():
+    """Build one .eml draft per counterparty and stream them as a download (a single
+    .eml, or a .zip when there is more than one). Opens as editable drafts in Outlook
+    via the X-Unsent header; From = is.trade.doc@jpmchase.com."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    from apps.pages import otc_emails
+    drafts = _sigcoll_build_drafts()
+    if not drafts:
+        return jsonify({'success': False,
+                        'error': 'No pending-signature confirmations found.'}), 404
+    fname, mime, data = otc_emails.build_drafts_download(drafts, _SIGCOLL_FROM)
+    resp = make_response(data)
+    resp.headers['Content-Type'] = mime
+    resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
+    resp.headers['X-Draft-Count'] = str(len(drafts))
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Signature Collection Generated', 'Control Panel',
+                         '{} pending-signature draft(s) generated'.format(len(drafts)))
+    return resp
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -3341,11 +4284,91 @@ def _cc_cell(row, idx):
     return str(v).strip()
 
 
+# ----------------------------------------------------------------------------
+#  Placeholder e-mail filter.
+#  The source spreadsheet is filled by hand, so a contact with no real address
+#  often carries a stand-in instead of a blank cell: 'xxx', 'x-x', 'a definir',
+#  and — the tricky ones — strings that ARE valid e-mail syntax but address
+#  nobody, like 'xx@xx.com'. Sending confirmations to those bounces, so they
+#  are dropped on import and swept out of the stored base.
+# ----------------------------------------------------------------------------
+_CC_EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+
+# Tokens that never name a real mailbox or company, checked against the local
+# part and against the domain's first label ('xx' in 'xx.com.br').
+_CC_PLACEHOLDER_TOKENS = {
+    'ab', 'abc', 'asd', 'asdf', 'qwerty',
+    'na', 'nan', 'n/a', 'none', 'null', 'nulo', 'nil', 'vazio', 'branco',
+    'test', 'teste', 'testing', 'example', 'exemplo', 'sample', 'dummy', 'fake',
+    'email', 'e-mail', 'mail', 'correio', 'sememail', 'sem-email', 'seemail',
+    'naotem', 'nao-tem', 'notem', 'nada', 'adefinir', 'a-definir', 'definir',
+    'tbd', 'todo', 'pendente', 'placeholder', 'nomail', 'no-mail',
+}
+# Domains reserved by RFC 2606 / commonly used as stand-ins.
+_CC_PLACEHOLDER_DOMAINS = {'example.com', 'example.org', 'example.net',
+                           'test.com', 'teste.com', 'email.com', 'mail.com',
+                           'dominio.com', 'empresa.com'}
+
+
+def _cc_is_placeholder_token(tok, min_len=2):
+    """A token that cannot be a real mailbox/company name: a known stand-in word,
+    or filler made of one repeated character.
+
+    Two deliberate escape hatches, because dropping a live address costs far more
+    than keeping a dead one:
+      * `min_len` — 2 for the local part, since a one-letter mailbox is unusual
+        but real ('j@nubank.com.br'); 1 for the domain, where it never is.
+      * repeated letters other than 'x' only count as filler from three
+        characters on — 'bb.com.br' is Banco do Brasil, not a placeholder.
+        'x' is the universal stand-in and digits never name a company."""
+    t = (tok or '').strip().lower()
+    if not t:
+        return True
+    if t in _CC_PLACEHOLDER_TOKENS:
+        return True
+    if len(t) < min_len or len(set(t)) != 1 or not t.isalnum():
+        return False
+    return t[0] == 'x' or t[0].isdigit() or len(t) >= 3
+
+
+def _cc_email_is_usable(email):
+    """True when `email` looks like an address that could actually receive mail.
+    A BLANK e-mail is not a placeholder — the caller decides what to do with a
+    contact that simply has none."""
+    e = (email or '').strip().lower()
+    if not e or not _CC_EMAIL_RE.match(e):
+        return False
+    local, _, domain = e.partition('@')
+    if domain in _CC_PLACEHOLDER_DOMAINS:
+        return False
+    if _cc_is_placeholder_token(local):
+        return False
+    # First domain label: 'xx' in 'xx.com.br', 'amaggi' in 'amaggi.com.br'.
+    return not _cc_is_placeholder_token(domain.split(".")[0], min_len=1)
+
+
+def _cc_drop_placeholder_contacts(contacts):
+    """(kept, dropped[]) — a contact whose e-mail is filled in but unusable is
+    dropped; one with a blank e-mail is left untouched."""
+    kept, dropped = [], []
+    for c in contacts or []:
+        email = str((c or {}).get('email', '') or '').strip()
+        if email and not _cc_email_is_usable(email):
+            dropped.append(c)
+        else:
+            kept.append(c)
+    return kept, dropped
+
+
 def _cc_parse_rules(raw):
     out, seen = [], set()
     for part in str(raw or '').replace('\n', ';').replace('/', ';').replace(',', ';').split(';'):
         p = part.strip()
         if not p:
+            continue
+        # 'Active'/'Inactive' são status do contato, não regra — a planilha
+        # mistura os dois na mesma célula e o valor acabava duplicado na tela.
+        if p.upper() in ('ACTIVE', 'INACTIVE'):
             continue
         canon = _CONTACT_RULE_MAP.get(p.upper(), p)
         if canon.upper() not in seen:
@@ -3400,6 +4423,7 @@ def _import_client_contacts(filename, raw_bytes):
 
     groups = {}                    # nspn -> {'spn', 'name', 'contacts'[]}
     rows_seen = 0
+    skipped_email = []             # placeholder addresses left out of the import
     for i in range(_CONTACTS_DATA_START_ROW - 1, len(rows)):
         row = rows[i]
         spn_raw = _cc_cell(row, _CC_SPN)
@@ -3417,6 +4441,12 @@ def _import_client_contacts(filename, raw_bytes):
         if not (cname or phone or email or rule):
             continue               # blank contact line
         rows_seen += 1
+        # A filled-in but unusable address ('xxx', 'xx@xx.com') means the row
+        # carries no way to reach anyone — skip it instead of importing a
+        # contact that will bounce.
+        if email and not _cc_email_is_usable(email):
+            skipped_email.append('%s · %s · %s' % (spn_raw.strip(), cname or '(no name)', email))
+            continue
         g = groups.setdefault(nspn, {'spn': spn_raw.strip(), 'name': '', 'contacts': []})
         cp_name = _cc_cell(row, _CC_NAME)
         if cp_name and not g['name']:
@@ -3450,11 +4480,28 @@ def _import_client_contacts(filename, raw_bytes):
                 rec['COUNTERPARTY'] = g['name']
         rec['CONTACTS'] = g['contacts']     # replace contacts for this SPN
 
+    # Sweep the WHOLE base, not just the SPNs in this spreadsheet: placeholders
+    # imported before this filter existed live under counterparties the current
+    # file may not even mention.
+    swept = 0
+    for rec in data:
+        kept, dropped = _cc_drop_placeholder_contacts(rec.get('CONTACTS') or [])
+        if dropped:
+            rec['CONTACTS'] = kept
+            swept += len(dropped)
+            for c in dropped:
+                log.info('[contacts] swept placeholder %s · %s · %s',
+                         rec.get('SPN', ''), c.get('name', ''), c.get('email', ''))
+
     _cpd_save_list(data)
+    if skipped_email:
+        log.info('[contacts] %d placeholder e-mail rows skipped on import:\n  %s',
+                 len(skipped_email), '\n  '.join(skipped_email))
     return {
         'rows': rows_seen, 'spns': len(groups),
         'contacts': sum(len(g['contacts']) for g in groups.values()),
         'matched': matched, 'created': created, 'total': len(data),
+        'skipped_email': len(skipped_email), 'swept': swept,
     }
 
 
@@ -3743,6 +4790,9 @@ def api_cp_import_contacts():
     msg = ('<b>{contacts}</b> contacts imported across <b>{spns}</b> counterparties.'
            '<br>Matched existing: {matched} &middot; New records appended: {created}'
            '<br>Total counterparties: {total}').format(**summary)
+    if summary.get('skipped_email') or summary.get('swept'):
+        msg += ('<br>Placeholder e-mails ignored: {skipped_email} '
+                '&middot; removed from the stored base: {swept}').format(**summary)
     return jsonify({'success': True, 'message': msg})
 
 
@@ -5479,7 +6529,9 @@ NDFC_SOURCE_ROOT = os.getenv('NDFC_SOURCE_ROOT', SETTLEMENTS_ROOT)
 NDFC_JSON_ROOT = OTM_JSON_ROOT
 _NDFC_COLUMNS = [
     'LEGAL', 'NM_COUNTERPARTY', 'ID_SOURCE_DEAL', 'DT_DEAL', 'CD_CETIP_RETURN', 'DT_SETTLEMENT',
-    'VL_NOTIONAL_LC', 'VL_NOTIONAL_FC', 'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'VL_TAX_INCOME',
+    'CCY_NOTIONAL_LC', 'VL_NOTIONAL_LC', 'CCY_NOTIONAL_FC', 'VL_NOTIONAL_FC',
+    'VL_STRIKE_PRICE', 'VL_FORWARD_RATE', 'PUBLISHER',
+    'VL_TAX_INCOME',
     'ID_DEAL', '[PROD] Cockpit.SETTLEMENT', 'NB_BANK', 'CD_BRANCH', 'CD_BANK_ACCOUNT',
 ]
 _NDFC_HEADER_ROW = 4                                  # 1-based (data from row 5)
@@ -5637,6 +6689,192 @@ def _ndfc_num(v):
         return 0.0
 
 
+# Sentinel emitted when a blank CD_CETIP_RETURN has no match in the Live Position
+# NDF file — the front-end renders it as a warning badge ("Missing B3 ID").
+_NDFC_MISSING_B3 = '__MISSING_B3_ID__'
+# Second-chance rescue via Operations B3 (Resgate/TER): BRL tolerance between the
+# B3 "Valor" and the cockpit's [PROD] Cockpit.SETTLEMENT.
+_NDFC_OPB3_VAL_TOL = 5.0
+
+# Sisbacen numeric currency code → ISO 3-letter (keys with leading zeros
+# stripped). Codes not mapped here fall through as the raw number so ops can
+# spot the gap and extend the table.
+_NDFC_SISBACEN_CCY = {
+    '55': 'DKK', '65': 'NOK', '70': 'SEK', '150': 'AUD', '165': 'CAD',
+    '220': 'USD', '245': 'NZD', '425': 'CHF', '470': 'JPY', '540': 'GBP',
+    '706': 'ARS', '715': 'CLP', '720': 'COP', '741': 'MXN', '745': 'UYU',
+    '785': 'ZAR', '790': 'BRL', '795': 'CNY', '978': 'EUR',
+}
+
+
+def _ndfc_ccy_from_sisbacen(code):
+    """'00220' / '220' → 'USD'; unmapped codes return the raw (stripped) code."""
+    digits = _acc_digits(code)
+    if not digits:
+        return ''
+    key = digits.lstrip('0') or '0'
+    return _NDFC_SISBACEN_CCY.get(key, key)
+
+
+def _ndfc_valnum(v):
+    """Value string → float or None. Accepts BR ('1.234.567,89' / '1234,89') and
+    US ('1234567.89') formats — with a comma present, dots are thousands."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    try:
+        if ',' in s:
+            return float(s.replace('.', '').replace(',', '.'))
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _ndfc_b3_maps(ref):
+    """Lookup maps from the newest Live Position NDF file (DPOSICAO-TER, walking
+    back from D-1 ANBIMA of `ref`):
+      ident_map: right-14 of "Codigo Identificador" (athena id registered at B3)
+                 → "Contrato" (CETIP contract)
+      pub_map:   "Contrato" → publisher: "BACEN" when "Nome do Feeder" is BACEN,
+                 otherwise the "Tela funcao Consulta" value.
+      contr_map: "Contrato" → {'fwd', 'base', 'cnpj', 'ccy_fc', 'ccy_lc', 'pos',
+                 'conta_parte', 'conta_cparte'}:
+                 Taxa Forward, Valor Base no registro and digits-only CPF/CNPJ da
+                 Contraparte (used by the Operations B3 rescue to double-check a
+                 candidate contract), plus Simbolo da Moeda (→ CCY_NOTIONAL_FC)
+                 and Codigo Sisbacen da Moeda Cotada mapped to ISO-3
+                 (→ CCY_NOTIONAL_LC).
+    """
+    ident_map, pub_map, contr_map = {}, {}, {}
+    try:
+        path, _ = _ndf_ter_path(_prev_anbima_bizday(ref))
+        if not path:
+            return ident_map, pub_map, contr_map
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+        if not data:
+            return ident_map, pub_map, contr_map
+        keys, _seen = [], set()
+        for rec in data:
+            for k in rec.keys():
+                if k not in _seen:
+                    _seen.add(k); keys.append(k)
+        k_ident = _fcst_resolve_key(keys, ('Codigo Identificador',))
+        k_contr = _fcst_resolve_key(keys, ('Contrato',))
+        k_feed  = _fcst_resolve_key(keys, ('Nome do Feeder',))
+        k_tela  = _fcst_resolve_key(keys, ('Tela funcao Consulta',))
+        k_fwd   = _fcst_resolve_key(keys, ('Taxa Forward',))
+        k_base  = _fcst_resolve_key(keys, ('Valor Base no registro',))
+        k_cnpj  = _fcst_resolve_key(keys, ('CPF/CNPJ da Contraparte',))
+        k_sym   = _fcst_resolve_key(keys, ('Simbolo da Moeda',))
+        k_cot   = _fcst_resolve_key(keys, ('Codigo Sisbacen da Moeda Cotada',))
+        k_pos   = _fcst_resolve_key(keys, ('Descricao da posicao do Participante',))
+        k_cparte = _fcst_resolve_key(keys, ('Codigo da Parte',))
+        k_ccpty  = _fcst_resolve_key(keys, ('Codigo da Contraparte',))
+        k_emis  = _fcst_resolve_key(keys, ('Data de Emissao',))
+        k_venc  = _fcst_resolve_key(keys, ('Data de Vencimento',))
+        for rec in data:
+            contrato = str(rec.get(k_contr, '') or '').strip() if k_contr else ''
+            if not contrato:
+                continue
+            ident = str(rec.get(k_ident, '') or '').strip() if k_ident else ''
+            if ident:
+                ident_map[ident[-14:]] = contrato
+            feeder = str(rec.get(k_feed, '') or '').strip() if k_feed else ''
+            tela = str(rec.get(k_tela, '') or '').strip() if k_tela else ''
+            pub_map[contrato.upper()] = 'BACEN' if feeder.upper() == 'BACEN' else tela
+            contr_map[contrato.upper()] = {
+                'fwd':  _ndfc_valnum(rec.get(k_fwd, '')) if k_fwd else None,
+                'base': _ndfc_valnum(rec.get(k_base, '')) if k_base else None,
+                'cnpj': _acc_digits(rec.get(k_cnpj, '')) if k_cnpj else '',
+                'ccy_fc': str(rec.get(k_sym, '') or '').strip() if k_sym else '',
+                'ccy_lc': _ndfc_ccy_from_sisbacen(rec.get(k_cot, '')) if k_cot else '',
+                'pos': str(rec.get(k_pos, '') or '').strip() if k_pos else '',
+                'conta_parte': str(rec.get(k_cparte, '') or '').strip() if k_cparte else '',
+                'conta_cparte': str(rec.get(k_ccpty, '') or '').strip() if k_ccpty else '',
+                'emissao': str(rec.get(k_emis, '') or '').strip() if k_emis else '',
+                'venc': str(rec.get(k_venc, '') or '').strip() if k_venc else '',
+            }
+    except Exception:
+        log.warning('[ndfc] live-position lookup failed:\n%s', traceback.format_exc())
+    return ident_map, pub_map, contr_map
+
+
+def _ndfc_opb3_resgates(ref):
+    """(valor, Título) pairs from the day's Operations B3 rows whose Tipo
+    Operação = Resgate and Tipo Título = TER — candidate CETIP contracts for
+    cockpit rows whose CD_CETIP_RETURN is still unresolved."""
+    out = []
+    try:
+        _, ops = _opb3_load(ref)
+        for r in (ops or []):
+            if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
+                continue
+            if _fcst_norm(str(r.get('Tipo Título', ''))) != 'ter':
+                continue
+            valor = _ndfc_valnum(r.get('Valor'))
+            titulo = str(r.get('Título', '') or '').strip()
+            if valor is not None and titulo:
+                out.append((valor, titulo))
+    except Exception:
+        log.warning('[ndfc] opb3 resgates load failed:\n%s', traceback.format_exc())
+    return out
+
+
+def _ndfc_strike_calc(rec, lp, is_cross):
+    """VL_STRIKE_PRICE display-time calc (port of the ops Excel formula):
+    strike = VL_FORWARD_RATE ± |SETTLEMENT| / VL_NOTIONAL_FC, where the sign is
+    + when the settlement direction agrees with the participant's TER position
+    (COMPRADOR with positive settlement, or VENDEDOR with negative), − otherwise.
+    Only valid for CCY×BRL pairs — a cross-currency NDF settles in BRL but quotes
+    the forward in the cross, so the division is in the wrong unit; those show
+    '-' until the BRL→quote-ccy conversion is defined."""
+    if is_cross:
+        return '-'
+    pos = _fcst_norm(lp.get('pos', ''))
+    if pos not in ('comprador', 'vendedor'):
+        return '-'
+    settle = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+    fwd = _ndfc_valnum(rec.get('VL_FORWARD_RATE', ''))
+    notional = _ndfc_valnum(rec.get('VL_NOTIONAL_FC', ''))
+    if settle is None or fwd is None or not notional:
+        return '-'
+    ratio = settle / notional
+    add = (ratio > 0 and pos == 'comprador') or (ratio < 0 and pos == 'vendedor')
+    delta = abs(settle) / notional
+    return '{:.6f}'.format(fwd + delta if add else fwd - delta)
+
+
+def _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid):
+    """Second-chance CD_CETIP_RETURN: find an Operations B3 Resgate/TER whose
+    Valor ≈ [PROD] Cockpit.SETTLEMENT (±_NDFC_OPB3_VAL_TOL BRL), then confirm the
+    candidate Título against Live Position NDF (forward rate and Valor Base no
+    registro must match the cockpit row) and against RefData (the contraparte's
+    CNPJ must resolve to the cockpit's NM_COUNTERPARTY). Returns the confirmed
+    contract or ''."""
+    settle = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+    fwd = _ndfc_valnum(rec.get('VL_FORWARD_RATE', ''))
+    base = _ndfc_valnum(rec.get('VL_NOTIONAL_FC', ''))
+    name = _fcst_norm(str(rec.get('NM_COUNTERPARTY', '') or '').strip())
+    if settle is None or fwd is None or base is None or not name:
+        return ''
+    for valor, titulo in resgates:
+        if abs(valor - settle) > _NDFC_OPB3_VAL_TOL:
+            continue
+        lp = contr_map.get(titulo.upper())
+        if not lp:
+            continue
+        if lp['fwd'] is None or round(lp['fwd'], 6) != round(fwd, 6):
+            continue
+        if lp['base'] is None or abs(lp['base'] - base) > 0.01:
+            continue
+        ref_name = by_taxid.get(lp['cnpj'], '') if lp['cnpj'] else ''
+        if not ref_name or _fcst_norm(ref_name) != name:
+            continue
+        return titulo
+    return ''
+
+
 def _ndfc_collect(ref):
     """Read the NDF Cockpit JSON for `ref` → display rows (formatted) + widgets."""
     widgets = {'total': 0, 'counterparties': 0, 'notional': '0.00', 'settlement': '0.00'}
@@ -5653,12 +6891,62 @@ def _ndfc_collect(ref):
                 _ndfc_save(jp, data)
             except Exception:
                 pass
+        ident_map, pub_map, contr_map = _ndfc_b3_maps(ref)
+        resgates = _ndfc_opb3_resgates(ref)
+        _, by_taxid = _vcp_refdata_maps()
         cpties, sum_notional, sum_settle = set(), 0.0, 0.0
         for rec in data:
+            # Only JPM legal entities are shown (BANCO J.P. MORGAN…, JPMORGAN
+            # CHASE…): rows under other legals (e.g. LAWTON…) don't belong to
+            # this desk's settlement. Punctuation/spacing-insensitive ("J.P." ≡
+            # "JP"). Blank LEGAL stays visible so a hand-added row never
+            # vanishes silently. Display-time only — the JSON keeps every row.
+            legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+            if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
+                continue
+            # Display-time lookups vs Live Position NDF: fill a blank
+            # CD_CETIP_RETURN from ID_SOURCE_DEAL (right-14 → Contrato), and
+            # derive PUBLISHER from the matched contract's feeder. When the id
+            # lookup misses, try the Operations B3 Resgate/TER rescue before
+            # flagging the row as Missing B3 ID.
+            cd = str(rec.get('CD_CETIP_RETURN', '') or '').strip()
+            if not cd:
+                src = str(rec.get('ID_SOURCE_DEAL', '') or '').strip()
+                cd = ident_map.get(src[-14:], '') if src else ''
+                if not cd:
+                    cd = _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid)
+                cd_display = cd or _NDFC_MISSING_B3
+            else:
+                cd_display = cd
+            publisher = str(rec.get('PUBLISHER', '') or '').strip() or pub_map.get(cd.upper(), '')
+            lp = contr_map.get(cd.upper(), {}) if cd else {}
+            lk_fc, lk_lc = lp.get('ccy_fc', ''), lp.get('ccy_lc', '')
+            # Cross-currency NDF (neither leg is BRL): the TER file carries the
+            # legs swapped relative to the cockpit, so invert the looked-up pair
+            # (e.g. USD/EUR → EUR/USD). Manually typed values are left alone.
+            if lk_fc and lk_lc and lk_fc.upper() != 'BRL' and lk_lc.upper() != 'BRL':
+                lk_fc, lk_lc = lk_lc, lk_fc
+            ccy_fc = str(rec.get('CCY_NOTIONAL_FC', '') or '').strip() or lk_fc
+            ccy_lc = str(rec.get('CCY_NOTIONAL_LC', '') or '').strip() or lk_lc
+            strike = str(rec.get('VL_STRIKE_PRICE', '') or '').strip()
+            if not strike:
+                is_cross = bool(ccy_fc and ccy_lc
+                                and ccy_fc.upper() != 'BRL' and ccy_lc.upper() != 'BRL')
+                strike = _ndfc_strike_calc(rec, lp, is_cross)
             row = []
             for c in _NDFC_COLUMNS:
                 v = rec.get(c, '')
-                if c in _NDFC_DATE_COLS:
+                if c == 'CD_CETIP_RETURN':
+                    v = cd_display
+                elif c == 'PUBLISHER':
+                    v = publisher
+                elif c == 'CCY_NOTIONAL_FC':
+                    v = ccy_fc
+                elif c == 'CCY_NOTIONAL_LC':
+                    v = ccy_lc
+                elif c == 'VL_STRIKE_PRICE':
+                    v = strike
+                elif c in _NDFC_DATE_COLS:
                     v = _ndfc_fmt_date(v)
                 elif c in _NDFC_FWD_COLS:
                     v = _ndfc_fmt_fwd(v)
@@ -5673,11 +6961,13 @@ def _ndfc_collect(ref):
                 cpties.add(nm)
             sum_notional += _ndfc_num(rec.get('VL_NOTIONAL_LC', ''))
             sum_settle += _ndfc_num(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
-        widgets['total'] = len(data)
+        widgets['total'] = len(rows_out)
         widgets['counterparties'] = len(cpties)
         widgets['notional'] = '{:,.2f}'.format(sum_notional)
         widgets['settlement'] = '{:,.2f}'.format(sum_settle)
-    return {'widgets': widgets, 'columns': _NDFC_COLUMNS, 'rows': rows_out,
+    # Headers are displayed UPPER; positional order matches _NDFC_COLUMNS, which
+    # the row add/edit endpoints rely on when mapping cells back by index.
+    return {'widgets': widgets, 'columns': [c.upper() for c in _NDFC_COLUMNS], 'rows': rows_out,
             'updated': _ds_read_updated(jp)}
 
 
@@ -5826,6 +7116,413 @@ def api_ndfc_row_confirm():
     _create_notification(sid, session.get('user_name', ''), 'NDF Cockpit Row Confirmed', 'NDF Cockpit',
                          '{} ({})'.format(rec.get('ID_DEAL', ''), _ndfc_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  NDF › Other Publisher — Daily Settlement › NDF › Other Publisher
+#  Derived (read-only) view, VCP-style: the base rows are the day's Operations B3
+#  entries with Tipo Operação = PENDENTE_CAMBIO, each joined to the other NDF
+#  pages by the CETIP contract (the B3 "Título"):
+#    CLIENT           ← that Cockpit row's NM_COUNTERPARTY
+#    B3 ID            ← Operations B3 "Título"
+#    ATHENA ID        ← NDF Cockpit ID_SOURCE_DEAL of the row whose CD_CETIP_RETURN
+#                       is this contract (Cockpit resolution reused as-is, so a
+#                       contract recovered by athena id or by the Operations B3
+#                       rescue counts here too)
+#    CCY FC           ← that Cockpit row's CCY_NOTIONAL_FC
+#    TX PARIDADE      ← that Cockpit row's VL_STRIKE_PRICE, shown 0.00000000
+#    CCY LC           ← always BRL (the quoted leg of a PENDENTE_CAMBIO is local)
+#    TX COTADA        ← always 1.00000000
+#    CONTA PARTE      ← Live Position NDF "Codigo da Parte" for the contract
+#    CONTA CONTRAPARTE← Live Position NDF "Codigo da Contraparte"
+#  Values are recomputed on every load; only the maker/checker meta is persisted
+#  (per day, keyed by B3 ID), so a confirmation survives a reload.
+# ══════════════════════════════════════════════════════════════════════════════
+_NDFOP_COLUMNS = ['CLIENT', 'B3 ID', 'ATHENA ID', 'CCY FC', 'TX PARIDADE',
+                  'CCY LC', 'TX COTADA', 'CONTA PARTE', 'CONTA CONTRAPARTE']
+_NDFOP_OP_TYPE = 'PENDENTE_CAMBIO'
+_NDFOP_TX_COTADA = '1.00000000'
+_NDFOP_CCY_LC = 'BRL'
+# B3 ID is the row identity (and the meta key), so it is never overridable by an edit.
+_NDFOP_KEY_COL = _NDFOP_COLUMNS.index('B3 ID')
+
+
+def _ndfop_key(v):
+    """Comparison key tolerant to accent/case/separator ('PENDENTE_CAMBIO',
+    'Pendente Câmbio' and 'pendente-cambio' all collapse to the same token)."""
+    return re.sub(r'[^a-z0-9]', '', _fcst_norm(str(v or '')))
+
+
+def _ndfop_fmt8(v):
+    """Rate → 0.00000000 (8 decimals). Non-numeric (e.g. the Cockpit's '-' when
+    the strike can't be computed) passes through untouched."""
+    n = _ndfc_valnum(v)
+    return '{:.8f}'.format(n) if n is not None else str(v or '').strip()
+
+
+def _ndfop_meta_path(ref):
+    return os.path.join(NDFC_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'ndf-other-publisher_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _ndfop_meta_load(ref):
+    """{B3 ID → {status, maker, checker, cells, deleted}} — the persisted overlay.
+    `cells` holds manual edits (index-aligned to _NDFOP_COLUMNS, only the entries
+    that differ from the derived value) and `deleted` hides the row."""
+    p = _ndfop_meta_path(ref)
+    try:
+        with open(p, encoding='utf-8') as fh:
+            data = json.load(fh) or {}
+        return p, (data if isinstance(data, dict) else {})
+    except Exception:
+        return p, {}
+
+
+def _ndfop_meta_save(path, meta):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+
+
+def _ndfop_cockpit_index(ref):
+    """{CD_CETIP_RETURN (upper) → {'athena', 'strike', 'client', 'ccy_fc'}} built from
+    the NDF Cockpit DISPLAY rows, so the contract shown here is exactly the one the
+    Cockpit shows (including the ones it recovered via athena id or the Operations B3
+    rescue)."""
+    out = {}
+    try:
+        payload = _ndfc_collect(ref)
+        cols = payload.get('columns') or []
+        i_cd = cols.index('CD_CETIP_RETURN')
+        i_ath = cols.index('ID_SOURCE_DEAL')
+        i_stk = cols.index('VL_STRIKE_PRICE')
+        i_cli = cols.index('NM_COUNTERPARTY')
+        i_fc = cols.index('CCY_NOTIONAL_FC')
+        for row in payload.get('rows') or []:
+            cd = str(row[i_cd] or '').strip()
+            if not cd or cd == _NDFC_MISSING_B3:
+                continue
+            out.setdefault(cd.upper(), {'athena': str(row[i_ath] or '').strip(),
+                                        'strike': row[i_stk],
+                                        'client': str(row[i_cli] or '').strip(),
+                                        'ccy_fc': str(row[i_fc] or '').strip()})
+    except Exception:
+        log.warning('[ndf-other-publisher] cockpit index failed:\n%s', traceback.format_exc())
+    return out
+
+
+def _ndfop_collect(ref):
+    _, ops = _opb3_load(ref)
+    cockpit = _ndfop_cockpit_index(ref)
+    _, _, contr = _ndfc_b3_maps(ref)
+    _, meta = _ndfop_meta_load(ref)
+    want = _ndfop_key(_NDFOP_OP_TYPE)
+    rows_out = []
+    for rec in (ops or []):
+        if _ndfop_key(rec.get('Tipo Operação', '')) != want:
+            continue
+        b3 = str(rec.get('Título', '') or '').strip()
+        if not b3:
+            continue
+        m = meta.get(b3, {})
+        if m.get('deleted'):
+            continue
+        ck = cockpit.get(b3.upper(), {})
+        lp = contr.get(b3.upper(), {})
+        cells = [
+            ck.get('client', ''),
+            b3,
+            ck.get('athena', ''),
+            ck.get('ccy_fc', ''),
+            _ndfop_fmt8(ck.get('strike', '')),
+            _NDFOP_CCY_LC,
+            _NDFOP_TX_COTADA,
+            lp.get('conta_parte', ''),
+            lp.get('conta_cparte', ''),
+        ]
+        # A manual edit wins over the derived value, so a fix made here survives
+        # the next load even if the upstream file still disagrees. B3 ID is the row
+        # identity and therefore not overridable.
+        for i, v in enumerate(m.get('cells') or []):
+            if i != _NDFOP_KEY_COL and i < len(cells) and str(v or '').strip():
+                cells[i] = str(v).strip()
+        rows_out.append(cells + [m.get('status', 'New'), m.get('maker', ''),
+                                 m.get('checker', ''), b3])
+    return {'widgets': {'total': len(rows_out)}, 'columns': list(_NDFOP_COLUMNS),
+            'rows': rows_out, 'updated': _ds_read_updated(_opb3_json_path(ref))}
+
+
+@blueprint.route('/ndf-other-publisher')
+def ndf_other_publisher():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/ndf-other-publisher.html', segment='ndf-other-publisher',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/ndf-other-publisher/data')
+def api_ndfop_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ndfop_collect(ref)
+    payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/ndf-other-publisher/row/confirm', methods=['POST'])
+def api_ndfop_row_confirm():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'status': 'OK', 'checker': sid, 'maker': entry.get('maker', '')})
+    meta[rid] = entry
+    try:
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Confirmed',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-other-publisher/row/edit', methods=['POST'])
+def api_ndfop_row_edit():
+    """Persist manual cell overrides for a derived row. The edit is an overlay —
+    the row keeps being rebuilt from Operations B3 / Cockpit / Live Position, and
+    only the edited cells are replaced. Editing resets the row to Pending so the
+    checker has to look at it again."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    cells = p.get('cells')
+    if not rid or not isinstance(cells, list):
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'cells': [str(c or '').strip() for c in cells[:len(_NDFOP_COLUMNS)]],
+                  'status': 'Pending', 'maker': sid, 'checker': ''})
+    meta[rid] = entry
+    try:
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Edited',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/ndf-other-publisher/row/delete', methods=['POST'])
+def api_ndfop_row_delete():
+    """Hide a derived row. Nothing is removed from the source files, so the delete
+    is recorded as a tombstone in the day's overlay and can be undone by editing
+    the JSON."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', '') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    path, meta = _ndfop_meta_load(ref)
+    sid = session.get('user_sid', '')
+    entry = meta.get(rid) or {}
+    entry.update({'deleted': True, 'deleted_by': sid})
+    meta[rid] = entry
+    try:
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Deleted',
+                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+# ── Send to Conecta (Batch Conecta TAXA files) ────────────────────────────────
+#  One positional line per row, the ops spreadsheet's columns A..L concatenated
+#  (each field already fixed-width, so the concat IS the record). Ported from the
+#  Excel column formulas: constants TER  /1/0015, random 10-digit internal number
+#  (MID(RAND();3;10)), bank participant 73760009, counterparty account normalised
+#  to 8 digits (41007 → 00041007), rates as 4-digit integer + 8-digit decimals.
+#  Rows against Lawton (C.Parte 00041007) are mirrored into a second file with
+#  Participante ↔ C.Parte swapped — the Lawton-side view of the same trade:
+#    TAXA_BANCO.txt  — header TER  00015JPMORGANBM··········yyyymmdd00001 + lines
+#    TAXA_LAWTON.txt — header TER  00015INTRAGLAWTONFDO·····yyyymmdd00001 + the
+#                      swapped lines (TCO_LAWTON-style participant header)
+#  Both written to CONECTA_NEW_PATH like the New Deals send-conecta files.
+_NDFOP_CONECTA_LABELS = ['Id do sistema', 'Id tipo linha', 'Código operação',
+                         'N Contr Interno', 'Participante', 'Pap. Participante',
+                         'C.Parte', 'Contrato', 'Tx Câmbio', 'Tx Paridade',
+                         'Tx Cotada', 'Quantidade de Datas de Verificação']
+_NDFOP_PARTICIPANT = '73760009'   # bank participant account
+_NDFOP_LAWTON = '00041007'        # Lawton account → triggers the mirrored file
+
+
+def _ndfop_acct8(v):
+    """Account → 8-digit code: digits only, left-padded with zeros
+    (41007 → 00041007, 73760.10-2 → 73760102)."""
+    d = re.sub(r'\D', '', str(v or ''))
+    return d.zfill(8) if d else ''
+
+
+def _ndfop_rate12(v):
+    """Rate → positional 12 chars: 4-digit integer part + 8-digit decimals, no
+    separator (5.55 → 000555000000, 1 → 000100000000). '' when not usable."""
+    n = _ndfc_valnum(v)
+    if n is None or n < 0:
+        return ''
+    ip, dec = '{:.8f}'.format(n).split('.')
+    return (ip.zfill(4) + dec) if len(ip) <= 4 else ''
+
+
+def _ndfop_conecta_fields(cells, swap=False):
+    """[(label, value)] of one Conecta line for a display row (indexed by
+    _NDFOP_COLUMNS). swap=True builds the Lawton-side view: Participante and
+    C.Parte trade places, everything else identical."""
+    idx = {c: i for i, c in enumerate(_NDFOP_COLUMNS)}
+    part, cparte = _NDFOP_PARTICIPANT, _ndfop_acct8(cells[idx['CONTA CONTRAPARTE']])
+    if swap:
+        part, cparte = cparte, part
+    vals = ['TER  ', '1', '0015',
+            ''.join(random.choices('0123456789', k=10)),
+            part, ' ', cparte,
+            str(cells[idx['B3 ID']] or '').strip().ljust(10),
+            ' ' * 12,
+            _ndfop_rate12(cells[idx['TX PARIDADE']]),
+            _ndfop_rate12(cells[idx['TX COTADA']]),
+            '000']
+    return list(zip(_NDFOP_CONECTA_LABELS, vals))
+
+
+def _ndfop_rows_by_id(ref):
+    """{row id → data cells} of the day's display rows (overrides applied)."""
+    n = len(_NDFOP_COLUMNS)
+    return {str(r[n + 3]): r[:n] for r in _ndfop_collect(ref)['rows']}
+
+
+@blueprint.route('/api/ndf-other-publisher/row/preview')
+def api_ndfop_row_preview():
+    """Double-click preview: the Conecta fields of one row, vertically. A Lawton
+    row returns two views (Banco × Lawton and the account-swapped Lawton × Banco)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    rid = (request.args.get('id') or '').strip()
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    cells = _ndfop_rows_by_id(ref).get(rid)
+    if cells is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    lawton = _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON
+    views = [{'title': 'Banco × Lawton' if lawton else 'Banco',
+              'fields': _ndfop_conecta_fields(cells)}]
+    if lawton:
+        views.append({'title': 'Lawton × Banco',
+                      'fields': _ndfop_conecta_fields(cells, swap=True)})
+    return jsonify({'success': True, 'id': rid, 'views': views})
+
+
+@blueprint.route('/api/ndf-other-publisher/send', methods=['POST'])
+def api_ndfop_send():
+    """Row-level or batch send: writes TAXA_BANCO.txt (and TAXA_LAWTON.txt when a
+    Lawton row is included) to the Batch Conecta New folder. All-or-nothing: a row
+    without a usable TX PARIDADE aborts the whole request, so a batch is never
+    half-sent."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ids = [str(i or '').strip() for i in (p.get('ids') or []) if str(i or '').strip()]
+    if not ids:
+        return jsonify({'success': False, 'error': 'No rows selected.'}), 400
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    by_id = _ndfop_rows_by_id(ref)
+    missing = [i for i in ids if i not in by_id]
+    if missing:
+        return jsonify({'success': False,
+                        'error': 'Row(s) not found: ' + ', '.join(missing)}), 404
+    i_stk = _NDFOP_COLUMNS.index('TX PARIDADE')
+    bad = [i for i in ids if not _ndfop_rate12(by_id[i][i_stk])]
+    if bad:
+        return jsonify({'success': False,
+                        'error': 'TX PARIDADE missing/invalid: ' + ', '.join(bad)}), 400
+    banco_lines, lawton_lines = [], []
+    for rid in ids:
+        cells = by_id[rid]
+        banco_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells)))
+        if _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON:
+            lawton_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells, swap=True)))
+    # Headers differ by participant name, TCO_* style: both padded to 20 chars
+    # (JPMORGANBM = 10 + 10 spaces, INTRAGLAWTONFDO = 15 + 5 spaces).
+    today = datetime.today().strftime('%Y%m%d')
+    banco_header = 'TER  00015' + 'JPMORGANBM' + ' ' * 10 + today + '00001'
+    lawton_header = 'TER  00015' + 'INTRAGLAWTONFDO' + ' ' * 5 + today + '00001'
+    files = []
+    try:
+        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+        fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_BANCO.txt')
+        with open(fp, 'w', encoding='utf-8') as fh:
+            fh.write('\n'.join([banco_header] + banco_lines))
+        files.append({'filename': os.path.basename(fp), 'count': len(banco_lines)})
+        if lawton_lines:
+            fp = _unique_filepath(CONECTA_NEW_PATH, 'TAXA_LAWTON.txt')
+            with open(fp, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([lawton_header] + lawton_lines))
+            files.append({'filename': os.path.basename(fp), 'count': len(lawton_lines)})
+    except Exception as exc:
+        log.error('[ndf-other-publisher] send failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    sid = session.get('user_sid', '')
+    # Files are on the share — flip the rows to Sent in the day's overlay (same
+    # as New Deals: checker = whoever sent). Best-effort: a meta write failure
+    # must not report the send itself as failed.
+    try:
+        path, meta = _ndfop_meta_load(ref)
+        for rid in ids:
+            entry = meta.get(rid) or {}
+            entry.update({'status': 'Sent', 'checker': sid})
+            meta[rid] = entry
+        _ndfop_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-other-publisher] sent-status save failed:\n%s', traceback.format_exc())
+    _create_notification(sid, session.get('user_name', ''), 'Sent to B3', 'NDF Other Publisher',
+                         str(len(ids)) + ' row' + ('' if len(ids) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'count': len(ids), 'files': files})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -6959,10 +8656,11 @@ def api_lpopt_data():
 
 
 # ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
-#  Worksheet page modelled on Other Products Summary: two editable tables (Trade
-#  Level + Settlement Summary) with their own columns, plus header cards pulled
-#  from the latest DPOSICAO-TER position JSON (Total real; Vanilla / Other
-#  Publisher / T+0 counting logic pending — user will supply).
+#  Page modelled on Other Products Summary: header cards from the latest
+#  DPOSICAO-TER position JSON + two tables now auto-populated per reference date
+#  (see _ndfsum_collect): Trade Level mirrors the NDF Cockpit display rows and
+#  Settlement Summary nets them per counterparty. Manual Add-row remains for
+#  ad-hoc lines; nothing on this page is persisted.
 @blueprint.route('/ndf-summary')
 def ndf_summary():
     if not session.get('authenticated'):
@@ -7032,6 +8730,552 @@ def api_ndf_summary_cards():
                     'cards': {'vanilla': vanilla, 'other_publisher': other_publisher,
                               't0': t0, 'total': total},
                     'ter_date': dref})
+
+
+# ── NDF Summary data: Trade Level from the Cockpit + Settlement Summary ──────
+#  Trade Level mirrors the NDF Cockpit DISPLAY rows (so the athena-id and
+#  Operations B3 contract rescues apply here for free), joined with the day's
+#  Operations B3 by Título for the B3 settlement leg. Settlement Summary nets
+#  the trades per counterparty according to the CounterpartyDetails net type
+#  and fills the default PAY/RECEIVE bank account. Everything is derived on
+#  each load — this endpoint persists nothing.
+_NDFSUM_TOL = 5.0                    # |SETTLEMENT − SETTLEMENT B3| tolerance (BRL)
+
+
+def _ndfsum_refdata_spn():
+    """{normalized counterparty name → {'spn', 'taxid'}} from RefData.json
+    (recon join rule: first record per name wins)."""
+    out = {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except (IOError, json.JSONDecodeError):
+        data = []
+    for rec in (data if isinstance(data, list) else []):
+        nm = _fcst_norm(str(rec.get('COUNTERPARTY', '') or ''))
+        spn = str(rec.get('SPN', '') or '').strip()
+        if nm and spn and nm not in out:
+            out[nm] = {'spn': spn, 'taxid': str(rec.get('TAX ID', '') or '').strip()}
+    return out
+
+
+def _ndfsum_net_type(rec_cpd):
+    """Approved NET.value for a CounterpartyDetails record; anything unconfigured
+    or not yet checked falls back to Total Net (same safe rule as the recon)."""
+    net = (rec_cpd or {}).get('NET') or {}
+    val = str(net.get('value', '') or '').strip()
+    status = str(net.get('status', '') or '').strip() or 'Active'
+    return val if (val in ('Total Net', 'Pay/Rec', 'No Net') and status == 'Active') else 'Total Net'
+
+
+# Per-day overlay (only thing this page persists): {counterparty name →
+# {'status': 'Generated', 'maker', 'at'}} written when the settlement notices
+# are generated, so the Generated pill survives reloads. Lives next to the
+# cockpit day JSON.
+def _ndfsum_meta_path(ref):
+    return os.path.join(NDFC_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'ndf-summary_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _ndfsum_meta_load(ref):
+    path = _ndfsum_meta_path(ref)
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return path, (data if isinstance(data, dict) else {})
+    except Exception:
+        return path, {}
+
+
+def _ndfsum_meta_save(path, meta):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+
+
+def _ndfsum_account_fmt(banking, direction):
+    """Default PAY/RECEIVE account → 'BCO: 341 | AG: 0910 | CC: 967' (bank =
+    3-digit code; the front bolds the labels). Only an approved default
+    (slot.current) is used; unset → ''."""
+    slot_key = 'DEFAULT_RECEIVE' if direction == 'RECEIVE' else 'DEFAULT_PAY'
+    slot = (banking or {}).get(slot_key) or {}
+    acc = next((a for a in (banking or {}).get('ACCOUNTS', [])
+                if a.get('id') and a.get('id') == slot.get('current')), None)
+    if not acc:
+        return ''
+    bank = re.sub(r'\D', '', str(acc.get('bank', '') or ''))
+    return 'BCO: {} | AG: {} | CC: {}'.format(bank.zfill(3) if bank else '',
+                                              str(acc.get('agency', '') or '').strip(),
+                                              str(acc.get('account', '') or '').strip())
+
+
+def _ndfsum_fx_map(ref):
+    """{CETIP contract (upper) → 'vanilla' | 't0' | 'other'} for the FX NDFs
+    (Classe do Ativo Subjacente = TAXAS DE CAMBIO) maturing on `ref`, read from
+    the latest Live Position NDF (DPOSICAO-TER). Vanilla = SISBACEN with a
+    non-zero Código da Cotação, T+0 = SISBACEN with Cotação 0 (same-day fixing),
+    Other Publisher = FEEDER.
+
+    This is the whitelist that keeps the B3 reconciliation honest: Operations B3
+    mixes FX NDFs, commodity NDFs and others, so only contracts in this map count
+    on the B3 side — otherwise the totals could never tie out."""
+    out = {}
+    path, _ = _ndf_ter_path(_prev_anbima_bizday(datetime.now()))
+    if not path:
+        return out
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return out
+    if not data:
+        return out
+    fx = _fcst_norm('TAXAS DE CAMBIO')
+    want_mat = ref.strftime('%Y%m%d')
+    tipo_key = contr_key = venc_key = classe_key = cot_key = None
+    for k in data[0].keys():
+        kn = _fcst_norm(k)
+        if kn in ('tipo do contrato', 'tipo de contrato'):
+            tipo_key = k
+        elif kn == 'contrato':
+            contr_key = k
+        elif kn == 'data de vencimento':
+            venc_key = k
+        elif kn == 'classe do ativo subjacente':
+            classe_key = k
+        elif kn in ('codigo da cotacao', 'codigo de cotacao'):
+            cot_key = k
+
+    def _is_zero_cot(rec):
+        v = str(rec.get(cot_key, '') if cot_key else '').strip().replace(',', '.')
+        try:
+            return float(v) == 0
+        except ValueError:
+            return True                          # empty / non-numeric → treated as 0
+    for rec in data:
+        if classe_key and _fcst_norm(str(rec.get(classe_key, ''))) != fx:
+            continue
+        d = _fcst_parse_date(rec.get(venc_key, '')) if venc_key else None
+        if not (d and d.strftime('%Y%m%d') == want_mat):
+            continue
+        contrato = str(rec.get(contr_key, '') or '').strip().upper() if contr_key else ''
+        if not contrato:
+            continue
+        tipo = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
+        if tipo == 'feeder':
+            out[contrato] = 'other'
+        else:
+            out[contrato] = 't0' if _is_zero_cot(rec) else 'vanilla'
+    return out
+
+
+def _ndfsum_money(n):
+    """US thousands (#,##0.00) with parentheses for negatives — the settlement
+    convention the reconciliation cards / the reference spreadsheet use."""
+    s = '{:,.2f}'.format(abs(n))
+    return '({})'.format(s) if n < -0.005 else s
+
+
+def _ndfsum_collect(ref):
+    ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
+    # Operations B3 settlement leg per Título: Resgate rows are the settlement
+    # proper, so they win; any other operation type is only a fallback.
+    _, ops = _opb3_load(ref)
+    b3_val, b3_val_any = {}, {}
+    for r in (ops or []):
+        titulo = str(r.get('Título', '') or '').strip().upper()
+        if not titulo:
+            continue
+        if _fcst_norm(str(r.get('Tipo Operação', ''))) == 'resgate':
+            b3_val.setdefault(titulo, r.get('Valor', ''))
+        else:
+            b3_val_any.setdefault(titulo, r.get('Valor', ''))
+    for titulo, v in b3_val_any.items():
+        b3_val.setdefault(titulo, v)
+
+    def _ter_date(v):
+        d = _fcst_parse_date(v)
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    # B3 × internal reconciliation for the header cards. The FX whitelist (from
+    # the Live Position NDF) is the universe on BOTH sides; per category:
+    #   internal (JP) = NDF Cockpit rows whose contract is in it → count + Σ SETTLEMENT
+    #   B3 (CETIP)    = Operations B3 Resgate rows for those contracts → count + Σ Valor
+    fx_map = _ndfsum_fx_map(ref)
+    recon_acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
+                 for k in ('vanilla', 't0', 'other', 'total')}
+
+    _, _, contr_map = _ndfc_b3_maps(ref)
+    trade, raws = [], []
+    for row in _ndfc_collect(ref)['rows']:
+        b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip()
+        if b3 == _NDFC_MISSING_B3:
+            b3 = ''
+        lp = contr_map.get(b3.upper(), {}) if b3 else {}
+        trade_date = _ter_date(lp.get('emissao', ''))
+        settle_date = _ter_date(lp.get('venc', ''))
+        raw_b3 = b3_val.get(b3.upper(), '') if b3 else ''
+        # Cockpit DISPLAY cells are US-formatted (#,##0.00 via _swapchar_fmt_value)
+        # → parse with the US parser; the raw Operations B3 Valor keeps the same
+        # BR/US-tolerant parse the resgates reader uses.
+        settle_n = _mtm_parse_num(row[ci['[PROD] Cockpit.SETTLEMENT']])
+        b3_n = _ndfc_valnum(raw_b3)
+        diff = settle_n - b3_n if (settle_n is not None and b3_n is not None) else None
+        ok = diff is not None and -_NDFSUM_TOL < diff < _NDFSUM_TOL
+        trade.append({
+            'cells': [row[ci['LEGAL']], row[ci['NM_COUNTERPARTY']],
+                      row[ci['ID_SOURCE_DEAL']], b3, trade_date, settle_date,
+                      row[ci['VL_NOTIONAL_FC']], row[ci['CCY_NOTIONAL_FC']],
+                      row[ci['VL_FORWARD_RATE']], row[ci['[PROD] Cockpit.SETTLEMENT']],
+                      _swapchar_fmt_value(raw_b3) if str(raw_b3 or '').strip() else '',
+                      row[ci['VL_STRIKE_PRICE']], row[ci['VL_TAX_INCOME']]],
+            'diff': '{:,.2f}'.format(diff) if diff is not None else '',
+            'ok': ok,
+        })
+        # Internal (Cockpit) side of the reconciliation: only FX NDFs settling on
+        # ref (contract in the whitelist), bucketed by its category.
+        cat = fx_map.get(b3.upper()) if b3 else None
+        if cat:
+            sv = settle_n or 0.0
+            recon_acc[cat]['int_count'] += 1
+            recon_acc[cat]['int_value'] += sv
+            recon_acc['total']['int_count'] += 1
+            recon_acc['total']['int_value'] += sv
+        cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
+        if cpty and settle_n is not None:
+            raws.append({
+                'counterparty': cpty,
+                'legal': str(row[ci['LEGAL']] or '').strip(),
+                'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
+                'trade_date': trade_date,
+                'notional_fc': abs(_mtm_parse_num(row[ci['VL_NOTIONAL_FC']]) or 0.0),
+                'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
+                'settlement': settle_n,
+                'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
+            })
+
+    spn_by_name = _ndfsum_refdata_spn()
+    cpd = _cpd_load()
+    _, sum_meta = _ndfsum_meta_load(ref)
+    groups = {}
+    for r in raws:
+        groups.setdefault(r['counterparty'], []).append(r)
+    summary = []
+    for cpty in sorted(groups, key=_fcst_norm):
+        items = groups[cpty]
+        ref_rec = spn_by_name.get(_fcst_norm(cpty), {})
+        spn = ref_rec.get('spn', '')
+        rec_cpd = _cpd_find(cpd, spn) if spn else None
+        net_type = _ndfsum_net_type(rec_cpd)
+        for r in items:                     # net type + IDs flow to the notices
+            r['net_type'] = net_type
+            r['spn'] = spn
+            r['taxid'] = ref_rec.get('taxid', '')
+        # Per-trade cash considering tax: the IR withheld always SHRINKS the cash
+        # actually moving — sign-independent, so it is right regardless of whether
+        # the cockpit signs the settlement from the bank's or the client's point
+        # of view (tax is only present on client gains).
+        vals = [(r['settlement'] - r['tax'] if r['settlement'] >= 0
+                 else r['settlement'] + r['tax']) for r in items]
+        recv = sum(v for v in vals if v > 0)
+        pay = sum(v for v in vals if v < 0)
+        total = recv + pay
+        if net_type == 'Total Net':
+            # One netted figure on the side of the final result only.
+            recv, pay = (total, 0.0) if total >= 0 else (0.0, total)
+        direction = 'RECEIVE' if total >= 0 else 'PAY'
+        banking = _bank_norm((rec_cpd or {}).get('BANKING'))
+        summary.append({
+            'counterparty': cpty,
+            'status': (sum_meta.get(cpty) or {}).get('status') or 'New',
+            'receive': '{:,.2f}'.format(recv) if recv else '',
+            'pay': '{:,.2f}'.format(pay) if pay else '',
+            'net_type': net_type,
+            'direction': direction,
+            'account': _ndfsum_account_fmt(banking, direction),
+        })
+
+    # B3 side: Operations B3 settlement (Resgate) rows for FX-whitelisted
+    # contracts only — commodity/other NDFs that also live in Operations B3 are
+    # excluded because their Título is not in fx_map.
+    for r in (ops or []):
+        if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
+            continue
+        cat = fx_map.get(str(r.get('Título', '') or '').strip().upper())
+        if not cat:
+            continue
+        val = _ndfc_valnum(r.get('Valor')) or 0.0
+        recon_acc[cat]['b3_count'] += 1
+        recon_acc[cat]['b3_value'] += val
+        recon_acc['total']['b3_count'] += 1
+        recon_acc['total']['b3_value'] += val
+
+    recon = {}
+    for k, a in recon_acc.items():
+        recon[k] = {
+            'b3_count': a['b3_count'], 'b3_value': _ndfsum_money(a['b3_value']),
+            'int_count': a['int_count'], 'int_value': _ndfsum_money(a['int_value']),
+            'diff_value': _ndfsum_money(a['int_value'] - a['b3_value']),
+            # Matched only when both the operation count AND the value totals agree
+            # (value within the same ±tolerance the Trade Level uses per trade).
+            'matched': (a['b3_count'] == a['int_count']
+                        and abs(a['b3_value'] - a['int_value']) <= _NDFSUM_TOL),
+        }
+
+    return {'trade': trade, 'summary': summary, 'email_trades': raws, 'recon': recon}
+
+
+@blueprint.route('/api/ndf-summary/data')
+def api_ndf_summary_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    payload = _ndfsum_collect(ref)
+    payload.pop('email_trades', None)          # backend-only (settlement notices)
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d')})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/ndf-summary/settlement-emails', methods=['POST'])
+def api_ndf_summary_settlement_emails():
+    """Generate the NDF settlement notices (.eml drafts) for the reference date.
+    One draft per counterparty group according to its net type — Total Net: one
+    netted notice; Pay/Rec: one per direction; No Net: one per trade. Delivery
+    follows the New Deals premium flow (downloadable .eml/.zip, X-Unsent)."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    from apps.pages import otc_emails
+    trades = _ndfsum_collect(ref).get('email_trades') or []
+    # Restrict to the counterparties the user ticked on the Settlement Summary.
+    # When the key is absent (other callers) we keep the previous all-rows behaviour;
+    # an explicit empty list generates nothing.
+    sel = payload.get('counterparties')
+    if isinstance(sel, list):
+        wanted = {_fcst_norm(str(x)) for x in sel if str(x).strip()}
+        trades = [t for t in trades if _fcst_norm(str(t.get('counterparty', ''))) in wanted]
+    drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+
+    # Persist Generated per notified counterparty (day overlay) — best-effort ON
+    # PURPOSE: the drafts are already produced, so a failure here is logged but
+    # never turns a successful generation into an error.
+    try:
+        path, meta = _ndfsum_meta_load(ref)
+        sid = session.get('user_sid', '')
+        for name in {d.get('counterparty', '') for d in drafts if d.get('counterparty')}:
+            entry = meta.get(name) or {}
+            entry.update({'status': 'Generated', 'maker': sid,
+                          'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            meta[name] = entry
+        _ndfsum_meta_save(path, meta)
+    except Exception:
+        log.error('[ndf-summary] generated-status save failed:\n%s', traceback.format_exc())
+
+    # Up to 2 notices → the individual .eml files (open straight in Outlook, no
+    # unzip step); 3+ → a single .zip. A one-shot HTTP download can only carry one
+    # file, so the ≤2 case ships the .eml bytes as base64 in JSON and the page
+    # saves each one; the zip path is unchanged.
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts),
+                        'counterparties': cp_count, 'files': files})
+
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_NDF'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
+    return resp
+
+
+@blueprint.route('/api/ndf-summary/mark-sent', methods=['POST'])
+def api_ndf_summary_mark_sent():
+    """Confirm action on the Settlement Summary: flip a counterparty's day-overlay
+    status from Generated → Sent (persisted like the Generated flag). Only rows
+    currently Generated transition; returns how many were updated."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    names = payload.get('counterparties')
+    if not isinstance(names, list):
+        names = [names] if names else []
+    wanted = {_fcst_norm(str(n)) for n in names if str(n or '').strip()}
+    if not wanted:
+        return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
+    try:
+        path, meta = _ndfsum_meta_load(ref)
+        sid = session.get('user_sid', '')
+        updated = 0
+        for name, entry in list(meta.items()):
+            if _fcst_norm(name) in wanted and (entry or {}).get('status') == 'Generated':
+                entry = entry or {}
+                entry.update({'status': 'Sent', 'maker': sid,
+                              'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+                meta[name] = entry
+                updated += 1
+        if updated:
+            _ndfsum_meta_save(path, meta)
+        return jsonify({'ok': True, 'updated': updated})
+    except Exception as e:
+        log.error('[ndf-summary] mark-sent failed:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+
+
+# TED release request (TEDs button on the Settlement Summary) — fixed recipients.
+_TED_EMAIL_TO = ['brazil.otc.ops@jpmorgan.com', 'brazil.otc.settlements@jpmorgan.com']
+
+
+def _ted_ssi_attachment(cpty):
+    """Newest file inside the counterparty's Electronic Inventory SSI folder
+    (ELECTRONIC_INVENTORY_ROOT/<cpty>/SSI), or None when the folder is missing
+    or empty."""
+    try:
+        folder = _ei_actual_dir_name(_ei_sanitize(cpty))
+        ssi_dir = os.path.join(ELECTRONIC_INVENTORY_ROOT, folder, 'SSI')
+        if not os.path.isdir(ssi_dir):
+            return None
+        files = [os.path.join(ssi_dir, f) for f in os.listdir(ssi_dir)
+                 if os.path.isfile(os.path.join(ssi_dir, f))]
+        return max(files, key=os.path.getmtime) if files else None
+    except Exception:
+        return None
+
+
+@blueprint.route('/api/ndf-summary/ted-email', methods=['POST'])
+def api_ndf_summary_ted_email():
+    """TEDs button: e-mail the TED release request to OTC Ops + Settlements.
+    A row qualifies when its netted Pay side is filled AND the counterparty's
+    default PAY account is NOT at Banco J.P. Morgan (BCO 376 → internal book
+    transfer, no TED). Split into two blocks by legal entity (BANCO / MGT);
+    each counterparty's SSI (newest file in Electronic Inventory/<cpty>/SSI)
+    goes attached. From = the shared OTC Tracker mailbox."""
+    from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from apps.pages import otc_emails
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    # Same universe and netting as the Settlement Summary, but grouped per
+    # (legal entity, counterparty) so each LE gets its own e-mail block.
+    trades = _ndfsum_collect(ref).get('email_trades') or []
+    groups = {}
+    for t in trades:
+        name = str(t.get('counterparty', '') or '').strip()
+        if not name or otc_emails._is_lawton(name) or otc_emails._is_jpmorgan(name):
+            continue
+        groups.setdefault((otc_emails._ndf_legal_class(t.get('legal')), name), []).append(t)
+
+    cpd = _cpd_load()
+    blocks = {'JPM': [], 'MGT': []}
+    for (le, name), items in sorted(groups.items()):
+        # Per-trade cash net of IR (sign-aware — same rule as the Summary card).
+        vals = [(r['settlement'] - r['tax'] if r['settlement'] >= 0
+                 else r['settlement'] + r['tax']) for r in items]
+        recv = sum(v for v in vals if v > 0)
+        pay = sum(v for v in vals if v < 0)
+        if str(items[0].get('net_type', '') or 'Total Net') == 'Total Net':
+            total = recv + pay
+            pay = total if total < 0 else 0.0
+        if not pay:                          # Pay column empty → nothing to wire
+            continue
+        spn = items[0].get('spn', '')
+        rec_cpd = _cpd_find(cpd, spn) if spn else None
+        banking = _bank_norm((rec_cpd or {}).get('BANKING'))
+        acct = _ndfsum_account_fmt(banking, 'PAY')     # same source as the ACCOUNT column
+        m = re.match(r'BCO:\s*(\d+)', acct or '')
+        if (m.group(1).lstrip('0') if m else '') == '376':
+            continue                         # account at Banco JPM → book transfer, no TED
+        blocks[le].append({'counterparty': name,
+                           'value': otc_emails._brl(abs(pay)),
+                           'account': acct or '—'})
+
+    rows_all = blocks['JPM'] + blocks['MGT']
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    if not rows_all:
+        return jsonify({'ok': True, 'count': 0,
+                        'message': 'Nenhuma TED a liberar para {} (sem Pay ou contas no BCO 376).'
+                        .format(ref_fmt)})
+
+    # SSI attachment per distinct counterparty (a name may appear in both LEs).
+    attach, missing_ssi = [], []
+    for name in sorted({r['counterparty'] for r in rows_all}, key=_fcst_norm):
+        p = _ted_ssi_attachment(name)
+        (attach.append(p) if p else missing_ssi.append(name))
+
+    html = render_template('pages/email-template-ted-release.html',
+                           ref_date_fmt=ref_fmt,
+                           banco_rows=blocks['JPM'], mgt_rows=blocks['MGT'],
+                           missing_ssi=missing_ssi,
+                           current_year=datetime.now().year)
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = "Liberar TED's - NDF - {}".format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = ', '.join(_TED_EMAIL_TO)
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Liberação de TED — please view in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(limg)
+        _attach_email_gradient(related)
+        msg.attach(related)
+        for p in attach:
+            with open(p, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', 'attachment',
+                            filename=os.path.basename(p))
+            msg.attach(part)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, _TED_EMAIL_TO, msg.as_string())
+    except Exception as e:
+        log.error('[ndf-ted] e-mail FAILED:\n%s', traceback.format_exc())
+        return jsonify({'ok': False,
+                        'error': 'E-mail failed: {}: {}'.format(type(e).__name__, e)}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'TED Release Sent', 'NDF Summary',
+                         '{} TED(s) — {}'.format(len(rows_all), ref.strftime('%Y-%m-%d')))
+    return jsonify({'ok': True, 'count': len(rows_all),
+                    'attached': len(attach), 'missing_ssi': missing_ssi})
 
 
 # ============================================================================
@@ -8010,6 +10254,7 @@ def _send_mtm_validation_email(subject, html, logo_path, attach_paths):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         for path in attach_paths:
             try:
@@ -8050,6 +10295,7 @@ def _send_mtm_endprocess_email(subject, html, logo_path):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
@@ -9044,6 +11290,7 @@ def _send_accrual_validation_email(subject, html, logo_path, attach_paths):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
 
         for path in attach_paths:
@@ -9353,6 +11600,7 @@ def _send_accrual_endprocess_email(subject, html, logo_path):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
@@ -9874,11 +12122,32 @@ def api_pending_confirmation_search():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', []) or []
     has_status = any(_pc_norm(f.get('field', '')) == 'status' for f in filters)
-    cats = [_pc_category_from_filters(filters)] if has_status else ['backlog', 'pending', 'ok']
-    rows = []
-    for cat in cats:
-        rows += _pc_load_rows(cat)
-    # The Status chip only chose the DB(s); apply every OTHER chip to the rows.
+    if has_status:
+        # A Status chip means "rows whose CURRENT status is X". Because status is
+        # recomputed at read time (e.g. a now-Exception*/OK row may still physically
+        # sit in the pending DB until the daily re-route), we can't trust the DB a
+        # row lives in — load all three and keep only rows whose recomputed target
+        # category matches the requested one. Prevents e.g. Ok rows leaking into a
+        # Pending filter.
+        want = _pc_category_from_filters(filters)
+        seen, rows = set(), []
+        for cat in ('backlog', 'pending', 'ok'):
+            for r in _pc_load_rows(cat):
+                if _pc_target_category(r) != want:
+                    continue
+                tn = str(r.get('Trade Number', '') or '')
+                key = tn or ('#%d' % len(rows))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(r)
+        cats = [want]
+    else:
+        cats = ['backlog', 'pending', 'ok']
+        rows = []
+        for cat in cats:
+            rows += _pc_load_rows(cat)
+    # The Status chip only chose the category; apply every OTHER chip to the rows.
     other = [f for f in filters if _pc_norm(f.get('field', '')) != 'status']
     if other:
         rows = [r for r in rows if _deal_matches(r, other)]
@@ -10115,7 +12384,11 @@ _PC_PASTDUE_STATUS = 'Exception Digital Fep Web'
 
 
 def _pc_is_ok_status(v):
-    return _pc_norm(v) in _PC_OK_STATUSES
+    # ANY "Exception *" status (Exception, Exception FepWeb, Exception Digital Fep
+    # Web, …) counts as resolved/OK — it is NOT an outstanding confirmation, so it
+    # must not feed the pending metrics. Kept alongside the explicit resolved set.
+    n = _pc_norm(v)
+    return n.startswith('exception') or n in _PC_OK_STATUSES
 
 
 def _pc_cutoff_date():
@@ -10412,9 +12685,12 @@ def api_update_deal_cache(deal_id):
         updated_deal = deals[idx].copy()
 
     # Mirror NDF: push to Intrag Option when Status→Success and the counterparty
-    # is Banco J.P. Morgan (intragroup).
+    # is Banco J.P. Morgan (intragroup). External clients instead become a fresh
+    # outstanding confirmation → Pending Confirmation (the manual-mapping twin of
+    # the return-file scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
         _maybe_save_intrag_opt(updated_deal)
+        _pc_save_from_deal(updated_deal, 'OPTION COMM')     # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -10700,9 +12976,12 @@ def api_update_fxo_cache(deal_id):
         updated_deal = deals[idx].copy()
 
     # Mirror opt-comm: push to Intrag Option (FXO overrides) when Status→Success
-    # and the counterparty is Banco J.P. Morgan (intragroup).
+    # and the counterparty is Banco J.P. Morgan (intragroup). External clients
+    # instead flow to Pending Confirmation (manual-mapping twin of the return-file
+    # scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
         _maybe_save_intrag_fxo(updated_deal)
+        _pc_save_from_deal(updated_deal, 'OPTION')          # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -12705,6 +14984,11 @@ def api_ndf_update_deal_cache(deal_id):
             _save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
             log.error('[NDF PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
+    # External clients (non-intragroup) instead become a fresh outstanding
+    # confirmation → Pending Confirmation. Manual-mapping twin of the return-file
+    # scan trigger; _pc_save_from_deal skips internal/intragroup legs itself.
+    if new_status == 'Success':
+        _pc_save_from_deal(updated_deal, 'NDF COMM')        # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -13299,6 +15583,8 @@ def _b3_save(path, records):
 
 @blueprint.route('/api/fx-holiday-schedules', methods=['GET'])
 def api_fx_holiday_schedules():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     _SYSTEM_FILES = {
         'Subjacente.json', 'VCP.json', 'Dominio.json', 'RefData.json',
         'datatables-rendering.json', 'datatables.json',
@@ -13374,6 +15660,8 @@ def api_holidays_save():
 
 @blueprint.route('/api/b3/update', methods=['POST'])
 def api_b3_update():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
@@ -13383,6 +15671,9 @@ def api_b3_update():
 
     if table not in _B3_FILE_MAP or idx is None:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     if not (0 <= int(idx) < len(records)):
@@ -13439,12 +15730,17 @@ def api_b3_update():
 
 @blueprint.route('/api/b3/delete', methods=['POST'])
 def api_b3_delete():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
 
     if table not in _B3_FILE_MAP or idx is None:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     if not (0 <= int(idx) < len(records)):
@@ -13469,6 +15765,8 @@ def api_b3_delete():
 
 @blueprint.route('/api/b3/add', methods=['POST'])
 def api_b3_add():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     fields  = payload.get('fields', {})
@@ -13476,6 +15774,9 @@ def api_b3_add():
 
     if table not in _B3_FILE_MAP:
         return jsonify({'ok': False, 'error': 'bad_request'}), 400
+
+    if not _user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _b3_load(table)
     fields['STATUS']  = 'PENDING'
@@ -13908,12 +16209,12 @@ def api_mapping_b3():
 # Builds the HTML drafts in apps/pages/otc_emails.py and opens them in Outlook
 # for manual review (win32com — Windows/JPM only; degrades gracefully elsewhere).
 # ==============================================================================
-def _email_drafts_response(drafts):
+def _email_drafts_response(drafts, zip_name=None):
     """Return the drafts as a downloadable .eml / .zip so the file opens in the
     ACTING user's Outlook (server-side Outlook automation would only ever open on
     the server). From = the logged-in user's e-mail (resolved from their SID)."""
     from apps.pages import otc_emails
-    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'))
+    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'), zip_name=zip_name)
     resp = make_response(data)
     resp.headers['Content-Type'] = mime
     resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
@@ -13928,7 +16229,7 @@ def api_opt_premium_email():
 
     from apps.pages import otc_emails
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    drafts = otc_emails.build_premium_emails(deals)
+    drafts = otc_emails.build_premium_emails(deals, asset_label='Opção de Commodities')
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     return _email_drafts_response(drafts)
@@ -13941,8 +16242,9 @@ def api_fxo_premium_email():
 
     from apps.pages import otc_emails
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    drafts = otc_emails.build_premium_emails(deals, asset_label='Taxas de Câmbio',
-                                             ref_key='FX CASH ACCRONYM')
+    drafts = otc_emails.build_premium_emails(deals, asset_label='Opção de Moeda',
+                                             ref_key='FX CASH ACCRONYM',
+                                             cc_comm_sales=False)   # FX flow — Comm Sales isn't copied
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     return _email_drafts_response(drafts)
@@ -15200,6 +17502,393 @@ def reconciliation_payrec_end():
 # ROTA GENÉRICA — TEMPLATES (deve ser a ÚLTIMA rota definida)
 # ==============================================================================
 
+# ============================================================================
+#  ELECTRONIC INVENTORY — per-counterparty document library
+#  Root: ELECTRONIC_INVENTORY_ROOT\<Client>\{Confirmations,Transactional,SSI}
+#  Confirmations are foldered by date (YYYY\MM\DD); SSI / Transactional are flat
+#  with a "<TYPE> - <Client> - ddmmyyyy" naming convention. Browsing reads
+#  straight from the network share — offline/empty just yields empty lists,
+#  never a 500. Folder names come from RefData.json COUNTERPARTY (same source
+#  scripts/create_counterparty_folders.py uses), matched tolerantly by
+#  _ei_sanitize so a slightly different on-disk name is still found.
+# ============================================================================
+_EI_TRANSACTIONAL_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
+# Confirmations are filed per trade product, under
+# Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>.
+_EI_CONFIRMATION_TYPES = ('NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP')
+_EI_PREVIEWABLE = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
+_EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
+                      '.png', '.jpg', '.jpeg', '.gif', '.txt', '.zip'}
+
+
+def _ei_refdata_clients():
+    """[(name, spn)] from RefData.json. Best-effort: [] if missing/unreadable."""
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return []
+    out = []
+    for r in (rows if isinstance(rows, list) else []):
+        name = (r.get('COUNTERPARTY') or '').strip()
+        if name:
+            out.append((name, (r.get('SPN') or '').strip()))
+    return out
+
+
+def _ei_resolve_client_dir(client, create=False):
+    """Absolute <ROOT>\\<client> path via the tolerant sanitized match. When
+    create=True, ensures the three subfolders exist first."""
+    folder = _ei_sanitize(client)
+    if not folder:
+        return None
+    if create:
+        _ensure_counterparty_folders(client)
+    # Cached share scan first — see _ei_actual_dir_name.
+    return os.path.join(ELECTRONIC_INVENTORY_ROOT, _ei_actual_dir_name(folder))
+
+
+_EI_MONTH_NAMES = ('January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December')
+# Month folder is '<mm>. <Month>' ('06. June') so the share sorts numerically and
+# still reads at a glance in Explorer. Folders written before this convention are
+# plain '<mm>' — _EI_MONTH_DIR_RE matches both so browsing never loses them.
+_EI_MONTH_DIR_RE = re.compile(r'^(\d{2})(?:\.\s*[A-Za-z]+)?$')
+
+
+def _ei_month_folder(mm):
+    """'06' -> '06. June'. Falls back to the bare number if mm is out of range."""
+    try:
+        return '%s. %s' % (mm, _EI_MONTH_NAMES[int(mm) - 1])
+    except Exception:
+        return mm
+
+
+def _ei_ordinal(n):
+    """1 -> '1st', 2 -> '2nd', 3 -> '3rd', 4 -> '4th' … (11/12/13 are 'th')."""
+    if 11 <= (n % 100) <= 13:
+        return '%dth' % n
+    return '%d%s' % (n, {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th'))
+
+
+def _ei_version_prefix(n, style):
+    """Version marker for the n-th copy. Confirmations read as '#2 NDF - …'
+    (a trade count), agreements as '2nd CGD AMENDMENT - …' (a legal ordinal).
+    The first copy carries no marker at all."""
+    if n <= 1:
+        return ''
+    return ('#%d ' % n) if style == 'hash' else ('%s ' % _ei_ordinal(n))
+
+
+def _ei_next_ordinal(target_dir, prefix, cname):
+    """Which numbered copy of `<prefix> - <cname> - …` the next upload becomes.
+
+    Counts what is already filed in `target_dir` and returns max+1, so a second
+    CGD Amendment lands as '2nd CGD AMENDMENT - …' regardless of its date. Max
+    (not count) so deleting a middle document never re-issues a taken number.
+    Matches both marker styles ('#2 ' and '2nd ') so a folder that already holds
+    one convention keeps counting correctly. Returns 1 when nothing matches."""
+    pat = re.compile(
+        r'^(?:(?:#(\d+)|(\d+)(?:st|nd|rd|th))\s+)?%s\s+-\s+%s\s+-\s+'
+        % (re.escape(prefix), re.escape(cname)), re.IGNORECASE)
+    highest = 0
+    try:
+        for entry in os.listdir(_ei_long_path(target_dir)):
+            m = pat.match(entry)
+            if m:
+                seen = m.group(1) or m.group(2)
+                highest = max(highest, int(seen) if seen else 1)
+    except Exception:
+        return 1        # unreadable/missing dir — caller still writes the file
+    return highest + 1
+
+
+def _ei_human_size(n):
+    try:
+        n = float(n)
+    except Exception:
+        return ''
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if n < 1024 or unit == 'TB':
+            return ('%d %s' % (int(n), unit)) if unit == 'B' else ('%.1f %s' % (n, unit))
+        n /= 1024.0
+    return ''
+
+
+def _ei_iter_files(base, doctype):
+    """Yield a dict per file under <base>/<doctype>. Confirmations recurses and
+    reads a dd/mm/yyyy date from the YYYY/MM/DD path; Transactional derives a
+    sub-type from the '<TYPE> - ...' filename prefix. rel is POSIX, base-relative."""
+    sub = os.path.join(base, doctype)
+    if not os.path.isdir(sub):
+        return
+    for dirpath, _dirs, files in os.walk(sub):
+        for fn in files:
+            if fn.startswith('.') or fn.startswith('~$'):
+                continue
+            ext = os.path.splitext(fn)[1].lower()
+            # Only PDF documents are listed/previewed on this page.
+            if ext != '.pdf':
+                continue
+            full = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(full)
+            except Exception:
+                continue
+            rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
+            parts = [p for p in rel_within.split('/') if p and p != '.']
+            doc_date = ''
+            if doctype == 'Confirmations' and len(parts) >= 3:
+                mdir = _EI_MONTH_DIR_RE.match(parts[1])
+                if (re.match(r'^\d{4}$', parts[0]) and mdir and re.match(r'^\d{2}$', parts[2])):
+                    doc_date = '%s/%s/%s' % (parts[2], mdir.group(1), parts[0])
+            subtype = ''
+            if doctype in ('Transactional', 'Confirmations'):
+                # Drop the version marker ('2nd CGD AMENDMENT - …', '#2 NDF - …')
+                # so the sub-type still matches every copy of the same kind.
+                m = re.match(r'^\s*(?:(?:#\d+|\d+(?:st|nd|rd|th))\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
+                             fn, re.IGNORECASE)
+                subtype = (m.group(1).strip().upper() if m else '')
+            yield {
+                'name': fn,
+                'doctype': doctype,
+                'subtype': subtype,
+                'rel': os.path.relpath(full, base).replace('\\', '/'),
+                'ext': ext.lstrip('.').upper(),
+                'previewable': ext in _EI_PREVIEWABLE,
+                'size': st.st_size,
+                'size_h': _ei_human_size(st.st_size),
+                'doc_date': doc_date,
+                'modified': int(st.st_mtime),
+                'modified_h': datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M'),
+            }
+
+
+# Cache for the (slow) network-share folder scan. The I:\ drive can take far
+# longer than a request should ever block, so the scan runs in a background
+# thread that fills this cache; requests serve whatever is cached and never wait
+# more than a short grace period. `complete` distinguishes "scanned, folder truly
+# absent" from "not scanned yet" so the UI never shows a false "no folder" badge.
+_EI_ROOT_CACHE = {'ts': 0.0, 'exists': None, 'dirs': {}, 'complete': False, 'scanning': False}
+_EI_ROOT_CACHE_TTL = 300.0       # seconds a completed scan stays fresh
+_EI_ROOT_CACHE_LOCK = threading.Lock()
+
+
+def _ei_scan_root_worker():
+    """Full (unbounded) share scan → fills _EI_ROOT_CACHE. Runs in a daemon thread
+    so the slow enumeration never blocks the request that triggered it."""
+    exists, dirs, ok = False, {}, False
+    try:
+        exists = os.path.isdir(ELECTRONIC_INVENTORY_ROOT)
+        if exists:
+            with os.scandir(ELECTRONIC_INVENTORY_ROOT) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir():
+                            dirs[_ei_sanitize(entry.name).upper()] = entry.name
+                    except OSError:
+                        continue
+        ok = True
+    except Exception:
+        log.warning('[ei] scanning root failed:\n%s', traceback.format_exc())
+    with _EI_ROOT_CACHE_LOCK:
+        if ok:
+            _EI_ROOT_CACHE.update(ts=time.time(), exists=exists, dirs=dirs, complete=True)
+        _EI_ROOT_CACHE['scanning'] = False
+
+
+def _ei_scan_root(grace=6.0):
+    """Return (root_exists, dirs, complete). Serves the cached scan when fresh;
+    otherwise kicks off a background rescan and waits up to `grace` seconds for it
+    to finish (so a responsive share fills in on the very first load), then returns
+    the best data available. `complete` is False when the share hasn't been fully
+    scanned yet — the caller must NOT claim a folder is missing in that case."""
+    now = time.time()
+    with _EI_ROOT_CACHE_LOCK:
+        fresh = _EI_ROOT_CACHE['complete'] and (now - _EI_ROOT_CACHE['ts']) < _EI_ROOT_CACHE_TTL
+        if fresh:
+            return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), True)
+        start = not _EI_ROOT_CACHE['scanning']
+        if start:
+            _EI_ROOT_CACHE['scanning'] = True
+    if start:
+        threading.Thread(target=_ei_scan_root_worker, daemon=True).start()
+    # Give the scan a short grace window to complete (short-circuits as soon as done).
+    deadline = now + grace
+    while time.time() < deadline:
+        with _EI_ROOT_CACHE_LOCK:
+            if _EI_ROOT_CACHE['complete'] and _EI_ROOT_CACHE['ts'] >= now - _EI_ROOT_CACHE_TTL:
+                return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), True)
+        time.sleep(0.15)
+    # Still scanning — return any stale data we have, flagged incomplete.
+    with _EI_ROOT_CACHE_LOCK:
+        return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), False)
+
+
+@blueprint.route('/api/electronic-inventory/clients')
+def api_ei_clients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    root = ELECTRONIC_INVENTORY_ROOT
+    spn_by_key = {}
+    all_ref = _ei_refdata_clients()
+    for name, spn in all_ref:
+        spn_by_key[_ei_sanitize(name).upper()] = (name, spn)
+    # Cached, background-warmed share scan — never blocks on a slow network drive.
+    root_exists, disk_dirs, complete = _ei_scan_root()
+    clients = {}
+    for key, folder in disk_dirs.items():
+        ref = spn_by_key.get(key)
+        clients[key] = {'name': folder, 'spn': ref[1] if ref else '', 'on_disk': True}
+    # Fold in RefData names not (yet) matched to a folder. When the scan is still
+    # running we don't know if the folder exists, so on_disk = None (unknown) and
+    # the UI shows no badge; only a COMPLETE scan justifies a "no folder" badge.
+    for name, spn in all_ref:
+        key = _ei_sanitize(name).upper()
+        if key not in clients:
+            clients[key] = {'name': name, 'spn': spn,
+                            'on_disk': (False if complete else None)}
+    out = sorted(clients.values(), key=lambda c: c['name'].upper())
+    return jsonify({'success': True, 'clients': out, 'root': root,
+                    'root_exists': bool(root_exists),
+                    'scan_complete': complete,
+                    'share_slow': not complete,
+                    'transactional_types': list(_EI_TRANSACTIONAL_TYPES),
+                    'confirmation_types': list(_EI_CONFIRMATION_TYPES)})
+
+
+@blueprint.route('/api/electronic-inventory/documents')
+def api_ei_documents():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client = (request.args.get('client') or '').strip()
+    doctype = (request.args.get('type') or 'all').strip()
+    if not client:
+        return jsonify({'success': False, 'message': 'client required'}), 400
+    base = _ei_resolve_client_dir(client)
+    folder_exists = bool(base) and os.path.isdir(base)
+    docs = []
+    if folder_exists:
+        types = EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)
+        for dt in types:
+            if dt not in EI_SUBFOLDERS:
+                continue
+            try:
+                docs.extend(_ei_iter_files(base, dt))
+            except Exception:
+                log.warning('[ei] iter %s/%s failed:\n%s', client, dt, traceback.format_exc())
+    docs.sort(key=lambda d: d['modified'], reverse=True)
+    return jsonify({'success': True, 'documents': docs, 'client': client,
+                    'folder': base or '', 'folder_exists': folder_exists})
+
+
+def _ei_long_path(path):
+    r"""Windows extended-length form (\\?\...) for paths near MAX_PATH (260).
+
+    The Confirmations tree (<client>/Confirmations/<yyyy>/<mm>. <Month>/<dd>/
+    <product>/<TYPE> - <client> - <ddmmyyyy>.pdf) repeats a counterparty name
+    that can be 50+ chars twice, so a long name lands within a few dozen chars
+    of the limit. Past it every os.path/open call fails with a plain "not
+    found", which is indistinguishable from a missing file. No-op off Windows,
+    on short paths, and on already-prefixed ones. The path must already be
+    absolute and normalised — \\?\ disables all further normalisation."""
+    if os.name != 'nt' or len(path) < 250 or path.startswith('\\\\?\\'):
+        return path
+    if path.startswith('\\\\'):                 # UNC: \\server\share -> \\?\UNC\server\share
+        return '\\\\?\\UNC\\' + path[2:]
+    return '\\\\?\\' + path
+
+
+@blueprint.route('/api/electronic-inventory/file')
+def api_ei_file():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    from flask import send_file, abort
+    client = (request.args.get('client') or '').strip()
+    rel = (request.args.get('rel') or '').strip()
+    download = request.args.get('download') in ('1', 'true', 'yes')
+    base = _ei_resolve_client_dir(client)
+    if not base or not rel:
+        return abort(404)
+    # Path-traversal guard. Deliberately NOT os.path.realpath: on Windows it
+    # resolves the mapped drive (I:) to its UNC target, swapping 3 chars for ~37
+    # and pushing a deep Confirmations path over MAX_PATH — the file then 404s
+    # even though it is right there on the share. normpath collapses '..' and
+    # '.' textually, which is exactly what this guard needs; an absolute or
+    # drive-qualified `rel` escapes base and is caught by the same comparison.
+    base_abs = os.path.normpath(os.path.abspath(base))
+    full = os.path.normpath(os.path.join(base_abs, rel))
+    if not (full == base_abs or full.startswith(base_abs + os.sep)):
+        return abort(400)
+    name = os.path.basename(full)
+    full = _ei_long_path(full)
+    if not os.path.isfile(full):
+        return abort(404)
+    try:
+        return send_file(full, as_attachment=download, download_name=name)
+    except TypeError:   # Flask < 2.0
+        return send_file(full, as_attachment=download, attachment_filename=name)
+
+
+@blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
+def api_ei_upload():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client  = (request.form.get('client') or '').strip()
+    doctype = (request.form.get('type') or '').strip()
+    subtype = (request.form.get('subtype') or '').strip()
+    date_s  = (request.form.get('date') or '').strip()
+    f = request.files.get('file')
+    if not client or doctype not in EI_SUBFOLDERS or not f or not f.filename:
+        return jsonify({'success': False, 'message': 'client, a valid type and a file are required'}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in _EI_ALLOWED_UPLOAD:
+        return jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
+    if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+        return jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
+    digits = re.sub(r'\D', '', date_s)
+    ddmmyyyy = digits if len(digits) == 8 else datetime.now().strftime('%d%m%Y')
+    dd, mm, yyyy = ddmmyyyy[0:2], ddmmyyyy[2:4], ddmmyyyy[4:8]
+    base = _ei_resolve_client_dir(client, create=True)
+    cname = _ei_sanitize(client)
+    if doctype == 'Confirmations':
+        # Confirmations: Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>. The
+        # product folder keeps a busy trading day readable instead of dumping
+        # every product's PDFs side by side.
+        prefix = (_ei_sanitize(subtype).upper() or 'CONFIRMATION')
+        product_dir = _ei_sanitize(subtype) or 'Other'
+        target_dir = os.path.join(base, 'Confirmations', yyyy, _ei_month_folder(mm), dd, product_dir)
+    elif doctype == 'SSI':
+        target_dir = os.path.join(base, 'SSI')
+        prefix = 'SSI'
+    else:  # Transactional
+        target_dir = os.path.join(base, 'Transactional')
+        prefix = (_ei_sanitize(subtype).upper() or 'DOC')
+    try:
+        os.makedirs(_ei_long_path(target_dir), exist_ok=True)
+        # A counterparty can legitimately have several documents of the same kind
+        # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
+        # clobbering the previous or hiding it behind a meaningless " (2)".
+        nth = _ei_next_ordinal(target_dir, prefix, cname)
+        style = 'hash' if doctype == 'Confirmations' else 'ordinal'
+        fname = '%s%s - %s - %s%s' % (
+            _ei_version_prefix(nth, style), prefix, cname, ddmmyyyy, ext)
+        dest = os.path.join(target_dir, fname)
+        stem, e = os.path.splitext(dest)
+        i = 2
+        while os.path.exists(_ei_long_path(dest)):   # same kind AND same date — still never clobber
+            dest = '%s (%d)%s' % (stem, i, e)
+            i += 1
+        f.save(_ei_long_path(dest))     # `dest` itself stays clean for relpath/basename below
+    except Exception:
+        log.error('[ei] upload failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
+    return jsonify({'success': True, 'saved': {
+        'name': os.path.basename(dest),
+        'rel': os.path.relpath(dest, base).replace('\\', '/'),
+        'doctype': doctype}})
+
+
 @blueprint.route('/<template>')
 def route_template(template):
     # Catch-all page renderer — require authentication so unauthenticated
@@ -15226,6 +17915,17 @@ def route_template(template):
 
 def _initiate_2fa(sid, email, name):
     log.info("[_initiate_2fa] Generating 2FA code for SID=%s email=%s", sid, email)
+    # Throttle sends: if a code was just emailed (or too many were requested),
+    # don't send another — route the user to the entry page to use the code they
+    # already have. The pending session is still set so they can proceed.
+    allowed, wait_msg = _code_send_allowed(sid)
+    if not allowed:
+        log.warning("[_initiate_2fa] Send throttled for SID=%s: %s", sid, wait_msg)
+        session['pending_sid'] = sid
+        session['masked_email'] = get_masked_email(email)
+        session['masked_phone'] = get_masked_phone()
+        flash(wait_msg, "warning")
+        return redirect(url_for('pages_blueprint.two_factor_page'))
     code = generate_verification_code()
     save_verification_code(sid, code)
 
@@ -15240,6 +17940,194 @@ def _initiate_2fa(sid, email, name):
     session['masked_phone'] = get_masked_phone()
     log.info("[_initiate_2fa] Session set for SID=%s → redirecting to 2FA page", sid)
     return redirect(url_for('pages_blueprint.two_factor_page'))
+
+
+# ============================================================================
+#  METRICS — Pending Confirmation
+#  Dashboard for confirmations pending > 30 days. Offenders (bankers / clients /
+#  economic groups) come from the daily pending-confirmation snapshot JSON ("photo
+#  of the day"); the >30d volume history is seeded from the external report
+#  (static/data/pending-confirmation-metrics-history.json) until enough internal
+#  snapshots accumulate. Owner holds one or more banker names separated by ';'.
+# ============================================================================
+_PC_METRICS_AGING_THRESHOLD = 30
+_PC_METRICS_HISTORY_FILE = os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'pending-confirmation-metrics-history.json')
+
+
+def _pc_metrics_int(v):
+    try:
+        return int(float(str(v).strip()))
+    except Exception:
+        return None
+
+
+def _pc_latest_snapshot_rows():
+    """Newest daily pending-confirmation snapshot as a list of row dicts. Walks
+    back a few days if today's isn't written yet; falls back to the live pending
+    DB when no snapshot exists at all. Returns (rows, source_label)."""
+    def _pending_only(rows):
+        # Defensive: a snapshot taken under older rules may still contain rows whose
+        # Pending Status is now considered OK (any Exception*). Drop them so the
+        # metrics never count a resolved confirmation as pending.
+        return [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
+    try:
+        for back in range(0, 40):
+            d = datetime.now() - timedelta(days=back)
+            p = os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'),
+                             'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d')))
+            if os.path.isfile(p):
+                with open(p, encoding='utf-8') as fh:
+                    rows = json.load(fh)
+                if isinstance(rows, list):
+                    return _pending_only(rows), d.strftime('%Y-%m-%d')
+    except Exception:
+        log.warning('[pc-metrics] snapshot scan failed:\n%s', traceback.format_exc())
+    try:
+        return _pending_only(_pc_load_rows('pending')), 'live'
+    except Exception:
+        return [], 'none'
+
+
+def _pc_metrics_offenders(rows):
+    """Top-5 offenders among rows aging > 30 days (each row = one contract):
+      • bankers       → # of pending contracts (confirmations)
+      • clients       → # of pending contracts (confirmations)
+      • economic grp  → # of pending contracts (confirmations)
+    Owner is a fixed banker GROUP (e.g. "A; B; C") — treated as a single name, not
+    split per person, since the group is the same team across a client's deals.
+    """
+    gt30 = [r for r in rows
+            if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD]
+
+    banker_count, client_count, egroup_count = {}, {}, {}
+    for r in gt30:
+        client = str(r.get('Client', '') or '').strip()
+        egroup = str(r.get('Economic Group', '') or '').strip()
+        banker = str(r.get('Owner', '') or '').strip()     # whole Owner group = one name
+        if banker:
+            banker_count[banker] = banker_count.get(banker, 0) + 1
+        if client:
+            client_count[client] = client_count.get(client, 0) + 1
+        if egroup:
+            egroup_count[egroup] = egroup_count.get(egroup, 0) + 1
+
+    def top5(d):
+        return [{'label': k, 'value': v}
+                for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:5]]
+
+    return {
+        'bankers':    top5(banker_count),
+        'clients':    top5(client_count),
+        'egroups':    top5(egroup_count),
+        'gt30_total': len(gt30),
+        'all_total':  len(rows),
+    }
+
+
+def _pc_metrics_history():
+    """>30d volume history: seed (external report) merged with any internal daily
+    snapshots. Returns {gt30:{monthly,daily}, all:{monthly,daily}} where each point
+    is {period|date, volume, pct} (pct = MoM/DoD change vs the previous point)."""
+    seed = {}
+    try:
+        with open(_PC_METRICS_HISTORY_FILE, encoding='utf-8') as fh:
+            seed = json.load(fh)
+    except Exception:
+        log.warning('[pc-metrics] could not read history seed')
+    seed_gt30 = (seed.get('gt30') or {})
+    seed_monthly = list(seed_gt30.get('monthly') or [])
+    seed_daily   = list(seed_gt30.get('daily') or [])
+
+    internal_gt30, internal_all = {}, {}     # day 'YYYY-MM-DD' -> volume
+    try:
+        if os.path.isdir(_PC_SNAPSHOT_DIR):
+            for root, _dirs, files in os.walk(_PC_SNAPSHOT_DIR):
+                for fn in files:
+                    if not fn.endswith('.json'):
+                        continue
+                    m = re.search(r'(\d{4})(\d{2})(\d{2})', fn)
+                    if not m:
+                        continue
+                    day = '{}-{}-{}'.format(*m.groups())
+                    try:
+                        with open(os.path.join(root, fn), encoding='utf-8') as fh:
+                            rows = json.load(fh)
+                    except Exception:
+                        continue
+                    if not isinstance(rows, list):
+                        continue
+                    # Snapshots taken under older rules may still carry rows whose
+                    # Pending Status is now considered OK (any Exception*). Exclude
+                    # them so the >30d history never counts a resolved confirmation.
+                    rows = [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
+                    internal_gt30[day] = sum(
+                        1 for r in rows
+                        if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
+                    internal_all[day] = len(rows)
+    except Exception:
+        log.warning('[pc-metrics] internal snapshot scan failed:\n%s', traceback.format_exc())
+
+    def merge_daily(seed_list, internal):
+        by = {d['date']: d['volume'] for d in seed_list}
+        by.update(internal)                     # internal overrides seed for same day
+        return [{'date': k, 'volume': by[k]} for k in sorted(by)]
+
+    def monthly_last(internal):                 # last snapshot value of each month
+        by_month = {}
+        for day in sorted(internal):
+            by_month[day[:7]] = internal[day]
+        return by_month
+
+    gt30_daily   = merge_daily(seed_daily, internal_gt30)
+    gt30_month   = {m['period']: m['volume'] for m in seed_monthly}
+    gt30_month.update(monthly_last(internal_gt30))
+    gt30_monthly = [{'period': k, 'volume': gt30_month[k]} for k in sorted(gt30_month)]
+
+    all_daily    = [{'date': k, 'volume': internal_all[k]} for k in sorted(internal_all)]
+    all_month    = monthly_last(internal_all)
+    all_monthly  = [{'period': k, 'volume': all_month[k]} for k in sorted(all_month)]
+
+    def with_pct(series, key):
+        out, prev = [], None
+        for pt in series:
+            vol = pt['volume']
+            pct = None if prev in (None, 0) else round((vol - prev) * 100.0 / prev)
+            out.append({key: pt[key], 'volume': vol, 'pct': pct})
+            prev = vol
+        return out
+
+    return {
+        'gt30': {'monthly': with_pct(gt30_monthly, 'period'), 'daily': with_pct(gt30_daily, 'date')},
+        'all':  {'monthly': with_pct(all_monthly, 'period'),  'daily': with_pct(all_daily, 'date')},
+    }
+
+
+@blueprint.route('/metrics-pending-confirmation')
+def metrics_pending_confirmation():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/metrics-pending-confirmation.html',
+                           segment='metrics-pending-confirmation')
+
+
+@blueprint.route('/api/metrics-pending-confirmation/offenders')
+def api_pc_metrics_offenders():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    # Always read the live pending DuckDB (not the daily snapshot) so edits on the
+    # Pending Confirmation page reflect on the dashboard immediately; snapshots
+    # remain history-only (see /history).
+    rows = [r for r in _pc_load_rows('pending')
+            if not _pc_is_ok_status(r.get('Pending Status', ''))]
+    return jsonify({'success': True, 'source': 'live', **_pc_metrics_offenders(rows)})
+
+
+@blueprint.route('/api/metrics-pending-confirmation/history')
+def api_pc_metrics_history():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, **_pc_metrics_history()})
 
 
 def get_segment(request):
