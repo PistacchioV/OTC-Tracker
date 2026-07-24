@@ -664,8 +664,13 @@ def _ndf_legal_class(legal):
 
 
 def _ndf_liquido(t):
-    """Resultado Líquido of one trade = settlement − IR withheld."""
-    return float(t.get('settlement') or 0.0) - float(t.get('tax') or 0.0)
+    """Resultado Líquido of one trade. The IR withheld always SHRINKS the cash
+    actually moving, so it is subtracted from a positive result and added to a
+    negative one (same sign-aware rule as the NDF Summary net): e.g. a −20,000.00
+    result with 1.00 of tax nets to −19,999.00, not −20,001.00."""
+    s = float(t.get('settlement') or 0.0)
+    tax = float(t.get('tax') or 0.0)
+    return s - tax if s >= 0 else s + tax
 
 
 def build_ndf_settlement_emails(trades, ref_date=None):
@@ -708,7 +713,10 @@ def build_ndf_settlement_emails(trades, ref_date=None):
 def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     apurado = sum(float(t.get('settlement') or 0.0) for t in items)
     ir = sum(float(t.get('tax') or 0.0) for t in items)
-    final = apurado - ir
+    # Sign-aware net (see _ndf_liquido): the IR shrinks the cash moving, so on a
+    # negative Resultado Apurado it is added back rather than subtracted — final
+    # is the sum of the per-trade líquidos, not simply apurado − ir.
+    final = sum(_ndf_liquido(t) for t in items)
     cp = cpd.get(_norm_spn(items[0].get('spn')), {})
     taxid = items[0].get('taxid', '')
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
