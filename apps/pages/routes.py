@@ -8997,6 +8997,44 @@ def api_ndf_summary_settlement_emails():
     return resp
 
 
+@blueprint.route('/api/ndf-summary/mark-sent', methods=['POST'])
+def api_ndf_summary_mark_sent():
+    """Confirm action on the Settlement Summary: flip a counterparty's day-overlay
+    status from Generated → Sent (persisted like the Generated flag). Only rows
+    currently Generated transition; returns how many were updated."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    names = payload.get('counterparties')
+    if not isinstance(names, list):
+        names = [names] if names else []
+    wanted = {_fcst_norm(str(n)) for n in names if str(n or '').strip()}
+    if not wanted:
+        return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
+    try:
+        path, meta = _ndfsum_meta_load(ref)
+        sid = session.get('user_sid', '')
+        updated = 0
+        for name, entry in list(meta.items()):
+            if _fcst_norm(name) in wanted and (entry or {}).get('status') == 'Generated':
+                entry = entry or {}
+                entry.update({'status': 'Sent', 'maker': sid,
+                              'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+                meta[name] = entry
+                updated += 1
+        if updated:
+            _ndfsum_meta_save(path, meta)
+        return jsonify({'ok': True, 'updated': updated})
+    except Exception as e:
+        log.error('[ndf-summary] mark-sent failed:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+
+
 # ============================================================================
 #  MtM — Swap Mark-to-Market by line of business (+ COE)
 #  Swap file  "…ConsultaInfoDerivativosSemAtualMID" → CEM / EDG / Hybrids /

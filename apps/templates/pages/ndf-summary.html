@@ -152,16 +152,19 @@
     .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
 }
 /* Row action + status control feedback */
-#ops-page .ops-row-del, #ops-page .ops-status-sel {
+#ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
     transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
 }
-#ops-page .ops-row-del:active { transform: scale(0.9); }
+#ops-page .ops-row-del:active, #ops-page .ops-row-confirm:active { transform: scale(0.9); }
 @media (hover: hover) and (pointer: fine) {
     #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+    #ops-page .ops-row-confirm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(25,135,84,.38); }
 }
+#ops-page .ops-row-confirm:disabled { opacity: .5; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
     .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
-    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active { transform: none; }
+    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active,
+    #ops-page .ops-row-confirm:hover, #ops-page .ops-row-confirm:active { transform: none; }
 }
 
 #ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
@@ -430,6 +433,12 @@ document.addEventListener('DOMContentLoaded', function () {
         return '<div class="d-flex justify-content-center gap-1">' +
             '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
+    // Settlement Summary rows also carry a Confirm action (Generated → Sent).
+    function summaryActionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a href="#" class="btn btn-success btn-sm rounded-circle ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
 
     // Build a blank data row (array) for a table given its data-column count.
@@ -556,9 +565,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
                   : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
     }
-    // Standard status pill for the Settlement Summary rows (New → Generated).
+    // Standard status pill for the Settlement Summary rows (New → Generated → Sent).
     function pill(text, cls) {
         return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
+    }
+    function statusPill(status) {
+        if (status === 'Sent')      return pill('Sent', 'text-bg-primary');
+        if (status === 'Generated') return pill('Generated', 'text-bg-success');
+        return pill('New', 'text-bg-info');
     }
     // 'BCO: 341 | AG: 0910 | CC: 967' with the labels in bold (values are
     // digits, so bolding after esc() is safe).
@@ -578,9 +592,8 @@ document.addEventListener('DOMContentLoaded', function () {
         dtTrade.draw();
         dtSummary.clear();
         (j.summary || []).forEach(function (r) {
-            var st = r.status === 'Generated'
-                ? pill('Generated', 'text-bg-success') : pill('New', 'text-bg-info');
-            dtSummary.row.add([cb, actionsCell(), st,
+            var st = statusPill(r.status);
+            dtSummary.row.add([cb, summaryActionsCell(), st,
                 esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
                 esc(r.direction), accountHtml(r.account)]);
         });
@@ -676,6 +689,44 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.disabled = false;
             btn.innerHTML = '<i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">' + t('ops-generate', 'Print Advice') + '</span>';
         });
+    });
+
+    // ── Confirm action: flip a Settlement Summary row Generated → Sent ────────
+    // Only a generated notice can be confirmed; the new status is persisted (day
+    // overlay) so it survives a reload, just like Generated.
+    $('#ops-summary-table tbody').on('click', '.ops-row-confirm', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) return;
+        var rowApi = dtSummary.row($btn.closest('tr'));
+        var d = rowApi.data();
+        if (!d) return;
+        if (!/>Generated</.test(d[2] || '')) {
+            if (window.Swal) Swal.fire({ title: t('ops-confirm-na-title', 'Not Generated'),
+                text: t('ops-confirm-na', 'Only a generated notice can be marked as Sent.'),
+                icon: 'info', confirmButtonColor: '#0066cc' });
+            return;
+        }
+        var name = decodeHtml(d[3]).trim();
+        $btn.prop('disabled', true);
+        fetch('/api/ndf-summary/mark-sent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparties: [name] })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res && res.ok && res.updated) {
+                  d[2] = statusPill('Sent'); rowApi.data(d); dtSummary.draw(false);
+              } else {
+                  if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                      text: (res && res.error) || t('ops-gen-fail', 'Request failed.'),
+                      icon: 'error', confirmButtonColor: '#dc3545' });
+              }
+          })
+          .catch(function () {
+              if (window.Swal) Swal.fire({ title: t('swal-err-title', 'Error'),
+                  text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
+          })
+          .finally(function () { $btn.prop('disabled', false); });
     });
 
     // Expose the batch loader so the reference-date picker (own <script> below)
