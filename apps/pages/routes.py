@@ -226,6 +226,7 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/daily-settlement-save': 'daily',
     '/api/control-panel/settlement-forecast/data': 'forecast',
     '/api/control-panel/settlement-forecast/email': 'forecast',
+    '/api/control-panel/settlement-forecast/recipients': 'forecast',
     '/api/control-panel/import-contacts': 'contacts',
     '/api/control-panel/daily-metric/recipients': 'dailymetric',
     '/api/control-panel/daily-metric/run': 'dailymetric',
@@ -3385,10 +3386,10 @@ def _decode_data_uri(d):
         return None
 
 
-def _send_forecast_email(payload, images):
-    """Render the Settlement Forecast HTML report and e-mail it to OTC Ops with
-    the chart PNGs embedded (cid). `images` maps cid → raw PNG bytes. Best-effort
-    — returns True on success or an error string."""
+def _send_forecast_email(payload, images, to_list, cc_list):
+    """Render the Settlement Forecast HTML report and e-mail it to the saved
+    recipients (TO/CC) with the chart PNGs embedded (cid). `images` maps cid → raw
+    PNG bytes. Best-effort — returns True on success or an error string."""
     from email.mime.image import MIMEImage
     try:
         html = render_template(
@@ -3407,8 +3408,10 @@ def _send_forecast_email(payload, images):
         msg = MIMEMultipart('mixed')
         msg['Subject'] = 'Settlement Forecast'
         msg['From'] = SHARED_MAILBOX
-        msg['To'] = CETIP_OTC_OPS_EMAIL
-        msg['Cc'] = ', '.join(_ACC_ENDPROC_CC)     # Renato + Danilo (same cc as accrual / MTM swap)
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
 
         related = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
@@ -3423,6 +3426,17 @@ def _send_forecast_email(payload, images):
             limg.add_header('Content-ID', '<otc_logo>')
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(limg)
+
+        # Header gradient image (cid fallback for Outlook, exactly like the daily
+        # metric) — the shared header partial references cid:otc_gradient when the
+        # absolute URL isn't available.
+        grad_path = _get_email_asset('email-header-gradient.png')
+        if grad_path:
+            with open(grad_path, 'rb') as f:
+                gimg = MIMEImage(f.read())
+            gimg.add_header('Content-ID', '<otc_gradient>')
+            gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+            related.attach(gimg)
 
         for cid, data in images.items():
             if not data:
@@ -3484,10 +3498,27 @@ def api_cp_forecast_data():
     return jsonify({'success': True, **data})
 
 
+@blueprint.route('/api/control-panel/settlement-forecast/recipients', methods=['GET', 'POST'])
+def api_cp_forecast_recipients():
+    """GET → the saved TO/CC; POST → persist them (so they survive across runs)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_forecast_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_forecast_recipients((payload.get('to') or '').strip(),
+                                  (payload.get('cc') or '').strip())
+    except Exception as e:
+        log.error('[forecast] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
 @blueprint.route('/api/control-panel/settlement-forecast/email', methods=['POST'])
 def api_cp_forecast_email():
     """Receive the client-rendered chart PNGs (data URIs), rebuild the report
-    tables server-side and e-mail the Settlement Forecast to OTC Ops."""
+    tables server-side and e-mail the Settlement Forecast to the saved TO/CC."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
@@ -3498,21 +3529,28 @@ def api_cp_forecast_email():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
+    rec = _load_forecast_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha TO/CC antes de rodar.'}), 400
+
     data = _forecast_payload(ref)
     imgs = payload.get('images') or {}
     images = {
         'fcst_product': _decode_data_uri(imgs.get('by_product')),
         'fcst_entity':  _decode_data_uri(imgs.get('by_entity')),
     }
-    result = _send_forecast_email(data, images)
+    result = _send_forecast_email(data, images, to_list, cc_list)
     if result is not True:
         return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Settlement Forecast Sent', 'Control Panel',
-                         'Forecast e-mailed to OTC Ops ({})'.format(ref.strftime('%Y-%m-%d')))
+                         'Forecast e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list)
     return jsonify({'success': True,
-                    'message': 'Settlement Forecast e-mailed to OTC Ops.'})
+                    'message': 'Settlement Forecast enviado para {} destinatário(s).'.format(n)})
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -3526,6 +3564,26 @@ def api_cp_forecast_email():
 _DAILY_METRIC_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), '..', 'static', 'data', 'control-panel'))
 _DAILY_METRIC_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'daily_metric_recipients.json')
+# Settlement Forecast keeps its own saved TO/CC (same folder, no BCC) so the card
+# recipients replace the previously hardcoded OTC Ops / accrual-cc addresses.
+_FORECAST_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'settlement_forecast_recipients.json')
+
+
+def _load_forecast_recipients():
+    try:
+        with open(_FORECAST_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': ''}
+
+
+def _save_forecast_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_FORECAST_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
 
 
 def _load_daily_metric_recipients():

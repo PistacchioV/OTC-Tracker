@@ -41,7 +41,10 @@
     border-radius: 18px;
     padding: 1.5rem 1.5rem 1.35rem;
     height: 100%;
-    min-height: 290px;
+    /* Floor sized to the tallest card (Settlement Forecast: TO + CC + Reference
+       date). Every card shares it so the grid stays visually uniform even though
+       cards carry a different number of fields. */
+    min-height: 480px;
     display: flex;
     flex-direction: column;
     transition: transform 240ms var(--cp-ease),
@@ -331,8 +334,19 @@
                     <h3 class="cp-card__title" data-lang="cp-r-fcst-title">Settlement Forecast</h3>
                     <p class="cp-card__desc" data-lang="cp-r-fcst-desc">
                         Reads the CETIP position files, projects the upcoming settlements by business
-                        day and entity, and e-mails the consolidated forecast report to OTC Ops.
+                        day and entity, and e-mails the forecast report. Set the TO / CC once — they
+                        are saved and reused on every run.
                     </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-fcst-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-fcst-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
                         <div class="cp-datefield" id="cpFcstDateWrap">
