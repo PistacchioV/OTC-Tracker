@@ -41,6 +41,17 @@
 </style>
 <header class="app-topbar">
     <div class="container-fluid topbar-menu">
+
+      <!-- Centered horizontal nav (Nova/Linear style). Full navigation stays
+           available via the "Pages" megamenu. -->
+      <nav class="vr-topnav d-none d-lg-flex" aria-label="Primary">
+        <a href="/dashboard" data-vrnav="/dashboard">Dashboard</a>
+        <a href="/live-position-ndf" data-vrnav="/live-position">Live Position</a>
+        <a href="/pending-confirmation" data-vrnav="/pending-confirmation">Pending</a>
+        <a href="/reconciliation-payrec" data-vrnav="/reconciliation">Pay/Rec</a>
+        <a href="/reference-data" data-vrnav="/reference-data">Reference Data</a>
+      </nav>
+
       <div class="d-flex align-items-center gap-2">
   
         <!-- Topbar Brand Logo -->

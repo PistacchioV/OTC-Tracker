@@ -58,9 +58,30 @@
     }, 1200);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
+  // Marca o link ativo do nav central conforme a rota atual.
+  function markActiveNav() {
+    var path = window.location.pathname || "/";
+    var links = document.querySelectorAll(".vr-topnav a[data-vrnav]");
+    var best = null;
+    var bestLen = -1;
+    links.forEach(function (a) {
+      var key = a.getAttribute("data-vrnav") || "";
+      if (key && (path === key || path.indexOf(key) === 0) && key.length > bestLen) {
+        best = a;
+        bestLen = key.length;
+      }
+    });
+    if (best) best.classList.add("vr-active");
+  }
+
+  function boot() {
     init();
+    markActiveNav();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
   }
 })();

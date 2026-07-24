@@ -381,6 +381,88 @@ h1, h2, h3, h4, h5,
 .pagination .page-link { border-radius: 8px; margin: 0 2px; border-color: var(--vr-card-border); }
 
 /* ============================================================================
+   NAVBAR ESTILO NOVA/LINEAR — topbar horizontal flutuante, sem sidebar.
+   Logo à esquerda · links no centro · ações à direita. Navegação completa
+   permanece no megamenu "Pages".
+   ========================================================================== */
+/* Esconde a sidebar e usa largura total */
+.sidenav-menu { display: none !important; }
+.content-page { margin-left: 0 !important; }
+.sidenav-toggle-button,
+.topnav-toggle-button,
+.button-on-hover { display: none !important; }
+
+/* Topbar vira barra flutuante arredondada (pill) */
+.app-topbar {
+  margin: 14px 20px 0 20px !important;
+  height: 62px;
+  border-radius: 18px;
+  border: 1px solid var(--vr-card-border);
+  box-shadow: var(--vr-card-shadow);
+  background: color-mix(in oklab, var(--vr-page-bg) 60%, transparent) !important;
+}
+.app-topbar .topbar-menu { padding-inline: 1.1rem; }
+
+/* Declutter: esconde busca e ícones de admin que poluem o visual "Nova".
+   (a busca continua acessível pelo modal; nav completa no megamenu "Pages") */
+.app-search,
+#fullscreen-toggler,
+#monochrome-toggler,
+.topbar-item .btn-theme-setting {
+  display: none !important;
+}
+
+/* Revela o logo próprio do topbar (à esquerda) */
+.logo-topbar {
+  display: flex !important;
+  align-items: center;
+  float: none !important;
+  margin-right: 0.5rem;
+}
+.logo-topbar .logo-lg { display: inline-flex !important; align-items: center; }
+
+/* Nav central horizontal */
+.vr-topnav {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  align-items: center;
+  gap: 2px;
+  z-index: 2;
+}
+.vr-topnav a {
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  color: var(--ins-secondary-color);
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s var(--vr-ease), background-color 0.2s var(--vr-ease);
+}
+.vr-topnav a:hover {
+  color: var(--ins-body-color);
+  background: var(--vr-card-bg);
+}
+.vr-topnav a.vr-active {
+  color: var(--ins-body-color);
+  background: linear-gradient(100deg,
+              color-mix(in oklab, var(--vr-accent-1) 20%, transparent),
+              color-mix(in oklab, var(--vr-accent-3) 14%, transparent));
+  box-shadow: inset 0 0 0 1px var(--vr-card-border);
+}
+
+/* Conteúdo abaixo do navbar flutuante ganha respiro no topo */
+.content-page { padding-top: 1.4rem; }
+
+/* Em telas menores, sem os links centrais, o layout continua válido */
+@media (max-width: 991.98px) {
+  .app-topbar { margin-inline: 12px !important; }
+}
+
+/* ============================================================================
    Animações de entrada — .vr-reveal → .vr-in via IntersectionObserver.
    ========================================================================== */
 @media (prefers-reduced-motion: no-preference) {
