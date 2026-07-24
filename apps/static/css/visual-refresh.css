@@ -387,19 +387,53 @@ h1, h2, h3, h4, h5,
   background-color: var(--vr-card-bg);
 }
 
-/* Date field das páginas (Live Position / summaries / cockpit): usava
-   var(--bs-secondary-bg, #fff) → fundo BRANCO no dark, e --bs-border-color
-   indefinido → SEM borda. Força vars do tema + borda visível, globalmente. */
-.live-datewrap input {
+/* Date field das páginas (Live Position / summaries / cockpit / otm / ops-b3):
+   usava var(--bs-secondary-bg, #fff) → fundo BRANCO no dark, e --bs-border-color
+   indefinido → SEM borda. Cada página usa um prefixo diferente de "…datewrap",
+   então casa por padrão de classe e força vars do tema + borda visível. */
+[class*="datewrap"] input {
   background: var(--ins-secondary-bg) !important;
   color: var(--ins-body-color) !important;
   border: 1px solid color-mix(in oklab, var(--ins-body-color) 22%, transparent) !important;
 }
-.live-datewrap input:focus {
+[class*="datewrap"] input:focus {
   border-color: color-mix(in oklab, var(--vr-accent-2) 60%, transparent) !important;
   box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.18) !important;
 }
-.live-datewrap .live-cal-btn { color: var(--ins-secondary-color) !important; }
+[class*="datewrap"] [class*="cal-btn"],
+[class*="datewrap"] > span { color: var(--ins-secondary-color) !important; }
+
+/* ── Widgets de resumo (otm / ob / ndfc / ln / ops-widget…) ────────────────
+   Todas as páginas de summary usam o mesmo padrão .<pfx>-widget__value/__icon/
+   --total. Aplica o bento em gradiente nas 6 de uma vez (via seletor por
+   padrão de classe + !important para vencer as regras #page). */
+[class*="-widget__value"] {
+  background: var(--vr-grad);
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em;
+}
+[class*="-widget__icon"] {
+  background: var(--vr-grad) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 16px rgba(94, 92, 230, 0.28);
+}
+[class*="-widget--total"] {
+  background: linear-gradient(120deg, #0066cc, #5e5ce6 55%, #8b5cf6 85%, #d946ef) !important;
+  border: 0 !important;
+}
+/* No card Total (fundo já em gradiente) o número/ícone voltam ao branco */
+[class*="-widget--total"] [class*="-widget__value"] {
+  background: none !important;
+  -webkit-text-fill-color: #fff !important;
+  color: #fff !important;
+}
+[class*="-widget--total"] [class*="-widget__icon"] {
+  background: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none;
+}
 
 /* Paginação DataTables coerente */
 .dataTables_wrapper .dataTables_paginate .paginate_button.current,
