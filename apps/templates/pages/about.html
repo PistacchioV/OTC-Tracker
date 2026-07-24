@@ -24,14 +24,16 @@
 /* ── Scroll reveal ──────────────────────────────────────────── */
 .ab-rv {
     opacity: 0;
-    transform: translateY(18px);
-    transition: opacity 640ms var(--ab-ease-out),
-                transform 640ms var(--ab-ease-out);
+    transform: translateY(30px) scale(0.965);
+    filter: blur(8px);
+    transition: opacity 760ms var(--ab-ease-out),
+                transform 760ms var(--ab-ease-out),
+                filter 760ms var(--ab-ease-out);
 }
-.ab-rv.in { opacity: 1; transform: none; }
+.ab-rv.in { opacity: 1; transform: none; filter: blur(0); }
 
 @media (prefers-reduced-motion: reduce) {
-    .ab-rv { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .ab-rv { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
     /* Drop hover/press movement too — keep only color/shadow feedback. */
     .ab-feat:hover, .ab-feat:active, .ab-tech:hover,
     .ab-feat__link:hover i { transform: none !important; }
@@ -431,6 +433,124 @@
     color: rgba(255,255,255,.70);
     margin-bottom: 1.875rem;
     line-height: 1.55;
+}
+/* ================================================================
+ *  ABOUT — MOTION BOOST (entrada sequencial, glow, sheen, hover+)
+ * ================================================================ */
+
+/* ── Entrada sequencial do HERO no load ─────────────────────────── */
+.ab-hero__badge,
+.ab-hero__logo,
+.ab-hero h1,
+.ab-hero .ab-lead,
+.ab-hero__btns {
+    opacity: 0;
+    animation: abHeroIn 900ms var(--ab-ease-out) both;
+}
+.ab-hero__badge { animation-delay: 120ms; }
+.ab-hero__logo  { animation: abLogoIn 950ms var(--ab-ease-out) 240ms both,
+                             abLogoGlow 4.2s ease-in-out 1500ms infinite; }
+.ab-hero h1       { animation-delay: 380ms; }
+.ab-hero .ab-lead { animation-delay: 520ms; }
+.ab-hero__btns    { animation-delay: 660ms; }
+
+@keyframes abHeroIn {
+    from { opacity: 0; transform: translateY(26px); filter: blur(9px); }
+    to   { opacity: 1; transform: none;              filter: blur(0); }
+}
+@keyframes abLogoIn {
+    0%   { opacity: 0; transform: translateY(14px) scale(0.72); }
+    60%  { opacity: 1; transform: translateY(0)    scale(1.06); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes abLogoGlow {
+    0%, 100% { filter: drop-shadow(0 4px 20px rgba(0,0,0,.28)); }
+    50%      { filter: drop-shadow(0 8px 34px rgba(41,151,255,.55)); }
+}
+
+/* Sheen diagonal cruzando o hero periodicamente */
+.ab-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,.12) 50%, transparent 68%);
+    background-size: 250% 100%;
+    animation: abSheen 7.5s ease-in-out 1.6s infinite;
+    pointer-events: none;
+}
+@keyframes abSheen {
+    0%        { background-position: 210% 0; }
+    55%, 100% { background-position: -70% 0; }
+}
+
+/* Título do hero com leve brilho de texto */
+.ab-hero h1 { text-shadow: 0 2px 30px rgba(0,0,0,.18); }
+
+/* ── Stats: contador ganha "pop" ao revelar ─────────────────────── */
+.ab-stat__val { display: inline-block; will-change: transform; }
+.ab-rv.in .ab-stat__val { animation: abPop 620ms var(--ab-ease-out) 120ms both; }
+@keyframes abPop {
+    0%   { transform: scale(0.6); opacity: 0; }
+    55%  { transform: scale(1.12); opacity: 1; }
+    100% { transform: none; }
+}
+
+/* ── Feature cards: hover mais marcante + ícone reativo ─────────── */
+.ab-feat { position: relative; overflow: hidden; }
+.ab-feat::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    box-shadow: inset 0 0 0 1px rgba(41,151,255,.45);
+    opacity: 0;
+    transition: opacity 260ms var(--ab-ease-out);
+    pointer-events: none;
+}
+.ab-feat__icon { transition: transform 260ms var(--ab-ease-out); }
+@media (hover:hover) and (pointer:fine) {
+    .ab-feat:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 20px 46px rgba(0,102,204,.16);
+    }
+    .ab-feat:hover::after { opacity: 1; }
+    .ab-feat:hover .ab-feat__icon { transform: scale(1.1) rotate(-4deg); }
+}
+
+/* ── Flow steps: número com anel pulsante ao revelar ────────────── */
+.ab-step__num { position: relative; }
+.ab-rv.in .ab-step__num::after {
+    content: '';
+    position: absolute; inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--ab-blue);
+    opacity: 0;
+    animation: abRing 900ms var(--ab-ease-out) 200ms 1;
+}
+@keyframes abRing {
+    0%   { opacity: .6; transform: scale(0.7); }
+    100% { opacity: 0;  transform: scale(1.35); }
+}
+
+/* ── CTA azul: glow pulsante ────────────────────────────────────── */
+.ab-tile-blue::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 55% 70% at 50% -10%, rgba(41,151,255,.38) 0%, transparent 62%);
+    animation: abPulse 4.5s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes abPulse {
+    0%, 100% { opacity: .35; }
+    50%      { opacity: .85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ab-hero__badge, .ab-hero__logo, .ab-hero h1, .ab-hero .ab-lead, .ab-hero__btns,
+    .ab-hero::after, .ab-tile-blue::after, .ab-rv.in .ab-stat__val,
+    .ab-rv.in .ab-step__num::after {
+        animation: none !important;
+        opacity: 1 !important;
+    }
 }
 </style>
 {% endblock extra_css %}
@@ -1024,12 +1144,45 @@
 <script>
 (function () {
     'use strict';
+    var reduce = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Stagger por índice em TODOS os grupos .ab-sg (não só os 6 primeiros).
+    document.querySelectorAll('.ab-sg').forEach(function (group) {
+        var kids = group.querySelectorAll(':scope > .ab-rv');
+        kids.forEach(function (k, i) {
+            k.style.transitionDelay = Math.min(i * 70, 560) + 'ms';
+        });
+    });
+
+    // Count-up para valores numéricos dos stats (ex.: 2, 100%).
+    function countUp(el) {
+        var raw = (el.textContent || '').trim();
+        var m = raw.match(/^(\d+)(\D*)$/);
+        if (!m) return;                       // "B3", "SID" etc. ficam como estão
+        var target = parseInt(m[1], 10), suffix = m[2] || '';
+        if (reduce) { el.textContent = target + suffix; return; }
+        var dur = 1150, start = null;
+        function step(ts) {
+            if (!start) start = ts;
+            var p = Math.min((ts - start) / dur, 1);
+            var eased = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(eased * target) + suffix;
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) {
-            if (e.isIntersecting) {
-                e.target.classList.add('in');
-                io.unobserve(e.target);
+            if (!e.isIntersecting) return;
+            e.target.classList.add('in');
+            var val = e.target.querySelector('.ab-stat__val');
+            if (val && !val.dataset.counted) {
+                val.dataset.counted = '1';
+                countUp(val);
             }
+            io.unobserve(e.target);
         });
     }, { threshold: 0.06, rootMargin: '0px 0px -28px 0px' });
 
