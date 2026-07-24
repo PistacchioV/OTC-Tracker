@@ -1337,5 +1337,10 @@
   "ops-gen-none": "No settlements to notify for this date.",
   "ops-gen-fail": "Request failed.",
   "ops-gen-ok-title": "Notices Generated",
-  "ops-gen-ok-text": "{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook."
+  "ops-gen-ok-text": "{n} settlement notice(s) generated for {c} counterparty(ies). Open the downloaded file to review in your Outlook.",
+  "ndf-r-ops": "Ops",
+  "ndf-r-value": "Value",
+  "ndf-r-internal": "Internal",
+  "ndf-r-ok": "OK",
+  "ndf-r-check": "Check"
 }

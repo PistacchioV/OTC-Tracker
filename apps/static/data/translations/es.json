@@ -1336,5 +1336,10 @@
   "ops-gen-none": "No hay liquidaciones para avisar en esta fecha.",
   "ops-gen-fail": "La solicitud falló.",
   "ops-gen-ok-title": "Avisos generados",
-  "ops-gen-ok-text": "{n} aviso(s) de liquidación generado(s) para {c} contraparte(s). Abra el archivo descargado para revisarlo en su Outlook."
+  "ops-gen-ok-text": "{n} aviso(s) de liquidación generado(s) para {c} contraparte(s). Abra el archivo descargado para revisarlo en su Outlook.",
+  "ndf-r-ops": "Ops",
+  "ndf-r-value": "Valor",
+  "ndf-r-internal": "Interno",
+  "ndf-r-ok": "OK",
+  "ndf-r-check": "Verificar"
 }

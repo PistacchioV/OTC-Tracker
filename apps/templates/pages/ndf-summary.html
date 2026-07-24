@@ -75,6 +75,53 @@
 .ops-widget__sub .ops-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
 .ops-widget--soon { opacity: .6; }
 
+/* ── Reconciliation cards (B3 × Internal) ──────────────────── */
+.ops-recon .ops-widget__head { margin-bottom: .7rem; }
+/* The matched pill sits where the big number used to; calm green when tied,
+   attention-amber ("Verificar") when not. Color only — these render on every
+   load, so no entrance animation of their own (the card stagger is enough). */
+.ops-recon-badge {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+    padding: .16rem .5rem; border-radius: 999px; white-space: nowrap;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
+}
+.ops-recon-badge.is-ok    { background: rgba(34,197,94,.16);  color: #16a34a; }
+.ops-recon-badge.is-check { background: rgba(245,158,11,.18); color: #b45309; }
+.ops-recon-grid {
+    border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
+    display: grid; row-gap: .18rem;
+}
+.ops-recon-hdr, .ops-recon-row {
+    display: grid; grid-template-columns: 1fr auto auto; column-gap: .9rem; align-items: baseline;
+}
+.ops-recon-hdr {
+    font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ins-secondary-color, #8a8a8f); padding-bottom: .1rem;
+}
+.ops-recon-row { font-size: .8rem; padding: .1rem 0; }
+.ops-recon-row .ops-recon-side { font-weight: 600; color: var(--ins-secondary-color, #6e6e73); }
+.ops-recon-row [data-recon-b3c], .ops-recon-row [data-recon-intc] {
+    font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ins-body-color);
+}
+.ops-recon-row .ops-num { min-width: 92px; font-weight: 700; color: var(--ins-body-color); }
+/* Unmatched card gets a subtle amber ring — functional (scan the row of cards
+   and the odd one out pops), not decorative. */
+.ops-recon.is-unmatched { box-shadow: inset 0 0 0 1px rgba(245,158,11,.5); }
+
+/* Total card: dark gradient, so recon text/hairline go light. */
+.ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+.ops-recon--total .ops-widget__title,
+.ops-recon--total .ops-recon-row,
+.ops-recon--total .ops-recon-row .ops-recon-side,
+.ops-recon--total .ops-recon-row [data-recon-b3c],
+.ops-recon--total .ops-recon-row [data-recon-intc],
+.ops-recon--total .ops-recon-row .ops-num { color: #fff; }
+.ops-recon--total .ops-recon-hdr { color: rgba(255,255,255,.75); }
+.ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
+.ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
+.ops-recon--total.is-unmatched { box-shadow: inset 0 0 0 2px rgba(245,158,11,.9); }
+
 /* Staggered widget entrance */
 @keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: no-preference) {
@@ -147,41 +194,48 @@
         </div>
     </div>
 
-    <!-- Cards: Vanilla / Other Publisher / T+0 / Total (from latest DPOSICAO-TER) -->
-    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
+    <!-- Reconciliation cards: B3 (CETIP) × Internal (Cockpit) per category.
+         FX whitelist from the Live Position NDF keeps non-FX Operations B3 out. -->
+    <div class="row row-cols-xxl-3 row-cols-md-3 row-cols-1 g-2 ops-widgets">
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="vanilla">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-primary-subtle text-primary"><i class="ti ti-exchange"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-vanilla">Vanilla</h3>
-                    <span class="ops-widget__value" id="ndf-c-vanilla">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="other">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-news"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-other">Other Publisher</h3>
-                    <span class="ops-widget__value" id="ndf-c-other">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
-                <div class="ops-widget__head">
-                    <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-calendar-event"></i></span>
-                    <h3 class="ops-widget__title" data-lang="ndf-c-t0">T+0</h3>
-                    <span class="ops-widget__value" id="ndf-c-t0">0</span>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="ops-widget" style="background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0;">
+            <div class="ops-widget ops-recon ops-recon--total" data-cat="total">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon" style="background: rgba(255,255,255,.18); color:#fff;"><i class="ti ti-sum"></i></span>
                     <h3 class="ops-widget__title" data-lang="ndf-c-total" style="color:#fff;">Total</h3>
-                    <span class="ops-widget__value" id="ndf-c-total" style="color:#fff;">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ndf-r-ops">Ops</span><span data-lang="ndf-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ndf-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
@@ -471,13 +525,23 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.bootstrap) bootstrap.Modal.getInstance(document.getElementById('opsAddModal')).hide();
     });
 
-    // ── Cards: Vanilla / Other Publisher / T+0 / Total (from the latest TER) ──
-    function setCards(c) {
-        c = c || {};
-        $('#ndf-c-vanilla').text(c.vanilla || 0);
-        $('#ndf-c-other').text(c.other_publisher || 0);
-        $('#ndf-c-t0').text(c.t0 || 0);
-        $('#ndf-c-total').text(c.total || 0);
+    // ── Reconciliation cards: B3 (CETIP) × Internal (Cockpit), per category ──
+    function setRecon(recon) {
+        recon = recon || {};
+        document.querySelectorAll('.ops-recon').forEach(function (card) {
+            var r = recon[card.dataset.cat] || {};
+            card.querySelector('[data-recon-b3c]').textContent = r.b3_count != null ? r.b3_count : 0;
+            card.querySelector('[data-recon-b3v]').textContent = r.b3_value || '0.00';
+            card.querySelector('[data-recon-intc]').textContent = r.int_count != null ? r.int_count : 0;
+            card.querySelector('[data-recon-intv]').textContent = r.int_value || '0.00';
+            var badge = card.querySelector('[data-recon-badge]');
+            var ok = !!r.matched;
+            badge.className = 'ops-recon-badge ' + (ok ? 'is-ok' : 'is-check');
+            badge.innerHTML = ok
+                ? '<i class="ti ti-check"></i>' + t('ndf-r-ok', 'OK')
+                : '<i class="ti ti-alert-triangle"></i>' + t('ndf-r-check', 'Check');
+            card.classList.toggle('is-unmatched', !ok);
+        });
     }
 
     // ── Derived rows (Trade Level ← NDF Cockpit; Settlement Summary ← net per
@@ -523,13 +587,11 @@ document.addEventListener('DOMContentLoaded', function () {
     function loadDate(ymd) {
         currentYmd = ymd || currentYmd;
         var qs = ymd ? ('?date=' + encodeURIComponent(ymd)) : '';
-        fetch('/api/ndf-summary/cards' + qs)
-            .then(function (r) { return r.json(); })
-            .then(function (j) { if (j && j.success) setCards(j.cards); })
-            .catch(function () {});
+        // The reconciliation cards + both tables all come from /data (Cockpit,
+        // Operations B3 and the FX whitelist), so a single call feeds everything.
         fetch('/api/ndf-summary/data' + qs)
             .then(function (r) { return r.json(); })
-            .then(function (j) { if (j && j.success) fillTables(j); })
+            .then(function (j) { if (j && j.success) { fillTables(j); setRecon(j.recon); } })
             .catch(function () {});
     }
 

@@ -8674,6 +8674,60 @@ def _ndfsum_account_fmt(banking, direction):
                                               str(acc.get('account', '') or '').strip())
 
 
+def _ndfsum_fx_map(ref):
+    """{CETIP contract (upper) → 'vanilla' | 'other'} for the FX NDFs (Classe do
+    Ativo Subjacente = TAXAS DE CAMBIO) maturing on `ref`, read from the latest
+    Live Position NDF (DPOSICAO-TER). Vanilla = SISBACEN (direct/BACEN — same-day
+    T+0 folds in here), Other Publisher = FEEDER.
+
+    This is the whitelist that keeps the B3 reconciliation honest: Operations B3
+    mixes FX NDFs, commodity NDFs and others, so only contracts in this map count
+    on the B3 side — otherwise the totals could never tie out."""
+    out = {}
+    path, _ = _ndf_ter_path(_prev_anbima_bizday(datetime.now()))
+    if not path:
+        return out
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return out
+    if not data:
+        return out
+    fx = _fcst_norm('TAXAS DE CAMBIO')
+    want_mat = ref.strftime('%Y%m%d')
+    tipo_key = contr_key = venc_key = classe_key = None
+    for k in data[0].keys():
+        kn = _fcst_norm(k)
+        if kn in ('tipo do contrato', 'tipo de contrato'):
+            tipo_key = k
+        elif kn == 'contrato':
+            contr_key = k
+        elif kn == 'data de vencimento':
+            venc_key = k
+        elif kn == 'classe do ativo subjacente':
+            classe_key = k
+    for rec in data:
+        if classe_key and _fcst_norm(str(rec.get(classe_key, ''))) != fx:
+            continue
+        d = _fcst_parse_date(rec.get(venc_key, '')) if venc_key else None
+        if not (d and d.strftime('%Y%m%d') == want_mat):
+            continue
+        contrato = str(rec.get(contr_key, '') or '').strip().upper() if contr_key else ''
+        if not contrato:
+            continue
+        tipo = _fcst_norm(str(rec.get(tipo_key, ''))) if tipo_key else ''
+        out[contrato] = 'other' if tipo == 'feeder' else 'vanilla'
+    return out
+
+
+def _ndfsum_money(n):
+    """US thousands (#,##0.00) with parentheses for negatives — the settlement
+    convention the reconciliation cards / the reference spreadsheet use."""
+    s = '{:,.2f}'.format(abs(n))
+    return '({})'.format(s) if n < -0.005 else s
+
+
 def _ndfsum_collect(ref):
     ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
     # Operations B3 settlement leg per Título: Resgate rows are the settlement
@@ -8694,6 +8748,14 @@ def _ndfsum_collect(ref):
     def _ter_date(v):
         d = _fcst_parse_date(v)
         return d.strftime('%d/%m/%Y') if d else ''
+
+    # B3 × internal reconciliation for the header cards. The FX whitelist (from
+    # the Live Position NDF) is the universe on BOTH sides; per category:
+    #   internal (JP) = NDF Cockpit rows whose contract is in it → count + Σ SETTLEMENT
+    #   B3 (CETIP)    = Operations B3 Resgate rows for those contracts → count + Σ Valor
+    fx_map = _ndfsum_fx_map(ref)
+    recon_acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
+                 for k in ('vanilla', 'other', 'total')}
 
     _, _, contr_map = _ndfc_b3_maps(ref)
     trade, raws = [], []
@@ -8722,6 +8784,15 @@ def _ndfsum_collect(ref):
             'diff': '{:,.2f}'.format(diff) if diff is not None else '',
             'ok': ok,
         })
+        # Internal (Cockpit) side of the reconciliation: only FX NDFs settling on
+        # ref (contract in the whitelist), bucketed by its category.
+        cat = fx_map.get(b3.upper()) if b3 else None
+        if cat:
+            sv = settle_n or 0.0
+            recon_acc[cat]['int_count'] += 1
+            recon_acc[cat]['int_value'] += sv
+            recon_acc['total']['int_count'] += 1
+            recon_acc['total']['int_value'] += sv
         cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
         if cpty and settle_n is not None:
             raws.append({
@@ -8775,7 +8846,35 @@ def _ndfsum_collect(ref):
             'direction': direction,
             'account': _ndfsum_account_fmt(banking, direction),
         })
-    return {'trade': trade, 'summary': summary, 'email_trades': raws}
+
+    # B3 side: Operations B3 settlement (Resgate) rows for FX-whitelisted
+    # contracts only — commodity/other NDFs that also live in Operations B3 are
+    # excluded because their Título is not in fx_map.
+    for r in (ops or []):
+        if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
+            continue
+        cat = fx_map.get(str(r.get('Título', '') or '').strip().upper())
+        if not cat:
+            continue
+        val = _ndfc_valnum(r.get('Valor')) or 0.0
+        recon_acc[cat]['b3_count'] += 1
+        recon_acc[cat]['b3_value'] += val
+        recon_acc['total']['b3_count'] += 1
+        recon_acc['total']['b3_value'] += val
+
+    recon = {}
+    for k, a in recon_acc.items():
+        recon[k] = {
+            'b3_count': a['b3_count'], 'b3_value': _ndfsum_money(a['b3_value']),
+            'int_count': a['int_count'], 'int_value': _ndfsum_money(a['int_value']),
+            'diff_value': _ndfsum_money(a['int_value'] - a['b3_value']),
+            # Matched only when both the operation count AND the value totals agree
+            # (value within the same ±tolerance the Trade Level uses per trade).
+            'matched': (a['b3_count'] == a['int_count']
+                        and abs(a['b3_value'] - a['int_value']) <= _NDFSUM_TOL),
+        }
+
+    return {'trade': trade, 'summary': summary, 'email_trades': raws, 'recon': recon}
 
 
 @blueprint.route('/api/ndf-summary/data')
