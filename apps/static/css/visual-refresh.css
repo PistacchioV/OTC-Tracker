@@ -74,7 +74,6 @@ h1, h2, h3, h4, h5,
    TODAS as páginas de uma vez, de forma consistente). */
 .page-title-head {
   position: relative;
-  overflow: hidden;
   padding: 1.35rem 1.6rem;
   margin-bottom: 1.25rem;
   border-radius: 18px;
@@ -387,6 +386,20 @@ h1, h2, h3, h4, h5,
   border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent);
   background-color: var(--vr-card-bg);
 }
+
+/* Date field das páginas (Live Position / summaries / cockpit): usava
+   var(--bs-secondary-bg, #fff) → fundo BRANCO no dark, e --bs-border-color
+   indefinido → SEM borda. Força vars do tema + borda visível, globalmente. */
+.live-datewrap input {
+  background: var(--ins-secondary-bg) !important;
+  color: var(--ins-body-color) !important;
+  border: 1px solid color-mix(in oklab, var(--ins-body-color) 22%, transparent) !important;
+}
+.live-datewrap input:focus {
+  border-color: color-mix(in oklab, var(--vr-accent-2) 60%, transparent) !important;
+  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.18) !important;
+}
+.live-datewrap .live-cal-btn { color: var(--ins-secondary-color) !important; }
 
 /* Paginação DataTables coerente */
 .dataTables_wrapper .dataTables_paginate .paginate_button.current,
