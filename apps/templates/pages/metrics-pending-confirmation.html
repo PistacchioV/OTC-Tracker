@@ -108,6 +108,38 @@
 /* Selects com contorno visível */
 #pcm-page .pcm-select { border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent); }
 
+/* ── KPI HERO — painel gradiente escuro estilo Nova ── */
+[data-bs-theme="light"] #pcm-page .pcm-hero,
+[data-bs-theme="dark"] #pcm-page .pcm-hero {
+    background:
+        radial-gradient(70% 130% at 8% -25%, rgba(0,102,204,.5), transparent 60%),
+        radial-gradient(60% 130% at 96% -15%, rgba(217,70,239,.32), transparent 60%),
+        linear-gradient(160deg, #0d1226 0%, #0a0a12 72%) !important;
+    border: 1px solid rgba(255,255,255,.09) !important;
+    border-radius: 26px !important;
+    box-shadow: 0 28px 70px rgba(8,10,25,.34) !important;
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+#pcm-page .pcm-hero .card-body { padding: 2.6rem 2.4rem; }
+#pcm-page .pcm-hero .pcm-kpi__label { color: rgba(255,255,255,.55) !important; }
+#pcm-page .pcm-hero .pcm-kpi__val,
+[data-bs-theme="dark"] #pcm-page .pcm-hero .pcm-kpi__val {
+    background: linear-gradient(100deg, #fff 26%, #8ab4ff 64%, #d3aaff 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+}
+#pcm-page .pcm-hero .pcm-note { color: rgba(255,255,255,.55) !important; }
+/* minis viram chips glass sobre o painel escuro */
+#pcm-page .pcm-hero .pcm-mini {
+    background: rgba(255,255,255,.06) !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+}
+#pcm-page .pcm-hero .pcm-mini__l { color: rgba(255,255,255,.55) !important; }
+#pcm-page .pcm-hero .pcm-mini__v,
+[data-bs-theme="dark"] #pcm-page .pcm-hero .pcm-mini__v {
+    background: linear-gradient(135deg, #8ab4ff, #d3aaff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
 /* Entrada mais marcante — só quando há motion */
 @media (prefers-reduced-motion: no-preference) {
     @keyframes pcmRise {
@@ -128,7 +160,7 @@
     <!-- ═══ KPI hero (volume data — external report, no internal history yet) ═══ -->
     <div class="row">
         <div class="col-12">
-            <div class="card pcm-fade">
+            <div class="card pcm-fade pcm-hero">
                 <div class="card-body">
                     <div class="row align-items-center g-4">
                         <div class="col-lg-4">

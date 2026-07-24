@@ -184,23 +184,77 @@
     }
 }
 
-/* ── Stat cards: tile de ícone em gradiente + número GIGANTE em gradiente ── */
-#dash-page .row-cols-xxl-4 .card-body { padding: 1.7rem 1.6rem; }
-#dash-page .row-cols-xxl-4 .avatar-title {
-    background: var(--dash-grad) !important;
-    color: #fff !important;
-    border-radius: 15px !important;
-    width: 54px !important; height: 54px !important;
-    font-size: 1.55rem;
-    box-shadow: 0 8px 20px rgba(94,92,230,.32);
+/* ── HERO HEADER — painel gradiente escuro estilo Nova ── */
+#dash-page .dash-hero {
+    position: relative; overflow: hidden;
+    border-radius: 26px;
+    padding: 2.8rem 2.4rem;
+    margin-bottom: 1.6rem;
+    background:
+        radial-gradient(72% 130% at 10% -25%, rgba(0,102,204,.55), transparent 60%),
+        radial-gradient(64% 130% at 96% -12%, rgba(217,70,239,.34), transparent 60%),
+        linear-gradient(160deg, #0d1226 0%, #0a0a12 72%);
+    border: 1px solid rgba(255,255,255,.09);
+    box-shadow: 0 28px 70px rgba(8,10,25,.34);
 }
-#dash-page .row-cols-xxl-4 h3 {
-    font-size: clamp(2.1rem, 3vw, 2.7rem) !important;
-    font-weight: 800 !important; letter-spacing: -0.03em; line-height: 1;
-    background: var(--dash-grad);
+#dash-page .dash-hero__row {
+    position: relative; z-index: 1;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 1rem; flex-wrap: wrap;
+}
+#dash-page .dash-hero__eyebrow {
+    font-size: .7rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+    background: linear-gradient(100deg, #8ab4ff, #d3aaff);
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
-#dash-page .row-cols-xxl-4 p { font-weight: 600; font-size: .9rem; }
+#dash-page .dash-hero__title {
+    font-size: clamp(2.1rem, 4vw, 3rem); font-weight: 800; letter-spacing: -0.04em;
+    line-height: 1.02; margin: .45rem 0 .5rem;
+    background: linear-gradient(100deg, #fff 28%, #8ab4ff 66%, #d3aaff 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#dash-page .dash-hero__sub { color: rgba(255,255,255,.66); font-size: 1rem; margin: 0; max-width: 640px; }
+#dash-page .dash-hero .btn-outline-primary {
+    background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.22); color: #fff;
+}
+#dash-page .dash-hero .btn-outline-primary:hover,
+#dash-page .dash-hero .btn-outline-primary.show {
+    background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.34); color: #fff;
+}
+
+/* ── STAT CARDS — bento colorido, ícone watermark + número gigante ── */
+#dash-page .dash-stat { position: relative; overflow: hidden; border-radius: 20px !important; }
+#dash-page .dash-stat .card-body { position: relative; z-index: 1; padding: 1.6rem 1.6rem 1.5rem !important; }
+#dash-page .dash-stat__wm {
+    position: absolute; right: -6px; bottom: -20px; z-index: 0;
+    font-size: 6.5rem; line-height: 1; color: var(--c2); opacity: .12;
+}
+#dash-page .dash-stat__icon {
+    width: 50px; height: 50px; border-radius: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.5rem; margin-bottom: 1.1rem;
+    background: linear-gradient(135deg, var(--c1), var(--c2));
+    box-shadow: 0 8px 20px color-mix(in oklab, var(--c2) 40%, transparent);
+}
+#dash-page .dash-stat__num {
+    font-size: clamp(2.4rem, 3.4vw, 3.1rem) !important;
+    font-weight: 800 !important; letter-spacing: -0.03em; line-height: 1; margin: 0;
+    background: linear-gradient(135deg, var(--c1), var(--c2));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#dash-page .dash-stat__label { font-weight: 600; font-size: .92rem; margin: .4rem 0 0; color: var(--ins-secondary-color); }
+#dash-page .dash-stat--ndf   { --c1: #0066cc; --c2: #3b82f6; }
+#dash-page .dash-stat--opt   { --c1: #1a8a4a; --c2: #10b981; }
+#dash-page .dash-stat--swap  { --c1: #e0910f; --c2: #f59e0b; }
+#dash-page .dash-stat--total { --c1: #5e5ce6; --c2: #8b5cf6; }
+[data-bs-theme="light"] #dash-page .dash-stat {
+    background: linear-gradient(162deg, color-mix(in oklab, var(--c2) 9%, #fff), #fff) !important;
+    border: 1px solid color-mix(in oklab, var(--c2) 16%, rgba(0,0,0,.05)) !important;
+}
+[data-bs-theme="dark"] #dash-page .dash-stat {
+    background: linear-gradient(162deg, color-mix(in oklab, var(--c2) 16%, rgba(255,255,255,.03)), rgba(255,255,255,.03)) !important;
+    border: 1px solid color-mix(in oklab, var(--c2) 22%, rgba(255,255,255,.08)) !important;
+}
 
 /* Números grandes (Live total) em gradiente */
 #dash-page #live-total {
@@ -234,12 +288,14 @@
 {% block page_content %}
 <div id="dash-page" class="container-fluid" data-content="">
 
-    {% set title='Dashboard' %}
-    {% include 'partials/page-title.html' %}
-
-    <!-- Period filter -->
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-end">
+    <!-- ═══ HERO HEADER (Nova) ═══════════════════════════════════ -->
+    <div class="dash-hero dash-fade-in">
+        <div class="dash-hero__row">
+            <div>
+                <span class="dash-hero__eyebrow">OTC Derivatives Operations</span>
+                <h1 class="dash-hero__title" data-lang="dash-hero-title">Operations Dashboard</h1>
+                <p class="dash-hero__sub" data-lang="dash-hero-sub">Deals, live positions and settlement forecast — at a glance.</p>
+            </div>
             <div class="dropdown" id="dash-period-filter">
                 <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="dash-period-btn" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="ti ti-calendar me-1"></i><span id="dash-period-label" data-lang="dash-filter-year">Ano Atual</span>
@@ -253,80 +309,48 @@
         </div>
     </div>
 
-    <!-- Stats widgets -->
-    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
-        <!-- NDF Deals Widget -->
+    <!-- ═══ STAT CARDS — bento colorido ══════════════════════════ -->
+    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">
         <div class="col">
-            <div class="card dash-fade-in">
+            <div class="card dash-fade-in dash-stat dash-stat--ndf">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-primary-subtle text-primary rounded-circle fs-24">
-                                <i class="ti ti-exchange"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="dash-ndf-count">–</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-ndf-title">NDF Deals</p>
-                        </div>
-                    </div>
+                    <i class="ti ti-exchange dash-stat__wm"></i>
+                    <span class="dash-stat__icon"><i class="ti ti-exchange"></i></span>
+                    <h3 class="dash-stat__num"><span id="dash-ndf-count">–</span></h3>
+                    <p class="dash-stat__label" data-lang="dash-ndf-title">NDF Deals</p>
                 </div>
             </div>
-        </div><!-- end col -->
-        <!-- Options Deals Widget -->
+        </div>
         <div class="col">
-            <div class="card dash-fade-in">
+            <div class="card dash-fade-in dash-stat dash-stat--opt">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-success-subtle text-success rounded-circle fs-24">
-                                <i class="ti ti-chart-candle"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="dash-opt-count">–</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-opt-title">Options Deals</p>
-                        </div>
-                    </div>
+                    <i class="ti ti-chart-candle dash-stat__wm"></i>
+                    <span class="dash-stat__icon"><i class="ti ti-chart-candle"></i></span>
+                    <h3 class="dash-stat__num"><span id="dash-opt-count">–</span></h3>
+                    <p class="dash-stat__label" data-lang="dash-opt-title">Options Deals</p>
                 </div>
             </div>
-        </div><!-- end col -->
-        <!-- Swap Deals Widget -->
+        </div>
         <div class="col">
-            <div class="card dash-fade-in">
+            <div class="card dash-fade-in dash-stat dash-stat--swap">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-warning-subtle text-warning rounded-circle fs-24">
-                                <i class="ti ti-arrows-exchange-2"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="dash-swap-count">–</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-swap-title">Swap Deals</p>
-                        </div>
-                    </div>
+                    <i class="ti ti-arrows-exchange-2 dash-stat__wm"></i>
+                    <span class="dash-stat__icon"><i class="ti ti-arrows-exchange-2"></i></span>
+                    <h3 class="dash-stat__num"><span id="dash-swap-count">–</span></h3>
+                    <p class="dash-stat__label" data-lang="dash-swap-title">Swap Deals</p>
                 </div>
             </div>
-        </div><!-- end col -->
-        <!-- Total Deals Widget -->
+        </div>
         <div class="col">
-            <div class="card dash-fade-in">
+            <div class="card dash-fade-in dash-stat dash-stat--total">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-info-subtle text-info rounded-circle fs-24">
-                                <i class="ti ti-database"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span id="dash-total-count">–</span></h3>
-                            <p class="mb-0 text-muted" data-lang="dash-total-title">Total Deals</p>
-                        </div>
-                    </div>
+                    <i class="ti ti-database dash-stat__wm"></i>
+                    <span class="dash-stat__icon"><i class="ti ti-database"></i></span>
+                    <h3 class="dash-stat__num"><span id="dash-total-count">–</span></h3>
+                    <p class="dash-stat__label" data-lang="dash-total-title">Total Deals</p>
                 </div>
             </div>
-        </div><!-- end col -->
+        </div>
     </div><!-- end row -->
 
     <!-- Deal Distribution + Flow Analytics -->
