@@ -42,9 +42,9 @@
 <header class="app-topbar">
     <div class="container-fluid topbar-menu">
 
-      <!-- Centered horizontal nav (Nova/Linear style). Full navigation stays
-           available via the "Pages" megamenu. -->
-      <nav class="vr-topnav d-none d-lg-flex" aria-label="Primary">
+      <!-- Centered horizontal nav (Nova/Linear style). Quick links; full
+           navigation via the menu drawer (☰). -->
+      <nav class="vr-topnav d-none d-lg-flex" id="vr-topnav" aria-label="Primary">
         <a href="/dashboard" data-vrnav="/dashboard">Dashboard</a>
         <a href="/live-position-ndf" data-vrnav="/live-position">Live Position</a>
         <a href="/pending-confirmation" data-vrnav="/pending-confirmation">Pending</a>
@@ -283,6 +283,12 @@
   
       <div class="d-flex align-items-center gap-2">
   
+        <!-- Theme toggle (visual-refresh): clear sun/moon switch -->
+        <button class="vr-theme-btn" id="vr-theme-btn" type="button" aria-label="Toggle theme" title="Light / Dark">
+          <i data-lucide="sun" class="vr-ico-sun"></i>
+          <i data-lucide="moon" class="vr-ico-moon"></i>
+        </button>
+
         <!-- Search Box -->
         <div class="app-search d-none d-xl-flex" id="search-box-rounded-right">
           <input

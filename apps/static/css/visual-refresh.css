@@ -58,13 +58,9 @@ body {
   background-image:
     radial-gradient(58% 34% at 82% -4%, var(--vr-glow-b), transparent 60%),
     radial-gradient(46% 30% at 12% -6%, var(--vr-glow-a), transparent 58%),
-    radial-gradient(40% 40% at 100% 8%, var(--vr-glow-c), transparent 60%),
-    linear-gradient(to right, var(--vr-grid-line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--vr-grid-line) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 60px 60px, 60px 60px;
-  background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
-  background-attachment: fixed, fixed, fixed, fixed, fixed;
+    radial-gradient(40% 40% at 100% 8%, var(--vr-glow-c), transparent 60%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* ── Tipografia grande estilo Linear/Raycast ──────────────────────────────── */
@@ -443,6 +439,8 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
 .app-search,
 #fullscreen-toggler,
 #monochrome-toggler,
+#theme-dropdown,
+#megamenu-pages,
 .topbar-item .btn-theme-setting {
   display: none !important;
 }
@@ -456,7 +454,7 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
 }
 .logo-topbar .logo-lg { display: inline-flex !important; align-items: center; }
 
-/* Nav central horizontal */
+/* Nav central horizontal com DROPDOWNS por seção */
 .vr-topnav {
   position: absolute;
   left: 50%;
@@ -466,6 +464,7 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
   gap: 2px;
   z-index: 2;
 }
+/* Links simples do nav central (opção A) */
 .vr-topnav a {
   padding: 0.5rem 0.95rem;
   border-radius: 999px;
@@ -488,6 +487,111 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
               color-mix(in oklab, var(--vr-accent-3) 14%, transparent));
   box-shadow: inset 0 0 0 1px var(--vr-card-border);
 }
+
+.vr-dd { position: relative; }
+.vr-dd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.5rem 0.85rem;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  color: var(--ins-secondary-color);
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s var(--vr-ease), background-color 0.2s var(--vr-ease);
+}
+.vr-dd-btn i { width: 15px; height: 15px; opacity: 0.7; transition: transform 0.2s var(--vr-ease); }
+.vr-dd-btn:hover { color: var(--ins-body-color); background: var(--vr-card-bg); }
+.vr-dd.vr-open .vr-dd-btn i { transform: rotate(180deg); }
+.vr-dd-btn.vr-active {
+  color: var(--ins-body-color);
+  background: linear-gradient(100deg,
+              color-mix(in oklab, var(--vr-accent-1) 20%, transparent),
+              color-mix(in oklab, var(--vr-accent-3) 14%, transparent));
+  box-shadow: inset 0 0 0 1px var(--vr-card-border);
+}
+/* painel do dropdown */
+.vr-dd-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  min-width: 230px;
+  max-width: 460px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--vr-card-border);
+  background: var(--ins-secondary-bg);
+  box-shadow: var(--vr-card-shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s var(--vr-ease), transform 0.18s var(--vr-ease), visibility 0.18s var(--vr-ease);
+  z-index: 1201;
+}
+.vr-dd.vr-open .vr-dd-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.vr-dd-link {
+  display: block;
+  padding: 0.5rem 0.7rem;
+  border-radius: 9px;
+  color: var(--ins-body-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.15s var(--vr-ease), color 0.15s var(--vr-ease);
+}
+.vr-dd-link:hover {
+  background: var(--vr-card-bg);
+  color: var(--vr-accent-2);
+}
+.vr-dd-group { margin-top: 4px; }
+.vr-dd-group > .vr-dd-group,
+.vr-dd-group .vr-dd-link { margin-left: 8px; }
+.vr-dd-head {
+  padding: 0.4rem 0.7rem 0.2rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ins-secondary-color);
+  opacity: 0.75;
+}
+
+/* Toggle de tema (sol/lua) */
+.vr-theme-btn {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 11px;
+  border: 1px solid var(--vr-card-border);
+  background: var(--vr-card-bg);
+  color: var(--ins-body-color);
+  cursor: pointer;
+  transition: background-color 0.2s var(--vr-ease), border-color 0.2s var(--vr-ease), transform 0.2s var(--vr-ease);
+}
+.vr-theme-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--vr-accent-2) 40%, var(--vr-card-border));
+}
+.vr-theme-btn i { width: 18px; height: 18px; }
+.vr-theme-btn .vr-ico-sun { display: none; }
+.vr-theme-btn .vr-ico-moon { display: inline-flex; }
+[data-bs-theme=dark] .vr-theme-btn .vr-ico-sun { display: inline-flex; }
+[data-bs-theme=dark] .vr-theme-btn .vr-ico-moon { display: none; }
 
 /* Conteúdo abaixo do navbar flutuante ganha respiro no topo */
 .content-page { padding-top: 1.4rem; }
