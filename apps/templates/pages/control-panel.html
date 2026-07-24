@@ -250,7 +250,21 @@
                     <p class="cp-card__desc" data-lang="cp-r-cetip-desc">
                         Reads the raw CETIP files from the B3 daily download folder, renames them to the
                         standard convention and saves them into the settlement folders used by the KPI.
+                        The TO of each distribution e-mail is editable below (saved for the next runs);
+                        OTC Ops stays in CC.
                     </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-cetip-ss-to">TO — Sales Support</label>
+                        <input type="text" id="cp-cetip-ss-to" data-payload-key="ss_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-cetip-cem-to">TO — CEM Latam BA</label>
+                        <input type="text" id="cp-cetip-cem-to" data-payload-key="cem_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
                         <div class="cp-datefield" id="cpDateWrap">
@@ -581,6 +595,13 @@ function cpRunRoutine(btn) {
     // (e.g. Save CETIP Files: 'save' vs 'distribute').
     var stage = btn.getAttribute('data-stage');
     if (stage) body.stage = stage;
+    // Optional extra fields: any input in the same card carrying data-payload-key
+    // is sent under that key (e.g. the CETIP distribution TO lists) — the values
+    // travel with the run itself, so no blur/save race.
+    var cardEl = btn.closest('.cp-card');
+    if (cardEl) cardEl.querySelectorAll('[data-payload-key]').forEach(function (el) {
+        body[el.getAttribute('data-payload-key')] = el.value || '';
+    });
 
     fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(body) })
@@ -801,6 +822,32 @@ document.addEventListener('click', function (e) {
             if (icon) icon.className = origIcon || 'ti ti-player-play';
         });
     });
+})();
+
+// ── Save CETIP Files card: persisted TO per distribution e-mail ──────────────
+// Sales Support / CEM Latam TO lists load from the server (defaults = the old
+// hardcoded addresses) and save on blur; the Run buttons also send them in the
+// POST payload via data-payload-key, so the run always uses what's on screen.
+(function () {
+    var ssEl  = document.getElementById('cp-cetip-ss-to');
+    var cemEl = document.getElementById('cp-cetip-cem-to');
+    if (!ssEl || !cemEl) return;
+    var REC_URL = '/api/control-panel/cetip-settlement/recipients';
+
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!d || !d.success) return;
+                             ssEl.value = d.ss_to || ''; cemEl.value = d.cem_to || ''; })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ ss_to: ssEl.value, cem_to: cemEl.value })
+        }).catch(function () {});
+    }
+    [ssEl, cemEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
 })();
 
 // ── Weekly Escalation card: persisted TO/CC + Run (CEM/EDG > 30 days e-mail) ──

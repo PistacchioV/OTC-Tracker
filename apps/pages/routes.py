@@ -223,6 +223,7 @@ _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
 _CP_ENDPOINT_CARD = {
     '/api/control-panel/cetip-settlement': 'cetip',
+    '/api/control-panel/cetip-settlement/recipients': 'cetip',
     '/api/control-panel/daily-settlement-save': 'daily',
     '/api/control-panel/settlement-forecast/data': 'forecast',
     '/api/control-panel/settlement-forecast/email': 'forecast',
@@ -2168,6 +2169,32 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 # CEM Latam BA (Buenos Aires CIB Ops) — receive the Option Position .OPC file, cc OTC Ops.
+# Editable TO lists for the two distribution e-mails (Sales Support / CEM Latam),
+# persisted from the Save CETIP Files card. Empty/absent → the hardcoded defaults
+# below. The CC (OTC Ops) stays hardcoded on purpose.
+_CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel',
+    'cetip_distribution_recipients.json'))
+
+
+def _load_cetip_recipients():
+    try:
+        with open(_CETIP_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'ss_to': d.get('ss_to', '') or '', 'cem_to': d.get('cem_to', '') or ''}
+    except Exception:
+        pass
+    return {'ss_to': '', 'cem_to': ''}
+
+
+def _save_cetip_recipients(ss_to, cem_to):
+    os.makedirs(os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
+    with open(_CETIP_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'ss_to': ss_to or '', 'cem_to': cem_to or ''},
+                  fh, ensure_ascii=False, indent=2)
+
+
 CETIP_CEM_LATAM_EMAILS    = [e.strip() for e in os.getenv(
     'CETIP_CEM_LATAM_EMAILS',
     'lautaro.larriera@jpmchase.com,sacha.yebrin@jpmchase.com,candela.ferreiro@jpmorgan.com,'
@@ -2680,11 +2707,14 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
         return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 
-def _cetip_distribute_emails(ref, dest_dir, send_mail):
+def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None):
     """Stage 2 of Save CETIP Files ("Send to other areas"): e-mail Sales Support
     (SIC + Term/Option/SWAP positions) and CEM Latam BA (.OPC) with the files that
     stage 1 already saved to dest_dir — no re-save. Attachment paths are rebuilt
-    from each rule's deterministic dest name for the reference date."""
+    from each rule's deterministic dest name for the reference date. TO lists come
+    from the card (persisted); empty → the hardcoded defaults. CC stays OTC Ops."""
+    ss_to_list  = ss_to_list  or [CETIP_SALES_SUPPORT_EMAIL]
+    cem_to_list = cem_to_list or CETIP_CEM_LATAM_EMAILS
     if not os.path.isdir(dest_dir):
         return jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
@@ -2721,7 +2751,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
                   'The requested position files were not found for the reference date.')
         ss_subject = 'CETIP Consolidated - Corporate - {}'.format(ref_yymmdd)
         mail_ss = _send_cetip_email(
-            [CETIP_SALES_SUPPORT_EMAIL], [CETIP_OTC_OPS_EMAIL], ss_subject,
+            ss_to_list, [CETIP_OTC_OPS_EMAIL], ss_subject,
             'Hello, Sales Support.', ss_msg,
             ref_fmt, attach_saved, attachments=attach_paths)
 
@@ -2730,7 +2760,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
                    'The DPOSICAO.OPC file was not found for the reference date.')
         cem_subject = 'CETIP Option Position - CEM Latam - {}'.format(ref_yymmdd)
         mail_cem = _send_cetip_email(
-            CETIP_CEM_LATAM_EMAILS, [CETIP_OTC_OPS_EMAIL], cem_subject,
+            cem_to_list, [CETIP_OTC_OPS_EMAIL], cem_subject,
             'Hello CEM Latam BA,', cem_msg,
             ref_fmt, opc_saved, attachments=opc_paths)
 
@@ -2749,6 +2779,27 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail):
     return jsonify({'success': True, 'message': msg,
                     'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem},
                     'destination': dest_dir})
+
+
+@blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
+def api_cp_cetip_recipients():
+    """GET → the TO lists for the two distribution e-mails (defaults shown when
+    nothing is saved yet); POST → persist them. CC (OTC Ops) is fixed in code."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        rec = _load_cetip_recipients()
+        return jsonify({'success': True,
+                        'ss_to': rec['ss_to'] or CETIP_SALES_SUPPORT_EMAIL,
+                        'cem_to': rec['cem_to'] or '; '.join(CETIP_CEM_LATAM_EMAILS)})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_cetip_recipients((payload.get('ss_to') or '').strip(),
+                               (payload.get('cem_to') or '').strip())
+    except Exception as e:
+        log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
 
 
 @blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
@@ -2778,8 +2829,20 @@ def api_cp_cetip_settlement():
 
     # Stage 2 ("Send to other areas") — no re-save; e-mail Sales Support + CEM Latam
     # from the already-saved files. Requires stage 1 ("Save CETIP Files") to have run.
+    # TO lists: run payload (what's on the card) > saved > hardcoded default; when
+    # the payload carries them they are persisted for the next runs.
     if stage == 'distribute':
-        return _cetip_distribute_emails(ref, dest_dir, send_mail)
+        rec = _load_cetip_recipients()
+        if 'ss_to' in payload or 'cem_to' in payload:
+            rec = {'ss_to': (payload.get('ss_to') or '').strip(),
+                   'cem_to': (payload.get('cem_to') or '').strip()}
+            try:
+                _save_cetip_recipients(rec['ss_to'], rec['cem_to'])
+            except Exception:
+                log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
+        return _cetip_distribute_emails(ref, dest_dir, send_mail,
+                                        _parse_emails(rec['ss_to']),
+                                        _parse_emails(rec['cem_to']))
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
