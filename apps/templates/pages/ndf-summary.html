@@ -151,13 +151,14 @@
 @media (hover: hover) and (pointer: fine) {
     .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
 }
-/* Standard row-action button: a perfect circle of a fixed size, so every action
-   (Delete, Confirm, …) shares the exact same shape regardless of its icon. New
-   row actions should reuse .ops-row-act to stay on this format. */
+/* Standard row-action button: fixed-size rounded square (the Delete button's
+   shape), so every action (Delete, Confirm, …) shares the exact same format
+   regardless of its icon. New row actions should reuse .ops-row-act. */
 #ops-page .ops-row-act {
     width: 32px; height: 32px; padding: 0; flex: 0 0 auto;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
+    border-radius: 10px !important;   /* rounded square — NOT a circle */
 }
 #ops-page .ops-row-act > i { font-size: 1rem; }
 /* Row action + status control feedback */
@@ -440,13 +441,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     // Settlement Summary rows also carry a Confirm action (Generated → Sent).
     function summaryActionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-success btn-sm rounded-circle ops-row-act ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-success btn-sm ops-row-act ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
 
