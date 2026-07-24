@@ -385,9 +385,44 @@ h1, h2, h3, h4, h5,
    Logo à esquerda · links no centro · ações à direita. Navegação completa
    permanece no megamenu "Pages".
    ========================================================================== */
-/* Esconde a sidebar e usa largura total */
-.sidenav-menu { display: none !important; }
+/* Sidebar NÃO some — vira um DRAWER deslizante (navegação completa preservada).
+   Conteúdo full-width; a sidebar abre sobre o conteúdo via botão de menu. */
 .content-page { margin-left: 0 !important; }
+.sidenav-menu {
+  transform: translateX(-100%);
+  transition: transform 0.32s var(--vr-ease);
+  z-index: 1200 !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+body.vr-nav-open .sidenav-menu { transform: none; }
+/* backdrop do drawer */
+.vr-nav-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.3s var(--vr-ease), visibility 0.3s var(--vr-ease);
+  z-index: 1150;
+}
+body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
+
+/* botão de menu (abre o drawer) no navbar */
+.vr-menu-btn {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 11px;
+  border: 1px solid var(--vr-card-border);
+  background: var(--vr-card-bg);
+  color: var(--ins-body-color);
+  cursor: pointer;
+  transition: background-color 0.2s var(--vr-ease), border-color 0.2s var(--vr-ease), transform 0.2s var(--vr-ease);
+}
+.vr-menu-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--vr-accent-2) 40%, var(--vr-card-border));
+}
+
+/* os toggles antigos do admin continuam ocultos (o drawer usa o novo botão) */
 .sidenav-toggle-button,
 .topnav-toggle-button,
 .button-on-hover { display: none !important; }

@@ -74,9 +74,40 @@
     if (best) best.classList.add("vr-active");
   }
 
+  // Drawer de navegação: o botão de menu do navbar abre a sidebar completa
+  // (com todos os submenus) deslizando sobre o conteúdo.
+  function initNavDrawer() {
+    var btn = document.getElementById("vr-menu-btn");
+    var sidenav = document.querySelector(".sidenav-menu");
+    if (!btn || !sidenav) return;
+
+    var backdrop = document.createElement("div");
+    backdrop.className = "vr-nav-backdrop";
+    document.body.appendChild(backdrop);
+
+    function open() { document.body.classList.add("vr-nav-open"); }
+    function close() { document.body.classList.remove("vr-nav-open"); }
+    function toggle() { document.body.classList.toggle("vr-nav-open"); }
+
+    btn.addEventListener("click", toggle);
+    backdrop.addEventListener("click", close);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") close();
+    });
+    // Fecha ao navegar por um link do menu (leva para outra página).
+    sidenav.addEventListener("click", function (e) {
+      var a = e.target.closest("a[href]");
+      if (!a) return;
+      var href = a.getAttribute("href") || "";
+      // ignora toggles de submenu (href vazio / javascript:)
+      if (href && href !== "#" && href.indexOf("javascript:") !== 0) close();
+    });
+  }
+
   function boot() {
     init();
     markActiveNav();
+    initNavDrawer();
   }
 
   if (document.readyState === "loading") {
