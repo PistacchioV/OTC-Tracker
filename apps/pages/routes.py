@@ -557,10 +557,43 @@ class _DuckDBHandle:
             _duckdb_conn_lock.release()
 
 
+def _duckdb_connect_resilient(path, **kwargs):
+    """``duckdb.connect`` that recovers from a corrupt/unreplayable WAL.
+
+    A WAL left in a bad state (process killed mid-write, or the DuckDB quirk
+    "Failure while replaying WAL … GetDefaultDatabase with no default database
+    set") makes ``connect`` raise and blocks the DB entirely — which, on the
+    Users DB, breaks even the lock/login flow. When that happens we quarantine
+    the ``.wal`` (rename it aside) and retry once: the file reopens from its last
+    checkpoint. Uncommitted WAL data is unrecoverable in this state anyway.
+
+    Read-only opens can't quarantine (nothing should be writing), so they just
+    propagate the original error.
+    """
+    try:
+        return duckdb.connect(path, **kwargs)
+    except Exception as e:
+        msg = str(e).lower()
+        wal_path = str(path) + ".wal"
+        recoverable = ("wal" in msg or "replay" in msg) and os.path.exists(wal_path)
+        if kwargs.get("read_only") or not recoverable:
+            raise
+        quarantine = wal_path + ".corrupt-" + time.strftime("%Y%m%d-%H%M%S")
+        try:
+            os.rename(wal_path, quarantine)
+        except Exception:
+            log.error("DuckDB WAL replay failed and quarantine failed:\n%s",
+                      traceback.format_exc())
+            raise e
+        log.error("DuckDB WAL replay failed for %s (%s); quarantined WAL → %s and retried open",
+                  path, e.__class__.__name__, os.path.basename(quarantine))
+        return duckdb.connect(path, **kwargs)
+
+
 def _duckdb_open():
     global _duckdb_conn
     abs_path = os.path.abspath(DB_PATH)
-    _duckdb_conn = duckdb.connect(
+    _duckdb_conn = _duckdb_connect_resilient(
         abs_path,
         config={
             "autoinstall_known_extensions": "false",

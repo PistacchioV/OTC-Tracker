@@ -355,15 +355,25 @@ h1, h2, h3, h4, h5,
   background: var(--vr-card-bg);
 }
 .badge { letter-spacing: 0.02em; font-weight: 600; border-radius: 8px; }
+/* Inputs precisam de contorno VISÍVEL — dentro de cards claros o campo some se a
+   borda for fraca demais. Borda derivada da cor do texto (adapta light/dark). */
 .form-control, .form-select {
   border-radius: 10px;
-  border-color: var(--vr-card-border);
+  background-color: var(--ins-secondary-bg);
+  border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent);
   transition: box-shadow 0.18s var(--vr-ease), border-color 0.18s var(--vr-ease);
 }
+.form-control::placeholder { color: color-mix(in oklab, var(--ins-body-color) 45%, transparent); }
 .form-control:focus,
 .form-select:focus {
-  border-color: color-mix(in oklab, var(--vr-accent-2) 55%, var(--vr-card-border));
-  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.16);
+  background-color: var(--ins-secondary-bg);
+  border-color: color-mix(in oklab, var(--vr-accent-2) 65%, transparent);
+  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.18);
+}
+/* input-group e afins herdam o mesmo contorno */
+.input-group-text {
+  border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent);
+  background-color: var(--vr-card-bg);
 }
 
 /* Paginação DataTables coerente */
@@ -435,13 +445,15 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
 .app-topbar .topbar-menu { padding-inline: 1.1rem; }
 
 /* Declutter: esconde busca e ícones de admin que poluem o visual "Nova".
-   (a busca continua acessível pelo modal; nav completa no megamenu "Pages") */
-.app-search,
-#fullscreen-toggler,
-#monochrome-toggler,
-#theme-dropdown,
-#megamenu-pages,
-.topbar-item .btn-theme-setting {
+   IMPORTANTE: escopar ao .app-topbar — a classe .app-search também é usada em
+   páginas (ex.: combo de contraparte da Electronic Inventory). Sem o escopo, o
+   campo dessas páginas some e fica impossível digitar. */
+.app-topbar .app-search,
+.app-topbar #fullscreen-toggler,
+.app-topbar #monochrome-toggler,
+.app-topbar #theme-dropdown,
+.app-topbar #megamenu-pages,
+.app-topbar .btn-theme-setting {
   display: none !important;
 }
 
