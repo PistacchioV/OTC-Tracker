@@ -1332,7 +1332,7 @@
   "nop-status": "Status",
   "nop-edit-title": "Editar linha",
   "nop-send": "Enviar",
-  "ops-generate": "Gerar",
+  "ops-generate": "Print Advice",
   "ops-gen-none-title": "Nada para gerar",
   "ops-gen-none": "Nenhuma liquidação para avisar nesta data.",
   "ops-gen-fail": "A solicitação falhou.",

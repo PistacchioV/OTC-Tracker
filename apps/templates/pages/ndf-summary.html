@@ -265,7 +265,7 @@
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
                         </div>
                         <button type="button" class="btn btn-sm btn-soft-primary" id="opsGenerate">
-                            <i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">Generate</span>
+                            <i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">Print Advice</span>
                         </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
@@ -604,14 +604,35 @@ document.addEventListener('DOMContentLoaded', function () {
     // Same delivery as the New Deals premium notices: the response is either a
     // JSON "nothing to generate"/error or a downloadable .eml/.zip whose drafts
     // open in the user's own Outlook (X-Unsent).
+    // Decode the HTML-escaped counterparty cell back to its raw name (esc() ran on
+    // it when the row was built) so the backend matches the exact cockpit name.
+    function decodeHtml(s) {
+        var el = document.createElement('textarea'); el.innerHTML = String(s || ''); return el.value;
+    }
     var genBtn = document.getElementById('opsGenerate');
     if (genBtn) genBtn.addEventListener('click', function () {
         var btn = this;
+        // Only the rows whose checkbox is ticked (same selector the Delete uses).
+        var sel = dtSummary.rows(function (idx, data, node) {
+            return node ? $(node).find('.ops-cb').prop('checked') : false;
+        });
+        var names = [];
+        sel.data().each(function (d) {
+            var name = decodeHtml(d[3]).trim();
+            if (name) names.push(name);
+        });
+        var selIdx = sel.indexes();
+        if (!names.length) {
+            if (window.Swal) Swal.fire({ title: t('ops-gen-nosel-title', 'No Selection'),
+                text: t('ops-gen-nosel', 'Select at least one counterparty to generate its notices.'),
+                icon: 'info', confirmButtonColor: '#0066cc' });
+            return;
+        }
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-generate', 'Generate');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-generate', 'Print Advice');
         fetch('/api/ndf-summary/settlement-emails', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: currentYmd })
+            body: JSON.stringify({ date: currentYmd, counterparties: names })
         }).then(function (r) {
             var ct = (r.headers.get('Content-Type') || '');
             if (ct.indexOf('application/json') !== -1) {
@@ -634,10 +655,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 a.href = url; a.download = fname;
                 document.body.appendChild(a); a.click(); a.remove();
                 setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-                // Every counterparty row on the Summary just had its notice(s)
-                // generated — flip the status pill (display-time only, like the
-                // rest of the page: it resets on the next load).
-                dtSummary.rows().every(function () {
+                // Only the selected counterparty rows had their notice(s)
+                // generated — flip just those status pills (display-time only, like
+                // the rest of the page: it resets on the next load).
+                dtSummary.rows(selIdx).every(function () {
                     var d = this.data();
                     d[2] = pill('Generated', 'text-bg-success');
                     this.data(d);
@@ -653,7 +674,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
         }).finally(function () {
             btn.disabled = false;
-            btn.innerHTML = '<i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">' + t('ops-generate', 'Generate') + '</span>';
+            btn.innerHTML = '<i class="ti ti-mail-forward me-1"></i><span data-lang="ops-generate">' + t('ops-generate', 'Print Advice') + '</span>';
         });
     });
 

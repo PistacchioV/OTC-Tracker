@@ -1332,7 +1332,7 @@
   "nop-status": "Status",
   "nop-edit-title": "Edit row",
   "nop-send": "Send",
-  "ops-generate": "Generate",
+  "ops-generate": "Print Advice",
   "ops-gen-none-title": "Nothing to Generate",
   "ops-gen-none": "No settlements to notify for this date.",
   "ops-gen-fail": "Request failed.",

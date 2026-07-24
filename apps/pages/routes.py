@@ -8958,13 +8958,21 @@ def api_ndf_summary_settlement_emails():
     follows the New Deals premium flow (downloadable .eml/.zip, X-Unsent)."""
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    ds = str((request.get_json(silent=True) or {}).get('date', '') or '').strip()
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
     try:
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
     from apps.pages import otc_emails
     trades = _ndfsum_collect(ref).get('email_trades') or []
+    # Restrict to the counterparties the user ticked on the Settlement Summary.
+    # When the key is absent (other callers) we keep the previous all-rows behaviour;
+    # an explicit empty list generates nothing.
+    sel = payload.get('counterparties')
+    if isinstance(sel, list):
+        wanted = {_fcst_norm(str(x)) for x in sel if str(x).strip()}
+        trades = [t for t in trades if _fcst_norm(str(t.get('counterparty', ''))) in wanted]
     drafts = otc_emails.build_ndf_settlement_emails(trades, ref.strftime('%d/%m/%Y'))
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
