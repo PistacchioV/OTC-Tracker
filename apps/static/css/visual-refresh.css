@@ -402,20 +402,20 @@ body.vr-nav-open .sidenav-menu { transform: none; }
 }
 body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
 
-/* botão de menu (abre o drawer) no navbar */
+/* botão de menu (abre o drawer) no navbar — sem box, igual aos ícones nativos */
 .vr-menu-btn {
   width: 40px; height: 40px;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 11px;
-  border: 1px solid var(--vr-card-border);
-  background: var(--vr-card-bg);
-  color: var(--ins-body-color);
+  border: 0;
+  background: transparent;
+  color: var(--ins-secondary-color);
   cursor: pointer;
-  transition: background-color 0.2s var(--vr-ease), border-color 0.2s var(--vr-ease), transform 0.2s var(--vr-ease);
+  transition: background-color 0.2s var(--vr-ease), color 0.2s var(--vr-ease);
 }
 .vr-menu-btn:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--vr-accent-2) 40%, var(--vr-card-border));
+  background: var(--vr-card-bg);
+  color: var(--ins-body-color);
 }
 
 /* os toggles antigos do admin continuam ocultos (o drawer usa o novo botão) */
@@ -572,26 +572,57 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
   opacity: 0.75;
 }
 
-/* Toggle de tema (sol/lua) */
-.vr-theme-btn {
-  width: 40px; height: 40px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 11px;
+/* Toggle de tema — pill segmentado (sol | lua) com destaque deslizante */
+.vr-theme {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  height: 34px;
+  border-radius: 999px;
   border: 1px solid var(--vr-card-border);
   background: var(--vr-card-bg);
-  color: var(--ins-body-color);
   cursor: pointer;
-  transition: background-color 0.2s var(--vr-ease), border-color 0.2s var(--vr-ease), transform 0.2s var(--vr-ease);
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.2s var(--vr-ease);
 }
-.vr-theme-btn:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--vr-accent-2) 40%, var(--vr-card-border));
+.vr-theme:hover {
+  border-color: color-mix(in oklab, var(--vr-accent-2) 45%, var(--vr-card-border));
 }
-.vr-theme-btn i { width: 18px; height: 18px; }
-.vr-theme-btn .vr-ico-sun { display: none; }
-.vr-theme-btn .vr-ico-moon { display: inline-flex; }
-[data-bs-theme=dark] .vr-theme-btn .vr-ico-sun { display: inline-flex; }
-[data-bs-theme=dark] .vr-theme-btn .vr-ico-moon { display: none; }
+.vr-theme__seg {
+  position: relative;
+  z-index: 1;
+  width: 27px;
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ins-secondary-color);
+  transition: color 0.28s var(--vr-ease);
+}
+.vr-theme__seg i { width: 15px; height: 15px; }
+/* destaque deslizante */
+.vr-theme__hl {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffb64d, #ff8a3d);
+  box-shadow: 0 3px 10px rgba(255, 138, 61, 0.4);
+  transition: transform 0.32s var(--vr-ease), background 0.32s var(--vr-ease), box-shadow 0.32s var(--vr-ease);
+}
+/* Light: sol ativo (branco sobre o destaque laranja) */
+.vr-theme__seg--sun { color: #fff; }
+/* Dark: destaque desliza para a lua, vira gradiente indigo/violet */
+[data-bs-theme=dark] .vr-theme__hl {
+  transform: translateX(27px);
+  background: linear-gradient(135deg, var(--vr-accent-2), var(--vr-accent-3));
+  box-shadow: 0 3px 10px rgba(94, 92, 230, 0.45);
+}
+[data-bs-theme=dark] .vr-theme__seg--sun { color: var(--ins-secondary-color); }
+[data-bs-theme=dark] .vr-theme__seg--moon { color: #fff; }
 
 /* Conteúdo abaixo do navbar flutuante ganha respiro no topo */
 .content-page { padding-top: 1.4rem; }

@@ -19,6 +19,10 @@
     --ab-parchment: #f5f5f7;
     --ab-white:     #ffffff;
     --ab-hairline:  #e0e0e0;
+    --ab-violet:    #8b5cf6;
+    --ab-fuchsia:   #d946ef;
+    --ab-grad:      linear-gradient(100deg, #0066cc, #5e5ce6 52%, #8b5cf6 80%, #d946ef);
+    --ab-grad-soft: linear-gradient(135deg, rgba(0,102,204,.16), rgba(139,92,246,.14));
 }
 
 /* ── Scroll reveal ──────────────────────────────────────────── */
@@ -51,18 +55,23 @@
 
 /* ── HERO ───────────────────────────────────────────────────── */
 .ab-hero {
-    background: linear-gradient(145deg, #003d99 0%, #0066cc 55%, #004db3 100%) !important;
-    border-radius: 18px;
-    padding: 5rem 2rem 4.5rem;
+    background:
+        radial-gradient(72% 90% at 14% -12%, rgba(0,102,204,.38) 0%, transparent 58%),
+        radial-gradient(60% 80% at 92% -6%, rgba(217,70,239,.24) 0%, transparent 58%),
+        linear-gradient(165deg, #0d1226 0%, #0a0a12 62%) !important;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 26px;
+    padding: 6rem 2rem 5.25rem;
     text-align: center;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 30px 80px rgba(8,10,25,.35);
 }
 .ab-hero::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(255,255,255,.07) 0%, transparent 65%);
+    background: radial-gradient(ellipse 80% 60% at 50% 15%, rgba(255,255,255,.06) 0%, transparent 62%);
     pointer-events: none;
 }
 .ab-hero__badge {
@@ -91,12 +100,16 @@
     filter: drop-shadow(0 4px 20px rgba(0,0,0,.28));
 }
 .ab-hero h1 {
-    font-size: clamp(2.25rem, 4.5vw, 3.25rem) !important;
-    font-weight: 700 !important;
-    color: #fff !important;
-    letter-spacing: -0.5px !important;
-    line-height: 1.07 !important;
-    margin-bottom: 1.125rem !important;
+    font-size: clamp(2.6rem, 5.6vw, 4rem) !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.045em !important;
+    line-height: 1.03 !important;
+    margin-bottom: 1.25rem !important;
+    background: linear-gradient(100deg, #ffffff 28%, #8ab4ff 62%, #d3aaff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent !important;
 }
 .ab-hero .ab-lead {
     font-size: 1rem;
@@ -109,22 +122,23 @@
 
 /* Hero/CTA buttons */
 .ab-btn-w {
-    background: #fff;
-    color: var(--ab-blue);
+    background: var(--ab-grad);
+    color: #fff;
     border: none;
     border-radius: 9999px;
-    padding: .55rem 1.5rem;
+    padding: .58rem 1.5rem;
     font-size: .875rem;
     font-weight: 600;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
     gap: .375rem;
-    transition: background 150ms ease, transform 150ms ease;
+    box-shadow: 0 8px 22px rgba(94,92,230,.38);
+    transition: filter 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
-.ab-btn-w:active { transform: scale(0.97); color: var(--ab-blue); }
+.ab-btn-w:active { transform: scale(0.97); color: #fff; }
 @media (hover:hover) and (pointer:fine) {
-    .ab-btn-w:hover { background: #e4ecf7; color: var(--ab-blue); }
+    .ab-btn-w:hover { filter: brightness(1.08) saturate(1.05); transform: translateY(-1px); color: #fff; box-shadow: 0 10px 28px rgba(94,92,230,.46); }
 }
 .ab-btn-o {
     background: rgba(255,255,255,.10);
@@ -554,6 +568,128 @@
         opacity: 1 !important;
     }
 }
+
+/* ================================================================
+ *  ABOUT — NOVA REDESIGN (overrides visuais, além das animações)
+ * ================================================================ */
+
+/* Eyebrow (rótulo de seção) em gradiente */
+.ab-sl {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    background: var(--ab-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    display: block;
+    margin-bottom: .55rem;
+}
+
+/* Título de seção grande e apertado */
+.ab-st {
+    font-size: clamp(1.6rem, 3vw, 2.35rem) !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    line-height: 1.1 !important;
+}
+
+/* Seção de features: sem "caixa" — cards flutuam sobre o glow da página */
+.ab-tile-parchment,
+[data-bs-theme=dark] .ab-tile-parchment {
+    background: transparent;
+    padding: .5rem 0;
+}
+
+/* Demais painéis: superfície glass coerente com o visual-refresh */
+.ab-tile-dark, .ab-tile-white, .ab-tile-dark2,
+[data-bs-theme=dark] .ab-tile-dark,
+[data-bs-theme=dark] .ab-tile-white,
+[data-bs-theme=dark] .ab-tile-dark2 {
+    background: var(--vr-card-bg, rgba(9,9,30,.02));
+    border: 1px solid var(--vr-card-border, rgba(9,9,30,.08));
+    border-radius: 20px;
+    padding: 2.4rem 2rem;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+.ab-tile-dark .ab-st, .ab-tile-dark2 .ab-st,
+[data-bs-theme=dark] .ab-tile-dark .ab-st,
+[data-bs-theme=dark] .ab-tile-dark2 .ab-st { color: var(--ins-heading-color) !important; }
+
+/* Stats: número enorme em gradiente */
+.ab-stat { border: 0 !important; padding: 1.25rem 1rem; }
+.ab-stat .ab-stat__val {
+    font-size: clamp(2rem, 3.6vw, 2.9rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    background: var(--ab-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+/* Rótulo de categoria (New Deals, Daily Settlement…) em gradiente */
+.ab-cap-group,
+[data-bs-theme=dark] .ab-cap-group {
+    background: var(--ab-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    font-size: .72rem;
+    letter-spacing: .12em;
+    margin: 2rem 0 1rem;
+}
+
+/* Feature cards: glass + ícone em tile de gradiente */
+.ab-feat,
+[data-bs-theme=dark] .ab-feat {
+    background: var(--vr-card-bg, #fff);
+    border: 1px solid var(--vr-card-border, var(--ab-hairline));
+    border-radius: 16px;
+    padding: 1.6rem;
+}
+.ab-feat .ab-feat__icon {
+    background: var(--ab-grad) !important;
+    color: #fff !important;
+    box-shadow: 0 6px 16px rgba(94,92,230,.3);
+}
+.ab-feat .ab-feat__title { font-size: 1rem; letter-spacing: -0.01em; }
+.ab-feat .ab-feat__link { color: var(--ab-blue-dk); }
+
+/* Passos do fluxo: número em círculo de gradiente */
+.ab-step .ab-step__num {
+    background: var(--ab-grad) !important;
+    color: #fff !important;
+    box-shadow: 0 6px 16px rgba(94,92,230,.3);
+    border: 0 !important;
+}
+
+/* Tech chips (Platform stack): pill glass */
+.ab-tech,
+[data-bs-theme=dark] .ab-tech {
+    background: var(--vr-card-bg, #fff);
+    border: 1px solid var(--vr-card-border, var(--ab-hairline));
+    border-radius: 14px;
+}
+
+/* CTA: painel em gradiente multicolor */
+.ab-tile-blue {
+    background: linear-gradient(120deg, #0066cc 0%, #5e5ce6 48%, #8b5cf6 78%, #d946ef 100%) !important;
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(94,92,230,.32);
+}
+.ab-tile-blue .ab-sl {
+    background: none;
+    -webkit-text-fill-color: rgba(255,255,255,.78);
+    color: rgba(255,255,255,.78);
+}
+.ab-tile-blue .ab-st { color: #fff !important; }
 </style>
 {% endblock extra_css %}
 

@@ -82,11 +82,12 @@
           NOTA: O arquivo favicon.ico deve conter múltiplos tamanhos
                 (16x16, 32x32, 48x48, 64x64, 128x128, 256x256)
           ========================================================================= #}
-       <link rel="shortcut icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
-       <link rel="icon" type="image/x-icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
-       <link rel="icon" type="image/png" sizes="32x32" href="{{ config. ASSETS_ROOT }}/images/favicon. ico">
-       <link rel="icon" type="image/png" sizes="16x16" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
-       <link rel="apple-touch-icon" href="{{ config.ASSETS_ROOT }}/images/favicon.ico">
+       {# Favicon: usa o logo PRETO (logo-sm-black) — o logo branco some na aba
+          clara do navegador. #}
+       <link rel="shortcut icon" href="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png">
+       <link rel="icon" type="image/png" sizes="32x32" href="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png">
+       <link rel="icon" type="image/png" sizes="16x16" href="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png">
+       <link rel="apple-touch-icon" href="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png">
    
        {# =========================================================================
           BLOCO CSS

@@ -286,10 +286,11 @@
   
       <div class="d-flex align-items-center gap-2">
   
-        <!-- Theme toggle (visual-refresh): clear sun/moon switch -->
-        <button class="vr-theme-btn" id="vr-theme-btn" type="button" aria-label="Toggle theme" title="Light / Dark">
-          <i data-lucide="sun" class="vr-ico-sun"></i>
-          <i data-lucide="moon" class="vr-ico-moon"></i>
+        <!-- Theme toggle (visual-refresh): segmented sun/moon switch -->
+        <button class="vr-theme" id="vr-theme-btn" type="button" role="switch" aria-label="Alternar tema claro e escuro" title="Tema claro / escuro">
+          <span class="vr-theme__hl" aria-hidden="true"></span>
+          <span class="vr-theme__seg vr-theme__seg--sun"><i data-lucide="sun"></i></span>
+          <span class="vr-theme__seg vr-theme__seg--moon"><i data-lucide="moon"></i></span>
         </button>
 
         <!-- Search Box -->
