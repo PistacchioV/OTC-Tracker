@@ -4852,3 +4852,122 @@ apps/templates/pages/metrics-pending-confirmation.html  ← subtítulo + badge d
 apps/static/js/pages/metrics-pending-confirmation.js    ← idem
 apps/static/data/translations/{en,br,es}.json       ← chaves nop-* (inclui nop-send, nop-edit-title)
 ```
+
+## 108. Sessão 2026-07-23 — NDF Summary: Trade Level, Settlement Summary, avisos de liquidação e batimento B3 × interno
+
+Página **Daily Settlements › NDF Summary** deixou de ser placeholder e virou a consolidação
+diária dos NDFs de moeda. Tudo é **derivado** (o Cockpit + Operations B3 + TER + CounterpartyDetails)
+— nada persiste no disco exceto o *overlay* de status do dia. Também entraram ajustes menores em
+Electronic Inventory, Reference Data e nos subjects dos avisos de prêmio.
+
+### Trade Level (`ddecf06`, `2fb19dc`)
+`_ndfsum_collect(ref)` em `routes.py` monta as linhas espelhando as linhas de DISPLAY do NDF Cockpit
+e juntando com Operations B3. Ordem final das 13 células:
+`[LEGAL, NM_COUNTERPARTY, ATHENA ID(ID_SOURCE_DEAL), B3 ID(CD_CETIP_RETURN), TRADE DATE, SETTLEMENT DATE,
+NOTIONAL FC(VL_NOTIONAL_FC), CCY_NOTIONAL_FC, FORWARD RATE(VL_FORWARD_RATE), SETTLEMENT, SETTLEMENT B3,
+FIXING RATE(VL_STRIKE_PRICE), TAX(VL_TAX_INCOME)]`.
+- **TRADE/SETTLEMENT DATE** vêm do `contr_map[b3]['emissao'/'venc']` (Data de Emissão / Vencimento do
+  TER), formatadas por `_ter_date`; sem match no TER → em branco.
+- **SETTLEMENT B3**: pega o `Valor` cru do Operations B3 casando por B3 ID; `DIFFERENCE = SETTLEMENT − SETTLEMENT B3`
+  com tolerância `_NDFSUM_TOL = 5.0` → ícone de check (ok) ou X; badge de status OK/Check.
+- **Parsing de valor** (pegadinha que já mordeu antes): as células de DISPLAY do Cockpit são
+  US-formatadas (`1,000.00`) → usar `_mtm_parse_num` (US). O `Valor` cru do Operations B3 usa
+  `_ndfc_valnum` (BR/US-tolerante). **Não** trocar um pelo outro.
+
+### Settlement Summary (`ddecf06`, `2fb19dc`, `bf30c7e`)
+Net por contraparte, guiado pelo *net type* do CounterpartyDetails (`_ndfsum_net_type`):
+Total Net (1 linha netada) · Pay/Rec (1 por direção) · No Net (1 por trade); default Total Net.
+- **Direction** pelo sinal do net; **ACCOUNT** vem do modelo BANKING (`DEFAULT_PAY`/`DEFAULT_RECEIVE` →
+  ACCOUNTS[]), formatado por `_ndfsum_account_fmt` como `BCO: 341 | AG: 0910 | CC: 967` (banco em 3 dígitos
+  zfill; no template BCO:/AG:/CC: ficam em negrito).
+- Coluna **Observação** removida; card centralizado (`col-xxl-8`, `justify-content-center`);
+  placeholders dos filtros centralizados.
+
+### Avisos de liquidação — Generate (`2fb19dc`, `bf30c7e`)
+Botão **Generate** no toolbar do card Settlement Summary. `POST /api/ndf-summary/settlement-emails`
+→ `build_ndf_settlement_emails(trades, ref_date)` em `otc_emails.py` gera drafts `.eml` (X-Unsent →
+rascunho editável no Outlook) num zip `Avisos_Liquidacao_ddmmyy_NDF.zip`.
+- Agrupamento por (contraparte, classe legal via `_ndf_legal_class` = MGT se JPMORGANCHASE senão JPM)
+  × net type. Tabela de dados: `Nº da Confirmação(Athena ID) · Data de Início · Notional Original(com CCY,
+  ex. USD 5.100.000,00) · Resultado Apurado · IR(0,005%) · Resultado Líquido(=Settlement−IR)`.
+- Valores por linha com `R$` e negativos entre parênteses `(R$ 2.500,00)` via `_brl`.
+- **Banco**: MGT positivo → JPMORGAN CHASE BANK (BRASIL) 488/0001/985181643, CNPJ 46.518.205/0001-64;
+  senão BANCO JP MORGAN S/A 376/0011/5116003, CNPJ 33.172.537/0001-98 (`_JPM_BANK_KV`).
+- **Subject**: `Liquidação de Operação de Derivativo (Termo de Moeda) - dd/mm/yyyy - CONTRAPARTE`,
+  com ` x JPMORGAN CHASE` no fim quando MGT.
+- **Status Generated persiste**: overlay `ndf-summary_YYYYMMDD.json` (`_ndfsum_meta_path/load/save`)
+  keyed por contraparte {status, maker, at}; gravado best-effort após a geração, relido no próximo `/data`.
+- SweetAlert em inglês (com `data-lang`) ao final informando nº de avisos × nº de contrapartes
+  (headers `X-Draft-Count` / `X-Counterparty-Count`). **Correção**: o `ndf-summary.html` só incluía o JS
+  do sweetalert2, faltava o CSS → dialog sem estilo; incluído `sweetalert2.min.css` no extra_css.
+
+### Batimento B3 × interno nos cards (`203dfe5`, `a07f971`)
+Os 3 cards do topo (Vanilla / Other Publisher / Total) viraram um **batimento de quantidade e valor**
+entre B3 e interno, por categoria. Decisão de fonte de dados (confirmada com o usuário):
+- **Interno** = `[PROD] Cockpit.SETTLEMENT` cru; **B3** = `Valor` cru do Operations B3 (resgates).
+  É **bruto × bruto** — o IR (`VL_TAX_INCOME`) só entra no Settlement Summary, **nunca** no batimento.
+- O Operations B3 mistura NDF de moeda, de commodity, etc.; então **os dois lados são filtrados** por um
+  whitelist de FX vindo do Live Position NDF (`_ndfsum_fx_map`): contratos com Classe do Ativo Subjacente
+  == TAXAS DE CAMBIO e Vencimento == data de referência; SISBACEN (inclui T+0) → `vanilla`, FEEDER → `other`.
+  Contrato fora do whitelist é ignorado nos dois lados.
+- `recon[cat]` = {b3_count, b3_value, int_count, int_value, diff_value, matched}; `matched` = contagem igual
+  **e** `abs(b3_value − int_value) ≤ _NDFSUM_TOL`. Card sem match ganha anel âmbar (`.ops-recon.is-unmatched`).
+- **Alinhamento OPS/VALUE** (`a07f971`): header e linhas eram grids `auto` independentes → desalinhavam.
+  Fixado para `grid-template-columns: 1fr 2.75rem 7rem` (mesma geometria) + títulos OPS/VALUE à direita.
+- Design conforme `/emil-design-eng`: sem animação por-update (os cards renderizam a cada load),
+  cores semânticas OK/Verificar, `tabular-nums` alinhados à direita.
+
+### Outros (`b0e5fee`, `0d2e6eb`, `4978a71`, `9ab7ab3`)
+- **Electronic Inventory**: select-all ao focar os campos (busca de contraparte + datas de upload);
+  blocos extras de upload no mesmo tamanho/layout do primeiro; X em cada dropzone para remover arquivo
+  anexado por engano. JS bump `?v=20260723a`.
+- **Reference Data**: opção `INTERNAL` no Signature Type (Digital/Manual/Internal).
+- **New Deals (avisos de prêmio)**: `build_premium_emails(deals, asset_label=…)` — FXO usa
+  `Opção de Moeda`, Opt Comm usa `Opção de Commodities`. Subject:
+  `(Pagamento de Prêmio) Liquidação de Operação de Derivativo (<asset_label>) - dd/mm/yyyy - CONTRAPARTE`.
+- **Script** `scripts/export_electronic_inventory_excel.py`: varre `ELECTRONIC_INVENTORY_ROOT`, monta
+  workbook openpyxl com abas Transacionais/SSI/Confirmações (nome do arquivo + contraparte), salva em
+  `~/Downloads`; suporta long_path (MAX_PATH Windows), `--root`/`--out`.
+
+### Faixa branca no e-mail (sem mudança de código)
+O template ganhou fundo full-canvas (body bgcolor + table bgcolor + VML `<v:background>` MSO) — é o único
+mecanismo que o Word pinta de ponta a ponta. A faixa branca que o usuário ainda via é **chrome do cliente**
+(canvas de composição do Word / container do OWA), fora do controle do e-mail; o enviado renderiza correto.
+Perguntado via AskUserQuestion → usuário optou por **manter o cinza como está** (sem alteração).
+
+### Pendências / pontos em aberto (não bloqueantes, sinalizados ao usuário)
+- **T+0** hoje entra dobrado em Vanilla no batimento — fácil de separar em categoria própria se o desk quiser.
+- O whitelist de FX filtra por **Vencimento == data de referência**; se o desk considerar "liquidando" por
+  outra data (ex. data de liquidação financeira ≠ vencimento), trocar o campo em `_ndfsum_fx_map`.
+- As tabelas dos avisos usam os cabeçalhos **sem os dois-pontos** do spec original, para casar com o template
+  do aviso de prêmio; dá pra restaurar se pedirem.
+
+### Commits (sessão 2026-07-23, continuação — NDF Summary)
+```
+ddecf06  feat(ndf-summary): Trade Level do Cockpit + Settlement Summary netado por contraparte
+9ab7ab3  feat(scripts): export do Electronic Inventory para Excel (Downloads)
+b0e5fee  feat(electronic-inventory): select-all nos campos, blocos do upload no padrão do inicial e X nos dropzones
+2fb19dc  feat(ndf-summary): datas do TER, avisos de liquidação (Generate) e ajustes do Settlement Summary
+0d2e6eb  feat(reference-data): opção INTERNAL no Signature Type
+bf30c7e  feat(ndf-summary): refinamentos dos avisos (banco MGT, CCY, R$), status Generated persistido e fundo VML no e-mail
+a0752bc  fix(ndf-summary): botão Generate no card certo + CSS do SweetAlert faltando
+4978a71  feat(new-deals): rótulo do ativo no subject do aviso de prêmio (Opção de Commodities / Opção de Moeda)
+203dfe5  feat(ndf-summary): cards viram batimento B3 × interno por categoria
+a07f971  fix(ndf-summary): alinhar os cabeçalhos OPS/VALUE do batimento com os números
+```
+
+### Arquivos (sessão 2026-07-23, continuação — NDF Summary)
+```
+apps/pages/routes.py                    ← _ndfsum_collect (Trade Level, Settlement Summary, recon), _ndfsum_net_type,
+                                           _ndfsum_refdata_spn, _ndfsum_account_fmt, _ndfsum_meta_*, _ndfsum_fx_map,
+                                           _ndfsum_money, endpoints /api/ndf-summary/{data,settlement-emails};
+                                           build_premium_emails asset_label (FXO/Opt Comm)
+apps/pages/otc_emails.py                ← build_ndf_settlement_emails, _ndf_settlement_email, _ndf_legal_class,
+                                           _JPM_BANK_KV, _brl (R$ + negativos entre parênteses), _email_shell VML
+apps/templates/pages/ndf-summary.html   ← 3 cards de batimento (.ops-recon), Trade Level, Settlement Summary centralizado,
+                                           botão Generate, SweetAlert, sweetalert2 CSS/JS, setRecon(), fillTables()
+apps/templates/pages/reference-data.html ← option INTERNAL no Signature Type
+apps/static/js/pages/electronic-inventory.js ← select-all, blocos extras no padrão, X nos dropzones (?v=20260723a)
+apps/static/data/translations/{en,br,es}.json ← ops-generate, ops-gen-*, ndf-r-ops/value/internal/ok/check
+scripts/export_electronic_inventory_excel.py  ← NOVO: varredura do Electronic Inventory → Excel no Downloads
+```
