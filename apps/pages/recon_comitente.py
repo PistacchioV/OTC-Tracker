@@ -739,6 +739,14 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
                     msg_related.attach(logo_img)
                 break
 
+        # Header gradient inline (cid:otc_gradient) — Outlook/VML fallback of the
+        # shared e-mail header partial (same pattern as the daily metric / payrec).
+        try:
+            from apps.pages.routes import _attach_email_gradient
+            _attach_email_gradient(msg_related)
+        except Exception:
+            pass
+
         msg.attach(msg_related)
 
         # Anexo Excel

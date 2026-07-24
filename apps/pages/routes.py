@@ -1324,6 +1324,31 @@ def _get_email_asset(filename):
     return None
 
 
+def _attach_email_gradient(container):
+    """Attach the header gradient PNG as an inline cid:otc_gradient part — the
+    shared e-mail header partial's Outlook/VML fallback (daily-metric pattern,
+    now standard for every HTML e-mail). Works with or without an app context
+    (threaded senders resolve the path relative to this module). Best-effort."""
+    from email.mime.image import MIMEImage
+    try:
+        path = _get_email_asset('email-header-gradient.png')
+    except Exception:                     # no app context (background thread)
+        path = os.path.normpath(os.path.join(
+            os.path.dirname(__file__), '..', 'static', 'images', 'email-header-gradient.png'))
+        if not os.path.exists(path):
+            path = None
+    if not path:
+        return
+    try:
+        with open(path, 'rb') as f:
+            gimg = MIMEImage(f.read())
+        gimg.add_header('Content-ID', '<otc_gradient>')
+        gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
+        container.attach(gimg)
+    except Exception:
+        log.warning('[email] could not attach header gradient:\n%s', traceback.format_exc())
+
+
 @blueprint.app_context_processor
 def _inject_email_grad_url():
     """Expose `grad_url` (absolute URL to the header gradient image) to every
@@ -2630,6 +2655,7 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
 
         for path in attachments:
@@ -3427,16 +3453,7 @@ def _send_forecast_email(payload, images, to_list, cc_list):
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(limg)
 
-        # Header gradient image (cid fallback for Outlook, exactly like the daily
-        # metric) — the shared header partial references cid:otc_gradient when the
-        # absolute URL isn't available.
-        grad_path = _get_email_asset('email-header-gradient.png')
-        if grad_path:
-            with open(grad_path, 'rb') as f:
-                gimg = MIMEImage(f.read())
-            gimg.add_header('Content-ID', '<otc_gradient>')
-            gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
-            related.attach(gimg)
+        _attach_email_gradient(related)      # Outlook/VML gradient fallback (cid)
 
         for cid, data in images.items():
             if not data:
@@ -3756,15 +3773,9 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             msg.attach(limg)
 
-        # Header gradient image — referenced by VML so the gradient shows in Outlook
+        # Header gradient — referenced by VML so the gradient shows in Outlook
         # (which ignores CSS gradients). Modern clients keep the CSS linear-gradient.
-        grad_path = _get_email_asset('email-header-gradient.png')
-        if grad_path:
-            with open(grad_path, 'rb') as f:
-                gimg = MIMEImage(f.read())
-            gimg.add_header('Content-ID', '<otc_gradient>')
-            gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
-            msg.attach(gimg)
+        _attach_email_gradient(msg)
 
         recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
@@ -3912,6 +3923,7 @@ def _send_weekly_escalation_email(ref, to_list, cc_list):
             limg.add_header('Content-ID', '<otc_logo>')
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             msg.attach(limg)
+        _attach_email_gradient(msg)
         recipients = to_list + cc_list
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
             server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
@@ -10030,6 +10042,7 @@ def _send_mtm_validation_email(subject, html, logo_path, attach_paths):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         for path in attach_paths:
             try:
@@ -10070,6 +10083,7 @@ def _send_mtm_endprocess_email(subject, html, logo_path):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
@@ -11064,6 +11078,7 @@ def _send_accrual_validation_email(subject, html, logo_path, attach_paths):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
 
         for path in attach_paths:
@@ -11373,6 +11388,7 @@ def _send_accrual_endprocess_email(subject, html, logo_path):
             img.add_header('Content-ID', '<otc_logo>')
             img.add_header('Content-Disposition', 'inline', filename='logo.png')
             related.attach(img)
+        _attach_email_gradient(related)
         msg.attach(related)
         recipients = [CETIP_OTC_OPS_EMAIL] + _ACC_ENDPROC_CC
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
