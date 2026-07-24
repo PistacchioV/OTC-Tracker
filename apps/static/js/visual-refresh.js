@@ -94,8 +94,8 @@
     var pinBtn = document.createElement("button");
     pinBtn.className = "vr-pin-btn";
     pinBtn.type = "button";
-    pinBtn.title = "Fixar / desafixar menu";
-    pinBtn.setAttribute("aria-label", "Fixar menu");
+    pinBtn.title = "Pin / unpin menu";
+    pinBtn.setAttribute("aria-label", "Pin menu");
     pinBtn.innerHTML = '<i data-lucide="pin"></i>';
     sidenav.appendChild(pinBtn);
     if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
@@ -149,6 +149,10 @@
   // ── Nav central: gera dropdowns por seção a partir da sidebar ──────────────
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  // Re-aplica as traduções (default EN nos data-lang) ao conteúdo gerado por JS.
+  function applyI18n() {
+    try { if (window.otcI18n && window.otcI18n.applyTranslations) window.otcI18n.applyTranslations(); } catch (e) {}
   }
   function textOf(a) {
     var mt = a.querySelector(".menu-text");
@@ -256,25 +260,26 @@
     var KEY = "otc_topnav_" + (SID || "anon");
     var MAX = 7;
 
+    // label = default EN; lang = chave data-lang (traduzida em br/en/es)
     var OPTIONS = [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/live-position-ndf", label: "Live Position" },
-      { href: "/pending-confirmation", label: "Pending" },
-      { href: "/reconciliation-payrec", label: "Pay/Rec" },
-      { href: "/reconciliation-comitente", label: "Comitente" },
-      { href: "/reference-data", label: "Reference Data" },
-      { href: "/new_deals-ndf-fwdstart", label: "New Deals" },
-      { href: "/control-panel", label: "Control Panel" },
-      { href: "/electronic-inventory", label: "Electronic Inventory" },
-      { href: "/ndf-summary", label: "NDF Summary" },
-      { href: "/otm-settlements", label: "OTM Settlements" },
-      { href: "/accrual-swap", label: "Accrual" },
-      { href: "/mtm-swap", label: "MtM" },
-      { href: "/manual-confirmation", label: "Manual Confirmation" },
-      { href: "/cgd", label: "CGD" },
-      { href: "/index-b3", label: "Index B3" },
-      { href: "/metrics-pending-confirmation", label: "Metrics" },
-      { href: "/users-roles", label: "Users" }
+      { href: "/dashboard", label: "Dashboard", lang: "vr-nav-dashboard" },
+      { href: "/live-position-ndf", label: "Live Position", lang: "vr-nav-liveposition" },
+      { href: "/pending-confirmation", label: "Pending", lang: "vr-nav-pending" },
+      { href: "/reconciliation-payrec", label: "Pay/Rec", lang: "vr-nav-payrec" },
+      { href: "/reconciliation-comitente", label: "Comitente", lang: "vr-nav-comitente" },
+      { href: "/reference-data", label: "Reference Data", lang: "vr-nav-refdata" },
+      { href: "/new_deals-ndf-fwdstart", label: "New Deals", lang: "vr-nav-newdeals" },
+      { href: "/control-panel", label: "Control Panel", lang: "vr-nav-controlpanel" },
+      { href: "/electronic-inventory", label: "Electronic Inventory", lang: "vr-nav-einventory" },
+      { href: "/ndf-summary", label: "NDF Summary", lang: "vr-nav-ndfsummary" },
+      { href: "/otm-settlements", label: "OTM Settlements", lang: "vr-nav-otm" },
+      { href: "/accrual-swap", label: "Accrual", lang: "vr-nav-accrual" },
+      { href: "/mtm-swap", label: "MtM", lang: "vr-nav-mtm" },
+      { href: "/manual-confirmation", label: "Manual Confirmation", lang: "vr-nav-manualconf" },
+      { href: "/cgd", label: "CGD", lang: "vr-nav-cgd" },
+      { href: "/index-b3", label: "Index B3", lang: "vr-nav-indexb3" },
+      { href: "/metrics-pending-confirmation", label: "Metrics", lang: "vr-nav-metrics" },
+      { href: "/users-roles", label: "Users", lang: "vr-nav-users" }
     ];
     var DEFAULTS = ["/dashboard", "/live-position-ndf", "/pending-confirmation", "/reconciliation-payrec", "/reference-data"];
     var allowed = null; // {href:1} ou null = tudo liberado
@@ -291,11 +296,12 @@
       var html = chosen.map(function (h) {
         var o = optOf(h);
         var active = (path === h || path.indexOf(h) === 0);
-        return '<a href="' + esc(h) + '"' + (active ? ' class="vr-active"' : "") + ">" + esc(o.label) + "</a>";
+        return '<a href="' + esc(h) + '" data-lang="' + o.lang + '"' + (active ? ' class="vr-active"' : "") + ">" + esc(o.label) + "</a>";
       }).join("");
-      html += '<button class="vr-nav-edit" id="vr-nav-edit" type="button" title="Personalizar menu" aria-label="Personalizar menu"><i data-lucide="sliders-horizontal"></i></button>';
+      html += '<button class="vr-nav-edit" id="vr-nav-edit" type="button" title="Customize menu" aria-label="Customize menu"><i data-lucide="sliders-horizontal"></i></button>';
       nav.innerHTML = html;
       if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+      applyI18n();
       var eb = document.getElementById("vr-nav-edit");
       if (eb) eb.addEventListener("click", openEditor);
     }
@@ -308,17 +314,18 @@
       var panel = document.createElement("div");
       panel.className = "vr-navcfg";
       panel.innerHTML =
-        '<div class="vr-navcfg__head"><span>Personalizar menu</span><button class="vr-navcfg__x" type="button" aria-label="Fechar">&times;</button></div>' +
-        '<div class="vr-navcfg__hint">Escolha quais atalhos aparecem no topo (até ' + MAX + ").</div>" +
+        '<div class="vr-navcfg__head"><span data-lang="vr-cfg-title">Customize menu</span><button class="vr-navcfg__x" type="button" aria-label="Close">&times;</button></div>' +
+        '<div class="vr-navcfg__hint" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max ' + MAX + ").</div>" +
         '<div class="vr-navcfg__body">' +
           opts.map(function (o) {
             var on = current.indexOf(o.href) !== -1;
-            return '<label class="vr-navcfg__item"><input type="checkbox" value="' + esc(o.href) + '"' + (on ? " checked" : "") + "><span>" + esc(o.label) + "</span></label>";
+            return '<label class="vr-navcfg__item"><input type="checkbox" value="' + esc(o.href) + '"' + (on ? " checked" : "") + '><span data-lang="' + o.lang + '">' + esc(o.label) + "</span></label>";
           }).join("") +
         "</div>" +
-        '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button">Padrão</button><span class="vr-navcfg__spacer"></span><button class="vr-navcfg__cancel" type="button">Cancelar</button><button class="vr-navcfg__save" type="button">Salvar</button></div>';
+        '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button" data-lang="vr-cfg-reset">Default</button><span class="vr-navcfg__spacer"></span><button class="vr-navcfg__cancel" type="button" data-lang="vr-cfg-cancel">Cancel</button><button class="vr-navcfg__save" type="button" data-lang="vr-cfg-save">Save</button></div>';
       document.body.appendChild(backdrop);
       document.body.appendChild(panel);
+      applyI18n();
 
       function close() { backdrop.remove(); panel.remove(); document.removeEventListener("keydown", onKey); }
       function onKey(e) { if (e.key === "Escape") close(); }

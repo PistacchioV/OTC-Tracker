@@ -1120,7 +1120,8 @@ document.addEventListener('DOMContentLoaded', function (e) {
     new App().init();
     new LayoutCustomizer().init();
     new Plugins().init();
-    new I18nManager().init();
+    window.otcI18n = new I18nManager();
+    window.otcI18n.init();
 });
 
 
