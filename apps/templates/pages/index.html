@@ -152,6 +152,82 @@
 @media (prefers-reduced-motion: reduce) {
     #dash-page .live-datewrap input, #dash-page .live-cal-btn { transition: none; }
 }
+
+/* ================================================================
+ *  DASHBOARD — NOVA REDESIGN (layout, tipografia, motion)
+ * ================================================================ */
+#dash-page { --dash-grad: linear-gradient(100deg,#0066cc,#5e5ce6 52%,#8b5cf6 80%,#d946ef); }
+
+/* Page title grande com barra de acento */
+#dash-page .page-title-head h4 {
+    font-size: 2rem !important; font-weight: 800; letter-spacing: -0.04em;
+    background: linear-gradient(180deg, var(--ins-heading-color, #1d1d1f), color-mix(in oklab, var(--ins-heading-color, #1d1d1f) 60%, transparent));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#dash-page .page-title-head .flex-grow-1::after {
+    content: ""; display: block; margin-top: .5rem; width: 52px; height: 3px; border-radius: 3px;
+    background: var(--dash-grad);
+}
+
+/* Cards: cantos maiores + hover glow colorido */
+#dash-page .card { border-radius: 20px !important; }
+#dash-page .card-title { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+@media (hover: hover) and (pointer: fine) {
+    #dash-page .card:hover { transform: translateY(-4px); }
+    [data-bs-theme="light"] #dash-page .card:hover {
+        box-shadow: 0 18px 44px rgba(94,92,230,.16), 0 2px 8px rgba(0,0,0,.05) !important;
+        border-color: color-mix(in oklab, #5e5ce6 26%, rgba(255,255,255,.65)) !important;
+    }
+    [data-bs-theme="dark"] #dash-page .card:hover {
+        box-shadow: 0 22px 54px rgba(99,102,241,.24), 0 2px 10px rgba(0,0,0,.4) !important;
+        border-color: color-mix(in oklab, #5e5ce6 34%, rgba(255,255,255,.10)) !important;
+    }
+}
+
+/* ── Stat cards: tile de ícone em gradiente + número GIGANTE em gradiente ── */
+#dash-page .row-cols-xxl-4 .card-body { padding: 1.7rem 1.6rem; }
+#dash-page .row-cols-xxl-4 .avatar-title {
+    background: var(--dash-grad) !important;
+    color: #fff !important;
+    border-radius: 15px !important;
+    width: 54px !important; height: 54px !important;
+    font-size: 1.55rem;
+    box-shadow: 0 8px 20px rgba(94,92,230,.32);
+}
+#dash-page .row-cols-xxl-4 h3 {
+    font-size: clamp(2.1rem, 3vw, 2.7rem) !important;
+    font-weight: 800 !important; letter-spacing: -0.03em; line-height: 1;
+    background: var(--dash-grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#dash-page .row-cols-xxl-4 p { font-weight: 600; font-size: .9rem; }
+
+/* Números grandes (Live total) em gradiente */
+#dash-page #live-total {
+    font-weight: 800; letter-spacing: -0.03em;
+    background: var(--dash-grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+/* Botões de filtro: pill que preenche em gradiente no hover */
+#dash-page .btn-outline-primary {
+    border-radius: 999px;
+    border-color: color-mix(in oklab, #5e5ce6 42%, transparent);
+    color: var(--ins-body-color);
+}
+#dash-page .btn-outline-primary:hover,
+#dash-page .btn-outline-primary.show {
+    background: var(--dash-grad); border-color: transparent; color: #fff;
+}
+
+/* Entrada mais marcante (fade + rise + blur + scale) — só quando há motion */
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes dashRise {
+        from { opacity: 0; transform: translateY(26px) scale(.965); filter: blur(7px); }
+        to   { opacity: 1; transform: none; filter: blur(0); }
+    }
+    #dash-page .dash-fade-in { animation: dashRise 0.72s var(--dash-ease-out) both; }
+}
 </style>
 {% endblock extra_css %}
 
@@ -451,4 +527,36 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/dashboard.js?v=20260704f"></script>
+<script>
+/* Count-up nos números-chave — anima quando o dashboard.js preenche os valores.
+   Guardado contra re-entrância (nossas próprias escritas não re-disparam). */
+(function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var IDS = ['dash-ndf-count','dash-opt-count','dash-swap-count','dash-total-count','live-total'];
+    function animate(el) {
+        var orig = (el.textContent || '').trim();
+        var t = parseFloat(orig.replace(/[^\d.-]/g, ''));
+        if (!isFinite(t)) return;
+        if (el._ctOrig === orig) return;   // já animado para este valor
+        el._ctOrig = orig; el._animating = true;
+        var dur = 900, start = null;
+        function step(ts) {
+            if (!start) start = ts;
+            var p = Math.min((ts - start) / dur, 1);
+            var e = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(e * t).toLocaleString();
+            if (p < 1) { requestAnimationFrame(step); }
+            else { el.textContent = orig; el._animating = false; }   // restaura formatação original
+        }
+        requestAnimationFrame(step);
+    }
+    IDS.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var obs = new MutationObserver(function () { if (!el._animating) animate(el); });
+        obs.observe(el, { childList: true, characterData: true, subtree: true });
+        if (!/^[–—-]?$/.test((el.textContent || '').trim())) animate(el);
+    });
+})();
+</script>
 {% endblock extra_javascript %}

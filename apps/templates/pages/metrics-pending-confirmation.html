@@ -51,6 +51,71 @@
 #pcm-page .pcm-select:focus { box-shadow: 0 0 0 3px rgba(0,102,204,.18); border-color: #0066cc; }
 
 .pcm-note { font-size: .74rem; color: #6e6e73; }
+
+/* ================================================================
+ *  METRICS — NOVA REDESIGN (KPI hero, tipografia, motion)
+ * ================================================================ */
+#pcm-page { --pcm-grad: linear-gradient(100deg,#0066cc,#5e5ce6 52%,#8b5cf6 80%,#d946ef); }
+
+/* Page title grande com barra de acento */
+#pcm-page .page-title-head h4 {
+    font-size: 2rem !important; font-weight: 800; letter-spacing: -0.04em;
+    background: linear-gradient(180deg, var(--ins-heading-color, #1d1d1f), color-mix(in oklab, var(--ins-heading-color, #1d1d1f) 60%, transparent));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#pcm-page .page-title-head .flex-grow-1::after {
+    content: ""; display: block; margin-top: .5rem; width: 52px; height: 3px; border-radius: 3px;
+    background: var(--pcm-grad);
+}
+
+/* Cards + títulos */
+#pcm-page .card { border-radius: 20px !important; }
+#pcm-page .card-title { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+@media (hover: hover) and (pointer: fine) {
+    #pcm-page .card:hover { transform: translateY(-4px); }
+    [data-bs-theme="light"] #pcm-page .card:hover {
+        box-shadow: 0 18px 44px rgba(94,92,230,.16), 0 2px 8px rgba(0,0,0,.05) !important;
+    }
+    [data-bs-theme="dark"] #pcm-page .card:hover {
+        box-shadow: 0 22px 54px rgba(99,102,241,.24), 0 2px 10px rgba(0,0,0,.4) !important;
+    }
+}
+
+/* KPI hero — número gigante em gradiente + minis reforçados */
+#pcm-page .pcm-kpi__val,
+[data-bs-theme="dark"] #pcm-page .pcm-kpi__val {
+    font-size: clamp(3rem, 6.5vw, 4.6rem);
+    font-weight: 800; letter-spacing: -0.045em; line-height: .95;
+    background: var(--pcm-grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+#pcm-page .pcm-kpi__label { letter-spacing: .12em; font-size: .72rem; }
+#pcm-page .pcm-mini__v,
+[data-bs-theme="dark"] #pcm-page .pcm-mini__v {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: -0.025em;
+    background: var(--pcm-grad);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#pcm-page .pcm-mini {
+    padding: 1rem .5rem;
+    border-radius: 14px;
+    background: var(--vr-card-bg, rgba(9,9,30,.02));
+    border: 1px solid var(--vr-card-border, rgba(9,9,30,.06));
+}
+#pcm-page .pcm-mini__l { letter-spacing: .08em; }
+
+/* Selects com contorno visível */
+#pcm-page .pcm-select { border: 1px solid color-mix(in oklab, var(--ins-body-color) 20%, transparent); }
+
+/* Entrada mais marcante — só quando há motion */
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes pcmRise {
+        from { opacity: 0; transform: translateY(26px) scale(.965); filter: blur(7px); }
+        to   { opacity: 1; transform: none; filter: blur(0); }
+    }
+    #pcm-page .pcm-fade { animation: pcmRise 0.72s var(--pcm-ease-out) both; }
+}
 </style>
 {% endblock extra_css %}
 
@@ -164,4 +229,35 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/chartjs/chart.umd.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/metrics-pending-confirmation.js?v=3"></script>
+<script>
+/* Count-up nos KPIs — anima quando o JS da página preenche os valores. */
+(function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var IDS = ['pcm-kpi-value','pcm-mini-prev','pcm-mini-avg','pcm-mini-peak'];
+    function animate(el) {
+        var orig = (el.textContent || '').trim();
+        var t = parseFloat(orig.replace(/[^\d.-]/g, ''));
+        if (!isFinite(t)) return;
+        if (el._ctOrig === orig) return;
+        el._ctOrig = orig; el._animating = true;
+        var dur = 950, start = null;
+        function step(ts) {
+            if (!start) start = ts;
+            var p = Math.min((ts - start) / dur, 1);
+            var e = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(e * t).toLocaleString();
+            if (p < 1) { requestAnimationFrame(step); }
+            else { el.textContent = orig; el._animating = false; }
+        }
+        requestAnimationFrame(step);
+    }
+    IDS.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var obs = new MutationObserver(function () { if (!el._animating) animate(el); });
+        obs.observe(el, { childList: true, characterData: true, subtree: true });
+        if (!/^[–—-]?$/.test((el.textContent || '').trim())) animate(el);
+    });
+})();
+</script>
 {% endblock extra_javascript %}
