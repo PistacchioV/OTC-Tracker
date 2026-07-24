@@ -11,6 +11,7 @@
     var API = '/api/electronic-inventory';
     var UPLOAD_TIMEOUT_MS = 90000;   // hard ceiling on a save to the (slow) I: share
     var PREVIEW_TIMEOUT_MS = 45000;  // ditto for streaming a PDF into the viewer
+    var upModalReady = false;        // upload modal fully shown → dropzones may browse
     var state = {
         clients: [],          // [{name, spn, on_disk}]
         rootExists: false,
@@ -559,7 +560,7 @@
 
         var drop = el.querySelector('.ei-up-drop'), file = el.querySelector('.ei-up-file');
         var clearBtn = el.querySelector('.ei-up-clear');
-        drop.addEventListener('click', function () { file.click(); });
+        drop.addEventListener('click', function () { if (upModalReady) file.click(); });
         file.addEventListener('change', function () {
             el.querySelector('.ei-up-drop-label').textContent =
                 this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
@@ -771,6 +772,14 @@
         });
 
         // upload modal
+        // Browse-dialog guard: the dropzones only react AFTER the modal is fully
+        // shown. Without this, the second click of a habitual double-click (or a
+        // click while the modal is still fading in) lands on the centred dropzone
+        // that now covers the Upload button's position, and the OS file picker
+        // opens "directly" — which is exactly what some users reported.
+        upModalReady = false;
+        $('eiUploadModal').addEventListener('shown.bs.modal', function () { upModalReady = true; });
+        $('eiUploadModal').addEventListener('hide.bs.modal', function () { upModalReady = false; });
         $('eiUploadBtn').addEventListener('click', function () {
             if (!state.client) { toast('warning', 'Select a counterparty first', 'Choose one on the left, then upload.'); return; }
             $('eiUpClient').value = state.client;
@@ -781,14 +790,22 @@
             $('eiUpNamePreview').textContent = '';
             clearExtraBlocks();
             resetDate($('eiUpDate'));
-            bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).show();
+            try {
+                bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).show();
+            } catch (err) {
+                // bootstrap missing/broken (stale cache, unsupported browser):
+                // fail loudly instead of leaving a dead button.
+                console.error('ei: upload modal failed to open', err);
+                toast('error', 'Could not open the upload window',
+                      'Refresh the page with Ctrl+F5 and try again.');
+            }
         });
         $('eiUpType').addEventListener('change', function () {
             fillSubtypeOptions(this.value);
             updateNamePreview();
         });
         $('eiUpSubtype').addEventListener('change', updateNamePreview);
-        $('eiDrop').addEventListener('click', function () { $('eiUpFile').click(); });
+        $('eiDrop').addEventListener('click', function () { if (upModalReady) $('eiUpFile').click(); });
         $('eiUpFile').addEventListener('change', function () {
             $('eiDropLabel').textContent = this.files[0] ? this.files[0].name : 'Drop a file here or click to browse';
             $('eiDropClear').classList.toggle('d-none', !this.files[0]);
