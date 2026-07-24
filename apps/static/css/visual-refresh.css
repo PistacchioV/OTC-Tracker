@@ -70,11 +70,23 @@ h1, h2, h3, h4, h5,
   letter-spacing: -0.022em;
 }
 
+/* Header de página vira um painel hero com glow de gradiente (global — eleva
+   TODAS as páginas de uma vez, de forma consistente). */
 .page-title-head {
-  padding-block: 0.6rem 0.9rem;
-  margin-bottom: 0.4rem;
-  border: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 1.35rem 1.6rem;
+  margin-bottom: 1.25rem;
+  border-radius: 18px;
+  border: 1px solid var(--vr-card-border);
+  background:
+    radial-gradient(58% 180% at 0% -10%, color-mix(in oklab, var(--vr-accent-2) 13%, transparent), transparent 62%),
+    radial-gradient(48% 180% at 100% -10%, color-mix(in oklab, var(--vr-accent-4) 9%, transparent), transparent 60%),
+    var(--vr-card-bg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+.page-title-head .breadcrumb { position: relative; z-index: 1; }
 .page-title-head h4 {
   font-size: 2rem !important;
   font-weight: 800 !important;
