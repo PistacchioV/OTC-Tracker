@@ -47,7 +47,7 @@
 
       <!-- Centered horizontal nav (Nova/Linear style). Quick links; full
            navigation via the menu drawer (☰). -->
-      <nav class="vr-topnav d-none d-lg-flex" id="vr-topnav" aria-label="Primary">
+      <nav class="vr-topnav d-none d-lg-flex" id="vr-topnav" aria-label="Primary" data-sid="{{ session.get('user_sid', '') }}">
         <a href="/dashboard" data-vrnav="/dashboard">Dashboard</a>
         <a href="/live-position-ndf" data-vrnav="/live-position">Live Position</a>
         <a href="/pending-confirmation" data-vrnav="/pending-confirmation">Pending</a>

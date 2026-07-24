@@ -226,10 +226,125 @@
     if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
   }
 
+  // ── Nav central PERSONALIZÁVEL: cada usuário escolhe os atalhos ────────────
+  function initTopNavCustom() {
+    var nav = document.getElementById("vr-topnav");
+    if (!nav) return;
+    var SID = (nav.getAttribute("data-sid") || "").trim().toUpperCase();
+    var KEY = "otc_topnav_" + (SID || "anon");
+    var MAX = 7;
+
+    var OPTIONS = [
+      { href: "/dashboard", label: "Dashboard" },
+      { href: "/live-position-ndf", label: "Live Position" },
+      { href: "/pending-confirmation", label: "Pending" },
+      { href: "/reconciliation-payrec", label: "Pay/Rec" },
+      { href: "/reconciliation-comitente", label: "Comitente" },
+      { href: "/reference-data", label: "Reference Data" },
+      { href: "/new_deals-ndf-fwdstart", label: "New Deals" },
+      { href: "/control-panel", label: "Control Panel" },
+      { href: "/electronic-inventory", label: "Electronic Inventory" },
+      { href: "/ndf-summary", label: "NDF Summary" },
+      { href: "/otm-settlements", label: "OTM Settlements" },
+      { href: "/accrual-swap", label: "Accrual" },
+      { href: "/mtm-swap", label: "MtM" },
+      { href: "/manual-confirmation", label: "Manual Confirmation" },
+      { href: "/cgd", label: "CGD" },
+      { href: "/index-b3", label: "Index B3" },
+      { href: "/metrics-pending-confirmation", label: "Metrics" },
+      { href: "/users-roles", label: "Users" }
+    ];
+    var DEFAULTS = ["/dashboard", "/live-position-ndf", "/pending-confirmation", "/reconciliation-payrec", "/reference-data"];
+    var allowed = null; // {href:1} ou null = tudo liberado
+
+    function optOf(h) { for (var i = 0; i < OPTIONS.length; i++) if (OPTIONS[i].href === h) return OPTIONS[i]; return null; }
+    function isAllowed(h) { return !allowed || allowed[h] === 1; }
+    function load() { try { var v = JSON.parse(localStorage.getItem(KEY) || "null"); if (Array.isArray(v)) return v; } catch (e) {} return DEFAULTS.slice(); }
+    function saveList(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+
+    function render() {
+      var chosen = load().filter(function (h) { return optOf(h) && isAllowed(h); });
+      if (!chosen.length) chosen = DEFAULTS.filter(isAllowed);
+      var path = window.location.pathname || "/";
+      var html = chosen.map(function (h) {
+        var o = optOf(h);
+        var active = (path === h || path.indexOf(h) === 0);
+        return '<a href="' + esc(h) + '"' + (active ? ' class="vr-active"' : "") + ">" + esc(o.label) + "</a>";
+      }).join("");
+      html += '<button class="vr-nav-edit" id="vr-nav-edit" type="button" title="Personalizar menu" aria-label="Personalizar menu"><i data-lucide="sliders-horizontal"></i></button>';
+      nav.innerHTML = html;
+      if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+      var eb = document.getElementById("vr-nav-edit");
+      if (eb) eb.addEventListener("click", openEditor);
+    }
+
+    function openEditor() {
+      var current = load();
+      var opts = OPTIONS.filter(function (o) { return isAllowed(o.href); });
+      var backdrop = document.createElement("div");
+      backdrop.className = "vr-navcfg-backdrop";
+      var panel = document.createElement("div");
+      panel.className = "vr-navcfg";
+      panel.innerHTML =
+        '<div class="vr-navcfg__head"><span>Personalizar menu</span><button class="vr-navcfg__x" type="button" aria-label="Fechar">&times;</button></div>' +
+        '<div class="vr-navcfg__hint">Escolha quais atalhos aparecem no topo (até ' + MAX + ").</div>" +
+        '<div class="vr-navcfg__body">' +
+          opts.map(function (o) {
+            var on = current.indexOf(o.href) !== -1;
+            return '<label class="vr-navcfg__item"><input type="checkbox" value="' + esc(o.href) + '"' + (on ? " checked" : "") + "><span>" + esc(o.label) + "</span></label>";
+          }).join("") +
+        "</div>" +
+        '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button">Padrão</button><span class="vr-navcfg__spacer"></span><button class="vr-navcfg__cancel" type="button">Cancelar</button><button class="vr-navcfg__save" type="button">Salvar</button></div>';
+      document.body.appendChild(backdrop);
+      document.body.appendChild(panel);
+
+      function close() { backdrop.remove(); panel.remove(); document.removeEventListener("keydown", onKey); }
+      function onKey(e) { if (e.key === "Escape") close(); }
+      function syncMax() {
+        var atMax = panel.querySelectorAll("input[type=checkbox]:checked").length >= MAX;
+        panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) { if (!cb.checked) cb.disabled = atMax; });
+      }
+      document.addEventListener("keydown", onKey);
+      backdrop.addEventListener("click", close);
+      panel.querySelector(".vr-navcfg__x").addEventListener("click", close);
+      panel.querySelector(".vr-navcfg__cancel").addEventListener("click", close);
+      panel.querySelector(".vr-navcfg__body").addEventListener("change", syncMax);
+      panel.querySelector(".vr-navcfg__reset").addEventListener("click", function () {
+        panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) { cb.checked = DEFAULTS.indexOf(cb.value) !== -1; });
+        syncMax();
+      });
+      panel.querySelector(".vr-navcfg__save").addEventListener("click", function () {
+        var chosen = [];
+        OPTIONS.forEach(function (o) {
+          var cb = panel.querySelector('input[value="' + o.href + '"]');
+          if (cb && cb.checked) chosen.push(o.href);
+        });
+        saveList(chosen);
+        render();
+        close();
+      });
+      syncMax();
+    }
+
+    // Filtra pelas páginas que o usuário pode acessar (mesmo critério do megamenu),
+    // depois renderiza.
+    fetch("/api/me/access", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.success && !d.is_admin && d.configured) {
+          allowed = {};
+          (d.pages || []).forEach(function (u) { allowed[u] = 1; });
+          if (allowed["/"]) allowed["/dashboard"] = 1;
+        }
+        render();
+      })
+      .catch(function () { render(); });
+  }
+
   function boot() {
     init();
     initThemeToggle();
-    markActiveNav();
+    initTopNavCustom();
     initNavDrawer();
   }
 
