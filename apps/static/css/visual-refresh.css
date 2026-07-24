@@ -453,6 +453,43 @@ body.vr-nav-open .vr-nav-backdrop { opacity: 1; visibility: visible; }
   color: var(--ins-body-color);
 }
 
+/* ── Botão de FIXAR a sidebar (dentro do menu) ── */
+.vr-pin-btn {
+  position: absolute; top: 14px; right: 12px; z-index: 3;
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--vr-card-border); border-radius: 9px;
+  background: var(--vr-card-bg); color: var(--ins-secondary-color); cursor: pointer;
+  transition: color .2s var(--vr-ease), border-color .2s var(--vr-ease), background-color .2s var(--vr-ease);
+}
+.vr-pin-btn:hover { color: var(--ins-body-color); border-color: color-mix(in oklab, var(--vr-accent-2) 40%, var(--vr-card-border)); }
+.vr-pin-btn i { width: 15px; height: 15px; }
+body.vr-nav-pinned .vr-pin-btn {
+  color: #fff;
+  background: var(--vr-grad);
+  border-color: transparent;
+}
+
+/* ── Sidebar FIXA (pinned): docka e o conteúdo encolhe para caber ── */
+@media (min-width: 992px) {
+  body.vr-nav-pinned .sidenav-menu { transform: none !important; box-shadow: none; }
+  body.vr-nav-pinned .vr-nav-backdrop { opacity: 0 !important; visibility: hidden !important; }
+  body.vr-nav-pinned .content-page {
+    margin-left: var(--ins-sidenav-width, 240px) !important;
+    transition: margin-left .32s var(--vr-ease);
+  }
+  body.vr-nav-pinned .app-topbar {
+    margin-left: calc(var(--ins-sidenav-width, 240px) + 20px) !important;
+    transition: margin-left .32s var(--vr-ease);
+  }
+  body.vr-nav-pinned .vr-menu-btn { display: none !important; }
+}
+/* Em telas pequenas o pin não docka — continua como drawer */
+@media (max-width: 991.98px) {
+  body.vr-nav-pinned .sidenav-menu { transform: translateX(-100%); }
+  body.vr-nav-open .sidenav-menu { transform: none; }
+}
+
 /* os toggles antigos do admin continuam ocultos (o drawer usa o novo botão) */
 .sidenav-toggle-button,
 .topnav-toggle-button,

@@ -89,6 +89,28 @@
     function close() { document.body.classList.remove("vr-nav-open"); }
     function toggle() { document.body.classList.toggle("vr-nav-open"); }
 
+    // ── Botão de FIXAR (pin): docka a sidebar e encolhe o conteúdo ──
+    var PINKEY = "otc_nav_pinned";
+    var pinBtn = document.createElement("button");
+    pinBtn.className = "vr-pin-btn";
+    pinBtn.type = "button";
+    pinBtn.title = "Fixar / desafixar menu";
+    pinBtn.setAttribute("aria-label", "Fixar menu");
+    pinBtn.innerHTML = '<i data-lucide="pin"></i>';
+    sidenav.appendChild(pinBtn);
+    if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+
+    function setPinned(on) {
+      document.body.classList.toggle("vr-nav-pinned", on);
+      if (on) document.body.classList.remove("vr-nav-open"); // dockada, sem overlay
+      try { localStorage.setItem(PINKEY, on ? "1" : "0"); } catch (e) {}
+    }
+    pinBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setPinned(!document.body.classList.contains("vr-nav-pinned"));
+    });
+    try { if (localStorage.getItem(PINKEY) === "1") document.body.classList.add("vr-nav-pinned"); } catch (e) {}
+
     btn.addEventListener("click", toggle);
     backdrop.addEventListener("click", close);
     document.addEventListener("keydown", function (e) {
