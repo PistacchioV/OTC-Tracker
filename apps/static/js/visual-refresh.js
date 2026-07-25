@@ -189,17 +189,6 @@
     var mt = a.querySelector(".menu-text[data-lang]") || a.querySelector("[data-lang]");
     return mt ? (mt.getAttribute("data-lang") || "") : "";
   }
-  function iconOf(a) {
-    if (!a) return "";
-    var ic = a.querySelector(".menu-icon [data-lucide]") || a.querySelector("[data-lucide]");
-    if (ic) return ic.getAttribute("data-lucide") || "";
-    var ti = a.querySelector("i.ti");
-    if (ti) {
-      var m = (ti.className || "").match(/\bti-([a-z0-9-]+)/i);
-      if (m) return "ti:" + m[1];
-    }
-    return "";
-  }
   function parseItem(li) {
     var a = null;
     // âncora direta do item (não das subvias)
@@ -218,7 +207,7 @@
     }
     var href = a ? a.getAttribute("href") : null;
     var isLeaf = !!(href && href.charAt(0) === "/");
-    var node = { text: a ? textOf(a) : "", lang: a ? langOf(a) : "", icon: a ? iconOf(a) : "", href: isLeaf ? href : null, children: [] };
+    var node = { text: a ? textOf(a) : "", lang: a ? langOf(a) : "", href: isLeaf ? href : null, children: [] };
     if (submenu) {
       Array.prototype.forEach.call(submenu.children, function (c) {
         if (c.classList && c.classList.contains("side-nav-item")) node.children.push(parseItem(c));
@@ -342,19 +331,18 @@
       });
       // indexa todas as folhas (páginas) na ordem da sidebar, guardando o
       // ramo pai (para desambiguar rótulos genéricos no nav de topo).
-      function walk(node, parent, inheritedIcon) {
+      function walk(node, parent) {
         if (node.href) {
           if (!OPTMAP[node.href]) {
             OPTMAP[node.href] = {
               href: node.href, text: node.text, lang: node.lang,
-              icon: node.icon || inheritedIcon || "",
               parentText: parent ? parent.text : "", parentLang: parent ? parent.lang : ""
             };
             ORDER.push(node.href);
           }
-        } else { node.children.forEach(function (c) { walk(c, node, node.icon || inheritedIcon || ""); }); }
+        } else { node.children.forEach(function (c) { walk(c, node); }); }
       }
-      SECTIONS.forEach(function (s) { s.nodes.forEach(function (n) { walk(n, null, ""); }); });
+      SECTIONS.forEach(function (s) { s.nodes.forEach(function (n) { walk(n, null); }); });
       // conta rótulos duplicados para saber quais precisam do contexto do pai
       var counts = {};
       ORDER.forEach(function (h) { var t = (OPTMAP[h].text || "").toLowerCase(); counts[t] = (counts[t] || 0) + 1; });
@@ -394,14 +382,7 @@
           var langAttr = d.lang ? ' data-lang="' + esc(d.lang) + '"' : "";
           return (i ? " " : "") + "<span" + langAttr + ">" + esc(d.text) + "</span>";
         }).join("");
-        var ic = o.icon || "";
-        var iconHtml = "";
-        if (ic.indexOf("ti:") === 0) {
-          iconHtml = '<i class="ti ti-' + esc(ic.slice(3)) + ' vr-topnav__ic"></i>';
-        } else if (ic) {
-          iconHtml = '<i data-lucide="' + esc(ic) + '" class="vr-topnav__ic"></i>';
-        }
-        return '<a href="' + esc(h) + '"' + (active ? ' class="vr-active"' : "") + ">" + iconHtml + '<span class="vr-topnav__tx">' + inner + "</span></a>";
+        return '<a href="' + esc(h) + '"' + (active ? ' class="vr-active"' : "") + ">" + inner + "</a>";
       }).join("");
       html += '<button class="vr-nav-edit" id="vr-nav-edit" type="button" title="Customize menu" aria-label="Customize menu"><i data-lucide="sliders-horizontal"></i></button>';
       nav.innerHTML = html;

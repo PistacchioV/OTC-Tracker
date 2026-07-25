@@ -255,10 +255,16 @@ h1, h2, h3, h4, h5,
   background: var(--vr-card-bg);
 }
 .side-nav .side-nav-item .side-nav-link .menu-icon {
-  transition: transform 0.2s var(--vr-ease);
+  transition: transform 260ms var(--vr-ease), color 0.2s var(--vr-ease);
 }
-.side-nav .side-nav-item .side-nav-link:hover .menu-icon {
-  transform: translateX(1px) scale(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .side-nav .side-nav-item .side-nav-link:hover .menu-icon {
+    transform: scale(1.16) rotate(-6deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-nav .side-nav-item .side-nav-link .menu-icon { transition: color 0.2s var(--vr-ease); }
+  .side-nav .side-nav-item .side-nav-link:hover .menu-icon { transform: none; }
 }
 .side-nav .side-nav-item .side-nav-link.active,
 .side-nav .side-nav-item.menuitem-active > .side-nav-link {
@@ -585,9 +591,6 @@ body.vr-nav-pinned .vr-pin-btn {
 }
 /* Links simples do nav central (opção A) */
 .vr-topnav a {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
   padding: 0.5rem 0.95rem;
   border-radius: 999px;
   color: var(--ins-secondary-color);
@@ -608,25 +611,6 @@ body.vr-nav-pinned .vr-pin-btn {
               color-mix(in oklab, var(--vr-accent-1) 20%, transparent),
               color-mix(in oklab, var(--vr-accent-3) 14%, transparent));
   box-shadow: inset 0 0 0 1px var(--vr-card-border);
-}
-/* Ícone do item + animação (mesmo padrão dos cards do about/index) */
-.vr-topnav__ic {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  stroke-width: 2;
-  color: var(--vr-accent-2, #5e5ce6);
-  transition: transform 260ms var(--vr-ease), color 0.2s var(--vr-ease);
-}
-i.ti.vr-topnav__ic { width: auto; height: auto; font-size: 1.02rem; line-height: 1; }
-.vr-topnav a.vr-active .vr-topnav__ic { color: var(--ins-body-color); }
-.vr-topnav__tx { display: inline-flex; align-items: baseline; gap: 0.28rem; }
-@media (hover: hover) and (pointer: fine) {
-  .vr-topnav a:hover .vr-topnav__ic { transform: scale(1.16) rotate(-6deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .vr-topnav__ic { transition: color 0.2s var(--vr-ease); }
-  .vr-topnav a:hover .vr-topnav__ic { transform: none; }
 }
 
 /* Botão de personalizar os atalhos do nav central */
