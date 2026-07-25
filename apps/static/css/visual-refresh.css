@@ -254,16 +254,32 @@ h1, h2, h3, h4, h5,
 .side-nav .side-nav-item .side-nav-link:hover {
   background: var(--vr-card-bg);
 }
+/* Ícone do sidenav = tile de gradiente com glifo branco (igual ao about) */
 .side-nav .side-nav-item .side-nav-link .menu-icon {
-  transition: transform 260ms var(--vr-ease), color 0.2s var(--vr-ease);
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--vr-grad);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(94, 92, 230, 0.28);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 260ms var(--vr-ease), box-shadow 0.2s var(--vr-ease);
 }
+.side-nav .side-nav-item .side-nav-link .menu-icon i { color: #fff; font-size: 1rem; line-height: 1; }
+.side-nav .side-nav-item .side-nav-link .menu-icon svg { width: 17px; height: 17px; color: #fff; }
 @media (hover: hover) and (pointer: fine) {
   .side-nav .side-nav-item .side-nav-link:hover .menu-icon {
-    transform: scale(1.16) rotate(-6deg);
+    transform: scale(1.1) rotate(-4deg);
+    box-shadow: 0 6px 16px rgba(94, 92, 230, 0.38);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .side-nav .side-nav-item .side-nav-link .menu-icon { transition: color 0.2s var(--vr-ease); }
+  .side-nav .side-nav-item .side-nav-link .menu-icon { transition: box-shadow 0.2s var(--vr-ease); }
   .side-nav .side-nav-item .side-nav-link:hover .menu-icon { transform: none; }
 }
 .side-nav .side-nav-item .side-nav-link.active,
@@ -276,7 +292,14 @@ h1, h2, h3, h4, h5,
 }
 .side-nav .side-nav-item .side-nav-link.active .menu-icon,
 .side-nav .side-nav-item.menuitem-active > .side-nav-link .menu-icon {
-  color: var(--vr-accent-2);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(94, 92, 230, 0.45);
+}
+.side-nav .side-nav-item .side-nav-link.active .menu-icon i,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link .menu-icon i,
+.side-nav .side-nav-item .side-nav-link.active .menu-icon svg,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link .menu-icon svg {
+  color: #fff;
 }
 .side-nav .side-nav-item .side-nav-link.active::before,
 .side-nav .side-nav-item.menuitem-active > .side-nav-link::before {
