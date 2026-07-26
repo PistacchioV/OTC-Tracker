@@ -139,6 +139,69 @@ function hexToRgba(hex, a) {
 const GROW_ANIM     = { duration: 850, easing: 'easeOutQuart' };
 const GROW_ANIM_PIE = { animateRotate: true, animateScale: true, duration: 850, easing: 'easeOutQuart' };
 
+// ─── data labels no canvas ───────────────────────────────────────────────────
+// Valores visíveis direto no gráfico (não só no tooltip) — sem dependência
+// externa. Dois modos, escolhidos por options.plugins.vrValueLabels.mode:
+//   'bar-end' → barras horizontais: número no fim da barra (total por linha
+//               quando o eixo é empilhado); entra para dentro da barra quando
+//               encosta na borda da área do gráfico.
+//   'arc'     → doughnut/pie: número branco no meio da fatia; fatias < 5% do
+//               total ficam sem rótulo (ilegível) — o tooltip continua cobrindo.
+const valueLabelPlugin = {
+    id: 'vrValueLabels',
+    afterDatasetsDraw(chart) {
+        const opts = chart.options.plugins && chart.options.plugins.vrValueLabels;
+        if (!opts || !opts.mode) return;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return;
+        ctx.save();
+        ctx.font = `700 11px ${bodyFont}`;
+        if (opts.mode === 'bar-end') {
+            // Total por índice (soma das séries visíveis) na ponta da última barra.
+            const totals = {}, endX = {}, endY = {};
+            chart.data.datasets.forEach((ds, di) => {
+                if (!chart.isDatasetVisible(di)) return;
+                const meta = chart.getDatasetMeta(di);
+                meta.data.forEach((bar, i) => {
+                    const v = Number(ds.data[i]) || 0;
+                    totals[i] = (totals[i] || 0) + v;
+                    if (v > 0 || endX[i] === undefined) { endX[i] = bar.x; endY[i] = bar.y; }
+                });
+            });
+            Object.keys(totals).forEach((i) => {
+                if (!totals[i]) return;
+                const label = Number(totals[i]).toLocaleString('en-US');
+                const w = ctx.measureText(label).width;
+                const inside = endX[i] + 8 + w > chartArea.right;   // sem espaço → entra na barra
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = inside ? 'right' : 'left';
+                ctx.fillStyle = inside ? '#fff' : ins('body-color');
+                ctx.fillText(label, inside ? endX[i] - 6 : endX[i] + 6, endY[i]);
+            });
+        } else if (opts.mode === 'arc') {
+            const meta = chart.getDatasetMeta(0);
+            const data = chart.data.datasets[0].data.map(Number);
+            const total = data.reduce((a, b) => a + (b || 0), 0);
+            if (!total) { ctx.restore(); return; }
+            meta.data.forEach((arc, i) => {
+                const v = data[i] || 0;
+                if (!v || v / total < 0.05) return;
+                const p = arc.getProps(['x', 'y', 'startAngle', 'endAngle', 'innerRadius', 'outerRadius'], true);
+                const ang = (p.startAngle + p.endAngle) / 2;
+                const r = (p.innerRadius + p.outerRadius) / 2;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(0,0,0,.35)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(v.toLocaleString('en-US'), p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
+                ctx.shadowBlur = 0;
+            });
+        }
+        ctx.restore();
+    }
+};
+
 // Live Position display labels: SWAP → Swap, CEMHYB → HYB (house convention).
 function liveDisplayLabel(label) {
     return String(label == null ? '' : label).replace(/^SWAP /, 'Swap ').replace(/CEMHYB/, 'HYB');
@@ -159,6 +222,7 @@ function buildPieChart(ndf, opt, fxo, swap) {
     if (pieChart) pieChart.destroy();
     pieChart = new Chart(ctx, {
         type: 'doughnut',
+        plugins: [valueLabelPlugin],
         data: {
             labels: ['NDF Commodities', 'Option Commodities', 'Option FXO', 'Swap'],
             datasets: [{
@@ -174,6 +238,7 @@ function buildPieChart(ndf, opt, fxo, swap) {
             responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM_PIE,
             plugins: {
+                vrValueLabels: { mode: 'arc' },
                 legend: { position: 'bottom', labels: { font: { family: bodyFont }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 15 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
             }
@@ -586,11 +651,13 @@ function buildClientsChart(top5) {
 
     clientsChart = new Chart(ctx, {
         type: 'bar',
+        plugins: [valueLabelPlugin],
         data: { labels: top5.map(d => d.label), datasets: datasets },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM,
             plugins: {
+                vrValueLabels: { mode: 'bar-end' },
                 legend: stacked
                     ? { position: 'bottom', labels: { font: { family: bodyFont, size: 10 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 10 } }
                     : { display: false },
@@ -612,11 +679,13 @@ function buildProductsChart(top5) {
     const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary')];
     productsChart = new Chart(ctx, {
         type: 'doughnut',
+        plugins: [valueLabelPlugin],
         data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(baseColors, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM_PIE,
             plugins: {
+                vrValueLabels: { mode: 'arc' },
                 legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
             }
@@ -635,11 +704,13 @@ function buildCommoditiesChart(top5) {
     if (_setChartEmpty(ctx, !top5 || !top5.length)) return;
     commoditiesChart = new Chart(ctx, {
         type: 'doughnut',
+        plugins: [valueLabelPlugin],
         data: { labels: top5.map(d => d.label), datasets: [{ data: top5.map(d => d.count), backgroundColor: doughnutGradient(COMMODITY_COLORS, 1, 0.6), borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff', borderWidth: 2, hoverOffset: 8, cutout: '60%' }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: GROW_ANIM_PIE,
             plugins: {
+                vrValueLabels: { mode: 'arc' },
                 legend: { position: 'right', labels: { font: { family: bodyFont, size: 11 }, color: ins('secondary-color'), usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } })
             }
@@ -762,6 +833,7 @@ function buildLivePositionChart(data) {
     };
     liveChart = new Chart(ctx, {
         type: 'bar',
+        plugins: [valueLabelPlugin],
         data: {
             labels: rows.map(r => liveDisplayLabel(r.label)),
             datasets: [{
@@ -777,6 +849,7 @@ function buildLivePositionChart(data) {
             animation: GROW_ANIM,
             plugins: {
                 legend: { display: false },
+                vrValueLabels: { mode: 'bar-end' },
                 tooltip: premiumTooltip({ callbacks: { label: ctx => ` ${ctx.parsed.x}` } })
             },
             scales: {
@@ -877,10 +950,14 @@ async function loadDashboard(period) {
         const data = await res.json();
         _lastData = data;
 
-        // Null-safe: a missing/renamed count element must never halt chart rendering
+        // Null-safe: a missing/renamed count element must never halt chart rendering.
+        // Counts render as #,##0 (en-US thousands, no decimals); the count-up
+        // animation on the page parses digits back out and restores this format.
         const setText = (id, val) => {
             const el = document.getElementById(id);
-            if (el) el.textContent = val;
+            if (!el) return;
+            const n = Number(val);
+            el.textContent = isFinite(n) ? Math.round(n).toLocaleString('en-US') : val;
         };
         setText('dash-ndf-count', data.ndf_total);
         setText('dash-opt-count', data.opt_total);
