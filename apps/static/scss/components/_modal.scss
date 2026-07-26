@@ -65,16 +65,22 @@
 
 
 // Modal Animation
+// The dialog's RESTING state is visible: the entrance zoom animates from
+// hidden to natural and needs no fill-mode. If the animation never runs —
+// OS reduced motion (Windows 11 ships with Animation Effects off, which
+// makes browsers report prefers-reduced-motion: reduce) or a page-level
+// `* { animation: none !important }` rule — the dialog simply appears
+// instantly. Never park the dialog at opacity 0 waiting for an animation
+// to rescue it: that left the upload modal invisible (backdrop only) on
+// every reduced-motion machine.
 .modal {
     .modal-dialog {
         transition: none;
-        transform: scale(0.85);
-        opacity: 0;
     }
 
     &.show {
         .modal-dialog {
-            animation: zoomInModal 0.1s ease-out forwards;
+            animation: zoomInModal 0.1s ease-out;
         }
     }
 }
