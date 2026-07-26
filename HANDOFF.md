@@ -4971,3 +4971,126 @@ apps/static/js/pages/electronic-inventory.js ← select-all, blocos extras no pa
 apps/static/data/translations/{en,br,es}.json ← ops-generate, ops-gen-*, ndf-r-ops/value/internal/ok/check
 scripts/export_electronic_inventory_excel.py  ← NOVO: varredura do Electronic Inventory → Excel no Downloads
 ```
+
+---
+
+## 109. Branch `visual-refresh` — Redesign visual (Nova / Linear / Raycast / Vercel)
+
+> **Escopo/branch:** todo o redesign visual vive na branch **`visual-refresh`** (NÃO na `main`). É uma
+> **camada aditiva de override** que NÃO altera markup nem lógica das páginas — refina fundo, tipografia,
+> gradientes, cards, navegação e adiciona animações. Para reverter por completo basta remover os dois
+> `<link>`/`<script>` em `partials/head-css.html` / `partials/footer-scripts.html`.
+
+### 109.1 A camada de override — arquivos
+```
+apps/static/css/visual-refresh.css   ← override de estilo, carregado DEPOIS de app.css
+apps/static/js/visual-refresh.js     ← IIFE que constrói o drawer, o nav de topo customizável,
+                                        o pin da sidebar e o editor "Personalizar menu"
+```
+- Ambos são **aditivos**: compatíveis com o tema nativo (`data-bs-theme` light/dark) e com os
+  `--ins-*` do tema OTC Tracker. **NÃO usar `--bs-*`** (a maioria é indefinida no tema → cai no fallback
+  `#fff` e gera bug no dark). Use sempre os tokens `--ins-*` (nativos) ou `--vr-*` (desta camada).
+
+### 109.2 Tokens de design (`:root` em `visual-refresh.css`)
+```
+--vr-accent-1: #0066cc   (azul)     --vr-accent-3: #8b5cf6   (roxo)
+--vr-accent-2: #5e5ce6   (índigo)   --vr-accent-4: #d946ef   (magenta)
+--vr-grad:  linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef)   ← GRADIENTE DE MARCA
+--vr-card-radius: 18px
+--vr-ease:  cubic-bezier(0.22, 1, 0.36, 1)
+--vr-card-bg / --vr-card-border / --vr-card-shadow[-hover]  ← superfícies (mudam por tema)
+--vr-page-bg / --vr-glow-a/b/c / --vr-grid-line            ← fundo + glow radial (mudam por tema)
+```
+- O gradiente de marca `--vr-grad` é o **mesmo** do `--ab-grad` do about.html
+  (azul → índigo → roxo → magenta). Use-o para qualquer superfície de destaque (logo, tiles de ícone,
+  barras de item ativo, hero panels).
+- Dark = preto profundo estilo Nova (`--ins-body-bg: #08080d`). Light = `#f4f5f9` com glow visível.
+
+### 109.3 Navegação — drawer + pin + nav de topo customizável (`visual-refresh.js`)
+- **Sidebar vira DRAWER deslizante:** `.sidenav-menu { transform: translateX(-100%) }`; abre com
+  `body.vr-nav-open` (botão de menu `.vr-menu-btn` no topbar) sobre um backdrop. Navegação COMPLETA
+  preservada (nada foi removido do sidenav.html).
+- **Pin/dock (fixar a sidebar):** botão `.vr-pin-btn` dentro do menu → `body.vr-nav-pinned`. Em
+  `≥992px` a sidebar **docka** (largura fixa `--ins-sidenav-width`, 240px) e o `.content-page` /
+  `.app-topbar` recuam com `margin-left`. **Bug corrigido (`b2dd137`):** ao pinnar, forçar
+  `data-sidenav-size="default"` (salvando o valor anterior em `localStorage["otc_nav_prevsize"]` e
+  restaurando ao despinnar) — senão um resíduo do modo nativo `on-hover` fazia a sidebar dockada
+  colapsar/expandir no hover. Há também um lock de largura CSS em `body.vr-nav-pinned .sidenav-menu`.
+- **Nav de topo customizável (`#vr-topnav`):** links centrais no navbar, escolhidos pelo usuário
+  (máx. 7, default = Dashboard/Live Position NDF/Pending/Pay-Rec/Reference Data). Persistidos em
+  `localStorage["otc_topnav_<SID>"]`. A árvore de opções é construída **a partir da própria sidebar**
+  (`buildSections()` → grupos/subgrupos/folhas), com desambiguação de rótulos genéricos
+  (set `GENERIC` + contagem de duplicados → mostra o contexto do grupo pai).
+- **Editor "Personalizar menu" (`openEditor`)**: painel com TODAS as páginas agrupadas por seção/subgrupo
+  destacados (`.vr-navcfg__group` / `.vr-navcfg__grouphead` / `.vr-navcfg__sub`), checkboxes recursivos.
+- **⚠️ SEGREGAÇÃO DE ACESSO (obrigatória):** tanto a sidebar (`sidenav.html`, pruning client-side) quanto
+  o nav de topo e o editor filtram por `/api/me/access` (`{is_admin, configured, pages:[]}`). O gate
+  `isAllowed(href)` do customizer é ao menos tão restritivo quanto o da sidebar — só pode aparecer no
+  top menu / menu / personalização o que o usuário tem permissão. Ao mexer em navegação, manter esse gate.
+
+### 109.4 Animação de ícone padrão "card" (about → index → metrics → sidenav)
+Padrão de motion nascido no **about.html** (`.ab-feat__icon`) e propagado:
+- **Ícone:** `transition: transform 260ms var(--vr-ease)`; no hover do card/link →
+  `transform: scale(1.1) rotate(-4deg)` (no sidenav/top usei `scale(1.16) rotate(-6deg)`), o card levanta
+  `translateY(-6px)`.
+- **Sempre** atrás de `@media (hover:hover) and (pointer:fine)` + reset em `@media (prefers-reduced-motion: reduce)`.
+- Aplicado nos ícones dos cards iniciais do **index.html** (`.dash-stat__icon`) e das mini-chips do
+  **metrics-pending-confirmation.html** (`.pcm-mini__icon`).
+
+### 109.5 Ícone do sidenav = tile de gradiente com glifo branco (igual about) — `1c475a1`
+- `.side-nav … .menu-icon` virou um **tile 30×30, `border-radius:9px`, `background: var(--vr-grad)`,
+  glifo `#fff`**, com brilho índigo (`box-shadow: 0 4px 12px rgba(94,92,230,.28)`). Mesma paleta dos
+  ícones do about (glifo branco + tile de gradiente de marca).
+- SVG interno forçado a `17×17` e `color:#fff`; item ativo mantém glifo branco com sombra mais forte
+  (o `color: var(--vr-accent-2)` antigo do ativo foi trocado por `#fff`, senão o glifo sumia no gradiente).
+- Hover usa a animação-card (`scale(1.1) rotate(-4deg)`), com guarda de reduced-motion.
+
+### 109.6 Paleta harmônica dos cards do Dashboard (index.html) — `dd94c05`
+Alinhada ao gradiente de marca (removido o amarelo/laranja que quebrava a harmonia):
+```
+.dash-stat--ndf   { --c1:#1866dc; --c2:#3d8bfd }   (azul)
+.dash-stat--opt   { --c1:#4f46e5; --c2:#7c73ff }   (índigo)
+.dash-stat--swap  { --c1:#8b3ff0; --c2:#a855f7 }   (roxo)
+.dash-stat--total { --c1:#c026d3; --c2:#e455f5 }   (magenta)
+```
+
+### 109.7 i18n — REGRA (vale para toda UI adicionada nesta camada)
+Texto **default sempre em inglês** no HTML **com `data-lang="<chave>"`**; adicionar/atualizar a chave nos
+três JSONs `apps/static/data/translations/{en,br,es}.json`. `applyTranslations()` só sobrescreve se a
+chave existir e for truthy (chave ausente → mantém o default inglês). Chaves adicionadas nesta leva:
+nav customizer (`vr-cfg-*`), hero (`dash-hero-*`).
+
+### Commits (branch `visual-refresh` — redesign; mais recentes → base)
+```
+1c475a1  Give sidenav icons the about-style gradient tile
+d1ff8e5  Move the card-style icon animation to the sidenav; revert the top menu
+9193bd5  Add icons and hover animation to the top menu bar items   (revertido por d1ff8e5)
+6405dfd  Drop "at a glance" from the Dashboard hero subtitle
+dd94c05  Harmonize dashboard card palette and animate initial card icons
+b2dd137  Fix pinned sidebar on-hover glitch, expand nav customizer, polish Control Panel
+cd57e56  Restyle notification toasts + fix dashboard dropdown stacking
+b702c34  i18n: English defaults + data-lang for the added UI (nav customizer, hero)
+3f4c29f  Apply gradient bento to summary widgets + fix all date fields globally
+e410feb  Add pin/dock option for the sidebar (content resizes to fit)
+15bff4f  Make the center navbar links user-customizable
+2abf0a1  Global page header: gradient-glow hero panel (applies to all pages)
+7ca11e4  Restructure Dashboard + Metrics headers (Nova hero + bento stats)
+9d08cc1  Redesign Dashboard + Pending-Confirmation Metrics (Nova style)
+129e263  Design: segmented theme toggle, borderless menu icon, black favicon, About redesign
+502576c  Restore full navigation via slide-in drawer
+9485630  Restructure navigation into floating horizontal navbar (Nova style)
+d1d2cdb  Add modern visual-refresh layer (Linear/Vercel/Raycast style)   ← base da camada
+```
+
+### Arquivos (branch `visual-refresh`)
+```
+apps/static/css/visual-refresh.css   ← camada de override (tokens --vr-*, sidenav drawer+pin+tiles,
+                                        cards, hero, nav customizer, animações)
+apps/static/js/visual-refresh.js      ← drawer, pin (forceFixedSidenav/restoreSidenavSize),
+                                        nav de topo customizável, editor "Personalizar menu"
+apps/templates/partials/head-css.html / footer-scripts.html ← <link>/<script> da camada
+apps/templates/pages/index.html       ← paleta harmônica dos cards + animação dos ícones + hero sem "at a glance"
+apps/templates/pages/metrics-pending-confirmation.html ← ícones nas mini-chips + animação
+apps/templates/pages/about.html        ← origem do padrão de ícone (tile de gradiente + motion)
+apps/static/data/translations/{en,br,es}.json ← chaves vr-cfg-*, dash-hero-*
+```
