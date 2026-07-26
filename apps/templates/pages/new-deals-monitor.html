@@ -1,0 +1,297 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}New Deals Monitor{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<style>
+/* ============================================================================
+   New Deals Monitor — visão por produto × status da reference date.
+   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
+   ============================================================================ */
+#ndm-page { --ndm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
+/* Reference-date bar (mesmo padrão do NDF Summary: daterangepicker dd/mm/yyyy) */
+#ndm-page .ndm-datewrap { position: relative; width: 168px; }
+#ndm-page .ndm-datewrap input {
+    width: 100%; border: 1px solid var(--ins-border-color); border-radius: 10px;
+    padding: .35rem 2.2rem .35rem .75rem; font-size: .85rem; font-weight: 600;
+    color: var(--ins-body-color); background: var(--ins-secondary-bg, #fff); cursor: pointer;
+}
+#ndm-page .ndm-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ins-secondary-color); cursor: pointer;
+}
+
+/* ── Card bento ────────────────────────────────────────────────────────── */
+#ndm-page .ndm-card {
+    height: 100%;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1.15rem 1.25rem 1.05rem;
+    display: flex; flex-direction: column; gap: .8rem;
+    transition: transform 260ms var(--ndm-ease), box-shadow 260ms var(--ndm-ease),
+                border-color 260ms var(--ndm-ease);
+}
+#ndm-page .ndm-card.is-soon { opacity: .68; }
+
+#ndm-page .ndm-card__head { display: flex; align-items: center; gap: .75rem; }
+#ndm-page .ndm-card__icon {
+    width: 42px; height: 42px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    color: #fff; font-size: 1.25rem;
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--ndm-ease), box-shadow .2s var(--ndm-ease);
+}
+#ndm-page .ndm-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
+#ndm-page .ndm-card__total {
+    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+}
+
+/* Status chips — contagem visível por status */
+#ndm-page .ndm-chips { display: flex; flex-wrap: wrap; gap: .4rem; min-height: 26px; }
+#ndm-page .ndm-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .7rem; font-weight: 700; letter-spacing: .015em;
+    padding: .18rem .55rem; border-radius: 999px;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
+}
+#ndm-page .ndm-chip b { font-variant-numeric: tabular-nums; font-weight: 800; }
+#ndm-page .ndm-chip--new      { background: rgba(67, 191, 229, .16);  color: #1d7ea8; }
+#ndm-page .ndm-chip--pending  { background: rgba(247, 184, 75, .20);  color: #8a6100; }
+#ndm-page .ndm-chip--approved { background: rgba(94, 92, 230, .16);   color: #5e5ce6; }
+#ndm-page .ndm-chip--sent     { background: rgba(0, 102, 204, .14);   color: #0066cc; }
+#ndm-page .ndm-chip--success  { background: rgba(26, 138, 74, .16);   color: #1a8a4a; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--new      { color: #7fd4f2; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--pending  { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--approved { color: #a5a3ff; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--sent     { color: #7db4f5; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--success  { color: #7ed6a2; }
+
+/* Barra proporcional por status (leitura instantânea do que falta) */
+#ndm-page .ndm-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--ins-tertiary-bg, #eef0f4); }
+#ndm-page .ndm-bar span { height: 100%; }
+#ndm-page .ndm-bar .sg-new      { background: #43bfe5; }
+#ndm-page .ndm-bar .sg-pending  { background: #f7b84b; }
+#ndm-page .ndm-bar .sg-approved { background: #5e5ce6; }
+#ndm-page .ndm-bar .sg-sent     { background: #0066cc; }
+#ndm-page .ndm-bar .sg-success  { background: #1a8a4a; }
+#ndm-page .ndm-bar .sg-other    { background: #8a969c; }
+
+#ndm-page .ndm-card__foot {
+    margin-top: auto; display: flex; align-items: center; justify-content: space-between;
+    font-size: .76rem; color: var(--ins-secondary-color);
+}
+#ndm-page .ndm-open { display: inline-flex; align-items: center; gap: .3rem; font-weight: 600; color: #0066cc; text-decoration: none; }
+#ndm-page .ndm-open i { transition: transform 200ms var(--ndm-ease); }
+#ndm-page .ndm-soon-pill {
+    font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: .16rem .55rem; border-radius: 999px;
+    background: linear-gradient(100deg, rgba(0,102,204,.14), rgba(139,92,246,.14));
+    color: var(--ins-secondary-color);
+}
+#ndm-page .ndm-empty-note { font-size: .76rem; color: var(--ins-secondary-color); font-style: italic; }
+
+/* Hover: card levanta + ícone com a animação padrão (about → sidenav → aqui) */
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .ndm-card:hover {
+        transform: translateY(-6px);
+        box-shadow: var(--vr-card-shadow-hover, 0 14px 34px rgba(15, 23, 42, .12));
+        border-color: rgba(0, 102, 204, .28);
+    }
+    #ndm-page .ndm-card:hover .ndm-card__icon {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
+    }
+    #ndm-page .ndm-open:hover i { transform: translateX(3px); }
+}
+
+/* Entrada em cascata */
+@media (prefers-reduced-motion: no-preference) {
+    #ndm-page .ndm-col { opacity: 0; transform: translateY(12px); animation: ndmIn 420ms var(--ndm-ease) both; }
+    #ndm-page .ndm-col:nth-child(1)  { animation-delay:   0ms; }
+    #ndm-page .ndm-col:nth-child(2)  { animation-delay:  45ms; }
+    #ndm-page .ndm-col:nth-child(3)  { animation-delay:  90ms; }
+    #ndm-page .ndm-col:nth-child(4)  { animation-delay: 135ms; }
+    #ndm-page .ndm-col:nth-child(5)  { animation-delay: 180ms; }
+    #ndm-page .ndm-col:nth-child(6)  { animation-delay: 225ms; }
+    #ndm-page .ndm-col:nth-child(7)  { animation-delay: 270ms; }
+    #ndm-page .ndm-col:nth-child(8)  { animation-delay: 315ms; }
+    #ndm-page .ndm-col:nth-child(9)  { animation-delay: 360ms; }
+    #ndm-page .ndm-col:nth-child(10) { animation-delay: 405ms; }
+    #ndm-page .ndm-col:nth-child(n+11) { animation-delay: 450ms; }
+    @keyframes ndmIn { to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+    #ndm-page .ndm-card, #ndm-page .ndm-card__icon, #ndm-page .ndm-open i { transition: none; }
+    #ndm-page .ndm-card:hover, #ndm-page .ndm-card:hover .ndm-card__icon { transform: none; }
+}
+
+/* daterangepicker fora do #ndm-page (anexa no body) — fundo sólido + seleção azul */
+.daterangepicker { z-index: 1090; border-radius: 12px; border: 1px solid var(--ins-border-color);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .18); background: #fff; }
+.daterangepicker td.active, .daterangepicker td.active:hover { background-color: #0066cc; }
+[data-bs-theme=dark] .daterangepicker { background: #2b2f3a; color: var(--ins-body-color); }
+[data-bs-theme=dark] .daterangepicker .calendar-table { background: transparent; border: 0; }
+[data-bs-theme=dark] .daterangepicker td.available:hover,
+[data-bs-theme=dark] .daterangepicker th.available:hover { background: #3a3f4d; }
+[data-bs-theme=dark] .daterangepicker td.off, [data-bs-theme=dark] .daterangepicker td.off:hover { background: transparent; color: #6c757d; }
+[data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
+[data-bs-theme=dark] .daterangepicker .calendar-table th,
+[data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--ins-body-color); }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="ndm-page" class="container-fluid" data-content="">
+
+    {% set subtitle='Products' %}
+    {% set title='Monitor' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Reference date -->
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <p class="text-muted mb-0 fs-sm" data-lang="ndm-sub">
+                Imported operations by product and status for the reference date — what still needs action on each page.
+            </p>
+            <div class="d-flex align-items-center gap-2">
+                <label class="fs-sm fw-semibold mb-0" data-lang="ndm-ref-date">Reference date</label>
+                <div class="ndm-datewrap" id="ndmDateWrap">
+                    <input type="text" id="ndm-ref-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="ndm-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards (preenchidos pelo JS a partir de /api/new-deals/monitor) -->
+    <div class="row row-cols-xxl-4 row-cols-xl-3 row-cols-md-2 row-cols-1 g-3" id="ndmGrid"></div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var ICONS = {
+        'ndf-commodities':    'ti-wheat',
+        'ndf-fwdstart':       'ti-player-skip-forward',
+        'ndf-otherpublisher': 'ti-news',
+        'opt-commodities':    'ti-chart-candle',
+        'opt-fxo':            'ti-currency-dollar',
+        'opt-equity':         'ti-chart-line',
+        'swap-equities':      'ti-arrows-exchange',
+        'swap-cem':           'ti-building-bank',
+        'intrag-ndf':         'ti-building',
+        'intrag-option':      'ti-briefcase'
+    };
+    // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
+    var STATUS_ORDER = ['New', 'Pending', 'Approved', 'Sent', 'Success'];
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function t(key, fallback) {
+        var el = document.querySelector('[data-lang="' + key + '"]');
+        return (el && el.textContent.trim()) || fallback;
+    }
+    function slug(status) { return String(status).toLowerCase(); }
+    function known(status) { return STATUS_ORDER.indexOf(status) !== -1; }
+
+    function cardHtml(c) {
+        var statuses = Object.keys(c.statuses || {});
+        statuses.sort(function (a, b) {
+            var ia = STATUS_ORDER.indexOf(a), ib = STATUS_ORDER.indexOf(b);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+        var chips = statuses.map(function (s) {
+            var cls = known(s) ? ' ndm-chip--' + slug(s) : '';
+            return '<span class="ndm-chip' + cls + '">' + esc(s) + ' <b>' + c.statuses[s] + '</b></span>';
+        }).join('');
+        var bar = '';
+        if (c.total > 0) {
+            bar = '<div class="ndm-bar">' + statuses.map(function (s) {
+                var cls = known(s) ? 'sg-' + slug(s) : 'sg-other';
+                var pct = (c.statuses[s] / c.total * 100).toFixed(2);
+                return '<span class="' + cls + '" style="width:' + pct + '%"></span>';
+            }).join('') + '</div>';
+        }
+        var body = c.total > 0
+            ? '<div class="ndm-chips">' + chips + '</div>' + bar
+            : '<div class="ndm-chips"><span class="ndm-empty-note" data-lang-ignore>' +
+              esc(t('ndm-empty', 'No operations imported for this date.')) + '</span></div>';
+        var foot;
+        if (c.soon && !c.total) {
+            foot = '<span class="ndm-soon-pill" data-lang-ignore>' + esc(t('ndm-dev', 'In development')) + '</span><span></span>';
+        } else if (c.url) {
+            foot = '<span></span><a class="ndm-open" href="' + esc(c.url) + '">' +
+                   esc(t('ndm-open', 'Open page')) + ' <i class="ti ti-arrow-right"></i></a>';
+        } else {
+            foot = '<span></span><span></span>';
+        }
+        return (
+            '<div class="col ndm-col">' +
+              '<div class="ndm-card' + (c.soon && !c.total ? ' is-soon' : '') + '">' +
+                '<div class="ndm-card__head">' +
+                  '<span class="ndm-card__icon"><i class="ti ' + (ICONS[c.key] || 'ti-package') + '"></i></span>' +
+                  '<h3 class="ndm-card__title">' + esc(c.label) + '</h3>' +
+                  '<span class="ndm-card__total">' + Number(c.total || 0).toLocaleString('en-US') + '</span>' +
+                '</div>' +
+                body +
+                '<div class="ndm-card__foot">' + foot + '</div>' +
+              '</div>' +
+            '</div>');
+    }
+
+    function load(ymd) {
+        fetch('/api/new-deals/monitor' + (ymd ? '?date=' + encodeURIComponent(ymd) : ''))
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) return;
+                document.getElementById('ndmGrid').innerHTML = j.cards.map(cardHtml).join('');
+            })
+            .catch(function (e) { console.error('ndm load error', e); });
+    }
+
+    function initDatePicker() {
+        var inp = document.getElementById('ndm-ref-date');
+        var iso = '{{ today }}'.split('-');
+        if (inp && iso.length === 3) inp.value = iso[2] + '/' + iso[1] + '/' + iso[0];
+        if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
+            var $d = jQuery('#ndm-ref-date');
+            $d.daterangepicker({
+                singleDatePicker: true, autoApply: true, showDropdowns: true,
+                locale: { format: 'DD/MM/YYYY' },
+                startDate: moment()
+            }, function (start) { load(start.format('YYYY-MM-DD')); });
+            jQuery('#ndmDateWrap .ndm-cal-btn').on('click', function () { $d.trigger('click'); });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        initDatePicker();
+        load('{{ today }}');
+    });
+})();
+</script>
+<!-- Chaves de tradução usadas pelo JS (invisíveis; applyTranslations preenche) -->
+<div class="d-none" aria-hidden="true">
+    <span data-lang="ndm-empty">No operations imported for this date.</span>
+    <span data-lang="ndm-dev">In development</span>
+    <span data-lang="ndm-open">Open page</span>
+</div>
+{% endblock extra_javascript %}

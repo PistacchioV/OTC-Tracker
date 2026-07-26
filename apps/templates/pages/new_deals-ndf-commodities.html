@@ -2312,6 +2312,7 @@ $(document).ready(function() {
         if (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to')) {
             return sfRangeWord(f.mode) + ' ' + f.col.label.toUpperCase();
         }
+        if (f.mode === 'not') return f.col.label.toUpperCase() + ' \u2260';
         return f.col.label.toUpperCase();
     }
 
@@ -2478,9 +2479,14 @@ $(document).ready(function() {
         var tradeDateCol = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
         if (tradeDateCol) {
             sfActive.push({ col: tradeDateCol, value: target, mode: 'exact', key: sfFilterKey(tradeDateCol, 'exact') });
-            sfRenderChips();
-            sfApply();
         }
+        // Default filter 2: Status <> Success — o dia a dia é olhar o que ainda
+        // nao processou; remova o chip para ver tudo.
+        var statusCol = SF_COLS.filter(function(c) { return c.label === 'Status'; })[0];
+        if (statusCol) {
+            sfActive.push({ col: statusCol, value: 'Success', mode: 'not', key: sfFilterKey(statusCol, 'not') });
+        }
+        if (sfActive.length) { sfRenderChips(); sfApply(); }
     })();
 
     document.getElementById('sfSearchBtn').addEventListener('click', function() {

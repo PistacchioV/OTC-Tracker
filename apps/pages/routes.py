@@ -12034,7 +12034,12 @@ def _deal_matches(deal, filters):
             continue
         cell_val = str(deal.get(field, '')).strip()
         if ftype == 'text':
-            if value.lower() not in cell_val.lower():
+            # mode 'not' = "different from" (case-insensitive equality, negated) —
+            # used by the New Deals default chip Status <> Success.
+            if (f.get('mode') or '').lower() == 'not':
+                if value.lower() == cell_val.lower():
+                    return False
+            elif value.lower() not in cell_val.lower():
                 return False
         elif ftype == 'date':
             mode = (f.get('mode') or 'exact').lower()
@@ -16948,6 +16953,97 @@ _GENERIC_ND_PRODUCTS = {
 
 def _generic_nd_cfg(product):
     return _GENERIC_ND_PRODUCTS.get(product)
+
+
+# ==============================================================================
+# NEW DEALS — MONITOR
+# Visão por produto × status das operações importadas na reference date. Os
+# caches de New Deals já são particionados por dia (YYYYMMDD_*.json), então o
+# histórico "dia a dia" vem do próprio layout de arquivos — mudar a reference
+# date apenas lê os arquivos daquele dia, nada precisa ser re-persistido.
+# ==============================================================================
+
+# Catálogo dos cards (ordem de exibição). 'dirs' são os caminhos relativos ao
+# NEW_DEALS_CACHE_ROOT que alimentam o card (variantes de grafia incluídas).
+# 'soon' = produto ainda sem desenvolvimento — o card aparece como placeholder,
+# mas se um dia o diretório ganhar arquivos os números passam a contar sozinhos.
+_NDM_CARDS = [
+    {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',)},
+    {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FWD Start', 'NDF/FwdStart')},
+    {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher', 'NDF/Other Publisher')},
+    {'key': 'opt-commodities',    'label': 'Option Commodities',  'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',)},
+    {'key': 'opt-fxo',            'label': 'Option FXO',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',)},
+    {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities')},
+    {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',)},
+    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',)},
+    {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',)},
+    {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',)},
+]
+
+
+@blueprint.route('/new-deals-monitor')
+def new_deals_monitor():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/new-deals-monitor.html', segment='new-deals-monitor',
+                           today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/new-deals/monitor')
+def api_new_deals_monitor():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    want = ref.strftime('%Y%m%d')
+
+    # Um único walk: agrupa os arquivos DA DATA por produto (caminho sem os
+    # níveis de ano/mês), contando linhas por Status.
+    found = {}
+    if os.path.isdir(NEW_DEALS_CACHE_ROOT):
+        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
+            for fname in files:
+                if not fname.endswith('.json') or fname[:8] != want:
+                    continue
+                rel = os.path.relpath(root, NEW_DEALS_CACHE_ROOT).replace('\\', '/')
+                pkey = '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
+                try:
+                    with open(os.path.join(root, fname), encoding='utf-8') as fh:
+                        data = json.load(fh)
+                except Exception:
+                    continue
+                bucket = found.setdefault(pkey, Counter())
+                for d in (data if isinstance(data, list) else [data]):
+                    if isinstance(d, dict):
+                        bucket[str(d.get('Status') or 'New').strip() or 'New'] += 1
+
+    cards, claimed = [], set()
+    for c in _NDM_CARDS:
+        agg = Counter()
+        for dkey in c['dirs']:
+            if dkey in found:
+                agg.update(found[dkey])
+                claimed.add(dkey)
+        cards.append({
+            'key': c['key'], 'label': c['label'], 'url': c['url'],
+            'soon': bool(c.get('soon')), 'total': sum(agg.values()),
+            'statuses': dict(agg),
+        })
+    # "e etc": qualquer produto com arquivos na data que não está no catálogo
+    # (ex.: Swap Rates / Swap Commodities) ganha um card genérico no fim.
+    for pkey in sorted(found):
+        if pkey in claimed:
+            continue
+        agg = found[pkey]
+        cards.append({
+            'key': 'extra-' + pkey.lower().replace('/', '-').replace(' ', '-'),
+            'label': pkey.replace('/', ' '), 'url': None, 'soon': False,
+            'total': sum(agg.values()), 'statuses': dict(agg),
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'cards': cards})
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):

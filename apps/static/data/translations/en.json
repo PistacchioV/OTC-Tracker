@@ -1368,5 +1368,11 @@
   "vr-nav-cgd": "CGD",
   "vr-nav-indexb3": "Index B3",
   "vr-nav-metrics": "Metrics",
-  "vr-nav-users": "Users"
+  "vr-nav-users": "Users",
+  "nav-products-monitor": "Monitor",
+  "ndm-sub": "Imported operations by product and status for the reference date — what still needs action on each page.",
+  "ndm-ref-date": "Reference date",
+  "ndm-empty": "No operations imported for this date.",
+  "ndm-dev": "In development",
+  "ndm-open": "Open page"
 }
