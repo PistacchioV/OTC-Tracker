@@ -272,6 +272,17 @@ h1, h2, h3, h4, h5,
 }
 .side-nav .side-nav-item .side-nav-link .menu-icon i { color: #fff; font-size: 1rem; line-height: 1; }
 .side-nav .side-nav-item .side-nav-link .menu-icon svg { width: 17px; height: 17px; color: #fff; }
+/* Ícones custom com wrapper próprio (Index B3, Intrag): o span interno de 20px
+   do sidenav.html deixava o SVG de 17px encostado no canto — desalinhado dentro
+   do tile de 30px. Wrapper passa a ter o tamanho do glifo e centralizar por flex. */
+.side-nav .side-nav-item .side-nav-link .menu-icon .icon-b3,
+.side-nav .side-nav-item .side-nav-link .menu-icon .icon-intrag {
+  width: 17px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 @media (hover: hover) and (pointer: fine) {
   .side-nav .side-nav-item .side-nav-link:hover .menu-icon {
     transform: scale(1.1) rotate(-4deg);

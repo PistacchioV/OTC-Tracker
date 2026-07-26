@@ -234,6 +234,19 @@
     box-shadow: 0 8px 20px rgba(94, 92, 230, .28) !important;
 }
 .cp-card__icon i { color: #fff; }
+/* Animação-card padrão (about → sidenav → aqui): hover no card levanta e o
+   ícone dá scale + leve rotação. Sempre atrás de hover fino + reduced-motion. */
+.cp-card__icon { transition: transform 260ms var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow .2s var(--vr-ease, ease); }
+@media (hover: hover) and (pointer: fine) {
+    .cp-card:hover .cp-card__icon {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 10px 24px rgba(94, 92, 230, .38) !important;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cp-card__icon { transition: none; }
+    .cp-card:hover .cp-card__icon { transform: none; }
+}
 @media (prefers-reduced-motion: no-preference) {
     @keyframes cp-rise { from { opacity: 0; transform: translateY(22px) scale(.97); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
     .cp-reveal { animation: cp-rise 640ms var(--cp-ease-out) both; }
