@@ -1,5 +1,6 @@
 # local dev stubs (never commit)
 awmpy.py
+smoke_db.py
 
 # Mock dashboard data — visual testing only, NEVER commit
 **/*_mock.json
