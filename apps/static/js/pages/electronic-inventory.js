@@ -8,6 +8,14 @@
 (function () {
     'use strict';
 
+    // Build stamp: F12 → Console shows which version of this file the browser
+    // actually runs. First thing to check when a machine misbehaves — a stale
+    // JS/HTML pair (cached template + fresh static, or the reverse) is the
+    // usual culprit, not the OS or the browser.
+    var EI_BUILD = '2026-07-25a';
+    window.EI_BUILD = EI_BUILD;
+    try { console.info('[electronic-inventory] build ' + EI_BUILD); } catch (e) { /* noop */ }
+
     var API = '/api/electronic-inventory';
     var UPLOAD_TIMEOUT_MS = 90000;   // hard ceiling on a save to the (slow) I: share
     var PREVIEW_TIMEOUT_MS = 45000;  // ditto for streaming a PDF into the viewer
@@ -787,15 +795,17 @@
         $('eiUploadModal').addEventListener('hidden.bs.modal', function () { document.body.classList.remove('ei-upload-open'); });
         $('eiUploadBtn').addEventListener('click', function () {
             if (!state.client) { toast('warning', 'Select a counterparty first', 'Choose one on the left, then upload.'); return; }
-            $('eiUpClient').value = state.client;
-            $('eiUpType').value = state.type !== 'all' ? state.type : 'Confirmations';
-            fillSubtypeOptions($('eiUpType').value);   // also resets the sub-type to "— Select —"
-            $('eiUpFile').value = ''; $('eiDropLabel').textContent = 'Drop a file here or click to browse';
-            $('eiDropClear').classList.add('d-none');
-            $('eiUpNamePreview').textContent = '';
-            clearExtraBlocks();
-            resetDate($('eiUpDate'));
+            // The whole prep is inside the try — a missing element here (JS newer
+            // than the cached HTML) must fail loudly, not leave a dead button.
             try {
+                $('eiUpClient').value = state.client;
+                $('eiUpType').value = state.type !== 'all' ? state.type : 'Confirmations';
+                fillSubtypeOptions($('eiUpType').value);   // also resets the sub-type to "— Select —"
+                $('eiUpFile').value = ''; $('eiDropLabel').textContent = 'Drop a file here or click to browse';
+                $('eiDropClear').classList.add('d-none');
+                $('eiUpNamePreview').textContent = '';
+                clearExtraBlocks();
+                resetDate($('eiUpDate'));
                 bootstrap.Modal.getOrCreateInstance($('eiUploadModal')).show();
             } catch (err) {
                 // bootstrap missing/broken (stale cache, unsupported browser):
@@ -840,7 +850,17 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        wire();
+        // wire() is one long chain of getElementById().addEventListener — a
+        // single missing element (stale HTML/JS pair) throws and silently kills
+        // every binding after it, which is how "the Upload button does nothing"
+        // reports happen. Surface it instead.
+        try {
+            wire();
+        } catch (err) {
+            console.error('ei: page wiring failed (stale cache? build ' + EI_BUILD + ')', err);
+            toast('error', 'Page failed to initialize',
+                  'Refresh with Ctrl+F5. If it persists, the server may be running mixed versions — contact support.');
+        }
         loadClients();
         if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
     });

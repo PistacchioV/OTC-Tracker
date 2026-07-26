@@ -18002,11 +18002,9 @@ input::-webkit-inner-spin-button {
 
 .modal .modal-dialog {
   transition: none;
-  transform: scale(0.85);
-  opacity: 0;
 }
 .modal.show .modal-dialog {
-  animation: zoomInModal 0.1s ease-out forwards;
+  animation: zoomInModal 0.1s ease-out;
 }
 
 @keyframes zoomInModal {
