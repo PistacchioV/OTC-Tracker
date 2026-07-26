@@ -15,8 +15,10 @@
 
 /* ── Toolbar (dropzone + buttons) ─────────────────────────────── */
 #payrec-page .pr-dropzone {
-    border: 1.5px dashed var(--bs-border-color, #ced4da); border-radius: 12px;
-    padding: .85rem 1rem; cursor: pointer; background: var(--bs-tertiary-bg, #f8f9fa);
+    /* tokens --ins-* (nativos do tema): os --bs-* são indefinidos aqui e caíam
+       no fallback claro — dropzone branco no dark (HANDOFF §109). */
+    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 12px;
+    padding: .85rem 1rem; cursor: pointer; background: var(--ins-tertiary-bg, #f8f9fa);
     transition: border-color 150ms var(--pr-ease-out), background-color 150ms var(--pr-ease-out);
 }
 #payrec-page .pr-dropzone:hover, #payrec-page .pr-dropzone:focus-visible { border-color: #0066cc; outline: none; }
@@ -27,7 +29,7 @@
 #payrec-page .pr-dz-list:empty { margin: 0; }
 #payrec-page .pr-dz-list li {
     display: inline-flex; align-items: center; gap: .35rem; font-size: .74rem;
-    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6);
+    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--ins-border-color, #dee2e6);
     border-radius: 50rem; padding: 2px 6px 2px 10px; color: var(--ins-body-color);
     animation: pr-chip-in 200ms var(--pr-ease-out) both;
 }
@@ -47,11 +49,11 @@
 /* Reference date */
 #payrec-page .pr-datewrap { position: relative; width: 160px; }
 #payrec-page .pr-datewrap input {
-    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    width: 100%; border: 1px solid var(--ins-border-color); border-radius: 10px;
     padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
-    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    color: var(--ins-body-color); background: var(--ins-secondary-bg, #fff); cursor: pointer;
 }
-#payrec-page .pr-cal-btn { position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer; }
+#payrec-page .pr-cal-btn { position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--ins-secondary-color); cursor: pointer; }
 
 /* ── Result blocks ────────────────────────────────────────────── */
 #payrec-page .pr-block { animation: pr-block-in 280ms var(--pr-ease-out) both; }
@@ -63,7 +65,7 @@
 
 #payrec-page .pr-block__title { font-size: .95rem; font-weight: 700; letter-spacing: -.2px; margin: 0 0 .55rem; display: flex; align-items: center; gap: .45rem; }
 #payrec-page .pr-block__title i { font-size: 1.05rem; color: #0066cc; }
-#payrec-page .pr-block__count { font-size: .72rem; font-weight: 600; color: var(--ins-secondary-color); background: var(--bs-tertiary-bg); border-radius: 50rem; padding: 1px 9px; }
+#payrec-page .pr-block__count { font-size: .72rem; font-weight: 600; color: var(--ins-secondary-color); background: var(--ins-tertiary-bg); border-radius: 50rem; padding: 1px 9px; }
 
 #payrec-page .pr-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--pr-hairline); }
 #payrec-page table.pr-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin: 0; }
