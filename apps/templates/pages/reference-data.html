@@ -16,7 +16,9 @@
     #ref-data-table td { white-space:nowrap; font-size:0.8rem; }
     td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
     td.editing .select2-container { width:100%!important; }
-    .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+    /* Ações de linha: SEMPRE quadrado de cantos arredondados (nunca círculo/pill),
+       independente do raio que qualquer camada de tema aplique em .btn. */
+    .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:7px !important; }
     .edit-actions-wrap { display:flex; gap:4px; }
     .pill-badge { font-size:0.68rem; }
     .select2-dropdown { font-size:0.78rem; }
@@ -277,7 +279,7 @@
     .cp-glass .cp-defbtn-pend    { background: #d39e00 !important; }
     .cp-glass .cp-defbtn:disabled { opacity: 0.5; }
     .cp-acc-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-    .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px; }
+    .cp-glass .btn-xs { padding: 2px 7px; font-size: 0.68rem; line-height: 1.3; border-radius: 7px !important; }
     .cp-glass .btn-xs:active { transform: scale(0.94); }
     .cp-def-pend { outline: 2px dashed rgba(255,193,7,0.8); outline-offset: 1px; }
     .cp-def-banner {
