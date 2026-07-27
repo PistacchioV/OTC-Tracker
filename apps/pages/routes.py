@@ -13868,6 +13868,9 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     end_cp = str(get('END COUNTERPARTY') or '').strip()
     if not end_cp:
         return None, None
+    # Internal holding book — not a client trade, never imported
+    if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_'):
+        return None, None
 
     # LE: Settlement Location BRAZIL → JPM; JPMCBB → MGT (else raw, visible)
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
