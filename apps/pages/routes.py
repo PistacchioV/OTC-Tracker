@@ -13854,7 +13854,7 @@ def _api_rec_is_dead(norm):
     return False
 
 
-def _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy):
+def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
     norm = _ndf_api_norm(rec)
@@ -13873,16 +13873,12 @@ def _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy):
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
     le = {'BRAZIL': 'JPM', 'JPMCBB': 'MGT'}.get(loc, loc)
 
-    # SPN comes as its own field in the payload; End Counterparty is an
-    # FX Cash acronym-style code (e.g. "CMBB-LAW") — used as fallback key.
-    spn = str(get('SPN') or '').strip()
-    if spn.endswith('.0'):
-        spn = spn[:-2]
-    ref = refmap.get(_norm_spn(spn), {}) if spn else {}
-    if not ref:
-        ref = refmap_acr.get(end_cp.upper(), {})
-        if not spn:
-            spn = str(ref.get('SPN', '') or '').strip()
+    # Counterparty enrichment is keyed by End Counterparty (FX Cash
+    # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM.
+    # When the code is not registered, SPN/Client/TaxID stay blank and the page
+    # stamps the "Missing Counterparty" badge on those columns.
+    ref = refmap_acr.get(end_cp.upper(), {})
+    spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
     last_fix  = _fxo_date_dmy(_ndf_api_get(norm, 'LAST FIXING DATE') or get('EXPIRATION DATE'))
@@ -13923,7 +13919,7 @@ def _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy):
         'Month':             month,
         'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
         'SPN':               spn,
-        'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
+        'Acronym':           (ref.get('FX CASH ACCRONYM', '') or '') or end_cp,
         'Client':            ref.get('COUNTERPARTY', '') or '',
         'TaxID':             ref.get('TAX ID', '') or '',
         'FirstFixingDate':   first_fix,
@@ -14000,9 +13996,8 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
-    refmap = _fxo_refdata_by_spn()
     refmap_acr = {}
-    for _r in refmap.values():
+    for _r in _fxo_refdata_by_spn().values():
         _a = str(_r.get('FX CASH ACCRONYM', '') or '').strip().upper()
         if _a and _a not in refmap_acr:
             refmap_acr[_a] = _r
@@ -14012,7 +14007,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        target, deal = _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy)
+        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
         if target is None:
             norm = _ndf_api_norm(rec)
             instr = str(norm.get('INSTRUMENT TYPE') or '')
