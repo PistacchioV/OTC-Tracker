@@ -7,7 +7,8 @@ Planilha de origem (aba "Base"), uma linha por contraparte:
     F Client Role Status      G Contatos        H Banker   I Grupo Economico
 
 O que é atualizado, casando pelo SPN:
-  * RefData.json          → BANKER (col. H) e ECONOMIC GROUP (col. I)
+  * RefData.json          → BANKER (col. H), ECONOMIC GROUP (col. I) e
+                            SIGNATURE TYPE (col. K; vazio na planilha = não mexe)
   * CounterpartyDetails   → CONTACTS a partir da col. G (e-mails separados por ';')
 
 Regras aplicadas aos contatos
@@ -54,6 +55,7 @@ SHEET = 'Base'
 
 # Colunas (1-based, como na planilha).
 COL_COUNTERPARTY, COL_SPN, COL_CONTATOS, COL_BANKER, COL_GRUPO = 1, 2, 7, 8, 9
+COL_SIGNATURE = 11   # K — Signature Type
 
 # Todas as regras que um contato importado recebe. Espelha o que a Reference
 # Data exibe hoje; manter em sincronia com CP_RULES em reference-data.html.
@@ -129,6 +131,7 @@ def read_sheet(path):
             'contatos': cell(COL_CONTATOS),
             'banker': cell(COL_BANKER),
             'grupo': cell(COL_GRUPO),
+            'signature': cell(COL_SIGNATURE),
         })
     wb.close()
     return rows
@@ -161,7 +164,7 @@ def main():
     for r in cpd:
         cpd_by_spn.setdefault(norm_spn(r.get('SPN')), r)
 
-    n_banker = n_grupo = n_contacts_new = n_contacts_upd = 0
+    n_banker = n_grupo = n_signature = n_contacts_new = n_contacts_upd = 0
     dropped, no_ref, no_cpd, created_cpd = [], [], [], []
 
     for row in rows:
@@ -178,6 +181,9 @@ def main():
             if row['grupo'] and str(ref.get('ECONOMIC GROUP') or '').strip() != row['grupo']:
                 ref['ECONOMIC GROUP'] = row['grupo']
                 n_grupo += 1
+            if row['signature'] and str(ref.get('SIGNATURE TYPE') or '').strip() != row['signature']:
+                ref['SIGNATURE TYPE'] = row['signature']
+                n_signature += 1
 
         # ── CounterpartyDetails: contatos ────────────────────────────────
         emails, seen = [], set()
@@ -225,7 +231,8 @@ def main():
         rec['CONTACTS'] = existing
 
     # ── Relatório ────────────────────────────────────────────────────────
-    print('RefData    : BANKER atualizado em %d · ECONOMIC GROUP em %d' % (n_banker, n_grupo))
+    print('RefData    : BANKER atualizado em %d · ECONOMIC GROUP em %d · SIGNATURE TYPE em %d'
+          % (n_banker, n_grupo, n_signature))
     print('Contatos   : %d novos · %d com regras atualizadas' % (n_contacts_new, n_contacts_upd))
     print('Placeholder: %d e-mails descartados' % len(dropped))
     if dropped:
