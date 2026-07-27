@@ -15956,7 +15956,7 @@ def api_ndf_send_conecta():
         except Exception:
             return '0' * (int_digits + dec_digits)
 
-    FIXED_UNDERLYINGS = {'NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'}
+    FIXED_UNDERLYINGS = {'NACX0005', 'NAEB0011', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'}
 
     import json as _json
     lawton_lines = []

@@ -1069,7 +1069,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-image-exif-orientation.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/filepond/filepond-plugin-file-encode.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/xlsx/xlsx.full.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v=20260727c"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/choices/choices.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
@@ -3936,7 +3936,7 @@ $(document).ready(function() {
         var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
-        var FIXED_UND   = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
+        var FIXED_UND   = ['NACX0005', 'NAEB0011', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
         var isFixed     = FIXED_UND.indexOf(underlying) !== -1;
         var tipoCotacao = isFixed ? 'F' : 'A';
         var fonteInfo   = isFixed ? '340' : '358';
