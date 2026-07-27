@@ -11,8 +11,9 @@
  *
  * The badge work is DOM-only (it never touches DataTables `cell.data()`), so it
  * coexists cleanly with the Missing Index B3 mechanism (which DOES swap the
- * Status cell data). Always invoke refreshAll() AFTER the B3 refresh so the CP
- * badge is appended on top of whatever B3 left in the Status cell.
+ * Status cell data). Always invoke refreshAll() AFTER the B3 refresh. In the
+ * Status cell the CP badge shows ALONE: whatever badge is there (status/B3)
+ * is hidden while the counterparty is missing and restored when registered.
  *
  * Usage (inside the page script, after the DataTable is built):
  *   var inst = MissingCounterparty.init({
@@ -102,13 +103,17 @@ window.MissingCounterparty = (function () {
         var missing = this.isMissing(v.spn, v.acr);
         var badge   = this.badgeHtml();
 
-        // Status cell — append/remove (coexists with the Missing Index B3 badge).
+        // Status cell — when missing, the CP badge REPLACES the status badge
+        // visually (hide, don't destroy: cell data stays untouched, so a later
+        // registration — or the next draw — restores the original badge).
         var stNode = t.cell(tr, c.status).node();
         if (stNode) {
             var $st = $(stNode);
             $st.find('.missing-cp-badge').remove();
+            $st.children().show();
             if (missing && !$st.find('.row-edit-field').length) {
-                $st.append(($st.html().trim() ? ' ' : '') + badge);
+                $st.children().hide();
+                $st.append(badge);
             }
         }
 
