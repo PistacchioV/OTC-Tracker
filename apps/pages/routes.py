@@ -18404,6 +18404,121 @@ def api_generic_nd_send_conecta(product):
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
+@blueprint.route('/api/new-deals/<product>/mapping-b3', methods=['POST'])
+def api_generic_nd_mapping_b3(product):
+    """B3 return-file scan for the generic NDF pages — same logic as the
+    ndf-commodities mapping. The TER files write the RIGHT-14 chars of the Deal
+    as Código Identificador, so the return-line match uses that suffix."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return jsonify({'ok': False, 'error': 'Unknown product'}), 404
+
+    data = request.get_json(silent=True) or {}
+    sent_deals = data.get('deals', [])
+    if not sent_deals:
+        return jsonify({'ok': True, 'results': []})
+
+    mapping         = {}
+    files_to_delete = []
+    try:
+        if not os.path.isdir(RETURN_PATH):
+            return jsonify({'ok': False, 'error': f'Return folder not found: {RETURN_PATH}'}), 400
+
+        for fname in os.listdir(RETURN_PATH):
+            fpath = os.path.join(RETURN_PATH, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, 'r', encoding='latin-1') as fh:
+                    lines = fh.readlines()
+                file_has_ter = False
+                for line in lines[1:]:  # skip header row
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # Sigla at chars 57-59 (1-based): only 'TER' (termo) lines
+                    if line[56:59] != 'TER':
+                        continue
+                    file_has_ter = True
+                    if 'EXECUCAO OK' not in line:
+                        continue
+                    parts = line.split(';')
+                    if len(parts) < 2:
+                        continue
+                    b3_id = parts[1].strip()
+                    for sd in sent_deals:
+                        deal_text = sd.get('Deal', '')
+                        if deal_text and deal_text not in mapping and deal_text[-14:] in line:
+                            mapping[deal_text] = b3_id
+                # Only delete return files that actually carried TER (NDF) lines
+                if file_has_ter:
+                    files_to_delete.append(fpath)
+            except Exception:
+                continue
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+    results = []
+    for sd in sent_deals:
+        deal_text   = sd.get('Deal', '')
+        client_name = sd.get('Client', '')
+
+        if deal_text and deal_text in mapping:
+            b3_id      = mapping[deal_text]
+            new_status = 'Success'
+            updates    = {'Status': new_status, 'B3_ID': b3_id}
+        else:
+            b3_id      = ''
+            new_status = 'Error'
+            updates    = {'Status': new_status}
+
+        success_deal = None
+        if deal_text:
+            file_path, idx = _find_generic_nd_deal(cfg, deal_text, client_name)
+            if file_path is not None:
+                with _cache_lock:
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as fh:
+                            deals_list = json.load(fh)
+                        deals_list[idx].update(updates)
+                        _atomic_write_json(file_path, deals_list)
+                        if new_status == 'Success':
+                            success_deal = deals_list[idx].copy()
+                    except Exception:
+                        pass
+
+        if success_deal is not None:
+            cl_low = (success_deal.get('Client', '') or '').lower()
+            if 'banco' in cl_low and 'morgan' in cl_low:
+                try:
+                    _save_intrag_ndf_entry(success_deal)
+                except Exception as exc:
+                    log.error('[MAPPING-B3 %s] Intrag save failed for deal=%r: %s',
+                              product, deal_text, exc)
+            _generic_nd_pc_trigger(product, success_deal)   # → pending confirmation
+
+        results.append({
+            'id':     deal_text,
+            'deal':   deal_text,
+            'b3_id':  b3_id,
+            'status': new_status,
+        })
+
+    for fpath in files_to_delete:
+        try:
+            os.remove(fpath)
+        except Exception:
+            pass
+
+    if results:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'B3 Mapped', cfg['label'],
+                             str(len(results)) + ' deal' + ('' if len(results) == 1 else 's') + ' mapped')
+    return jsonify({'ok': True, 'results': results})
+
+
 # ==============================================================================
 # NOTIFICATIONS
 # ==============================================================================
