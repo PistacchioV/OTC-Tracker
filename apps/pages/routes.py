@@ -8393,6 +8393,8 @@ def api_opb3_row_confirm():
 #  Modalidade de Liquidação Bilateral*/Bruta*. Drafts .eml (X-Unsent) com o
 #  shell padrão dos avisos; destinatários vêm dos cards CEM / Equities.
 _OPB3_MSG_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'operations_b3_mensageria_recipients.json')
+# BCC de compliance (GDT) dos intragrupo — ver regra no loop da geração.
+_OPB3_MSG_GDT_BCC = 'gdt.br.derivatives@restricted.chase.com'
 
 
 def _opb3_msg_load_recipients():
@@ -8584,10 +8586,20 @@ def api_opb3_mensageria():
         to, cc = recips[rk]['to'], recips[rk]['cc']
         if not to:
             missing.add(rk.upper())
+        # BCC compliance (GDT): IntragAtacama* sempre; IntragLawton só quando
+        # Tipo Título = SWAP e a somatória é "Banco recebe do(a)" (≥ 0) — nos
+        # demais casos contra o Lawton o BCC fica em branco.
+        cp_simpl = str(recs[0].get('Contraparte (Nome Simpl.)', '') or '').strip().upper()
+        bcc = ''
+        if cp_simpl.startswith('INTRAGATACAMA'):
+            bcc = _OPB3_MSG_GDT_BCC
+        elif cp_simpl.startswith('INTRAGLAWTON') and 'swap' in titn and total >= 0:
+            bcc = _OPB3_MSG_GDT_BCC
         drafts.append(otc_emails.build_opb3_mensageria_email({
             'tipo': g['tipo'], 'tipo_titulo': recs[0].get('Tipo Título', ''),
             'tipo_operacao': g['tipo_op'], 'cpty': cpty, 'ref_date': ref_fmt,
             'rows': rows, 'total': total, 'internal': internal, 'to': to, 'cc': cc,
+            'bcc': bcc,
         }))
 
     if missing:

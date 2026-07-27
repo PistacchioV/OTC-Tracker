@@ -182,8 +182,10 @@ def _email_notice(html):
             '<span style="font-weight:700;">Importante:</span> ' + html + '</td></tr></table>')
 
 
-def _email_shell(title, ref_date, intro_html, body_html):
-    """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer."""
+def _email_shell(title, ref_date, intro_html, body_html, footer_extra=''):
+    """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer.
+    `footer_extra`: linha adicional no fim da assinatura (ex.: a classificação
+    "JPMC Internal Use Only" dos e-mails internos de mensageria)."""
     return (
         # bgcolor ATTRIBUTES alongside the inline styles: Outlook (Word engine and
         # outlook.com) drops style backgrounds on body/table in some render paths,
@@ -235,7 +237,9 @@ def _email_shell(title, ref_date, intro_html, body_html):
         '<div style="font-weight:600;color:#555;margin-bottom:2px;">Atenciosamente,</div>'
         'Banco J.P. Morgan S.A. &nbsp;|&nbsp; Av. Brigadeiro Faria Lima, 3729 – 15º andar – São Paulo – SP<br>'
         'T: 55 11 4950 6717 &nbsp;|&nbsp; brsp_otc_derivatives_ops@jpmorgan.com &nbsp;|&nbsp; jpmorgan.com<br>'
-        'Ouvidoria JPMorgan: 0800 – 7700847 &middot; ouvidoria.jp.morgan@jpmorgan.com'
+        'Ouvidoria JPMorgan: 0800 – 7700847 &middot; ouvidoria.jp.morgan@jpmorgan.com' +
+        (('<div style="margin-top:8px;font-weight:600;color:#8a8a8f;">' + _esc(footer_extra) + '</div>')
+         if footer_extra else '') +
         '</td></tr>'
         '</table></td></tr></table></body></html>')
 
@@ -982,6 +986,9 @@ def build_eml_bytes(draft, sender_email=None):
     cc = _resolve_recipients(draft.get('cc'))
     if cc:
         lines.append('Cc: ' + cc)
+    bcc = _resolve_recipients(draft.get('bcc'))
+    if bcc:
+        lines.append('Bcc: ' + bcc)
     lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
     html = draft.get('html', '') or ''
 
@@ -1067,10 +1074,10 @@ def _msg_highlight(text, bg):
 
 
 def _msg_flow_phrase(total, cpty):
-    """'Banco recebe do(a) X R$ v' (total ≥ 0) / 'Banco paga ao(à) X R$ v'."""
+    """'Banco recebe do(a) X R$ v' (total ≥ 0) / 'Banco paga X R$ v'."""
     if total >= 0:
         return 'Banco recebe do(a) {} R$ {}'.format(cpty, _br(abs(total)))
-    return 'Banco paga ao(à) {} R$ {}'.format(cpty, _br(abs(total)))
+    return 'Banco paga {} R$ {}'.format(cpty, _br(abs(total)))
 
 
 def build_opb3_mensageria_email(group):
@@ -1110,12 +1117,14 @@ def build_opb3_mensageria_email(group):
             '<span style="font-size:13.5px;color:#333;font-family:' + _E_FONT + ';">Favor considerar:&nbsp;&nbsp;</span>' +
             _msg_highlight(_msg_flow_phrase(float(internal), cpty), '#d9efd9'))
 
-    html = _email_shell('Mensageria de Liquidação', ref_date, intro, body)
+    html = _email_shell('Mensageria de Liquidação', ref_date, intro, body,
+                        footer_extra='JPMC Internal Use Only')
     return {
         'subject': subject,
         'html': html,
         'to': group.get('to') or '',
         'cc': group.get('cc') or '',
+        'bcc': group.get('bcc') or '',
         'counterparty': cpty,
     }
 
