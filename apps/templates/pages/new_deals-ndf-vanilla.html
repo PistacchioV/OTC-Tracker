@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}FWD Start NDF{% endblock title %}
+{% block title %}Vanilla NDF{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css"/>
@@ -408,40 +408,34 @@
   #deals-processing-table td:nth-child(15) { min-width: 130px; width: 130px;  } /* Last Fixing Date */
 
   #deals-processing-table th:nth-child(16),
-  #deals-processing-table td:nth-child(16) { min-width: 130px; width: 130px;  } /* Strike Set Date */
+  #deals-processing-table td:nth-child(16) { min-width: 110px; width: 110px;  } /* Intrument */
 
   #deals-processing-table th:nth-child(17),
-  #deals-processing-table td:nth-child(17) { min-width: 130px; width: 130px;  } /* Strike Set Offset */
+  #deals-processing-table td:nth-child(17) { min-width: 95px;  width: 95px;   } /* Trade Type */
 
   #deals-processing-table th:nth-child(18),
-  #deals-processing-table td:nth-child(18) { min-width: 110px; width: 110px;  } /* Intrument */
+  #deals-processing-table td:nth-child(18) { min-width: 85px;  width: 85px;   } /* Direction */
 
   #deals-processing-table th:nth-child(19),
-  #deals-processing-table td:nth-child(19) { min-width: 95px;  width: 95px;   } /* Trade Type */
+  #deals-processing-table td:nth-child(19) { min-width: 100px; width: 100px;  } /* FX Pair */
 
   #deals-processing-table th:nth-child(20),
-  #deals-processing-table td:nth-child(20) { min-width: 85px;  width: 85px;   } /* Direction */
+  #deals-processing-table td:nth-child(20) { min-width: 140px; width: 140px;  } /* Quantity Currency */
 
   #deals-processing-table th:nth-child(21),
-  #deals-processing-table td:nth-child(21) { min-width: 100px; width: 100px;  } /* FX Pair */
+  #deals-processing-table td:nth-child(21) { min-width: 130px; width: 130px;  } /* Publisher */
 
   #deals-processing-table th:nth-child(22),
-  #deals-processing-table td:nth-child(22) { min-width: 140px; width: 140px;  } /* Quantity Currency */
+  #deals-processing-table td:nth-child(22) { min-width: 130px; width: 130px;  } /* Notional */
 
   #deals-processing-table th:nth-child(23),
-  #deals-processing-table td:nth-child(23) { min-width: 130px; width: 130px;  } /* Publisher */
+  #deals-processing-table td:nth-child(23) { min-width: 110px; width: 110px;  } /* Rate */
 
   #deals-processing-table th:nth-child(24),
-  #deals-processing-table td:nth-child(24) { min-width: 130px; width: 130px;  } /* Notional */
+  #deals-processing-table td:nth-child(24) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
 
   #deals-processing-table th:nth-child(25),
-  #deals-processing-table td:nth-child(25) { min-width: 110px; width: 110px;  } /* Rate */
-
-  #deals-processing-table th:nth-child(26),
-  #deals-processing-table td:nth-child(26) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
-
-  #deals-processing-table th:nth-child(27),
-  #deals-processing-table td:nth-child(27) { min-width: 120px; width: 120px;  } /* TradingBook */
+  #deals-processing-table td:nth-child(25) { min-width: 120px; width: 120px;  } /* TradingBook */
 
   /* Todas as células da tabela devem ter nowrap */
   #deals-processing-table td {
@@ -743,7 +737,7 @@
                 <i class="ti ti-arrows-exchange-2"></i>
             </div>
             <div>
-                <h4 class="fs-xl fw-bold m-0" data-lang="nd-page-title-ndf-fwdstart">FWD Start NDF</h4>
+                <h4 class="fs-xl fw-bold m-0" data-lang="nd-page-title-ndf-vanilla">Vanilla NDF</h4>
             </div>
         </div>
         <div class="text-end">
@@ -751,7 +745,7 @@
                 <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
                 <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="new-deals">New Deals</a></li>
                 <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-ndf">NDF</a></li>
-                <li class="breadcrumb-item active" data-lang="nav-fwd-start">FWD Start</li>
+                <li class="breadcrumb-item active" data-lang="nav-ndf-vanilla">Vanilla</li>
             </ol>
         </div>
     </div>
@@ -854,7 +848,7 @@
                         <table class="table table-striped dt-responsive align-middle mb-0"
                                id="deals-processing-table">
                             <thead class="thead-sm text-uppercase fs-xxs">
-                                <!-- Linha 1: cabeçalhos — schema NDF FWD Start (24 colunas de dados) -->
+                                <!-- Linha 1: cabeçalhos — schema NDF Vanilla (22 colunas de dados) -->
                                 <tr class="text-uppercase fs-xxs">
                                     <th class="ps-3" style="width: 50px;">
                                         <input class="form-check-input form-check-input-light fs-14 mt-0"
@@ -876,8 +870,6 @@
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-tax-id">Tax ID</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-first-fix">First Fixing Date</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-last-fix">Last Fixing Date</th>
-                                    <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-strike-set-date">Strike Set Date</th>
-                                    <th data-table-sort="" data-format="text" data-lang="nd-col-strike-set-offset">Strike Set Offset</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-instrument">Intrument</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trade-type">Trade Type</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-direction">Direction</th>
@@ -888,7 +880,7 @@
                                     <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-rate">Rate</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-is-brr-fixed">Is BRR Fixed?</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trading-book">TradingBook</th>
-                                    <th></th><!-- col 27: Maker  (hidden) -->
+                                    <th></th><!-- col 25: Maker  (hidden) -->
                                 </tr>
 
                                 <!-- Linha de inputs para busca por coluna -->
@@ -908,8 +900,6 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Tax ID" data-lang-placeholder="col-tax-id"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="First Fixing Date" data-lang-placeholder="col-first-fix"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Last Fixing Date" data-lang-placeholder="col-last-fix"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Set Date" data-lang-placeholder="col-strike-set-date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Set Offset" data-lang-placeholder="col-strike-set-offset"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrument" data-lang-placeholder="col-instrument"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type" data-lang-placeholder="col-trade-type"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Direction" data-lang-placeholder="col-direction"></th>
@@ -936,13 +926,13 @@
 </div>
 
 <!-- =====================================================================
-     ADD NEW ROW MODAL — NDF FWD Start
+     ADD NEW ROW MODAL — NDF Vanilla
      ===================================================================== -->
 <div class="modal fade" id="addRowModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content liquid-glass">
       <div class="modal-header py-2">
-        <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add New Deal — NDF FWD Start</h5>
+        <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add New Deal — NDF Vanilla</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -1001,15 +991,6 @@
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Last Fixing Date</label>
             <input type="date" class="form-control form-control-sm" id="ar-lastfix">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">Strike Set Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-strikesetdate">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label form-label-sm mb-1">Strike Set Offset</label>
-            <input type="text" class="form-control form-control-sm" id="ar-strikesetoffset">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Intrument</label>
@@ -1209,7 +1190,7 @@ var _FX_HOLIDAY_NDF  = [];   // available FX holiday schedule names
         })
         .catch(function () {});
 
-    // FWD Start has no Underlying Asset / Commodities columns, so the Subjacente
+    // Vanilla has no Underlying Asset / Commodities columns, so the Subjacente
     // (Missing Index B3) machinery is intentionally not loaded — _ASSET_NDF stays
     // empty, which makes _isAssetMissing() always false and disables that logic.
 
@@ -1246,13 +1227,12 @@ var COL_TO_JSON_FIELD = {
     8:  'SettlementDate',  9:  'SPN',
     10: 'Acronym',         11: 'Client',
     12: 'TaxID',           13: 'FirstFixingDate',
-    14: 'LastFixingDate',  15: 'StrikeSetDate',
-    16: 'StrikeSetOffset', 17: 'Instrument',
-    18: 'TradeType',       19: 'Direction',
-    20: 'FXPair',          21: 'QuantityCurrency',
-    22: 'Publisher',       23: 'Notional',
-    24: 'Rate',            25: 'IsBRRFixed',
-    26: 'TradingBook',     27: 'Maker'
+    14: 'LastFixingDate',  15: 'Instrument',
+    16: 'TradeType',       17: 'Direction',
+    18: 'FXPair',          19: 'QuantityCurrency',
+    20: 'Publisher',       21: 'Notional',
+    22: 'Rate',            23: 'IsBRRFixed',
+    24: 'TradingBook',     25: 'Maker'
 };
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
@@ -1304,8 +1284,6 @@ function dealJsonToRow(deal) {
         taxIdHtml,
         deal.FirstFixingDate   || '',
         deal.LastFixingDate    || '',
-        deal.StrikeSetDate     || '',
-        deal.StrikeSetOffset   || '',
         deal.Instrument        || '',
         deal.TradeType         || '',
         deal.Direction         || '',
@@ -1369,7 +1347,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [24, 27]   // Rate (not applicable to FWD Start) + Maker SID
+                targets: [25]       // Maker SID — hidden metadata
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1398,7 +1376,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1409,7 +1387,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1420,7 +1398,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1431,7 +1409,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1442,7 +1420,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1530,19 +1508,17 @@ $(document).ready(function() {
                 'nd-col-tax-id',            // col 11
                 'nd-col-first-fix',         // col 12
                 'nd-col-last-fix',          // col 13
-                'nd-col-strike-set-date',   // col 14
-                'nd-col-strike-set-offset', // col 15
-                'nd-col-instrument',        // col 16
-                'nd-col-trade-type',        // col 17
-                'nd-col-direction',         // col 18
-                'nd-col-fx-pair',           // col 19
-                'nd-col-qty-ccy',           // col 20
-                'nd-col-publisher',         // col 21
-                'nd-col-notional',          // col 22
-                'nd-col-rate',              // col 23
-                'nd-col-is-brr-fixed',      // col 24
-                'nd-col-trading-book'       // col 25
-                // col 26 — Maker (hidden, no label)
+                'nd-col-instrument',        // col 14
+                'nd-col-trade-type',        // col 15
+                'nd-col-direction',         // col 16
+                'nd-col-fx-pair',           // col 17
+                'nd-col-qty-ccy',           // col 18
+                'nd-col-publisher',         // col 19
+                'nd-col-notional',          // col 20
+                'nd-col-rate',              // col 21
+                'nd-col-is-brr-fixed',      // col 22
+                'nd-col-trading-book'       // col 23
+                // col 24 — Maker (hidden, no label)
             ];
             var container = api.table().container();
             // DT2.x uses .dt-scroll-head; DT1.x used .dataTables_scrollHead
@@ -1662,7 +1638,7 @@ $(document).ready(function() {
                 importBtn.addEventListener('click', function() {
                     var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
                     if (dz && dz.files && dz.files.length) {
-                        OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/fwd-start/cache', 'ndf', ['Cancel', 'Option']);
+                        OTCFileUpload.processDropzone(table, '{{ config.ASSETS_ROOT }}', CURRENT_USER_SID, '/api/new-deals/vanilla/cache', 'ndf', ['Cancel', 'Option']);
                         return;
                     }
                     Swal.fire({
@@ -1689,7 +1665,7 @@ $(document).ready(function() {
                                     Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
                                     return;
                                 }
-                                var mine = (res.targets && res.targets['fwd-start'] && res.targets['fwd-start'].deals) || [];
+                                var mine = (res.targets && res.targets['vanilla'] && res.targets['vanilla'].deals) || [];
                                 var counts = [];
                                 var LABELS = { 'fwd-start': 'FWD Start', 'other-publishers': 'Other Publisher', 'vanilla': 'Vanilla' };
                                 Object.keys(res.targets || {}).forEach(function(k){
@@ -1771,7 +1747,7 @@ $(document).ready(function() {
                     mappingBtn.style.pointerEvents = 'none';
                     mappingBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
 
-                    fetch('/api/new-deals/fwd-start/mapping-b3', {
+                    fetch('/api/new-deals/vanilla/mapping-b3', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deals: sentDeals })
@@ -1891,7 +1867,7 @@ $(document).ready(function() {
             var columnLabels = [
                 "Status", "LE", "Deal", "B3 ID", "Trade Date", "Month",
                 "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
-                "First Fixing Date", "Last Fixing Date", "Strike Set Date", "Strike Set Offset",
+                "First Fixing Date", "Last Fixing Date",
                 "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
                 "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook"
             ];
@@ -1902,7 +1878,6 @@ $(document).ready(function() {
                 dropdown.className = 'dropdown';
 
                 var menuItems = columnLabels.map(function(label, index) {
-                    if (index + 2 === 24) return '';   // Rate — permanently hidden on FWD Start
                     return '<li class="dropdown-item">' +
                         '<div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" ' +
@@ -1974,18 +1949,16 @@ $(document).ready(function() {
                     '<option value="12">Tax ID</option>' +
                     '<option value="13">First Fixing Date</option>' +
                     '<option value="14">Last Fixing Date</option>' +
-                    '<option value="15">Strike Set Date</option>' +
-                    '<option value="16">Strike Set Offset</option>' +
-                    '<option value="17">Intrument</option>' +
-                    '<option value="18">Trade Type</option>' +
-                    '<option value="19">Direction</option>' +
-                    '<option value="20">FX Pair</option>' +
-                    '<option value="21">Quantity Currency</option>' +
-                    '<option value="22">Publisher</option>' +
-                    '<option value="23">Notional</option>' +
-                    '<option value="24">Rate</option>' +
-                    '<option value="25">Is BRR Fixed?</option>' +
-                    '<option value="26">TradingBook</option>';
+                    '<option value="15">Intrument</option>' +
+                    '<option value="16">Trade Type</option>' +
+                    '<option value="17">Direction</option>' +
+                    '<option value="18">FX Pair</option>' +
+                    '<option value="19">Quantity Currency</option>' +
+                    '<option value="20">Publisher</option>' +
+                    '<option value="21">Notional</option>' +
+                    '<option value="22">Rate</option>' +
+                    '<option value="23">Is BRR Fixed?</option>' +
+                    '<option value="24">TradingBook</option>';
 
                 // Botão Send
                 var confirmBtn = document.createElement('button');
@@ -2047,24 +2020,22 @@ $(document).ready(function() {
         { label: 'Accronym',          type: 'text',   dtCol: 10 },
         { label: 'Client',            type: 'text',   dtCol: 11 },
         { label: 'Tax ID',            type: 'text',   dtCol: 12 },
-        { label: 'Strike Set Offset', type: 'text',   dtCol: 16 },
-        { label: 'Intrument',         type: 'text',   dtCol: 17 },
-        { label: 'Trade Type',        type: 'text',   dtCol: 18 },
-        { label: 'Direction',         type: 'text',   dtCol: 19 },
-        { label: 'FX Pair',           type: 'text',   dtCol: 20 },
-        { label: 'Quantity Currency', type: 'text',   dtCol: 21 },
-        { label: 'Publisher',         type: 'text',   dtCol: 22 },
-        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 25 },
-        { label: 'TradingBook',       type: 'text',   dtCol: 26 },
+        { label: 'Intrument',         type: 'text',   dtCol: 15 },
+        { label: 'Trade Type',        type: 'text',   dtCol: 16 },
+        { label: 'Direction',         type: 'text',   dtCol: 17 },
+        { label: 'FX Pair',           type: 'text',   dtCol: 18 },
+        { label: 'Quantity Currency', type: 'text',   dtCol: 19 },
+        { label: 'Publisher',         type: 'text',   dtCol: 20 },
+        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 23 },
+        { label: 'TradingBook',       type: 'text',   dtCol: 24 },
         // date columns
         { label: 'Trade Date',        type: 'date',   dtCol: 6  },
         { label: 'Settlement Date',   type: 'date',   dtCol: 8  },
         { label: 'First Fixing Date', type: 'date',   dtCol: 13 },
         { label: 'Last Fixing Date',  type: 'date',   dtCol: 14 },
-        { label: 'Strike Set Date',   type: 'date',   dtCol: 15 },
         // number columns
-        { label: 'Notional',          type: 'number', dtCol: 23 },
-        { label: 'Rate',              type: 'number', dtCol: 24 }
+        { label: 'Notional',          type: 'number', dtCol: 21 },
+        { label: 'Rate',              type: 'number', dtCol: 22 }
     ];
 
     var sfActive = [];      // [{col, value}]
@@ -2229,7 +2200,6 @@ $(document).ready(function() {
         'Accronym':          'Acronym',
         'Client':            'Client',
         'Tax ID':            'TaxID',
-        'Strike Set Offset': 'StrikeSetOffset',
         'Intrument':         'Instrument',
         'Trade Type':        'TradeType',
         'Direction':         'Direction',
@@ -2242,7 +2212,6 @@ $(document).ready(function() {
         'Settlement Date':   'SettlementDate',
         'First Fixing Date': 'FirstFixingDate',
         'Last Fixing Date':  'LastFixingDate',
-        'Strike Set Date':   'StrikeSetDate',
         'Notional':          'Notional',
         'Rate':              'Rate'
     };
@@ -2263,7 +2232,7 @@ $(document).ready(function() {
 
         if (!filters.length) return;
 
-        fetch('/api/new-deals/fwd-start/cache/search', {
+        fetch('/api/new-deals/vanilla/cache/search', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ filters: filters })
@@ -2504,7 +2473,7 @@ $(document).ready(function() {
         }
 
         var colIdx = parseInt(colVal);
-        var dateColIndices = [6, 8, 12, 13, 14];
+        var dateColIndices = [6, 8, 12, 13];
 
         if (colIdx === 2) {
             var inp = makeInput('text', function(el) { el.disabled = true; el.placeholder = 'Will set status → Approved'; });
@@ -2513,17 +2482,17 @@ $(document).ready(function() {
         } else if (dateColIndices.indexOf(colIdx) !== -1) {
             wrapper.appendChild(makeInput('date'));
 
-        } else if (colIdx === 18) {
+        } else if (colIdx === 16) {
             var sel = makeInput('select');
             sel.innerHTML = '<option value="">Select...</option><option value="BUY">BUY</option><option value="SELL">SELL</option>';
             wrapper.appendChild(sel);
 
-        } else if (colIdx === 17) {
+        } else if (colIdx === 15) {
             var sel = makeInput('select');
             sel.innerHTML = '<option value="">Select...</option><option value="ASIAN">ASIAN</option><option value="VANILLA">VANILLA</option>';
             wrapper.appendChild(sel);
 
-        } else if (colIdx === 24) {
+        } else if (colIdx === 22) {
             var sel = makeInput('select');
             sel.innerHTML = '<option value="">Select...</option><option value="YES">YES</option><option value="NO">NO</option>';
             wrapper.appendChild(sel);
@@ -2678,7 +2647,7 @@ $(document).ready(function() {
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[27] || '';
+            var rowMaker  = d[25] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -2721,7 +2690,7 @@ $(document).ready(function() {
             if (!result.isConfirmed) return;
 
             var dealPayloads = sendableRows.map(function(item) { return extractRowDeal(item.data); });
-            fetch('/api/new-deals/fwd-start/send-conecta', {
+            fetch('/api/new-deals/vanilla/send-conecta', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ deals: dealPayloads })
@@ -2734,7 +2703,7 @@ $(document).ready(function() {
                             var sendChanges    = { Checker: CURRENT_USER_SID, Status: 'Sent' };
                             var capturedClient = _sh(item.data[10]);
                             (function(capturedData, capturedRowId, capturedChanges, capturedCli) {
-                                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(capturedRowId) + '?client=' + encodeURIComponent(capturedCli), {
+                                fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(capturedRowId) + '?client=' + encodeURIComponent(capturedCli), {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify(capturedChanges)
@@ -2742,7 +2711,7 @@ $(document).ready(function() {
                                     if (r.status === 404) {
                                         var fullDeal = rowDataToNdfDeal(capturedData, capturedRowId, capturedChanges);
                                         console.log('[NDF-DEALS SEND] PATCH 404 → creating missing cache entry', capturedRowId);
-                                        fetch('/api/new-deals/fwd-start/cache', {
+                                        fetch('/api/new-deals/vanilla/cache', {
                                             method:  'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body:    JSON.stringify(fullDeal)
@@ -2875,7 +2844,7 @@ $(document).ready(function() {
                 );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
-                table.cell(rowIdx, 27).data(CURRENT_USER_SID);
+                table.cell(rowIdx, 25).data(CURRENT_USER_SID);
                 changedFields['Maker'] = CURRENT_USER_SID;
                 processedCount++;
                 patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
@@ -2887,7 +2856,7 @@ $(document).ready(function() {
 
             // Pass 2 (async): single bulk-patch request — one read+write per file, no race condition
             if (patches.length > 0) {
-                fetch('/api/new-deals/fwd-start/cache/bulk-patch', {
+                fetch('/api/new-deals/vanilla/cache/bulk-patch', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ patches: patches })
@@ -2966,7 +2935,7 @@ $(document).ready(function() {
                 }
             });
 
-            fetch('/api/new-deals/fwd-start/cache/bulk-delete', {
+            fetch('/api/new-deals/vanilla/cache/bulk-delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pairs: pairs })
@@ -3219,7 +3188,7 @@ $(document).ready(function() {
     // ROW ACTION BUTTONS: Edit / Confirm / Delete / Send
     // ========================================================================
 
-    var DATE_COL_INDICES      = [6, 8, 13, 14, 15];
+    var DATE_COL_INDICES      = [6, 8, 13, 14];
     var QUOTED_COL_INDEX      = -1;   // no Quoted-in-Cents column on this page
     var STATUS_COL_INDEX      = 2;
     // Columns never turned into inputs (auto-populated or structural)
@@ -3284,17 +3253,15 @@ $(document).ready(function() {
             TaxID:            _sh(d[12]),
             FirstFixingDate:  _sh(d[13]),
             LastFixingDate:   _sh(d[14]),
-            StrikeSetDate:    _sh(d[15]),
-            StrikeSetOffset:  _sh(d[16]),
-            Instrument:       _sh(d[17]),
-            TradeType:        _sh(d[18]),
-            Direction:        _sh(d[19]),
-            FXPair:           _sh(d[20]),
-            QuantityCurrency: _sh(d[21]),
-            Publisher:        _sh(d[22]),
-            Notional:         _sh(d[23]),
-            Rate:             _sh(d[24]),
-            IsBRRFixed:       _sh(d[25])
+            Instrument:       _sh(d[15]),
+            TradeType:        _sh(d[16]),
+            Direction:        _sh(d[17]),
+            FXPair:           _sh(d[18]),
+            QuantityCurrency: _sh(d[19]),
+            Publisher:        _sh(d[20]),
+            Notional:         _sh(d[21]),
+            Rate:             _sh(d[22]),
+            IsBRRFixed:       _sh(d[23])
         };
     }
 
@@ -3315,19 +3282,17 @@ $(document).ready(function() {
             TaxID:            _sh(d[12]),
             FirstFixingDate:  _sh(d[13]),
             LastFixingDate:   _sh(d[14]),
-            StrikeSetDate:    _sh(d[15]),
-            StrikeSetOffset:  _sh(d[16]),
-            Instrument:       _sh(d[17]),
-            TradeType:        _sh(d[18]),
-            Direction:        _sh(d[19]),
-            FXPair:           _sh(d[20]),
-            QuantityCurrency: _sh(d[21]),
-            Publisher:        _sh(d[22]),
-            Notional:         _sh(d[23]),
-            Rate:             _sh(d[24]),
-            IsBRRFixed:       _sh(d[25]),
-            TradingBook:      _sh(d[26]),
-            Maker:            d[27] || '',
+            Instrument:       _sh(d[15]),
+            TradeType:        _sh(d[16]),
+            Direction:        _sh(d[17]),
+            FXPair:           _sh(d[18]),
+            QuantityCurrency: _sh(d[19]),
+            Publisher:        _sh(d[20]),
+            Notional:         _sh(d[21]),
+            Rate:             _sh(d[22]),
+            IsBRRFixed:       _sh(d[23]),
+            TradingBook:      _sh(d[24]),
+            Maker:            d[25] || '',
             Checker:          ''
         };
         if (overrides) {
@@ -3526,7 +3491,7 @@ $(document).ready(function() {
         var changedFields = {};
 
         // Save all editable fields back to plain text; capture plain values for JSON sync
-        for (var colIdx = 2; colIdx <= 26; colIdx++) {
+        for (var colIdx = 2; colIdx <= 24; colIdx++) {
             if (SKIP_EDIT_COLS.indexOf(colIdx) !== -1) {
                 var roNode = table.cell(tr[0], colIdx).node();
                 if (!roNode) continue;
@@ -3572,7 +3537,7 @@ $(document).ready(function() {
 
         // Maker = editor's SID; sync to DataTable hidden col
         var rowId = _sh(table.cell(tr[0], 4).data()) || '';
-        table.cell(tr[0], 27).data(CURRENT_USER_SID);
+        table.cell(tr[0], 25).data(CURRENT_USER_SID);
         changedFields['Maker'] = CURRENT_USER_SID;
 
         // Status always becomes Pending after an edit
@@ -3594,7 +3559,7 @@ $(document).ready(function() {
         }
 
         if (rowId) {
-            fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(origClient), {
+            fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(origClient), {
                 method:  'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify(changedFields)
@@ -3642,10 +3607,10 @@ $(document).ready(function() {
             if (statusNode) {
                 $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
             }
-            table.cell(tr[0], 27).data(CURRENT_USER_SID);
+            table.cell(tr[0], 25).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 4).data()) || '';
             if (pendRowId) {
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
+                fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ Status: 'Pending', Maker: CURRENT_USER_SID })
@@ -3670,7 +3635,7 @@ $(document).ready(function() {
                 });
                 return;
             }
-            var approverMaker = table.cell(tr[0], 27).data() || '';
+            var approverMaker = table.cell(tr[0], 25).data() || '';
             if (approverMaker && approverMaker === CURRENT_USER_SID) {
                 Swal.fire({
                     title: t('swal-not-allowed-title', 'Not Allowed'),
@@ -3685,10 +3650,10 @@ $(document).ready(function() {
                 $(statusNode).html('<span class="badge text-bg-secondary bg-gradient">Approved</span>');
             }
             // Approver becomes the new Maker → next step (Send) must be a different user
-            table.cell(tr[0], 27).data(CURRENT_USER_SID);
+            table.cell(tr[0], 25).data(CURRENT_USER_SID);
             var approveRowId = _sh(table.cell(tr[0], 4).data()) || '';
             if (approveRowId) {
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
+                fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ Status: 'Approved', Maker: CURRENT_USER_SID })
@@ -3718,7 +3683,7 @@ $(document).ready(function() {
                 var rowId = _sh(table.cell(tr[0], 4).data()) || '';
                 if (rowId) {
                     var clientVal = _sh(table.cell(tr[0], 11).data());
-                    fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(clientVal), {
+                    fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(clientVal), {
                         method: 'DELETE'
                     }).catch(function(err) { console.warn('Cache DELETE failed:', err); });
                 }
@@ -3733,7 +3698,7 @@ $(document).ready(function() {
         var tr = $(this).closest('tr');
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
         var currentStatus = statusNode ? $(statusNode).find('.badge').text().trim() : '';
-        var makerSid = table.cell(tr[0], 27).data() || '';
+        var makerSid = table.cell(tr[0], 25).data() || '';
 
         if (currentStatus !== 'Approved' && currentStatus !== 'Error') {
             var msg = currentStatus === 'New'
@@ -3771,7 +3736,7 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
             var dealPayload = extractRowDeal(tr[0]);
-            fetch('/api/new-deals/fwd-start/send-conecta', {
+            fetch('/api/new-deals/vanilla/send-conecta', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ deals: [dealPayload] })
@@ -3780,7 +3745,7 @@ $(document).ready(function() {
                 if (res.ok) {
                     var rowId = _sh(table.cell(tr[0], 4).data()) || '';
                     if (rowId) {
-                        fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
+                        fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
@@ -4165,7 +4130,7 @@ $(document).ready(function() {
                 }
             }).then(function(result) {
                 if (result.isConfirmed) {
-                    fetch('/api/new-deals/fwd-start/send-conecta', {
+                    fetch('/api/new-deals/vanilla/send-conecta', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deals: [deal] })
@@ -4174,7 +4139,7 @@ $(document).ready(function() {
                         if (res.ok) {
                             var rowId = _sh(table.cell(tr, 4).data()) || '';
                             if (rowId) {
-                                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr, 11).data())), {
+                                fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr, 11).data())), {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
@@ -4276,9 +4241,9 @@ $(document).ready(function() {
         }
 
         function arClearFields() {
-            $('#ar-le,#ar-deal,#ar-acronym,#ar-spn,#ar-client,#ar-taxid,#ar-strikesetoffset,' +
+            $('#ar-le,#ar-deal,#ar-acronym,#ar-spn,#ar-client,#ar-taxid,' +
               '#ar-fxpair,#ar-qtyccy,#ar-publisher,#ar-notional,#ar-rate,#ar-tradingbook').val('');
-            $('#ar-tradedate,#ar-settledate,#ar-firstfix,#ar-lastfix,#ar-strikesetdate').val('');
+            $('#ar-tradedate,#ar-settledate,#ar-firstfix,#ar-lastfix').val('');
             $('#ar-month').val('');
             $('#ar-instrument').val('Swap');
             $('#ar-tradetype,#ar-direction,#ar-isbrrfixed').val('');
@@ -4303,7 +4268,7 @@ $(document).ready(function() {
             var d = table.row(tr).data();
             if (!d) return;
             $(arModalEl).data('editRowId', _sh(d[4]) || '').data('editTr', tr);
-            arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Deal &mdash; NDF FWD Start';
+            arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-edit me-1"></i>Edit Deal &mdash; NDF Vanilla';
             $('#ar-le').val(_sh(d[3]));
             $('#ar-deal').val(_sh(d[4]));
             $('#ar-b3id').val(_sh(d[5]));
@@ -4316,24 +4281,22 @@ $(document).ready(function() {
             $('#ar-taxid').val(_sh(d[12]));
             $('#ar-firstfix').val(dmy2isoLocal(_sh(d[13])));
             $('#ar-lastfix').val(dmy2isoLocal(_sh(d[14])));
-            $('#ar-strikesetdate').val(dmy2isoLocal(_sh(d[15])));
-            $('#ar-strikesetoffset').val(_sh(d[16]));
-            $('#ar-instrument').val(_sh(d[17]) || 'Swap');
-            $('#ar-tradetype').val(_sh(d[18]));
-            $('#ar-direction').val(_sh(d[19]));
-            $('#ar-fxpair').val(_sh(d[20]));
-            $('#ar-qtyccy').val(_sh(d[21]));
-            $('#ar-publisher').val(_sh(d[22]));
-            $('#ar-notional').val(_sh(d[23]));
-            $('#ar-rate').val(_sh(d[24]));
-            $('#ar-isbrrfixed').val(_sh(d[25]));
-            $('#ar-tradingbook').val(_sh(d[26]));
+            $('#ar-instrument').val(_sh(d[15]) || 'Swap');
+            $('#ar-tradetype').val(_sh(d[16]));
+            $('#ar-direction').val(_sh(d[17]));
+            $('#ar-fxpair').val(_sh(d[18]));
+            $('#ar-qtyccy').val(_sh(d[19]));
+            $('#ar-publisher').val(_sh(d[20]));
+            $('#ar-notional').val(_sh(d[21]));
+            $('#ar-rate').val(_sh(d[22]));
+            $('#ar-isbrrfixed').val(_sh(d[23]));
+            $('#ar-tradingbook').val(_sh(d[24]));
             bootstrap.Modal.getOrCreateInstance(arModalEl).show();
         };
 
         $(arModalEl).on('show.bs.modal', function () {
             if (!$(arModalEl).data('editRowId')) {
-                arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-plus me-1"></i>Add New Deal &mdash; NDF FWD Start';
+                arModalEl.querySelector('.modal-title').innerHTML = '<i class="ti ti-plus me-1"></i>Add New Deal &mdash; NDF Vanilla';
                 arClearFields();
             }
         });
@@ -4400,8 +4363,6 @@ $(document).ready(function() {
                 TaxID:            $('#ar-taxid').val().trim(),
                 FirstFixingDate:  isoToDmy($('#ar-firstfix').val()),
                 LastFixingDate:   isoToDmy($('#ar-lastfix').val()),
-                StrikeSetDate:    isoToDmy($('#ar-strikesetdate').val()),
-                StrikeSetOffset:  $('#ar-strikesetoffset').val().trim(),
                 Instrument:       $('#ar-instrument').val().trim() || 'Swap',
                 TradeType:        $('#ar-tradetype').val() || '',
                 Direction:        $('#ar-direction').val() || '',
@@ -4439,7 +4400,7 @@ $(document).ready(function() {
 
             if (editRowId) {
                 var editClient = $('#ar-client').val().trim();
-                fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(editRowId) + '?client=' + encodeURIComponent(editClient), {
+                fetch('/api/new-deals/vanilla/cache/' + encodeURIComponent(editRowId) + '?client=' + encodeURIComponent(editClient), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify(deal)
@@ -4460,7 +4421,7 @@ $(document).ready(function() {
                     Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK' });
                 });
             } else {
-                fetch('/api/new-deals/fwd-start/cache', {
+                fetch('/api/new-deals/vanilla/cache', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify(deal)

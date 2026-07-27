@@ -26,6 +26,7 @@ Requirements::
 
 from __future__ import annotations
 
+import os
 from html.parser import HTMLParser
 from typing import Optional
 
@@ -111,6 +112,15 @@ def build_session():
             "unavailable. Install it with 'pip install requests'."
         )
     session = requests.Session()
+    # athena-app-uat.jpmchase.net is an INTERNAL host: the corporate proxy set in
+    # the environment refuses it (WinError 10061 "Unable to connect to proxy")
+    # while the browser goes direct. Ignore proxy/env settings entirely.
+    session.trust_env = False
+    # If TLS verification fails against the internal JPM CA, point this env var
+    # at the corporate CA bundle (.pem) — certifi does not ship internal roots.
+    ca_bundle = os.getenv("ATHENA_CA_BUNDLE")
+    if ca_bundle:
+        session.verify = ca_bundle
     if HttpNegotiateAuth is not None:
         session.auth = HttpNegotiateAuth()
     # A Windows browser UA is required so ADFS negotiates Kerberos instead of

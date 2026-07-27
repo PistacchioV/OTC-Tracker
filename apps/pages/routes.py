@@ -181,7 +181,8 @@ _ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access'}
 _NOTIF_PAGE_URL = {
     'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
     'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
-    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'Index B3': '/index-b3',
+    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'NDF Vanilla': '/new_deals-ndf-vanilla',
+    'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
     'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
     'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
@@ -13720,6 +13721,8 @@ def _fxo_deals_from_api_records(records, sid):
             n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
             if n and n not in norm:
                 norm[n] = v
+        if _api_rec_is_dead(norm):
+            continue
         deal = _fxo_deal_from_row(norm.get, sid, refmap)
         if deal:
             deals.append(deal)
@@ -13808,6 +13811,243 @@ try:
     _fxo_api_start_scheduler()
 except Exception:
     log.warning('[opt-fxo] could not start the Athena API scheduler')
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# NDF — Athena getTrades API import (FWD Start / Other Publisher / Vanilla)
+# ──────────────────────────────────────────────────────────────────────────
+# One pull, three destinations. Routing per record:
+#   1. Instrument Type = FXForwardStartNDF → FWD Start — EXCEPT when the
+#      Strike Set Date is today (reference date): the trade will be cancelled
+#      and re-booked as vanilla later, so it must not be imported at all.
+#   2. Otherwise, Publisher ≠ PTAX → Other Publisher.
+#   3. Everything else → Vanilla.
+# Same new-only persistence rule as the FXO API pull: a poll or re-import
+# never overwrites a deal already in the day file (key Deal+Client).
+
+def _ndf_api_norm(rec):
+    """Normalize an API record's keys the same way the XLSX headers are
+    normalized (underscores/spaces → single space, uppercase)."""
+    norm = {}
+    for k, v in rec.items():
+        n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
+        if n and n not in norm:
+            norm[n] = v
+    return norm
+
+
+def _ndf_api_get(norm, *names):
+    """First non-empty value among alternative normalized field names."""
+    for n in names:
+        v = norm.get(n)
+        if v not in (None, ''):
+            return v
+    return None
+
+
+def _api_rec_is_dead(norm):
+    """True for records flagged isCancelled / isDead in the API payload."""
+    for k in ('ISCANCELLED', 'IS CANCELLED', 'ISDEAD', 'IS DEAD'):
+        v = norm.get(k)
+        if v is True or str(v).strip().lower() == 'true':
+            return True
+    return False
+
+
+def _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy):
+    """One Athena NDF getTrades record → (target_product, deal_dict).
+    target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
+    norm = _ndf_api_norm(rec)
+    get = norm.get
+
+    if _api_rec_is_dead(norm):
+        return None, None
+    deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
+    if not deal_name:
+        return None, None
+    end_cp = str(get('END COUNTERPARTY') or '').strip()
+    if not end_cp:
+        return None, None
+
+    # LE: Settlement Location BRAZIL → JPM; JPMCBB → MGT (else raw, visible)
+    loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
+    le = {'BRAZIL': 'JPM', 'JPMCBB': 'MGT'}.get(loc, loc)
+
+    # SPN comes as its own field in the payload; End Counterparty is an
+    # FX Cash acronym-style code (e.g. "CMBB-LAW") — used as fallback key.
+    spn = str(get('SPN') or '').strip()
+    if spn.endswith('.0'):
+        spn = spn[:-2]
+    ref = refmap.get(_norm_spn(spn), {}) if spn else {}
+    if not ref:
+        ref = refmap_acr.get(end_cp.upper(), {})
+        if not spn:
+            spn = str(ref.get('SPN', '') or '').strip()
+
+    first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
+    last_fix  = _fxo_date_dmy(_ndf_api_get(norm, 'LAST FIXING DATE') or get('EXPIRATION DATE'))
+    # ASIAN only when there is an actual fixing window (first ≠ last). An empty
+    # FIRST_FIXING_DATE (last falls back to Expiration Date) is a single fixing
+    # → VANILLA.
+    trade_type = 'ASIAN' if (first_fix and last_fix and first_fix != last_fix) else 'VANILLA'
+
+    trade_date = _fxo_date_dmy(get('TRADE DATE'))
+    try:
+        month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
+    except ValueError:
+        month = ''
+
+    qty_ccy  = _fxo_ccy(get('QUANTITY CURRENCY'))
+    qty_v    = _fxo_num(get('QUANTITY'))
+    strike_v = _fxo_num(get('STRIKE'))
+    instr    = str(get('INSTRUMENT TYPE') or '').strip()
+    publisher = str(get('PUBLISHER') or '').strip()
+
+    # Routing (order matters: FWD Start wins over the publisher test)
+    if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
+        strike_set = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
+        if strike_set and strike_set == today_dmy:
+            return None, None       # will be cancelled + re-booked as vanilla
+        target = 'fwd-start'
+    elif publisher and 'PTAX' not in publisher.upper():
+        target = 'other-publishers'
+    else:
+        target = 'vanilla'
+
+    deal = {
+        'Status':            'New',
+        'LE':                le,
+        'Deal':              deal_name,
+        'B3_ID':             '',
+        'TradeDate':         trade_date,
+        'Month':             month,
+        'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
+        'SPN':               spn,
+        'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
+        'Client':            ref.get('COUNTERPARTY', '') or '',
+        'TaxID':             ref.get('TAX ID', '') or '',
+        'FirstFixingDate':   first_fix,
+        'LastFixingDate':    last_fix,
+        'Instrument':        instr,
+        'TradeType':         trade_type,
+        'Direction':         str(get('TYPE') or '').strip().upper(),
+        'FXPair':            str(get('INSTRUMENT') or '').strip(),
+        'QuantityCurrency':  qty_ccy,
+        'Publisher':         publisher,
+        'Notional':          ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
+        'Rate':              ('{:,.8f}'.format(strike_v) if strike_v is not None else ''),
+        'IsBRRFixed':        ('YES' if qty_ccy == 'BRL' else 'NO'),
+        'TradingBook':       str(get('TRADING BOOK') or '').strip(),
+        'Maker':             sid,
+    }
+    if target == 'fwd-start':
+        deal['StrikeSetDate']   = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
+        deal['StrikeSetOffset'] = str(_ndf_api_get(norm, 'STRIKE OFFSET', 'STRIKEOFFSET',
+                                                   'STRIKE SET OFFSET') or '').strip()
+        deal['Rate'] = ''       # FWD Start: strike is only set on the strike set date
+    return target, deal
+
+
+def _generic_nd_persist_new_deals(product, deals):
+    """Insert only deals whose Deal+Client is not yet in the product's day file.
+    Returns the list actually inserted (existing deals are left untouched)."""
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return []
+    fresh, seen_files = [], {}
+    with _cache_lock:
+        for d in deals:
+            try:
+                ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
+            except (ValueError, TypeError):
+                ref_date = datetime.now()
+            dir_path = os.path.join(cfg['dir'], ref_date.strftime('%Y'), ref_date.strftime('%m'))
+            fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + cfg['suffix'])
+            if fpath not in seen_files:
+                existing, keys = [], set()
+                try:
+                    with open(fpath, encoding='utf-8') as fh:
+                        existing = json.load(fh)
+                    if not isinstance(existing, list):
+                        existing = [existing]
+                    for e in existing:
+                        keys.add(((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()))
+                except (IOError, json.JSONDecodeError):
+                    existing = []
+                seen_files[fpath] = (dir_path, existing, keys)
+            dir_path, existing, keys = seen_files[fpath]
+            key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
+            if key in keys:
+                continue
+            keys.add(key)
+            existing.append(d)
+            fresh.append(d)
+        for fpath, (dir_path, existing, _keys) in seen_files.items():
+            os.makedirs(dir_path, exist_ok=True)
+            _atomic_write_json(fpath, existing)
+    return fresh
+
+
+def _ndf_api_pull(sid='API', actor_name='Athena API'):
+    """Fetch today's NDF trades from the Athena API and route/insert the new
+    ones into FWD Start / Other Publisher / Vanilla. Raises on network/SSO
+    errors — the caller decides how loud to be about it."""
+    from apps.pages import athena_api
+    if not athena_api.is_available():
+        raise RuntimeError("The 'requests' package is not installed; "
+                           "the Athena API client is unavailable.")
+    now = datetime.now()
+    payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
+    records = athena_api.extract_records(payload)
+
+    refmap = _fxo_refdata_by_spn()
+    refmap_acr = {}
+    for _r in refmap.values():
+        _a = str(_r.get('FX CASH ACCRONYM', '') or '').strip().upper()
+        if _a and _a not in refmap_acr:
+            refmap_acr[_a] = _r
+    today_dmy = now.strftime('%d/%m/%Y')
+    routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
+    skipped_fwd_today = 0
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        target, deal = _ndf_deal_from_api(rec, sid, refmap, refmap_acr, today_dmy)
+        if target is None:
+            norm = _ndf_api_norm(rec)
+            instr = str(norm.get('INSTRUMENT TYPE') or '')
+            if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
+                skipped_fwd_today += 1
+            continue
+        routed[target].append(deal)
+
+    targets = {}
+    for product, deals in routed.items():
+        inserted = _generic_nd_persist_new_deals(product, deals)
+        cfg = _generic_nd_cfg(product)
+        if inserted and cfg:
+            _create_notification(sid, actor_name, 'New Deals', cfg['label'],
+                                 '{} deal{} imported from the Athena API'.format(
+                                     len(inserted), '' if len(inserted) == 1 else 's'))
+        targets[product] = {'parsed': len(deals), 'imported': len(inserted),
+                            'deals': inserted}
+    return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
+            'skipped_fwd_strike_today': skipped_fwd_today, 'targets': targets}
+
+
+@blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])
+def api_ndf_import_api():
+    """Manual trigger of the Athena NDF pull (Import button, empty dropzone,
+    on the FWD Start / Other Publisher / Vanilla pages)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    try:
+        result = _ndf_api_pull(sid=session.get('user_sid', '') or 'API',
+                               actor_name=session.get('user_name', '') or 'Athena API')
+    except Exception as e:                              # noqa: BLE001
+        log.warning('[ndf] manual Athena API import failed: %s', e)
+        return jsonify({'success': False, 'message': str(e)}), 502
+    return jsonify(result)
 
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/batch', methods=['POST'])
@@ -17392,6 +17632,11 @@ _GENERIC_ND_PRODUCTS = {
         'suffix': '_ndfotherpub.json',
         'label':  'NDF Other Publisher',
     },
+    'vanilla': {
+        'dir':    os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'Vanilla'),
+        'suffix': '_ndfvanilla.json',
+        'label':  'NDF Vanilla',
+    },
 }
 
 
@@ -17415,6 +17660,7 @@ _NDM_CARDS = [
     {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',)},
     {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FWD Start', 'NDF/FwdStart')},
     {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher', 'NDF/Other Publisher')},
+    {'key': 'ndf-vanilla',        'label': 'NDF Vanilla',         'url': '/new_deals-ndf-vanilla',        'dirs': ('NDF/Vanilla',)},
     {'key': 'opt-commodities',    'label': 'Option Commodities',  'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',)},
     {'key': 'opt-fxo',            'label': 'Option FXO',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',)},
     {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities')},
