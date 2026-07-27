@@ -17772,7 +17772,9 @@ def api_new_deals_monitor():
                 bucket = found.setdefault(pkey, Counter())
                 for d in (data if isinstance(data, list) else [data]):
                     if isinstance(d, dict):
-                        bucket[str(d.get('Status') or 'New').strip() or 'New'] += 1
+                        # Intrag entries carry lowercase 'status' — without the
+                        # fallback every intrag deal counted as 'New' forever.
+                        bucket[str(d.get('Status') or d.get('status') or 'New').strip() or 'New'] += 1
 
     cards, claimed = [], set()
     for c in _NDM_CARDS:
