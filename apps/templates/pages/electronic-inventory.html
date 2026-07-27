@@ -154,21 +154,16 @@
     #ei-page .ei-status-dot.off { background: #d0a02a; box-shadow: 0 0 0 3px rgba(208,160,42,.15); }
     #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
 
-    /* Upload modal — make the liquid-glass panel less translucent (more readable)
-       than the shared component default, scoped to this modal only. The theme's
-       backdrop-filter blur is also disabled here (panel + full-screen backdrop):
-       on weak corporate GPUs it made opening this modal take several seconds
-       with just a blurred screen showing. The panel is 92% opaque anyway. */
+    /* Upload modal — liquid-glass panel less translucent (more readable) than
+       the shared component default, scoped to this modal only. The backdrop
+       blur do tema fica ATIVO: o kill-switch que o desligava mirava uma
+       lentidão cuja causa real era o bug do reduced-motion (diálogo preso em
+       opacity 0), já corrigido na raiz em _modal.scss. */
     #eiUploadModal .modal-content.liquid-glass {
         background: rgba(255, 255, 255, 0.92) !important;
-        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     }
     [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass {
         background: rgba(26, 29, 35, 0.94) !important;
-        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-    }
-    body.ei-upload-open .modal-backdrop {
-        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     }
 
     /* Confirmations folder navigator (left rail) ----------------------- */
