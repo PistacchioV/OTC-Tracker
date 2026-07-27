@@ -1708,7 +1708,7 @@ $(document).ready(function() {
                 importBtn.setAttribute('type', 'button');
                 importBtn.setAttribute('data-bs-toggle', 'tooltip');
                 importBtn.setAttribute('data-bs-placement', 'bottom');
-                importBtn.setAttribute('data-bs-title', 'Process emails from dropzone');
+                importBtn.setAttribute('data-bs-title', 'Import XLSX from dropzone — or pull today from the Athena API when empty');
                 importBtn.setAttribute('data-bs-custom-class', 'tooltip-teal');
                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importBtnContainer.appendChild(importBtn);
@@ -1721,9 +1721,65 @@ $(document).ready(function() {
                     var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
                     var xlsx = (dz && dz.files) ? dz.files.filter(function(f){ return /\.xlsx$/i.test(f.name); }) : [];
                     if (!xlsx.length) {
-                        Swal.fire({ icon: 'info',
-                            title: t('swal-no-xlsx-title', 'No file'),
-                            text:  t('swal-no-xlsx-text', 'Drop a Brazil_FXO_Blotter_Extended …xlsx file in the dropzone first.') });
+                        // Empty dropzone → offer the Athena API pull (trade date = today).
+                        // The API path never overwrites existing deals, only inserts new ones.
+                        Swal.fire({
+                            icon: 'question',
+                            title: t('swal-fxo-api-title', 'Import from Athena API'),
+                            text:  t('swal-fxo-api-text', 'No file in the dropzone. Pull today\'s FXO trades from the Athena API?'),
+                            showCancelButton: true,
+                            confirmButtonText: t('swal-fxo-api-confirm', 'Yes, import'),
+                            cancelButtonText:  t('swal-cancel', 'Cancel'),
+                            confirmButtonColor: '#0066cc', cancelButtonColor: '#6c757d'
+                        }).then(function(result){
+                            if (!result.isConfirmed) return;
+                            importBtn.disabled = true;
+                            importBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
+                            function _restoreApiBtn() {
+                                importBtn.disabled = false;
+                                importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                            }
+                            fetch('/api/new-deals/opt-fxo/import-api', { method: 'POST' })
+                                .then(function(r){ return r.json(); })
+                                .then(function(res){
+                                    _restoreApiBtn();
+                                    if (!res || !res.success) {
+                                        Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
+                                        return;
+                                    }
+                                    var inserted = res.deals || [];
+                                    if (!inserted.length) {
+                                        Swal.fire({ icon: 'info', title: t('swal-imported', 'Imported'),
+                                            text: t('swal-fxo-api-none', 'No new deals — everything from the API is already in the table.'),
+                                            timer: 2600, showConfirmButton: false });
+                                        return;
+                                    }
+                                    var rowMap = {};
+                                    table.rows().every(function(){
+                                        var d = this.data();
+                                        if (_sh(d[3])) rowMap[_sh(d[3]) + '|' + _sh(d[10])] = this;
+                                    });
+                                    inserted.forEach(function(d){
+                                        var key = (d.Deal || '') + '|' + (d.Client || '');
+                                        if (rowMap[key]) rowMap[key].data(dealJsonToRow(d));
+                                        else table.row.add(dealJsonToRow(d));
+                                    });
+                                    table.draw(false);
+                                    if (window.fetchNotifications) window.fetchNotifications();
+                                    if (window._refreshMissingBadgesOPT) window._refreshMissingBadgesOPT();
+                                    Swal.fire({ icon: 'success', title: t('swal-imported', 'Imported'),
+                                        text: inserted.length + ' ' + t('swal-deals-imported', 'deal(s) imported.'),
+                                        timer: 2200, showConfirmButton: false });
+                                    // Premium D0 alert — same check as the XLSX flow
+                                    var _todayMid = new Date(); _todayMid.setHours(0, 0, 0, 0);
+                                    var dueToday = inserted.filter(function(d){
+                                        var sd = _parseSpotDate(d.SpotDate);
+                                        return sd && sd.getTime() === _todayMid.getTime();
+                                    }).length;
+                                    if (dueToday > 0) setTimeout(function(){ _showPremiumDueTodayAlert(dueToday); }, 2300);
+                                })
+                                .catch(function(e){ _restoreApiBtn(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+                        });
                         return;
                     }
                     var fd = new FormData();

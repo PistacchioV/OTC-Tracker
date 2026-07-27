@@ -13554,6 +13554,86 @@ def _fxo_order_deal(d):
     return ordered
 
 
+def _fxo_deal_from_row(get, sid, refmap):
+    """Build one Opt-FXO deal dict from a source row. `get(NAME)` returns the
+    value of the normalized-uppercase column NAME — the XLSX blotter headers
+    and the Athena API field names normalize to the same keys, so both sources
+    share this builder (same drop filters, same derivations).
+    Returns None when the row must be skipped."""
+    PUT_CALL = {'PUT': 'Option (Put)', 'CALL': 'Option (Call)'}
+
+    # Drop rows with empty End Counterparty / Description / SPN
+    if str(get('END COUNTERPARTY') or '').strip() == '':
+        return None
+    if str(get('END COUNTERPARTY DESCRIPTION') or '').strip() == '':
+        return None
+    if str(get('SPN') or '').strip() == '':
+        return None
+
+    # B3 does not accept underscores in the deal id on file registration —
+    # replace '_' with '-' at the source (applies to Deal, dedup, Conecta).
+    deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
+    if not deal_name:
+        return None
+
+    spn = str(get('SPN') or '').strip()
+    if spn.endswith('.0'):
+        spn = spn[:-2]
+    ref = refmap.get(_norm_spn(spn), {})
+
+    strike_v = _fxo_num(get('STRIKE'))
+    premq_v  = _fxo_num(get('PREMIUM QUANTITY'))
+    qty_v    = _fxo_num(get('QUANTITY'))
+    ppu_v    = (premq_v / qty_v) if (premq_v is not None and qty_v not in (None, 0)) else None
+
+    first_fix = get('FIRST FIXING DATE')
+    last_fix  = get('LAST FIXING DATE')
+    if str(first_fix or '').strip() and str(last_fix or '').strip():
+        trade_type, fix_start, fix_end = 'ASIAN', _fxo_date_dmy(first_fix), _fxo_date_dmy(last_fix)
+    else:
+        exp = _fxo_date_dmy(get('EXPIRATION DATE'))
+        trade_type, fix_start, fix_end = 'VANILLA', exp, exp
+
+    trade_date = _fxo_date_dmy(get('TRADE DATE'))
+    try:
+        month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
+    except ValueError:
+        month = ''
+
+    direction = str(get('TYPE') or '').strip().upper()
+    strike_ccy = _fxo_ccy(get('QUANTITY CURRENCY'))  # FXO: Underlying Asset == Strike Currency
+
+    return {
+        'Status':            'New',
+        'Deal':              deal_name,
+        'B3_ID':             '',
+        'TradeDate':         trade_date,
+        'Month':             month,
+        'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
+        'SPN':               spn,
+        'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
+        'Client':            ref.get('COUNTERPARTY', '') or '',
+        'TaxID':             ref.get('TAX ID', '') or '',
+        'TradeType':         trade_type,
+        'UnderlyingAsset':   strike_ccy,
+        'FXHolidaySchedule': 'ANBIMA',
+        'TotalNotional':     ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
+        'Instrument':        PUT_CALL.get(str(get('OPTION TYPE') or '').strip().upper(), ''),
+        'Strike':            ('{:.6f}'.format(strike_v) if strike_v is not None else ''),
+        'StrikeCurrency':    strike_ccy,
+        'Direction':         direction,
+        'Premium':           ('{:,.2f}'.format(premq_v) if premq_v is not None else ''),
+        'PremiumPerUnit':    ('{:,.8f}'.format(ppu_v) if ppu_v is not None else ''),
+        'PremiumCCY':        _fxo_ccy(get('PREMIUM CCY')),
+        'SpotDate':          _fxo_date_dmy(get('PREMIUM DATE')),
+        'FixingStartDate':   fix_start,
+        'FixingEndDate':     fix_end,
+        'TradingBook':       str(get('TRADING BOOK') or '').strip(),
+        'OtherBook':         str(get('OTHER BOOK') or '').strip(),
+        'Maker':             sid,
+    }
+
+
 def _fxo_persist_deals(deals):
     """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count."""
     by_file = {}
@@ -13590,6 +13670,146 @@ def _fxo_persist_deals(deals):
     return saved
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# OPT FXO — Athena getTrades API import (manual button + 10-min scheduler)
+# ──────────────────────────────────────────────────────────────────────────
+# The API returns the same columns as the XLSX blotter, so the rows go through
+# the same _fxo_deal_from_row filters/derivations. Unlike the XLSX flow, the
+# API pull NEVER overwrites an existing Deal+Client — a deal already in the day
+# file may have been worked (Approved/Sent) and a 10-min poll must not reset it.
+
+def _fxo_persist_new_deals(deals):
+    """Insert only deals whose Deal+Client is not yet in the day file.
+    Returns the list actually inserted (existing ones are left untouched)."""
+    fresh, seen_files = [], {}
+    for d in deals:
+        try:
+            ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
+        except (ValueError, TypeError):
+            ref_date = datetime.now()
+        fpath = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'),
+                             ref_date.strftime('%Y%m%d') + '_optfxo.json')
+        if fpath not in seen_files:
+            keys = set()
+            try:
+                with open(fpath, encoding='utf-8') as fh:
+                    existing = json.load(fh)
+                for e in (existing if isinstance(existing, list) else [existing]):
+                    keys.add(((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()))
+            except (IOError, json.JSONDecodeError):
+                pass
+            seen_files[fpath] = keys
+        key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
+        if key not in seen_files[fpath]:
+            seen_files[fpath].add(key)      # dedup within the same pull too
+            fresh.append(d)
+    if fresh:
+        _fxo_persist_deals(fresh)
+    return fresh
+
+
+def _fxo_deals_from_api_records(records, sid):
+    """Athena getTrades records → Opt-FXO deal dicts (same builder as XLSX)."""
+    refmap = _fxo_refdata_by_spn()
+    deals = []
+    for rec in records or []:
+        if not isinstance(rec, dict):
+            continue
+        norm = {}
+        for k, v in rec.items():
+            n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
+            if n and n not in norm:
+                norm[n] = v
+        deal = _fxo_deal_from_row(norm.get, sid, refmap)
+        if deal:
+            deals.append(deal)
+    return deals
+
+
+def _fxo_api_pull(sid='API', actor_name='Athena API'):
+    """Fetch today's FXO trades from the Athena API and insert the new ones.
+    Shared by the manual Import button and the 10-min scheduler. Raises on
+    network/SSO errors — callers decide how loud to be about it."""
+    from apps.pages import athena_api
+    if not athena_api.is_available():
+        raise RuntimeError("The 'requests' package is not installed; "
+                           "the Athena API client is unavailable.")
+    date = datetime.now().strftime('%Y%m%d')
+    payload = athena_api.fetch_fxo_trades(date)
+    records = athena_api.extract_records(payload)
+    deals = _fxo_deals_from_api_records(records, sid)
+    inserted = _fxo_persist_new_deals(deals)
+    if inserted:
+        _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
+                             '{} deal{} imported from the Athena API'.format(
+                                 len(inserted), '' if len(inserted) == 1 else 's'))
+    return {'success': True, 'date': date, 'fetched': len(records),
+            'parsed': len(deals), 'imported': len(inserted), 'deals': inserted}
+
+
+@blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
+def api_fxo_import_api():
+    """Manual trigger of the Athena FXO pull (Import button, empty dropzone)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    try:
+        result = _fxo_api_pull(sid=session.get('user_sid', '') or 'API',
+                               actor_name=session.get('user_name', '') or 'Athena API')
+    except Exception as e:                              # noqa: BLE001
+        log.warning('[opt-fxo] manual Athena API import failed: %s', e)
+        return jsonify({'success': False, 'message': str(e)}), 502
+    return jsonify(result)
+
+
+# In-app scheduler — polls the Athena FXO API every FXO_API_POLL_MIN minutes
+# (default 10) with trade date = today. Same self-contained pattern as the
+# pending-confirmation daily scheduler. Off the JPM network every poll fails;
+# repeats of the same error are demoted to debug so the log stays readable.
+_FXO_API_POLL_MIN = int(os.getenv('FXO_API_POLL_MIN', '10') or 10)
+_fxo_api_scheduler_started = False
+_fxo_api_scheduler_lock = threading.Lock()
+
+
+def _fxo_api_scheduler_loop():
+    last_err = None
+    while True:
+        time.sleep(max(60, _FXO_API_POLL_MIN * 60))
+        try:
+            res = _fxo_api_pull()
+            if res.get('imported'):
+                log.info('[opt-fxo] Athena API poll: %d new deal(s) imported '
+                         '(%d fetched)', res['imported'], res['fetched'])
+            last_err = None
+        except Exception as e:                          # noqa: BLE001
+            msg = str(e)
+            if msg != last_err:
+                log.warning('[opt-fxo] Athena API poll failed: %s', msg)
+            else:
+                log.debug('[opt-fxo] Athena API poll failed again: %s', msg)
+            last_err = msg
+
+
+def _fxo_api_start_scheduler():
+    global _fxo_api_scheduler_started
+    from apps.pages import athena_api
+    if not athena_api.is_available():
+        log.info('[opt-fxo] Athena API scheduler NOT started (requests missing)')
+        return
+    with _fxo_api_scheduler_lock:
+        if _fxo_api_scheduler_started:
+            return
+        _fxo_api_scheduler_started = True
+    threading.Thread(target=_fxo_api_scheduler_loop,
+                     name='fxo-athena-api-scheduler', daemon=True).start()
+    log.info('[opt-fxo] Athena API scheduler started (every %d min)', _FXO_API_POLL_MIN)
+
+
+try:
+    _fxo_api_start_scheduler()
+except Exception:
+    log.warning('[opt-fxo] could not start the Athena API scheduler')
+
+
 @blueprint.route('/api/new-deals/opt-fxo/cache/batch', methods=['POST'])
 def api_fxo_cache_batch():
     """Persist a finalized list of FXO deals (after the page resolves duplicates)."""
@@ -13621,7 +13841,6 @@ def api_fxo_import_xlsx():
 
     sid = session.get('user_sid', '') or ''
     refmap = _fxo_refdata_by_spn()
-    PUT_CALL = {'PUT': 'Option (Put)', 'CALL': 'Option (Call)'}
     deals, errors = [], []
 
     for f in files:
@@ -13653,76 +13872,9 @@ def api_fxo_import_xlsx():
         for r in it:
             if r is None:
                 continue
-            # Drop rows with empty End Counterparty (P) / Description (Q) / SPN (O)
-            if str(g(r, 'END COUNTERPARTY') or '').strip() == '':
-                continue
-            if str(g(r, 'END COUNTERPARTY DESCRIPTION') or '').strip() == '':
-                continue
-            if str(g(r, 'SPN') or '').strip() == '':
-                continue
-
-            # B3 does not accept underscores in the deal id on file registration —
-            # replace '_' with '-' at the source (applies to Deal, dedup, Conecta).
-            deal_name = str(g(r, 'DEAL NAME') or '').strip().replace('_', '-')
-            if not deal_name:
-                continue
-
-            spn = str(g(r, 'SPN') or '').strip()
-            if spn.endswith('.0'):
-                spn = spn[:-2]
-            ref = refmap.get(_norm_spn(spn), {})
-
-            strike_v = _fxo_num(g(r, 'STRIKE'))
-            premq_v  = _fxo_num(g(r, 'PREMIUM QUANTITY'))
-            qty_v    = _fxo_num(g(r, 'QUANTITY'))
-            ppu_v    = (premq_v / qty_v) if (premq_v is not None and qty_v not in (None, 0)) else None
-
-            first_fix = g(r, 'FIRST FIXING DATE')
-            last_fix  = g(r, 'LAST FIXING DATE')
-            if str(first_fix or '').strip() and str(last_fix or '').strip():
-                trade_type, fix_start, fix_end = 'ASIAN', _fxo_date_dmy(first_fix), _fxo_date_dmy(last_fix)
-            else:
-                exp = _fxo_date_dmy(g(r, 'EXPIRATION DATE'))
-                trade_type, fix_start, fix_end = 'VANILLA', exp, exp
-
-            trade_date = _fxo_date_dmy(g(r, 'TRADE DATE'))
-            try:
-                month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
-            except ValueError:
-                month = ''
-
-            direction = str(g(r, 'TYPE') or '').strip().upper()
-            strike_ccy = _fxo_ccy(g(r, 'QUANTITY CURRENCY'))  # FXO: Underlying Asset == Strike Currency
-
-            deals.append({
-                'Status':            'New',
-                'Deal':              deal_name,
-                'B3_ID':             '',
-                'TradeDate':         trade_date,
-                'Month':             month,
-                'SettlementDate':    _fxo_date_dmy(g(r, 'SETTLEMENT DATE')),
-                'SPN':               spn,
-                'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
-                'Client':            ref.get('COUNTERPARTY', '') or '',
-                'TaxID':             ref.get('TAX ID', '') or '',
-                'TradeType':         trade_type,
-                'UnderlyingAsset':   strike_ccy,
-                'FXHolidaySchedule': 'ANBIMA',
-                'TotalNotional':     ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
-                'Instrument':        PUT_CALL.get(str(g(r, 'OPTION TYPE') or '').strip().upper(), ''),
-                'Strike':            ('{:.6f}'.format(strike_v) if strike_v is not None else ''),
-                'StrikeCurrency':    strike_ccy,
-                'Direction':         direction,
-                'Premium':           ('{:,.2f}'.format(premq_v) if premq_v is not None else ''),
-                'PremiumPerUnit':    ('{:,.8f}'.format(ppu_v) if ppu_v is not None else ''),
-                'PremiumCCY':        _fxo_ccy(g(r, 'PREMIUM CCY')),
-                'SpotDate':          _fxo_date_dmy(g(r, 'PREMIUM DATE')),
-                'FixingStartDate':   fix_start,
-                'FixingEndDate':     fix_end,
-                'TradingBook':       str(g(r, 'TRADING BOOK') or '').strip(),
-                'OtherBook':         str(g(r, 'OTHER BOOK') or '').strip(),
-                'Maker':             sid,
-            })
+            deal = _fxo_deal_from_row(lambda name: g(r, name), sid, refmap)
+            if deal:
+                deals.append(deal)
         wb.close()
 
     # dry_run=1 → parse only (the page first checks Deal+Client duplicates against
