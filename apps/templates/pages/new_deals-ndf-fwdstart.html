@@ -3971,7 +3971,7 @@ $(document).ready(function() {
         var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
-        var FIXED_UND   = ['NACX0005', 'NAEB0011', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
+        var FIXED_UND   = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
         var isFixed     = FIXED_UND.indexOf(underlying) !== -1;
         var tipoCotacao = isFixed ? 'F' : 'A';
         var fonteInfo   = isFixed ? '340' : '358';
