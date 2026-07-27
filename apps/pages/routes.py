@@ -17679,10 +17679,11 @@ def _generic_nd_cfg(product):
     return _GENERIC_ND_PRODUCTS.get(product)
 
 
-# Product Type shown on the Pending Confirmation row per generic-NDF page.
-_GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF FWD START',
-                       'other-publishers': 'NDF OTHER PUB',
-                       'vanilla': 'NDF VANILLA'}
+# Product Type shown on the Pending Confirmation row — the three generic NDF
+# pages (Vanilla / Other Publisher / FWD Start) all report plain 'NDF'.
+_GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF',
+                       'other-publishers': 'NDF',
+                       'vanilla': 'NDF'}
 
 
 def _generic_nd_pending_status(product, deal):

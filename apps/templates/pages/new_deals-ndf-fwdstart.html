@@ -1818,7 +1818,7 @@ $(document).ready(function() {
                                 if (_sh(d[4]) !== result.id) return;
                                 var node = this.node();
                                 if (result.status === 'Success') {
-                                    table.cell(node, 4).data(result.b3_id || '');
+                                    table.cell(node, 5).data(result.b3_id || '');   // col 5 = B3 ID (4 é o Deal)
                                     table.cell(node, 2).data(
                                         '<span class="badge text-bg-success bg-gradient">Success</span>'
                                     );
