@@ -60,6 +60,14 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #operations-b3-page .btn:active { transform: scale(0.97); }
+/* Mensageria recipient cards: tile de gradiente padrão (about/sidenav) no ícone */
+#operations-b3-page .ob-msg-icon {
+    width: 30px; height: 30px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 9px; color: #fff; font-size: 1rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+}
 /* Row action buttons — solid circular (project standard, matches Intrag). */
 #opb3-table td .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
   font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
@@ -198,6 +206,9 @@
                 <button class="btn btn-secondary bg-gradient" type="button" id="obImportBtn">
                     <i class="ti ti-file-import fs-xl me-1"></i><span data-lang="ob-import">Import operations</span>
                 </button>
+                <button class="btn btn-primary bg-gradient" type="button" id="obMsgBtn">
+                    <i class="ti ti-mail-forward fs-xl me-1"></i><span data-lang="ob-mensageria">Mensageria</span>
+                </button>
                 <span class="text-muted fs-xs" id="ob-import-info"></span>
                 <div class="ms-auto d-flex align-items-center gap-2">
                     <span class="text-muted fs-xs text-nowrap" id="ob-updated"></span>
@@ -205,6 +216,56 @@
                     <div class="ob-datewrap" id="obDateWrap">
                         <input type="text" id="ob-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
                         <span class="ob-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensageria recipients: um card por time do piloto (TO/CC persistidos) -->
+    <div class="row g-2 mt-0">
+        <div class="col-md-6">
+            <div class="card mb-0 h-100">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="ob-msg-icon"><i class="ti ti-building-bank"></i></span>
+                        <h5 class="mb-0 fs-sm fw-bold">CEM</h5>
+                        <span class="text-muted fs-xxs" data-lang="ob-msg-hint">Mensageria recipients</span>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label fs-xxs text-muted mb-1">TO</label>
+                            <input type="text" class="form-control form-control-sm ob-msg-fld" id="obCemTo"
+                                   placeholder="email1@jpmorgan.com; email2@jpmorgan.com" autocomplete="off">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fs-xxs text-muted mb-1">CC</label>
+                            <input type="text" class="form-control form-control-sm ob-msg-fld" id="obCemCc"
+                                   placeholder="optional — separate with ;" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-0 h-100">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="ob-msg-icon"><i class="ti ti-chart-line"></i></span>
+                        <h5 class="mb-0 fs-sm fw-bold">Equities</h5>
+                        <span class="text-muted fs-xxs" data-lang="ob-msg-hint">Mensageria recipients</span>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label fs-xxs text-muted mb-1">TO</label>
+                            <input type="text" class="form-control form-control-sm ob-msg-fld" id="obEqTo"
+                                   placeholder="email1@jpmorgan.com; email2@jpmorgan.com" autocomplete="off">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fs-xxs text-muted mb-1">CC</label>
+                            <input type="text" class="form-control form-control-sm ob-msg-fld" id="obEqCc"
+                                   placeholder="optional — separate with ;" autocomplete="off">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -283,5 +344,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/operations-b3.js?v=20260706b"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/operations-b3.js?v=20260727a"></script>
 {% endblock extra_javascript %}

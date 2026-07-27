@@ -1374,5 +1374,9 @@
   "ndm-ref-date": "Reference date",
   "ndm-empty": "No operations imported for this date.",
   "ndm-dev": "In development",
-  "ndm-open": "Open page"
+  "ndm-open": "Open page",
+  "ob-col-type": "Type",
+  "ob-mensageria": "Mensageria",
+  "ob-msg-hint": "Mensageria recipients",
+  "nav-operations-b3": "Operations B3"
 }

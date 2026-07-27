@@ -1047,3 +1047,81 @@ def build_drafts_download(drafts, sender_email=None, zip_name=None):
     else:
         zname = 'otc_email_drafts.zip'
     return zname, 'application/zip', buf.getvalue()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPERATIONS B3 — MENSAGERIA (time do piloto)
+# Um e-mail por quebra (Tipo × Contraparte × Tipo Operação) das operações do
+# dia com Modalidade de Liquidação Bilateral*/Bruta*. Mesmo shell/assinatura
+# dos avisos de NDF de Moeda.
+# ──────────────────────────────────────────────────────────────────────────
+_MSG_TABLE_HEADERS = ['Participante (Nome Simpl.)', 'Conta', 'Tipo Operação', 'C/V', 'Título',
+                      'Tipo Título', 'Valor', 'Sistema', 'Modalidade Liquidação', 'Status',
+                      'Contraparte (Nome Simpl.)', 'Conta Contraparte']
+
+
+def _msg_highlight(text, bg):
+    return ('<div style="display:inline-block;background:' + bg + ';padding:5px 12px;'
+            'font-size:13.5px;font-weight:700;color:#1d1d1f;font-family:' + _E_FONT + ';">' +
+            _esc(text) + '</div>')
+
+
+def _msg_flow_phrase(total, cpty):
+    """'Banco recebe do(a) X R$ v' (total ≥ 0) / 'Banco paga ao(à) X R$ v'."""
+    if total >= 0:
+        return 'Banco recebe do(a) {} R$ {}'.format(cpty, _br(abs(total)))
+    return 'Banco paga ao(à) {} R$ {}'.format(cpty, _br(abs(total)))
+
+
+def build_opb3_mensageria_email(group):
+    """One Mensageria draft. `group`:
+      tipo, tipo_titulo, tipo_operacao, cpty (nome p/ subject/frases),
+      ref_date (dd/mm/yyyy), rows ([[12 células]] na ordem _MSG_TABLE_HEADERS),
+      total (float, soma B3 — positivo = Banco recebe),
+      internal (float|None — batimento interno; None = sem fonte p/ comparar),
+      to, cc.
+    """
+    tipo_op = str(group.get('tipo_operacao') or '').strip()
+    tit = _fcst_norm_local(group.get('tipo_titulo'))
+    cpty = group.get('cpty') or '—'
+    ref_date = group.get('ref_date') or ''
+    total = float(group.get('total') or 0.0)
+
+    tit_label = {'swap': 'Swap', 'ter': 'NDF', 'opc': 'Opção'}.get(tit, group.get('tipo_titulo') or '')
+    if _fcst_norm_local(tipo_op) == 'pagamento de premio':
+        base = 'Prêmio ' + tit_label
+    else:
+        base = (tipo_op.title() + (' ' + tit_label if tit_label else '')).strip()
+    subject = '{} - Liquidação Banco x {} - {}'.format(base, cpty, ref_date)
+
+    intro = (_ep('Bom dia,') +
+             _ep('Favor acatar a mensagem abaixo:') +
+             _ep('Obrigado(a)!'))
+
+    def _gap(h):
+        return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
+
+    body = _msg_highlight(_msg_flow_phrase(total, cpty), '#fff3a0') + _gap(12)
+    body += _email_data_table(_MSG_TABLE_HEADERS, group.get('rows') or [])
+
+    internal = group.get('internal')
+    if internal is not None and abs(abs(float(internal)) - abs(total)) > 0.005:
+        body += _gap(14) + (
+            '<span style="font-size:13.5px;color:#333;font-family:' + _E_FONT + ';">Favor considerar:&nbsp;&nbsp;</span>' +
+            _msg_highlight(_msg_flow_phrase(float(internal), cpty), '#d9efd9'))
+
+    html = _email_shell('Mensageria de Liquidação', ref_date, intro, body)
+    return {
+        'subject': subject,
+        'html': html,
+        'to': group.get('to') or '',
+        'cc': group.get('cc') or '',
+        'counterparty': cpty,
+    }
+
+
+def _fcst_norm_local(s):
+    """Normalização local (minúsculas, sem acento) — espelha routes._fcst_norm sem
+    importar de routes (evita import circular)."""
+    s = str(s or '').strip().lower()
+    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')

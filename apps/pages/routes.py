@@ -8136,9 +8136,79 @@ def _opb3_breakdown(data, col):
     return {'total': sum(counts.values()), 'items': items}
 
 
+def _opb3_tipo_maps(ref):
+    """{'TER'|'OPC'|'SWAP': {contrato_upper: tipo}} a partir dos snapshots de
+    posição (DPOSICAO*) mais recentes até D-1 ANBIMA de `ref` (walk-back de até
+    10 dias úteis por categoria — mesmo fallback do Live Position):
+      TER  → valor da coluna "Classe do Ativo Subjacente" (como está, upper)
+      OPC  → CAMB/MOEDA → TAXAS DE CAMBIO; COMMOD/MERCAD → COMMODITIES; resto → EQUITIES
+      SWAP → valor do "Código Identificador"
+    """
+    specs = {
+        'TER':  ('NDF',    lambda r: '73760_{}_DPOSICAO-TER.json'.format(r)),
+        'OPC':  ('Option', lambda r: '73760_{}_DPOSICAO.json'.format(r)),
+        'SWAP': ('Swap',   lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r)),
+    }
+    out = {k: {} for k in specs}
+    for key, (cat, fname) in specs.items():
+        probe = _prev_anbima_bizday(ref)
+        path = None
+        for _ in range(10):
+            p = os.path.join(B3_JSON_ROOT, cat, _b3_date_subpath(probe.strftime('%y%m%d')),
+                             fname(probe.strftime('%y%m%d')))
+            if os.path.isfile(p):
+                path = p
+                break
+            probe = _prev_anbima_bizday(probe)
+        if not path:
+            continue
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            continue
+        if not data:
+            continue
+        keys = list(data[0].keys())
+        k_contr = _fcst_resolve_key(keys, ('Contrato', 'Título', 'Titulo', 'Codigo do Contrato'))
+        k_classe = _fcst_resolve_key(keys, ('Classe do Ativo Subjacente', 'Classe do Ativo', 'Classe'))
+        k_ident = _fcst_resolve_key(keys, ('Código Identificador', 'Codigo Identificador'))
+        for rec in data:
+            contrato = str(rec.get(k_contr, '') or '').strip().upper() if k_contr else ''
+            if not contrato:
+                continue
+            if key == 'SWAP':
+                tipo = str(rec.get(k_ident, '') or '').strip().upper() if k_ident else ''
+            else:
+                classe = _fcst_norm(str(rec.get(k_classe, '') or '')) if k_classe else ''
+                if key == 'OPC':
+                    if 'camb' in classe or 'moeda' in classe:
+                        tipo = 'TAXAS DE CAMBIO'
+                    elif 'commod' in classe or 'mercad' in classe:
+                        tipo = 'COMMODITIES'
+                    else:
+                        tipo = 'EQUITIES'
+                else:                                   # TER: classe como está
+                    tipo = str(rec.get(k_classe, '') or '').strip().upper() if k_classe else ''
+            if tipo:
+                out[key].setdefault(contrato, tipo)
+    return out
+
+
+def _opb3_tipo_for(rec, maps):
+    """Tipo derivado de uma linha do Operations B3 (match Título × posição)."""
+    titn = _fcst_norm(str(rec.get('Tipo Título', '') or ''))
+    key = 'SWAP' if 'swap' in titn else ('OPC' if 'opc' in titn else ('TER' if 'ter' in titn else None))
+    if not key:
+        return ''
+    titulo = str(rec.get('Título', '') or '').strip().upper()
+    return maps.get(key, {}).get(titulo, '')
+
+
 def _opb3_collect(ref):
     jp = _opb3_json_path(ref)
     rows_out, data = [], []
+    tipo_maps = _opb3_tipo_maps(ref)
     if os.path.isfile(jp):
         try:
             with open(jp, encoding='utf-8') as fh:
@@ -8160,6 +8230,8 @@ def _opb3_collect(ref):
                 elif c == 'Valor':
                     v = _swapchar_fmt_value(v)
                 row.append('' if v is None else v)
+            # Coluna derivada Type (não persistida): match do Título na posição.
+            row.append(_opb3_tipo_for(rec, tipo_maps))
             # Append maker/checker meta as the row tail: [...data..., status, maker, checker, id]
             row += [rec.get('_ob_status', 'New'), rec.get('_ob_maker', ''),
                     rec.get('_ob_checker', ''), rec.get('_ob_id', '')]
@@ -8171,7 +8243,7 @@ def _opb3_collect(ref):
         'tipo_titulo':   _opb3_breakdown(data, 'Tipo Título'),
         'modalidade':    _opb3_breakdown(data, 'Modalidade Liquidação'),
     }
-    return {'widgets': widgets, 'columns': _OPB3_COLUMNS, 'rows': rows_out,
+    return {'widgets': widgets, 'columns': _OPB3_COLUMNS + ['Type'], 'rows': rows_out,
             'updated': _ds_read_updated(jp)}
 
 
@@ -8314,6 +8386,214 @@ def api_opb3_row_confirm():
     _create_notification(sid, session.get('user_name', ''), 'Operations B3 Row Confirmed', 'Operations B3',
                          '{} ({})'.format(rec.get('Num Ctrl Operação', ''), _opb3_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
+
+
+# ── Operations B3 › Mensageria (time do piloto) ──────────────────────────────
+#  Um e-mail por quebra Tipo × Contraparte × Tipo Operação das linhas com
+#  Modalidade de Liquidação Bilateral*/Bruta*. Drafts .eml (X-Unsent) com o
+#  shell padrão dos avisos; destinatários vêm dos cards CEM / Equities.
+_OPB3_MSG_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'operations_b3_mensageria_recipients.json')
+
+
+def _opb3_msg_load_recipients():
+    try:
+        with open(_OPB3_MSG_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh) or {}
+    except Exception:
+        d = {}
+    out = {}
+    for k in ('cem', 'equities'):
+        v = d.get(k) or {}
+        out[k] = {'to': str(v.get('to', '') or ''), 'cc': str(v.get('cc', '') or '')}
+    return out
+
+
+def _opb3_msg_save_recipients(payload):
+    cur = _opb3_msg_load_recipients()
+    for k in ('cem', 'equities'):
+        v = (payload or {}).get(k)
+        if isinstance(v, dict):
+            cur[k] = {'to': str(v.get('to', '') or '').strip(),
+                      'cc': str(v.get('cc', '') or '').strip()}
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    _atomic_write_json(_OPB3_MSG_RECIPIENTS_FILE, cur)
+    return cur
+
+
+@blueprint.route('/api/operations-b3/mensageria/recipients', methods=['GET', 'POST'])
+def api_opb3_msg_recipients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_opb3_msg_load_recipients()})
+    try:
+        cur = _opb3_msg_save_recipients(request.get_json(silent=True) or {})
+    except Exception as e:
+        log.error('[opb3-msg] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True, **cur})
+
+
+def _opb3_msg_route_key(tipo):
+    """Card de destinatários por tipo: EQUITIES/EDG/AÇÕES → equities; resto → cem."""
+    tn = _fcst_norm(str(tipo or ''))
+    return 'equities' if ('equit' in tn or 'edg' in tn or 'acao' in tn or 'acoes' in tn) else 'cem'
+
+
+def _opb3_refdata_by_account():
+    """Conta CETIP ('B3 ACCOUNT', ex. 74220.00-5) → nome da contraparte (RefData)."""
+    out = {}
+    try:
+        with open(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'RefData.json'),
+                  encoding='utf-8') as fh:
+            for r in json.load(fh) or []:
+                acc = str(r.get('B3 ACCOUNT', '') or '').strip()
+                name = str(r.get('COUNTERPARTY', '') or '').strip()
+                if acc and name and acc not in out:
+                    out[acc] = name
+    except Exception:
+        pass
+    return out
+
+
+def _opb3_internal_ter_map(ref):
+    """Contrato B3 (upper) → Σ SETTLEMENT interno (Cockpit NDF) — lado JP do
+    batimento do e-mail para Tipo Título = TER."""
+    out = {}
+    try:
+        ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
+        for row in _ndfc_collect(ref)['rows']:
+            b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip().upper()
+            if not b3 or b3 == _NDFC_MISSING_B3.upper():
+                continue
+            v = _mtm_parse_num(row[ci['[PROD] Cockpit.SETTLEMENT']])
+            if v is not None:
+                out[b3] = out.get(b3, 0.0) + v
+    except Exception:
+        return {}
+    return out
+
+
+def _opb3_internal_swapprem_map(ref):
+    """Contrato (upper) → Σ valor da agenda de prêmios (DAGENDAPREMIOS) — lado JP
+    do batimento para PAGAMENTO DE PREMIO × SWAP. {} quando não há arquivo."""
+    out = {}
+    probe = _prev_anbima_bizday(ref)
+    path = None
+    for _ in range(10):
+        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(probe.strftime('%y%m%d')),
+                         '73760_{}_DAGENDAPREMIOS.json'.format(probe.strftime('%y%m%d')))
+        if os.path.isfile(p):
+            path = p
+            break
+        probe = _prev_anbima_bizday(probe)
+    if not path:
+        return out
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+        if not data:
+            return out
+        keys = list(data[0].keys())
+        k_contr = _fcst_resolve_key(keys, ('Contrato', 'Codigo do Contrato', 'Título', 'Titulo'))
+        k_val = _fcst_resolve_key(keys, ('Valor do Evento', 'Valor'))
+        for rec in data:
+            contrato = str(rec.get(k_contr, '') or '').strip().upper() if k_contr else ''
+            v = _ndfc_valnum(rec.get(k_val)) if k_val else None
+            if contrato and v is not None:
+                out[contrato] = out.get(contrato, 0.0) + v
+    except Exception:
+        return {}
+    return out
+
+
+@blueprint.route('/api/operations-b3/mensageria', methods=['POST'])
+def api_opb3_mensageria():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    from apps.pages import otc_emails
+    p = request.get_json(silent=True) or {}
+    ref = _opb3_ref_from(p)
+    _, data = _opb3_load(ref)
+    if not data:
+        return jsonify({'success': False, 'error': 'No Operations B3 data for {}.'.format(
+            ref.strftime('%d/%m/%Y'))}), 400
+
+    recips = _opb3_msg_load_recipients()
+    tipo_maps = _opb3_tipo_maps(ref)
+    names = _opb3_refdata_by_account()
+
+    # Linhas elegíveis: Modalidade de Liquidação Bilateral* ou Bruta*.
+    def _eligible(rec):
+        m = _fcst_norm(str(rec.get('Modalidade Liquidação', '') or ''))
+        return m.startswith('bilateral') or m.startswith('bruta')
+
+    groups = {}
+    for rec in data:
+        if not _eligible(rec):
+            continue
+        tipo = _opb3_tipo_for(rec, tipo_maps)
+        conta_cp = str(rec.get('Conta Contraparte', '') or '').strip()
+        tipo_op = str(rec.get('Tipo Operação', '') or '').strip()
+        gkey = (tipo, conta_cp, _fcst_norm(tipo_op))
+        groups.setdefault(gkey, {'tipo': tipo, 'conta_cp': conta_cp, 'tipo_op': tipo_op,
+                                 'recs': []})['recs'].append(rec)
+    if not groups:
+        return jsonify({'success': False,
+                        'error': 'No Bilateral/Bruta operations for {}.'.format(ref.strftime('%d/%m/%Y'))}), 400
+
+    # Batimentos internos (carregados uma vez, usados por grupo conforme o caso).
+    ter_map = _opb3_internal_ter_map(ref)
+    prem_map = _opb3_internal_swapprem_map(ref)
+
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    drafts, missing = [], set()
+    for g in groups.values():
+        recs = g['recs']
+        titn = _fcst_norm(str(recs[0].get('Tipo Título', '') or ''))
+        opn = _fcst_norm(g['tipo_op'])
+        cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
+        total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
+
+        # Lado interno: TER → Cockpit SETTLEMENT; SWAP prêmio → DAGENDAPREMIOS.
+        # None (sem fonte / contrato não encontrado) → e-mail sai sem a linha
+        # "Favor considerar" — não há o que comparar.
+        src = ter_map if 'ter' in titn else (prem_map if ('swap' in titn and opn == 'pagamento de premio') else None)
+        internal = None
+        if src:
+            vals = [src.get(str(r.get('Título', '') or '').strip().upper()) for r in recs]
+            if vals and all(v is not None for v in vals):
+                internal = sum(vals)
+
+        rows = [[
+            'JPMORGANBM',
+            str(r.get('Conta', '') or ''),
+            str(r.get('Tipo Operação', '') or ''),
+            str(r.get('C/V', '') or ''),
+            str(r.get('Título', '') or ''),
+            str(r.get('Tipo Título', '') or ''),
+            _swapchar_fmt_value(r.get('Valor', '')),
+            'CETIP21',
+            str(r.get('Modalidade Liquidação', '') or ''),
+            str(r.get('Status', '') or ''),
+            str(r.get('Contraparte (Nome Simpl.)', '') or ''),
+            str(r.get('Conta Contraparte', '') or ''),
+        ] for r in recs]
+
+        rk = _opb3_msg_route_key(g['tipo'])
+        to, cc = recips[rk]['to'], recips[rk]['cc']
+        if not to:
+            missing.add(rk.upper())
+        drafts.append(otc_emails.build_opb3_mensageria_email({
+            'tipo': g['tipo'], 'tipo_titulo': recs[0].get('Tipo Título', ''),
+            'tipo_operacao': g['tipo_op'], 'cpty': cpty, 'ref_date': ref_fmt,
+            'rows': rows, 'total': total, 'internal': internal, 'to': to, 'cc': cc,
+        }))
+
+    if missing:
+        return jsonify({'success': False,
+                        'error': 'Set the TO recipients on the {} card(s) first.'.format(' and '.join(sorted(missing)))}), 400
+    return _email_drafts_response(drafts, zip_name='mensageria_{}'.format(ref.strftime('%Y%m%d')))
 
 
 # ── Live Position › NDF ──────────────────────────────────────────────────────

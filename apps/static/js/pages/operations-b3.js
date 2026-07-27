@@ -115,7 +115,11 @@
       '<th class="text-center" style="min-width:38px"><input type="checkbox" id="obCheckAll" class="form-check-input"></th>' +
       '<th data-lang="ob-actions">Actions</th>' +
       '<th data-lang="ob-status">Status</th>' +
-      columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+      columns.map(function (c) {
+        // Coluna derivada Type (match do Título × Live Position): inglês default + i18n.
+        if (c === 'Type') return '<th data-lang="ob-col-type">Type</th>';
+        return '<th>' + esc(c) + '</th>';
+      }).join('') + '</tr>';
     var filterRow =
       '<tr class="ob-th-filter">' +
       '<th></th><th></th>' +
@@ -286,12 +290,18 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
   }
 
+  // Colunas editáveis: a derivada Type (última, calculada no servidor) fica fora
+  // do Add/Edit — não é persistida, nasce do match com a posição.
+  function dataCols() {
+    return (COLS.length && COLS[COLS.length - 1] === 'Type') ? COLS.slice(0, -1) : COLS;
+  }
+
   // New Deals glass modal: a field per column. editId=null → Add; else Edit (prefilled).
   function openModal(editId, prefillCells) {
     EDIT_ID = editId || null;
     var title = document.getElementById('obModalTitle');
     if (title) title.textContent = EDIT_ID ? t('editTitle') : t('addTitle');
-    document.getElementById('obAddFields').innerHTML = COLS.map(function (c, i) {
+    document.getElementById('obAddFields').innerHTML = dataCols().map(function (c, i) {
       var val = (prefillCells && prefillCells[i] != null) ? prefillCells[i] : '';
       return '<div class="col-md-4"><label class="form-label fs-xs text-muted mb-1">' + esc(c) + '</label>' +
         '<input type="text" class="form-control form-control-sm ob-add-fld" data-i="' + i + '" value="' + esc(val) + '"></div>';
@@ -335,7 +345,7 @@
       .on('click.obact', '.btn-row-edit', function () {
         var id = this.getAttribute('data-id');
         var row = CURRENT_ROWS.filter(function (r) { return String(metaOf(r).id) === String(id); })[0];
-        openModal(id, row ? row.slice(0, COLS.length) : null);
+        openModal(id, row ? row.slice(0, dataCols().length) : null);
       })
       .on('click.obact', '.btn-row-confirm', function () {
         var id = this.getAttribute('data-id');
@@ -363,6 +373,76 @@
       });
   }
 
+  // ── Mensageria: destinatários persistidos (cards CEM / Equities) + geração ──
+  var MSG_REC_URL = '/api/operations-b3/mensageria/recipients';
+  function msgFields() {
+    return {
+      cem: { to: document.getElementById('obCemTo'), cc: document.getElementById('obCemCc') },
+      equities: { to: document.getElementById('obEqTo'), cc: document.getElementById('obEqCc') },
+    };
+  }
+  function msgLoadRecipients() {
+    var f = msgFields();
+    if (!f.cem.to) return;
+    fetch(MSG_REC_URL, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success) return;
+        ['cem', 'equities'].forEach(function (k) {
+          if (d[k]) { f[k].to.value = d[k].to || ''; f[k].cc.value = d[k].cc || ''; }
+        });
+      })
+      .catch(function () {});
+  }
+  function msgSaveRecipients() {
+    var f = msgFields();
+    if (!f.cem.to) return Promise.resolve();
+    return postJSON(MSG_REC_URL, {
+      cem: { to: f.cem.to.value.trim(), cc: f.cem.cc.value.trim() },
+      equities: { to: f.equities.to.value.trim(), cc: f.equities.cc.value.trim() },
+    }).catch(function () {});
+  }
+  function wireMensageria() {
+    document.querySelectorAll('.ob-msg-fld').forEach(function (el) {
+      el.addEventListener('blur', msgSaveRecipients);
+    });
+    var btn = document.getElementById('obMsgBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      // Salva os TO/CC primeiro para a geração usar exatamente o que está nos cards.
+      msgSaveRecipients().then(function () {
+        return fetch('/api/operations-b3/mensageria', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: currentDate() }),
+        });
+      }).then(function (r) {
+        var ct = r.headers.get('Content-Type') || '';
+        if (ct.indexOf('json') !== -1) {
+          return r.json().then(function (j) {
+            btn.disabled = false;
+            if (window.Swal) Swal.fire({ icon: 'warning', title: 'Mensageria', text: (j && j.error) || t('err') });
+          });
+        }
+        var count = r.headers.get('X-Draft-Count') || '';
+        var cd = r.headers.get('Content-Disposition') || '';
+        var m = /filename="?([^";]+)"?/.exec(cd);
+        return r.blob().then(function (blob) {
+          btn.disabled = false;
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = (m && m[1]) || 'mensageria.zip';
+          document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+          if (window.Swal) Swal.fire({ icon: 'success', title: 'Mensageria',
+            text: count ? (count + ' draft(s) generated.') : 'Drafts generated.',
+            timer: 2200, showConfirmButton: false });
+        });
+      }).catch(function () { btn.disabled = false; });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     wireClear();
     wireImport();
@@ -370,6 +450,8 @@
     wireAddRow();
     wireActions();
     wireDatePicker();
+    wireMensageria();
+    msgLoadRecipients();
     load(page.getAttribute('data-today'));
   });
 })();
