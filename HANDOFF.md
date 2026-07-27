@@ -5094,3 +5094,151 @@ apps/templates/pages/metrics-pending-confirmation.html ← ícones nas mini-chip
 apps/templates/pages/about.html        ← origem do padrão de ícone (tile de gradiente + motion)
 apps/static/data/translations/{en,br,es}.json ← chaves vr-cfg-*, dash-hero-*
 ```
+
+## 110. Sessão 2026-07-24 — Control Panel: TO/CC editáveis nos cards de e-mail (`658b7e1`, `7826b49`)
+
+- **Settlement Forecast** (`658b7e1`) e **Save CETIP Files** (`7826b49`) ganharam campos TO/CC editáveis
+  no próprio card do Control Panel, persistidos em JSON de runtime dentro de
+  `apps/static/data/control-panel/` (pasta **untracked, nunca commitar** — destinatários de produção).
+- No Save CETIP Files o TO é **por e-mail de área** (cada área tem seu destinatário).
+- E-mails desses fluxos passaram a usar o header no padrão daily-metric (ver §111).
+
+## 111. Sessão 2026-07-24 — Header de gradiente vira PADRÃO de todos os e-mails (`89b9e37`, `97036bb`)
+
+- `89b9e37`: o header do daily-metric (ghost-table MSO + faixa de gradiente via `cid:` embutido)
+  virou o padrão e foi aplicado a **todos** os templates de e-mail (accrual, MTM, cetip-saved,
+  recon comitente/payrec, settlement forecast, …). Helper central: `_attach_email_gradient(msg_related)`
+  em `routes.py` anexa o PNG do gradiente como related part.
+- `588b213` tentou fazer o rect VML acompanhar a largura real do `td`; **revertido** em `4b8f0ad`
+  (largura fixa é o que renderiza certo no Outlook clássico). Não reintroduzir.
+- `97036bb`: os dois últimos templates fora do padrão — **Verification Code** (`email-verification.html`)
+  e **Account Activated** — entraram no padrão; `send_verification_email` / `send_account_activated_email`
+  agora chamam `_attach_email_gradient`.
+
+## 112. Sessão 2026-07-24 — NDF Summary: refinamentos, TEDs e T+0 de volta
+
+- `3acf3bb` Print Advice gera avisos **só das contrapartes selecionadas** (checkbox da tabela).
+- `353a93a` resultado líquido do aviso encolhe com o IR também quando negativo.
+- `dc6a48a` ação **Confirm** no Settlement Summary (status Generated → Sent).
+- `07d0aa8` ≤2 avisos = download direto dos `.eml` (sem zip); botões de ação padronizados.
+- `7410c72` todos os botões de ação no formato do Delete (quadrado com cantos arredondados —
+  **padrão do app: nunca botão-bola**).
+- `99831cb` **botão TEDs**: e-mail de liberação de TED com as SSIs anexas
+  (template `email-template-ted-release.html`).
+- `21a9eb9` **card T+0 restaurado** como batimento próprio: `_ndfsum_fx_map` lê o Código da Cotação
+  (SISBACEN + cotação 0 → `t0`; ≠0 → `vanilla`; FEEDER → `other`); o recon acumula por chave
+  `('vanilla','t0','other','total')` — T+0 tinha sumido quando os cards viraram batimento B3×interno.
+
+## 113. Sessão 2026-07-26/27 — Electronic Inventory: causa-raiz do upload no Win11 (`fe8d7f2`, `a651e08`)
+
+- Sintoma (usuários Win11): clicar em Upload Documents não abria o modal (ou abria o file picker direto).
+  Duas tentativas anteriores (`4f1bfee`, `f4457cc` — remover backdrop-filter) NÃO eram a causa.
+- **Causa-raiz (`fe8d7f2`)**: `.modal-dialog` ficava parqueado em `opacity:0` e dependia da animação
+  (`forwards`) para aparecer. Windows 11 com "Animation Effects" desligado ⇒
+  `prefers-reduced-motion: reduce` ⇒ animação não roda ⇒ **modal invisível** (o clique caía no
+  dropzone invisível, por isso o file picker "direto"). Fix app-wide em
+  `scss/components/_modal.scss` + patch manual em `app.css`/`app.min.css` (sem node/gulp neste Mac):
+  estado de repouso visível, animação `zoomInModal .1s ease-out` **sem `forwards`**, `transition: none`.
+- `a651e08`: com a causa-raiz resolvida, o kill-switch de backdrop-filter foi removido e o **blur do
+  fundo voltou** ao modal de upload (opacidades de painel 92%/94% mantidas).
+
+## 114. Branch principal agora é `visual-refresh` (merge `35954f0`)
+
+- Desde 26/07/2026 **todo o trabalho vai para `visual-refresh`** (antes `apple-design`).
+  `apple-design` foi mergeada (`35954f0`) e não recebe mais commits.
+- Skill `/commit` e a memória do Claude já apontam para a branch nova.
+- O bloco DEV BYPASS local em `routes.py` hoje tem **23 linhas** (inclui
+  `_LOCK_ALLOWED_ENDPOINTS.add('pages_blueprint.dev_login')` — sem isso o auto-lock intercepta o
+  `/dev-login`). Continua NUNCA indo para o repo (ver skill `/commit`).
+
+## 115. Sessão 2026-07-27 — Ajustes da camada visual-refresh
+
+- `090d190` **Pay/Rec recon**: dropzone branco no dark — tokens `--bs-*` indefinidos trocados por
+  `--ins-*` (reforça a regra da §109.1).
+- `4f51650` ícones **Index B3/Intrag** centralizados no tile de gradiente
+  (`.menu-icon .icon-b3/.icon-intrag` 17×17 inline-flex) + animação-card nos ícones dos cards do
+  **Control Panel** (`.cp-card__icon`).
+- `0278367` **sidebar pinada perdia os textos**: o config.js do tema re-aplica
+  `data-sidenav-size="condensed"` ≤1140px por cima do pin. Fix em `visual-refresh.js`:
+  `enforcePinnedSize()` + MutationObserver no atributo + listener de resize forçam `"default"`
+  enquanto `body.vr-nav-pinned` e ≥992px (seta o atributo direto, de propósito NÃO via
+  `forceFixedSidenav` para não salvar "condensed" como tamanho anterior do usuário).
+- `c6bc42c` **Dashboard**: contagens dos cards em `#,##0` e valores **visíveis** nos gráficos —
+  plugin custom Chart.js `valueLabelPlugin` (id `vrValueLabels`, `afterDatasetsDraw`), modo
+  `bar-end` (total na ponta da barra, branco por dentro se cortar) e `arc` (rótulo branco com
+  sombra, pula fatias <5%); ligado em liveChart, clientsChart, productsChart, commoditiesChart e
+  pieChart via `plugins:[valueLabelPlugin]` + `options.plugins.vrValueLabels={mode}`.
+- `72d249b` assinatura do **Weekly Escalation** = "Institutional Services by OTC Tracker"
+  (igual daily metric).
+- `f6b779c`/`83c3abf` **Reference Data**: BANCO JOHN DEERE S/A - 217 nas opções de banco
+  (editor de duplo clique E dropdown de conta nova — lista única `CP_BANKS`, ordem numérica);
+  botões check/confirm no padrão quadrado arredondado (`border-radius:7px !important` em
+  `.btn-act` e `.cp-glass .btn-xs`).
+- **Verificação de sintaxe JS neste Mac**: usar o JavaScriptCore
+  (`/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc -e "new Function(readFile('arquivo.js'))"`)
+  — checagem de chaves via python dá falso positivo com regex literals.
+
+## 116. Sessão 2026-07-27 — New Deals: filtro Status ≠ Success + NOVA página Products › Monitor (`b02b910`)
+
+- **Filtro padrão novo** em todas as páginas New Deals: além de Trade Date = today, `Status <> Success`
+  (modo de texto `'not'` em `_deal_matches`).
+- **NOVA página `/new-deals-monitor`** — primeiro item da seção **Products** no sidenav (controla os
+  sub-itens: new deals, unwinds, intrag…): um card por produto (catálogo `_NDM_CARDS`; NDF Commodities,
+  FWD Start, Other Publisher, Option Commodities, FXO, Intrag NDF/Option, e placeholders
+  "In development" para Equity Options/Swap Equities/Swap CEM), reference date = today com histórico
+  dia-a-dia (daterangepicker). API `/api/new-deals/monitor` varre `NEW_DEALS_CACHE_ROOT` por arquivos
+  `YYYYMMDD*`, agrupa por caminho de produto e conta por Status; produtos fora do catálogo aparecem
+  como extras. Visual segue as regras da §109 (bento cards, chips de status, barra proporcional,
+  stagger de entrada, i18n `ndm-*`).
+- **Seção Components REMOVIDA do sidenav** (era só suporte de desenvolvimento; 678 linhas fora) —
+  some automaticamente do Page Access também, porque o checklist é construído do DOM vivo da sidebar.
+
+## 117. Sessão 2026-07-27 — Operations B3: coluna Type + Mensageria (`58cf073`, `d78ad52`, `2470497`)
+
+### Coluna Type (derivada, sempre a última)
+- `_opb3_collect` appenda um **Type** derivado por registro (`_opb3_tipo_for`): match do Título contra a
+  live position da categoria via `_opb3_tipo_maps(ref)` (walk-back ≤10 dias úteis ANBIMA por categoria
+  sob `B3_JSON_ROOT`). Regra: **OPC** → CLASSE DO ATIVO SUBJACENTE = TAXAS DE CAMBIO → `TAXAS DE CAMBIO`,
+  COMMODITIES → `COMMODITIES`, resto → `EQUITIES`; **TER** → valor de CLASSE DO ATIVO SUBJACENTE;
+  **SWAP** → código identificador (CEM-/EDG-…). No front, header `Type` com `data-lang="ob-col-type"`;
+  `dataCols()` exclui a coluna dos modais Add/Edit (ela não é editável).
+
+### Mensageria (drafts .eml para o time do piloto)
+- Botão **Mensageria** ao lado do Import + dois cards **CEM** e **Equities** com TO/CC
+  (blur-save em `_OPB3_MSG_RECIPIENTS_FILE`, dentro de `control-panel/` — untracked).
+  Roteamento: `_opb3_msg_route_key(tipo)` → `'equities'` se o tipo normalizado contém
+  equit/edg/acao, senão `'cem'` (**premissa ajustável** se o split do piloto for outro).
+- Elegíveis: só linhas com Modalidade de Liquidação `Bilateral*`/`Bruta*`. Segregação: um draft por
+  `(tipo título, Conta Contraparte, tipo operação)`. Nome da contraparte: `RefData.json`
+  (`B3 ACCOUNT` → `COUNTERPARTY`), fallback Nome Simplificado.
+- **Subject**: PAGAMENTO DE PREMIO → `Prêmio {Swap|NDF|Opção} - Liquidação Banco x {cpty} - dd/mm/yyyy`;
+  demais → `{Tipo Op} {label} - Liquidação Banco x {cpty} - dd/mm/yyyy`.
+- **Frase do fluxo** (`_msg_flow_phrase`, destaque amarelo): soma ≥0 →
+  `Banco recebe do(a) {cpty} R$ #.##0,00`; negativa → `Banco paga {cpty} R$ #.##0,00`
+  (**sem** "ao(à)" — pedido explícito).
+- **Batimento interno**: TER → Cockpit (`_opb3_internal_ter_map`), prêmio de Swap → DAGENDAPREMIOS
+  (`_opb3_internal_swapprem_map`). Se TODOS os contratos do grupo casarem e a diferença for
+  > R$ 0,005 → linha verde `Favor considerar: Banco recebe/paga … R$ #.##0,00`; 100% igual → omite.
+- **BCC de compliance** (`2470497`): contraparte simplificada `INTRAGATACAMA*` → BCC
+  `gdt.br.derivatives@restricted.chase.com`; `INTRAGLAWTON*` **e** título SWAP **e** Banco recebe →
+  mesmo BCC; demais casos Lawton → BCC vazio. `build_eml_bytes` ganhou header `Bcc:`.
+- Shell padrão dos avisos (`_email_shell`) com novo parâmetro `footer_extra` →
+  **"JPMC Internal Use Only"** abaixo da assinatura, só nos e-mails de mensageria.
+- Tabela do draft com as 12 colunas do print da B3 (`_MSG_TABLE_HEADERS`); intro
+  Bom dia / Favor acatar / Obrigado(a)!; resposta via `_email_drafts_response`
+  (1 → `.eml`, N → zip `mensageria_YYYYMMDD.zip`, From = e-mail do usuário logado).
+- Testado ponta-a-ponta com o smoke DB: 11 drafts, segregação/subjects/roteamento/BCC verificados.
+
+### Sidenav (`d78ad52`)
+- **Operations B3** virou filho direto de **Daily Settlement** (grupo "B3 Files" removido);
+  item placeholder **Settlement Messages** removido.
+
+## 118. smoke_db.py — massa de dados fictícia LOCAL (nunca commitar) (`80bf075`)
+
+- `smoke_db.py` na raiz gera dados fake para visualização local: b3 files
+  (DPOSICAO-TER/DPOSICAO/DPOSICAO-SWAP/DFLUXO, últimos 5 dias úteis), New Deals `*_mock.json` de hoje
+  e operations-b3 do dia (Títulos casando com os contratos das posições geradas, contrapartes
+  INTRAG* — Atacama/Lawton/MGT — para exercitar as regras de BCC).
+- **NUNCA commitar**: o script está no `.gitignore` (bloco "local dev stubs", junto do stub `awmpy.py`)
+  e os dados caem nos patterns já ignorados (`b3 files/**/*.json`, `**/*_mock.json`,
+  `daily settlement/**/*.json`).

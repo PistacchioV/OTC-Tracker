@@ -94,6 +94,7 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 
 ### Key non-obvious details
 
+- **Working branch is `visual-refresh`** (since 2026-07-26; `apple-design` was merged in and is retired). All commits and pushes go there — never assume `main`. See HANDOFF §109/§114 for the visual-refresh design rules (tokens `--vr-*`/`--ins-*`, never `--bs-*`; i18n with English defaults + `data-lang`).
 - `awmpy` is an internal JPMorgan library and is not available on PyPI. The app will fail at login/register (phonebook lookup) if it is not installed. For **local dev off the JPM network**, a tiny `awmpy` stub in the venv lets the server boot — real SID login won't work, so use the `/dev-login` DEV BYPASS route instead (that block is stripped from `routes.py` before every commit; see HANDOFF).
 - `DB_PATH` for DuckDB is a **relative** path resolved from the module dir (see Database section above) — no per-machine editing needed.
 - **Local dev on macOS**: use `flask run --port=5005` — port 5000 is taken by the AirPlay Receiver (returns a 403 "AirTunes"). The venv here is Python 3.12 (`.venv311`); `duckdb` and `flask-minify` are required (both in `requirements.txt`).
