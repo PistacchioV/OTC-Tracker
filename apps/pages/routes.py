@@ -12956,11 +12956,12 @@ except Exception:
     log.warning('[pending-confirmation] could not start daily scheduler')
 
 
-def _pc_save_from_deal(deal, product_type, pending_status=None):
+def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=None):
     """Build and insert a pending row from a Success+mapped New Deals deal.
     product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO),
     'NDF FWD START' / 'NDF OTHER PUB' / 'NDF VANILLA' (generic NDF pages).
-    pending_status overrides the default 'Pending OTC' (signature-type rules)."""
+    pending_status overrides the default 'Pending OTC' (signature-type rules);
+    trade_number overrides the Deal id (FWD Start rows are keyed by B3 ID)."""
     try:
         client = str(deal.get('Client', '') or '')
         if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
@@ -12977,7 +12978,7 @@ def _pc_save_from_deal(deal, product_type, pending_status=None):
         row['Product Type'] = product_type
         row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
         row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
-        row['Trade Number'] = str(deal.get('Deal', '') or '')
+        row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
         row['Pending Status'] = pending_status or 'Pending OTC'
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
         _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
@@ -13927,11 +13928,15 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     except ValueError:
         month = ''
 
-    qty_ccy  = _fxo_ccy(get('QUANTITY CURRENCY'))
-    qty_v    = _fxo_num(get('QUANTITY'))
-    strike_v = _fxo_num(get('STRIKE'))
-    instr    = str(get('INSTRUMENT TYPE') or '').strip()
+    qty_ccy   = _fxo_ccy(get('QUANTITY CURRENCY'))
+    other_ccy = _fxo_ccy(get('OTHER QUANTITY UNITS'))
+    qty_v     = _fxo_num(get('QUANTITY'))
+    strike_v  = _fxo_num(get('STRIKE'))
+    instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
+    # FX Pair comes with internal ccy codes ("USB/BRR") → ISO ("USD/BRL")
+    fx_pair = re.sub(r'[A-Z]{3}', lambda m: _fxo_ccy(m.group(0)),
+                     str(get('INSTRUMENT') or '').strip().upper())
 
     # Routing (order matters: FWD Start wins over the publisher test)
     if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
@@ -13961,8 +13966,9 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         'Instrument':        instr,
         'TradeType':         trade_type,
         'Direction':         str(get('TYPE') or '').strip().upper(),
-        'FXPair':            str(get('INSTRUMENT') or '').strip(),
+        'FXPair':            fx_pair,
         'QuantityCurrency':  qty_ccy,
+        'OtherQuantityCurrency': other_ccy,
         'Publisher':         publisher,
         'Notional':          ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
         'Rate':              ('{:,.8f}'.format(strike_v) if strike_v is not None else ''),
@@ -17703,9 +17709,14 @@ def _generic_nd_pending_status(product, deal):
 
 def _generic_nd_pc_trigger(product, deal):
     """→ Pending Confirmation on Status Success (same trigger as the other New
-    Deals products; _pc_save_from_deal skips internal/intragroup legs itself)."""
+    Deals products; _pc_save_from_deal skips internal/intragroup legs itself).
+    FWD Start rows are keyed by the mapped B3 ID, not the Deal name."""
+    tn = None
+    if product == 'fwd-start':
+        tn = str(deal.get('B3_ID', '') or '').strip() or None
     _pc_save_from_deal(deal, _GENERIC_ND_PC_TYPE.get(product, 'NDF'),
-                       pending_status=_generic_nd_pending_status(product, deal))
+                       pending_status=_generic_nd_pending_status(product, deal),
+                       trade_number=tn)
 
 
 # ==============================================================================
@@ -18083,6 +18094,314 @@ def api_generic_nd_bulk_patch_cache(product):
                              'Bulk Update', cfg['label'],
                              str(updated) + ' deal' + ('s' if updated != 1 else '') + ' updated')
     return jsonify({"success": True, "updated": updated})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# GENERIC NDF (FWD Start / Other Publisher) — send-conecta (TER files)
+# ──────────────────────────────────────────────────────────────────────────
+# Same positional TER layout as ndf-commodities, with the FX-NDF field rules.
+# Lines are split into THREE files by participant entity:
+#   • client is the Banco J.P. Morgan → the LAWTON-side leg → *_LAWTON file
+#     (participant 00041007) — mirrors the ndf-commodities convention;
+#   • else LE = MGT → *_MGT file (participant 04880006);
+#   • else → *_BANCO file (participant 73760009).
+# Counterparty account follows the LE matrix used on the page previews.
+
+# Athena publisher → B3 fonte de informação / fonte de consulta codes.
+_NDF_PUBLISHER_CODES = {
+    'BFIX 4PM LONDON':       {'info': '14399', 'consulta': '2'},   # BLOOMBERG
+    'OBSERVADO/BCENTRAL CL': {'info': '11703', 'consulta': '5'},   # OUTROS
+    'PEN SBSP/BCRP':         {'info': '11683', 'consulta': '5'},   # OUTROS
+    'REUTERS - WMR':         {'info': '247',   'consulta': '0'},   # REUTERS
+    'TRM COP':               {'info': '11682', 'consulta': '5'},   # OUTROS
+}
+
+_moeda_num_codes_cache = None
+
+
+def _moeda_num_code(iso):
+    """ISO 3-letter → B3 3-digit currency code (BaseMoeda.json, SIMBOLO →
+    CODIGO DE CADASTRO). Unknown/blank → ''. """
+    global _moeda_num_codes_cache
+    if _moeda_num_codes_cache is None:
+        m = {}
+        try:
+            with open(os.path.join(_B3_DATA_DIR, 'BaseMoeda.json'), encoding='utf-8') as fh:
+                for r in json.load(fh):
+                    sym = str(r.get('SIMBOLO') or '').strip().upper()
+                    code = str(r.get('CODIGO DE CADASTRO') or '').strip()
+                    if sym and code and sym not in m:
+                        m[sym] = code
+        except (IOError, json.JSONDecodeError):
+            pass
+        _moeda_num_codes_cache = m
+    return _moeda_num_codes_cache.get(str(iso or '').strip().upper(), '')
+
+
+_anbima_hols_cache = None
+
+
+def _anbima_holidays():
+    global _anbima_hols_cache
+    if _anbima_hols_cache is None:
+        try:
+            with open(os.path.join(_B3_DATA_DIR, 'anbima.json'), encoding='utf-8') as fh:
+                _anbima_hols_cache = {(x.get('date') if isinstance(x, dict) else x)
+                                      for x in json.load(fh)}
+        except (IOError, json.JSONDecodeError):
+            _anbima_hols_cache = set()
+    return _anbima_hols_cache
+
+
+def _anbima_biz_diff(start_dt, end_dt):
+    """ANBIMA business days in (start, end] — the 'diferença de dias úteis'."""
+    if not start_dt or not end_dt or end_dt <= start_dt:
+        return 0
+    hols, n, cur = _anbima_holidays(), 0, start_dt
+    while cur < end_dt:
+        cur += timedelta(days=1)
+        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
+            n += 1
+    return n
+
+
+def _anbima_add_biz(start_dt, n):
+    """start advanced by n ANBIMA business days."""
+    if not start_dt:
+        return None
+    hols, cur, left = _anbima_holidays(), start_dt, n
+    while left > 0:
+        cur += timedelta(days=1)
+        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
+            left -= 1
+    return cur
+
+
+@blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
+def api_generic_nd_send_conecta(product):
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    if product not in ('fwd-start', 'other-publishers'):
+        return jsonify({'ok': False, 'error': 'send-conecta not available for this product'}), 404
+    is_fwd = product == 'fwd-start'
+    prefix = 'FWDSTART' if is_fwd else 'OTHERPUBLISHER'
+
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    if not deals:
+        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+
+    today = datetime.today().strftime('%Y%m%d')
+
+    def _s(v):
+        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
+
+    def _pos(s, width, align='left', fill=' '):
+        s = str(s or '')[:width]
+        return s.rjust(width, fill) if align == 'right' else s.ljust(width, fill)
+
+    def _znum(val, int_digits, dec_digits):
+        """Zero-padded positional number: int_digits + dec_digits chars."""
+        try:
+            from decimal import Decimal
+            d = abs(Decimal(str(val).replace(',', '')))
+            ip = int(d)
+            fp = int(((d - ip) * (10 ** dec_digits)).to_integral_value())
+            return str(ip).zfill(int_digits) + str(fp).zfill(dec_digits)
+        except Exception:
+            return '0' * (int_digits + dec_digits)
+
+    def _d8(v):
+        dt = _parse_date_any(_s(v))
+        return dt.strftime('%Y%m%d') if dt else ''
+
+    def _is_jpm(c):
+        return bool(re.search(r'J\.?P\.?\s*MORGAN', c.upper()))
+
+    def _is_mgt(c):
+        return 'MGT' in c.upper()
+
+    def _is_lawton(c):
+        return 'LAWTON' in c.upper()
+
+    buckets = {'BANCO': [], 'LAWTON': [], 'MGT': []}
+    counts = Counter()
+    for deal in deals:
+        client   = _s(deal.get('Client', ''))
+        le       = _s(deal.get('LE', '')).upper()
+        deal_id  = _s(deal.get('Deal', ''))
+        publisher = _s(deal.get('Publisher', ''))
+        is_ptax  = 'PTAX' in publisher.upper()
+        qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
+        oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
+        trade_type = _s(deal.get('TradeType', '')).upper()
+        asian    = trade_type == 'ASIAN'
+
+        # Entity bucket + participant / counterparty accounts
+        if _is_jpm(client):                       # Lawton-side mirror leg
+            bucket, participant = 'LAWTON', '00041007'
+            cpty = '04880006' if le == 'MGT' else '73760009'
+        else:
+            bucket = 'MGT' if le == 'MGT' else 'BANCO'
+            participant = '04880006' if le == 'MGT' else '73760009'
+            if _is_lawton(client):
+                cpty = '00041007'
+            elif le == 'MGT':
+                cpty = '73760009' if _is_jpm(client) else '04880109'
+            else:
+                cpty = '04880006' if _is_mgt(client) else '73760102'
+        taxid = '' if (_is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
+            else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
+
+        last_fix_dt = _parse_date_any(_s(deal.get('LastFixingDate', '')))
+        settl_dt    = _parse_date_any(_s(deal.get('SettlementDate', '')))
+        biz_diff    = _anbima_biz_diff(last_fix_dt, settl_dt)
+
+        strike_set_dt = _parse_date_any(_s(deal.get('StrikeSetDate', '')))
+        fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
+
+        fonte_info = '   0' if is_ptax else '   1'
+        boletim    = '3' if fonte_info == '   0' else '1'
+
+        # Notional: integer right-justified to 14 + '00'
+        try:
+            qty_int = int(round(float(_s(deal.get('TotalNotional', '')).replace(',', ''))))
+            qty_str = str(qty_int).rjust(14, '0') + '00'
+        except Exception:
+            qty_str = '0' * 16
+
+        fix_start = _d8(deal.get('FirstFixingDate', ''))
+        fix_end   = _d8(deal.get('LastFixingDate', ''))
+        fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
+        tipo_media = 'N' if fix_single else 'A'
+
+        if is_fwd:
+            taxa_termo   = _pos('', 20)
+            cot_venc     = str(biz_diff)[:1] or '0'
+            fonte_cons   = ''
+            tela_cons    = ''
+            cot_rs_usd   = ''
+            cot_paridade = ''
+            data_aval    = ''
+            termo_flag   = 'S'
+            forma_atu    = 'V'
+            valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
+        else:
+            # Weak currencies quote inverted vs BRL: 1/rate rounded per table
+            rate_raw = _fxo_num(_s(deal.get('Rate', '')))
+            _INV = {'CNH': 4, 'MXN': 4, 'COP': 6, 'PEN': 4, 'CLP': 6}
+            if rate_raw and qty_ccy in _INV:
+                rate_val = round(1.0 / rate_raw, _INV[qty_ccy])
+            else:
+                rate_val = rate_raw
+            taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
+            cot_venc     = ' '
+            pub = _NDF_PUBLISHER_CODES.get(publisher.upper(), {})
+            fonte_cons   = pub.get('consulta', '')
+            tela_cons    = pub.get('info', '')
+            cot_rs_usd   = '1'
+            cot_paridade = '3'
+            data_aval    = _d8(deal.get('LastFixingDate', ''))
+            termo_flag   = 'N'
+            forma_atu    = ' '
+            valor_perc   = (_znum(_s(deal.get('StrikeSetOffset', '')), 4, 8)
+                            if _s(deal.get('StrikeSetOffset', '')) else _pos('', 12))
+
+        dir_code = '0' if _s(deal.get('Direction', '')).upper() == 'BUY' else '1'
+        my_number = str(random.randint(1000000000, 9999999999))
+
+        line = (
+            _pos('TER  ', 5)                         +  # ID do Sistema
+            _pos('1', 1)                             +  # ID Tipo de Linha
+            _pos('0001', 4)                          +  # Código Operação
+            _pos(my_number, 10)                      +  # Meu Número
+            _pos(participant, 8)                     +  # Lançamento do Participante
+            _pos(dir_code, 1)                        +  # Papel
+            _pos('', 14)                             +  # CPF/CNPJ Cliente Parte
+            _pos(cpty, 8)                            +  # Contraparte
+            _pos(taxid, 14)                          +  # CPF/CNPJ Contraparte
+            _pos('S', 1)                             +  # Contrato Global
+            _pos('2', 20, 'right')                   +  # Classe do Ativo Subjacente
+            _pos(fonte_info, 4)                      +  # Fonte de Informação
+            _pos(_moeda_num_code(qty_ccy), 3)        +  # Moeda de Referência
+            _pos(_moeda_num_code(oth_ccy), 3)        +  # Moeda Cotada
+            _pos(cot_venc, 1)                        +  # Cotação para o Vencimento
+            _pos(qty_str, 16)                        +  # Valor Base / Quantidade
+            _pos('', 10)                             +  # Código do Ativo Subjacente
+            _pos(taxa_termo, 20)                     +  # Taxa a Termo (R$/Moeda)
+            _pos(fix_single, 8)                      +  # Data de Fixing do Ativo Subjacente
+            _pos(_d8(deal.get('TradeDate', '')), 8)  +  # Data de Operação
+            _pos(_d8(deal.get('SettlementDate', '')), 8) +  # Data de Vencimento
+            _pos(boletim, 1)                         +  # Boletim
+            _pos(' ', 1)                             +  # Tipo de Cotação
+            _pos('', 8)                              +  # Data de Fixing da Moeda
+            _pos('', 1)                              +  # Cross Rate na Avaliação?
+            _pos(fonte_cons, 1)                      +  # Fonte de Consulta
+            _pos(tela_cons, 8, 'right')              +  # Tela ou Função de Consulta
+            _pos('', 8)                              +  # Praça de Negociação
+            _pos('', 8)                              +  # Horário de Consulta
+            _pos(cot_rs_usd, 1)                      +  # Cotação Taxa de Câmbio R$/USD
+            _pos(cot_paridade, 1)                    +  # Cotação Paridade
+            _pos(data_aval, 8)                       +  # Data de Avaliação
+            _pos('', 10)                             +  # Código da Paridade Cross
+            _pos('', 8)                              +  # Data de Fixing da Paridade Cross
+            _pos(termo_flag, 1)                      +  # Termo a Termo
+            _pos(fixacao_dt.strftime('%Y%m%d') if fixacao_dt else '', 8) +  # Data de Fixação
+            _pos(forma_atu, 1)                       +  # Forma de Atualização
+            _pos(valor_perc, 12)                     +  # Valor / Percentual Negociado
+            _pos(str(biz_diff)[:1] or '0', 1)        +  # Cotação para Fixing
+            _pos('N', 1)                             +  # Atualizar Valor Base?
+            _pos('', 12)                             +  # Cotação Inicial
+            _pos('N', 1)                             +  # Ajustar Taxa
+            _pos('', 1)                              +  # Responsável pelo Ajuste da Taxa
+            _pos('', 8)                              +  # Data Inicial para Ajuste da Taxa
+            _pos('', 8)                              +  # Data Final para Ajuste da Taxa
+            _pos('', 1)                              +  # Limites
+            _pos('', 14)                             +  # Superior (Paridade)
+            _pos('', 14)                             +  # Inferior (Paridade)
+            _pos('', 8)                              +  # Data de Liquidação do Prêmio
+            _pos('', 1)                              +  # Prêmio a ser Pago Pelo
+            _pos('', 16)                             +  # Valor do Prêmio
+            _pos('', 1)                              +  # Modalidade de Liquidação
+            _pos('', 1)                              +  # Prêmio em Moeda Estrangeira
+            _pos('', 8)                              +  # Data de Fixing da Moeda do Prêmio
+            _pos('S' if _s(deal.get('IsBRRFixed', '')).upper() == 'YES' else '', 1) +  # Taxa a Termo em Reais
+            _pos('', 280)                            +  # Observação
+            _pos(deal_id[-14:], 14, 'right')         +  # Código Identificador (right 14 of Deal)
+            _pos(tipo_media, 1)                      +  # Tipo Média Asiático
+            _pos(str(_anbima_biz_diff(
+                _parse_date_any(_s(deal.get('FirstFixingDate', ''))),
+                _parse_date_any(_s(deal.get('LastFixingDate', ''))))
+                 + (1 if asian else 0)).zfill(3) if asian else '000', 3)  # Qtde Datas Verificação
+        )
+        buckets[bucket].append(line)
+        counts[bucket] += 1
+
+    headers = {
+        'BANCO':  _pos('TER  ', 5) + '0' + '0001' + 'JPMORGANBM' + ' ' * 10 + today + '00003',
+        'LAWTON': _pos('TER  ', 5) + '0' + '0001' + 'INTRAGLAWTONFDO' + ' ' * 5 + today + '00003',
+        'MGT':    _pos('TER  ', 5) + '0' + '0001' + 'MORGANBC' + ' ' * 12 + today + '00003',
+    }
+
+    generated = []
+    try:
+        os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
+        for bucket in ('BANCO', 'LAWTON', 'MGT'):
+            if not buckets[bucket]:
+                continue
+            path = _unique_filepath(CONECTA_NEW_PATH, '{}_{}.txt'.format(prefix, bucket))
+            with open(path, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([headers[bucket]] + buckets[bucket]))
+            generated.append({'filename': os.path.basename(path), 'count': counts[bucket]})
+        total = sum(counts.values())
+        if total > 0:
+            cfg = _generic_nd_cfg(product)
+            _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                 'Sent to B3', cfg['label'] if cfg else product,
+                                 str(total) + ' deal' + ('' if total == 1 else 's') + ' sent')
+        primary = generated[0]['filename'] if generated else ''
+        return jsonify({'ok': True, 'filename': primary, 'count': total, 'files': generated})
+    except Exception as exc:                            # noqa: BLE001
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 # ==============================================================================

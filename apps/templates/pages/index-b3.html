@@ -40,6 +40,21 @@
         </div>
     </div>
 
+    <ul class="nav nav-tabs nav-bordered mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a class="nav-link active" data-bs-toggle="tab" href="#tabIndexSearch" role="tab">
+                <i class="ti ti-filter me-1"></i><span data-lang="b3-tab-search">Index Search</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link" data-bs-toggle="tab" href="#tabBaseMoeda" role="tab">
+                <i class="ti ti-currency-dollar me-1"></i><span data-lang="b3-tab-base-moeda">Currency Base</span>
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+    <div class="tab-pane show active" id="tabIndexSearch" role="tabpanel">
     <div class="row">
         <div class="col-12">
             <div class="card filter-card">
@@ -190,6 +205,44 @@
             </div>
         </div>
     </div>
+    </div><!-- /tabIndexSearch -->
+
+    <div class="tab-pane" id="tabBaseMoeda" role="tabpanel">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h5 class="card-title mb-0">
+                        <i class="ti ti-currency-dollar me-1 text-primary"></i>
+                        <span data-lang="b3-tab-base-moeda">Currency Base</span>
+                    </h5>
+                    <input type="text" class="form-control form-control-sm" id="bmFilter"
+                           style="max-width:240px" placeholder="Filter…" data-lang-placeholder="bm-filter">
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height:62vh">
+                        <table class="table table-sm table-striped table-hover mb-0 align-middle" id="baseMoedaTable">
+                            <thead class="thead-sm text-uppercase fs-xxs" style="position:sticky;top:0;z-index:1">
+                                <tr>
+                                    <th data-lang="bm-type">Type</th>
+                                    <th data-lang="bm-indicator-type">Indicator Type</th>
+                                    <th data-lang="bm-field">Field</th>
+                                    <th data-lang="bm-field-desc">Field Description</th>
+                                    <th data-lang="bm-reg-code">Registration Code</th>
+                                    <th data-lang="bm-symbol">Currency Code</th>
+                                    <th data-lang="bm-quot-type">Quotation Type</th>
+                                    <th data-lang="bm-decimals">Decimal Places</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bmTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- /tabBaseMoeda -->
+    </div><!-- /tab-content -->
 
 </div>
 {% endblock page_content %}
@@ -398,6 +451,30 @@
             fillSelect('selClasse', unique(DATA.subj, 'Classe'), '-- Select Class --');
             fillSelect('selCodigo', unique(DATA.subj, 'Codigo do Ativo Subjacente'));
             fillSelect('selTipoIF', unique(DATA.subj, 'Tipo IF'), '-- All --');
+
+            // ── Currency Base tab (BaseMoeda.json) ────────────────────────
+            fetch('{{ config.ASSETS_ROOT }}/data/BaseMoeda.json')
+                .then(r => r.json())
+                .then(rows => {
+                    const esc = s => String(s == null ? '' : s)
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const COLS = ['TIPO', 'TIPO DE INDICADOR', 'CAMPO', 'DESCRICAO DO CAMPO',
+                                  'CODIGO DE CADASTRO', 'SIMBOLO', 'TIPO COTACAO', 'CASAS DECIMAIS'];
+                    const tbody = document.getElementById('bmTbody');
+                    const render = filter => {
+                        const f = (filter || '').trim().toUpperCase();
+                        tbody.innerHTML = rows
+                            .filter(r => !f || COLS.some(c => String(r[c] || '').toUpperCase().includes(f)))
+                            .map(r => '<tr>' + COLS.map((c, i) =>
+                                '<td' + (i === 5 ? ' class="fw-semibold"' : '') + '>' +
+                                esc(r[c]) + '</td>').join('') + '</tr>')
+                            .join('');
+                    };
+                    render('');
+                    const inp = document.getElementById('bmFilter');
+                    if (inp) inp.addEventListener('input', () => render(inp.value));
+                })
+                .catch(() => {});
 
             btnPes.disabled = false;
         } catch (err) {

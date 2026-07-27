@@ -875,6 +875,7 @@
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-direction">Direction</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-fx-pair">FX Pair</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-qty-ccy">Quantity Currency</th>
+                                    <th data-table-sort="" data-format="text" data-lang="nd-col-other-qty-ccy">Other Quantity Currency</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-publisher">Publisher</th>
                                     <th data-table-sort="" data-format="num-2dp" data-lang="nd-col-notional">Notional</th>
                                     <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-rate">Rate</th>
@@ -905,6 +906,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Direction" data-lang-placeholder="col-direction"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FX Pair" data-lang-placeholder="col-fx-pair"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quantity Currency" data-lang-placeholder="col-qty-ccy"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Other Quantity Currency" data-lang-placeholder="nd-col-other-qty-ccy"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Publisher" data-lang-placeholder="col-publisher"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Notional" data-lang-placeholder="col-notional"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Rate" data-lang-placeholder="col-rate"></th>
@@ -1022,6 +1024,10 @@
           <div class="col-md-3">
             <label class="form-label form-label-sm mb-1">Quantity Currency</label>
             <input type="text" class="form-control form-control-sm" id="ar-qtyccy">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">Other Quantity Currency</label>
+            <input type="text" class="form-control form-control-sm" id="ar-otherqtyccy">
           </div>
           <div class="col-md-3">
             <label class="form-label form-label-sm mb-1">Publisher</label>
@@ -1289,6 +1295,7 @@ function dealJsonToRow(deal) {
         deal.Direction         || '',
         deal.FXPair            || '',
         deal.QuantityCurrency  || '',
+        deal.OtherQuantityCurrency || '',
         deal.Publisher         || '',
         deal.Notional          || '',
         deal.Rate              || '',
@@ -1347,7 +1354,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [23, 25]   // Is BRR Fixed (dropped from this page) + Maker SID
+                targets: [24, 26]   // Is BRR Fixed (dropped from this page) + Maker SID
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1376,7 +1383,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1387,7 +1394,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1398,7 +1405,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1409,7 +1416,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1420,7 +1427,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],
+                            columns: [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1514,11 +1521,12 @@ $(document).ready(function() {
                 'nd-col-direction',         // col 17
                 'nd-col-fx-pair',           // col 18
                 'nd-col-qty-ccy',           // col 19
-                'nd-col-publisher',         // col 20
-                'nd-col-notional',          // col 21
-                'nd-col-rate'               // col 22
-                // col 23 Is BRR Fixed + col 25 Maker — hidden, not in scroll head
-                ,'nd-col-trading-book'      // col 24
+                'nd-col-other-qty-ccy',     // col 20
+                'nd-col-publisher',         // col 21
+                'nd-col-notional',          // col 22
+                'nd-col-rate'               // col 23
+                // col 24 Is BRR Fixed + col 26 Maker — hidden, not in scroll head
+                ,'nd-col-trading-book'      // col 25
             ];
             var container = api.table().container();
             // DT2.x uses .dt-scroll-head; DT1.x used .dataTables_scrollHead
@@ -1869,6 +1877,7 @@ $(document).ready(function() {
                 "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
                 "First Fixing Date", "Last Fixing Date",
                 "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
+                "Other Quantity Currency",
                 "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook"
             ];
 
@@ -1878,7 +1887,7 @@ $(document).ready(function() {
                 dropdown.className = 'dropdown';
 
                 var menuItems = columnLabels.map(function(label, index) {
-                    if (index + 2 === 23) return '';   // Is BRR Fixed — permanently hidden here
+                    if (index + 2 === 24) return '';   // Is BRR Fixed — permanently hidden here
                     return '<li class="dropdown-item">' +
                         '<div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" ' +
@@ -2648,7 +2657,7 @@ $(document).ready(function() {
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[25] || '';
+            var rowMaker  = d[26] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -3259,10 +3268,11 @@ $(document).ready(function() {
             Direction:        _sh(d[17]),
             FXPair:           _sh(d[18]),
             QuantityCurrency: _sh(d[19]),
-            Publisher:        _sh(d[20]),
-            Notional:         _sh(d[21]),
-            Rate:             _sh(d[22]),
-            IsBRRFixed:       _sh(d[23])
+            OtherQuantityCurrency: _sh(d[20]),
+            Publisher:        _sh(d[21]),
+            Notional:         _sh(d[22]),
+            Rate:             _sh(d[23]),
+            IsBRRFixed:       _sh(d[24])
         };
     }
 
@@ -3288,12 +3298,13 @@ $(document).ready(function() {
             Direction:        _sh(d[17]),
             FXPair:           _sh(d[18]),
             QuantityCurrency: _sh(d[19]),
-            Publisher:        _sh(d[20]),
-            Notional:         _sh(d[21]),
-            Rate:             _sh(d[22]),
-            IsBRRFixed:       _sh(d[23]),
-            TradingBook:      _sh(d[24]),
-            Maker:            d[25] || '',
+            OtherQuantityCurrency: _sh(d[20]),
+            Publisher:        _sh(d[21]),
+            Notional:         _sh(d[22]),
+            Rate:             _sh(d[23]),
+            IsBRRFixed:       _sh(d[24]),
+            TradingBook:      _sh(d[25]),
+            Maker:            d[26] || '',
             Checker:          ''
         };
         if (overrides) {
@@ -3880,6 +3891,45 @@ $(document).ready(function() {
         return list;
     }
 
+    // ── ANBIMA holidays + B3 currency codes (Base Moeda) for the TER preview ──
+    var _ANBIMA_HOLS = {};
+    fetch('/static/data/anbima.json').then(function(r){ return r.json(); }).then(function(d){
+        (d || []).forEach(function(x){ var k = (x && x.date) || x; if (k) _ANBIMA_HOLS[k] = true; });
+    }).catch(function(){});
+    var _MOEDA_CODES = {};
+    fetch('/static/data/BaseMoeda.json').then(function(r){ return r.json(); }).then(function(d){
+        (d || []).forEach(function(x){
+            var s = String(x['SIMBOLO'] || '').trim().toUpperCase();
+            var cd = String(x['CODIGO DE CADASTRO'] || '').trim();
+            if (s && cd && !_MOEDA_CODES[s]) _MOEDA_CODES[s] = cd;
+        });
+    }).catch(function(){});
+    function _moedaCode(iso) { return _MOEDA_CODES[String(iso || '').trim().toUpperCase()] || ''; }
+    function _isAnbimaBiz(d) {
+        var dow = d.getDay();
+        return dow !== 0 && dow !== 6 && !_ANBIMA_HOLS[_bizToYMDDash(d)];
+    }
+    /* dias úteis ANBIMA em (start, end] */
+    function _bizDiffX(startStr, endStr) {
+        var s = _bizParseDate(startStr), e = _bizParseDate(endStr);
+        if (!s || !e || s >= e) return 0;
+        var n = 0, cur = new Date(s.getTime());
+        while (cur < e) { cur.setDate(cur.getDate() + 1); if (_isAnbimaBiz(cur)) n++; }
+        return n;
+    }
+    function _addBizX(dateStr, n) {
+        var d = _bizParseDate(dateStr);
+        if (!d) return '';
+        var left = n, cur = new Date(d.getTime());
+        while (left > 0) { cur.setDate(cur.getDate() + 1); if (_isAnbimaBiz(cur)) left--; }
+        return _bizToYMD8(cur);
+    }
+    function _fmt8(v) {
+        var n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+        if (isNaN(n)) return '';
+        return n.toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+    }
+
     function buildConectaFields(deal, bizDayCount) {
         function _date(val) {
             val = _sh(val);
@@ -3997,6 +4047,45 @@ $(document).ready(function() {
         if (!vanilla) {
             f[58] = bizDayCount !== undefined ? String(bizDayCount).padStart(3, '0') : '';
         }
+
+
+        // ── Regras TER do Other Publisher (espelham o send-conecta do servidor) ──
+        var _diff = _bizDiffX(deal.LastFixingDate || '', deal.SettlementDate || '');
+        var _isPtax = String(deal.Publisher || '').toUpperCase().indexOf('PTAX') !== -1;
+        var _PUBCODES = {
+            'BFIX 4PM LONDON':       { info: '14399', consulta: '2' },
+            'OBSERVADO/BCENTRAL CL': { info: '11703', consulta: '5' },
+            'PEN SBSP/BCRP':         { info: '11683', consulta: '5' },
+            'REUTERS - WMR':         { info: '247',   consulta: '0' },
+            'TRM COP':               { info: '11682', consulta: '5' }
+        };
+        var _pub = _PUBCODES[String(deal.Publisher || '').trim().toUpperCase()] || {};
+        var _qc = String(deal.QuantityCurrency || '').toUpperCase();
+        var _rateN = parseFloat(String(deal.Rate || '').replace(/,/g, ''));
+        var _INV = { CNH: 4, MXN: 4, COP: 6, PEN: 4, CLP: 6 };  // moedas fracas → 1/taxa
+        var _rateV = (!isNaN(_rateN) && _rateN && _INV[_qc] !== undefined)
+            ? (Math.round((1 / _rateN) * Math.pow(10, _INV[_qc])) / Math.pow(10, _INV[_qc]))
+            : _rateN;
+        f[10] = '2';                                    // Classe do Ativo (arquivo: 19 espaços + 2)
+        f[16] = '';                                     // Código do Ativo (arquivo: 10 espaços)
+        f[17] = isNaN(_rateV) ? '' : _fmt8(_rateV);     // Taxa a Termo (arquivo: 12 int + 8 dec)
+        f[14] = ' ';                                    // Cotação p/ Vencimento
+        f[25] = _pub.consulta || '';                    // Fonte de Consulta (1 char)
+        f[26] = _pub.info || '';                        // Tela/Função de Consulta (arquivo: 8, à direita)
+        f[11] = _isPtax ? '   0' : '   1';              // Fonte de Informação
+        f[21] = _isPtax ? '3' : '1';                    // Boletim
+        f[22] = ' ';                                    // Tipo de Cotação
+        f[34] = 'N';                                    // Termo a Termo
+        f[35] = deal.StrikeSetDate ? _addBizX(deal.StrikeSetDate, _diff) : '';  // Data de Fixação
+        f[36] = ' ';                                    // Forma de Atualização
+        f[31] = deal.LastFixingDate ? _date(deal.LastFixingDate) : '';  // Data de Avaliação
+        f[29] = '1';                                    // Cotação R$/USD
+        f[30] = '3';                                    // Cotação Paridade
+        f[37] = deal.StrikeSetOffset ? _fmt8(deal.StrikeSetOffset) : '';  // Valor/Percentual
+        f[38] = String(_diff);                          // Cotação para Fixing
+        f[12] = _moedaCode(deal.QuantityCurrency);      // Moeda de Referência (3 dígitos)
+        f[13] = _moedaCode(deal.OtherQuantityCurrency); // Moeda Cotada (3 dígitos)
+        f[56] = String(deal.Deal || '').slice(-14);     // Código Identificador (14 da direita)
 
         return CONECTA_FIELD_NAMES.map(function(name, i) {
             return { name: name, value: f[i] };
@@ -4257,7 +4346,7 @@ $(document).ready(function() {
 
         function arClearFields() {
             $('#ar-le,#ar-deal,#ar-acronym,#ar-spn,#ar-client,#ar-taxid,' +
-              '#ar-fxpair,#ar-qtyccy,#ar-publisher,#ar-notional,#ar-rate,#ar-tradingbook').val('');
+              '#ar-fxpair,#ar-qtyccy,#ar-otherqtyccy,#ar-publisher,#ar-notional,#ar-rate,#ar-tradingbook').val('');
             $('#ar-tradedate,#ar-settledate,#ar-firstfix,#ar-lastfix').val('');
             $('#ar-month').val('');
             $('#ar-instrument').val('Swap');
@@ -4301,11 +4390,12 @@ $(document).ready(function() {
             $('#ar-direction').val(_sh(d[17]));
             $('#ar-fxpair').val(_sh(d[18]));
             $('#ar-qtyccy').val(_sh(d[19]));
-            $('#ar-publisher').val(_sh(d[20]));
-            $('#ar-notional').val(_sh(d[21]));
-            $('#ar-rate').val(_sh(d[22]));
-            $('#ar-isbrrfixed').val(_sh(d[23]));
-            $('#ar-tradingbook').val(_sh(d[24]));
+            $('#ar-otherqtyccy').val(_sh(d[20]));
+            $('#ar-publisher').val(_sh(d[21]));
+            $('#ar-notional').val(_sh(d[22]));
+            $('#ar-rate').val(_sh(d[23]));
+            $('#ar-isbrrfixed').val(_sh(d[24]));
+            $('#ar-tradingbook').val(_sh(d[25]));
             bootstrap.Modal.getOrCreateInstance(arModalEl).show();
         };
 
@@ -4383,6 +4473,7 @@ $(document).ready(function() {
                 Direction:        $('#ar-direction').val() || '',
                 FXPair:           $('#ar-fxpair').val().trim(),
                 QuantityCurrency: $('#ar-qtyccy').val().trim(),
+                OtherQuantityCurrency: $('#ar-otherqtyccy').val().trim(),
                 Publisher:        $('#ar-publisher').val().trim(),
                 Notional:         $('#ar-notional').val().trim(),
                 Rate:             $('#ar-rate').val().trim(),
