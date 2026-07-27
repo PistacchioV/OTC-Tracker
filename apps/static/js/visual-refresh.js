@@ -138,6 +138,27 @@
       }
     } catch (e) {}
 
+    // O tema muda data-sidenav-size sozinho (config.js: janela ≤1140px →
+    // "condensed"; toggles do app.js) e atropela o "default" forçado acima —
+    // a sidebar dockada ficava só com os tiles, sem os textos. Enquanto
+    // pinada em viewport de dock (≥992px), o tamanho é SEMPRE "default":
+    // qualquer troca externa é revertida na hora. Setamos o atributo direto
+    // (sem forceFixedSidenav) para não gravar "condensed" como tamanho
+    // anterior do usuário.
+    function enforcePinnedSize() {
+      if (!document.body.classList.contains("vr-nav-pinned")) return;
+      if (window.innerWidth < 992) return;
+      if (htmlEl.getAttribute("data-sidenav-size") !== "default") {
+        htmlEl.setAttribute("data-sidenav-size", "default");
+      }
+    }
+    try {
+      new MutationObserver(enforcePinnedSize)
+        .observe(htmlEl, { attributes: true, attributeFilter: ["data-sidenav-size"] });
+    } catch (e) {}
+    window.addEventListener("resize", enforcePinnedSize);
+    enforcePinnedSize();
+
     btn.addEventListener("click", toggle);
     backdrop.addEventListener("click", close);
     document.addEventListener("keydown", function (e) {
