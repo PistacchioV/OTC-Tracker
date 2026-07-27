@@ -1823,7 +1823,8 @@ def api_dashboard_stats():
         """
         rel = os.path.relpath(file_path, NEW_DEALS_CACHE_ROOT).replace('\\', '/')
         parts = rel.split('/')
-        label_parts = [p for p in parts[:-1] if not p.isdigit()][:2]
+        pretty = {'FwdStart': 'FWD Start', 'OtherPublisher': 'Other Publisher'}
+        label_parts = [pretty.get(p, p) for p in parts[:-1] if not p.isdigit()][:2]
         return ' '.join(label_parts) if label_parts else 'Other'
 
     def _type_from_product(product):
@@ -1877,10 +1878,26 @@ def api_dashboard_stats():
     def _fam(d):
         # FXO is split out of the OPT bucket so the dashboard can show it apart
         return 'FXO' if _is_fxo(d) else d['_type']
+
+    def _ndf_bucket(product):
+        """NDF sub-bucket by product label: vanilla/otherpub/fwdstart, '' = rest
+        (Commodities, Intrag, …). Same split the distribution/flow charts show."""
+        q = (product or '').lower().replace(' ', '')
+        if 'vanilla' in q:
+            return 'vanilla'
+        if 'otherpublisher' in q:
+            return 'otherpub'
+        if 'fwdstart' in q:
+            return 'fwdstart'
+        return ''
     ndf_deals     = [d for d in counted_deals if _fam(d) == 'NDF']
     optcomm_deals = [d for d in counted_deals if _fam(d) == 'OPT']
     fxo_deals     = [d for d in counted_deals if _fam(d) == 'FXO']
     swap_deals    = [d for d in counted_deals if _fam(d) == 'SWAP']
+    ndf_vanilla_deals  = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'vanilla']
+    ndf_otherpub_deals = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'otherpub']
+    ndf_fwdstart_deals = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'fwdstart']
+    ndf_comm_deals     = [d for d in ndf_deals if not _ndf_bucket(d.get('_product'))]
     opt_deals     = optcomm_deals + fxo_deals  # all options (stat card)
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
     pending_total = sum(1 for d in counted_deals if (d.get('Status') or '').strip() in pending_statuses)
@@ -1916,6 +1933,9 @@ def api_dashboard_stats():
     monthly_ndf = [0] * 12
     monthly_fxo = [0] * 12
     monthly_swap = [0] * 12
+    monthly_ndf_vanilla  = [0] * 12
+    monthly_ndf_otherpub = [0] * 12
+    monthly_ndf_fwdstart = [0] * 12
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
         for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in files:
@@ -1938,7 +1958,10 @@ def api_dashboard_stats():
                 elif ptype == 'SWAP':
                     target = monthly_swap
                 else:
-                    target = monthly_ndf
+                    target = {'vanilla': monthly_ndf_vanilla,
+                              'otherpub': monthly_ndf_otherpub,
+                              'fwdstart': monthly_ndf_fwdstart}.get(
+                                  _ndf_bucket(product), monthly_ndf)
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
@@ -1979,12 +2002,18 @@ def api_dashboard_stats():
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
         'top5_underlying': top5_underlying,
-        'dist_ndf':      len(ndf_deals),
+        'dist_ndf':      len(ndf_comm_deals),
+        'dist_ndf_vanilla':  len(ndf_vanilla_deals),
+        'dist_ndf_otherpub': len(ndf_otherpub_deals),
+        'dist_ndf_fwdstart': len(ndf_fwdstart_deals),
         'dist_opt':      len(optcomm_deals),
         'dist_fxo':      len(fxo_deals),
         'dist_swap':     len(swap_deals),
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
+        'monthly_ndf_vanilla':  monthly_ndf_vanilla,
+        'monthly_ndf_otherpub': monthly_ndf_otherpub,
+        'monthly_ndf_fwdstart': monthly_ndf_fwdstart,
         'monthly_fxo':   monthly_fxo,
         'monthly_swap':  monthly_swap,
         'recent_deals':  recent_deals,
@@ -12927,9 +12956,11 @@ except Exception:
     log.warning('[pending-confirmation] could not start daily scheduler')
 
 
-def _pc_save_from_deal(deal, product_type):
+def _pc_save_from_deal(deal, product_type, pending_status=None):
     """Build and insert a pending row from a Success+mapped New Deals deal.
-    product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO)."""
+    product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO),
+    'NDF FWD START' / 'NDF OTHER PUB' / 'NDF VANILLA' (generic NDF pages).
+    pending_status overrides the default 'Pending OTC' (signature-type rules)."""
     try:
         client = str(deal.get('Client', '') or '')
         if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
@@ -12947,7 +12978,7 @@ def _pc_save_from_deal(deal, product_type):
         row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
         row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
         row['Trade Number'] = str(deal.get('Deal', '') or '')
-        row['Pending Status'] = 'Pending OTC'
+        row['Pending Status'] = pending_status or 'Pending OTC'
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
         _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
     except Exception:
@@ -17642,6 +17673,41 @@ def _generic_nd_cfg(product):
     return _GENERIC_ND_PRODUCTS.get(product)
 
 
+# Product Type shown on the Pending Confirmation row per generic-NDF page.
+_GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF FWD START',
+                       'other-publishers': 'NDF OTHER PUB',
+                       'vanilla': 'NDF VANILLA'}
+
+
+def _generic_nd_pending_status(product, deal):
+    """Pending Status for a mapped (Status→Success) generic-NDF deal.
+    Rules: (Settlement − Trade) ≤ 60 corridos → 'Exception FepWeb' (all three);
+    FWD Start → 'Pending OTC'; Other Publisher/Vanilla → by the counterparty's
+    SIGNATURE TYPE in RefData: Internal → Exception Digital Fep Web,
+    Digital → Pending Digital Signature, Manual (and unregistered) → Pending
+    Original."""
+    td = _parse_date_any(deal.get('TradeDate', ''))
+    md = _parse_date_any(deal.get('SettlementDate', ''))
+    if td and md and (md - td).days <= 60:
+        return 'Exception FepWeb'
+    if product == 'fwd-start':
+        return 'Pending OTC'
+    rec = _fxo_refdata_by_spn().get(_norm_spn(deal.get('SPN', '')), {})
+    sig = _pc_norm(rec.get('SIGNATURE TYPE', ''))
+    if sig == 'internal':
+        return _PC_PASTDUE_STATUS          # Exception Digital Fep Web
+    if sig == 'digital':
+        return 'Pending Digital Signature'
+    return 'Pending Original'
+
+
+def _generic_nd_pc_trigger(product, deal):
+    """→ Pending Confirmation on Status Success (same trigger as the other New
+    Deals products; _pc_save_from_deal skips internal/intragroup legs itself)."""
+    _pc_save_from_deal(deal, _GENERIC_ND_PC_TYPE.get(product, 'NDF'),
+                       pending_status=_generic_nd_pending_status(product, deal))
+
+
 # ==============================================================================
 # NEW DEALS — MONITOR
 # Visão por produto × status das operações importadas na reference date. Os
@@ -17873,6 +17939,8 @@ def api_generic_nd_update_cache(product, deal_id):
             _save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
             log.error('[NDF GENERIC PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
+    if str(updates.get('Status', '')) == 'Success':
+        _generic_nd_pc_trigger(product, updated_deal)       # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
     if _fields:
@@ -17995,13 +18063,18 @@ def api_generic_nd_bulk_patch_cache(product):
                     deals = json.load(fh)
             except (json.JSONDecodeError, ValueError):
                 deals = []
+            success_deals = []
             for deal_id, client, updates in file_ops:
                 idx = next((i for i, d in enumerate(deals)
                             if d.get('Deal') == deal_id and (not client or d.get('Client', '') == client)), None)
                 if idx is not None:
                     deals[idx].update(updates)
                     updated += 1
+                    if str(updates.get('Status', '')) == 'Success':
+                        success_deals.append(deals[idx].copy())
             _atomic_write_json(fp, deals)
+        for d in success_deals:
+            _generic_nd_pc_trigger(product, d)              # → pending confirmation
 
     if updated > 0:
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
