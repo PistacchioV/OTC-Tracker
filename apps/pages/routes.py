@@ -19034,12 +19034,14 @@ def api_conf_ndfcomm_save():
                                conf=conf, doc_only=True)
 
     ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
-    month_folder = '{:02d}. {}'.format(ref.month, _CONF_MONTHS_PT[ref.month - 1])
-    dir_path = os.path.join(ELECTRONIC_INVENTORY_ROOT, 'Confirmations',
-                            ref.strftime('%Y'), month_folder, ref.strftime('%d'),
-                            'NDF Commodities')
-    # Nome no padrão legado, prefixado com contraparte × mercadoria porque a
-    # pasta é por produto (não por contraparte como na macro antiga).
+    # Pasta da contraparte no Electronic Inventory — mesma árvore que o upload
+    # manual da página (<Cliente>\Confirmations\YYYY\mm. Month\dd\<produto>),
+    # para a confirmação aparecer no browse do EI junto dos demais documentos.
+    client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), 'NDF Commodities')
+    # Nome no padrão legado, mantendo o prefixo contraparte × mercadoria.
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -19049,17 +19051,17 @@ def api_conf_ndfcomm_save():
     base = _ei_sanitize(base)
 
     try:
-        os.makedirs(dir_path, exist_ok=True)
+        os.makedirs(_ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(os.path.join(dir_path, candidate + '.doc')) or \
-                os.path.exists(os.path.join(dir_path, candidate + '.pdf')):
+        while os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
         pdf_path = os.path.join(dir_path, candidate + '.pdf')
-        with open(doc_path, 'w', encoding='utf-8') as fh:
+        with open(_ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
             fh.write(doc_html)
-        with open(pdf_path, 'wb') as fh:
+        with open(_ei_long_path(pdf_path), 'wb') as fh:
             fh.write(pdf_bytes)
 
         # XML do contrato (FepWeb): mesmo nome do numeroContrato, mesma pasta.
@@ -19071,11 +19073,11 @@ def api_conf_ndfcomm_save():
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(picked, merc, ref)
             xbase = _ei_sanitize(numero_contrato) or candidate
             xcand, xn = xbase, 0
-            while os.path.exists(os.path.join(dir_path, xcand + '.xml')):
+            while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(xbase, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
-            with open(xml_path, 'w', encoding='utf-8') as fh:
+            with open(_ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
             # numeroContrato → coluna FepWeb ID das operações no Pending Confirmation
@@ -19412,10 +19414,12 @@ def api_conf_optcomm_save():
                                conf=conf, doc_only=True)
 
     ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
-    month_folder = '{:02d}. {}'.format(ref.month, _CONF_MONTHS_PT[ref.month - 1])
-    dir_path = os.path.join(ELECTRONIC_INVENTORY_ROOT, 'Confirmations',
-                            ref.strftime('%Y'), month_folder, ref.strftime('%d'),
-                            'Commodities Options')
+    # Pasta da contraparte no Electronic Inventory (mesma árvore do upload
+    # manual) — ver api_conf_ndfcomm_save.
+    client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), 'Commodities Options')
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -19425,17 +19429,17 @@ def api_conf_optcomm_save():
     base = _ei_sanitize(base)
 
     try:
-        os.makedirs(dir_path, exist_ok=True)
+        os.makedirs(_ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(os.path.join(dir_path, candidate + '.doc')) or \
-                os.path.exists(os.path.join(dir_path, candidate + '.pdf')):
+        while os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
         pdf_path = os.path.join(dir_path, candidate + '.pdf')
-        with open(doc_path, 'w', encoding='utf-8') as fh:
+        with open(_ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
             fh.write(doc_html)
-        with open(pdf_path, 'wb') as fh:
+        with open(_ei_long_path(pdf_path), 'wb') as fh:
             fh.write(pdf_bytes)
 
         # XML do contrato: tipoOperacao Option, numeroContrato com prefixo
@@ -19447,11 +19451,11 @@ def api_conf_optcomm_save():
                 picked, merc, ref, tipo='Option', prefixo='Opt_Comm')
             xbase = _ei_sanitize(numero_contrato) or candidate
             xcand, xn = xbase, 0
-            while os.path.exists(os.path.join(dir_path, xcand + '.xml')):
+            while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(xbase, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
-            with open(xml_path, 'w', encoding='utf-8') as fh:
+            with open(_ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
                 fh.write(xml_str)
             xml_files.append(xml_path)
             fep_updated = _conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
