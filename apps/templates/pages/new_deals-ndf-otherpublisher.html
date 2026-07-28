@@ -4064,7 +4064,8 @@ $(document).ready(function() {
 
         // ── Regras TER do Other Publisher (espelham o send-conecta do servidor) ──
         var _diff = _bizDiffX(deal.LastFixingDate || '', deal.SettlementDate || '');
-        var _isPtax = String(deal.Publisher || '').toUpperCase().indexOf('PTAX') !== -1;
+        // Fonte de Informação: só o PTAX "puro" vale 0; PTAX* e demais = 1.
+        var _isPtax = String(deal.Publisher || '').trim().toUpperCase() === 'PTAX';
         var _PUBCODES = {
             'BFIX 4PM LONDON':       { info: '14399', consulta: '2' },
             'OBSERVADO/BCENTRAL CL': { info: '11703', consulta: '5' },
@@ -4095,9 +4096,14 @@ $(document).ready(function() {
         f[29] = '1';                                    // Cotação R$/USD
         f[30] = '3';                                    // Cotação Paridade
         f[37] = deal.StrikeSetOffset ? _fmt8(deal.StrikeSetOffset) : '';  // Valor/Percentual
-        f[38] = String(_diff);                          // Cotação para Fixing
-        f[12] = _moedaCode(deal.QuantityCurrency);      // Moeda de Referência (3 dígitos)
-        f[13] = _moedaCode(deal.OtherQuantityCurrency); // Moeda Cotada (3 dígitos)
+        f[38] = ' ';                                    // Cotação para Fixing (OP: em branco)
+        // BRL fixed: inverte — a moeda estrangeira é a Referência e o BRL a Cotada
+        var _brlFixed = _sh(deal.IsBRRFixed || '').toUpperCase() === 'YES';
+        f[12] = _moedaCode(_brlFixed ? deal.OtherQuantityCurrency : deal.QuantityCurrency);   // Moeda de Referência (3 dígitos)
+        f[13] = _moedaCode(_brlFixed ? deal.QuantityCurrency : deal.OtherQuantityCurrency);   // Moeda Cotada (3 dígitos)
+        f[15] = _qty(deal.TotalNotional || deal.Notional || '');  // Valor Base = coluna (Total) Notional
+        // LE Lawton: parte Lawton (00041007) × contraparte banco JPM (73760009, sem CNPJ)
+        if (le.indexOf('LAWTON') !== -1) { f[4] = '00041007'; f[7] = '73760009'; f[8] = ''; }
         f[56] = String(deal.Deal || '').slice(-14);     // Código Identificador (14 da direita)
 
         return CONECTA_FIELD_NAMES.map(function(name, i) {

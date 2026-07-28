@@ -20241,14 +20241,17 @@ def api_generic_nd_send_conecta(product):
         le       = _s(deal.get('LE', '')).upper()
         deal_id  = _s(deal.get('Deal', ''))
         publisher = _s(deal.get('Publisher', ''))
-        is_ptax  = 'PTAX' in publisher.upper()
+        # Fonte de Informação: só o PTAX "puro" vale 0; PTAX* e demais publishers = 1.
+        is_ptax  = publisher.strip().upper() == 'PTAX'
         qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
         oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
         trade_type = _s(deal.get('TradeType', '')).upper()
         asian    = trade_type == 'ASIAN'
 
         # Entity bucket + participant / counterparty accounts
-        if _is_jpm(client):                       # Lawton-side mirror leg
+        if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
+            bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
+        elif _is_jpm(client):                     # Lawton-side mirror leg
             bucket, participant = 'LAWTON', '00041007'
             cpty = '04880006' if le == 'MGT' else '73760009'
         else:
@@ -20260,7 +20263,7 @@ def api_generic_nd_send_conecta(product):
                 cpty = '73760009' if _is_jpm(client) else '04880109'
             else:
                 cpty = '04880006' if _is_mgt(client) else '73760102'
-        taxid = '' if (_is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
+        taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
             else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
 
         last_fix_dt = _parse_date_any(_s(deal.get('LastFixingDate', '')))
@@ -20273,9 +20276,11 @@ def api_generic_nd_send_conecta(product):
         fonte_info = '   0' if is_ptax else '   1'
         boletim    = '3' if fonte_info == '   0' else '1'
 
-        # Notional: integer right-justified to 14 + '00'
+        # Notional: integer right-justified to 14 + '00'. Os deals de OP mandam a
+        # coluna como Notional (só o NDF Comm usa TotalNotional) — aceita ambos.
+        notional_s = _s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))
         try:
-            qty_int = int(round(float(_s(deal.get('TotalNotional', '')).replace(',', ''))))
+            qty_int = int(round(float(notional_s.replace(',', ''))))
             qty_str = str(qty_int).rjust(14, '0') + '00'
         except Exception:
             qty_str = '0' * 16
@@ -20320,6 +20325,11 @@ def api_generic_nd_send_conecta(product):
         dir_code = '0' if _s(deal.get('Direction', '')).upper() == 'BUY' else '1'
         my_number = str(random.randint(1000000000, 9999999999))
 
+        # OP com BRL fixed: inverte as moedas — a estrangeira vira a Moeda de
+        # Referência e o BRL a Moeda Cotada.
+        brl_fixed = (not is_fwd) and _s(deal.get('IsBRRFixed', '')).upper() == 'YES'
+        moeda_ref, moeda_cot = (oth_ccy, qty_ccy) if brl_fixed else (qty_ccy, oth_ccy)
+
         line = (
             _pos('TER  ', 5)                         +  # ID do Sistema
             _pos('1', 1)                             +  # ID Tipo de Linha
@@ -20333,8 +20343,8 @@ def api_generic_nd_send_conecta(product):
             _pos('S', 1)                             +  # Contrato Global
             _pos('2', 20, 'right')                   +  # Classe do Ativo Subjacente
             _pos(fonte_info, 4)                      +  # Fonte de Informação
-            _pos(_moeda_num_code(qty_ccy), 3)        +  # Moeda de Referência
-            _pos(_moeda_num_code(oth_ccy), 3)        +  # Moeda Cotada
+            _pos(_moeda_num_code(moeda_ref), 3)      +  # Moeda de Referência
+            _pos(_moeda_num_code(moeda_cot), 3)      +  # Moeda Cotada
             _pos(cot_venc, 1)                        +  # Cotação para o Vencimento
             _pos(qty_str, 16)                        +  # Valor Base / Quantidade
             _pos('', 10)                             +  # Código do Ativo Subjacente
@@ -20359,7 +20369,7 @@ def api_generic_nd_send_conecta(product):
             _pos(fixacao_dt.strftime('%Y%m%d') if fixacao_dt else '', 8) +  # Data de Fixação
             _pos(forma_atu, 1)                       +  # Forma de Atualização
             _pos(valor_perc, 12)                     +  # Valor / Percentual Negociado
-            _pos(str(biz_diff)[:1] or '0', 1)        +  # Cotação para Fixing
+            _pos((str(biz_diff)[:1] or '0') if is_fwd else ' ', 1) +  # Cotação para Fixing (OP: em branco)
             _pos('N', 1)                             +  # Atualizar Valor Base?
             _pos('', 12)                             +  # Cotação Inicial
             _pos('N', 1)                             +  # Ajustar Taxa
