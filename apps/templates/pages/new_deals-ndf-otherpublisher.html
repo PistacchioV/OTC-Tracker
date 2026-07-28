@@ -4073,7 +4073,25 @@ $(document).ready(function() {
             'REUTERS - WMR':         { info: '247',   consulta: '0' },
             'TRM COP':               { info: '11682', consulta: '5' }
         };
-        var _pub = _PUBCODES[String(deal.Publisher || '').trim().toUpperCase()] || {};
+        // Casa o nome exato primeiro; senão, por token — a Athena manda o
+        // publisher composto (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR).
+        var _pubKey = String(deal.Publisher || '').trim().toUpperCase();
+        var _pub = _PUBCODES[_pubKey];
+        if (!_pub) {
+            var _pubTok = [
+                ['BFIX', 'BFIX 4PM LONDON'],
+                ['BCENTRAL', 'OBSERVADO/BCENTRAL CL'],
+                ['OBSERVADO', 'OBSERVADO/BCENTRAL CL'],
+                ['SBSP', 'PEN SBSP/BCRP'],
+                ['BCRP', 'PEN SBSP/BCRP'],
+                ['WMR', 'REUTERS - WMR'],
+                ['TRM', 'TRM COP']
+            ];
+            for (var _pi = 0; _pi < _pubTok.length; _pi++) {
+                if (_pubKey.indexOf(_pubTok[_pi][0]) !== -1) { _pub = _PUBCODES[_pubTok[_pi][1]]; break; }
+            }
+        }
+        _pub = _pub || {};
         var _qc = String(deal.QuantityCurrency || '').toUpperCase();
         var _rateN = parseFloat(String(deal.Rate || '').replace(/,/g, ''));
         var _INV = { CNH: 4, MXN: 4, COP: 6, PEN: 4, CLP: 6 };  // moedas fracas → 1/taxa

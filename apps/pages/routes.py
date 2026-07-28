@@ -20125,6 +20125,24 @@ _NDF_PUBLISHER_CODES = {
     'TRM COP':               {'info': '11682', 'consulta': '5'},   # OUTROS
 }
 
+
+def _ndf_publisher_codes(publisher):
+    """Publisher → códigos B3. Casa o nome exato primeiro; senão, por token —
+    a Athena manda o publisher composto (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR)."""
+    p = (publisher or '').strip().upper()
+    if p in _NDF_PUBLISHER_CODES:
+        return _NDF_PUBLISHER_CODES[p]
+    for token, key in (('BFIX', 'BFIX 4PM LONDON'),
+                       ('BCENTRAL', 'OBSERVADO/BCENTRAL CL'),
+                       ('OBSERVADO', 'OBSERVADO/BCENTRAL CL'),
+                       ('SBSP', 'PEN SBSP/BCRP'),
+                       ('BCRP', 'PEN SBSP/BCRP'),
+                       ('WMR', 'REUTERS - WMR'),
+                       ('TRM', 'TRM COP')):
+        if token in p:
+            return _NDF_PUBLISHER_CODES[key]
+    return {}
+
 _moeda_num_codes_cache = None
 
 
@@ -20312,7 +20330,7 @@ def api_generic_nd_send_conecta(product):
                 rate_val = rate_raw
             taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
             cot_venc     = ' '
-            pub = _NDF_PUBLISHER_CODES.get(publisher.upper(), {})
+            pub = _ndf_publisher_codes(publisher)
             fonte_cons   = pub.get('consulta', '')
             tela_cons    = pub.get('info', '')
             cot_rs_usd   = '1'
