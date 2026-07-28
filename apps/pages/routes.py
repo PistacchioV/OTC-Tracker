@@ -20274,7 +20274,8 @@ def api_generic_nd_send_conecta(product):
         fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
 
         fonte_info = '   0' if is_ptax else '   1'
-        boletim    = '3' if fonte_info == '   0' else '1'
+        # Boletim: no OP sai em branco; no FWD Start segue a fonte (PTAX=3, demais=1).
+        boletim    = ('3' if fonte_info == '   0' else '1') if is_fwd else ' '
 
         # Notional: integer right-justified to 14 + '00'. Os deals de OP mandam a
         # coluna como Notional (só o NDF Comm usa TotalNotional) — aceita ambos.

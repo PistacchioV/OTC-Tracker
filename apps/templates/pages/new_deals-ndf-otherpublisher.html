@@ -4087,7 +4087,7 @@ $(document).ready(function() {
         f[25] = _pub.consulta || '';                    // Fonte de Consulta (1 char)
         f[26] = _pub.info || '';                        // Tela/Função de Consulta (arquivo: 8, à direita)
         f[11] = _isPtax ? '   0' : '   1';              // Fonte de Informação
-        f[21] = _isPtax ? '3' : '1';                    // Boletim
+        f[21] = ' ';                                    // Boletim (OP: em branco)
         f[22] = ' ';                                    // Tipo de Cotação
         f[34] = 'N';                                    // Termo a Termo
         f[35] = deal.StrikeSetDate ? _addBizX(deal.StrikeSetDate, _diff) : '';  // Data de Fixação
