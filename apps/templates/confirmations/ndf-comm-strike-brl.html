@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CONFIRMAÇÃO (BRL) — {{ conf.acronym }} · {{ conf.mercadoria }} · {{ conf.data_neg }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    color: #000;
+    background: #fff;
+    padding: 36pt;
+    max-width: 960px;
+    margin: 0 auto;
+    line-height: 1.4;
+  }
+
+  /* ── PAINEL DE EDIÇÃO ─────────────────────────────────── */
+  #editor-panel {
+    position: fixed;
+    top: 0; right: 0;
+    width: 320px;
+    height: 100vh;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    overflow-y: auto;
+    padding: 16px;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    z-index: 1000;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.4);
+  }
+
+  #editor-panel h1 {
+    font-size: 11pt;
+    color: #fff;
+    margin-bottom: 4px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  #editor-panel .subtitle {
+    font-size: 8pt;
+    color: #9090b0;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+
+  .field-group {
+    margin-bottom: 12px;
+  }
+
+  .field-group label {
+    display: block;
+    font-size: 8pt;
+    color: #a0a0c0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+  }
+
+  .field-group input,
+  .field-group select {
+    width: 100%;
+    background: #0d0d1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #e0e0e0;
+    padding: 5px 8px;
+    font-size: 9pt;
+    font-family: Arial, sans-serif;
+  }
+
+  .field-group input:focus,
+  .field-group select:focus {
+    border-color: #5555cc;
+    outline: none;
+  }
+
+  .section-header {
+    font-size: 8pt;
+    font-weight: bold;
+    color: #7070bb;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 14px 0 6px 0;
+    padding-top: 10px;
+    border-top: 1px solid #222;
+  }
+
+  .btn-add-row {
+    width: 100%;
+    background: #2a2a5a;
+    border: 1px solid #5555cc;
+    color: #aaaaee;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 9pt;
+    margin-top: 6px;
+    font-family: Arial, sans-serif;
+  }
+
+  .btn-add-row:hover { background: #333380; }
+
+  .btn-print {
+    width: 100%;
+    background: #1a6e3c;
+    border: none;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10pt;
+    font-weight: bold;
+    margin-top: 14px;
+    font-family: Arial, sans-serif;
+  }
+
+  .btn-print:hover { background: #228a4e; }
+
+  .row-editor {
+    background: #0d0d1a;
+    border: 1px solid #2a2a5a;
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+    position: relative;
+  }
+
+  .row-editor .row-num {
+    font-size: 8pt;
+    color: #7070bb;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+
+  .row-editor .mini-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .row-editor .mini-grid label {
+    font-size: 7pt;
+    color: #808090;
+    text-transform: uppercase;
+  }
+
+  .row-editor .mini-grid input,
+  .row-editor .mini-grid select {
+    width: 100%;
+    background: #111122;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #d0d0e0;
+    padding: 3px 5px;
+    font-size: 8pt;
+    font-family: Arial, sans-serif;
+  }
+
+  .btn-remove-row {
+    position: absolute;
+    top: 6px; right: 6px;
+    background: #4a1a1a;
+    border: 1px solid #aa3333;
+    color: #ee6666;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 8pt;
+    padding: 1px 5px;
+    font-family: Arial, sans-serif;
+  }
+
+  .btn-remove-row:hover { background: #6a2020; }
+
+  /* ── CAMPOS DINÂMICOS NO DOCUMENTO ───────────────────── */
+  .dyn {
+    color: #000;
+    font-weight: inherit;
+  }
+
+  /* ── LAYOUT DO DOCUMENTO ──────────────────────────────── */
+  #doc-body {
+    margin-right: 340px;
+  }
+
+  h2 {
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 12pt;
+  }
+
+  p { text-align: justify; margin-bottom: 6pt; }
+
+  .section-title { font-weight: bold; text-decoration: underline; }
+
+  .numbered-section { margin-bottom: 8pt; }
+
+  .party-line { margin-bottom: 4pt; margin-left: 36pt; text-indent: -18pt; }
+  .party-line .label { font-weight: bold; }
+
+  .alpha-list { margin-left: 18pt; margin-bottom: 6pt; }
+
+  .alpha-item {
+    margin-bottom: 6pt;
+    text-align: justify;
+    padding-left: 22pt;
+    position: relative;
+  }
+
+  .alpha-item .ltr {
+    position: absolute; left: 0; font-weight: bold;
+  }
+
+  .formula-block {
+    margin-left: 54pt;
+    margin-bottom: 8pt;
+    font-weight: bold;
+  }
+
+  .declarations-list { margin-left: 36pt; margin-bottom: 6pt; }
+
+  .decl-item {
+    margin-bottom: 6pt;
+    text-align: justify;
+    padding-left: 28pt;
+    position: relative;
+  }
+
+  .decl-item .ltr { position: absolute; left: 0; font-weight: bold; }
+
+  .separator {
+    border: none;
+    border-bottom: 1.5pt solid #000;
+    margin: 18pt 0 6pt 0;
+  }
+
+  .signature-table { width: 100%; border-collapse: collapse; margin-top: 12pt; }
+  .signature-table td { width: 50%; vertical-align: top; padding: 4pt 8pt; }
+  .signature-line { margin-top: 40pt; margin-bottom: 4pt; }
+
+  .witnesses-table { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+  .witnesses-table td { width: 50%; vertical-align: top; padding: 4pt 8pt; }
+
+  .reference-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    margin-top: 12pt;
+    margin-bottom: 12pt;
+  }
+
+  .reference-table th,
+  .reference-table td {
+    border: 0.5pt solid #000;
+    padding: 4pt 4pt;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.3;
+  }
+
+  .reference-table th { font-weight: bold; }
+
+  .annex-title {
+    text-align: center;
+    font-weight: bold;
+    margin: 18pt 0 12pt 0;
+    font-size: 12pt;
+  }
+
+  .page-break {
+    border-top: 1px dashed #ccc;
+    margin: 24pt 0;
+    padding-top: 12pt;
+  }
+
+  .center-italic { text-align: center; font-style: italic; margin: 12pt 0; }
+  .bold { font-weight: bold; }
+  .underline { text-decoration: underline; }
+  .italic { font-style: italic; }
+  sub { font-size: 0.75em; }
+
+  @media print {
+    #editor-panel { display: none; }
+    #doc-body { margin-right: 0; }
+    body { padding: 18pt; }
+    .page-break { page-break-before: always; border: none; }
+  }
+  {% if doc_only %}
+  /* Modo documento (gera o .doc): sem painel, corpo em largura total */
+  #doc-body { margin-right: 0; }
+  {% endif %}
+</style>
+</head>
+<body>
+
+{% if not doc_only %}
+<!-- ══════════════════════════════════════════════════════════
+     PAINEL DE EDIÇÃO
+═══════════════════════════════════════════════════════════ -->
+<div id="editor-panel">
+  <h1>⚙ Editor (BRL) — {{ conf.acronym }} · {{ conf.mercadoria }}</h1>
+  <p class="subtitle">Campos pré-preenchidos pelas operações de {{ conf.data_neg }}. Revise, ajuste se preciso e imprima/salve o PDF.</p>
+  {% if conf.warnings %}
+  <div style="background:#4a3a1a;border:1px solid #aa8833;color:#ffd54f;border-radius:4px;padding:8px;font-size:8.5pt;margin-bottom:12px;">
+    {% for w in conf.warnings %}<div>⚠ {{ w }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="section-header">Contrato Global de Derivativos</div>
+
+  <div class="field-group">
+    <label>Data do CGD (ex: 28 de Maio de 2008)</label>
+    <input type="text" id="inp_cgd_date" value="28 de Maio de 2008" oninput="update()">
+  </div>
+
+  <div class="section-header">Identificação da Contraparte</div>
+
+  <div class="field-group">
+    <label>Nome da Parte B (Contraparte)</label>
+    <input type="text" id="inp_parteb_nome" value="WHIRLPOOL SA" oninput="update()">
+  </div>
+
+  <div class="field-group">
+    <label>CNPJ da Parte B</label>
+    <input type="text" id="inp_parteb_cnpj" value="59.105.999/0001-86" oninput="update()">
+  </div>
+
+  <div class="section-header">Data da Operação</div>
+
+  <div class="field-group">
+    <label>Data de Negociação (dd/mm/aaaa)</label>
+    <input type="text" id="inp_data_neg" value="27/03/2026" oninput="update()">
+  </div>
+
+  <div class="field-group">
+    <label>Data por Extenso (assinatura)</label>
+    <input type="text" id="inp_data_extenso" value="27 de Março de 2026" oninput="update()">
+  </div>
+
+  <div class="section-header">Operações — Tabela Referência (Anexo I)</div>
+  <p style="font-size:7.5pt;color:#808090;margin-bottom:6px;">Adicione, remova e edite as linhas da tabela de operações abaixo.</p>
+
+  <div id="rows-container"></div>
+
+  <button class="btn-add-row" onclick="addRow()">+ Adicionar Operação</button>
+
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+
+  <button class="btn-print" style="background:#1a3a6e" onclick="saveToInventory(this)">💾 Salvar Word + PDF no Inventory</button>
+  <div id="save-status" style="font-size:8pt;color:#9090b0;margin-top:6px;word-break:break-all;"></div>
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     DOCUMENTO
+═══════════════════════════════════════════════════════════ -->
+<div id="doc-body">
+
+<h2>CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS</h2>
+
+<p>Esta Confirmação ("Confirmação") tem por objetivo reger as Operações de Derivativos a Parte A e a Parte B abaixo qualificadas, de acordo com as disposições legais e regulamentares aplicáveis e no âmbito do <span class="italic">Contrato Global de Derivativos e do Apêndice ao Contrato Global de Derivativos</span>, ambos firmados entre as Partes em <span class="dyn" id="out_cgd_date">{{ conf.cgd_date }}</span> ("Contrato"), cujos termos são incorporados por referência a este instrumento.</p>
+
+<p>Esta Confirmação formaliza uma ou mais Operações de Derivativos contratadas na mesma data entre as Partes individualizadas abaixo na Tabela Referência. No entanto, cada Operação de Derivativo é uma operação individual para fins tributários e de registro, sem prejuízo das disposições do Contrato que tratam da compensação e do cálculo do Valor de Vencimento Antecipado.</p>
+
+<p>Para fins dos cálculos descritos nessa Confirmação, a quantidade de Dias Úteis será apurada pelo Agente de Cálculo conforme as convenções e as práticas de mercado para contagem de dias úteis a depender da taxa, índice ou preço utilizado como referência em uma Operação de Derivativo.</p>
+
+<br>
+
+<!-- SEÇÃO 1 -->
+<div class="numbered-section">
+  <p><span class="bold">1. &nbsp;&nbsp;&nbsp;<span class="section-title">Definições Gerais</span></span></p>
+  <br>
+  <p>Os termos não definidos nesta Confirmação terão os mesmos significados a eles atribuídos no Contrato. Em caso de conflito entre uma definição do Contrato e a desta Confirmação, prevalecerá, para os fins desta Operação de Derivativo, a definição que constar desta Confirmação.</p>
+</div>
+
+<br>
+
+<!-- SEÇÃO 2 -->
+<div class="numbered-section">
+  <p><span class="bold">2. &nbsp;&nbsp;&nbsp;<span class="section-title">Definição das Partes</span></span></p>
+  <br>
+
+  <table style="border:none;border-collapse:collapse;margin-left:18pt;">
+    <tr>
+      <td style="padding:0 0 4pt 0;font-weight:bold;white-space:nowrap;vertical-align:top;">a. &nbsp;&nbsp; Parte A:</td>
+      <td style="padding:0 0 4pt 24pt;vertical-align:top;">
+        <span class="bold">BANCO J.P. MORGAN S.A.</span><br>
+        CNPJ/MF: &nbsp; 33.172.537/0001–98
+      </td>
+    </tr>
+    <tr><td colspan="2" style="padding:6pt 0;"></td></tr>
+    <tr>
+      <td style="padding:0;font-weight:bold;white-space:nowrap;vertical-align:top;">b. &nbsp;&nbsp; Parte B:</td>
+      <td style="padding:0 0 0 24pt;vertical-align:top;">
+        <span class="bold"><span class="dyn" id="out_parteb_nome">{{ conf.parteb_nome }}</span></span><br>
+        CNPJ/MF: &nbsp; <span class="dyn" id="out_parteb_cnpj">{{ conf.parteb_cnpj }}</span>
+      </td>
+    </tr>
+  </table>
+  <br>
+  <p style="margin-left:18pt;">A Parte A e a Parte B, além destas denominações, são também aqui individualmente denominadas "Parte", e em conjunto "Partes".</p>
+  <br>
+  <p class="party-line"><span class="label">c. &nbsp;&nbsp;&nbsp; Agente de Cálculo: &nbsp;&nbsp;&nbsp;&nbsp; Parte A, salvo se disposto de outra forma no Apêndice</span></p>
+  <br>
+  <p class="party-line"><span class="label">d. &nbsp;&nbsp; Acelerador: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Parte A</span></p>
+</div>
+
+<br>
+
+<!-- SEÇÃO 3 -->
+<div class="numbered-section">
+  <p><span class="bold">3. &nbsp;&nbsp;&nbsp;<span class="section-title">Disposições Gerais</span></span></p>
+  <br>
+
+  <div class="alpha-list">
+    <div class="alpha-item">
+      <span class="ltr">a.</span>
+      <span class="bold">Local do Registro:</span> B3 S.A. – Brasil, Bolsa, Balcão;
+    </div>
+    <br>
+    <div class="alpha-item">
+      <span class="ltr">b.</span>
+      <span class="bold">Data de Negociação:</span> <span class="dyn" id="out_data_neg">{{ conf.data_neg }}</span>;
+    </div>
+    <br>
+    <div class="alpha-item">
+      <span class="ltr">c.</span>
+      <span class="bold">Tipo de Operação:</span> Termo de Mercadoria;
+    </div>
+    <br>
+    <div class="alpha-item">
+      <span class="ltr">d.</span>
+      <span class="bold">Tabela de Referência:</span> Os dados e condições financeiras aplicáveis a cada Operação de Derivativo<sub>i</sub> contratada entre as Partes na Data de Negociação estão descritos na Tabela de Referência disposta no Anexo I.
+    </div>
+  </div>
+</div>
+
+<br>
+
+<!-- SEÇÃO 4 -->
+<div class="numbered-section">
+  <p><span class="bold">4. &nbsp;&nbsp;&nbsp;<span class="section-title">Cálculo do Valor de Liquidação de cada Operação:</span></span></p>
+  <br>
+
+  <p><span class="bold">4.1.</span> Operação de Termo é a operação em que o Comprador se obriga a comprar e o Vendedor se obriga a vender uma Quantidade de Mercadoria por um preço futuro definido pelas partes. Cada Operação de Termo descrita nessa Confirmação será liquidada por diferença em Reais, conforme a fórmula de cálculo disposta abaixo:</p>
+  <br>
+  <p>Em cada Data de Vencimento<sub>i</sub> de uma Operação<sub>i</sub>, o Agente de Cálculo apurará, com base nas variáveis aplicáveis à respectiva Operação<sub>i</sub>, conforme indicadas na Tabela de Referência, o Valor de Liquidação<sub>i</sub> a ser pago por uma Parte à outra, na forma seguir:</p>
+  <br>
+
+  <div class="declarations-list">
+    <div class="decl-item">
+      <span class="ltr">a.</span>
+      &nbsp; Se, na Data de Vencimento<sub>i</sub>, o Preço da Mercadoria na Liquidação<sub>i</sub>, convertido para Reais, for superior à Taxa Forward<sub>i</sub> aplicável, o Vendedor<sub>i</sub> pagará ao Comprador<sub>i</sub> o resultado da seguinte fórmula:
+    </div>
+    <br>
+    <div class="formula-block">
+      Valor de Liquidação<sub>i</sub> = Quantidade<sub>i</sub> x (Preço da Mercadoria na Liquidação<sub>i</sub> – Taxa Forward<sub>i</sub>)
+    </div>
+    <div class="decl-item">
+      <span class="ltr">b.</span>
+      &nbsp; Se, na Data de Vencimento<sub>i</sub>, o Preço da Mercadoria na Liquidação<sub>i</sub> for inferior à Taxa Forward<sub>i</sub> aplicável, o Comprador<sub>i</sub> pagará ao Vendedor<sub>i</sub> o resultado da seguinte fórmula:
+    </div>
+    <br>
+    <div class="formula-block">
+      Valor de Liquidação<sub>i</sub> = Quantidade<sub>i</sub> x (Taxa Forward<sub>i</sub> &nbsp; – Preço da Mercadoria na Liquidação<sub>i</sub>)
+    </div>
+  </div>
+
+  <p><span class="bold">4.2.</span> Para fins da metodologia de cálculo acima, os seguintes termos terão as definições que lhe são atribuídas conforme abaixo:</p>
+  <br>
+
+  <div class="declarations-list">
+    <div class="decl-item"><span class="ltr">a.</span><span class="bold">Mercadoria<sub>i</sub>:</span> Para cada Operação<sub>i</sub>, significa o contrato futuro de mercadoria (commodity) cujo código de negociação - Ticker<sub>i</sub> - na respectiva Bolsa de Valores está indicado na Tabela de Referência.</div><br>
+    <div class="decl-item"><span class="ltr">b.</span><span class="bold">Comprador<sub>i</sub>:</span> Para cada Operação<sub>i</sub>, significa a Parte compradora da Mercadoria<sub>i</sub>, conforme indicada na Tabela de Referência;</div><br>
+    <div class="decl-item"><span class="ltr">c.</span><span class="bold">Data de Vencimento<sub>i</sub>:</span> significa a data em que ocorrerá a liquidação de cada Operação<sub>i</sub>, conforme indicadas na Tabela de Referência, mediante o desembolso do Valor de Liquidação<sub>i</sub> pelo Comprador<sub>i</sub> ou pelo Vendedor<sub>i</sub>, de acordo com a apuração realizada pelo Agente de Cálculo na forma da cláusula anterior;</div><br>
+    <div class="decl-item"><span class="ltr">d.</span><span class="bold">Data de Verificação:</span> Significa a Data Inicial de Verificação da Mercadoria, a Data Final de Verificação da Mercadoria ou qualquer dia útil dentro do Período de Verificação do Preço da Mercadoria, conforme o caso, em que o Preço da Mercadoria<sub>i</sub> tenha que ser apurado para quaisquer fins desta Confirmação;</div><br>
+    <div class="decl-item"><span class="ltr">e.</span><span class="bold">Quantidade<sub>i</sub>:</span> Para cada Operação<sub>i</sub>, significa a quantidade indicada na Tabela da Referência;</div><br>
+    <div class="decl-item"><span class="ltr">f.</span><span class="bold">Período de Verificação do Preço da Mercadoria:</span> significa todos os dias úteis entre a Data Inicial de Verificação da Mercadoria<sub>i</sub> (inclusive) e a Data Final de Verificação da Mercadoria<sub>i</sub>; (inclusive);</div><br>
+    <div class="decl-item"><span class="ltr">g.</span><span class="bold">Preço da Mercadoria<sub>i</sub>:</span> significa o preço de fechamento do contrato futuro da Mercadoria referente ao Ticker<sub>i</sub> divulgado pela Bolsa de Valores<sub>i</sub> na Data de Verificação<sub>i</sub>.</div><br>
+    <div class="decl-item"><span class="ltr">h.</span><span class="bold">Preço da Mercadoria na Liquidação<sub>i</sub>:</span> para cada Operação<sub>i</sub>, significa a média simples do Preço da Mercadoria<sub>i</sub> apurada em cada dia útil do Período de Verificação do Preço da Mercadoria. Para se evitar dúvidas, caso o Período de Verificação do Preço da Mercadoria tenha apenas 1 dia, então a Preço da Mercadoria na Liquidação<sub>i</sub> será a Preço da Mercadoria<sub>i</sub> divulgada na Data Final de Verificação da Mercadoria<sub>i</sub>. Caso o Preço da Mercadoria na Liquidação<sub>i</sub> seja cotado em dólares norte-americanos, o Preço da Mercadoria na Liquidação será convertido para Reais pela USD PTAX<sub>i</sub>;</div><br>
+    <div class="decl-item"><span class="ltr">i.</span><span class="bold">USD PTAX<sub>i</sub>:</span> significa a média simples da taxa de conversão entre o Real ("BRL") e o Dólar dos Estados Unidos ("USD") apurada em cada dia útil entre a Data Inicial de Verificação USD PTAX<sub>i</sub> (inclusive) e a Data Final de Verificação USD PTAX<sub>i</sub> (inclusive), ambas contidas na Tabela de Referência, sendo tal taxa expressa pela quantidade de Reais por cada Dólar dos Estados Unidos, referente a operações interbancárias de venda de Dólares dos Estados Unidos com liquidação em dois dias úteis, conforme apurada pelo Banco Central do Brasil, e que pode ser obtida na página da internet <a href="http://www.bcb.gov.br/?txcambio">http://www.bcb.gov.br/?txcambio</a>, opção "Cotações e boletins", por volta das 13:15 horas divulgada em cada dia útil;</div><br>
+    <div class="decl-item"><span class="ltr">j.</span><span class="bold">Taxa Forward<sub>i</sub>:</span> Para cada Operação<sub>i</sub>, será a taxa indicada na Tabela de Referência; e</div><br>
+    <div class="decl-item"><span class="ltr">k.</span><span class="bold">Vendedor<sub>i</sub>:</span> Para cada Operação<sub>i</sub>, significa a outra Parte que não a Parte indicada como Comprador na Tabela da Referência.</div>
+  </div>
+</div>
+
+<br>
+
+<!-- SEÇÃO 5 -->
+<div class="numbered-section">
+  <p><span class="bold">5. &nbsp;&nbsp;&nbsp;<span class="section-title">Prêmio</span></span></p>
+  <br>
+  <p>Caso tenha sido indicado na Tabela de Referência que haverá pagamento de Prêmio em relação a uma Operação<sub>i</sub>, a Parte Devedora do Prêmio<sub>i</sub> deverá pagar o Prêmio<sub>i</sub> a outra Parte na Data de Pagamento de Prêmio<sub>i</sub> indicado na Tabela de Referência. As Partes reconhecem que o valor de Prêmio<sub>i</sub> está economicamente vinculado à respectiva Operação<sub>i</sub> como um todo, incluindo na definição do valor da Taxa Forward<sub>i</sub> e das demais condições financeiras da respectiva Operação<sub>i</sub> e, consequentemente ao Valor de Liquidação, de tal forma que o valor pago do Prêmio<sub>i</sub> faz parte do equilíbrio econômico-financeiro da Operação<sub>i</sub>. Portanto, o valor pago a título de prêmio não será devolvido em nenhuma hipótese, ainda que o resultado da Operação<sub>i</sub> seja desfavorável à Parte que pagou o Prêmio<sub>i</sub>.</p>
+</div>
+
+<br>
+
+<!-- SEÇÃO 6 -->
+<div class="numbered-section">
+  <p><span class="bold">6. &nbsp;&nbsp;&nbsp;<span class="section-title">Declarações:</span></span></p>
+  <br>
+  <p>Em adição às declarações feitas no Contrato, e como condição para a celebração desta Confirmação, as Partes e o Garantidor, se aplicável, declaram individualmente:</p>
+  <br>
+
+  <div class="declarations-list">
+    <div class="decl-item"><span class="ltr">a.</span>Que estão agindo por conta própria, tendo tomado de forma independente a decisão quanto a realizar a presente Operação de Derivativo, bem como quanto à adequação e conveniência da mesma, com base em critérios próprios e, na medida que cada uma considerou necessária, na opinião de seus próprios consultores;</div><br>
+    <div class="decl-item"><span class="ltr">b.</span>Que não estão se baseando em qualquer comunicação (escrita ou verbal) da outra parte, ou de qualquer pessoa agindo em seu nome, como forma de orientação para investimento ou recomendação para participar da presente operação, ficando entendido que as informações e explicações relativas aos termos e condições desta ou de qualquer outra Operação de Derivativo, não deverão ser consideradas como orientação de investimento, nem como recomendação de participação;</div><br>
+    <div class="decl-item"><span class="ltr">c.</span>Que nenhuma comunicação (escrita ou verbal), recebida de uma Parte, ou de qualquer pessoa agindo em seu nome, pela outra, será considerada como seguro ou garantia quanto à expectativa dos resultados previstos da Operação;</div><br>
+    <div class="decl-item"><span class="ltr">d.</span>Que têm conhecimento e experiência dentro do mercado de derivativos, suficientes para entender a estrutura de cada Operação de Derivativos, incluindo, sem limitação, os critérios determinados no Contrato para a apuração do Valor de Reposição, com os quais concordam sem restrições;</div><br>
+    <div class="decl-item"><span class="ltr">e.</span>Que estão cientes dos riscos inerentes às Operações de Derivativos e têm plena capacidade financeira para assumir as obrigações que venham a ser exigíveis em decorrência das Operações contratadas, mesmo nos piores cenários econômicos, bem como capacidade técnica e operacional para cumprir todas as obrigações estabelecidas no Contrato e em quaisquer Confirmações;</div><br>
+    <div class="decl-item"><span class="ltr">f.</span>Que as declarações prestadas de acordo do Contrato continuam plenamente válidas;</div><br>
+    <div class="decl-item"><span class="ltr">g.</span>Que tiveram a oportunidade de discutir absolutamente todos os termos do Contrato e de cada Confirmação, incluindo, mas não se limitando, a forma de resolução de conflitos e os critérios de cálculo, assumindo total responsabilidade pelos mesmos;</div><br>
+    <div class="decl-item"><span class="ltr">h.</span>Que tiveram prévio acesso a todas as informações que julgavam necessárias à sua decisão independente de celebração do Contrato e de cada Operação de Derivativos;</div><br>
+    <div class="decl-item"><span class="ltr">i.</span>Que cada Operação de Derivativos tem para a Parte B o intuito de proteção contra riscos financeiros a que estejam expostas, decorrentes de disparidades de taxas ou índices entre seus direitos e obrigações, de acordo com as normas aplicáveis e políticas internas relativas à condução de seus negócios;</div><br>
+    <div class="decl-item"><span class="ltr">j.</span>Que uma Parte não está agindo como agente fiduciário da outra Parte ou como sua assessora em relação a essa operação;</div><br>
+    <div class="decl-item"><span class="ltr">k.</span>Que estão plenamente cientes de que todas e quaisquer obrigações pecuniárias decorrentes da celebração de Operações sob o presente Contrato, por suas próprias naturezas, estão sujeitas a efeitos decorrentes de fatores econômicos e/ou políticos, entre outros, que podem levar à oscilações bruscas na cotação entre moedas estrangeiras e a moeda corrente nacional, nos preços de mercadorias, nos índices de preços, nos índices inflacionários, nas taxas de juros, entre outros e que podem produzir alterações relevantes nas obrigações pecuniárias assumidas. Diante disso, as Partes reconhecem desde já serem tais circunstâncias próprias e inerentes a Operações de Derivativos, sendo, pois, referidas oscilações e alterações previsíveis e até esperadas para todos os fins e efeitos;</div><br>
+    <div class="decl-item"><span class="ltr">l.</span>Que diante da possibilidade de ocorrência das oscilações e variações mencionadas na alínea anterior, as Partes reconhecem sua plena ciência de que o eventual aumento abrupto e significativo do valor das obrigações assumidas não poderá ser tipificado como espécie de onerosidade excessiva para o fim de escusá-la do cumprimento de suas obrigações;</div><br>
+    <div class="decl-item"><span class="ltr">m.</span>Que buscaram aconselhamento de seus próprios consultores fiscais, jurídicos e contábeis, no intuito de tomar uma decisão independente sobre a contratação da presente Operação;</div><br>
+    <div class="decl-item"><span class="ltr">n.</span>Que a Parte A é considerada instituição coberta para fins da Resolução CMN nº 4.662 e, caso a Parte B não seja uma Entidade Regulada, que a Parte B <span class="bold underline">não</span> é uma contraparte coberta para fins da Resolução CMN nº 4.662. Para fins desta declaração, "Entidades Reguladas" significa as instituições autorizadas a funcionar pelo Banco Central do Brasil, as entidades abertas ou fechadas de previdência complementar, as sociedades seguradoras, os fundos de investimento e as companhias securitizadoras; e</div><br>
+    <div class="decl-item"><span class="ltr">o.</span>Que estão cientes da possibilidade do Preço da Mercadoria<sub>i</sub> ser cotado a valores negativos, o que poderá causar uma perda financeira sem qualquer limite para o Comprador, e que o cálculo do Valor de Liquidação<sub>i</sub> conforme aqui definido não sofrerá qualquer ajuste ou a perda para uma das Partes não será limitada de nenhuma forma ainda que o Preço da Mercadoria<sub>i</sub> seja um número negativo. Ainda assim, as Partes concordam em manter os parâmetros de cálculo previstos no Contrato e nesta Confirmação.</div>
+  </div>
+</div>
+
+<br>
+
+<!-- SEÇÃO 7 -->
+<div class="numbered-section">
+  <p><span class="bold">7. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="section-title">Ratificação</span></span></p>
+  <br>
+  <p>A presente Confirmação é parte integrante e inseparável do Contrato, motivo pelo qual as Partes ratificam, nesta oportunidade, todos os termos nele previstos.</p>
+  <br>
+  <p>E por estarem assim, justas e contratadas, as Partes, por seus representantes legais devidamente constituídos e com poderes para celebrar Operações de Derivativos, assinam a presente Confirmação em 2 (duas) vias de igual teor e forma, para o mesmo fim, juntamente com as testemunhas abaixo.</p>
+</div>
+
+<hr class="separator">
+<p class="center-italic">[A próxima página contém as assinaturas da Confirmação de Operação de Derivativo]</p>
+
+<!-- PÁGINA DE ASSINATURAS -->
+<div class="page-break">
+  <p class="center-italic">[Página de assinaturas da Confirmação de Operação de Derivativo]</p>
+  <br>
+
+  <!-- ── Bloco JPMorgan ── -->
+  <p>São Paulo, <span class="dyn" id="out_data_extenso">{{ conf.data_extenso }}</span>.</p>
+  <br>
+
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+    <col style="width:50%"><col style="width:50%">
+    <tr>
+      <td style="vertical-align:top;padding:0 16pt 0 0;">
+        <p class="bold">BANCO J.P. MORGAN S.A.</p>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 16pt;">
+        <p>Por:</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align:bottom;padding:32pt 16pt 0 0;">
+        <p>Por:</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+      </td>
+      <td style="vertical-align:top;padding:0;">&nbsp;</td>
+    </tr>
+  </table>
+
+  <br><br><br>
+
+  <!-- ── Bloco Contraparte ── -->
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+    <col style="width:50%"><col style="width:50%">
+    <tr>
+      <td style="vertical-align:top;padding:0 16pt 0 0;">
+        <p class="bold"><span class="dyn" id="out_parteb_nome_assin">{{ conf.parteb_nome }}</span></p>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 16pt;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:bottom;padding:32pt 16pt 0 0;">
+        <p>Por:</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+      </td>
+      <td style="vertical-align:bottom;padding:32pt 0 0 16pt;">
+        <p>Por:</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+      </td>
+    </tr>
+  </table>
+
+  <br><br><br>
+
+  <!-- ── Declaração de poderes + Testemunhas ── -->
+  <p class="bold" style="text-align:justify;">Ao assinar a presente Confirmação, os representantes legais das Partes acima identificados, declaram, expressa e irrevogavelmente, que possuem poderes suficientes para representar as Partes na contratação da presente Operação de Derivativo.</p>
+
+  <br><br>
+
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+    <col style="width:50%"><col style="width:50%">
+    <tr>
+      <td style="vertical-align:top;padding:0 16pt 0 0;">
+        <p>Testemunhas:</p>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 16pt;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:bottom;padding:24pt 16pt 0 0;">
+        <p>1. &nbsp;-</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+        <p>RG:</p>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 16pt;">
+        <p>2.-</p>
+        <p style="border-bottom:1px solid #000;margin:4pt 0 4pt 0;">&nbsp;</p>
+        <p>Nome:</p>
+        <p>RG:</p>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- ANEXO I -->
+<div class="page-break">
+  <p class="annex-title">ANEXO I À CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS</p>
+
+  <table class="reference-table" id="ops-table">
+    <thead>
+      <tr>
+        <th><em>i</em></th>
+        <th>Nº</th>
+        <th>Comprador<sub>i</sub></th>
+        <th>Ticker<sub>i</sub></th>
+        <th>Bolsa de Valores</th>
+        <th>Quantidade</th>
+        <th>Prêmio<sub>i</sub></th>
+        <th>Parte Devedora do Prêmio<sub>i</sub></th>
+        <th>Data de Pagamento do Prêmio<sub>i</sub></th>
+        <th>Data Inicial de Verificação USD PTAX<sub>i</sub></th>
+        <th>Data Final de Verificação USD PTAX<sub>i</sub></th>
+        <th>Taxa Forward<sub>i</sub> (expresso em R$)</th>
+        <th>Data Inicial de Verificação da Mercadoria<sub>i</sub></th>
+        <th>Data Final de Verificação da Mercadoria<sub>i</sub></th>
+        <th>Data de Vencimento<sub>i</sub></th>
+      </tr>
+    </thead>
+    <tbody id="ops-tbody">
+      {% for r in conf.rows %}
+      <tr>
+        <td><strong>{{ loop.index }}</strong></td>
+        <td>{{ r.num }}</td><td>{{ r.comprador }}</td><td>{{ r.ticker }}</td>
+        <td>{{ r.bolsa }}</td><td>{{ r.qtd }}</td><td>{{ r.premio }}</td>
+        <td>{{ r.devedor }}</td><td>{{ r.dtPremio }}</td><td>{{ r.ptaxIni }}</td><td>{{ r.ptaxFim }}</td>
+        <td>{{ r.forward }}</td><td>{{ r.dtIni }}</td><td>{{ r.dtFim }}</td>
+        <td>{{ r.dtVenc }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /doc-body -->
+
+{% if not doc_only %}
+<script>
+// Dados injetados pelo servidor (grupo contraparte × mercadoria da reference date)
+var __CONF__ = {{ conf | tojson }};
+
+// ── Salvar Word + PDF no Electronic Inventory ───────────────
+function saveToInventory(btn) {
+  var st = document.getElementById('save-status');
+  var fields = {};
+  ['cgd_date', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (k) {
+    var inp = document.getElementById('inp_' + k);
+    fields[k] = inp ? inp.value : '';
+  });
+  btn.disabled = true; btn.textContent = '⏳ Salvando…';
+  st.textContent = '';
+  fetch('/api/confirmation/ndf-comm/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      family: 'brl',
+      date: (__CONF__ && __CONF__.ref_date) || '',
+      acronym: (__CONF__ && __CONF__.acronym) || '',
+      mercadoria: (__CONF__ && __CONF__.mercadoria) || '',
+      fields: fields, rows: rows
+    })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (res) {
+    btn.disabled = false; btn.textContent = '💾 Salvar Word + PDF no Inventory';
+    if (res.success) {
+      st.style.color = '#7ed6a2';
+      st.textContent = '✔ Salvo: ' + (res.files || []).join(' · ');
+      // Gerada → abre a janela de validação (checklist + preview do PDF)
+      if (res.validate_url) window.open(res.validate_url, '_blank');
+    } else {
+      st.style.color = '#ee6666';
+      st.textContent = '✖ ' + (res.message || 'Falha ao salvar.');
+    }
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = '💾 Salvar Word + PDF no Inventory';
+    st.style.color = '#ee6666';
+    st.textContent = '✖ ' + e.message;
+  });
+}
+
+// ── Dados de exemplo (usados só se o servidor não mandar linhas) ──────
+const defaultRows = [
+  { num:"DBH-1MPRSU", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"5",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"29/01/2027", forward:"12.370,0000", dtIni:"04/01/2027", dtFim:"29/01/2027", dtVenc:"02/02/2027" },
+  { num:"DBH-1MPRSV", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"26/02/2027", forward:"12.370,0000", dtIni:"01/02/2027", dtFim:"26/02/2027", dtVenc:"02/03/2027" },
+  { num:"DBH-1MPRSW", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/03/2027", forward:"12.370,0000", dtIni:"01/03/2027", dtFim:"31/03/2027", dtVenc:"02/04/2027" },
+  { num:"DBH-1MPRSX", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"30/04/2027", forward:"12.370,0000", dtIni:"01/04/2027", dtFim:"30/04/2027", dtVenc:"04/05/2027" },
+  { num:"DBH-1MPRSY", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/05/2027", forward:"12.370,0000", dtIni:"04/05/2027", dtFim:"28/05/2027", dtVenc:"01/06/2027" },
+  { num:"DBH-1MPRSZ", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"30/06/2027", forward:"12.370,0000", dtIni:"01/06/2027", dtFim:"30/06/2027", dtVenc:"02/07/2027" },
+  { num:"DBH-1MPRT0", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"5",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"30/07/2027", forward:"12.370,0000", dtIni:"01/07/2027", dtFim:"30/07/2027", dtVenc:"03/08/2027" },
+  { num:"DBH-1MPRT1", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/08/2027", forward:"12.370,0000", dtIni:"02/08/2027", dtFim:"31/08/2027", dtVenc:"02/09/2027" },
+  { num:"DBH-1MPRT2", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"30/09/2027", forward:"12.370,0000", dtIni:"01/09/2027", dtFim:"30/09/2027", dtVenc:"04/10/2027" },
+  { num:"DBH-1MPRT3", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"6",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"29/10/2027", forward:"12.370,0000", dtIni:"01/10/2027", dtFim:"29/10/2027", dtVenc:"03/11/2027" },
+  { num:"DBH-1MPRT4", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"30/11/2027", forward:"12.370,0000", dtIni:"01/11/2027", dtFim:"30/11/2027", dtVenc:"02/12/2027" },
+  { num:"DBH-1MPRT5", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/12/2027", forward:"12.370,0000", dtIni:"01/12/2027", dtFim:"31/12/2027", dtVenc:"04/01/2028" },
+  { num:"DBH-1MPRT6", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"5",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/01/2028", forward:"12.370,0000", dtIni:"04/01/2028", dtFim:"31/01/2028", dtVenc:"02/02/2028" },
+  { num:"DBH-1MPRT7", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"5",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"25/02/2028", forward:"12.370,0000", dtIni:"01/02/2028", dtFim:"25/02/2028", dtVenc:"02/03/2028" },
+  { num:"DBH-1MPRT8", comprador:"Parte B", ticker:"LOCADY", bolsa:"LME", qtd:"4",  premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"Não Aplicável", ptaxFim:"31/03/2028", forward:"12.370,0000", dtIni:"01/03/2028", dtFim:"31/03/2028", dtVenc:"04/04/2028" },
+];
+
+let rows = (__CONF__ && __CONF__.rows && __CONF__.rows.length)
+    ? JSON.parse(JSON.stringify(__CONF__.rows))
+    : JSON.parse(JSON.stringify(defaultRows));
+
+const fields = [
+  { key:"num",      label:"Nº (Deal ID)" },
+  { key:"comprador",label:"Comprador" },
+  { key:"ticker",   label:"Ticker" },
+  { key:"bolsa",    label:"Bolsa" },
+  { key:"qtd",      label:"Quantidade" },
+  { key:"premio",   label:"Prêmio" },
+  { key:"devedor",  label:"Parte Devedora" },
+  { key:"dtPremio", label:"Data Pgto Prêmio" },
+  { key:"ptaxIni",  label:"Data Inicial Verif. USD PTAX" },
+  { key:"ptaxFim",  label:"Data Final Verif. USD PTAX" },
+  { key:"forward",  label:"Taxa Forward" },
+  { key:"dtIni",    label:"Data Inicial Verif." },
+  { key:"dtFim",    label:"Data Final Verif." },
+  { key:"dtVenc",   label:"Data Vencimento" },
+];
+
+function renderPanel() {
+  const container = document.getElementById('rows-container');
+  container.innerHTML = '';
+  rows.forEach((row, idx) => {
+    const div = document.createElement('div');
+    div.className = 'row-editor';
+    let html = `<div class="row-num">Operação ${idx + 1}</div>
+      <button class="btn-remove-row" onclick="removeRow(${idx})">✕</button>
+      <div class="mini-grid">`;
+    fields.forEach(f => {
+      html += `<div>
+        <label>${f.label}</label>
+        <input type="text" value="${row[f.key]}" oninput="rows[${idx}]['${f.key}']=this.value;renderTable()">
+      </div>`;
+    });
+    html += '</div>';
+    div.innerHTML = html;
+    container.appendChild(div);
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('ops-tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${idx + 1}</strong></td>
+      <td>${row.num}</td>
+      <td>${row.comprador}</td>
+      <td>${row.ticker}</td>
+      <td>${row.bolsa}</td>
+      <td>${row.qtd}</td>
+      <td>${row.premio}</td>
+      <td>${row.devedor}</td>
+      <td>${row.dtPremio}</td>
+      <td>${row.ptaxIni}</td>
+      <td>${row.ptaxFim}</td>
+      <td>${row.forward}</td>
+      <td>${row.dtIni}</td>
+      <td>${row.dtFim}</td>
+      <td>${row.dtVenc}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addRow() {
+  rows.push({ num:"", comprador:"Parte B", ticker:"", bolsa:"LME", qtd:"", premio:"Não Aplicável", devedor:"Não Aplicável", dtPremio:"Não Aplicável", ptaxIni:"", ptaxFim:"", forward:"", dtIni:"", dtFim:"", dtVenc:"" });
+  renderPanel();
+  renderTable();
+  // scroll to new row
+  const container = document.getElementById('rows-container');
+  container.lastElementChild.scrollIntoView({ behavior:'smooth' });
+}
+
+function removeRow(idx) {
+  rows.splice(idx, 1);
+  renderPanel();
+  renderTable();
+}
+
+function update() {
+  const ids = ['cgd_date','parteb_nome','parteb_cnpj','data_neg','data_extenso'];
+  ids.forEach(id => {
+    const inp = document.getElementById('inp_' + id);
+    const out = document.getElementById('out_' + id);
+    if (inp && out) out.textContent = inp.value;
+  });
+  // assinatura da contraparte espelha o nome da Parte B
+  const nomeB = document.getElementById('inp_parteb_nome').value;
+  const assinB = document.getElementById('out_parteb_nome_assin');
+  if (assinB) assinB.textContent = nomeB;
+}
+
+// Init — campos do cabeçalho vêm do servidor; string vazia mantém o exemplo
+// do template visível para o usuário perceber que falta preencher.
+(function initFromConf() {
+  if (!__CONF__) return;
+  var map = { cgd_date: 'cgd_date', parteb_nome: 'parteb_nome', parteb_cnpj: 'parteb_cnpj',
+              data_neg: 'data_neg', data_extenso: 'data_extenso' };
+  Object.keys(map).forEach(function (k) {
+    var inp = document.getElementById('inp_' + k);
+    if (inp && __CONF__[map[k]]) inp.value = __CONF__[map[k]];
+  });
+  update();
+})();
+renderPanel();
+renderTable();
+</script>
+{% endif %}
+</body>
+</html>

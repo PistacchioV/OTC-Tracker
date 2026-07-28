@@ -64,11 +64,13 @@
 }
 #ndm-page .ndm-chip b { font-variant-numeric: tabular-nums; font-weight: 800; }
 #ndm-page .ndm-chip--new      { background: rgba(67, 191, 229, .16);  color: #1d7ea8; }
+#ndm-page .ndm-chip--generated{ background: rgba(139, 92, 246, .16);  color: #7c3aed; }
 #ndm-page .ndm-chip--pending  { background: rgba(247, 184, 75, .20);  color: #8a6100; }
 #ndm-page .ndm-chip--approved { background: rgba(94, 92, 230, .16);   color: #5e5ce6; }
 #ndm-page .ndm-chip--sent     { background: rgba(0, 102, 204, .14);   color: #0066cc; }
 #ndm-page .ndm-chip--success  { background: rgba(26, 138, 74, .16);   color: #1a8a4a; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--new      { color: #7fd4f2; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--generated{ color: #c4b5fd; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--pending  { color: #ffd54f; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--approved { color: #a5a3ff; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--sent     { color: #7db4f5; }
@@ -78,6 +80,7 @@
 #ndm-page .ndm-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--ins-tertiary-bg, #eef0f4); }
 #ndm-page .ndm-bar span { height: 100%; }
 #ndm-page .ndm-bar .sg-new      { background: #43bfe5; }
+#ndm-page .ndm-bar .sg-generated{ background: #8b5cf6; }
 #ndm-page .ndm-bar .sg-pending  { background: #f7b84b; }
 #ndm-page .ndm-bar .sg-approved { background: #5e5ce6; }
 #ndm-page .ndm-bar .sg-sent     { background: #0066cc; }
@@ -184,7 +187,8 @@
     background: var(--ins-border-color, rgba(0,0,0,.1));
 }
 @media (min-width: 1200px) {
-    #ndm-page .ndm-zone--intrag {
+    #ndm-page .ndm-zone--intrag,
+    #ndm-page .ndm-zone--conf {
         border-left: 1px dashed var(--ins-border-color, rgba(0,0,0,.12));
         padding-left: 1.25rem; height: 100%;
     }
@@ -244,7 +248,7 @@
         'intrag-option':      'ti-briefcase'
     };
     // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
-    var STATUS_ORDER = ['New', 'Pending', 'Approved', 'Sent', 'Success'];
+    var STATUS_ORDER = ['New', 'Pending', 'Generated', 'Approved', 'Sent', 'Success'];
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -282,6 +286,13 @@
             les = '<div class="ndm-les">' + c.les.map(function (e) {
                 return '<span class="ndm-le">' + esc(e.le) + ' <b>' +
                        Number(e.count || 0).toLocaleString('en-US') + '</b></span>';
+            }).join('') + '</div>';
+        }
+        // Cards de Confirmations: um pill por grupo segregado (cpty × mercadoria)
+        if (c.total > 0 && (c.groups || []).length) {
+            les += '<div class="ndm-les">' + c.groups.map(function (g) {
+                return '<span class="ndm-le">' + esc(g.label) + ' <b>' +
+                       Number(g.count || 0).toLocaleString('en-US') + '</b></span>';
             }).join('') + '</div>';
         }
         var body = c.total > 0
@@ -326,9 +337,19 @@
           intrag: ['intrag-swap'] }
     ];
 
-    function render(cards) {
+    // Cards de Confirmations por família de produto (só produtos com lógica de
+    // confirmação — Other Publisher e Vanilla ficam de fora por definição).
+    var CONF_BY_GROUP = {
+        'ndm-grp-ndf':     ['conf-ndf-commodities'],
+        'ndm-grp-options': [],
+        'ndm-grp-swaps':   []
+    };
+
+    function render(cards, confCards) {
         var byKey = {};
         cards.forEach(function (c) { byKey[c.key] = c; });
+        var confByKey = {};
+        (confCards || []).forEach(function (c) { confByKey[c.key] = c; });
         // Card ainda sem desenvolvimento no catálogo do servidor (Intrag Swap)
         if (!byKey['intrag-swap']) {
             byKey['intrag-swap'] = { key: 'intrag-swap', label: 'Intrag Swap', url: null,
@@ -339,22 +360,33 @@
             return keys.filter(function (k) { return byKey[k]; })
                        .map(function (k) { used[k] = true; return cardHtml(byKey[k]); }).join('');
         }
-        // Cabeçalhos das zonas (uma vez, no topo das duas metades)
+        // Cabeçalhos das zonas (uma vez, no topo das três colunas)
         var html =
-            '<div class="col-xl-9">' +
+            '<div class="col-xl-6">' +
               '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-building-bank"></i></span>' +
               esc(t('ndm-zone-b3', 'B3 Registration')) + '</h5></div>' +
+            '<div class="col-xl-3 d-none d-xl-block"><div class="ndm-zone--conf">' +
+              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-file-check"></i></span>' +
+              esc(t('ndm-zone-conf', 'Confirmations')) + '</h5></div></div>' +
             '<div class="col-xl-3 d-none d-xl-block"><div class="ndm-zone--intrag">' +
               '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-building"></i></span>' +
               esc(t('ndm-zone-intrag', 'Intrag')) + '</h5></div></div>';
         GROUPS.forEach(function (g) {
             var left  = pick(g.b3);
+            var conf  = (CONF_BY_GROUP[g.key] || [])
+                .filter(function (k) { return confByKey[k]; })
+                .map(function (k) { return cardHtml(confByKey[k]); }).join('');
             var right = pick(g.intrag);
             var title = '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>';
             html +=
-                '<div class="col-xl-9"><div class="ndm-grp">' + title +
-                    '<div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">' + left + '</div>' +
+                '<div class="col-xl-6"><div class="ndm-grp">' + title +
+                    '<div class="row row-cols-xxl-2 row-cols-md-2 row-cols-1 g-3">' + left + '</div>' +
                 '</div></div>' +
+                '<div class="col-xl-3"><div class="ndm-zone--conf h-100"><div class="ndm-grp">' +
+                    '<div class="ndm-grp-title"><span class="d-xl-none" data-lang-ignore>' +
+                    esc(t('ndm-zone-conf', 'Confirmations')) + ' — </span><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
+                    '<div class="row row-cols-1 g-3">' + conf + '</div>' +
+                '</div></div></div>' +
                 '<div class="col-xl-3"><div class="ndm-zone--intrag h-100"><div class="ndm-grp">' +
                     '<div class="ndm-grp-title"><span class="d-xl-none" data-lang-ignore>' +
                     esc(t('ndm-zone-intrag', 'Intrag')) + ' — </span><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
@@ -377,7 +409,7 @@
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) return;
-                render(j.cards || []);
+                render(j.cards || [], j.conf_cards || []);
             })
             .catch(function (e) { console.error('ndm load error', e); });
     }
@@ -409,6 +441,7 @@
     <span data-lang="ndm-dev">In development</span>
     <span data-lang="ndm-open">Open page</span>
     <span data-lang="ndm-zone-b3">B3 Registration</span>
+    <span data-lang="ndm-zone-conf">Confirmations</span>
     <span data-lang="ndm-zone-intrag">Intrag</span>
     <span data-lang="ndm-grp-ndf">NDF</span>
     <span data-lang="ndm-grp-options">Options</span>

@@ -19,12 +19,13 @@ import time
 import duckdb
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import awmpy
 from flask import (
-    render_template, request, redirect,
+    render_template, request, redirect, send_file,
     url_for, session, flash, jsonify, make_response
 )
 from jinja2 import TemplateNotFound
@@ -18297,6 +18298,609 @@ def _generic_nd_pc_trigger(product, deal):
 
 
 # ==============================================================================
+# NEW DEALS — CONFIRMATIONS (NDF Commodities · Termo de Mercadoria)
+# Portado da macro legada (TERMO.doc): as confirmações são segregadas por
+# contraparte × mercadoria × família de moeda do strike, POR trade date, sempre
+# excluindo as pontas internas (Client = Banco J.P. Morgan ou Lawton — as
+# pernas banco×lawton/lawton×banco não geram confirmação de cliente). Por
+# enquanto só o template "strike em USD" existe na web (os demais — BRL,
+# PLATTS, Palm Oil — chegam depois); grupos das outras famílias aparecem na
+# listagem como "template pendente".
+# ==============================================================================
+
+_CONF_INTERNAL_RE = re.compile(r'J\.?P\.?\s*MORGAN|LAWTON', re.IGNORECASE)
+# Na geração valem os mesmos cortes da macro (status "New"/"Pending Review"
+# fora); Canceled nunca conta para nada.
+_CONF_GEN_EXCLUDED_STATUS = {'New', 'Pending', 'Canceled'}
+_CONF_MONTHS_PT = ('Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro')
+# Código de mês dos contratos futuros (Jan..Dez) — usado no texto do CO1-2.
+_CONF_FUT_MONTH_CODE = {1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+                        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'}
+# Normalizações de tickers legados (herdadas da macro).
+_CONF_TICKER_MAP = {'NACX0005': 'VLSFO (AMFSA00)', 'PEURNPHY': 'PAAL00',
+                    'PCRUDTB1': 'PCAAS00'}
+
+_conf_subj_cache = {'mtime': None, 'map': {}}
+
+
+def _conf_subjacente_map():
+    """Subjacente.json indexado pelo código do ativo → bolsa/fator/mercadoria.
+    Cache por mtime (o arquivo muda pouco e tem ~8k registros)."""
+    fp = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
+                                       'static', 'data', 'Subjacente.json'))
+    try:
+        mt = os.path.getmtime(fp)
+    except OSError:
+        return {}
+    if _conf_subj_cache['mtime'] == mt:
+        return _conf_subj_cache['map']
+    out = {}
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            for rec in json.load(fh):
+                if not isinstance(rec, dict):
+                    continue
+                code = str(rec.get('Codigo do Ativo Subjacente') or '').strip()
+                if not code:
+                    continue
+                out.setdefault(code, {
+                    'bolsa':      str(rec.get('Bolsa de Negociacao') or '').strip(),
+                    'fator':      rec.get('Fator Conversao'),
+                    'mercadoria': str(rec.get('Commodity') or '').strip(),
+                })
+    except Exception:
+        log.error('[conf] Subjacente.json load failed:\n%s', traceback.format_exc())
+        return {}
+    _conf_subj_cache['mtime'] = mt
+    _conf_subj_cache['map'] = out
+    return out
+
+
+def _conf_fmt_date(v):
+    d = _parse_date_any(v)
+    return d.strftime('%d/%m/%Y') if d else str(v or '').strip()
+
+
+def _conf_date_extenso(v):
+    d = _parse_date_any(v)
+    if not d:
+        return str(v or '').strip()
+    return '{:02d} de {} de {}'.format(d.day, _CONF_MONTHS_PT[d.month - 1], d.year)
+
+
+def _conf_fmt_cnpj(v):
+    digits = re.sub(r'\D', '', str(v or ''))
+    if len(digits) > 14 and digits.endswith('0'):   # sobra de '.0' de planilha
+        digits = digits[:14]
+    if len(digits) != 14:
+        return str(v or '').strip()
+    return '{}.{}.{}/{}-{}'.format(digits[:2], digits[2:5], digits[5:8],
+                                   digits[8:12], digits[12:])
+
+
+def _conf_to_float(v):
+    s = str(v if v is not None else '').strip().replace(' ', '')
+    if not s:
+        return None
+    # "1.234,56" (BR) vs "1,234.56" (US) vs "1234.56"
+    if ',' in s and '.' in s:
+        s = s.replace('.', '').replace(',', '.') if s.rfind(',') > s.rfind('.') \
+            else s.replace(',', '')
+    elif ',' in s:
+        s = s.replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _conf_fmt_num(v, dec=4):
+    """Formato pt-BR: milhar '.', decimal ','. dec=None mantém 0–4 casas."""
+    n = _conf_to_float(v)
+    if n is None:
+        return str(v or '').strip()
+    if dec is None:
+        dec = 0 if float(n).is_integer() else 4
+    s = '{:,.{d}f}'.format(n, d=dec)
+    return s.replace(',', '\x00').replace('.', ',').replace('\x00', '.')
+
+
+def _conf_prev_biz(dt, n):
+    """dt recuado n dias úteis ANBIMA (espelho de _anbima_add_biz)."""
+    hols, cur, left = _anbima_holidays(), dt, n
+    while left > 0:
+        cur -= timedelta(days=1)
+        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
+            left -= 1
+    return cur
+
+
+def _conf_load_ndfcomm(ref):
+    """Deals do day-file de NDF Commodities da reference date (lista de dicts)."""
+    fname = ref.strftime('%Y%m%d') + '_ndfcomm.json'
+    fp = os.path.join(NDF_COMM_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
+    if not os.path.isfile(fp):
+        return []
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+    except Exception:
+        log.warning('[conf] cannot read %s', fp)
+        return []
+
+
+def _conf_deal_family(deal, subj):
+    """Família de template de um deal: strike-usd | brl | brl-platts | platts | palm-oil."""
+    ccy = str(deal.get('StrikeCurrency') or '').strip().upper()
+    is_brl = ccy in ('BRR', 'BRL')
+    merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or '').strip().upper()
+    bolsa = str((subj or {}).get('bolsa') or '').upper()
+    is_platts = 'BLOOMB' in bolsa          # na macro: exchange "BLOOMBGERG" = Platts
+    if merc == 'OLEO DE PALMA EM USD':
+        return 'palm-oil'
+    if is_brl and is_platts:
+        return 'brl-platts'
+    if is_brl:
+        return 'brl'
+    if is_platts:
+        return 'platts'
+    return 'strike-usd'
+
+
+# ── Estado das confirmações (ciclo próprio: New → Generated → Success) ───────
+# Persistido por reference date em day-files próprios; a chave é o grupo
+# (acronym | mercadoria | família). Generated = Word+PDF salvos no Inventory;
+# Success = validado na janela de checklist com o preview do PDF.
+CONF_STATE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "confirmations", "ndf-comm"
+))
+
+
+def _conf_state_path(ref):
+    return os.path.join(CONF_STATE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + '_conf.json')
+
+
+def _conf_key(acr, merc, fam):
+    return '{}|{}|{}'.format(acr, merc, fam)
+
+
+def _conf_state_load(ref):
+    fp = _conf_state_path(ref)
+    if not os.path.isfile(fp):
+        return {}
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _conf_state_save(ref, state):
+    fp = _conf_state_path(ref)
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+    _atomic_write_json(fp, state)
+
+
+def _conf_ndfcomm_groups(ref):
+    """Segregação das confirmações da data: um grupo por contraparte ×
+    mercadoria × família de template (pontas internas fora, Canceled fora).
+    Retorna (groups, status_counter, total_considerado)."""
+    subj_map = _conf_subjacente_map()
+    groups, statuses, total = {}, Counter(), 0
+    for deal in _conf_load_ndfcomm(ref):
+        st = str(deal.get('Status') or 'New').strip() or 'New'
+        if st == 'Canceled':
+            continue
+        client = str(deal.get('Client') or '').strip()
+        if _CONF_INTERNAL_RE.search(client):
+            continue                        # pontas banco/lawton não confirmam
+        ua = str(deal.get('UnderlyingAsset') or '').strip()
+        subj = subj_map.get(ua)
+        merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+        fam = _conf_deal_family(deal, subj)
+        acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
+        key = (acr, merc, fam)
+        g = groups.setdefault(key, {
+            'acronym': acr, 'client': client, 'mercadoria': merc, 'family': fam,
+            'count': 0, 'eligible': 0,
+        })
+        g['count'] += 1
+        if not g['client'] and client:
+            g['client'] = client
+        if st not in _CONF_GEN_EXCLUDED_STATUS:
+            g['eligible'] += 1
+        statuses[st] += 1
+        total += 1
+    ordered = sorted(groups.values(),
+                     key=lambda g: (g['acronym'], g['mercadoria'], g['family']))
+    return ordered, statuses, total
+
+
+@blueprint.route('/api/new-deals/ndf-commodities/confirmations')
+def api_ndfcomm_confirmations():
+    """Grupos de confirmação da reference date, com o link de geração quando o
+    template da família já existe (por ora, só strike-usd)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    groups, _statuses, _total = _conf_ndfcomm_groups(ref)
+    state = _conf_state_load(ref)
+    out = []
+    for g in groups:
+        available = g['family'] in _CONF_FAMILY_TEMPLATES
+        entry = state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        status = entry.get('status') or 'New'
+        qs = ('date=' + ref.strftime('%Y-%m-%d')
+              + '&acronym=' + quote(g['acronym'])
+              + '&mercadoria=' + quote(g['mercadoria']))
+        url = _CONF_FAMILY_TEMPLATES[g['family']][1] + '?' + qs if available else None
+        validate_url = ('/confirmation/ndf-comm/validate?' + qs + '&family=' + quote(g['family'])) \
+            if status in ('Generated', 'Success') else None
+        out.append({
+            'acronym': g['acronym'], 'client': g['client'],
+            'mercadoria': g['mercadoria'], 'family': g['family'],
+            'count': g['count'], 'eligible': g['eligible'],
+            'available': available, 'url': url,
+            'status': status, 'validate_url': validate_url,
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
+
+
+def _conf_co12_text(deal, index):
+    """Texto dinâmico do ticker CO1-2 (Brent rolling), portado da macro:
+    mercados CO<letra><dígito do ano> dos dois meses seguintes ao settlement."""
+    settle = _parse_date_any(deal.get('SettlementDate'))
+    refd = _parse_date_any(deal.get('FixingEndDate'))
+    if not settle or not refd:
+        return 'CO1-2'
+    two_before = _conf_prev_biz(refd, 2)
+    one_before = _conf_prev_biz(refd, 1)
+
+    def _mkt(offset):
+        m = settle.month + offset
+        y = settle.year + (m - 1) // 12
+        m = (m - 1) % 12 + 1
+        letter = _CONF_FUT_MONTH_CODE.get(m, '?')
+        return 'CO{}{}'.format(letter, str(y)[-1])
+
+    return ('Para as Datas de Verificação entre a Data Inicial de Verificação de Mercadoria e '
+            '{} significa {} e para as Datas de Verificação em {} e {}, significa {}'
+            .format(two_before.strftime('%d/%m/%Y'), _mkt(1),
+                    one_before.strftime('%d/%m/%Y'), refd.strftime('%d/%m/%Y'), _mkt(2)))
+
+
+# Famílias com template web disponível: template Jinja + rota de geração.
+# (brl-platts e palm-oil entram quando os respectivos .doc forem enviados.)
+_CONF_FAMILY_TEMPLATES = {
+    'strike-usd': ('confirmations/ndf-comm-strike-usd.html',        '/confirmation/ndf-comm/strike-usd'),
+    'platts':     ('confirmations/ndf-comm-platts-strike-usd.html', '/confirmation/ndf-comm/platts-strike-usd'),
+    'brl':        ('confirmations/ndf-comm-strike-brl.html',        '/confirmation/ndf-comm/strike-brl'),
+}
+
+
+def _conf_generation_page(family):
+    """Renderiza a confirmação pré-preenchida (família dada) para um grupo
+    contraparte × mercadoria da reference date. O template mantém o painel de
+    edição — o usuário revisa/ajusta, imprime e salva no Inventory."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    subj_map = _conf_subjacente_map()
+    picked = []
+    for deal in _conf_load_ndfcomm(ref):
+        st = str(deal.get('Status') or 'New').strip() or 'New'
+        if st in _CONF_GEN_EXCLUDED_STATUS:
+            continue
+        client = str(deal.get('Client') or '').strip()
+        if _CONF_INTERNAL_RE.search(client):
+            continue
+        ua = str(deal.get('UnderlyingAsset') or '').strip()
+        subj = subj_map.get(ua)
+        d_merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+        d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
+        if d_acr != acr or d_merc != merc:
+            continue
+        if _conf_deal_family(deal, subj) != family:
+            continue
+        picked.append((deal, subj))
+
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+
+    first = picked[0][0]
+    rows, warnings = [], []
+    for i, (deal, subj) in enumerate(picked, start=1):
+        ua = str(deal.get('UnderlyingAsset') or '').strip()
+        ticker = _CONF_TICKER_MAP.get(ua, ua)
+        if ua == 'CO1-2':
+            ticker = _conf_co12_text(deal, i)
+        fator = _conf_to_float((subj or {}).get('fator'))
+        strike = _conf_to_float(deal.get('Strike'))
+        forward = _conf_fmt_num(strike * (fator if fator else 1.0)) if strike is not None \
+            else str(deal.get('Strike') or '').strip()
+        f_ini = _parse_date_any(deal.get('FixingStartDate'))
+        f_fim = _parse_date_any(deal.get('FixingEndDate'))
+        bullet = bool(f_ini and f_fim and f_ini == f_fim)
+        direction = str(deal.get('Direction') or '').strip().upper()
+        row = {
+            'num':       str(deal.get('Deal') or '').strip(),
+            'comprador': 'Parte B' if direction.startswith('S') else 'Parte A',
+            'ticker':    ticker,
+            # No Platts a coluna é "Fonte de Divulgação" e o valor é PLATTS
+            'bolsa':     'PLATTS' if family == 'platts' else str((subj or {}).get('bolsa') or '').strip(),
+            'qtd':       _conf_fmt_num(str(deal.get('TotalNotional') or '').replace('-', ''), dec=None),
+            'premio':    'Não Aplicável',
+            'devedor':   'Não Aplicável',
+            'dtPremio':  'Não Aplicável',
+            'forward':   forward,
+            'dtIni':     'Não Aplicável' if bullet else _conf_fmt_date(deal.get('FixingStartDate')),
+            'dtFim':     _conf_fmt_date(deal.get('FixingEndDate')),
+            'dtVenc':    _conf_fmt_date(deal.get('SettlementDate')),
+        }
+        if family == 'brl':
+            # BRL: janela de verificação da USD PTAX = janela de fixing (macro
+            # legada usava as mesmas datas); bullet zera a inicial também.
+            row['ptaxIni'] = 'Não Aplicável' if bullet else _conf_fmt_date(deal.get('FixingStartDate'))
+            row['ptaxFim'] = _conf_fmt_date(deal.get('FixingEndDate'))
+        else:
+            row['ptax'] = _conf_fmt_date(deal.get('FXConvDate'))
+        rows.append(row)
+        if subj is None:
+            warnings.append('Ativo {} sem cadastro no Subjacente (bolsa/fator ausentes).'.format(ua))
+
+    # CGD da contraparte (CounterpartyDetails, primeiro item Active).
+    cgd_txt = ''
+    try:
+        rec = _cpd_find(_cpd_load(), str(first.get('SPN') or '').strip())
+        for item in _cgd_norm((rec or {}).get('CGD')):
+            if (item.get('status') or 'Active') == 'Active' and item.get('value'):
+                cgd_txt = item['value']
+                break
+    except Exception:
+        log.warning('[conf] CGD lookup failed:\n%s', traceback.format_exc())
+    if cgd_txt and _parse_date_any(cgd_txt):
+        cgd_txt = _conf_date_extenso(cgd_txt)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+
+    trade_date = first.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        'cgd_date':     cgd_txt,
+        'parteb_nome':  str(first.get('Client') or '').strip(),
+        'parteb_cnpj':  _conf_fmt_cnpj(first.get('TaxID')),
+        'data_neg':     _conf_fmt_date(trade_date),
+        'data_extenso': _conf_date_extenso(trade_date),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'rows':         rows,
+        'warnings':     warnings,
+    }
+    return render_template(_CONF_FAMILY_TEMPLATES[family][0], conf=conf)
+
+
+@blueprint.route('/confirmation/ndf-comm/strike-usd')
+def confirmation_ndfcomm_strike_usd():
+    return _conf_generation_page('strike-usd')
+
+
+@blueprint.route('/confirmation/ndf-comm/platts-strike-usd')
+def confirmation_ndfcomm_platts_strike_usd():
+    return _conf_generation_page('platts')
+
+
+@blueprint.route('/confirmation/ndf-comm/strike-brl')
+def confirmation_ndfcomm_strike_brl():
+    return _conf_generation_page('brl')
+
+
+@blueprint.route('/api/confirmation/ndf-comm/save', methods=['POST'])
+def api_conf_ndfcomm_save():
+    """Salva a confirmação (com os ajustes feitos no painel) em Word + PDF no
+    Electronic Inventory: Confirmations/YYYY/mm. Mês/dd/<produto>/<arquivo>.
+    O .doc é o próprio HTML do documento (o Word abre HTML nativamente — os
+    templates legados .doc já eram HTML do Word); o PDF é gerado via reportlab."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'strike-usd').strip()
+    if family not in _CONF_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
+    if not rows:
+        return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
+        'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
+        'data_neg':     str(fields.get('data_neg') or '').strip(),
+        'data_extenso': str(fields.get('data_extenso') or '').strip(),
+        'acronym':      acr,
+        'mercadoria':   merc,
+        'rows':         rows,
+        'warnings':     [],
+    }
+
+    try:
+        from apps.pages.confirmation_pdfs import termo_pdf
+        pdf_bytes = termo_pdf(conf, variant={'strike-usd': 'usd', 'platts': 'platts',
+                                             'brl': 'brl'}[family])
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    doc_html = render_template(_CONF_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+
+    ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
+    month_folder = '{:02d}. {}'.format(ref.month, _CONF_MONTHS_PT[ref.month - 1])
+    dir_path = os.path.join(ELECTRONIC_INVENTORY_ROOT, 'Confirmations',
+                            ref.strftime('%Y'), month_folder, ref.strftime('%d'),
+                            'NDF Commodities')
+    # Nome no padrão legado, prefixado com contraparte × mercadoria porque a
+    # pasta é por produto (não por contraparte como na macro antiga).
+    if len(rows) == 1 and str(rows[0].get('num') or '').strip():
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
+            acr, merc, str(rows[0]['num']).strip())
+    else:
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS - {}'.format(
+            acr, merc, ref.strftime('%Y%m%d'))
+    base = _ei_sanitize(base)
+
+    try:
+        os.makedirs(dir_path, exist_ok=True)
+        candidate, n = base, 0
+        while os.path.exists(os.path.join(dir_path, candidate + '.doc')) or \
+                os.path.exists(os.path.join(dir_path, candidate + '.pdf')):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(doc_path, 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(pdf_path, 'wb') as fh:
+            fh.write(pdf_bytes)
+    except Exception as exc:
+        log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    # Ciclo da confirmação: salvar = Generated (a validação com checklist +
+    # preview do PDF é o passo seguinte, que leva a Success).
+    ref_state = _parse_date_any(payload.get('date')) or ref
+    with _cache_lock:
+        state = _conf_state_load(ref_state)
+        state[_conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _conf_state_save(ref_state, state)
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Saved', 'NDF Comm',
+                         '{} · {} ({} op{})'.format(acr, merc, len(rows),
+                                                    '' if len(rows) == 1 else 's'))
+    validate_url = ('/confirmation/ndf-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
+                    + '&family=' + quote(family))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path],
+                    'validate_url': validate_url})
+
+
+def _conf_state_entry_or_404(args):
+    """(ref, key, entry, err_response) para os endpoints de validação/preview."""
+    ds = (args.get('date') or '').strip()
+    acr = (args.get('acronym') or '').strip()
+    merc = (args.get('mercadoria') or '').strip().upper()
+    fam = (args.get('family') or 'strike-usd').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    key = _conf_key(acr, merc, fam)
+    entry = _conf_state_load(ref).get(key)
+    if not entry:
+        return ref, key, None, ('Confirmação ainda não gerada para {} × {} em {}.'
+                                .format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+    return ref, key, entry, None
+
+
+@blueprint.route('/api/confirmation/ndf-comm/pdf')
+def api_conf_ndfcomm_pdf():
+    """Preview inline do PDF salvo da confirmação (para a janela de validação)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _conf_state_entry_or_404(request.args)
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+
+@blueprint.route('/confirmation/ndf-comm/validate')
+def confirmation_ndfcomm_validate():
+    """Janela de validação da confirmação gerada: checklist + preview do PDF.
+    Todos os checks marcados → Validate → status Success."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _conf_state_entry_or_404(request.args)
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'strike-usd').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + quote(acr)
+          + '&mercadoria=' + quote(merc) + '&family=' + quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           pdf_url='/api/confirmation/ndf-comm/pdf?' + qs)
+
+
+@blueprint.route('/api/confirmation/ndf-comm/validate', methods=['POST'])
+def api_conf_ndfcomm_validate():
+    """Marca a confirmação como Success após o checklist completo."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _conf_state_entry_or_404(payload)
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _cache_lock:
+        state = _conf_state_load(ref)
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _conf_state_save(ref, state)
+    acr, merc = (key.split('|') + ['', ''])[:2]
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Validated', 'NDF Comm', '{} · {}'.format(acr, merc))
+    return jsonify({'success': True, 'status': 'Success'})
+
+
+# ==============================================================================
 # NEW DEALS — MONITOR
 # Visão por produto × status das operações importadas na reference date. Os
 # caches de New Deals já são particionados por dia (YYYYMMDD_*.json), então o
@@ -18429,7 +19033,28 @@ def api_new_deals_monitor():
             'label': pkey.replace('/', ' '), 'url': None, 'soon': False,
             'total': sum(agg.values()), 'statuses': dict(agg),
         })
-    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'cards': cards})
+
+    # Zona Confirmations: segregação contraparte × mercadoria × família de
+    # template (pontas banco/lawton fora). Por ora só NDF Commodities tem
+    # lógica de confirmação — os demais produtos entram quando ganharem template.
+    # O ciclo aqui é o DA CONFIRMAÇÃO (New → Generated → Success), não o status
+    # dos deals: cada grupo segregado conta 1 no chip do seu estágio.
+    conf_groups, _deal_statuses, _conf_deal_total = _conf_ndfcomm_groups(ref)
+    conf_state = _conf_state_load(ref)
+    conf_statuses = Counter()
+    for g in conf_groups:
+        entry = conf_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        conf_statuses[entry.get('status') or 'New'] += 1
+    conf_cards = [{
+        'key': 'conf-ndf-commodities', 'label': 'NDF Commodities',
+        'url': '/new_deals-ndf-commodities', 'soon': False,
+        'total': len(conf_groups), 'statuses': dict(conf_statuses),
+        'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
+                    'family': g['family'], 'count': g['count']} for g in conf_groups],
+    }]
+
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    'cards': cards, 'conf_cards': conf_cards})
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):

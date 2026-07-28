@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validação — {{ acronym }} · {{ mercadoria }} · {{ ref_date_disp }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #12121f; color: #e0e0e0;
+         height: 100vh; display: flex; overflow: hidden; }
+
+  /* ── Painel esquerdo: checklist ── */
+  #panel { width: 360px; flex: 0 0 360px; background: #1a1a2e; padding: 20px;
+           overflow-y: auto; box-shadow: 4px 0 16px rgba(0,0,0,.4); }
+  #panel h1 { font-size: 13pt; color: #fff; margin-bottom: 2px; }
+  #panel .sub { font-size: 9pt; color: #9090b0; margin-bottom: 14px;
+                border-bottom: 1px solid #333; padding-bottom: 10px; }
+  .meta { font-size: 8.5pt; color: #a0a0c0; margin-bottom: 14px; line-height: 1.6; }
+  .meta b { color: #d0d0e8; }
+  .status-pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+                 font-size: 8.5pt; font-weight: bold; }
+  .status-Generated { background: #3b2b6e; color: #c4b5fd; }
+  .status-Success   { background: #12432a; color: #7ed6a2; }
+
+  .check-item { display: flex; gap: 10px; align-items: flex-start; background: #0d0d1a;
+                border: 1px solid #2a2a5a; border-radius: 6px; padding: 10px;
+                margin-bottom: 8px; cursor: pointer; font-size: 9.5pt; line-height: 1.45; }
+  .check-item input { margin-top: 2px; width: 15px; height: 15px; accent-color: #7c3aed; }
+  .check-item.done { border-color: #1a8a4a; }
+
+  #btn-validate { width: 100%; background: #1a6e3c; border: none; color: #fff;
+                  padding: 11px; border-radius: 6px; cursor: pointer; font-size: 11pt;
+                  font-weight: bold; margin-top: 14px; }
+  #btn-validate:disabled { background: #2a2a3a; color: #707080; cursor: not-allowed; }
+  #vstatus { font-size: 9pt; margin-top: 10px; min-height: 16px; }
+  .already { background: #12432a; border: 1px solid #1a8a4a; color: #7ed6a2;
+             border-radius: 6px; padding: 10px; font-size: 9.5pt; margin-top: 12px; }
+
+  /* ── Preview do PDF ── */
+  #preview { flex: 1 1 auto; height: 100vh; }
+  #preview iframe { width: 100%; height: 100%; border: none; background: #444; }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>✓ Validação da Confirmação</h1>
+  <p class="sub">Confira o PDF gerado ao lado e marque cada item do checklist para concluir.</p>
+
+  <div class="meta">
+    <b>Contraparte:</b> {{ acronym }}<br>
+    <b>Mercadoria:</b> {{ mercadoria }}<br>
+    <b>Trade date:</b> {{ ref_date_disp }}<br>
+    <b>Gerada por:</b> {{ saved_by }} em {{ saved_at }}<br>
+    <b>Status:</b> <span class="status-pill status-{{ status }}">{{ status }}</span>
+    {% if status == 'Success' %}<br><b>Validada por:</b> {{ validated_by }} em {{ validated_at }}{% endif %}
+  </div>
+
+  {% if status == 'Success' %}
+  <div class="already">Esta confirmação já foi validada. O preview ao lado é o PDF salvo no Electronic Inventory.</div>
+  {% endif %}
+
+  <div id="checks">
+    <label class="check-item"><input type="checkbox" data-check="counterparty">
+      Contraparte e CNPJ conferem com o Reference Data</label>
+    <label class="check-item"><input type="checkbox" data-check="cgd">
+      Data do CGD confere com o contrato cadastrado</label>
+    <label class="check-item"><input type="checkbox" data-check="operations">
+      Operações da Tabela de Referência conferem (deal, quantidade, taxa forward, direção)</label>
+    <label class="check-item"><input type="checkbox" data-check="dates">
+      Datas conferem (negociação, fixings, PTAX e vencimento)</label>
+  </div>
+
+  <button id="btn-validate" disabled>Validar → Success</button>
+  <div id="vstatus"></div>
+</div>
+
+<div id="preview">
+  <iframe src="{{ pdf_url }}" title="PDF Preview"></iframe>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var already = {{ 'true' if status == 'Success' else 'false' }};
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('#checks input[type="checkbox"]'));
+  var btn = document.getElementById('btn-validate');
+  var vs = document.getElementById('vstatus');
+
+  function sync() {
+    boxes.forEach(function (b) { b.closest('.check-item').classList.toggle('done', b.checked); });
+    btn.disabled = already || !boxes.every(function (b) { return b.checked; });
+  }
+  boxes.forEach(function (b) {
+    if (already) { b.checked = true; b.disabled = true; }
+    b.addEventListener('change', sync);
+  });
+  sync();
+  if (already) btn.textContent = 'Validada ✓';
+
+  btn.addEventListener('click', function () {
+    var checks = {};
+    boxes.forEach(function (b) { checks[b.dataset.check] = b.checked; });
+    btn.disabled = true; btn.textContent = 'Validando…';
+    fetch('/api/confirmation/ndf-comm/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '{{ ref_date }}', acronym: {{ acronym | tojson }},
+                             mercadoria: {{ mercadoria | tojson }},
+                             family: {{ family | tojson }}, checks: checks })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (res.success) {
+        btn.textContent = 'Validada ✓';
+        vs.style.color = '#7ed6a2';
+        vs.textContent = '✔ Confirmação marcada como Success.';
+        already = true;
+        boxes.forEach(function (b) { b.disabled = true; });
+        var pill = document.querySelector('.status-pill');
+        if (pill) { pill.textContent = 'Success'; pill.className = 'status-pill status-Success'; }
+        if (window.opener && window.opener.fetchNotifications) window.opener.fetchNotifications();
+      } else {
+        btn.disabled = false; btn.textContent = 'Validar → Success';
+        vs.style.color = '#ee6666';
+        vs.textContent = '✖ ' + (res.message || 'Falha na validação.');
+      }
+    })
+    .catch(function (e) {
+      btn.disabled = false; btn.textContent = 'Validar → Success';
+      vs.style.color = '#ee6666';
+      vs.textContent = '✖ ' + e.message;
+    });
+  });
+})();
+</script>
+</body>
+</html>

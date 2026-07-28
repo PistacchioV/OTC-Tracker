@@ -1473,6 +1473,7 @@ $(document).ready(function() {
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
             "<'econAffBtn me-2'>" +
+            "<'confirmationBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
@@ -1899,6 +1900,103 @@ $(document).ready(function() {
                 });
                 return out;
             }
+            // ── Confirmation (Termo) — lista os grupos segregados da data e abre
+            //    o documento pré-preenchido (por ora só strike em USD tem template).
+            var confContainer = document.querySelector('.confirmationBtn');
+            if (confContainer && !document.getElementById('confirmationBtn')) {
+                var confBtn = document.createElement('button');
+                confBtn.id = 'confirmationBtn';
+                confBtn.className = 'btn btn-sm btn-soft-success bg-gradient btn-toolbar-all';
+                confBtn.setAttribute('type', 'button');
+                confBtn.setAttribute('data-bs-toggle', 'tooltip');
+                confBtn.setAttribute('data-bs-placement', 'bottom');
+                confBtn.setAttribute('data-bs-title', t('nd-btn-confirmation-tip', 'Generate client confirmations (by counterparty × commodity)'));
+                confBtn.innerHTML = '<i class="ti ti-file-check me-1"></i><span data-lang="nd-btn-confirmation">Confirmation</span>';
+                confContainer.appendChild(confBtn);
+
+                function _confRefDateIso() {
+                    // Usa o chip exato de Trade Date do smart filter; sem chip → hoje.
+                    var chip = (typeof sfActive !== 'undefined' ? sfActive : []).filter(function (f) {
+                        return f.col && f.col.label === 'Trade Date' && f.mode === 'exact';
+                    })[0];
+                    if (chip) {
+                        var p = String(chip.value || '').trim().split('/');
+                        if (p.length === 3 && p[2].length === 4) {
+                            return p[2] + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[0]).slice(-2);
+                        }
+                    }
+                    var d = new Date();
+                    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+                }
+
+                confBtn.addEventListener('click', function () {
+                    var iso = _confRefDateIso();
+                    fetch('/api/new-deals/ndf-commodities/confirmations?date=' + encodeURIComponent(iso))
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (!res.success) {
+                                Swal.fire({ title: t('swal-err-title', 'Error'), text: res.message || 'Request failed.',
+                                    icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                                return;
+                            }
+                            var groups = res.groups || [];
+                            if (!groups.length) {
+                                Swal.fire({ title: t('swal-conf-none-title', 'No Confirmations'),
+                                    text: t('swal-conf-none', 'No client operations for this date (bank/Lawton legs are excluded).'),
+                                    icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                                return;
+                            }
+                            function _e(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                            var FAM_LABEL = { 'strike-usd': 'USD', 'brl': 'BRL', 'brl-platts': 'BRL · Platts',
+                                              'platts': 'Platts', 'palm-oil': 'Palm Oil' };
+                            var STATUS_CLS = { 'New': 'bg-info text-white', 'Generated': 'text-bg-primary', 'Success': 'text-bg-success' };
+                            var rows = groups.map(function (g) {
+                                var fam = FAM_LABEL[g.family] || g.family;
+                                var stCls = STATUS_CLS[g.status] || 'text-bg-secondary';
+                                var action;
+                                if (g.available && g.url && g.eligible > 0) {
+                                    action = '<a class="btn btn-sm btn-primary bg-gradient" target="_blank" href="' + _e(g.url) + '">' +
+                                             '<i class="ti ti-external-link me-1"></i>' + _e(t('conf-open', 'Open')) + '</a>';
+                                } else if (g.eligible === 0) {
+                                    action = '<span class="badge text-bg-warning">' + _e(t('conf-not-eligible', 'no eligible ops')) + '</span>';
+                                } else {
+                                    action = '<span class="badge text-bg-secondary">' + _e(t('conf-tpl-pending', 'template pending')) + '</span>';
+                                }
+                                if (g.validate_url) {
+                                    action += ' <a class="btn btn-sm btn-success bg-gradient" target="_blank" href="' + _e(g.validate_url) + '">' +
+                                              '<i class="ti ti-checklist me-1"></i>' + _e(t('conf-validate', 'Validate')) + '</a>';
+                                }
+                                return '<tr><td class="text-start">' + _e(g.acronym) + '</td>' +
+                                       '<td class="text-start">' + _e(g.mercadoria) + '</td>' +
+                                       '<td>' + _e(fam) + '</td>' +
+                                       '<td>' + Number(g.count) + '</td>' +
+                                       '<td>' + Number(g.eligible) + '</td>' +
+                                       '<td><span class="badge ' + stCls + ' bg-gradient">' + _e(g.status || 'New') + '</span></td>' +
+                                       '<td>' + action + '</td></tr>';
+                            }).join('');
+                            Swal.fire({
+                                title: t('swal-conf-title', 'Confirmations') + ' — ' + _e(res.date),
+                                html: '<div class="table-responsive" style="max-height:420px;overflow:auto">' +
+                                      '<table class="table table-sm align-middle" style="font-size:.85rem">' +
+                                      '<thead><tr><th class="text-start">' + _e(t('conf-col-cpty', 'Counterparty')) + '</th>' +
+                                      '<th class="text-start">' + _e(t('conf-col-comm', 'Commodity')) + '</th>' +
+                                      '<th>' + _e(t('conf-col-family', 'Template')) + '</th>' +
+                                      '<th>Ops</th><th>' + _e(t('conf-col-eligible', 'Eligible')) + '</th>' +
+                                      '<th>' + _e(t('conf-col-status', 'Status')) + '</th><th></th></tr></thead>' +
+                                      '<tbody>' + rows + '</tbody></table></div>' +
+                                      '<div class="text-muted text-start" style="font-size:.75rem">' +
+                                      _e(t('conf-note', 'Eligible = imported operations no longer New/Pending. Bank and Lawton legs never generate client confirmations.')) + '</div>',
+                                width: 900, showConfirmButton: false, showCloseButton: true
+                            });
+                        })
+                        .catch(function (err) {
+                            Swal.fire({ title: t('swal-err-title', 'Error'), text: String(err && err.message || err),
+                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                        });
+                });
+            }
+
             var econAffContainer = document.querySelector('.econAffBtn');
             if (econAffContainer && !document.getElementById('econAffBtn')) {
                 var econAffBtn = document.createElement('button');
