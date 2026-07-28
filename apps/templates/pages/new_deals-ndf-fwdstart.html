@@ -1388,6 +1388,19 @@ $(document).ready(function() {
                 targets: '_all'
             },
             {
+                // Is BRR Fixed? — YES/NO como badge (mesmo estilo do Quoted in
+                // Cents das páginas de commodities). Só no display: o DATA da
+                // célula segue "YES"/"NO" cru para filtros, export e edição.
+                targets: 26,
+                render: function (data, type) {
+                    if (type !== 'display') return data;
+                    var v = String(data == null ? '' : data).replace(/<[^>]*>/g, '').trim().toUpperCase();
+                    if (v === 'YES') return '<span class="badge text-bg-success rounded-pill">YES</span>';
+                    if (v === 'NO')  return '<span class="badge text-bg-warning rounded-pill">NO</span>';
+                    return data;
+                }
+            },
+            {
                 visible: false,
                 targets: [25, 28]   // Rate (not applicable to FWD Start) + Maker SID
             }
