@@ -147,11 +147,15 @@
 // Primary pill CTA: Action Blue #0066cc + full pill
 .btn-primary {
     border-radius: 50rem !important; // Apple rounded.pill — signature CTA
-    padding: 0.6875rem 1.375rem;     // Apple 11px × 22px
-    font-size: 0.875rem;
     font-weight: 400;
     letter-spacing: -0.224px;        // Apple caption tracking
     box-shadow: none !important;
+
+    // .btn-sm/.btn-lg size via CSS vars, which a literal padding would stomp
+    &:not(.btn-sm):not(.btn-lg) {
+        padding: 0.6875rem 1.375rem; // Apple 11px × 22px
+        font-size: 0.875rem;
+    }
 
     &:active { transform: scale(0.97); } // Apple press micro-interaction
 }
@@ -159,11 +163,14 @@
 // Secondary ghost pill
 .btn-outline-primary {
     border-radius: 50rem !important;
-    padding: 0.6875rem 1.375rem;
-    font-size: 0.875rem;
     font-weight: 400;
     letter-spacing: -0.224px;
     box-shadow: none !important;
+
+    &:not(.btn-sm):not(.btn-lg) {
+        padding: 0.6875rem 1.375rem;
+        font-size: 0.875rem;
+    }
 
     &:active { transform: scale(0.97); }
 }

@@ -17137,13 +17137,15 @@ html.sidebar-with-line .sub-menu .side-nav-link::after {
 
 .btn-primary {
   border-radius: 50rem !important;
+  font-weight: 400;
+  letter-spacing: -0.224px;
+  box-shadow: none !important;
+}
+.btn-primary:not(.btn-sm):not(.btn-lg) {
   padding: 11px 22px;
   padding: 0.6875rem 1.375rem;
   font-size: 14px;
   font-size: 0.875rem;
-  font-weight: 400;
-  letter-spacing: -0.224px;
-  box-shadow: none !important;
 }
 .btn-primary:active {
   transform: scale(0.97);
@@ -17151,13 +17153,15 @@ html.sidebar-with-line .sub-menu .side-nav-link::after {
 
 .btn-outline-primary {
   border-radius: 50rem !important;
+  font-weight: 400;
+  letter-spacing: -0.224px;
+  box-shadow: none !important;
+}
+.btn-outline-primary:not(.btn-sm):not(.btn-lg) {
   padding: 11px 22px;
   padding: 0.6875rem 1.375rem;
   font-size: 14px;
   font-size: 0.875rem;
-  font-weight: 400;
-  letter-spacing: -0.224px;
-  box-shadow: none !important;
 }
 .btn-outline-primary:active {
   transform: scale(0.97);
