@@ -18309,9 +18309,9 @@ def _generic_nd_pc_trigger(product, deal):
 # ==============================================================================
 
 _CONF_INTERNAL_RE = re.compile(r'J\.?P\.?\s*MORGAN|LAWTON', re.IGNORECASE)
-# Na geração valem os mesmos cortes da macro (status "New"/"Pending Review"
-# fora); Canceled nunca conta para nada.
-_CONF_GEN_EXCLUDED_STATUS = {'New', 'Pending', 'Canceled'}
+# A confirmação só pode ser gerada quando as operações estão com status
+# Success (registro concluído); Canceled nunca conta para nada.
+_CONF_GEN_ELIGIBLE_STATUS = 'Success'
 _CONF_MONTHS_PT = ('Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro')
 # Código de mês dos contratos futuros (Jan..Dez) — usado no texto do CO1-2.
@@ -18511,7 +18511,7 @@ def _conf_ndfcomm_groups(ref):
         g['count'] += 1
         if not g['client'] and client:
             g['client'] = client
-        if st not in _CONF_GEN_EXCLUDED_STATUS:
+        if st == _CONF_GEN_ELIGIBLE_STATUS:
             g['eligible'] += 1
         statuses[st] += 1
         total += 1
@@ -18586,6 +18586,30 @@ _CONF_FAMILY_TEMPLATES = {
 }
 
 
+def _conf_pick_ndfcomm(ref, acr, merc, family):
+    """Deals elegíveis (status Success, pontas internas fora) de um grupo
+    contraparte × mercadoria × família na reference date → [(deal, subj)]."""
+    subj_map = _conf_subjacente_map()
+    picked = []
+    for deal in _conf_load_ndfcomm(ref):
+        st = str(deal.get('Status') or 'New').strip() or 'New'
+        if st != _CONF_GEN_ELIGIBLE_STATUS:
+            continue
+        client = str(deal.get('Client') or '').strip()
+        if _CONF_INTERNAL_RE.search(client):
+            continue
+        ua = str(deal.get('UnderlyingAsset') or '').strip()
+        subj = subj_map.get(ua)
+        d_merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+        d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
+        if d_acr != acr or d_merc != merc:
+            continue
+        if _conf_deal_family(deal, subj) != family:
+            continue
+        picked.append((deal, subj))
+    return picked
+
+
 def _conf_generation_page(family):
     """Renderiza a confirmação pré-preenchida (família dada) para um grupo
     contraparte × mercadoria da reference date. O template mantém o painel de
@@ -18600,24 +18624,7 @@ def _conf_generation_page(family):
     except ValueError:
         ref = datetime.now()
 
-    subj_map = _conf_subjacente_map()
-    picked = []
-    for deal in _conf_load_ndfcomm(ref):
-        st = str(deal.get('Status') or 'New').strip() or 'New'
-        if st in _CONF_GEN_EXCLUDED_STATUS:
-            continue
-        client = str(deal.get('Client') or '').strip()
-        if _CONF_INTERNAL_RE.search(client):
-            continue
-        ua = str(deal.get('UnderlyingAsset') or '').strip()
-        subj = subj_map.get(ua)
-        d_merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
-        d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
-        if d_acr != acr or d_merc != merc:
-            continue
-        if _conf_deal_family(deal, subj) != family:
-            continue
-        picked.append((deal, subj))
+    picked = _conf_pick_ndfcomm(ref, acr, merc, family)
 
     if not picked:
         return ('Nenhuma operação elegível para essa confirmação '
@@ -18710,6 +18717,144 @@ def confirmation_ndfcomm_strike_brl():
     return _conf_generation_page('brl')
 
 
+# ── XML do contrato (FepWeb) por confirmação ─────────────────────────────────
+# Cada confirmação gerada produz um XML de mesmo nome do contrato na mesma
+# pasta. Códigos numéricos ISO-4217 das moedas de strike usuais.
+_CONF_CCY_NUM = {
+    'USD': '840', 'EUR': '978', 'GBP': '826', 'JPY': '392', 'CHF': '756',
+    'CAD': '124', 'AUD': '036', 'NZD': '554', 'MYR': '458', 'CNY': '156',
+    'CNH': '156', 'MXN': '484', 'ZAR': '710', 'SEK': '752', 'NOK': '578',
+    'DKK': '208', 'BRL': '986', 'BRR': '986',
+}
+_CONF_CNPJ_BANCO = '33172537000198'
+
+
+def _conf_strike_adj(deal, subj):
+    """Strike ajustado pelo quoted-in-cents (Fator Conversão do Subjacente
+    quando cadastrado; senão /100 quando o deal está marcado YES)."""
+    strike = _conf_to_float(deal.get('Strike'))
+    if strike is None:
+        return None
+    fator = _conf_to_float((subj or {}).get('fator'))
+    if fator:
+        return strike * fator
+    if str(deal.get('QuotedInCents') or '').strip().upper() == 'YES':
+        return strike / 100.0
+    return strike
+
+
+def _conf_ndf_xml(picked, merc, ref):
+    """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
+
+    valor            = Σ notional × strike ajustado × Spot FXRate
+    valorEstrangeiro = Σ notional × strike ajustado
+    numeroContrato   = DealName quando a confirmação tem 1 operação
+                       (Mondelez: DealName_Mercadoria); com várias,
+                       NDF_Comm_YYYYMMDD_Mercadoria."""
+    warnings = []
+    first = picked[0][0]
+    trade_dt = _parse_date_any(first.get('TradeDate')) or ref
+    merc_tag = re.sub(r'\s+', '_', str(merc or '').strip().upper())
+
+    if len(picked) > 1:
+        numero = 'NDF_Comm_{}_{}'.format(trade_dt.strftime('%Y%m%d'), merc_tag)
+    else:
+        numero = str(first.get('Deal') or '').strip() or \
+            'NDF_Comm_{}_{}'.format(trade_dt.strftime('%Y%m%d'), merc_tag)
+        if 'MONDELEZ' in str(first.get('Client') or '').upper():
+            numero = numero + '_' + merc_tag
+
+    ccy = str(first.get('StrikeCurrency') or '').strip().upper()
+    ccy_num = _CONF_CCY_NUM.get(ccy, '')
+    if not ccy_num:
+        warnings.append('Moeda do strike "{}" sem código numérico mapeado no XML.'.format(ccy))
+
+    valor = 0.0
+    valor_estr = 0.0
+    venc = None
+    for deal, subj in picked:
+        qty = _conf_to_float(str(deal.get('TotalNotional') or '').replace('-', ''))
+        strike_adj = _conf_strike_adj(deal, subj)
+        if qty is None or strike_adj is None:
+            warnings.append('Operação {}: notional/strike não numérico — fora dos valores do XML.'
+                            .format(deal.get('Deal')))
+            continue
+        leg = qty * strike_adj
+        valor_estr += leg
+        spot = _conf_to_float(deal.get('SpotFXRate'))
+        if spot is None:
+            if ccy in ('BRL', 'BRR'):
+                spot = 1.0
+            else:
+                spot = 1.0
+                warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao estrangeiro.'
+                                .format(deal.get('Deal')))
+        valor += leg * spot
+        sd = _parse_date_any(deal.get('SettlementDate'))
+        if sd and (venc is None or sd > venc):
+            venc = sd
+
+    cnpj_cli = re.sub(r'\D', '', str(first.get('TaxID') or ''))
+    if len(cnpj_cli) != 14:
+        warnings.append('CNPJ da contraparte fora do padrão (14 dígitos): "{}".'
+                        .format(first.get('TaxID')))
+
+    xml = (
+        '<contrato>\n'
+        '  <numeroContrato>{numero}</numeroContrato>\n'
+        '  <tipoOperacao>NDF</tipoOperacao>\n'
+        '  <tipoEvento>N</tipoEvento>\n'
+        '  <valor>{valor:.2f}</valor>\n'
+        '  <moedaEstrangeira>{ccy}</moedaEstrangeira>\n'
+        '  <valorEstrangeiro>{valor_estr:.2f}</valorEstrangeiro>\n'
+        '  <codigoNatureza></codigoNatureza>\n'
+        '  <descricaoNatureza></descricaoNatureza>\n'
+        '  <pagadorRecebidorExterior></pagadorRecebidorExterior>\n'
+        '  <cnpjBanco>{cnpj_banco}</cnpjBanco>\n'
+        '  <cnpjCliente>{cnpj_cli}</cnpjCliente>\n'
+        '  <cnpjCorretora></cnpjCorretora>\n'
+        '  <dataOperacao>{dt_op}</dataOperacao>\n'
+        '  <dataVencimento>{dt_venc}</dataVencimento>\n'
+        '</contrato>\n'
+    ).format(numero=numero, valor=valor, ccy=ccy_num, valor_estr=valor_estr,
+             cnpj_banco=_CONF_CNPJ_BANCO, cnpj_cli=cnpj_cli,
+             dt_op=trade_dt.strftime('%Y%m%d'),
+             dt_venc=venc.strftime('%Y%m%d') if venc else '')
+    return numero, xml, warnings
+
+
+def _conf_pc_set_fepweb(trade_numbers, numero):
+    """Grava o numeroContrato na coluna FepWeb ID das linhas do Pending
+    Confirmation cujo Trade Number é uma das operações da confirmação
+    (linhas de NDF Comm são chaveadas pelo Deal name). Varre os 3 DBs."""
+    tns = [str(t or '').strip() for t in trade_numbers if str(t or '').strip()]
+    if not tns:
+        return 0
+    updated = 0
+    placeholders = ', '.join('?' for _ in tns)
+    for fname in _PC_DBS.values():
+        path = os.path.join(_PC_DB_DIR, fname)
+        if not os.path.isfile(path):
+            continue
+        try:
+            con = duckdb.connect(path)
+            try:
+                before = con.execute(
+                    'SELECT count(*) FROM {} WHERE trim("Trade Number") IN ({})'
+                    .format(_PC_TABLE, placeholders), tns).fetchone()[0]
+                if before:
+                    con.execute(
+                        'UPDATE {} SET "FepWeb ID" = ? WHERE trim("Trade Number") IN ({})'
+                        .format(_PC_TABLE, placeholders), [numero] + tns)
+                    updated += before
+            finally:
+                con.close()
+        except Exception:
+            log.warning('[conf] FepWeb ID update failed em %s:\n%s', fname,
+                        traceback.format_exc())
+    return updated
+
+
 @blueprint.route('/api/confirmation/ndf-comm/save', methods=['POST'])
 def api_conf_ndfcomm_save():
     """Salva a confirmação (com os ajustes feitos no painel) em Word + PDF no
@@ -18784,6 +18929,28 @@ def api_conf_ndfcomm_save():
             fh.write(doc_html)
         with open(pdf_path, 'wb') as fh:
             fh.write(pdf_bytes)
+
+        # XML do contrato (FepWeb): mesmo nome do numeroContrato, mesma pasta.
+        # Calculado a partir dos deals-fonte (status Success) do grupo — não das
+        # linhas editadas no painel — porque valor/moeda/CNPJ vêm do cache.
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        picked = _conf_pick_ndfcomm(ref, acr, merc, family)
+        if picked:
+            numero_contrato, xml_str, xml_warns = _conf_ndf_xml(picked, merc, ref)
+            xbase = _ei_sanitize(numero_contrato) or candidate
+            xcand, xn = xbase, 0
+            while os.path.exists(os.path.join(dir_path, xcand + '.xml')):
+                xn += 1
+                xcand = '{} ({})'.format(xbase, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(xml_path, 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            # numeroContrato → coluna FepWeb ID das operações no Pending Confirmation
+            fep_updated = _conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+                                              numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
     except Exception as exc:
         log.error('[conf] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
@@ -18808,7 +18975,10 @@ def api_conf_ndfcomm_save():
     validate_url = ('/confirmation/ndf-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
-    return jsonify({'success': True, 'files': [doc_path, pdf_path],
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato,
+                    'fepweb_updated': fep_updated,
+                    'warnings': xml_warns,
                     'validate_url': validate_url})
 
 
@@ -19034,11 +19204,11 @@ def api_new_deals_monitor():
             'total': sum(agg.values()), 'statuses': dict(agg),
         })
 
-    # Zona Confirmations: segregação contraparte × mercadoria × família de
-    # template (pontas banco/lawton fora). Por ora só NDF Commodities tem
-    # lógica de confirmação — os demais produtos entram quando ganharem template.
-    # O ciclo aqui é o DA CONFIRMAÇÃO (New → Generated → Success), não o status
-    # dos deals: cada grupo segregado conta 1 no chip do seu estágio.
+    # Zona Confirmations: segregação contraparte × mercadoria (pontas
+    # banco/lawton fora). O ciclo aqui é o DA CONFIRMAÇÃO (New → Generated →
+    # Success), não o status dos deals: cada grupo segregado conta 1 no chip do
+    # seu estágio. NDF Commodities tem o fluxo completo; Commodities/FX Options
+    # ainda só contam a segregação (templates de confirmação virão depois).
     conf_groups, _deal_statuses, _conf_deal_total = _conf_ndfcomm_groups(ref)
     conf_state = _conf_state_load(ref)
     conf_statuses = Counter()
@@ -19052,6 +19222,45 @@ def api_new_deals_monitor():
         'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
                     'family': g['family'], 'count': g['count']} for g in conf_groups],
     }]
+
+    def _conf_option_card(key, label, url, cache_dir, suffix, by_commodity):
+        fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
+                          ref.strftime('%Y%m%d') + suffix)
+        groups = {}
+        if os.path.isfile(fp):
+            try:
+                with open(fp, encoding='utf-8') as fh:
+                    data = json.load(fh)
+            except Exception:
+                data = []
+            for d in (data if isinstance(data, list) else []):
+                if not isinstance(d, dict):
+                    continue
+                if str(d.get('Status') or '').strip() == 'Canceled':
+                    continue
+                client = str(d.get('Client') or '').strip()
+                if _CONF_INTERNAL_RE.search(client):
+                    continue
+                acr = str(d.get('Acronym') or '').strip() or client or '(sem contraparte)'
+                merc = str(d.get('Commodities') or '').strip().upper() if by_commodity else ''
+                g = groups.setdefault((acr, merc), {'acronym': acr, 'mercadoria': merc, 'count': 0})
+                g['count'] += 1
+        ordered = sorted(groups.values(), key=lambda g: (g['acronym'], g['mercadoria']))
+        return {
+            'key': key, 'label': label, 'url': url, 'soon': False,
+            'total': len(ordered),
+            'statuses': ({'New': len(ordered)} if ordered else {}),
+            'groups': [{'label': ('{} · {}'.format(g['acronym'], g['mercadoria'])
+                                  if g['mercadoria'] else g['acronym']),
+                        'count': g['count']} for g in ordered],
+        }
+
+    conf_cards.append(_conf_option_card(
+        'conf-opt-commodities', 'Commodities Options', '/new_deals-opt-commodities',
+        CACHE_BASE_DIR, '_optcomm.json', True))
+    conf_cards.append(_conf_option_card(
+        'conf-opt-fxo', 'FX Options', '/new_deals-opt-fxo',
+        OPT_FXO_CACHE_DIR, '_optfxo.json', False))
 
     return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'cards': cards, 'conf_cards': conf_cards})

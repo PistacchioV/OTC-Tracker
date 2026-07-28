@@ -1998,7 +1998,7 @@ $(document).ready(function() {
                                       '<th>' + _e(t('conf-col-status', 'Status')) + '</th><th></th></tr></thead>' +
                                       '<tbody>' + rows + '</tbody></table></div>' +
                                       '<div class="text-muted text-start" style="font-size:.75rem">' +
-                                      _e(t('conf-note', 'Eligible = imported operations no longer New/Pending. Bank and Lawton legs never generate client confirmations.')) + '</div>',
+                                      _e(t('conf-note', 'Eligible = operations with status Success (confirmations can only be generated after B3 registration succeeds). Bank and Lawton legs never generate client confirmations.')) + '</div>',
                                 width: 900, showConfirmButton: false, showCloseButton: true
                             });
                         })

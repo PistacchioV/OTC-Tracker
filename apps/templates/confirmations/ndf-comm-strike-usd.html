@@ -701,8 +701,11 @@ function saveToInventory(btn) {
   .then(function (res) {
     btn.disabled = false; btn.textContent = '💾 Salvar Word + PDF no Inventory';
     if (res.success) {
-      st.style.color = '#7ed6a2';
-      st.textContent = '✔ Salvo: ' + (res.files || []).join(' · ');
+      st.style.color = (res.warnings && res.warnings.length) ? '#ffd54f' : '#7ed6a2';
+      st.textContent = '✔ Salvo: ' + (res.files || []).join(' · ') +
+        (res.numero_contrato ? ' · contrato ' + res.numero_contrato : '') +
+        (res.fepweb_updated ? ' · FepWeb ID em ' + res.fepweb_updated + ' linha(s)' : '') +
+        ((res.warnings && res.warnings.length) ? ' · ⚠ ' + res.warnings.join(' | ') : '');
       // Gerada → abre a janela de validação (checklist + preview do PDF)
       if (res.validate_url) window.open(res.validate_url, '_blank');
     } else {
