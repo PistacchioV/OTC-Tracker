@@ -196,6 +196,10 @@
     padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
     text-align: center;          /* centres the typed text AND the placeholder */
 }
+/* Direction só carrega PAY/RECEIVE — célula estreita libera espaço para
+   Account e Observation caberem sem scroll na largura total (col-12). */
+#ops-summary-table th:nth-child(8), #ops-summary-table td:nth-child(8) { width: 84px; max-width: 84px; }
+
 #ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
 #ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
@@ -287,7 +291,7 @@
     <!-- Settlement Summary table (centred, wide enough for every column to fit
          without horizontal scroll, but not the full page width) -->
     <div class="row mt-2 justify-content-center">
-        <div class="col-xxl-11 col-xl-12 col-12">
+        <div class="col-12">
             <div class="card ops-tcard">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
