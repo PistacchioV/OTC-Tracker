@@ -13612,7 +13612,7 @@ def api_fxo_bulk_patch_deal_cache():
 # Internal 3-letter currency codes (feed) → ISO. Extend as new codes appear.
 _FXO_CCY_MAP = {
     'BRR': 'BRL', 'USB': 'USD', 'EUB': 'EUR', 'GBB': 'GBP',
-    'CHB': 'CHF', 'NOB': 'NOK', 'COB': 'COP',
+    'CHB': 'CHF', 'NOB': 'NOK', 'COB': 'COP', 'MXB': 'MXN',
 }
 _FXO_MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
                   'August', 'September', 'October', 'November', 'December']
@@ -14097,6 +14097,12 @@ def _api_rec_is_dead(norm):
     return False
 
 
+# Moedas fracas (cotação invertida vs BRL) — mesmo conjunto usado na geração
+# do arquivo Conecta (_INV); lá a inversão cobre o caso QuantityCurrency fraca,
+# aqui o caso OtherQuantityCurrency fraca (BRL/MXN etc.).
+_ND_WEAK_CCYS = ('CNH', 'MXN', 'COP', 'PEN', 'CLP')
+
+
 def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
@@ -14143,19 +14149,27 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     other_ccy = _fxo_ccy(get('OTHER QUANTITY UNITS'))
     qty_v     = _fxo_num(get('QUANTITY'))
     strike_v  = _fxo_num(get('STRIKE'))
+    # Moedas fracas cotam invertido vs BRL: a API manda o strike como
+    # Moeda/BRL (ex.: 3,33 MXN por BRL) — a página e os arquivos (Conecta,
+    # Intrag) trabalham com BRL por unidade da moeda (0,30...), então o Rate
+    # é gravado já invertido quando a perna cotada é uma moeda fraca.
+    if strike_v and other_ccy in _ND_WEAK_CCYS:
+        strike_v = 1.0 / strike_v
     instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
     # FX Pair comes with internal ccy codes ("USB/BRR") → ISO ("USD/BRL")
     fx_pair = re.sub(r'[A-Z]{3}', lambda m: _fxo_ccy(m.group(0)),
                      str(get('INSTRUMENT') or '').strip().upper())
 
-    # Routing (order matters: FWD Start wins over the publisher test)
+    # Routing (order matters: FWD Start wins over the publisher test).
+    # Vanilla é só o publisher "PTAX" puro — variantes (ex.: PTAX USB WMR 4)
+    # são Other Publisher.
     if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
         strike_set = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
         if strike_set and strike_set == today_dmy:
             return None, None       # will be cancelled + re-booked as vanilla
         target = 'fwd-start'
-    elif publisher and 'PTAX' not in publisher.upper():
+    elif publisher and publisher.upper() != 'PTAX':
         target = 'other-publishers'
     else:
         target = 'vanilla'
@@ -14986,6 +15000,11 @@ def _save_intrag_ndf_entry(deal):
         'checker':                '',
     }
 
+    _intrag_ndf_persist(entry, td)
+
+
+def _intrag_ndf_persist(entry, td):
+    """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
     ref = td or datetime.now()
     dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
     os.makedirs(dir_path, exist_ok=True)
@@ -15016,6 +15035,91 @@ def _save_intrag_ndf_entry(deal):
             entries.append(entry)
         _atomic_write_json(file_path, entries)
     log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
+
+
+def _save_intrag_ndf_moeda_entry(deal):
+    """NDF de moeda (Vanilla / Other Publisher contra o Lawton) → entrada na
+    Intrag NDF no layout do arquivo "Instrucao NDF Moeda" (NDF - TERMO DE
+    MOEDAS): campos de mercadoria em N/A, moeda = perna estrangeira do par,
+    valor nocional na moeda estrangeira, taxa forward em R$/moeda na coluna
+    Asian Fwd Avg Rate e o publisher na coluna Comm Fixing — espelho campo a
+    campo das linhas do template legado."""
+    td = _parse_deal_date(deal.get('TradeDate', '') or '')
+    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
+    lf = _parse_deal_date(deal.get('LastFixingDate', '') or '')
+    fmt_d = lambda d: d.strftime('%Y-%m-%d') if d else ''
+
+    # A linha das páginas genéricas é a ponta do banco CONTRA o Lawton; a
+    # carteira registrada (INTRAGJP552) é a do fundo, então a posição do
+    # participante é a inversa da Direction da linha (banco SELL → fundo compra).
+    direction = (deal.get('Direction', '') or '').upper()
+    position = 'COMPRADOR' if direction == 'SELL' else ('VENDEDOR' if direction == 'BUY' else '')
+
+    # _conf_to_float detecta BR ("1.234,56") e US ("1,234.56") — o Notional das
+    # páginas genéricas é gravado no formato US ('{:,.2f}').
+    rate_val = _conf_to_float(deal.get('Rate', ''))
+    notional_val = _conf_to_float(deal.get('Notional', ''))
+    qty_ccy = (deal.get('QuantityCurrency', '') or '').strip().upper()
+    oth_ccy = (deal.get('OtherQuantityCurrency', '') or '').strip().upper()
+    foreign_ccy = oth_ccy if qty_ccy == 'BRL' else qty_ccy
+
+    # Valor nocional na moeda estrangeira: nocional em BRL ÷ taxa (R$/moeda);
+    # quando a quantidade do deal já está na moeda estrangeira, é o próprio.
+    if notional_val is not None and qty_ccy == 'BRL' and rate_val:
+        foreign_notional = notional_val / rate_val
+    else:
+        foreign_notional = notional_val
+    notional_str = '{:.2f}'.format(foreign_notional) if foreign_notional is not None else ''
+
+    rate_str = '{:.8f}'.format(rate_val).rstrip('0').rstrip('.') if rate_val is not None else ''
+    # No template o publisher sai com espaços ("PTAX USB WMR 4"), não pipes.
+    publisher = (deal.get('Publisher', '') or 'PTAX').replace('|', ' ').strip() or 'PTAX'
+
+    # Offset do fixing (dias úteis ANBIMA entre o último fixing e o vencimento);
+    # o padrão de NDF de moeda é D-2.
+    fixing_off = 'D-2'
+    if lf and sd:
+        lo, hi = (lf, sd) if lf < sd else (sd, lf)
+        fixing_off = 'D-{}'.format(_anbima_bizdays_between(lo, hi))
+
+    entry = {
+        'contract_type':          'NDF - TERMO DE MOEDAS',
+        'b3_id':                  deal.get('B3_ID', '') or '',
+        'portfolio_code':         'INTRAGJP552',
+        'participant_position':   position,
+        'party_tax_id':           '',
+        'counterparty':           'JPM',
+        'cpty_tax_id':            '',
+        'cpty_collateral_basket': 'NÃO',
+        'party_collateral_basket':'NÃO',
+        'notional_value':         notional_str,
+        'trade_date':             fmt_d(td),
+        'registration_date':      fmt_d(td),
+        'maturity_date':          fmt_d(sd),
+        'currency':               foreign_ccy,
+        'reference_exchange':     'N/A',
+        'commodity':              'N/A',
+        'underlying_asset':       'N/A',
+        'quantity':               'N/A',
+        'unit_of_negotiation':    '0',
+        'strike':                 'N/A',
+        'strike_currency':        '0',
+        'expiry_month_year':      'BRL',
+        'anbima_bizdays':         'N/A',
+        'fixed_0':                'N/A',
+        'na_1':                   rate_str,
+        'na_2':                   'N/A',
+        'weekday_bizdays':        publisher,
+        'trade_type_label':       fixing_off,
+        'strike_ccy_label':       'N/A',
+        'na_3':                   'N/A',
+        '_deal':                  deal.get('Deal', '') or '',
+        '_client':                deal.get('Client', '') or '',
+        'status':                 'New',
+        'maker':                  '',
+        'checker':                '',
+    }
+    _intrag_ndf_persist(entry, td)
 
 
 # Intra-group accounts: 73760.00-9 = Banco J.P. Morgan, 00041.00-7 = Lawton.
@@ -18458,8 +18562,9 @@ CONF_STATE_DIR = os.path.normpath(os.path.join(
 ))
 
 
-def _conf_state_path(ref):
-    return os.path.join(CONF_STATE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+def _conf_state_path(ref, product='ndf-comm'):
+    base = os.path.join(os.path.dirname(CONF_STATE_DIR), product)
+    return os.path.join(base, ref.strftime('%Y'), ref.strftime('%m'),
                         ref.strftime('%Y%m%d') + '_conf.json')
 
 
@@ -18467,8 +18572,8 @@ def _conf_key(acr, merc, fam):
     return '{}|{}|{}'.format(acr, merc, fam)
 
 
-def _conf_state_load(ref):
-    fp = _conf_state_path(ref)
+def _conf_state_load(ref, product='ndf-comm'):
+    fp = _conf_state_path(ref, product)
     if not os.path.isfile(fp):
         return {}
     try:
@@ -18479,19 +18584,19 @@ def _conf_state_load(ref):
         return {}
 
 
-def _conf_state_save(ref, state):
-    fp = _conf_state_path(ref)
+def _conf_state_save(ref, state, product='ndf-comm'):
+    fp = _conf_state_path(ref, product)
     os.makedirs(os.path.dirname(fp), exist_ok=True)
     _atomic_write_json(fp, state)
 
 
-def _conf_ndfcomm_groups(ref):
+def _conf_segregate(deals, family_fn):
     """Segregação das confirmações da data: um grupo por contraparte ×
     mercadoria × família de template (pontas internas fora, Canceled fora).
     Retorna (groups, status_counter, total_considerado)."""
     subj_map = _conf_subjacente_map()
     groups, statuses, total = {}, Counter(), 0
-    for deal in _conf_load_ndfcomm(ref):
+    for deal in deals:
         st = str(deal.get('Status') or 'New').strip() or 'New'
         if st == 'Canceled':
             continue
@@ -18501,7 +18606,7 @@ def _conf_ndfcomm_groups(ref):
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         subj = subj_map.get(ua)
         merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
-        fam = _conf_deal_family(deal, subj)
+        fam = family_fn(deal, subj)
         acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         key = (acr, merc, fam)
         g = groups.setdefault(key, {
@@ -18518,6 +18623,10 @@ def _conf_ndfcomm_groups(ref):
     ordered = sorted(groups.values(),
                      key=lambda g: (g['acronym'], g['mercadoria'], g['family']))
     return ordered, statuses, total
+
+
+def _conf_ndfcomm_groups(ref):
+    return _conf_segregate(_conf_load_ndfcomm(ref), _conf_deal_family)
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/confirmations')
@@ -18577,6 +18686,23 @@ def _conf_co12_text(deal, index):
                     one_before.strftime('%d/%m/%Y'), refd.strftime('%d/%m/%Y'), _mkt(2)))
 
 
+def _conf_cgd_lookup(first):
+    """Data do CGD da contraparte (CounterpartyDetails, primeiro item Active),
+    por extenso quando o valor cadastrado é uma data."""
+    cgd_txt = ''
+    try:
+        rec = _cpd_find(_cpd_load(), str(first.get('SPN') or '').strip())
+        for item in _cgd_norm((rec or {}).get('CGD')):
+            if (item.get('status') or 'Active') == 'Active' and item.get('value'):
+                cgd_txt = item['value']
+                break
+    except Exception:
+        log.warning('[conf] CGD lookup failed:\n%s', traceback.format_exc())
+    if cgd_txt and _parse_date_any(cgd_txt):
+        cgd_txt = _conf_date_extenso(cgd_txt)
+    return cgd_txt
+
+
 # Famílias com template web disponível: template Jinja + rota de geração.
 # (brl-platts e palm-oil entram quando os respectivos .doc forem enviados.)
 _CONF_FAMILY_TEMPLATES = {
@@ -18586,12 +18712,12 @@ _CONF_FAMILY_TEMPLATES = {
 }
 
 
-def _conf_pick_ndfcomm(ref, acr, merc, family):
+def _conf_pick_eligible(deals, acr, merc, family, family_fn):
     """Deals elegíveis (status Success, pontas internas fora) de um grupo
-    contraparte × mercadoria × família na reference date → [(deal, subj)]."""
+    contraparte × mercadoria × família → [(deal, subj)]."""
     subj_map = _conf_subjacente_map()
     picked = []
-    for deal in _conf_load_ndfcomm(ref):
+    for deal in deals:
         st = str(deal.get('Status') or 'New').strip() or 'New'
         if st != _CONF_GEN_ELIGIBLE_STATUS:
             continue
@@ -18604,10 +18730,15 @@ def _conf_pick_ndfcomm(ref, acr, merc, family):
         d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         if d_acr != acr or d_merc != merc:
             continue
-        if _conf_deal_family(deal, subj) != family:
+        if family_fn(deal, subj) != family:
             continue
         picked.append((deal, subj))
     return picked
+
+
+def _conf_pick_ndfcomm(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_ndfcomm(ref), acr, merc, family,
+                               _conf_deal_family)
 
 
 def _conf_generation_page(family):
@@ -18672,17 +18803,7 @@ def _conf_generation_page(family):
             warnings.append('Ativo {} sem cadastro no Subjacente (bolsa/fator ausentes).'.format(ua))
 
     # CGD da contraparte (CounterpartyDetails, primeiro item Active).
-    cgd_txt = ''
-    try:
-        rec = _cpd_find(_cpd_load(), str(first.get('SPN') or '').strip())
-        for item in _cgd_norm((rec or {}).get('CGD')):
-            if (item.get('status') or 'Active') == 'Active' and item.get('value'):
-                cgd_txt = item['value']
-                break
-    except Exception:
-        log.warning('[conf] CGD lookup failed:\n%s', traceback.format_exc())
-    if cgd_txt and _parse_date_any(cgd_txt):
-        cgd_txt = _conf_date_extenso(cgd_txt)
+    cgd_txt = _conf_cgd_lookup(first)
     if not cgd_txt:
         warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
 
@@ -18743,24 +18864,26 @@ def _conf_strike_adj(deal, subj):
     return strike
 
 
-def _conf_ndf_xml(picked, merc, ref):
+def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
 
     valor            = Σ notional × strike ajustado × Spot FXRate
     valorEstrangeiro = Σ notional × strike ajustado
     numeroContrato   = DealName quando a confirmação tem 1 operação
                        (Mondelez: DealName_Mercadoria); com várias,
-                       NDF_Comm_YYYYMMDD_Mercadoria."""
+                       <prefixo>_YYYYMMDD_Mercadoria.
+    Opções de Commodities usam o mesmo contrato com tipo='Option' e
+    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF."""
     warnings = []
     first = picked[0][0]
     trade_dt = _parse_date_any(first.get('TradeDate')) or ref
     merc_tag = re.sub(r'\s+', '_', str(merc or '').strip().upper())
 
     if len(picked) > 1:
-        numero = 'NDF_Comm_{}_{}'.format(trade_dt.strftime('%Y%m%d'), merc_tag)
+        numero = '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
     else:
         numero = str(first.get('Deal') or '').strip() or \
-            'NDF_Comm_{}_{}'.format(trade_dt.strftime('%Y%m%d'), merc_tag)
+            '{}_{}_{}'.format(prefixo, trade_dt.strftime('%Y%m%d'), merc_tag)
         if 'MONDELEZ' in str(first.get('Client') or '').upper():
             numero = numero + '_' + merc_tag
 
@@ -18802,7 +18925,7 @@ def _conf_ndf_xml(picked, merc, ref):
     xml = (
         '<contrato>\n'
         '  <numeroContrato>{numero}</numeroContrato>\n'
-        '  <tipoOperacao>NDF</tipoOperacao>\n'
+        '  <tipoOperacao>{tipo}</tipoOperacao>\n'
         '  <tipoEvento>N</tipoEvento>\n'
         '  <valor>{valor:.2f}</valor>\n'
         '  <moedaEstrangeira>{ccy}</moedaEstrangeira>\n'
@@ -18816,7 +18939,7 @@ def _conf_ndf_xml(picked, merc, ref):
         '  <dataOperacao>{dt_op}</dataOperacao>\n'
         '  <dataVencimento>{dt_venc}</dataVencimento>\n'
         '</contrato>\n'
-    ).format(numero=numero, valor=valor, ccy=ccy_num, valor_estr=valor_estr,
+    ).format(numero=numero, tipo=tipo, valor=valor, ccy=ccy_num, valor_estr=valor_estr,
              cnpj_banco=_CONF_CNPJ_BANCO, cnpj_cli=cnpj_cli,
              dt_op=trade_dt.strftime('%Y%m%d'),
              dt_venc=venc.strftime('%Y%m%d') if venc else '')
@@ -18982,7 +19105,7 @@ def api_conf_ndfcomm_save():
                     'validate_url': validate_url})
 
 
-def _conf_state_entry_or_404(args):
+def _conf_state_entry_or_404(args, product='ndf-comm'):
     """(ref, key, entry, err_response) para os endpoints de validação/preview."""
     ds = (args.get('date') or '').strip()
     acr = (args.get('acronym') or '').strip()
@@ -18993,7 +19116,7 @@ def _conf_state_entry_or_404(args):
     except ValueError:
         ref = datetime.now()
     key = _conf_key(acr, merc, fam)
-    entry = _conf_state_load(ref).get(key)
+    entry = _conf_state_load(ref, product).get(key)
     if not entry:
         return ref, key, None, ('Confirmação ainda não gerada para {} × {} em {}.'
                                 .format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
@@ -19039,6 +19162,7 @@ def confirmation_ndfcomm_validate():
                            validated_by=entry.get('validated_by') or '',
                            validated_at=entry.get('validated_at') or '',
                            checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/ndf-comm',
                            pdf_url='/api/confirmation/ndf-comm/pdf?' + qs)
 
 
@@ -19067,6 +19191,360 @@ def api_conf_ndfcomm_validate():
     acr, merc = (key.split('|') + ['', ''])[:2]
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'NDF Comm', '{} · {}'.format(acr, merc))
+    return jsonify({'success': True, 'status': 'Success'})
+
+
+# ==============================================================================
+# NEW DEALS — CONFIRMATIONS (Commodities Options · Opção de Commodities)
+# Mesmo fluxo do NDF Commodities (segregação contraparte × mercadoria ×
+# família, ciclo New → Generated → Success, Word+PDF+XML no Inventory), portado
+# da macro legada de opções (criar_documento/process_documents). Diferenças:
+# a coluna Nº do Anexo I usa o Deal name (opção não tem mais mnemônico), o
+# ticker CO1-2 tem template legado próprio (família 'co1-2', pendente) e o XML
+# sai com tipoOperacao Option e prefixo Opt_Comm no numeroContrato — o resto
+# do padrão do contrato é idêntico ao do NDF.
+# ==============================================================================
+
+_CONF_OPT_FAMILY_TEMPLATES = {
+    'strike-usd': ('confirmations/opt-comm-strike-usd.html', '/confirmation/opt-comm/strike-usd'),
+}
+
+
+def _conf_load_optcomm(ref):
+    """Deals do day-file de Option/Commodities da reference date."""
+    fname = ref.strftime('%Y%m%d') + '_optcomm.json'
+    fp = os.path.join(CACHE_BASE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
+    if not os.path.isfile(fp):
+        return []
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+    except Exception:
+        log.warning('[conf] cannot read %s', fp)
+        return []
+
+
+def _conf_opt_family(deal, subj):
+    """Família de template de uma opção: as mesmas do NDF + 'co1-2' (a macro
+    legada tinha um OPÇÃO COMMODITY-CO1-2.doc próprio para o Brent rolling)."""
+    if str(deal.get('UnderlyingAsset') or '').strip() == 'CO1-2':
+        return 'co1-2'
+    return _conf_deal_family(deal, subj)
+
+
+def _conf_optcomm_groups(ref):
+    return _conf_segregate(_conf_load_optcomm(ref), _conf_opt_family)
+
+
+def _conf_pick_optcomm(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_optcomm(ref), acr, merc, family,
+                               _conf_opt_family)
+
+
+@blueprint.route('/api/new-deals/opt-commodities/confirmations')
+def api_optcomm_confirmations():
+    """Grupos de confirmação de Opção de Commodities da reference date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    groups, _statuses, _total = _conf_optcomm_groups(ref)
+    state = _conf_state_load(ref, 'opt-comm')
+    out = []
+    for g in groups:
+        available = g['family'] in _CONF_OPT_FAMILY_TEMPLATES
+        entry = state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        status = entry.get('status') or 'New'
+        qs = ('date=' + ref.strftime('%Y-%m-%d')
+              + '&acronym=' + quote(g['acronym'])
+              + '&mercadoria=' + quote(g['mercadoria']))
+        url = _CONF_OPT_FAMILY_TEMPLATES[g['family']][1] + '?' + qs if available else None
+        validate_url = ('/confirmation/opt-comm/validate?' + qs + '&family=' + quote(g['family'])) \
+            if status in ('Generated', 'Success') else None
+        out.append({
+            'acronym': g['acronym'], 'client': g['client'],
+            'mercadoria': g['mercadoria'], 'family': g['family'],
+            'count': g['count'], 'eligible': g['eligible'],
+            'available': available, 'url': url,
+            'status': status, 'validate_url': validate_url,
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
+
+
+def _conf_opt_generation_page(family):
+    """Renderiza a confirmação de Opção pré-preenchida para um grupo
+    contraparte × mercadoria da reference date (linhas no layout do Anexo I
+    da macro legada de opções — 16 colunas)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    picked = _conf_pick_optcomm(ref, acr, merc, family)
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+
+    first = picked[0][0]
+    rows, warnings = [], []
+    for deal, subj in picked:
+        ua = str(deal.get('UnderlyingAsset') or '').strip()
+        ticker = _CONF_TICKER_MAP.get(ua, ua)
+        fator = _conf_to_float((subj or {}).get('fator'))
+        strike = _conf_to_float(deal.get('Strike'))
+        # Preço de Exercício = strike × Fator Conversão (mesma regra da Taxa
+        # Forward do Termo; a macro usava strike_confirmation com o factor).
+        strike_fmt = _conf_fmt_num(strike * (fator if fator else 1.0)) if strike is not None \
+            else str(deal.get('Strike') or '').strip()
+        premium = _conf_to_float(str(deal.get('Premium') or '').replace('-', ''))
+        f_ini = _parse_date_any(deal.get('FixingStartDate'))
+        f_fim = _parse_date_any(deal.get('FixingEndDate'))
+        bullet = bool(f_ini and f_fim and f_ini == f_fim)
+        direction = str(deal.get('Direction') or '').strip().upper()
+        instrument = str(deal.get('Instrument') or '').upper()
+        rows.append({
+            'num':       str(deal.get('Deal') or '').strip(),
+            'tipo':      'Venda' if 'PUT' in instrument else 'Compra',
+            'forma':     'Europeia',
+            'ticker':    ticker,
+            'bolsa':     'PLATTS' if family in ('platts', 'brl-platts') else str((subj or {}).get('bolsa') or '').strip(),
+            'qtd':       _conf_fmt_num(str(deal.get('TotalNotional') or '').replace('-', ''), dec=None),
+            'ptax':      _conf_fmt_date(deal.get('FXConvDate')),
+            'comprador': 'Parte B' if direction.startswith('S') else 'Parte A',
+            'premio':    'R$ ' + _conf_fmt_num(premium, dec=2) if premium is not None
+                         else str(deal.get('Premium') or '').strip() or 'Não Aplicável',
+            'dtPremio':  _conf_fmt_date(deal.get('SpotDate')) or 'Não Aplicável',
+            'strike':    strike_fmt,
+            # Asiática: janela de verificação preenchida, Data de Exercício N/A;
+            # bullet (europeia de fato): só a Data de Exercício (= fixing end).
+            'dtIni':     'Não Aplicável' if bullet else _conf_fmt_date(deal.get('FixingStartDate')),
+            'dtFim':     'Não Aplicável' if bullet else _conf_fmt_date(deal.get('FixingEndDate')),
+            'dtExerc':   _conf_fmt_date(deal.get('FixingEndDate')) if bullet else 'Não Aplicável',
+            'dtVenc':    _conf_fmt_date(deal.get('SettlementDate')),
+        })
+        if subj is None:
+            warnings.append('Ativo {} sem cadastro no Subjacente (bolsa/fator ausentes).'.format(ua))
+
+    cgd_txt = _conf_cgd_lookup(first)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+
+    trade_date = first.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        'cgd_date':     cgd_txt,
+        'parteb_nome':  str(first.get('Client') or '').strip(),
+        'parteb_cnpj':  _conf_fmt_cnpj(first.get('TaxID')),
+        'data_neg':     _conf_fmt_date(trade_date),
+        'data_extenso': _conf_date_extenso(trade_date),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'rows':         rows,
+        'warnings':     warnings,
+    }
+    return render_template(_CONF_OPT_FAMILY_TEMPLATES[family][0], conf=conf)
+
+
+@blueprint.route('/confirmation/opt-comm/strike-usd')
+def confirmation_optcomm_strike_usd():
+    return _conf_opt_generation_page('strike-usd')
+
+
+@blueprint.route('/api/confirmation/opt-comm/save', methods=['POST'])
+def api_conf_optcomm_save():
+    """Salva a confirmação de Opção (Word + PDF + XML) no Electronic Inventory
+    e grava o numeroContrato na coluna FepWeb ID — mesmo fluxo do NDF Comm."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'strike-usd').strip()
+    if family not in _CONF_OPT_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
+    if not rows:
+        return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
+        'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
+        'data_neg':     str(fields.get('data_neg') or '').strip(),
+        'data_extenso': str(fields.get('data_extenso') or '').strip(),
+        'acronym':      acr,
+        'mercadoria':   merc,
+        'rows':         rows,
+        'warnings':     [],
+    }
+
+    try:
+        from apps.pages.confirmation_pdfs import opcao_pdf
+        pdf_bytes = opcao_pdf(conf)
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    doc_html = render_template(_CONF_OPT_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+
+    ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
+    month_folder = '{:02d}. {}'.format(ref.month, _CONF_MONTHS_PT[ref.month - 1])
+    dir_path = os.path.join(ELECTRONIC_INVENTORY_ROOT, 'Confirmations',
+                            ref.strftime('%Y'), month_folder, ref.strftime('%d'),
+                            'Commodities Options')
+    if len(rows) == 1 and str(rows[0].get('num') or '').strip():
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
+            acr, merc, str(rows[0]['num']).strip())
+    else:
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS - {}'.format(
+            acr, merc, ref.strftime('%Y%m%d'))
+    base = _ei_sanitize(base)
+
+    try:
+        os.makedirs(dir_path, exist_ok=True)
+        candidate, n = base, 0
+        while os.path.exists(os.path.join(dir_path, candidate + '.doc')) or \
+                os.path.exists(os.path.join(dir_path, candidate + '.pdf')):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(doc_path, 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(pdf_path, 'wb') as fh:
+            fh.write(pdf_bytes)
+
+        # XML do contrato: tipoOperacao Option, numeroContrato com prefixo
+        # Opt_Comm — o resto do padrão (valores, moedas, datas) é o do NDF.
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        picked = _conf_pick_optcomm(ref, acr, merc, family)
+        if picked:
+            numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
+                picked, merc, ref, tipo='Option', prefixo='Opt_Comm')
+            xbase = _ei_sanitize(numero_contrato) or candidate
+            xcand, xn = xbase, 0
+            while os.path.exists(os.path.join(dir_path, xcand + '.xml')):
+                xn += 1
+                xcand = '{} ({})'.format(xbase, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(xml_path, 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            fep_updated = _conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+                                              numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
+    except Exception as exc:
+        log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    ref_state = _parse_date_any(payload.get('date')) or ref
+    with _cache_lock:
+        state = _conf_state_load(ref_state, 'opt-comm')
+        state[_conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _conf_state_save(ref_state, state, 'opt-comm')
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Saved', 'Opt Comm',
+                         '{} · {} ({} op{})'.format(acr, merc, len(rows),
+                                                    '' if len(rows) == 1 else 's'))
+    validate_url = ('/confirmation/opt-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
+                    + '&family=' + quote(family))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato,
+                    'fepweb_updated': fep_updated,
+                    'warnings': xml_warns,
+                    'validate_url': validate_url})
+
+
+@blueprint.route('/api/confirmation/opt-comm/pdf')
+def api_conf_optcomm_pdf():
+    """Preview inline do PDF salvo da confirmação de Opção."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'opt-comm')
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+
+@blueprint.route('/confirmation/opt-comm/validate')
+def confirmation_optcomm_validate():
+    """Janela de validação da confirmação de Opção (checklist + preview)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'opt-comm')
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'strike-usd').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + quote(acr)
+          + '&mercadoria=' + quote(merc) + '&family=' + quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/opt-comm',
+                           pdf_url='/api/confirmation/opt-comm/pdf?' + qs)
+
+
+@blueprint.route('/api/confirmation/opt-comm/validate', methods=['POST'])
+def api_conf_optcomm_validate():
+    """Marca a confirmação de Opção como Success após o checklist completo."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _conf_state_entry_or_404(payload, 'opt-comm')
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _cache_lock:
+        state = _conf_state_load(ref, 'opt-comm')
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _conf_state_save(ref, state, 'opt-comm')
+    acr, merc = (key.split('|') + ['', ''])[:2]
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Validated', 'Opt Comm', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
 
 
@@ -19207,8 +19685,8 @@ def api_new_deals_monitor():
     # Zona Confirmations: segregação contraparte × mercadoria (pontas
     # banco/lawton fora). O ciclo aqui é o DA CONFIRMAÇÃO (New → Generated →
     # Success), não o status dos deals: cada grupo segregado conta 1 no chip do
-    # seu estágio. NDF Commodities tem o fluxo completo; Commodities/FX Options
-    # ainda só contam a segregação (templates de confirmação virão depois).
+    # seu estágio. NDF Commodities e Commodities Options têm o fluxo completo;
+    # FX Options ainda só conta a segregação (template de confirmação vem depois).
     conf_groups, _deal_statuses, _conf_deal_total = _conf_ndfcomm_groups(ref)
     conf_state = _conf_state_load(ref)
     conf_statuses = Counter()
@@ -19267,9 +19745,20 @@ def api_new_deals_monitor():
         (os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
          os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')),
         '_ndffwdstart.json', False))
-    conf_cards.append(_conf_option_card(
-        'conf-opt-commodities', 'Commodities Options', '/new_deals-opt-commodities',
-        CACHE_BASE_DIR, '_optcomm.json', True))
+    # Commodities Options: ciclo próprio da confirmação, igual ao NDF Comm.
+    opt_groups, _opt_deal_statuses, _opt_total = _conf_optcomm_groups(ref)
+    opt_state = _conf_state_load(ref, 'opt-comm')
+    opt_statuses = Counter()
+    for g in opt_groups:
+        entry = opt_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        opt_statuses[entry.get('status') or 'New'] += 1
+    conf_cards.append({
+        'key': 'conf-opt-commodities', 'label': 'Commodities Options',
+        'url': '/new_deals-opt-commodities', 'soon': False,
+        'total': len(opt_groups), 'statuses': dict(opt_statuses),
+        'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
+                    'family': g['family'], 'count': g['count']} for g in opt_groups],
+    })
     conf_cards.append(_conf_option_card(
         'conf-opt-fxo', 'FX Options', '/new_deals-opt-fxo',
         OPT_FXO_CACHE_DIR, '_optfxo.json', False))
@@ -19449,12 +19938,17 @@ def api_generic_nd_update_cache(product, deal_id):
         _atomic_write_json(file_path, deals)
         updated_deal = deals[idx].copy()
 
-    # Save to Intrag NDF when Status→Success and client is BANCO JP MORGAN
-    # (fwd-start / other-publishers share this generic endpoint).
-    # As páginas NDF genéricas (Vanilla / Other Publisher / FWD Start) ainda NÃO
-    # alimentam a Intrag NDF — a lógica será definida depois. Quando for a hora,
-    # reativar aqui o _save_intrag_ndf_entry para cliente Banco J.P. Morgan.
+    # Vanilla / Other Publisher contra o Lawton alimentam a Intrag NDF no
+    # layout "Instrucao NDF Moeda" quando o Status vira Success (FWD Start fora
+    # — o strike só existe na strike set date, quando rebooka como vanilla).
     if str(updates.get('Status', '')) == 'Success':
+        if product in ('vanilla', 'other-publishers') and \
+                'LAWTON' in (updated_deal.get('Client', '') or '').upper():
+            try:
+                _save_intrag_ndf_moeda_entry(updated_deal)
+            except Exception as exc:
+                log.error('[ND %s] Intrag moeda save failed for deal=%r: %s',
+                          product, deal_id, exc)
         _generic_nd_pc_trigger(product, updated_deal)       # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
@@ -19995,8 +20489,15 @@ def api_generic_nd_mapping_b3(product):
                         pass
 
         if success_deal is not None:
-            # As páginas NDF genéricas ainda NÃO alimentam a Intrag NDF — a
-            # lógica será definida depois (reativar _save_intrag_ndf_entry aqui).
+            # Vanilla / Other Publisher contra o Lawton → Intrag NDF (layout
+            # "Instrucao NDF Moeda"), mesmo gatilho do update manual.
+            if product in ('vanilla', 'other-publishers') and \
+                    'LAWTON' in (success_deal.get('Client', '') or '').upper():
+                try:
+                    _save_intrag_ndf_moeda_entry(success_deal)
+                except Exception as exc:
+                    log.error('[MAPPING-%s] Intrag moeda save failed for deal=%r: %s',
+                              product, deal_text, exc)
             _generic_nd_pc_trigger(product, success_deal)   # → pending confirmation
 
         results.append({
@@ -20792,14 +21293,22 @@ def _pc_metrics_int(v):
 
 
 def _pc_latest_snapshot_rows():
-    """Newest daily pending-confirmation snapshot as a list of row dicts. Walks
-    back a few days if today's isn't written yet; falls back to the live pending
-    DB when no snapshot exists at all. Returns (rows, source_label)."""
+    """Pending-confirmation rows for the metric e-mails (daily metric / weekly
+    escalation). Lê DIRETO do DB pending (Aging e Status são recalculados na
+    leitura por _pc_load_rows → informação 100% atual no momento do envio); o
+    snapshot diário mais recente fica só como fallback se o DB não abrir.
+    Returns (rows, source_label)."""
     def _pending_only(rows):
-        # Defensive: a snapshot taken under older rules may still contain rows whose
-        # Pending Status is now considered OK (any Exception*). Drop them so the
-        # metrics never count a resolved confirmation as pending.
+        # Defensive: rows whose Pending Status is now considered OK (any
+        # Exception*) may still sit in the pending DB/snapshot until the daily
+        # re-route. Drop them so the metrics never count a resolved confirmation.
         return [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
+    try:
+        rows = _pc_load_rows('pending')
+        if rows:
+            return _pending_only(rows), 'live'
+    except Exception:
+        log.warning('[pc-metrics] live DB read failed:\n%s', traceback.format_exc())
     try:
         for back in range(0, 40):
             d = datetime.now() - timedelta(days=back)
@@ -20812,10 +21321,7 @@ def _pc_latest_snapshot_rows():
                     return _pending_only(rows), d.strftime('%Y-%m-%d')
     except Exception:
         log.warning('[pc-metrics] snapshot scan failed:\n%s', traceback.format_exc())
-    try:
-        return _pending_only(_pc_load_rows('pending')), 'live'
-    except Exception:
-        return [], 'none'
+    return [], 'none'
 
 
 def _pc_metrics_offenders(rows):

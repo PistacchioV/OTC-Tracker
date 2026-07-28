@@ -1988,7 +1988,8 @@ $(document).ready(function() {
                                        '<td>' + action + '</td></tr>';
                             }).join('');
                             Swal.fire({
-                                title: t('swal-conf-title', 'Confirmations') + ' — ' + _e(res.date),
+                                title: t('swal-conf-title', 'Confirmations') + ' — ' +
+                                       _e(String(res.date || '').split('-').reverse().join('/')),
                                 html: '<div class="table-responsive" style="max-height:420px;overflow:auto">' +
                                       '<table class="table table-sm align-middle" style="font-size:.85rem">' +
                                       '<thead><tr><th class="text-start">' + _e(t('conf-col-cpty', 'Counterparty')) + '</th>' +

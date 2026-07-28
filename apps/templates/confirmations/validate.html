@@ -79,10 +79,21 @@
   <iframe src="{{ pdf_url }}" title="PDF Preview"></iframe>
 </div>
 
+<!-- Dados do servidor num bloco JSON próprio (mesmo padrão anti-lint dos
+     templates de confirmação): o endpoint varia por produto via api_base. -->
+<script type="application/json" id="val-data">{{ {
+  'api_base':   api_base or '/api/confirmation/ndf-comm',
+  'date':       ref_date,
+  'acronym':    acronym,
+  'mercadoria': mercadoria,
+  'family':     family,
+  'already':    status == 'Success'
+} | tojson }}</script>
 <script>
 (function () {
   'use strict';
-  var already = {{ 'true' if status == 'Success' else 'false' }};
+  var V = JSON.parse(document.getElementById('val-data').textContent || '{}');
+  var already = !!V.already;
   var boxes = Array.prototype.slice.call(document.querySelectorAll('#checks input[type="checkbox"]'));
   var btn = document.getElementById('btn-validate');
   var vs = document.getElementById('vstatus');
@@ -102,11 +113,11 @@
     var checks = {};
     boxes.forEach(function (b) { checks[b.dataset.check] = b.checked; });
     btn.disabled = true; btn.textContent = 'Validando…';
-    fetch('/api/confirmation/ndf-comm/validate', {
+    fetch(V.api_base + '/validate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: '{{ ref_date }}', acronym: {{ acronym | tojson }},
-                             mercadoria: {{ mercadoria | tojson }},
-                             family: {{ family | tojson }}, checks: checks })
+      body: JSON.stringify({ date: V.date, acronym: V.acronym,
+                             mercadoria: V.mercadoria,
+                             family: V.family, checks: checks })
     })
     .then(function (r) { return r.json(); })
     .then(function (res) {

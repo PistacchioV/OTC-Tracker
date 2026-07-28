@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""PDFs das confirmações de derivativos (Termo de Mercadoria).
+"""PDFs das confirmações de derivativos (Termo de Mercadoria e Opção).
 
-Réplica em reportlab do documento HTML de confirmação (o mesmo texto legal do
-template TERMO.doc legado). A4 paisagem — mesma orientação do .doc original —
-com a Tabela de Referência (Anexo I) em página própria.
+Réplica em reportlab dos documentos HTML de confirmação (mesmo texto legal dos
+templates .doc legados — TERMO.doc e OPÇÃO COMMODITY.doc). A4 paisagem, com a
+Tabela de Referência (Anexo I) em página própria.
 
 Import é lazy no chamador: se o reportlab não estiver instalado, o save
 retorna erro claro em vez de derrubar o app.
@@ -382,10 +382,10 @@ def termo_pdf(conf, variant='usd'):
     line = '_' * 46
 
     def _sig_block(name):
+        # Nome da parte em linha própria (span nas duas colunas); os dois
+        # campos Por:/____/Nome: lado a lado, alinhados na mesma altura.
         data = [
-            [Paragraph('<b>' + name + '</b>', S['sigb']), Paragraph('Por:', S['sig'])],
-            [Paragraph('', S['sig']), Paragraph(line, S['sig'])],
-            [Paragraph('', S['sig']), Paragraph('Nome:', S['sig'])],
+            [Paragraph('<b>' + name + '</b>', S['sigb']), Paragraph('', S['sig'])],
             [Paragraph('Por:', S['sig']), Paragraph('Por:', S['sig'])],
             [Paragraph(line, S['sig']), Paragraph(line, S['sig'])],
             [Paragraph('Nome:', S['sig']), Paragraph('Nome:', S['sig'])],
@@ -393,8 +393,10 @@ def termo_pdf(conf, variant='usd'):
         tbl = Table(data, colWidths=[doc.width / 2.0] * 2)
         tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 3), (-1, 3), 24),
+            ('SPAN', (0, 0), (1, 0)),
+            ('TOPPADDING', (0, 1), (-1, 1), 24),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (0, -1), 16),
         ]))
         return tbl
 
@@ -469,6 +471,376 @@ def termo_pdf(conf, variant='usd'):
     else:
         widths = [w * f for f in (0.025, 0.09, 0.06, 0.10, 0.065, 0.06, 0.055, 0.07,
                                   0.075, 0.075, 0.065, 0.09, 0.09, 0.08)]
+    tbl = Table(data, colWidths=widths, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.5, _BLACK),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    st.append(tbl)
+
+    doc.build(st)
+    return buf.getvalue()
+
+
+def opcao_pdf(conf, variant='usd'):
+    """Bytes do PDF da confirmação de Opção de Commodities (strike em USD).
+
+    Mesmo esqueleto do termo_pdf; o texto legal é o do OPÇÃO COMMODITY.doc
+    legado (cláusulas de call/put e definições a–p) e o Anexo I tem 16
+    colunas (Tipo da Opção, Forma de Exercício, Preço de Exercício, Data de
+    Exercício)."""
+    S = _styles()
+    buf = BytesIO()
+    page = landscape(A4)
+    doc = BaseDocTemplate(buf, pagesize=page,
+                          leftMargin=18 * mm, rightMargin=18 * mm,
+                          topMargin=15 * mm, bottomMargin=15 * mm,
+                          title='Confirmação de Operações de Derivativos')
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='f')
+    doc.addPageTemplates([PageTemplate(id='p', frames=[frame])])
+
+    cgd   = _e(conf.get('cgd_date'))
+    nome  = _e(conf.get('parteb_nome'))
+    cnpj  = _e(conf.get('parteb_cnpj'))
+    d_neg = _e(conf.get('data_neg'))
+    d_ext = _e(conf.get('data_extenso'))
+
+    st = []
+    st.append(Paragraph('CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS', S['title']))
+    st.append(Paragraph(
+        'Esta Confirmação ("Confirmação") tem por objetivo reger as Operações de Derivativos a '
+        'Parte A e a Parte B abaixo qualificadas, de acordo com as disposições legais e '
+        'regulamentares aplicáveis e no âmbito do <i>Contrato Global de Derivativos e do Apêndice '
+        'ao Contrato Global de Derivativos</i>, ambos firmados entre as Partes em ' + cgd +
+        ' ("Contrato"), cujos termos são incorporados por referência a este instrumento.', S['body']))
+
+    # Seção 1
+    st.append(Paragraph('1. &nbsp;&nbsp; <u>Definições Gerais</u>', S['section']))
+    st.append(Paragraph(
+        'Os termos não definidos nesta Confirmação terão os mesmos significados a eles atribuídos '
+        'no Contrato. Em caso de conflito entre uma definição do Contrato e a desta Confirmação, '
+        'prevalecerá, para os fins de cada Operação de Derivativo, a definição que constar desta '
+        'Confirmação.', S['body']))
+    st.append(Paragraph(_sub(
+        'Esta Confirmação formaliza uma ou mais Operações de Derivativos (referidas doravante de '
+        'forma individual e indistinta como "Operação[i]") contratadas na mesma data entre as '
+        'Partes individualizadas abaixo na Tabela Referência. No entanto, cada Operação de '
+        'Derivativo é uma operação individual para fins tributários e de registro, sem prejuízo '
+        'das disposições do Contrato que tratam da compensação e do cálculo do Valor de '
+        'Vencimento Antecipado.'), S['body']))
+    st.append(Paragraph(
+        'Para fins dos cálculos descritos nessa Confirmação, a quantidade de Dias Úteis será '
+        'apurada pelo Agente de Cálculo conforme as convenções e as práticas de mercado para '
+        'contagem de dias úteis a depender da taxa, índice ou preço utilizado como referência em '
+        'uma Operação de Derivativo.', S['body']))
+
+    # Seção 2
+    st.append(Paragraph('2. &nbsp;&nbsp; <u>Definição das Partes</u>', S['section']))
+    st.append(Paragraph('a. &nbsp;&nbsp; <b>Parte A:</b> &nbsp;&nbsp; <b>BANCO J.P. MORGAN S.A.</b> '
+                        '— CNPJ/MF: 33.172.537/0001–98', S['item']))
+    st.append(Paragraph('b. &nbsp;&nbsp; <b>Parte B:</b> &nbsp;&nbsp; <b>' + nome + '</b> '
+                        '— CNPJ/MF: ' + cnpj, S['item']))
+    st.append(Paragraph(
+        'A Parte A e a Parte B, além destas denominações, são também aqui individualmente '
+        'denominadas "Parte", e em conjunto "Partes".', S['item']))
+    st.append(Paragraph('c. &nbsp;&nbsp; <b>Agente de Cálculo:</b> Parte A, salvo se disposto de '
+                        'outra forma no Apêndice', S['item']))
+    st.append(Paragraph('d. &nbsp;&nbsp; <b>Acelerador:</b> Parte A', S['item']))
+
+    # Seção 3
+    st.append(Paragraph('3. &nbsp;&nbsp; <u>Disposições Gerais</u>', S['section']))
+    st.append(Paragraph('a. <b>Local do Registro:</b> B3 S.A. – Brasil, Bolsa, Balcão;', S['item']))
+    st.append(Paragraph('b. <b>Data de Negociação:</b> ' + d_neg + ';', S['item']))
+    st.append(Paragraph('c. <b>Tipo de Operação:</b> Opção;', S['item']))
+    st.append(Paragraph(_sub(
+        'd. <b>Tipo de Opção:</b> Para cada Operação[i], conforme especificado no Anexo I'), S['item']))
+    st.append(Paragraph(_sub(
+        'e. <b>Prêmio:</b> Para cada Operação[i], será o valor de Prêmio especificado no Anexo I '
+        'a ser pago pelo Comprador ao Vendedor na Data de Pagamento do Prêmio;'), S['item']))
+    st.append(Paragraph(_sub(
+        'f. <b>Data de Pagamento do Prêmio[i]:</b> Para cada Operação[i], significa a data '
+        'indicada na Tabela de Referência em que o Prêmio[i] deverá ser pago ao Vendedor.'), S['item']))
+    st.append(Paragraph(_sub(
+        'g. <b>Tabela de Referência:</b> Os dados e condições financeiras aplicáveis a cada '
+        'Operação[i] contratada entre as Partes na Data de Negociação estão descritos na Tabela '
+        'de Referência disposta no Anexo I.'), S['item']))
+
+    # Seção 4
+    st.append(Paragraph('4. &nbsp;&nbsp; <u>Cálculo do Valor de Liquidação de cada Operação:</u>', S['section']))
+    st.append(Paragraph(_sub(
+        '<b>4.1.</b> A Operação de Opção de Compra é a operação em que o Comprador do Vendedor '
+        'adquire a opção de comprar a Quantidade de Mercadoria por um preço de exercício '
+        'determinado entre as Partes. A Operação de Opção de Venda é a operação em que o '
+        'Comprador do Vendedor adquire a opção de vender a Quantidade de Mercadoria por um preço '
+        'de exercício determinado entre as Partes. A Opção de Compra e a Opção de Venda são '
+        'doravante referidas de forma indistinta meramente como "Opção". Para adquirir o direito '
+        'de compra ou de venda, conforme o caso, o Comprador pagará um valor de Prêmio ao '
+        'vendedor em cada Operação[i]. Cada Operação[i] de Opção descrita nessa Confirmação será '
+        'liquidada por diferença em Reais, conforme a fórmula de cálculo disposta abaixo:'), S['body']))
+    st.append(Paragraph(_sub(
+        'Na Data de Exercício ou na Data Final de Verificação da Mercadoria de uma Operação[i], '
+        'a depender da Forma de Exercício, o Agente de Cálculo apurará, com base nas variáveis '
+        'aplicáveis à respectiva Operação[i], conforme indicadas na Tabela de Referência, o Valor '
+        'de Liquidação[i] a ser pago por uma Parte à outra, na forma seguir:'), S['body']))
+    st.append(Paragraph(_sub(
+        'a. &nbsp; <b>Opção de Compra (call):</b> Caso, na Data de Exercício[i], o Preço Final da '
+        'Mercadoria[i] seja superior ao Preço de Exercício[i] e consequentemente seja exercida a '
+        'opção de compra, o Valor de Liquidação significa o montante a ser pago pelo Vendedor[i] '
+        'ao Comprador[i], na Data de Vencimento[i], correspondente à diferença positiva entre o '
+        'Preço Final da Mercadoria[i] e o Preço de Exercício[i], multiplicado pela Quantidade[i], '
+        'conforme a relação abaixo.'), S['item']))
+    st.append(Paragraph(_sub(
+        'Valor de Liquidação[i] = Máx[(Preço Final da Mercadoria[i] – Preço de Exercício[i]); 0] '
+        'x Quantidade[i]'), S['formula']))
+    st.append(Paragraph(_sub(
+        'b. &nbsp; <b>Opção de Venda (put):</b> Caso, na Data de Exercício[i], o Preço Final da '
+        'Mercadoria[i] seja inferior ao Preço de Exercício[i] e consequentemente seja exercida a '
+        'opção de venda, o Valor de Liquidação[i] significa o montante a ser pago pelo '
+        'Vendedor[i] ao Comprador[i], na Data de Vencimento[i], correspondente à diferença '
+        'positiva entre o Preço de Exercício[i] e o Preço Final[i], multiplicado pela Quantidade, '
+        'conforme a relação abaixo.'), S['item']))
+    st.append(Paragraph(_sub(
+        'Valor de Liquidação[i] = Máx[(Preço de Exercício[i] – Preço Final da Mercadoria[i]); 0] '
+        'x Quantidade[i]'), S['formula']))
+    st.append(Paragraph(
+        '<b>4.2.</b> Para fins da metodologia de cálculo acima, os seguintes termos terão as '
+        'definições que lhe são atribuídas conforme abaixo:', S['body']))
+    defs42 = [
+        'a. <b>Mercadoria[i]:</b> Para cada Operação[i], significa o contrato futuro de '
+        'mercadoria (commodity) cujo código de negociação - Ticker[i] - na respectiva Bolsa de '
+        'Valores está indicado na Tabela de Referência.',
+        'b. <b>Comprador[i]:</b> Para cada Operação[i], significa a Parte compradora da Opção, '
+        'conforme indicada na Tabela de Referência;',
+        'c. <b>Data de Vencimento[i]:</b> significa a data em que ocorrerá a liquidação de cada '
+        'Operação[i], conforme indicadas na Tabela de Referência, mediante o desembolso do Valor '
+        'de Liquidação[i] pelo Comprador[i] ou pelo Vendedor[i], de acordo com a apuração '
+        'realizada pelo Agente de Cálculo na forma da cláusula anterior;',
+        'd. <b>Data de Exercício[i]:</b> Para cada Operação[i], significa a data indicada na '
+        'Tabela de Referência na qual o Comprador poderá exercer a Opção. Para as Opções '
+        'Asiáticas, a Data de Exercício é a Data Final de Verificação da Mercadoria[i].',
+        'e. <b>Data de Verificação[i]:</b> Significa a Data de Exercício no caso das Opções '
+        'Européias ou cada dia útil dentro do Período de Verificação do Preço da Mercadoria no '
+        'caso de Opções Asiáticas.',
+        'f. <b>Data Inicial de Verificação da Mercadoria[i]:</b> para cada Operação[i] que seja '
+        'uma Opção Asiática, significa a data indicada na Tabela de Referência.',
+        'g. <b>Data Final de Verificação da Mercadoria[i]:</b> para cada Operação[i] que seja '
+        'uma Opção Asiática, significa a data indicada na Tabela de Referência.',
+        'h. <b>Forma de Exercício:</b> significa a Forma de Exercício indicada na Tabela de '
+        'Referência dentre as alternativas abaixo: '
+        'i. <b>Europeia.</b> O Preço Final da Mercadoria a ser utilizado no cálculo do Valor de '
+        'Liquidação da Operação[i] será apurado com referência ao Preço da Mercadoria divulgada '
+        'na Data de Exercício[i]. Na respectiva Data de Exercício da Operação[i], caso o Valor '
+        'de Liquidação a ser pago pelo Vendedor seja positivo, então a Opção será exercida '
+        'automaticamente, independentemente de qualquer manifestação do Comprador[i]. '
+        'ii. <b>Asiática:</b> O Preço Final da Mercadoria a ser utilizado no cálculo do Valor de '
+        'Liquidação da Operação[i] será apurado com referência à média simples dos Preços da '
+        'Mercadoria apuradas diariamente no Período de Verificação do Preço da Mercadoria. Na '
+        'respectiva Data Final de Verificação da Mercadoria[i], caso o Valor de Liquidação a ser '
+        'pago pelo Vendedor seja positivo, então a Opção será exercida automaticamente, '
+        'independentemente de qualquer manifestação do Comprador.',
+        'i. <b>Quantidade[i]:</b> Para cada Operação[i], significa a quantidade indicada na '
+        'Tabela da Referência;',
+        'j. <b>Período de Verificação do Preço da Mercadoria:</b> significa todos os dias úteis '
+        'entre a Data Inicial de Verificação da Mercadoria[i] (inclusive) e a Data Final de '
+        'Verificação da Mercadoria[i]; (inclusive);',
+        'k. <b>Preço da Mercadoria[i]:</b> significa o preço de fechamento do contrato futuro da '
+        'Mercadoria referente ao Ticker[i] divulgado pela Bolsa de Valores[i] na Data de '
+        'Verificação[i].',
+        'l. <b>Preço Final da Mercadoria[i]:</b> '
+        'i. Para Opções Européias, o Preço Final[i] será a Preço da Mercadoria apurada na Data '
+        'de Exercício[i]. '
+        'ii. Para Opções Asiáticas, o Preço Final[i] será a média simples dos Preços da '
+        'Mercadoria apuradas em cada dia útil do Período de Verificação do Preço da Mercadoria. '
+        'Caso o Preço Final da Mercadoria[i] seja cotado em dólares norte-americanos, o Preço '
+        'Final da Mercadoria[i] será convertido para Reais pela USD PTAX;',
+        'm. <b>Preço de Exercício[i]:</b> para cada Operação[i], indicado na Tabela de '
+        'Referência pelo qual o Vendedor se obrigou a vender ou a comprar do Comprador a '
+        'Mercadoria[i], conforme o Tipo de Opção.',
+        'n. <b>USD PTAX:</b> significa a taxa de conversão entre o Real ("BRL") e o Dólar dos '
+        'Estados Unidos ("USD"), expressa pela quantidade de Reais por cada Dólar dos Estados '
+        'Unidos, referente a operações interbancárias de venda de Dólares dos Estados Unidos com '
+        'liquidação em dois dias úteis, conforme apurada pelo Banco Central do Brasil, e que pode '
+        'ser obtida na página da internet http://www.bcb.gov.br/?txcambio, opção "Cotações e '
+        'boletins", por volta das 13:15 horas divulgada na Data de Verificação da PTAX[i].;',
+        'o. <b>Data de Verificação da PTAX[i]:</b> Para cada Operação[i], significa a data '
+        'indicada na Tabela de Referência; e',
+        'p. <b>Vendedor[i]:</b> para cada Operação[i], significa a outra Parte que não a Parte '
+        'indicada como Comprador[i] na Tabela da Referência.',
+    ]
+    for d in defs42:
+        st.append(Paragraph(_sub(d), S['item']))
+
+    # Seção 5 — Declarações (mesmo texto do Termo)
+    st.append(Paragraph('5. &nbsp;&nbsp; <u>Declarações:</u>', S['section']))
+    st.append(Paragraph(
+        'Em adição às declarações feitas no Contrato, e como condição para a celebração desta '
+        'Confirmação, as Partes e o Garantidor, se aplicável, declaram individualmente:', S['body']))
+    decls = [
+        'a. Que estão agindo por conta própria, tendo tomado de forma independente a decisão '
+        'quanto a realizar a presente Operação de Derivativo, bem como quanto à adequação e '
+        'conveniência da mesma, com base em critérios próprios e, na medida que cada uma '
+        'considerou necessária, na opinião de seus próprios consultores;',
+        'b. Que não estão se baseando em qualquer comunicação (escrita ou verbal) da outra parte, '
+        'ou de qualquer pessoa agindo em seu nome, como forma de orientação para investimento ou '
+        'recomendação para participar da presente operação, ficando entendido que as informações e '
+        'explicações relativas aos termos e condições desta ou de qualquer outra Operação de '
+        'Derivativo, não deverão ser consideradas como orientação de investimento, nem como '
+        'recomendação de participação;',
+        'c. Que nenhuma comunicação (escrita ou verbal), recebida de uma Parte, ou de qualquer '
+        'pessoa agindo em seu nome, pela outra, será considerada como seguro ou garantia quanto à '
+        'expectativa dos resultados previstos da Operação;',
+        'd. Que têm conhecimento e experiência dentro do mercado de derivativos, suficientes para '
+        'entender a estrutura de cada Operação de Derivativos, incluindo, sem limitação, os '
+        'critérios determinados no Contrato para a apuração do Valor de Reposição, com os quais '
+        'concordam sem restrições;',
+        'e. Que estão cientes dos riscos inerentes às Operações de Derivativos e têm plena '
+        'capacidade financeira para assumir as obrigações que venham a ser exigíveis em '
+        'decorrência das Operações contratadas, mesmo nos piores cenários econômicos, bem como '
+        'capacidade técnica e operacional para cumprir todas as obrigações estabelecidas no '
+        'Contrato e em quaisquer Confirmações;',
+        'f. Que as declarações prestadas de acordo do Contrato continuam plenamente válidas;',
+        'g. Que tiveram a oportunidade de discutir absolutamente todos os termos do Contrato e de '
+        'cada Confirmação, incluindo, mas não se limitando, a forma de resolução de conflitos e os '
+        'critérios de cálculo, assumindo total responsabilidade pelos mesmos;',
+        'h. Que tiveram prévio acesso a todas as informações que julgavam necessárias à sua '
+        'decisão independente de celebração do Contrato e de cada Operação de Derivativos;',
+        'i. Que cada Operação de Derivativos tem para a Parte B o intuito de proteção contra '
+        'riscos financeiros a que estejam expostas, decorrentes de disparidades de taxas ou '
+        'índices entre seus direitos e obrigações, de acordo com as normas aplicáveis e políticas '
+        'internas relativas à condução de seus negócios;',
+        'j. Que uma Parte não está agindo como agente fiduciário da outra Parte ou como sua '
+        'assessora em relação a essa operação;',
+        'k. Que estão plenamente cientes de que todas e quaisquer obrigações pecuniárias '
+        'decorrentes da celebração de Operações sob o presente Contrato, por suas próprias '
+        'naturezas, estão sujeitas a efeitos decorrentes de fatores econômicos e/ou políticos, '
+        'entre outros, que podem levar à oscilações bruscas na cotação entre moedas estrangeiras e '
+        'a moeda corrente nacional, nos preços de mercadorias, nos índices de preços, nos índices '
+        'inflacionários, nas taxas de juros, entre outros e que podem produzir alterações '
+        'relevantes nas obrigações pecuniárias assumidas. Diante disso, as Partes reconhecem desde '
+        'já serem tais circunstâncias próprias e inerentes a Operações de Derivativos, sendo, '
+        'pois, referidas oscilações e alterações previsíveis e até esperadas para todos os fins e '
+        'efeitos;',
+        'l. Que diante da possibilidade de ocorrência das oscilações e variações mencionadas na '
+        'alínea anterior, as Partes reconhecem sua plena ciência de que o eventual aumento abrupto '
+        'e significativo do valor das obrigações assumidas não poderá ser tipificado como espécie '
+        'de onerosidade excessiva para o fim de escusá-la do cumprimento de suas obrigações;',
+        'm. Que buscaram aconselhamento de seus próprios consultores fiscais, jurídicos e '
+        'contábeis, no intuito de tomar uma decisão independente sobre a contratação da presente '
+        'Operação;',
+        'n. Que a Parte A é considerada instituição coberta para fins da Resolução CMN nº 4.662 e, '
+        'caso a Parte B não seja uma Entidade Regulada, que a Parte B <b><u>não</u></b> é uma '
+        'contraparte coberta para fins da Resolução CMN nº 4.662. Para fins desta declaração, '
+        '"Entidades Reguladas" significa as instituições autorizadas a funcionar pelo Banco '
+        'Central do Brasil, as entidades abertas ou fechadas de previdência complementar, as '
+        'sociedades seguradoras, os fundos de investimento e as companhias securitizadoras; e',
+        'o. Que estão cientes da possibilidade do Preço da Mercadoria[i] ser cotado a valores '
+        'negativos, o que poderá causar uma perda financeira sem qualquer limite para o Comprador, '
+        'e que o cálculo do Valor de Liquidação[i] conforme aqui definido não sofrerá qualquer '
+        'ajuste ou a perda para uma das Partes não será limitada de nenhuma forma ainda que o '
+        'Preço da Mercadoria[i] seja um número negativo. Ainda assim, as Partes concordam em '
+        'manter os parâmetros de cálculo previstos no Contrato e nesta Confirmação.',
+    ]
+    for d in decls:
+        st.append(Paragraph(_sub(d), S['item']))
+
+    # Seção 6 — Ratificação
+    st.append(Paragraph('6. &nbsp;&nbsp; <u>Ratificação</u>', S['section']))
+    st.append(Paragraph(
+        'A presente Confirmação é parte integrante e inseparável do Contrato, motivo pelo qual as '
+        'Partes ratificam, nesta oportunidade, todos os termos nele previstos.', S['body']))
+    st.append(Paragraph(
+        'E por estarem assim, justas e contratadas, as Partes, por seus representantes legais '
+        'devidamente constituídos e com poderes para celebrar Operações de Derivativos, assinam a '
+        'presente Confirmação em 2 (duas) vias de igual teor e forma, para o mesmo fim, juntamente '
+        'com as testemunhas abaixo.', S['body']))
+    st.append(Paragraph('[A próxima página contém as assinaturas da Confirmação de Operação de '
+                        'Derivativo]', S['center']))
+
+    # ── Página de assinaturas ────────────────────────────────────────────────
+    st.append(PageBreak())
+    st.append(Paragraph('[Página de assinaturas da Confirmação de Operação de Derivativo]', S['center']))
+    st.append(Paragraph('São Paulo, ' + d_ext + '.', S['sig']))
+    st.append(Spacer(1, 14))
+
+    line = '_' * 46
+
+    def _sig_block(name):
+        # Nome da parte em linha própria (span nas duas colunas); os dois
+        # campos Por:/____/Nome: lado a lado, alinhados na mesma altura.
+        data = [
+            [Paragraph('<b>' + name + '</b>', S['sigb']), Paragraph('', S['sig'])],
+            [Paragraph('Por:', S['sig']), Paragraph('Por:', S['sig'])],
+            [Paragraph(line, S['sig']), Paragraph(line, S['sig'])],
+            [Paragraph('Nome:', S['sig']), Paragraph('Nome:', S['sig'])],
+        ]
+        tbl = Table(data, colWidths=[doc.width / 2.0] * 2)
+        tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('SPAN', (0, 0), (1, 0)),
+            ('TOPPADDING', (0, 1), (-1, 1), 24),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (0, -1), 16),
+        ]))
+        return tbl
+
+    st.append(_sig_block('BANCO J.P. MORGAN S.A.'))
+    st.append(Spacer(1, 24))
+    st.append(_sig_block(nome))
+    st.append(Spacer(1, 24))
+    st.append(Paragraph(
+        '<b>Ao assinar a presente Confirmação, os representantes legais das Partes acima '
+        'identificados, declaram, expressa e irrevogavelmente, que possuem poderes suficientes '
+        'para representar as Partes na contratação da presente Operação de Derivativo.</b>', S['body']))
+    st.append(Spacer(1, 18))
+    wit = Table([
+        [Paragraph('Testemunhas:', S['sig']), Paragraph('', S['sig'])],
+        [Paragraph('1. &nbsp;-', S['sig']), Paragraph('2.-', S['sig'])],
+        [Paragraph(line, S['sig']), Paragraph(line, S['sig'])],
+        [Paragraph('Nome:', S['sig']), Paragraph('Nome:', S['sig'])],
+        [Paragraph('RG:', S['sig']), Paragraph('RG:', S['sig'])],
+    ], colWidths=[doc.width / 2.0] * 2)
+    wit.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                             ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                             ('TOPPADDING', (0, 1), (-1, 1), 18)]))
+    st.append(wit)
+
+    # ── Anexo I — Tabela de Referência (16 colunas) ──────────────────────────
+    st.append(PageBreak())
+    st.append(Paragraph('ANEXO I À CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS', S['annex']))
+    heads = ['i', 'Nº', 'Tipo da Opção[i]', 'Forma de Exercício', 'Ticker[i]',
+             'Bolsa de Valores', 'Quantidade', 'Data de Verificação da PTAX[i]',
+             'Comprador[i]', 'Prêmio[i]', 'Data de Pagamento do Prêmio[i]',
+             'Preço de Exercício[i]',
+             'Data Inicial de Verificação da Mercadoria[i]',
+             'Data Final de Verificação da Mercadoria[i]',
+             'Data de Exercício[i]', 'Data de Vencimento[i]']
+    data = [[Paragraph(_sub(_e(h)), S['th']) for h in heads]]
+    for i, r in enumerate(conf.get('rows') or [], start=1):
+        data.append([
+            Paragraph('<b>%d</b>' % i, S['td']),
+            Paragraph(_e(r.get('num')), S['td']),
+            Paragraph(_e(r.get('tipo')), S['td']),
+            Paragraph(_e(r.get('forma')), S['td']),
+            Paragraph(_e(r.get('ticker')), S['td']),
+            Paragraph(_e(r.get('bolsa')), S['td']),
+            Paragraph(_e(r.get('qtd')), S['td']),
+            Paragraph(_e(r.get('ptax')), S['td']),
+            Paragraph(_e(r.get('comprador')), S['td']),
+            Paragraph(_e(r.get('premio')), S['td']),
+            Paragraph(_e(r.get('dtPremio')), S['td']),
+            Paragraph(_e(r.get('strike')), S['td']),
+            Paragraph(_e(r.get('dtIni')), S['td']),
+            Paragraph(_e(r.get('dtFim')), S['td']),
+            Paragraph(_e(r.get('dtExerc')), S['td']),
+            Paragraph(_e(r.get('dtVenc')), S['td']),
+        ])
+    w = doc.width
+    widths = [w * f for f in (0.02, 0.08, 0.05, 0.055, 0.08, 0.055, 0.05, 0.07,
+                              0.05, 0.065, 0.07, 0.06, 0.08, 0.08, 0.065, 0.07)]
     tbl = Table(data, colWidths=widths, repeatRows=1)
     tbl.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, _BLACK),
