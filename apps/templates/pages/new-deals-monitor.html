@@ -11,6 +11,9 @@
    ============================================================================ */
 #ndm-page { --ndm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
 
+/* Respiro entre a última seção (Swaps) e o rodapé da página */
+#ndmZones { padding-bottom: 2.5rem; }
+
 /* Reference-date bar (mesmo padrão do NDF Summary: daterangepicker dd/mm/yyyy) */
 #ndm-page .ndm-datewrap { position: relative; width: 168px; }
 #ndm-page .ndm-datewrap input {
@@ -340,7 +343,7 @@
     // Cards de Confirmations por família de produto (só produtos com lógica de
     // confirmação — Other Publisher e Vanilla ficam de fora por definição).
     var CONF_BY_GROUP = {
-        'ndm-grp-ndf':     ['conf-ndf-commodities'],
+        'ndm-grp-ndf':     ['conf-ndf-commodities', 'conf-ndf-fwdstart'],
         'ndm-grp-options': ['conf-opt-commodities', 'conf-opt-fxo'],
         'ndm-grp-swaps':   []
     };

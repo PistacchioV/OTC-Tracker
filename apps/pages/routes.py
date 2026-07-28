@@ -19223,11 +19223,15 @@ def api_new_deals_monitor():
                     'family': g['family'], 'count': g['count']} for g in conf_groups],
     }]
 
-    def _conf_option_card(key, label, url, cache_dir, suffix, by_commodity):
-        fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
-                          ref.strftime('%Y%m%d') + suffix)
+    def _conf_option_card(key, label, url, cache_dirs, suffix, by_commodity):
+        if isinstance(cache_dirs, str):
+            cache_dirs = (cache_dirs,)
         groups = {}
-        if os.path.isfile(fp):
+        for cache_dir in cache_dirs:
+            fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
+                              ref.strftime('%Y%m%d') + suffix)
+            if not os.path.isfile(fp):
+                continue
             try:
                 with open(fp, encoding='utf-8') as fh:
                     data = json.load(fh)
@@ -19255,6 +19259,14 @@ def api_new_deals_monitor():
                         'count': g['count']} for g in ordered],
         }
 
+    # FWD Start tem duas grafias de pasta em produção (FwdStart / FWD Start),
+    # como nos cards de B3 — o card soma as duas. Segregação só por contraparte
+    # (NDF de moeda não tem mercadoria).
+    conf_cards.append(_conf_option_card(
+        'conf-ndf-fwdstart', 'NDF FWD Start', '/new_deals-ndf-fwdstart',
+        (os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
+         os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')),
+        '_ndffwdstart.json', False))
     conf_cards.append(_conf_option_card(
         'conf-opt-commodities', 'Commodities Options', '/new_deals-opt-commodities',
         CACHE_BASE_DIR, '_optcomm.json', True))
