@@ -62,15 +62,9 @@
                     </div>
                     <h5 class="text-center text-muted mt-2 mb-0">Dark</h5>
                 </div>
-                <div class="col-4" id="theme-system">
-                    <div class="form-check card-radio">
-                        <input class="form-check-input" id="layout-color-system" name="data-bs-theme" type="radio" value="system"/>
-                        <label class="form-check-label p-0 w-100" for="layout-color-system">
-                            <img alt="System" class="img-fluid" src="{{ config.ASSETS_ROOT }}/images/layouts/theme-system.png"/>
-                        </label>
-                    </div>
-                    <h5 class="text-center text-muted mt-2 mb-0">System</h5>
-                </div>
+<!-- O modo 'System' (corpo claro + barras escuras) foi aposentado: o padrão
+     da casa é light = tudo claro e dark = tudo escuro (config.js normaliza
+     configs antigas persistidas). -->
             </div>
         </div>
 

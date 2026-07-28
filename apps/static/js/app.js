@@ -647,29 +647,16 @@ class LayoutCustomizer {
     }
 
     changeTheme(color) {
-        this.config.theme = color;
-
-        if (color === 'dark') {
-            this.html.setAttribute("data-bs-theme", "dark");
-            this.config.topbar.color = "dark";
-            this.config.menu.color = "dark";
-            this.html.setAttribute("data-topbar-color", "dark");
-            this.html.setAttribute("data-menu-color", "dark");
-        } else if (color === 'system') {
-            // body stays light; topbar + sidenav go dark
-            this.html.setAttribute("data-bs-theme", "light");
-            this.config.topbar.color = "dark";
-            this.config.menu.color = "dark";
-            this.html.setAttribute("data-topbar-color", "dark");
-            this.html.setAttribute("data-menu-color", "dark");
-        } else {
-            // light: everything light
-            this.html.setAttribute("data-bs-theme", "light");
-            this.config.topbar.color = "light";
-            this.config.menu.color = "light";
-            this.html.setAttribute("data-topbar-color", "light");
-            this.html.setAttribute("data-menu-color", "light");
-        }
+        // Padrão da casa: só existem dois visuais — light (tudo claro) e dark
+        // (tudo escuro). O antigo modo 'system' (corpo claro + barras escuras)
+        // é tratado como light; config.js normaliza o que ficou persistido.
+        const theme = color === 'dark' ? 'dark' : 'light';
+        this.config.theme = theme;
+        this.config.topbar.color = theme;
+        this.config.menu.color = theme;
+        this.html.setAttribute("data-bs-theme", theme);
+        this.html.setAttribute("data-topbar-color", theme);
+        this.html.setAttribute("data-menu-color", theme);
 
         this.setSwitchFromConfig();
     }

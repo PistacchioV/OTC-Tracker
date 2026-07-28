@@ -75,6 +75,17 @@
         parsed = null;
     }
     let config = parsed || htmlConfig;
+
+    // Padrão da casa (para TODOS os usuários): as cores de topbar e menu
+    // seguem SEMPRE o tema — light = tudo claro, dark = tudo escuro. Configs
+    // antigas persistidas (tema 'system' com barras escuras, cores avulsas do
+    // customizer) são normalizadas aqui e regravadas, senão um usuário fica
+    // preso ao visual fora do padrão sem saber por quê.
+    if (config.theme !== 'dark') config.theme = 'light';
+    config.topbar.color = config.theme;
+    config.menu.color = config.theme;
+    localStorage.setItem(storageKey, JSON.stringify(config));
+
     window.config = config;
 
     // Apply layout attributes immediately
