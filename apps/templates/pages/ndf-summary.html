@@ -155,7 +155,11 @@
    shape), so every action (Delete, Confirm, …) shares the exact same format
    regardless of its icon. New row actions should reuse .ops-row-act. */
 #ops-page .ops-row-act {
-    width: 32px; height: 32px; padding: 0; flex: 0 0 auto;
+    /* min/max travam o tamanho: nenhuma regra do tema (min-width de .btn etc.)
+       pode deixar um botão de ação maior que o outro. */
+    width: 32px; height: 32px;
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    padding: 0; flex: 0 0 auto;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
     border-radius: 10px !important;   /* rounded square — NOT a circle */
@@ -280,9 +284,10 @@
         </div>
     </div>
 
-    <!-- Settlement Summary table (narrower + centred: few, short columns) -->
+    <!-- Settlement Summary table (centred, wide enough for every column to fit
+         without horizontal scroll, but not the full page width) -->
     <div class="row mt-2 justify-content-center">
-        <div class="col-xxl-8 col-xl-10 col-12">
+        <div class="col-xxl-10 col-xl-12 col-12">
             <div class="card ops-tcard">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h4 class="card-title" data-lang="ops-summary-title">Settlement Summary</h4>
@@ -323,6 +328,7 @@
                                     <th>Settlement Net</th>
                                     <th>Direction</th>
                                     <th>Account</th>
+                                    <th data-lang="ops-col-obs">Observation</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
@@ -333,6 +339,7 @@
                                     <th><input type="text" placeholder="Settlement Net"></th>
                                     <th><input type="text" placeholder="Direction"></th>
                                     <th><input type="text" placeholder="Account"></th>
+                                    <th><input type="text" placeholder="Observation"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -560,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return dt;
     }
 
-    var dtSummary = initTable('ops-summary-table', 6);   // 6 data cols (Counterparty…Account)
+    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observation)
     var dtTrade   = initTable('ops-trade-table', 14, 50); // 14 data cols (LEGAL…DIFFERENCE); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
@@ -627,9 +634,12 @@ document.addEventListener('DOMContentLoaded', function () {
         dtSummary.clear();
         (j.summary || []).forEach(function (r) {
             var st = statusPill(r.status);
+            // esc() não escapa aspas — trocar " por &quot; para o value do input
+            var obsVal = esc(r.obs || '').replace(/"/g, '&quot;');
+            var obs = '<input type="text" class="ops-cell-inp ops-obs-inp" value="' + obsVal + '">';
             dtSummary.row.add([cb, summaryActionsCell(), st,
                 esc(r.counterparty), esc(r.receive), esc(r.pay), esc(r.net_type),
-                esc(r.direction), accountHtml(r.account)]);
+                esc(r.direction), accountHtml(r.account), obs]);
         });
         dtSummary.draw();
     }
@@ -782,6 +792,33 @@ document.addEventListener('DOMContentLoaded', function () {
                   text: t('ops-gen-fail', 'Request failed.'), icon: 'error', confirmButtonColor: '#dc3545' });
           })
           .finally(function () { $btn.prop('disabled', false); });
+    });
+
+    // ── Observation: free note per Settlement Summary row, saved on blur/change
+    //    in the same day overlay as the status, so it survives reloads. Manual
+    //    (Add row) rows are skipped — their counterparty cell is an input, not
+    //    a cockpit name the overlay can key on.
+    $('#ops-summary-table tbody').on('change', '.ops-obs-inp', function () {
+        var $inp = $(this);
+        var rowApi = dtSummary.row($inp.closest('tr'));
+        var d = rowApi.data();
+        if (!d || /<input/i.test(d[3] || '')) return;
+        var name = decodeHtml(d[3]).trim();
+        if (!name) return;
+        // Mantém o dado da linha em sincronia com o que foi digitado — sem isso
+        // um sort/filtro redesenharia a célula com o valor antigo.
+        d[9] = '<input type="text" class="ops-cell-inp ops-obs-inp" value="' +
+               esc($inp.val()).replace(/"/g, '&quot;') + '">';
+        fetch('/api/ndf-summary/observation', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparty: name, text: $inp.val() })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              // Feedback discreto: borda azul = salvo, vermelha = falhou.
+              $inp.css('border-color', res && res.ok ? 'var(--ops-blue)' : '#dc3545');
+              setTimeout(function () { $inp.css('border-color', ''); }, 1200);
+          })
+          .catch(function () { $inp.css('border-color', '#dc3545'); });
     });
 
     // ── TEDs: e-mail the TED release request (Pay filled, account BCO ≠ 376,

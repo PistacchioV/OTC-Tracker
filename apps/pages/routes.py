@@ -9374,6 +9374,7 @@ def _ndfsum_collect(ref):
             'net_type': net_type,
             'direction': direction,
             'account': _ndfsum_account_fmt(banking, direction),
+            'obs': (sum_meta.get(cpty) or {}).get('obs') or '',
         })
 
     # B3 side: Operations B3 settlement (Resgate) rows for FX-whitelisted
@@ -9522,6 +9523,41 @@ def api_ndf_summary_mark_sent():
         return jsonify({'ok': True, 'updated': updated})
     except Exception as e:
         log.error('[ndf-summary] mark-sent failed:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+
+
+@blueprint.route('/api/ndf-summary/observation', methods=['POST'])
+def api_ndf_summary_observation():
+    """Observação livre por contraparte no Settlement Summary — persistida no
+    mesmo overlay diário do status (Generated/Sent), então sobrevive a reload e
+    troca de reference date. Texto vazio limpa a observação."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    name = str(payload.get('counterparty', '') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
+    text = str(payload.get('text', '') or '').strip()
+    try:
+        path, meta = _ndfsum_meta_load(ref)
+        # O overlay é chaveado pelo nome exato do cockpit; casa por _fcst_norm
+        # para não criar chave duplicada por diferença de caixa/espaços.
+        key = next((k for k in meta if _fcst_norm(k) == _fcst_norm(name)), name)
+        entry = meta.get(key) or {}
+        if text:
+            entry['obs'] = text
+        else:
+            entry.pop('obs', None)
+        meta[key] = entry
+        _ndfsum_meta_save(path, meta)
+        return jsonify({'ok': True})
+    except Exception as e:
+        log.error('[ndf-summary] observation save failed:\n%s', traceback.format_exc())
         return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
 
 
