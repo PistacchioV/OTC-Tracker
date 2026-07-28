@@ -17947,12 +17947,9 @@ def api_generic_nd_update_cache(product, deal_id):
 
     # Save to Intrag NDF when Status→Success and client is BANCO JP MORGAN
     # (fwd-start / other-publishers share this generic endpoint).
-    cl_lower = (updated_deal.get('Client', '') or '').lower()
-    if str(updates.get('Status', '')) == 'Success' and 'banco' in cl_lower and 'morgan' in cl_lower:
-        try:
-            _save_intrag_ndf_entry(updated_deal)
-        except Exception as exc:
-            log.error('[NDF GENERIC PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
+    # As páginas NDF genéricas (Vanilla / Other Publisher / FWD Start) ainda NÃO
+    # alimentam a Intrag NDF — a lógica será definida depois. Quando for a hora,
+    # reativar aqui o _save_intrag_ndf_entry para cliente Banco J.P. Morgan.
     if str(updates.get('Status', '')) == 'Success':
         _generic_nd_pc_trigger(product, updated_deal)       # → pending confirmation
 
@@ -18491,13 +18488,8 @@ def api_generic_nd_mapping_b3(product):
                         pass
 
         if success_deal is not None:
-            cl_low = (success_deal.get('Client', '') or '').lower()
-            if 'banco' in cl_low and 'morgan' in cl_low:
-                try:
-                    _save_intrag_ndf_entry(success_deal)
-                except Exception as exc:
-                    log.error('[MAPPING-B3 %s] Intrag save failed for deal=%r: %s',
-                              product, deal_text, exc)
+            # As páginas NDF genéricas ainda NÃO alimentam a Intrag NDF — a
+            # lógica será definida depois (reativar _save_intrag_ndf_entry aqui).
             _generic_nd_pc_trigger(product, success_deal)   # → pending confirmation
 
         results.append({

@@ -145,6 +145,36 @@
 [data-bs-theme=dark] .daterangepicker:after { border-bottom-color: #2b2f3a; }
 [data-bs-theme=dark] .daterangepicker .calendar-table th,
 [data-bs-theme=dark] .daterangepicker .calendar-table td { color: var(--ins-body-color); }
+
+/* ── Zonas (B3 × Intrag) e subgrupos (NDF / Options / Swaps) ─────────────── */
+#ndm-page .ndm-zone-title {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .95rem; font-weight: 700; margin: 0 0 .35rem;
+    color: var(--ins-body-color);
+}
+#ndm-page .ndm-zone-title .ndm-zone-ico {
+    width: 28px; height: 28px; border-radius: 8px; display: inline-flex;
+    align-items: center; justify-content: center; color: #fff;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+}
+#ndm-page .ndm-zone-title .ndm-zone-ico i { font-size: 15px; }
+#ndm-page .ndm-grp { margin-top: 1rem; }
+#ndm-page .ndm-grp-title {
+    font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ins-secondary-color, #8a8a8f);
+    display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem;
+}
+#ndm-page .ndm-grp-title::after {
+    content: ''; flex: 1; height: 1px;
+    background: var(--ins-border-color, rgba(0,0,0,.1));
+}
+@media (min-width: 1200px) {
+    #ndm-page .ndm-zone--intrag {
+        border-left: 1px dashed var(--ins-border-color, rgba(0,0,0,.12));
+        padding-left: 1.25rem; height: 100%;
+    }
+}
 </style>
 {% endblock extra_css %}
 
@@ -171,8 +201,9 @@
         </div>
     </div>
 
-    <!-- Cards (preenchidos pelo JS a partir de /api/new-deals/monitor) -->
-    <div class="row row-cols-xxl-4 row-cols-xl-3 row-cols-md-2 row-cols-1 g-3" id="ndmGrid"></div>
+    <!-- Zonas (preenchidas pelo JS a partir de /api/new-deals/monitor):
+         esquerda = registro na B3, direita = Intrag; subgrupos NDF/Options/Swaps -->
+    <div class="row g-4" id="ndmZones"></div>
 
 </div>
 {% endblock page_content %}
@@ -189,6 +220,7 @@
         'ndf-commodities':    'ti-wheat',
         'ndf-fwdstart':       'ti-player-skip-forward',
         'ndf-otherpublisher': 'ti-news',
+        'ndf-vanilla':        'ti-droplet',
         'opt-commodities':    'ti-chart-candle',
         'opt-fxo':            'ti-currency-dollar',
         'opt-equity':         'ti-chart-line',
@@ -257,12 +289,64 @@
             '</div>');
     }
 
+    // Zonas: esquerda = registro na B3, direita = Intrag — ambas com os
+    // subgrupos NDF / Options / Swaps na mesma ordem.
+    var LAYOUT = [
+        { cls: 'col-xl-8', zone: '', icon: 'ti-building-bank',
+          titleKey: 'ndm-zone-b3', title: 'B3 Registration', cols: 'row-cols-xxl-3 row-cols-md-2 row-cols-1',
+          groups: [
+              { key: 'ndm-grp-ndf',     label: 'NDF',     cards: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla'] },
+              { key: 'ndm-grp-options', label: 'Options', cards: ['opt-commodities', 'opt-fxo', 'opt-equity'] },
+              { key: 'ndm-grp-swaps',   label: 'Swaps',   cards: ['swap-equities', 'swap-cem'] }
+          ] },
+        { cls: 'col-xl-4', zone: ' ndm-zone--intrag', icon: 'ti-building',
+          titleKey: 'ndm-zone-intrag', title: 'Intrag', cols: 'row-cols-1',
+          groups: [
+              { key: 'ndm-grp-ndf',     label: 'NDF',     cards: ['intrag-ndf'] },
+              { key: 'ndm-grp-options', label: 'Options', cards: ['intrag-option'] },
+              { key: 'ndm-grp-swaps',   label: 'Swaps',   cards: ['intrag-swap'] }
+          ] }
+    ];
+
+    function render(cards) {
+        var byKey = {};
+        cards.forEach(function (c) { byKey[c.key] = c; });
+        // Card ainda sem desenvolvimento no catálogo do servidor (Intrag Swap)
+        if (!byKey['intrag-swap']) {
+            byKey['intrag-swap'] = { key: 'intrag-swap', label: 'Intrag Swap', url: null,
+                                     soon: true, total: 0, statuses: {} };
+        }
+        var used = {};
+        var html = LAYOUT.map(function (z) {
+            var groups = z.groups.map(function (g) {
+                var cs = g.cards.filter(function (k) { return byKey[k]; })
+                    .map(function (k) { used[k] = true; return cardHtml(byKey[k]); }).join('');
+                if (!cs) return '';
+                return '<div class="ndm-grp">' +
+                       '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
+                       '<div class="row ' + z.cols + ' g-3">' + cs + '</div></div>';
+            }).join('');
+            return '<div class="' + z.cls + '"><div class="ndm-zone' + z.zone + '">' +
+                   '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ' + z.icon + '"></i></span>' +
+                   esc(t(z.titleKey, z.title)) + '</h5>' + groups + '</div></div>';
+        }).join('');
+        // Produtos fora do catálogo ("e etc") — grupo Others no fim, largura total
+        var extras = cards.filter(function (c) { return !used[c.key]; });
+        if (extras.length) {
+            html += '<div class="col-12"><div class="ndm-grp">' +
+                    '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t('ndm-grp-others', 'Others')) + '</span></div>' +
+                    '<div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">' +
+                    extras.map(cardHtml).join('') + '</div></div></div>';
+        }
+        document.getElementById('ndmZones').innerHTML = html;
+    }
+
     function load(ymd) {
         fetch('/api/new-deals/monitor' + (ymd ? '?date=' + encodeURIComponent(ymd) : ''))
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) return;
-                document.getElementById('ndmGrid').innerHTML = j.cards.map(cardHtml).join('');
+                render(j.cards || []);
             })
             .catch(function (e) { console.error('ndm load error', e); });
     }
@@ -293,5 +377,11 @@
     <span data-lang="ndm-empty">No operations imported for this date.</span>
     <span data-lang="ndm-dev">In development</span>
     <span data-lang="ndm-open">Open page</span>
+    <span data-lang="ndm-zone-b3">B3 Registration</span>
+    <span data-lang="ndm-zone-intrag">Intrag</span>
+    <span data-lang="ndm-grp-ndf">NDF</span>
+    <span data-lang="ndm-grp-options">Options</span>
+    <span data-lang="ndm-grp-swaps">Swaps</span>
+    <span data-lang="ndm-grp-others">Others</span>
 </div>
 {% endblock extra_javascript %}

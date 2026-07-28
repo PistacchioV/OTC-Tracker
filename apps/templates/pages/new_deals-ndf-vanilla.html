@@ -1731,7 +1731,10 @@ $(document).ready(function() {
                         var d = this.data();
                         var deal   = _sh(d[4]);
                         var status = _sh(d[2]);
-                        if ((status === 'Sent' || status === 'Error') && deal) {
+                        // Vanilla: o registro na B3 é feito por outra ferramenta (por
+                        // enquanto), então o mapping roda também para Status = New —
+                        // não há transição Sent nesta página.
+                        if ((status === 'New' || status === 'Sent' || status === 'Error') && deal) {
                             // Dedupe by Deal+Client so duplicate rows aren't sent/counted twice
                             var client = _sh(d[11]);
                             var key = deal + '|' + client;
@@ -1744,7 +1747,7 @@ $(document).ready(function() {
                     if (!sentDeals.length) {
                         Swal.fire({
                             title: t('swal-mapping-b3-title', 'Mapping B3 ID'),
-                            text: t('swal-mapping-no-sent', 'No operations with status "Sent" or "Error" to map.'),
+                            text: t('swal-mapping-no-new', 'No operations with status "New", "Sent" or "Error" to map.'),
                             icon: 'info',
                             confirmButtonText: t('swal-ok', 'OK'),
                             confirmButtonColor: '#198754'
