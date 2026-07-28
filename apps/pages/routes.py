@@ -17191,9 +17191,36 @@ def _cpd_load():
     try:
         with open(_cpd_path(), encoding='utf-8') as fh:
             data = json.load(fh)
-        return data if isinstance(data, list) else []
+        data = data if isinstance(data, list) else []
     except (json.JSONDecodeError, IOError, FileNotFoundError):
         return []
+    # Migração one-shot do formato legado (BANKING.PAY/RECEIVE, contatos sem
+    # id/appr, CGD string, NET ausente): normaliza TODOS os registros e
+    # persiste na primeira leitura em que algo mudou. Sem isso os ids de
+    # contas/contatos legados eram sorteados de novo a cada request (uuid) e o
+    # id que o modal manda num edit nunca batia com o do backend →
+    # 'not_found' mesmo com o registro existindo no JSON. A normalização é
+    # idempotente, então depois da primeira gravação nada mais muda.
+    changed = False
+    for rec in data:
+        if not isinstance(rec, dict):
+            continue
+        norm = {'CGD':      _cgd_norm(rec.get('CGD')),
+                'CONTACTS': _contacts_norm(rec.get('CONTACTS')),
+                'BANKING':  _bank_norm(rec.get('BANKING')),
+                'NET':      _net_norm(rec.get('NET'))}
+        for k, v in norm.items():
+            if rec.get(k) != v:
+                rec[k] = v
+                changed = True
+    if changed:
+        try:
+            _cpd_save_list(data)
+            log.info('[counterparty-details] legacy records migrated to the '
+                     'canonical shape (stable ids)')
+        except (IOError, OSError):
+            log.warning('[counterparty-details] legacy migration could not be saved')
+    return data
 
 
 def _cpd_save_list(data):
@@ -17346,6 +17373,16 @@ def _net_norm(net):
         'maker':   net.get('maker', '') or '',
         'checker': net.get('checker', '') or '',
     }
+
+
+# Migra o CounterpartyDetails.json já na subida do app (e não só no primeiro
+# request), para o modal do Reference Data — que lê o JSON estático direto —
+# encontrar os ids estáveis desde o primeiro acesso.
+try:
+    _cpd_load()
+except Exception:
+    log.warning('[counterparty-details] startup migration failed:\n%s',
+                traceback.format_exc())
 
 
 def _cpd_get_record(spn):
