@@ -17782,17 +17782,19 @@ def _ndm_deal_le(pkey, d):
     """Entidade (LE) de uma linha do monitor, para os subitens dos cards.
     Intrag: pelo portfolio code — INTRAGJP552 = LAW, INTRAGJP633 = ATA
     (Intrag NDF grava 'portfolio_code', Intrag Option grava 'portfolio').
-    B3: mesma convenção de bucketing do send-conecta — linha cujo Client é o
-    Banco J.P. Morgan é a perna-espelho da entidade intragrupo (ATA nos
-    produtos de equities, LAW nos demais); deal com LE = MGT (NDFs genéricos)
-    conta como MGT; o resto é registro do Banco → JPM."""
+    B3: deal com LE = MGT (NDFs genéricos) conta como MGT, mesmo quando o
+    Client é o Banco — MGT×JPM é registro da MGT, não da Lawton. Depois disso,
+    linha cujo Client é o Banco J.P. Morgan (e não a MGT) é a perna-espelho da
+    entidade intragrupo (ATA nos produtos de equities, LAW nos demais); o
+    resto é registro do Banco → JPM."""
     if pkey.startswith('Intrag'):
         code = str(d.get('portfolio_code') or d.get('portfolio') or '').strip().upper()
         return {'INTRAGJP552': 'LAW', 'INTRAGJP633': 'ATA'}.get(code, 'ATA')
-    if _NDM_JPM_RE.search(str(d.get('Client') or '')):
-        return 'ATA' if pkey in _NDM_ATA_DIRS else 'LAW'
     if str(d.get('LE') or '').strip().upper() == 'MGT':
         return 'MGT'
+    cl = str(d.get('Client') or '')
+    if _NDM_JPM_RE.search(cl) and 'MGT' not in cl.upper():
+        return 'ATA' if pkey in _NDM_ATA_DIRS else 'LAW'
     return 'JPM'
 
 
