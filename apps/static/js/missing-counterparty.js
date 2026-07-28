@@ -103,17 +103,25 @@ window.MissingCounterparty = (function () {
         var missing = this.isMissing(v.spn, v.acr);
         var badge   = this.badgeHtml();
 
-        // Status cell — when missing, the CP badge REPLACES the status badge
-        // visually (hide, don't destroy: cell data stays untouched, so a later
-        // registration — or the next draw — restores the original badge).
+        // Status cell — when missing, the CP badge REPLACES the whole cell
+        // content (stashed on the node for restore). Replacing beats hiding
+        // children: hide() misses text nodes / unexpected markup, which left
+        // "New" + badge side by side on some pages. Cell DATA stays untouched,
+        // so a draw re-renders the original status and this runs again.
         var stNode = t.cell(tr, c.status).node();
         if (stNode) {
             var $st = $(stNode);
-            $st.find('.missing-cp-badge').remove();
-            $st.children().show();
-            if (missing && !$st.find('.row-edit-field').length) {
-                $st.children().hide();
-                $st.append(badge);
+            if (!$st.find('.row-edit-field').length) {
+                var hasBadge = $st.find('.missing-cp-badge').length > 0;
+                if (missing && !hasBadge) {
+                    $st.data('cpOrig', $st.html());
+                    $st.html(badge);
+                } else if (!missing && hasBadge) {
+                    var orig = $st.data('cpOrig');
+                    if (orig != null) $st.html(orig);
+                    else $st.find('.missing-cp-badge').remove();
+                    $st.removeData('cpOrig');
+                }
             }
         }
 
