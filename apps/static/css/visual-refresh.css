@@ -647,6 +647,29 @@ body.vr-nav-pinned .vr-pin-btn {
   box-shadow: inset 0 0 0 1px var(--vr-card-border);
 }
 
+/* Janela estreita: o nav central deixa de ser absoluto (centrado na página) e
+   entra no fluxo flex ENTRE o grupo do logo e os controles da direita — pode
+   encolher (min-width: 0) e rolar na horizontal sem scrollbar visível, então
+   nunca sobrepõe o sino/tema/idioma/usuário. Acima de 1500px o layout
+   original (centralização absoluta perfeita) continua igual; abaixo de 992px
+   o nav já era escondido pelo d-lg-flex. */
+@media (max-width: 1499.98px) {
+  .vr-topnav {
+    position: static;
+    transform: none;
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+    overflow-x: auto;
+    scrollbar-width: none;        /* Firefox */
+    margin: 0 0.5rem;
+  }
+  .vr-topnav::-webkit-scrollbar { display: none; }
+  .app-topbar .topbar-menu > div.d-flex { order: 0; }              /* logo/menu */
+  .app-topbar .topbar-menu > div.d-flex:last-of-type { order: 2; } /* controles */
+}
+
 /* Botão de personalizar os atalhos do nav central */
 .vr-nav-edit {
   width: 30px; height: 30px; margin-left: 4px;
