@@ -19133,8 +19133,11 @@ def _ei_iter_files(base, doctype):
             if fn.startswith('.') or fn.startswith('~$'):
                 continue
             ext = os.path.splitext(fn)[1].lower()
-            # Only PDF documents are listed/previewed on this page.
-            if ext != '.pdf':
+            # Lista tudo que o Upload aceita (SSI costuma ser scan JPG/PNG, CGD
+            # chega como .msg, …) — só PDF deixava sumir arquivo presente na
+            # pasta (SSI da AMAGGI). Lixo de sistema (Thumbs.db, temporários)
+            # continua fora por não estar no whitelist.
+            if ext not in _EI_ALLOWED_UPLOAD:
                 continue
             full = os.path.join(dirpath, fn)
             try:
