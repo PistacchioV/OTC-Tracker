@@ -1095,8 +1095,12 @@ def build_opb3_mensageria_email(group):
     total = float(group.get('total') or 0.0)
 
     tit_label = {'swap': 'Swap', 'ter': 'NDF', 'opc': 'Opção'}.get(tit, group.get('tipo_titulo') or '')
-    if _fcst_norm_local(tipo_op) == 'pagamento de premio':
+    opn = _fcst_norm_local(tipo_op)
+    if opn == 'pagamento de premio':
         base = 'Prêmio ' + tit_label
+    elif opn == 'resgate' and tit == 'ter':
+        # Nomenclatura da macro atual: resgate de TER é "Vencimento de Termo"
+        base = 'Vencimento de Termo'
     else:
         base = (tipo_op.title() + (' ' + tit_label if tit_label else '')).strip()
     subject = '{} - Liquidação Banco x {} - {}'.format(base, cpty, ref_date)
@@ -1112,7 +1116,10 @@ def build_opb3_mensageria_email(group):
     body += _email_data_table(_MSG_TABLE_HEADERS, group.get('rows') or [])
 
     internal = group.get('internal')
-    if internal is not None and abs(abs(float(internal)) - abs(total)) > 0.005:
+    # Comparação ao centavo: qualquer divergência ≥ R$ 0,01 entre a somatória
+    # interna (Banco) e a da B3 mostra o "Favor considerar" — o arredondamento
+    # só filtra ruído de float abaixo de um centavo.
+    if internal is not None and round(abs(float(internal)), 2) != round(abs(total), 2):
         body += _gap(14) + (
             '<span style="font-size:13.5px;color:#333;font-family:' + _E_FONT + ';">Favor considerar:&nbsp;&nbsp;</span>' +
             _msg_highlight(_msg_flow_phrase(float(internal), cpty), '#d9efd9'))
