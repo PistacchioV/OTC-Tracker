@@ -1058,9 +1058,7 @@
                                         <th data-table-sort="">Economic Group</th>
                                         <th data-table-sort="">Signature Type</th>
                                         <th data-table-sort="">FepWeb ID</th>
-                                        <th data-table-sort="">Baixa Sem Abono</th>
                                         <th data-table-sort="">Pendência</th>
-                                        <th data-table-sort="">Abono</th>
                                     </tr>
                                     <!-- Linha de inputs para busca por coluna -->
                                         <tr class="column-search-input-bar" id="column-search-inputs">
@@ -1085,9 +1083,7 @@
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Economic Group"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Signature Type"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FepWeb ID"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Baixa Sem Abono"></th>
                                             <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Pendência"></th>
-                                            <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Abono"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1261,22 +1257,10 @@
                             <input type="text" id="ar_fepweb_id" class="form-control" placeholder="FepWeb ID…">
                         </div>
 
-                        <!-- Baixa Sem Abono -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Baixa Sem Abono</label>
-                            <input type="text" id="ar_baixa_sem_abono" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
-                        </div>
-
-                        <!-- Pendência -->
-                        <div class="col-md-3">
+                        <!-- Pendência (texto livre, não data) -->
+                        <div class="col-md-6">
                             <label class="form-label fw-semibold">Pendência</label>
-                            <input type="text" id="ar_pendencia" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
-                        </div>
-
-                        <!-- Abono -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Abono</label>
-                            <input type="text" id="ar_abono" class="form-control ar-date" placeholder="dd/mm/yyyy" autocomplete="off">
+                            <input type="text" id="ar_pendencia" class="form-control" placeholder="Pendência…">
                         </div>
 
                     </div><!-- end row g-3 -->
@@ -1413,8 +1397,8 @@ $(document).ready(function() {
                 // Date columns (dd/mm/yyyy) sort chronologically via an orthogonal
                 // yyyymmdd key — otherwise DataTables sorts them as plain strings
                 // (by day), so clicking the header never ordered oldest↔newest.
-                // Trade/Maturity/EA/Send/Return/Baixa Sem Abono/Pendência/Abono.
-                targets: [8, 9, 13, 14, 15, 21, 22, 23],
+                // Trade/Maturity/EA/Send/Return (Pendência agora é texto livre).
+                targets: [8, 9, 13, 14, 15],
                 render: function (data, type) {
                     if (type === 'sort' || type === 'type') {
                         var m = String(data == null ? '' : data).match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -1597,7 +1581,7 @@ $(document).ready(function() {
                      'ar_signature_type','ar_trade_date','ar_aging','ar_status',
                      'ar_trade_number','ar_pending_status','ar_ea','ar_send_date',
                      'ar_return_date','ar_break_reason','ar_comments','ar_fepweb_id',
-                     'ar_baixa_sem_abono','ar_pendencia','ar_abono'].forEach(function(id) {
+                     'ar_pendencia'].forEach(function(id) {
                         var el = document.getElementById(id);
                         if (el) el.value = '';
                     });
@@ -1618,7 +1602,7 @@ $(document).ready(function() {
                 "Maturity Date", "Trade Number", "Pending Status", "Owner", "EA",
                 "Send Date", "Return Date", "Break Reason",
                 "Comments", "Economic Group", "Signature Type",
-                "FepWeb ID", "Baixa Sem Abono", "Pendência", "Abono"
+                "FepWeb ID", "Pendência"
             ];
 
             var columnToggleWrapper = document.getElementById('pendColToggleWrap');
@@ -2101,9 +2085,7 @@ $(document).ready(function() {
         { label: 'Economic Group',   type: 'text',   dtCol: 18 },
         { label: 'Signature Type',   type: 'text',   dtCol: 19 },
         { label: 'FepWeb ID',        type: 'text',   dtCol: 20 },
-        { label: 'Baixa Sem Abono',  type: 'date',   dtCol: 21 },
-        { label: 'Pendência',        type: 'date',   dtCol: 22 },
-        { label: 'Abono',            type: 'date',   dtCol: 23 }
+        { label: 'Pendência',        type: 'text',   dtCol: 21 }
     ];
 
     var sfActive = [];
@@ -2176,7 +2158,7 @@ $(document).ready(function() {
         '<button type="button" class="btn btn-danger btn-sm rounded-circle ar-delete" title="Delete"><i class="ti ti-trash"></i></button>' +
         '</div>';
 
-    // Build one table row (24 cells: checkbox, actions, then the 22 columns) from
+    // Build one table row (22 cells: checkbox, actions, then the 20 columns) from
     // a DB row dict keyed by the page column names.
     function pcRowToArray(row) {
         var cells = [
@@ -2610,9 +2592,7 @@ $(document).ready(function() {
         var econGrp = document.getElementById('ar_economic_group').value.trim();
         var sigType = document.getElementById('ar_signature_type').value.trim();
         var fepweb  = document.getElementById('ar_fepweb_id').value.trim();
-        var bAbono  = document.getElementById('ar_baixa_sem_abono').value.trim();
         var pend    = document.getElementById('ar_pendencia').value.trim();
-        var abono   = document.getElementById('ar_abono').value.trim();
 
         // Required field validation
         var valid = true;
@@ -2631,14 +2611,14 @@ $(document).ready(function() {
             '<button type="button" class="btn btn-danger btn-sm rounded-circle ar-delete" title="Delete"><i class="ti ti-trash"></i></button>' +
             '</div>';
 
-        // Row array — all cells are plain text (columns 2–23)
+        // Row array — all cells are plain text (columns 2–21)
         var rowArray = [
             '<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="option">',
             actionsHtml,
             status, lob, spn, client, aging, prodType,
             tDate, matDate, tradeNo, pStatus, owner, ea,
             sendDate, retDate, bReason, comments,
-            econGrp, sigType, fepweb, bAbono, pend, abono
+            econGrp, sigType, fepweb, pend
         ];
 
         var _wasEdit = !!arEditTr;
@@ -2696,7 +2676,7 @@ $(document).ready(function() {
     // EDIT: open modal pre-filled with this row's data
     $('#pending-confirmation-table tbody').on('click', '.ar-edit', function() {
         var tr = $(this).closest('tr')[0];
-        var d  = table.row(tr).data(); // d[0..23] — plain text values
+        var d  = table.row(tr).data(); // d[0..21] — plain text values
         if (!d) return;
         arEditTr = tr;
 
@@ -2720,9 +2700,7 @@ $(document).ready(function() {
         document.getElementById('ar_economic_group').value  = d[18] || '';
         document.getElementById('ar_signature_type').value  = d[19] || '';
         document.getElementById('ar_fepweb_id').value       = d[20] || '';
-        document.getElementById('ar_baixa_sem_abono').value = d[21] || '';
-        document.getElementById('ar_pendencia').value       = d[22] || '';
-        document.getElementById('ar_abono').value           = d[23] || '';
+        document.getElementById('ar_pendencia').value       = d[21] || '';
         arSyncDatePickers();   // reflect the loaded dd/mm/yyyy values into the pickers
 
         arClearErrors();

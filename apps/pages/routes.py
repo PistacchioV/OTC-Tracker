@@ -12467,7 +12467,7 @@ _PC_COLUMNS = [
     'Status', 'LOB', 'SPN', 'Client', 'Aging', 'Product Type', 'Trade Date',
     'Maturity Date', 'Trade Number', 'Pending Status', 'Owner', 'EA', 'Send Date',
     'Return Date', 'Break Reason', 'Comments', 'Economic Group', 'Signature Type',
-    'FepWeb ID', 'Baixa Sem Abono', 'Pendência', 'Abono',
+    'FepWeb ID', 'Pendência',
 ]
 # Daily JSON snapshots of the pending DB (YYYY/MM/DD), for a future metrics page.
 _PC_SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'data',
@@ -12702,6 +12702,7 @@ def _pc_import_update(raw_bytes):
         r['Status'] = status
         r['Pending Status'] = pending_status
         r['Owner'] = _pc_banker_for_spn(spn)
+        _pc_refdata_enrich(r)        # Economic Group / Signature Type do RefData
         _pc_upsert_row(r)
         updated += 1
     try:
@@ -12885,8 +12886,11 @@ def _pc_delete_tn(category, tn):
 
 
 def _pc_insert_into(category, row):
+    # INSERT com colunas explícitas: funciona também num DB ainda não migrado
+    # (colunas legadas extras ficam NULL) — o VALUES posicional quebraria.
+    cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
     placeholders = ', '.join('?' for _ in _PC_COLUMNS)
-    _pc_write_exec(category, [('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, placeholders),
+    _pc_write_exec(category, [('INSERT INTO {} ({}) VALUES ({})'.format(_PC_TABLE, cols, placeholders),
                               [row.get(c, '') for c in _PC_COLUMNS])])
 
 
@@ -13018,6 +13022,21 @@ except Exception:
     log.warning('[pending-confirmation] could not start daily scheduler')
 
 
+def _pc_refdata_enrich(row):
+    """Preenche Economic Group / Signature Type da linha a partir do RefData
+    (chave: SPN; fallback: nome do Client) quando ainda estão vazios — todo
+    feed que insere linha no Pending Confirmation passa por aqui."""
+    rec = _fxo_refdata_by_spn().get(_norm_spn(row.get('SPN', '')))
+    if rec is None:
+        rec = _pc_refdata_by_name().get(_pc_norm(row.get('Client', '')))
+    if not rec:
+        return
+    if not str(row.get('Economic Group', '') or '').strip():
+        row['Economic Group'] = str(rec.get('ECONOMIC GROUP', '') or '').strip()
+    if not str(row.get('Signature Type', '') or '').strip():
+        row['Signature Type'] = str(rec.get('SIGNATURE TYPE', '') or '').strip()
+
+
 def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=None):
     """Build and insert a pending row from a Success+mapped New Deals deal.
     product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO),
@@ -13043,6 +13062,7 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
         row['Pending Status'] = pending_status or 'Pending OTC'
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
+        _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
         _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
     except Exception:
         log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
