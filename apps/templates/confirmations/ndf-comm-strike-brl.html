@@ -293,13 +293,13 @@
     body { padding: 18pt; }
     .page-break { page-break-before: always; border: none; }
   }
-  {% if doc_only %}
-  /* Modo documento (gera o .doc): sem painel, corpo em largura total */
-  #doc-body { margin-right: 0; }
-  {% endif %}
+  /* Modo documento (gera o .doc): sem painel, corpo em largura total.
+     A classe vem do Jinja no <body> — CSS puro, sem template tags aqui
+     (o linter do editor valida este bloco como CSS). */
+  body.doc-only #doc-body { margin-right: 0; }
 </style>
 </head>
-<body>
+<body{% if doc_only %} class="doc-only"{% endif %}>
 
 {% if not doc_only %}
 <!-- ══════════════════════════════════════════════════════════
@@ -673,9 +673,12 @@
 </div><!-- /doc-body -->
 
 {% if not doc_only %}
+<!-- Dados do servidor num bloco JSON próprio: o linter do editor não valida
+     application/json como JavaScript, então o Jinja não gera erro falso. -->
+<script type="application/json" id="conf-data">{{ conf | tojson }}</script>
 <script>
 // Dados injetados pelo servidor (grupo contraparte × mercadoria da reference date)
-var __CONF__ = {{ conf | tojson }};
+var __CONF__ = JSON.parse(document.getElementById('conf-data').textContent || 'null');
 
 // ── Salvar Word + PDF no Electronic Inventory ───────────────
 function saveToInventory(btn) {
