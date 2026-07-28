@@ -1816,6 +1816,22 @@ def api_dashboard_stats():
         cl = (d.get('Client') or '').lower()
         return 'banco' in cl or 'j.p morgan' in cl or 'jp morgan' in cl or 'jpmorgan' in cl
 
+    _jpm_re = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
+
+    def _gen_ndf_counted(d):
+        """NDF Vanilla / Other Publisher / FWD Start: nos gráficos de
+        distribuição e deal flow só contam os pares JPM×cliente, JPM×MGT,
+        JPM×Lawton e MGT×cliente. Os espelhos (MGT×JPM) e demais combinações
+        (MGT×Lawton, LE fora de JPM/MGT) ficam de fora para o mesmo deal
+        intragrupo não ser contado duas vezes."""
+        le = (d.get('LE') or '').strip().upper()
+        if le == 'JPM':
+            return True
+        if le == 'MGT':
+            cl = (d.get('Client') or '')
+            return 'LAWTON' not in cl.upper() and not _jpm_re.search(cl)
+        return False
+
     def _product_from_path(file_path):
         """Derive product label from directory path relative to new deals/ root.
         e.g. .../Option/Commodities/2026/06/file.json  → 'Option Commodities'
@@ -1894,9 +1910,15 @@ def api_dashboard_stats():
     optcomm_deals = [d for d in counted_deals if _fam(d) == 'OPT']
     fxo_deals     = [d for d in counted_deals if _fam(d) == 'FXO']
     swap_deals    = [d for d in counted_deals if _fam(d) == 'SWAP']
-    ndf_vanilla_deals  = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'vanilla']
-    ndf_otherpub_deals = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'otherpub']
-    ndf_fwdstart_deals = [d for d in ndf_deals if _ndf_bucket(d.get('_product')) == 'fwdstart']
+    # Os três NDF genéricos usam a regra própria de pares (LE × contraparte) em
+    # vez do filtro _is_bank — por isso partem de all_deals, não de counted_deals.
+    _gen_ndf_all = [d for d in all_deals if d.get('_type') == 'NDF']
+    ndf_vanilla_deals  = [d for d in _gen_ndf_all
+                          if _ndf_bucket(d.get('_product')) == 'vanilla' and _gen_ndf_counted(d)]
+    ndf_otherpub_deals = [d for d in _gen_ndf_all
+                          if _ndf_bucket(d.get('_product')) == 'otherpub' and _gen_ndf_counted(d)]
+    ndf_fwdstart_deals = [d for d in _gen_ndf_all
+                          if _ndf_bucket(d.get('_product')) == 'fwdstart' and _gen_ndf_counted(d)]
     ndf_comm_deals     = [d for d in ndf_deals if not _ndf_bucket(d.get('_product'))]
     opt_deals     = optcomm_deals + fxo_deals  # all options (stat card)
     pending_statuses = {'Pending', 'New', 'pending', 'new'}
@@ -1951,6 +1973,7 @@ def api_dashboard_stats():
                 product = _product_from_path(fp)
                 is_fxo_file = 'fxo' in product.lower()
                 ptype = _type_from_product(product)
+                gen_bucket = ''
                 if is_fxo_file:
                     target = monthly_fxo
                 elif ptype == 'OPT':
@@ -1958,22 +1981,25 @@ def api_dashboard_stats():
                 elif ptype == 'SWAP':
                     target = monthly_swap
                 else:
+                    gen_bucket = _ndf_bucket(product)
                     target = {'vanilla': monthly_ndf_vanilla,
                               'otherpub': monthly_ndf_otherpub,
                               'fwdstart': monthly_ndf_fwdstart}.get(
-                                  _ndf_bucket(product), monthly_ndf)
+                                  gen_bucket, monthly_ndf)
                 try:
                     with open(fp, 'r', encoding='utf-8') as fh:
                         data = json.load(fh)
                     # Same rule as the totals above: count every leg that carries a
                     # deal except the Banco J.P. Morgan leg — this keeps the client
                     # leg and one intragroup leg while dropping the mirror view, so
-                    # a deal seen from two sides is counted only once.
+                    # a deal seen from two sides is counted only once. Os NDF
+                    # genéricos (vanilla/other pub/fwd start) usam a regra de
+                    # pares LE × contraparte (_gen_ndf_counted).
                     cnt = sum(
                         1 for d in data
                         if isinstance(d, dict)
                         and (d.get('Deal') or '').strip()
-                        and not _is_bank(d)
+                        and (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
                     )
                     target[fdate.month - 1] += cnt
                 except Exception:
