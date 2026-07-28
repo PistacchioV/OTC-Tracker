@@ -186,7 +186,8 @@ _NOTIF_PAGE_URL = {
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
     'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
     'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
-    'Intrag NDF': '/intrag-ndf', 'Reconciliation': '/reconciliation-payrec',
+    'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
+    'Reconciliation': '/reconciliation-payrec',
     'Pending Confirmation': '/pending-confirmation',
 }
 
@@ -14771,6 +14772,9 @@ INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
 INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Option"
 ))
+INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Swap"
+))
 
 # Network share where generated Intrag NDF .txt files are written. Hardcoded
 # Windows path for the JPM machine (mirrors DB_PATH) — change per environment.
@@ -15803,6 +15807,249 @@ def api_intrag_option_mapping_intrag_id():
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
     results, err = _intrag_run_mapping(deals, 2, 'OPCAO', 8, _find_intrag_opt_entry)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'results': results})
+
+
+# ── Intrag Swap ───────────────────────────────────────────────────────────────
+# Mesmo modelo da Intrag NDF: entradas persistidas em day-files
+# YYYYMMDD_intrag_swap.json, ciclo New → Pending → Approved → Sent (4-eyes) e
+# geração de .txt (36 colunas do layout B3 de swap, separadas por ';') na mesma
+# pasta de rede da NDF. Não há feed automático — as linhas são criadas na página.
+
+def _find_intrag_swap_entry(deal_id, trade_date):
+    """Locate an Intrag Swap entry by deal id (+ optional start date to narrow
+    the daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
+    if not deal_id:
+        return None, None, None
+    ref = _parse_date_any(trade_date) if trade_date else None
+    candidate_files = []
+    if ref is not None:
+        fp = os.path.join(
+            INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+            ref.strftime('%Y%m%d') + '_intrag_swap.json'
+        )
+        if os.path.isfile(fp):
+            candidate_files.append(fp)
+    if not candidate_files and os.path.isdir(INTRAG_SWAP_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
+            for fname in files:
+                if fname.endswith('_intrag_swap.json'):
+                    candidate_files.append(os.path.join(root, fname))
+    for fp in candidate_files:
+        try:
+            with open(fp, 'r', encoding='utf-8') as fh:
+                entries = json.load(fh)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None
+
+
+@blueprint.route('/api/intrag/swap')
+def api_intrag_swap():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    date_str  = request.args.get('date', '').strip()       # YYYY-MM-DD (single day)
+    date_from = request.args.get('date_from', '').strip()  # YYYY-MM-DD (range start)
+    date_to   = request.args.get('date_to', '').strip()    # YYYY-MM-DD (range end)
+    suffix = '_intrag_swap.json'
+    entries = []
+    if date_from or date_to:
+        d_from = _parse_date_any(date_from)
+        d_to   = _parse_date_any(date_to)
+        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith(suffix):
+                        continue
+                    fdate = _parse_date_any(fname[:8])
+                    if fdate is None:
+                        continue
+                    if d_from and fdate < d_from:
+                        continue
+                    if d_to and fdate > d_to:
+                        continue
+                    try:
+                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+    elif date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fp = os.path.join(INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                              ref.strftime('%Y%m%d') + suffix)
+            if os.path.isfile(fp):
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    entries = json.load(fh)
+                if not isinstance(entries, list):
+                    entries = []
+        except Exception as exc:
+            log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
+    else:
+        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
+            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
+                for fname in sorted(files):
+                    if not fname.endswith(suffix):
+                        continue
+                    try:
+                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                            data = json.load(fh)
+                        if isinstance(data, list):
+                            entries.extend(data)
+                    except Exception as exc:
+                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+    return jsonify({'success': True, 'entries': entries})
+
+
+@blueprint.route('/api/intrag/swap/send-file', methods=['POST'])
+def api_intrag_swap_send_file():
+    """Generate the Intrag Swap .txt file(s) from the selected rows and flip
+    New/Approved → Sent. Same standard folder as NDF; file Intrag-Swap-YYYYMMDD.txt.
+
+    Body: { "items": [ { "deal_id": str, "cells": [...36...] } ] }. Rows are
+    grouped by Data Início (data col index 2) — one file per date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items')
+    if not isinstance(items, list) or not items:
+        rows = payload.get('rows')
+        if not isinstance(rows, list) or not rows:
+            return jsonify({'success': False, 'message': 'No rows provided'}), 400
+        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
+
+    START_DATE_IDX = 2   # Data Início within the 36 data columns
+    SENDABLE = {'New', 'Approved'}
+
+    groups = {}
+    sent_ids = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
+        if not cells:
+            continue
+        td_raw = cells[START_DATE_IDX] if len(cells) > START_DATE_IDX else ''
+        ref = _parse_date_any(td_raw) or datetime.now()
+        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
+        if it.get('deal_id'):
+            sent_ids.append((it['deal_id'], td_raw))
+
+    if not groups:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _cache_lock:
+            for key, grp in groups.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                os.makedirs(dir_path, exist_ok=True)
+                base = 'Intrag-Swap-' + key
+                candidate = base + '.txt'
+                n = 0
+                while os.path.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ').txt'
+                file_path = os.path.join(dir_path, candidate)
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
+                written.append(file_path)
+                log.info('[INTRAG SWAP] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
+
+            for deal_id, td_raw in sent_ids:
+                fp, entries, idx = _find_intrag_swap_entry(deal_id, td_raw)
+                if idx is None:
+                    continue
+                if (entries[idx].get('status') or 'New') in SENDABLE:
+                    entries[idx]['status'] = 'Sent'
+                    _atomic_write_json(fp, entries)
+    except Exception as exc:
+        log.error('[INTRAG SWAP] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Intrag Sent', 'Intrag Swap',
+                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'files': written, 'count': len(items)})
+
+
+@blueprint.route('/api/intrag/swap/edit', methods=['POST'])
+def api_intrag_swap_edit():
+    """Row-level edit on an Intrag Swap entry → status 'Pending', records maker."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    fields     = payload.get('fields') or {}
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    with _cache_lock:
+        fp, entries, idx = _find_intrag_swap_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if isinstance(fields, dict):
+            for k, v in fields.items():
+                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
+                    entries[idx][k] = v
+        entries[idx]['status']  = 'Pending'
+        entries[idx]['maker']   = session.get('user_sid', '')
+        entries[idx]['checker'] = ''
+        _atomic_write_json(fp, entries)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deal Updated', 'Intrag Swap', deal_id)
+    return jsonify({'success': True, 'status': 'Pending'})
+
+
+@blueprint.route('/api/intrag/swap/approve', methods=['POST'])
+def api_intrag_swap_approve():
+    """Move an Intrag Swap entry Pending → Approved (maker ≠ checker)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    user_sid = session.get('user_sid', '')
+    with _cache_lock:
+        fp, entries, idx = _find_intrag_swap_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if (entries[idx].get('status') or '') != 'Pending':
+            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
+        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+            return jsonify({'success': False,
+                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
+        entries[idx]['status']  = 'Approved'
+        entries[idx]['checker'] = user_sid
+        _atomic_write_json(fp, entries)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Status Updated', 'Intrag Swap', deal_id + ' → Approved')
+    return jsonify({'success': True, 'status': 'Approved'})
+
+
+@blueprint.route('/api/intrag/swap/mapping-intrag-id', methods=['POST'])
+def api_intrag_swap_mapping_intrag_id():
+    # Boletas CSV: linhas de swap identificadas pela col B == 'SWAP' com o B3 ID
+    # na col C (mesmo formato das linhas de NDF). Ajustar match_col/match_val/b3_col
+    # aqui se o layout real do CSV de retorno para swap for diferente.
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, err = _intrag_run_mapping(deals, 1, 'SWAP', 2, _find_intrag_swap_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
