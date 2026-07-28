@@ -1873,6 +1873,9 @@ def api_dashboard_stats():
                         data = json.load(fh)
                     for d in data:
                         if isinstance(d, dict) and (d.get('Deal') or '').strip():
+                            # Cancelado via API não conta em nenhuma métrica
+                            if str(d.get('Status') or '').strip() == 'Canceled':
+                                continue
                             d['_fdate']   = fdate.strftime('%Y-%m-%d')
                             d['_product'] = product
                             d['_type']    = deal_type
@@ -1999,6 +2002,7 @@ def api_dashboard_stats():
                         1 for d in data
                         if isinstance(d, dict)
                         and (d.get('Deal') or '').strip()
+                        and str(d.get('Status') or '').strip() != 'Canceled'
                         and (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
                     )
                     target[fdate.month - 1] += cnt
@@ -13828,40 +13832,107 @@ def _fxo_persist_deals(deals):
 # API pull NEVER overwrites an existing Deal+Client — a deal already in the day
 # file may have been worked (Approved/Sent) and a 10-min poll must not reset it.
 
-def _fxo_persist_new_deals(deals):
-    """Insert only deals whose Deal+Client is not yet in the day file.
-    Returns the list actually inserted (existing ones are left untouched)."""
-    fresh, seen_files = [], {}
-    for d in deals:
+# Campos que NUNCA entram na comparação de amend: Status/B3_ID/Maker/Checker
+# são do fluxo da página; SPN/Client/TaxID vêm do RefData (o re-enriquecimento
+# os altera sem a operação ter mudado); AmendChanged é o próprio marcador.
+_ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'SPN', 'Client', 'TaxID',
+                  'AmendChanged'}
+
+
+def _nd_api_amend(stored, incoming):
+    """Bate um deal já importado com a versão atual da API. Campo de dado
+    diferente → aplica o valor novo, Status = 'Amend' e registra o nome do
+    campo em AmendChanged (o front destaca as células). Deal já Canceled não
+    é reaberto. Retorna a lista de campos alterados."""
+    if str(stored.get('Status', '') or '').strip() == 'Canceled':
+        return []
+    changed = []
+    for k, v in incoming.items():
+        if k in _ND_AMEND_SKIP:
+            continue
+        if str(stored.get(k, '') or '').strip() != str(v or '').strip():
+            stored[k] = v
+            changed.append(k)
+    if changed:
+        stored['Status'] = 'Amend'
+        prev = stored.get('AmendChanged') or []
+        stored['AmendChanged'] = sorted(set(prev) | set(changed))
+    return changed
+
+
+def _nd_cancel_in_file(fpath, deal_name):
+    """Marca Status='Canceled' nas linhas com esse Deal no arquivo de cache.
+    Retorna quantas linhas mudaram (0 = arquivo/deal inexistente ou já
+    cancelado)."""
+    if not deal_name or not os.path.isfile(fpath):
+        return 0
+    with _cache_lock:
         try:
-            ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
-        except (ValueError, TypeError):
-            ref_date = datetime.now()
-        fpath = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'),
-                             ref_date.strftime('%Y%m%d') + '_optfxo.json')
-        if fpath not in seen_files:
-            keys = set()
+            with open(fpath, encoding='utf-8') as fh:
+                deals = json.load(fh)
+            if not isinstance(deals, list):
+                deals = [deals]
+        except (IOError, json.JSONDecodeError):
+            return 0
+        n = 0
+        for dd in deals:
+            if isinstance(dd, dict) and (dd.get('Deal') or '').strip() == deal_name \
+                    and (dd.get('Status') or '').strip() != 'Canceled':
+                dd['Status'] = 'Canceled'
+                n += 1
+        if n:
+            _atomic_write_json(fpath, deals)
+        return n
+
+
+def _fxo_persist_new_deals(deals):
+    """Insert deals whose Deal+Client is new; existing ones are compared with
+    the incoming API data — any difference applies the new values, flips the
+    Status to Amend and records AmendChanged. Returns (inserted, amended_names)."""
+    fresh, amended, seen_files = [], [], {}
+    with _cache_lock:
+        for d in deals:
             try:
-                with open(fpath, encoding='utf-8') as fh:
-                    existing = json.load(fh)
-                for e in (existing if isinstance(existing, list) else [existing]):
-                    keys.add(((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()))
-            except (IOError, json.JSONDecodeError):
-                pass
-            seen_files[fpath] = keys
-        key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
-        if key not in seen_files[fpath]:
-            seen_files[fpath].add(key)      # dedup within the same pull too
+                ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
+            except (ValueError, TypeError):
+                ref_date = datetime.now()
+            fpath = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'),
+                                 ref_date.strftime('%Y%m%d') + '_optfxo.json')
+            if fpath not in seen_files:
+                existing = []
+                try:
+                    with open(fpath, encoding='utf-8') as fh:
+                        existing = json.load(fh)
+                    if not isinstance(existing, list):
+                        existing = [existing]
+                except (IOError, json.JSONDecodeError):
+                    existing = []
+                idx = {((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()): e
+                       for e in existing if isinstance(e, dict)}
+                seen_files[fpath] = {'existing': existing, 'idx': idx, 'dirty': False}
+            st = seen_files[fpath]
+            key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
+            if key in st['idx']:
+                if _nd_api_amend(st['idx'][key], d):
+                    amended.append(d.get('Deal') or '')
+                    st['dirty'] = True
+                continue
+            st['idx'][key] = d                  # dedup within the same pull too
             fresh.append(d)
+        for fpath, st in seen_files.items():
+            if st['dirty']:
+                _atomic_write_json(fpath, st['existing'])
     if fresh:
         _fxo_persist_deals(fresh)
-    return fresh
+    return fresh, amended
 
 
 def _fxo_deals_from_api_records(records, sid):
-    """Athena getTrades records → Opt-FXO deal dicts (same builder as XLSX)."""
+    """Athena getTrades records → (deal dicts, cancelados). Cancelados são os
+    registros isCancelled/isDead: (Deal, TradeDate dd/mm/yyyy) para marcar
+    Status='Canceled' no cache quando o deal já tiver sido importado."""
     refmap = _fxo_refdata_by_spn()
-    deals = []
+    deals, cancelled = [], []
     for rec in records or []:
         if not isinstance(rec, dict):
             continue
@@ -13871,11 +13942,14 @@ def _fxo_deals_from_api_records(records, sid):
             if n and n not in norm:
                 norm[n] = v
         if _api_rec_is_dead(norm):
+            nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
+            if nm:
+                cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
             continue
         deal = _fxo_deal_from_row(norm.get, sid, refmap)
         if deal:
             deals.append(deal)
-    return deals
+    return deals, cancelled
 
 
 def _fxo_api_pull(sid='API', actor_name='Athena API'):
@@ -13889,14 +13963,32 @@ def _fxo_api_pull(sid='API', actor_name='Athena API'):
     date = datetime.now().strftime('%Y%m%d')
     payload = athena_api.fetch_fxo_trades(date)
     records = athena_api.extract_records(payload)
-    deals = _fxo_deals_from_api_records(records, sid)
-    inserted = _fxo_persist_new_deals(deals)
-    if inserted:
+    deals, dead = _fxo_deals_from_api_records(records, sid)
+    inserted, amended = _fxo_persist_new_deals(deals)
+    # isCancelled/isDead na API → deal já importado vira Status 'Canceled'
+    # (sai das métricas e dos arquivos gerados).
+    canceled = 0
+    for nm, td in dead:
+        try:
+            rd = datetime.strptime(td, '%d/%m/%Y') if td else datetime.now()
+        except ValueError:
+            rd = datetime.now()
+        canceled += _nd_cancel_in_file(
+            os.path.join(OPT_FXO_CACHE_DIR, rd.strftime('%Y'), rd.strftime('%m'),
+                         rd.strftime('%Y%m%d') + '_optfxo.json'), nm)
+    if inserted or amended or canceled:
+        bits = []
+        if inserted:
+            bits.append('{} imported'.format(len(inserted)))
+        if amended:
+            bits.append('{} amended'.format(len(amended)))
+        if canceled:
+            bits.append('{} canceled'.format(canceled))
         _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
-                             '{} deal{} imported from the Athena API'.format(
-                                 len(inserted), '' if len(inserted) == 1 else 's'))
+                             'Athena API: {} deal(s)'.format(', '.join(bits)))
     return {'success': True, 'date': date, 'fetched': len(records),
-            'parsed': len(deals), 'imported': len(inserted), 'deals': inserted}
+            'parsed': len(deals), 'imported': len(inserted),
+            'amended': len(amended), 'canceled': canceled, 'deals': inserted}
 
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
@@ -14102,12 +14194,14 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
 
 
 def _generic_nd_persist_new_deals(product, deals):
-    """Insert only deals whose Deal+Client is not yet in the product's day file.
-    Returns the list actually inserted (existing deals are left untouched)."""
+    """Insert deals whose Deal+Client is new in the product's day file; existing
+    ones are compared with the incoming API data — any difference applies the
+    new values, flips the Status to Amend and records AmendChanged (front
+    highlight). Returns (inserted, amended_names)."""
     cfg = _generic_nd_cfg(product)
     if not cfg:
-        return []
-    fresh, seen_files = [], {}
+        return [], []
+    fresh, amended, seen_files = [], [], {}
     with _cache_lock:
         for d in deals:
             try:
@@ -14117,28 +14211,30 @@ def _generic_nd_persist_new_deals(product, deals):
             dir_path = os.path.join(cfg['dir'], ref_date.strftime('%Y'), ref_date.strftime('%m'))
             fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + cfg['suffix'])
             if fpath not in seen_files:
-                existing, keys = [], set()
+                existing = []
                 try:
                     with open(fpath, encoding='utf-8') as fh:
                         existing = json.load(fh)
                     if not isinstance(existing, list):
                         existing = [existing]
-                    for e in existing:
-                        keys.add(((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()))
                 except (IOError, json.JSONDecodeError):
                     existing = []
-                seen_files[fpath] = (dir_path, existing, keys)
-            dir_path, existing, keys = seen_files[fpath]
+                idx = {((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()): e
+                       for e in existing if isinstance(e, dict)}
+                seen_files[fpath] = {'dir': dir_path, 'existing': existing, 'idx': idx}
+            st = seen_files[fpath]
             key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
-            if key in keys:
+            if key in st['idx']:
+                if _nd_api_amend(st['idx'][key], d):
+                    amended.append(d.get('Deal') or '')
                 continue
-            keys.add(key)
-            existing.append(d)
+            st['idx'][key] = d
+            st['existing'].append(d)
             fresh.append(d)
-        for fpath, (dir_path, existing, _keys) in seen_files.items():
-            os.makedirs(dir_path, exist_ok=True)
-            _atomic_write_json(fpath, existing)
-    return fresh
+        for fpath, st in seen_files.items():
+            os.makedirs(st['dir'], exist_ok=True)
+            _atomic_write_json(fpath, st['existing'])
+    return fresh, amended
 
 
 def _ndf_api_pull(sid='API', actor_name='Athena API'):
@@ -14160,13 +14256,19 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
             refmap_acr[_a] = _r
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
-    skipped_fwd_today = 0
+    skipped_fwd_today, dead = 0, []
     for rec in records:
         if not isinstance(rec, dict):
             continue
         target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
         if target is None:
             norm = _ndf_api_norm(rec)
+            if _api_rec_is_dead(norm):
+                # isCancelled/isDead: se o deal já foi importado, vira Canceled
+                nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
+                if nm:
+                    dead.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
+                continue
             instr = str(norm.get('INSTRUMENT TYPE') or '')
             if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
                 skipped_fwd_today += 1
@@ -14175,16 +14277,35 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
 
     targets = {}
     for product, deals in routed.items():
-        inserted = _generic_nd_persist_new_deals(product, deals)
+        inserted, amended = _generic_nd_persist_new_deals(product, deals)
         cfg = _generic_nd_cfg(product)
-        if inserted and cfg:
+        if (inserted or amended) and cfg:
+            bits = []
+            if inserted:
+                bits.append('{} imported'.format(len(inserted)))
+            if amended:
+                bits.append('{} amended'.format(len(amended)))
             _create_notification(sid, actor_name, 'New Deals', cfg['label'],
-                                 '{} deal{} imported from the Athena API'.format(
-                                     len(inserted), '' if len(inserted) == 1 else 's'))
+                                 'Athena API: {} deal(s)'.format(', '.join(bits)))
         targets[product] = {'parsed': len(deals), 'imported': len(inserted),
-                            'deals': inserted}
+                            'amended': len(amended), 'deals': inserted}
+
+    # Cancelamentos: procura o Deal no arquivo do dia (trade date do registro)
+    # dos três produtos — Status vira Canceled e o deal sai das métricas.
+    canceled = 0
+    for nm, td in dead:
+        try:
+            rd = datetime.strptime(td, '%d/%m/%Y') if td else now
+        except ValueError:
+            rd = now
+        for product in routed:
+            cfg = _generic_nd_cfg(product)
+            canceled += _nd_cancel_in_file(
+                os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
+                             rd.strftime('%Y%m%d') + cfg['suffix']), nm)
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
-            'skipped_fwd_strike_today': skipped_fwd_today, 'targets': targets}
+            'skipped_fwd_strike_today': skipped_fwd_today, 'canceled': canceled,
+            'targets': targets}
 
 
 @blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])
@@ -14414,6 +14535,8 @@ def api_fxo_send_conecta():
     all_lines  = []
 
     for deal in deals:
+        if str(deal.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # cancelado via API: fora dos arquivos
         client     = _sh(deal.get('Client', ''))
         taxid      = _sh(deal.get('TaxID', ''))
         instrument = _sh(deal.get('Instrument', ''))
@@ -16426,7 +16549,8 @@ def api_ndf_mapping_b3():
     for sd in sent_deals:
         deal_text   = sd.get('Deal', '')
         client_name = sd.get('Client', '')
-
+        if str(sd.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # cancelado via API: fora do mapping
         if deal_text and deal_text in mapping:
             b3_id      = mapping[deal_text]
             new_status = 'Success'
@@ -16893,6 +17017,8 @@ def api_send_conecta():
     all_lines  = []
 
     for deal in deals:
+        if str(deal.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # cancelado via API: fora dos arquivos
         client     = _sh(deal.get('Client', ''))
         taxid      = _sh(deal.get('TaxID', ''))
         instrument = _sh(deal.get('Instrument', ''))
@@ -18024,7 +18150,10 @@ def api_new_deals_monitor():
                     if isinstance(d, dict):
                         # Intrag entries carry lowercase 'status' — without the
                         # fallback every intrag deal counted as 'New' forever.
-                        bucket[str(d.get('Status') or d.get('status') or 'New').strip() or 'New'] += 1
+                        st = str(d.get('Status') or d.get('status') or 'New').strip() or 'New'
+                        if st == 'Canceled':      # cancelado via API: fora das métricas
+                            continue
+                        bucket[st] += 1
                         les[_ndm_deal_le(pkey, d)] += 1
 
     cards, claimed = [], set()
@@ -18506,6 +18635,8 @@ def api_generic_nd_send_conecta(product):
     buckets = {'BANCO': [], 'LAWTON': [], 'MGT': []}
     counts = Counter()
     for deal in deals:
+        if str(deal.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # cancelado via API: fora dos arquivos
         client   = _s(deal.get('Client', ''))
         le       = _s(deal.get('LE', '')).upper()
         deal_id  = _s(deal.get('Deal', ''))
@@ -18744,7 +18875,8 @@ def api_generic_nd_mapping_b3(product):
     for sd in sent_deals:
         deal_text   = sd.get('Deal', '')
         client_name = sd.get('Client', '')
-
+        if str(sd.get('Status', '') or '').strip() == 'Canceled':
+            continue                    # cancelado via API: fora do mapping
         if deal_text and deal_text in mapping:
             b3_id      = mapping[deal_text]
             new_status = 'Success'

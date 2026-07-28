@@ -1329,10 +1329,22 @@ function dealJsonToRow(deal) {
         'Approved': 'text-bg-secondary',
         'Sent':     'badge-sent',
         'Success':  'text-bg-success',
-        'Error':    'text-bg-danger'
+        'Error':    'text-bg-danger',
+        'Canceled': 'text-bg-dark'
     };
     var st = deal.Status || 'New';
     var statusHtml = '<span class="badge ' + (STATUS_BADGE[st] || 'text-bg-info') + ' bg-gradient">' + st + '</span>';
+    // Amend vindo da API: o backend grava em AmendChanged os nomes dos campos
+    // alterados; aqui viram índices de coluna para o drawCallback pintar as
+    // células (mesmo mecanismo do amend por e-mail).
+    if (st === 'Amend' && deal.AmendChanged && deal.AmendChanged.length) {
+        var AMEND_FIELD_COLS = { TradeDate: 5, Month: 6, SettlementDate: 7, Acronym: 9, TradeType: 12, UnderlyingAsset: 13, FXHolidaySchedule: 14, TotalNotional: 15, Instrument: 16, Strike: 17, StrikeCurrency: 18, Direction: 19, Premium: 20, PremiumPerUnit: 21, PremiumCCY: 22, SpotDate: 23, FixingStartDate: 24, FixingEndDate: 25, TradingBook: 26, OtherBook: 27 };
+        if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
+        window._OTC_AMEND_CHANGED_COLS[deal.Deal] = deal.AmendChanged
+            .map(function (f) { return AMEND_FIELD_COLS[f]; })
+            .filter(function (c) { return c != null; });
+    }
+
 
     var clientHtml = deal.Client
         ? _esc(deal.Client)
