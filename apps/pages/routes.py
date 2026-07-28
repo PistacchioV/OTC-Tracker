@@ -9174,20 +9174,53 @@ def _ndfsum_meta_save(path, meta):
         json.dump(meta, fh, ensure_ascii=False, indent=2)
 
 
-def _ndfsum_account_fmt(banking, direction):
-    """Default PAY/RECEIVE account → 'BCO: 341 | AG: 0910 | CC: 967' (bank =
-    3-digit code; the front bolds the labels). Only an approved default
-    (slot.current) is used; unset → ''."""
-    slot_key = 'DEFAULT_RECEIVE' if direction == 'RECEIVE' else 'DEFAULT_PAY'
+def _ndfsum_default_account(banking, slot_key):
+    """Conta default aprovada (slot.current) de um slot DEFAULT_PAY/RECEIVE."""
     slot = (banking or {}).get(slot_key) or {}
-    acc = next((a for a in (banking or {}).get('ACCOUNTS', [])
-                if a.get('id') and a.get('id') == slot.get('current')), None)
+    return next((a for a in (banking or {}).get('ACCOUNTS', [])
+                 if a.get('id') and a.get('id') == slot.get('current')), None)
+
+
+def _ndfsum_account_fmt(banking, direction):
+    """Conta default do CLIENTE para a linha → 'BCO: 341 | AG: 0910 | CC: 967'.
+
+    `direction` é a visão do BANCO (coluna Direction do Settlement Summary);
+    os defaults do Reference Data são visão da CONTRAPARTE — por isso o
+    cruzamento: banco PAY = cliente recebe → DEFAULT_RECEIVE; banco RECEIVE =
+    cliente paga → DEFAULT_PAY. Só default aprovado (slot.current); sem
+    default → ''."""
+    slot_key = 'DEFAULT_PAY' if direction == 'RECEIVE' else 'DEFAULT_RECEIVE'
+    acc = _ndfsum_default_account(banking, slot_key)
     if not acc:
         return ''
     bank = re.sub(r'\D', '', str(acc.get('bank', '') or ''))
     return 'BCO: {} | AG: {} | CC: {}'.format(bank.zfill(3) if bank else '',
                                               str(acc.get('agency', '') or '').strip(),
                                               str(acc.get('account', '') or '').strip())
+
+
+def _ndfsum_obs_auto(banking):
+    """Observação automática do Settlement Summary: classifica as contas
+    default do cliente como Internal (banco 376 / JPMorgan) ou External.
+    Ambas internas → 'Pay and Receive Internal'; nenhuma → 'Pay and Receive
+    External'; mista → 'Pay Internal | Receive External' (ou o inverso).
+    Slot sem default aprovado fica fora do rótulo; sem nenhum default → ''."""
+    def _internal(acc):
+        bank = str(acc.get('bank', '') or '').upper()
+        digits = re.sub(r'\D', '', bank)
+        return digits.lstrip('0') == '376' or 'JPMORGAN' in re.sub(r'[^A-Z]', '', bank)
+
+    parts = {}
+    for label, slot_key in (('Pay', 'DEFAULT_PAY'), ('Receive', 'DEFAULT_RECEIVE')):
+        acc = _ndfsum_default_account(banking, slot_key)
+        if acc:
+            parts[label] = _internal(acc)
+    if not parts:
+        return ''
+    if len(parts) == 2 and parts['Pay'] == parts['Receive']:
+        return 'Pay and Receive ' + ('Internal' if parts['Pay'] else 'External')
+    return ' | '.join('{} {}'.format(label, 'Internal' if internal else 'External')
+                      for label, internal in parts.items())
 
 
 def _ndfsum_fx_map(ref):
@@ -9374,7 +9407,9 @@ def _ndfsum_collect(ref):
             'net_type': net_type,
             'direction': direction,
             'account': _ndfsum_account_fmt(banking, direction),
-            'obs': (sum_meta.get(cpty) or {}).get('obs') or '',
+            # Observação manual (overlay do dia) prevalece; sem ela entra a
+            # classificação automática Internal/External das contas default.
+            'obs': (sum_meta.get(cpty) or {}).get('obs') or _ndfsum_obs_auto(banking),
         })
 
     # B3 side: Operations B3 settlement (Resgate) rows for FX-whitelisted
