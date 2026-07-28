@@ -18128,6 +18128,40 @@ def api_generic_nd_save_cache(product):
     return jsonify({"success": True, "deal": data.get('Deal', '')})
 
 
+def _generic_nd_reenrich(deals, refmap_cache):
+    """Preenche SPN/Client/TaxID de deals importados com contraparte faltante
+    cujo Acronym (End Counterparty) passou a existir no RefData — o cadastro
+    feito depois do import só corrigia o DOM da página; ao sair e voltar, o
+    cache em disco ainda tinha os campos vazios (linha sem badge e sem
+    cliente). Retorna True se algo mudou (o caller persiste o arquivo).
+    refmap_cache: dict de 1 posição para construir o mapa por acronym só uma
+    vez por request."""
+    changed = False
+    for deal in deals:
+        if not isinstance(deal, dict):
+            continue
+        if str(deal.get('SPN', '') or '').strip():
+            continue
+        acr = str(deal.get('Acronym', '') or '').strip().upper()
+        if not acr:
+            continue
+        if 'map' not in refmap_cache:
+            m = {}
+            for _r in _fxo_refdata_by_spn().values():
+                _a = str(_r.get('FX CASH ACCRONYM', '') or '').strip().upper()
+                if _a and _a not in m:
+                    m[_a] = _r
+            refmap_cache['map'] = m
+        rec = refmap_cache['map'].get(acr)
+        if not rec:
+            continue
+        deal['SPN'] = str(rec.get('SPN', '') or '')
+        deal['Client'] = rec.get('COUNTERPARTY', '') or ''
+        deal['TaxID'] = rec.get('TAX ID', '') or ''
+        changed = True
+    return changed
+
+
 @blueprint.route('/api/new-deals/<product>/cache/search', methods=['POST'])
 def api_generic_nd_search_cache(product):
     if not session.get('authenticated'):
@@ -18137,17 +18171,23 @@ def api_generic_nd_search_cache(product):
         return jsonify({"success": False, "message": "Unknown product"}), 404
 
     filters = (request.get_json(silent=True) or {}).get('filters', [])
-    matched = []
+    matched, refmap_cache = [], {}
     if os.path.isdir(cfg['dir']):
         for root, _dirs, files in os.walk(cfg['dir']):
             for fname in sorted(files):
                 if not fname.endswith(cfg['suffix']):
                     continue
+                fpath = os.path.join(root, fname)
                 try:
-                    with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
+                    with open(fpath, 'r', encoding='utf-8') as fh:
                         deals = json.load(fh)
                     if not isinstance(deals, list):
                         deals = [deals]
+                    # Contraparte cadastrada depois do import → persiste o
+                    # enriquecimento, senão a linha volta vazia a cada visita.
+                    if _generic_nd_reenrich(deals, refmap_cache):
+                        with _cache_lock:
+                            _atomic_write_json(fpath, deals)
                     for deal in deals:
                         if _deal_matches(deal, filters):
                             matched.append(deal)
