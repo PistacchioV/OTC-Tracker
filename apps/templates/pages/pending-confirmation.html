@@ -465,11 +465,13 @@
 
     /* Add/Edit modal — Aging & Status are auto-computed, so they read as
        disabled (greyed, no focus/typing). Kept `readonly` in markup so the
-       computed value still submits; this only makes that state visible. */
+       computed value still submits; this only makes that state visible.
+       Tokens --ins-* (o tema não define --bs-secondary-bg, então o fallback
+       claro vazava no modo dark — campo branco no modal escuro). */
     #addRowModal #ar_aging,
     #addRowModal #ar_status {
-        background-color: var(--bs-secondary-bg, #e9ecef) !important;
-        color: var(--bs-secondary-color, #6c757d) !important;
+        background-color: var(--ins-tertiary-bg, #e9ecef) !important;
+        color: var(--ins-secondary-color, #6c757d) !important;
         cursor: not-allowed;
         pointer-events: none;
         opacity: .9;
@@ -2680,27 +2682,29 @@ $(document).ready(function() {
         if (!d) return;
         arEditTr = tr;
 
-        // Populate modal fields from row data
-        document.getElementById('ar_status').value          = d[2]  || '';
-        document.getElementById('ar_lob').value             = d[3]  || '';
-        document.getElementById('ar_spn').value             = d[4]  || '';
-        document.getElementById('ar_client').value          = d[5]  || '';
-        document.getElementById('ar_aging').value           = d[6]  || '';
-        document.getElementById('ar_product_type').value    = d[7]  || '';
-        document.getElementById('ar_trade_date').value      = d[8]  || '';
-        document.getElementById('ar_maturity_date').value   = d[9]  || '';
-        document.getElementById('ar_trade_number').value    = d[10] || '';
-        document.getElementById('ar_pending_status').value  = d[11] || '';
-        document.getElementById('ar_owner').value           = d[12] || '';
-        document.getElementById('ar_ea').value              = d[13] || '';
-        document.getElementById('ar_send_date').value       = d[14] || '';
-        document.getElementById('ar_return_date').value     = d[15] || '';
-        document.getElementById('ar_break_reason').value    = d[16] || '';
-        document.getElementById('ar_comments').value        = d[17] || '';
-        document.getElementById('ar_economic_group').value  = d[18] || '';
-        document.getElementById('ar_signature_type').value  = d[19] || '';
-        document.getElementById('ar_fepweb_id').value       = d[20] || '';
-        document.getElementById('ar_pendencia').value       = d[21] || '';
+        // Populate modal fields from row data — _pcStrip decodifica o HTML da
+        // célula (sem ele o Status auto aparecia como "&lt; 10 dias..." e
+        // qualquer valor com & vinha escapado).
+        document.getElementById('ar_status').value          = _pcStrip(d[2]);
+        document.getElementById('ar_lob').value             = _pcStrip(d[3]);
+        document.getElementById('ar_spn').value             = _pcStrip(d[4]);
+        document.getElementById('ar_client').value          = _pcStrip(d[5]);
+        document.getElementById('ar_aging').value           = _pcStrip(d[6]);
+        document.getElementById('ar_product_type').value    = _pcStrip(d[7]);
+        document.getElementById('ar_trade_date').value      = _pcStrip(d[8]);
+        document.getElementById('ar_maturity_date').value   = _pcStrip(d[9]);
+        document.getElementById('ar_trade_number').value    = _pcStrip(d[10]);
+        document.getElementById('ar_pending_status').value  = _pcStrip(d[11]);
+        document.getElementById('ar_owner').value           = _pcStrip(d[12]);
+        document.getElementById('ar_ea').value              = _pcStrip(d[13]);
+        document.getElementById('ar_send_date').value       = _pcStrip(d[14]);
+        document.getElementById('ar_return_date').value     = _pcStrip(d[15]);
+        document.getElementById('ar_break_reason').value    = _pcStrip(d[16]);
+        document.getElementById('ar_comments').value        = _pcStrip(d[17]);
+        document.getElementById('ar_economic_group').value  = _pcStrip(d[18]);
+        document.getElementById('ar_signature_type').value  = _pcStrip(d[19]);
+        document.getElementById('ar_fepweb_id').value       = _pcStrip(d[20]);
+        document.getElementById('ar_pendencia').value       = _pcStrip(d[21]);
         arSyncDatePickers();   // reflect the loaded dd/mm/yyyy values into the pickers
 
         arClearErrors();
