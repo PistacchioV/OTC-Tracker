@@ -13825,7 +13825,7 @@ def _fxo_deals_from_api_records(records, sid):
 
 def _fxo_api_pull(sid='API', actor_name='Athena API'):
     """Fetch today's FXO trades from the Athena API and insert the new ones.
-    Shared by the manual Import button and the 10-min scheduler. Raises on
+    Shared by the manual Import button and the hourly scheduler. Raises on
     network/SSO errors — callers decide how loud to be about it."""
     from apps.pages import athena_api
     if not athena_api.is_available():
@@ -13859,10 +13859,10 @@ def api_fxo_import_api():
 
 
 # In-app scheduler — polls the Athena FXO API every FXO_API_POLL_MIN minutes
-# (default 10) with trade date = today. Same self-contained pattern as the
+# (default 60) with trade date = today. Same self-contained pattern as the
 # pending-confirmation daily scheduler. Off the JPM network every poll fails;
 # repeats of the same error are demoted to debug so the log stays readable.
-_FXO_API_POLL_MIN = int(os.getenv('FXO_API_POLL_MIN', '10') or 10)
+_FXO_API_POLL_MIN = int(os.getenv('FXO_API_POLL_MIN', '60') or 60)
 _fxo_api_scheduler_started = False
 _fxo_api_scheduler_lock = threading.Lock()
 
@@ -14145,6 +14145,55 @@ def api_ndf_import_api():
         log.warning('[ndf] manual Athena API import failed: %s', e)
         return jsonify({'success': False, 'message': str(e)}), 502
     return jsonify(result)
+
+
+# In-app scheduler — polls the Athena NDF API every NDF_API_POLL_MIN minutes
+# (default 20) with trade date = today, routing into FWD Start / Other
+# Publisher / Vanilla. Same pattern as the FXO scheduler above.
+_NDF_API_POLL_MIN = int(os.getenv('NDF_API_POLL_MIN', '20') or 20)
+_ndf_api_scheduler_started = False
+_ndf_api_scheduler_lock = threading.Lock()
+
+
+def _ndf_api_scheduler_loop():
+    last_err = None
+    while True:
+        time.sleep(max(60, _NDF_API_POLL_MIN * 60))
+        try:
+            res = _ndf_api_pull()
+            imported = sum(t.get('imported', 0) for t in (res.get('targets') or {}).values())
+            if imported:
+                log.info('[ndf] Athena API poll: %d new deal(s) imported '
+                         '(%d fetched)', imported, res['fetched'])
+            last_err = None
+        except Exception as e:                          # noqa: BLE001
+            msg = str(e)
+            if msg != last_err:
+                log.warning('[ndf] Athena API poll failed: %s', msg)
+            else:
+                log.debug('[ndf] Athena API poll failed again: %s', msg)
+            last_err = msg
+
+
+def _ndf_api_start_scheduler():
+    global _ndf_api_scheduler_started
+    from apps.pages import athena_api
+    if not athena_api.is_available():
+        log.info('[ndf] Athena API scheduler NOT started (requests missing)')
+        return
+    with _ndf_api_scheduler_lock:
+        if _ndf_api_scheduler_started:
+            return
+        _ndf_api_scheduler_started = True
+    threading.Thread(target=_ndf_api_scheduler_loop,
+                     name='ndf-athena-api-scheduler', daemon=True).start()
+    log.info('[ndf] Athena API scheduler started (every %d min)', _NDF_API_POLL_MIN)
+
+
+try:
+    _ndf_api_start_scheduler()
+except Exception:
+    log.warning('[ndf] could not start the Athena API scheduler')
 
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/batch', methods=['POST'])
@@ -17812,24 +17861,33 @@ _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
 # Produtos cuja entidade intragrupo é o fundo Atacama — a perna-espelho
 # (Client = Banco) conta como ATA em vez de LAW.
 _NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities'}
+# NDFs genéricos (têm coluna LE e não têm perna-espelho da Lawton nos caches):
+# neles LAW = operação CONTRA a Lawton, não Client = Banco.
+_NDM_GENERIC_NDF_DIRS = {'NDF/FWD Start', 'NDF/FwdStart',
+                         'NDF/OtherPublisher', 'NDF/Other Publisher',
+                         'NDF/Vanilla'}
 
 
 def _ndm_deal_le(pkey, d):
     """Entidade (LE) de uma linha do monitor, para os subitens dos cards.
     Intrag: pelo portfolio code — INTRAGJP552 = LAW, INTRAGJP633 = ATA
     (Intrag NDF grava 'portfolio_code', Intrag Option grava 'portfolio').
-    B3: deal com LE = MGT (NDFs genéricos) conta como MGT, mesmo quando o
-    Client é o Banco — MGT×JPM é registro da MGT, não da Lawton. Depois disso,
-    linha cujo Client é o Banco J.P. Morgan (e não a MGT) é a perna-espelho da
-    entidade intragrupo (ATA nos produtos de equities, LAW nos demais); o
-    resto é registro do Banco → JPM."""
+    NDFs genéricos (Vanilla/Other Pub/FWD Start): LE = MGT → MGT;
+    Client com LAWTON → LAW (operação contra a Lawton); resto → JPM. O teste
+    "Client = Banco" não serve aqui: o nome da MGT no RefData também casa com
+    J.P. Morgan, então as linhas JPM×MGT cairiam em LAW indevidamente.
+    Demais produtos B3: linha cujo Client é o Banco J.P. Morgan é a
+    perna-espelho da entidade intragrupo (ATA nos produtos de equities, LAW
+    nos demais); o resto é registro do Banco → JPM."""
     if pkey.startswith('Intrag'):
         code = str(d.get('portfolio_code') or d.get('portfolio') or '').strip().upper()
         return {'INTRAGJP552': 'LAW', 'INTRAGJP633': 'ATA'}.get(code, 'ATA')
-    if str(d.get('LE') or '').strip().upper() == 'MGT':
-        return 'MGT'
     cl = str(d.get('Client') or '')
-    if _NDM_JPM_RE.search(cl) and 'MGT' not in cl.upper():
+    if pkey in _NDM_GENERIC_NDF_DIRS:
+        if str(d.get('LE') or '').strip().upper() == 'MGT':
+            return 'MGT'
+        return 'LAW' if 'LAWTON' in cl.upper() else 'JPM'
+    if _NDM_JPM_RE.search(cl):
         return 'ATA' if pkey in _NDM_ATA_DIRS else 'LAW'
     return 'JPM'
 
