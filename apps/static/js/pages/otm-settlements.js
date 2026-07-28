@@ -109,6 +109,13 @@
     });
 
     if (dt) { dt.destroy(); }
+    // Ordenação padrão: Cpty Name A→Z e, dentro da contraparte, Trade Id A→Z.
+    // Índices calculados pelo nome (+3 pelas colunas fixas checkbox/actions/status).
+    var iCpty  = columns.indexOf('Cpty Name');
+    var iTrade = columns.indexOf('Trade Id');
+    var defaultOrder = [];
+    if (iCpty  >= 0) defaultOrder.push([iCpty + 3, 'asc']);
+    if (iTrade >= 0) defaultOrder.push([iTrade + 3, 'asc']);
     dt = jQuery('#otm-table').DataTable({
       data: data,
       columns: [{}, {}, {}].concat(columns.map(function () { return {}; })),
@@ -118,7 +125,7 @@
       ],
       // No scrollX: one table → header/body never misalign; .table-responsive scrolls.
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
-      pageLength: 200, order: [],
+      pageLength: 200, order: defaultOrder,
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
       buttons: [{
         extend: 'collection',
