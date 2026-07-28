@@ -84,6 +84,20 @@
 #ndm-page .ndm-bar .sg-success  { background: #1a8a4a; }
 #ndm-page .ndm-bar .sg-other    { background: #8a969c; }
 
+/* Subitens por LE (JPM / MGT / LAW / ATA) — contagem por entidade do card */
+#ndm-page .ndm-les { display: flex; flex-wrap: wrap; gap: .4rem; }
+#ndm-page .ndm-le {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .68rem; font-weight: 700; letter-spacing: .03em;
+    padding: .16rem .55rem; border-radius: 8px;
+    border: 1px dashed var(--ins-border-color, rgba(0, 0, 0, .14));
+    color: var(--ins-secondary-color, #6e6e73); background: transparent;
+}
+#ndm-page .ndm-le b {
+    font-variant-numeric: tabular-nums; font-weight: 800;
+    color: var(--ins-body-color);
+}
+
 #ndm-page .ndm-card__foot {
     margin-top: auto; display: flex; align-items: center; justify-content: space-between;
     font-size: .76rem; color: var(--ins-secondary-color);
@@ -262,8 +276,16 @@
                 return '<span class="' + cls + '" style="width:' + pct + '%"></span>';
             }).join('') + '</div>';
         }
+        // Subitens por LE (ordem definida pelo servidor; zeros aparecem)
+        var les = '';
+        if (c.total > 0 && (c.les || []).length) {
+            les = '<div class="ndm-les">' + c.les.map(function (e) {
+                return '<span class="ndm-le">' + esc(e.le) + ' <b>' +
+                       Number(e.count || 0).toLocaleString('en-US') + '</b></span>';
+            }).join('') + '</div>';
+        }
         var body = c.total > 0
-            ? '<div class="ndm-chips">' + chips + '</div>' + bar
+            ? '<div class="ndm-chips">' + chips + '</div>' + bar + les
             : '<div class="ndm-chips"><span class="ndm-empty-note" data-lang-ignore>' +
               esc(t('ndm-empty', 'No operations imported for this date.')) + '</span></div>';
         var foot;

@@ -17759,18 +17759,41 @@ def _generic_nd_pc_trigger(product, deal):
 # 'soon' = produto ainda sem desenvolvimento — o card aparece como placeholder,
 # mas se um dia o diretório ganhar arquivos os números passam a contar sozinhos.
 _NDM_CARDS = [
-    {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',)},
-    {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FWD Start', 'NDF/FwdStart')},
-    {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher', 'NDF/Other Publisher')},
-    {'key': 'ndf-vanilla',        'label': 'NDF Vanilla',         'url': '/new_deals-ndf-vanilla',        'dirs': ('NDF/Vanilla',)},
-    {'key': 'opt-commodities',    'label': 'Option Commodities',  'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',)},
-    {'key': 'opt-fxo',            'label': 'Option FXO',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',)},
-    {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities')},
-    {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',)},
-    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',)},
-    {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',)},
-    {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',)},
+    {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',),                          'les': ('JPM', 'LAW')},
+    {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FWD Start', 'NDF/FwdStart'),             'les': ('JPM', 'MGT', 'LAW')},
+    {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher', 'NDF/Other Publisher'), 'les': ('JPM', 'MGT', 'LAW')},
+    {'key': 'ndf-vanilla',        'label': 'NDF Vanilla',         'url': '/new_deals-ndf-vanilla',        'dirs': ('NDF/Vanilla',),                              'les': ('JPM', 'MGT', 'LAW')},
+    {'key': 'opt-commodities',    'label': 'Commodities Options', 'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',),                       'les': ('JPM', 'LAW')},
+    {'key': 'opt-fxo',            'label': 'FX Options',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',),                               'les': ('JPM', 'LAW')},
+    {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities'),          'les': ('JPM', 'ATA')},
+    {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',),                            'les': ('JPM', 'ATA')},
+    {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',),                                 'les': ('JPM', 'LAW')},
+    {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
+    {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
 ]
+
+_NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
+# Produtos cuja entidade intragrupo é o fundo Atacama — a perna-espelho
+# (Client = Banco) conta como ATA em vez de LAW.
+_NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities'}
+
+
+def _ndm_deal_le(pkey, d):
+    """Entidade (LE) de uma linha do monitor, para os subitens dos cards.
+    Intrag: pelo portfolio code — INTRAGJP552 = LAW, qualquer outro = ATA
+    (Intrag NDF grava 'portfolio_code', Intrag Option grava 'portfolio').
+    B3: mesma convenção de bucketing do send-conecta — linha cujo Client é o
+    Banco J.P. Morgan é a perna-espelho da entidade intragrupo (ATA nos
+    produtos de equities, LAW nos demais); deal com LE = MGT (NDFs genéricos)
+    conta como MGT; o resto é registro do Banco → JPM."""
+    if pkey.startswith('Intrag'):
+        code = str(d.get('portfolio_code') or d.get('portfolio') or '').strip().upper()
+        return 'LAW' if code == 'INTRAGJP552' else 'ATA'
+    if _NDM_JPM_RE.search(str(d.get('Client') or '')):
+        return 'ATA' if pkey in _NDM_ATA_DIRS else 'LAW'
+    if str(d.get('LE') or '').strip().upper() == 'MGT':
+        return 'MGT'
+    return 'JPM'
 
 
 @blueprint.route('/new-deals-monitor')
@@ -17793,8 +17816,8 @@ def api_new_deals_monitor():
     want = ref.strftime('%Y%m%d')
 
     # Um único walk: agrupa os arquivos DA DATA por produto (caminho sem os
-    # níveis de ano/mês), contando linhas por Status.
-    found = {}
+    # níveis de ano/mês), contando linhas por Status e por LE (_ndm_deal_le).
+    found, found_les = {}, {}
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
         for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
             for fname in files:
@@ -17808,23 +17831,28 @@ def api_new_deals_monitor():
                 except Exception:
                     continue
                 bucket = found.setdefault(pkey, Counter())
+                les    = found_les.setdefault(pkey, Counter())
                 for d in (data if isinstance(data, list) else [data]):
                     if isinstance(d, dict):
                         # Intrag entries carry lowercase 'status' — without the
                         # fallback every intrag deal counted as 'New' forever.
                         bucket[str(d.get('Status') or d.get('status') or 'New').strip() or 'New'] += 1
+                        les[_ndm_deal_le(pkey, d)] += 1
 
     cards, claimed = [], set()
     for c in _NDM_CARDS:
-        agg = Counter()
+        agg, agg_le = Counter(), Counter()
         for dkey in c['dirs']:
             if dkey in found:
                 agg.update(found[dkey])
+                agg_le.update(found_les.get(dkey, {}))
                 claimed.add(dkey)
         cards.append({
             'key': c['key'], 'label': c['label'], 'url': c['url'],
             'soon': bool(c.get('soon')), 'total': sum(agg.values()),
             'statuses': dict(agg),
+            # Lista ordenada (não dict) para o front preservar a ordem dos LEs
+            'les': [{'le': k, 'count': agg_le.get(k, 0)} for k in c.get('les', ())],
         })
     # "e etc": qualquer produto com arquivos na data que não está no catálogo
     # (ex.: Swap Rates / Swap Commodities) ganha um card genérico no fim.
