@@ -46,7 +46,11 @@ Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies thi
 
 `run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py`.
+There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~21k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+
+- `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
+- `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents
+- `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py`
 
 ### Authentication flow
 
@@ -100,3 +104,6 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **Local dev on macOS**: use `flask run --port=5005` — port 5000 is taken by the AirPlay Receiver (returns a 403 "AirTunes"). The venv here is Python 3.12 (`.venv311`); `duckdb` and `flask-minify` are required (both in `requirements.txt`).
 - `flask_login`, `flask_wtf`, and `flask_migrate` are in `requirements.txt` but are not actively used in the current codebase; the app manages sessions and DB directly.
 - SMTP delivery uses `mailhost.jpmchase.net` (internal relay, port 25, no auth) — email sending will silently fail outside the JPMorgan network.
+- **Athena `getTrades` API** (`apps/pages/athena_api.py`): imports New Deals for NDF/FXO (manual button + in-app schedulers, NDF every 20 min, FXO hourly). Needs the JPM network — off-network the scheduler fails silently (repeated errors demoted to `debug`). `build_session()` sets `trust_env=False` on purpose: inheriting the corporate proxy is what caused `WinError 10061` on the team's Windows box. Kerberos SSO on Windows needs `requests-negotiate-sspi`, which is **commented out** in `requirements.txt` (Windows-only) — install it on the JPM instance.
+- **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
+- **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128.

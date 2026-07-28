@@ -5242,3 +5242,397 @@ apps/static/data/translations/{en,br,es}.json ← chaves vr-cfg-*, dash-hero-*
 - **NUNCA commitar**: o script está no `.gitignore` (bloco "local dev stubs", junto do stub `awmpy.py`)
   e os dados caem nos patterns já ignorados (`b3 files/**/*.json`, `**/*_mock.json`,
   `daily settlement/**/*.json`).
+
+## 119. Sessão 2026-07-27/28 — API Athena (`getTrades`): cliente, imports, schedulers e reconciliação
+
+### Cliente (`bc0e3e1`, `e1beb7f`, `11c755c`)
+- **NOVO módulo `apps/pages/athena_api.py`** — cliente do `getTrades` com SSO Kerberos ADFS/IDAnywhere:
+  **User-Agent Trident** (sem isso o ADFS serve a página de login HTML em vez de negociar Negotiate) e
+  replay dos `form_post` auto-submetidos até vir o JSON. Um fetch por produto.
+- **Endpoint PROD** (`11c755c`): `athena-app` / `brazil-trade-data-api` — saiu o UAT
+  (`athena-app-uat` / `brazil-cem-ai-market-data-api`). Os quatro produtos (NDF, Commodities, FXO,
+  Swaps) respondem no PROD, então Commodities/Swaps deixaram de levantar `NotImplementedError`.
+- **`build_session()` com `trust_env=False`** (`e1beb7f`): o `requests` herdava o proxy corporativo,
+  que recusa hosts internos — era a causa do **WinError 10061** na instância Windows (o browser vai
+  direto). `ATHENA_CA_BUNDLE` fica disponível se a validação TLS esbarrar na CA interna.
+- `requests` e `reportlab` entram no `requirements.txt`; **`requests-negotiate-sspi` fica comentado**
+  (Windows-only — instalar na instância JPM). Fora da rede JPM o scheduler falha silencioso (erro
+  repetido rebaixado a debug) e sem `requests` nem sobe.
+
+### Import de FXO e NDF (`bc0e3e1`, `e1beb7f`, `216ae52`, `c14d0e5`, `f9621da`)
+- FXO: a API devolve as mesmas colunas do blotter XLSX → a construção linha→deal foi extraída para
+  `_fxo_deal_from_row`, compartilhada pelas duas fontes (mesmos filtros e derivações).
+- **Roteamento do NDF** (um pull, trade date = hoje): Instrument Type `FXForwardStartNDF` → **FWD Start**,
+  exceto Strike Set Date = hoje (pulada — será cancelada e rebookada como vanilla); senão
+  Publisher ≠ PTAX → **Other Publisher**; o resto → **NDF Vanilla**.
+  **"PTAX" é match EXATO** (`f9621da`): o teste antigo `"PTAX" in publisher` engolia as variantes
+  (`PTAX|USB|WMR|4` etc.), que devem cair na Other Publisher.
+- Descartados: registros `isCancelled`/`isDead` (nos dois produtos) e End Counterparty =
+  **`GLOBAL_HOLDING_BOOK`** (book interno, não é operação de cliente — `216ae52`).
+- **Contraparte pelo End Counterparty** (`c14d0e5`): código estilo FX Cash Acronym (ex. `CMBB-LAW`)
+  contra o `FX CASH ACCRONYM` do RefData, **sem** fallback pelo SPN do payload. Sem cadastro →
+  SPN/Client/Tax ID vazios + badge Missing Counterparty, e o Accronym mostra o código da API.
+- **ASIAN só com janela de fixing real** (first preenchido e ≠ last): sem isso o fallback do last
+  fixing para a Expiration Date tornava toda vanilla ASIAN.
+- **MXB→MXN** no mapa de moedas e **Rate gravado como 1/rate** quando a perna cotada é moeda fraca
+  (MXN/CNH/COP/PEN/CLP) — a API manda Moeda/BRL, mas página, Conecta e Intrag trabalham com R$/moeda.
+- Persistência **new-only** por `Deal+Client`: um poll periódico jamais reseta o status de um deal já
+  trabalhado (diferente do fluxo XLSX, que pergunta antes de substituir).
+
+### Schedulers (`bc0e3e1`, `c7f91a9`)
+- NDF a cada **20 min** (`NDF_API_POLL_MIN`) e FXO a cada **1 hora** (`FXO_API_POLL_MIN`, padrão 60 —
+  era 10 min). Threads daemon, erro repetido rebaixado a debug.
+
+### Reconciliação Amend / Canceled (`f07af44`)
+Os pulls deixaram de ser insert-only — cada deal da API é batido com o cache (chave `Deal+Client`):
+- **Amend**: campo de dado diferente aplica o valor novo, Status vira `Amend` e os nomes dos campos vão
+  para `AmendChanged`; o front converte a lista em índices de coluna e pinta as células em vermelho-claro
+  pelo mesmo mecanismo do amend por e-mail (sobrevive a draw/reload). **Fora da comparação**: campos de
+  workflow (`Status`/`B3_ID`/`Maker`/`Checker`) e de enriquecimento (`SPN`/`Client`/`TaxID`, que o RefData
+  altera sem a operação ter mudado).
+- **Canceled**: registro `isCancelled`/`isDead` cuja operação já foi importada tem o Status trocado para
+  `Canceled` e **sai de todas as métricas e arquivos** — dashboard (distribuição/deal flow/totais),
+  monitor (status e LEs), send-conecta (genéricos, FXO e commodities) e mapping B3. Cancelado não é
+  reaberto por amend; cancelado nunca importado segue ignorado. Badge escuro nas quatro páginas.
+- Notificações passam a trazer os três números (imported / amended / canceled).
+
+### Deep-link (`3dc3a7d`)
+- A página nova **NDF Vanilla** entrou no `PAGE_URL` das notificações (e no grupo New Deals, com
+  deep-link de `?tradedate=`) — sem isso "New Deals in NDF Vanilla" não era clicável.
+
+## 120. Sessão 2026-07-27/28 — NDF genéricos (Vanilla nova · Other Publisher · FWD Start)
+
+### Página nova NDF Vanilla (`e1beb7f`)
+- Criada sobre o template do Other Publisher, CRUD pelo cache genérico (produto `vanilla`), item no
+  sidenav e card no Monitor.
+
+### Colunas e apresentação
+- **Other Quantity Currency** depois de Quantity Currency nas três páginas (`4478d38`), vinda do
+  Other Quantity Units da API convertida para ISO (BRR→BRL); FX Pair idem (USB/BRR → USD/BRL). Todos os
+  índices posteriores (toggle, exports, hidden targets, modal, `ND_COL_KEYS`) deslocados e auditados.
+- **`ND_COL_KEYS` = colunas VISÍVEIS** (`c14d0e5`): a lista pulava `nd-col-acronym`, então do SPN em
+  diante cada cabeçalho recebia a chave da coluna seguinte (Accronym exibia "Client", Client exibia
+  "Tax ID"…). O `each()` percorre só o DOM do scroll-head — colunas ocultas (Rate no FWD Start,
+  Is BRR Fixed no Other Publisher, Maker em todas) **não** aparecem lá.
+- Ordenação padrão **Client A→Z** (`order [[11,'asc']]`) nas três (`d8ba4b1`); Vanilla com pageLength
+  50 (`3fcb74c`).
+- **Is BRR Fixed?** vira badge YES/NO (verde/amarelo) na Vanilla e FWD Start (`21d6ab6`) — render de
+  *display* do DataTables, o dado da célula segue `"YES"/"NO"` cru (filtros/export/edição inalterados).
+  Other Publisher fica de fora porque a coluna está oculta lá.
+- **Missing Counterparty** (`3fcb74c`, `3907225`): o badge da coluna Status **substitui** o conteúdo da
+  célula (guardado no nó para restauração) em vez de esconder os filhos — `children().hide()` não
+  alcança text nodes, e o "New" continuava aparecendo ao lado. Vale para as **seis** páginas que usam o
+  helper `missing-counterparty.js`; busters `?v=20260728a`.
+- **Contraparte cadastrada depois do import** (`3fa7a07`): `/cache/search` re-enriquece na leitura —
+  deal com SPN vazio cujo Acronym passou a existir no RefData ganha SPN/Client/Tax ID — e **regrava o
+  arquivo do dia**. Antes o `reloadAndEnrich` só corrigia o DOM e sair/voltar mostrava a linha vazia.
+
+### Mapping B3 (`6bbc32b`, `a6257bf`, `c6dab82`)
+- Endpoint genérico `/api/new-deals/<produto>/mapping-b3` criado — antes o 404 em HTML estourava no
+  front como "Unexpected token <". Mesma lógica do ndf-commodities (varre a pasta Return, linhas TER
+  com EXECUCAO OK, marca Success/Error + B3_ID, apaga os retornos processados), com uma diferença:
+  **o match do deal usa os 14 caracteres da direita**, que é o que os arquivos TER novos gravam no
+  Código Identificador.
+- Na **Vanilla** o mapping roda também com Status = New — o registro na B3 é feito por outra ferramenta
+  por enquanto, não há transição Sent nessa página.
+- O handler do botão gravava o B3 ID na coluna 4 (Deal) em vez da 5 (`a6257bf`) — era só visual, o cache
+  em disco sempre gravou certo (um F5 já restaurava).
+
+### Pending Confirmation e dashboard (`909a6de`, `a6257bf`, `4478d38`, `a194e7a`)
+- Deal mapeado (Status→Success no PATCH ou no bulk-patch) segue para o Pending Confirmation como os
+  demais produtos, com **Pending Status pelas regras de assinatura**: (Settlement − Trade) ≤ 60 dias
+  corridos → `Exception FepWeb` (as três páginas); FWD Start → `Pending OTC`; Other Publisher/Vanilla
+  pelo `SIGNATURE TYPE` do RefData — Internal → `Exception Digital Fep Web`, Digital →
+  `Pending Digital Signature`, Manual e sem cadastro → `Pending Original`. `_pc_save_from_deal` ganhou o
+  parâmetro `pending_status`. **Product Type = `NDF` simples** (não um rótulo por página).
+- **FWD Start**: o pending é chaveado pelo **B3 ID** mapeado, não pelo Deal (`4478d38`).
+- Dashboard: o bucket NDF foi dividido em sub-buckets (vanilla/otherpub/fwdstart, padrão do split
+  FXO×OPT). **`_gen_ndf_counted`** (`a194e7a`): LE JPM conta sempre; LE MGT só contra cliente externo
+  (Client sem Lawton e sem J.P. Morgan); outras LEs ficam fora — sem isso os espelhos intragrupo
+  (MGT×JPM junto com JPM×MGT) contavam o mesmo deal duas vezes. Vale só para os **dois gráficos**;
+  card inicial de NDF (`ndf_total`) e Top 5 seguem a regra antiga, de propósito.
+
+### Intrag
+- As três genéricas **não** alimentavam a Intrag NDF (`c6dab82` removeu os gatilhos do PATCH e do
+  mapping, com comentário de onde reativar). **Reativado em `f9621da`**: Vanilla/OP **contra o Lawton**
+  alimentam a Intrag NDF no layout do arquivo "Instrucao NDF Moeda" quando o Status vira Success —
+  campos de mercadoria em N/A, nocional convertido para a moeda estrangeira, posição do fundo = inversa
+  da Direction da linha do banco.
+
+### Novo market de commodities (`aeec6a7`, `3c5e701`)
+- `FO_0.5%_ROT_BRG_FOB` → ativo subjacente B3 **NAEB0011** (análogo do `FO_0.5%_SING_FOB` → NACX0005),
+  FX holiday **PLATTS-EUROPE** (Rotterdam Barges), underlying **FIXO** (tipoCotacao F / fonteInfo 340).
+  Já registrado no `Subjacente/Dominio.json`, então não gera Missing Index B3. Vale só para NDF Comm e
+  Opt Comm — **fora** do `FIXED_UND` das três páginas de NDF de moeda.
+
+## 121. Arquivo TER (Conecta) dos NDFs de moeda — regras finas
+
+Layout posicional de **648 chars**, criado em `4478d38` — `api_generic_nd_send_conecta(product)` serve
+`fwd-start` (prefixo `FWDSTART`) e `other-publishers` (prefixo `OTHERPUBLISHER`), com a flag `is_fwd`
+separando as regras. Três arquivos por entidade: **BANCO** (`JPMORGANBM`), **LAWTON**
+(`INTRAGLAWTONFDO` — perna espelho, cliente = Banco JPM) e **MGT** (`MORGANBC`).
+
+- **Contas pela LE do deal** (`216ae52`): o Lançamento do Participante deixou de depender do nome do
+  cliente — JPM → `73760009`, MGT → `04880006`. Contraparte pela matriz: LE JPM → MGT `04880006`,
+  demais `73760102`; LE MGT → JPM `73760009`, demais `04880109`; Lawton mantém `00041007` nas duas LEs.
+- **LE Lawton** (`45b29ed`): força parte `00041007` × contraparte `73760009` (banco, CNPJ em branco) no
+  arquivo LAWTON. Antes só o Client contendo "J.P. Morgan" era detectado e o deal caía no bucket BANCO.
+- **Valor Base / Quantidade** (`45b29ed`): o payload do OP manda a coluna como **`Notional`** (só o NDF
+  Comm usa `TotalNotional`) — o servidor aceita os dois, nessa ordem. Antes saía zerado.
+- **BRL fixed** (`45b29ed`, só no OP): a moeda estrangeira vira **Moeda de Referência** e o BRL a
+  **Moeda Cotada**.
+- **Fonte de Informação** (`45b29ed`): só o publisher **exatamente** `PTAX` vale `0`; PTAX* e demais
+  publishers valem `1`.
+- **Cotação para Fixing** (`45b29ed`) e **Boletim** (`f74f791`): **em branco no OP**. No FWD Start
+  seguem valendo (diferença de dias úteis e PTAX=3 / demais=1, respectivamente).
+- **Fonte de Consulta / Tela ou Função de Consulta** (`97fe07b`): o de-para publisher → códigos B3 casa
+  o nome exato da planilha e, se falhar, **casa por token** — a Athena manda o publisher composto
+  (`PTAX|USB|WMR|4`) e os dois campos saíam em branco. Tokens: `BFIX` → 14399/2,
+  `BCENTRAL`|`OBSERVADO` → 11703/5, `SBSP`|`BCRP` → 11683/5, `WMR` → 247/0, `TRM` → 11682/5.
+  Fonte de Consulta = **1 char**; Tela/Função = **8 chars à direita**, completada com espaços à esquerda.
+- **Posições verificadas** na linha de 648 chars (índices 0-based do Python): fonte info `[86:90]`,
+  Moeda Ref `[90:93]`, Moeda Cot `[93:96]`, Valor Base `[97:113]`, Trade+Settlement `[151:167]`,
+  **Boletim `[167:168]`**, Tipo de Cotação `[168:169]`, **Fonte de Consulta `[178:179]`**,
+  **Tela/Função `[179:187]`**, Cotação para Fixing `[253:254]`.
+- **⚠️ Espelho JS obrigatório**: cada regra existe **duas vezes** — no servidor e em
+  `buildConectaFields(deal, bizDayCount)` do template (preview do duplo clique, array `f[0..58]`:
+  f[11] Fonte de Informação, f[21] Boletim, f[25] Fonte de Consulta, f[26] Tela/Função, f[38] Cotação
+  para Fixing). O template do Other Publisher é OP-only (não precisa de gate `is_fwd`); mexeu numa
+  regra, mexa nos dois lados.
+- **Chaves do payload**: legal entity é **`LE`** (não `LegalEntity`) — um teste com a chave errada cai
+  no bucket BANCO sem erro nenhum.
+- Assunções documentadas: Data de Fixação do OP usa Strike Set Date (a página não tem o campo);
+  "diferença de dias úteis" = dias ANBIMA em (last fixing, settlement]; Vanilla segue sem send próprio.
+
+## 122. Sessão 2026-07-28 — Confirmações portadas da macro (NDF Commodities e Opção de Commodities)
+
+### NDF Commodities (`a2f8b2c`)
+- **Segregação** contraparte × mercadoria × família de moeda do strike, por trade date, sempre
+  excluindo as pontas internas (Client = Banco J.P. Morgan ou Lawton — banco×lawton e lawton×banco não
+  geram confirmação de cliente) e os `Canceled`.
+- **Famílias** (saem do deal): `strike-usd`, `brl` (BRR/BRL), `platts` (bolsa Bloomberg no Subjacente) e
+  `palm-oil` — **brl-platts e palm-oil ficam como "template pending"** até os `.doc` chegarem.
+- Botão **Confirmation** na página lista os grupos da data com status e ações; a geração abre o
+  documento pré-preenchido com as regras legadas: CGD do `CounterpartyDetails` por extenso, CNPJ
+  formatado, Tabela de Referência (comprador Parte B quando o banco vende, strike × Fator Conversão em
+  pt-BR, bullet "Não Aplicável", normalizações de ticker, texto dinâmico do CO1-2 com dias úteis ANBIMA).
+- **Ciclo próprio por grupo** (day-files em `cache/confirmations/ndf-comm`): New → Generated (Word+PDF
+  salvos) → Success (janela de validação com checklist ao lado do preview do PDF — só valida com tudo
+  marcado).
+- O **`.doc` é o próprio HTML do documento** (o Word abre HTML nativamente; os `.doc` legados já eram
+  Word-HTML) e o **PDF é réplica reportlab** (A4 paisagem). Variantes: `platts` troca o Anexo para
+  Código/Fonte de Divulgação; `brl` remove a PTAX pontual (USD PTAX = média entre as Datas
+  Inicial/Final de Verificação, preenchidas com a janela de fixing) e o Anexo vira 15 colunas com
+  Forward em R$.
+- Os Word-HTML originais ficam em `templates/pages` como **referência**; os operacionais são os de
+  **`templates/confirmations/`**.
+
+### XML do contrato (FepWeb) (`ddd0a63`)
+- Cada confirmação salva gera também o `.xml` com o nome do `numeroContrato`, na mesma pasta.
+  Valores dos **deals-fonte** (não das linhas editadas no painel): `valor` = Σ notional × strike
+  ajustado pelo quoted-in-cents (Fator Conversão do Subjacente, ou ÷100 quando YES) × Spot FXRate;
+  `valorEstrangeiro` = a mesma soma sem o câmbio; `moedaEstrangeira` em código ISO numérico;
+  `cnpjBanco` fixo; `cnpjCliente` = Tax ID; datas em `yyyymmdd` (vencimento = maior settlement do grupo).
+- `numeroContrato`: várias operações → `NDF_Comm_YYYYMMDD_MERCADORIA`; uma → nome do deal
+  (Mondelez: `Deal_MERCADORIA`). Ao gerar, ele é gravado na coluna **FepWeb ID** do Pending Confirmation
+  (match por Trade Number = deal, varrendo os 3 DBs).
+- A geração passou a **exigir status Success** nas operações (antes bastava não ser New/Pending).
+
+### Opção de Commodities (`f9621da`)
+- Mesma engenharia do NDF Comm: segregação contraparte × mercadoria × família (**CO1-2 vira família
+  própria, template pendente**), página de geração com painel de edição, Word+PDF+XML no Electronic
+  Inventory (pasta **Commodities Options**), ciclo New → Generated → Success, botão Confirmation na
+  página e card no monitor.
+- No **Anexo I a coluna Nº usa o Deal name** (opção não tem mais mnemônico). O XML reaproveita o
+  contrato do NDF com `tipoOperacao=Option` e prefixo `Opt_Comm` no `numeroContrato` — por isso
+  `_conf_ndf_xml` só ganhou parâmetros.
+
+### Onde os arquivos são salvos (`53efeb2`) — **corrigido**
+- Antes: `<EI_ROOT>\Confirmations\YYYY\mm. Mês\dd\<produto>` — uma árvore solta na raiz do share, e a
+  **pasta da contraparte** (a que o Electronic Inventory navega e onde o upload manual grava) ficava
+  vazia; ninguém achava as confirmações geradas.
+- Agora: **`<EI_ROOT>\<Contraparte>\Confirmations\YYYY\mm. Month\dd\<produto>`**, resolvendo a
+  contraparte por `parteb_nome` (fallback: acrônimo) via `_ei_resolve_client_dir(create=True)` — mesmo
+  match tolerante e mesma criação de subpastas do upload. O mês usa `_ei_month_folder` (**inglês**)
+  para cair na MESMA pasta mensal dos uploads, em vez de duplicar "07. Julho"/"07. July". As gravações
+  passam por `_ei_long_path` (o caminho novo repete o nome da contraparte e estoura MAX_PATH em nomes
+  longos).
+
+### Detalhes de template e layout
+- **Jinja fora de CSS/JS** (`c44a147`): o VS Code valida `<style>` como CSS e `<script>` como JS puros
+  e acusava 8 erros por template. O `{% if doc_only %}` dentro do `<style>` virou regra estática
+  `body.doc-only #doc-body` (a classe vem do Jinja no atributo do `<body>`, contexto HTML) e o
+  `{{ conf|tojson }}` foi para um bloco `<script type="application/json">` lido com `JSON.parse`.
+  **Padrão a seguir em qualquer template novo.**
+- **Blocos de assinatura** (`40ccbe8`): o nome da parte fica em linha própria e os dois campos
+  `Por:/____/Nome:` dividem uma única linha da tabela, lado a lado — antes saíam em escadinha no
+  impresso (idem testemunhas). A réplica PDF acompanha (`confirmation_pdfs.py`).
+- **`validate.html`** parametrizada por produto (`api_base`) e sem Jinja dentro de JS (`f9621da`).
+- **`btn-primary` respeitando `.btn-sm`** (`6a4c386`): o tema Apple fixava padding/font-size literais no
+  `.btn-primary` e no `.btn-outline-primary`, atropelando as variáveis `--ins-btn-*` do `.btn-sm` — no
+  modal de Confirmations o **Open** saía maior que o **Validate**. O tamanho fixo agora só vale em
+  `:not(.btn-sm):not(.btn-lg)`. **Sem node nesta máquina**: o `app.css` compilado foi editado à mão
+  espelhando o SCSS — o próximo `npm run build` regenera igual.
+
+### Spot FXRate (`543c9c4`)
+- O booking recap traz `SpotFXRate` ao lado do FXConvDate e a informação era descartada. O parser
+  compartilhado (`otc-fileupload`) passa a ler a coluna (header tolerante a espaços/caixa), grava no
+  cache e **inclui a coluna no diff de Amend**. A coluna entra antes do FXConvDate na NDF Comm e Opt
+  Comm, integrada a filtros, smart filter (number), toggle, exports, traduções e modal. Contagem de
+  `<th>` conferida: **31 NDF / 36 Opt**. Deals já importados ficam com a coluna vazia.
+
+## 123. Sessão 2026-07-27/28 — New Deals Monitor: zonas, contagem por LE e cards de Confirmations
+
+- **Zonas** (`c6dab82`, `2ce62a7`, `a2f8b2c`): os cards deixaram a grade única e viraram três zonas —
+  **B3 Registration** (larga, à esquerda), **Confirmations** e **Intrag** (com divisor). Cada subgrupo
+  (NDF / Options / Swaps) é uma **linha**, com os cards de B3 à esquerda e os das outras zonas na mesma
+  altura; abaixo de `xl` as metades empilham com o rótulo "Intrag — <grupo>". Produtos fora do catálogo
+  caem numa seção **Others** de largura total. `#ndmZones` com `padding-bottom` para a última linha não
+  encostar no rodapé (`6af6534`).
+- **Status do Intrag em minúscula** (`ca599d7`): os caches do Intrag NDF/Option guardam o lifecycle na
+  chave `status` (minúscula, convenção própria), mas o contador lia só `Status` — chave ausente caía no
+  default `New` e todo deal do Intrag aparecia como New para sempre. O contador tenta as duas chaves.
+- **Contagem por LE nos cards** (`14204f6`, `315ec0a`, `89564b1`, `c7f91a9`): cada card mostra a
+  contagem por entidade abaixo dos chips — NDFs genéricos com JPM/MGT/LAW; NDF Comm, Commodities
+  Options, FX Options e Swap CEM com JPM/LAW; Equity Options e Swap Equities com JPM/ATA; Intrag com
+  LAW/ATA. Na Intrag a entidade vem do portfolio code: **`INTRAGJP552` = LAW, `INTRAGJP633` = ATA**
+  (dict explícito; código inesperado conta como ATA). Os LEs viajam como **lista ordenada**, não dict,
+  para o front não depender de ordenação de chaves do JSON.
+  - **Regra final do `_ndm_deal_le` nos três NDFs genéricos** (`c7f91a9`): `LE=MGT` → MGT; Client
+    contendo LAWTON → LAW; resto → JPM. As tentativas anteriores usavam a heurística de perna-espelho
+    ("Client é o Banco J.P. Morgan") e classificavam MGT×JPM como LAW, porque o nome da MGT no RefData
+    também casa com o regex de J.P. Morgan. **Os demais produtos B3 mantêm a convenção de espelho**,
+    correta lá.
+- **Cards de Confirmations** (`ddd0a63`, `6af6534`): NDF Commodities (ciclo completo), Commodities
+  Options e FX Options (segregação contraparte × commodity / contraparte, pontas banco/Lawton fora) e
+  **NDF FWD Start** (segregação por contraparte — NDF de moeda não tem mercadoria — somando as duas
+  grafias de pasta do cache, `FwdStart` e `FWD Start`). Os que ainda não têm template ficam em New.
+- Renomeados no catálogo (`14204f6`): Option Commodities → **Commodities Options**; Option FXO →
+  **FX Options**.
+- **Ícones das zonas** (`1ed2cec`): B3 Registration e Intrag usam os **mesmos SVGs do sidenav**
+  (Index B3 e Intrag), num bloco oculto no fim do template que o JS clona (`zoneSvg`), evitando duplicar
+  paths gigantes na string. Os três ícones de título ganharam a **animação padrão** no hover
+  (`scale(1.1) rotate(-4deg)` + sombra, a cadeia about → sidenav → cards), com `prefers-reduced-motion`.
+
+## 124. Sessão 2026-07-28 — NDF Summary (Settlement Summary)
+
+- **Coluna Observation** (`4cf4a7a`): editável na célula e persistida no mesmo overlay diário do status
+  (`/api/ndf-summary/observation`) — sobrevive a reload e troca de reference date; texto vazio limpa.
+  Linhas manuais do Add row ficam fora do save (a célula de contraparte delas é um input, não um nome do
+  cockpit que o overlay possa chavear). Feedback discreto na célula (borda azul = salvo, vermelha =
+  falhou) e o dado da linha é atualizado junto, para um sort/filtro não redesenhar com o valor antigo.
+- **Coluna Account cruzada** (`195e164`): a Direction é visão do **BANCO**, mas os defaults PAY/RECEIVE
+  do Reference Data são visão da **CONTRAPARTE** — a coluna mostrava a conta errada. Agora cruza:
+  Direction PAY (banco paga, cliente recebe) → default de **RECEIVE**; Direction RECEIVE → default de
+  **PAY**. O e-mail de TEDs usa a mesma fonte.
+- **Observation automática** (`195e164`): classificação das contas default do cliente (interna = BCO 376
+  / JPMorgan) — ambas internas → "Pay and Receive Internal"; nenhuma → "Pay and Receive External";
+  mistas → "Pay Internal | Receive External" (ou o inverso). **A observação manual prevalece**; apagar o
+  texto manual restaura a automática no reload.
+- **Ficha de Liquidação em PDF anexa** (`a6f6f8f`): para as 6 contrapartes que a macro legada tratava
+  (ABB Automacao, ABB Eletrificacao, ABB Eletrificacao Filial 0003, Hitachi Energy, Phinia e Veolia
+  Water Technologies), o aviso de liquidação leva um PDF com o mesmo conteúdo do cartão branco do
+  e-mail. Nome: `<contraparte> - <yyyymmdd>.pdf`; match tolerante a caixa/acentos/traços; Pay/Rec com
+  dois avisos gera um PDF por aviso. Usa **reportlab importado de forma preguiçosa** — sem a lib o
+  e-mail sai **sem** o anexo, não falha. O `build_eml_bytes` ganhou **anexos genéricos**
+  (multipart/mixed envolvendo o corpo, wordmark inline preservado via multipart/related); **sem anexos o
+  formato antigo permanece byte a byte**, então os demais e-mails não mudaram.
+- **Largura** (`4cf4a7a` → `ec930b0` → `f419006`): col-xxl-8 → 10 → 11 → **col-12**, com a coluna
+  Direction travada em **84px** — foi preciso o card inteiro para Account e Observation caberem sem
+  scroll horizontal. Botões de ação por linha (`.ops-row-act`) travados em **32px** (min/max-width e
+  height), porque uma regra do tema alargava o check na instância da equipe.
+
+## 125. Sessão 2026-07-28 — Pending Confirmation
+
+- **Colunas removidas** (`57c7eca`): **Baixa Sem Abono** e **Abono** saem de cabeçalho, filtros,
+  Show/Hide, smart filter e modal. A coluna **Pendência deixa de ser data** — campo de texto livre, sem
+  datepicker e sem ordenação cronológica.
+- **Economic Group e Signature Type do RefData** (`57c7eca`): preenchidos em todo insert vindo dos feeds
+  pelo novo `_pc_refdata_enrich` (chave SPN, fallback nome do Client), que roda no `_pc_save_from_deal`
+  (todas as páginas de New Deals) e no import do xlsx Pending Update.
+- **INSERT nomeando colunas** (em vez de VALUES posicional): o app funciona também contra um DB ainda
+  não migrado (colunas legadas extras ficam NULL) — **sem janela de quebra entre o pull e o script**.
+- **Dark mode e modal** (`f148d62`): os campos auto usavam `var(--bs-secondary-bg)` — este tema só
+  define tokens `--ins-*`, então o fallback claro `#e9ecef` valia sempre e os campos ficavam brancos no
+  escuro (trocados por `--ins-tertiary-bg`/`--ins-secondary-color`; reforça a regra da §109.1). O Edit
+  preenchia o modal com o **HTML cru** das células (Status aparecia como `&lt; 10 dias…`) — todos os
+  campos passam pelo `_pcStrip`.
+
+## 126. Sessão 2026-07-28 — NOVA página Intrag Swap (`77b8b29`)
+
+- `/intrag-swap` com as **36 colunas** do layout B3 de swap (CARTEIRA, Código B3, datas, partes/curvas,
+  prêmio e os dois blocos de curva — o segundo ganha sufixo "(2)" **só na UI**; o `.txt` leva apenas os
+  valores na ordem do layout).
+- Mesmo ciclo da Intrag NDF: day-files `YYYYMMDD_intrag_swap.json` em `cache/new deals/Intrag/Swap`,
+  **New → Pending → Approved → Sent** com 4-eyes (maker ≠ checker), Send gerando
+  `Intrag-Swap-YYYYMMDD.txt` na mesma pasta de rede **agrupado por Data Início**, e Mapping Intrag ID
+  pelo CSV Boletas (**assume 'SWAP' na col B e B3 ID na col C** — espelho da NDF; se o retorno diferir,
+  ajustar num ponto só).
+- Headers/filtros/modal são **gerados em JS a partir de `SWAP_COLS`** para não triplicar 36 blocos
+  estáticos de HTML. **Sem feed automático** — linhas entram pelo Add Row.
+- Sidenav: item **Swap** no menu Intrag (entra no Page Access automaticamente) e "Intrag Swap" nos mapas
+  de notificação (routes + topbar). No mesmo commit saíram os placeholders **SPB** e **SDConta** do
+  Daily Settlement (âncoras `#spb`/`#sdconta` sem página real).
+
+## 127. Sessão 2026-07-28 — Correções diversas
+
+- **Tema: padrão único light/dark** (`50c2bcf`) — usuários com config antiga no localStorage (tema
+  `system`, corpo claro com sidenav/topbar escuros, ou cores avulsas do customizer) ficavam presos a um
+  visual fora do padrão. O `config.js` **normaliza a config no load de toda página** (tema ≠ dark vira
+  light; cores de topbar/menu seguem sempre o tema) e **regrava o localStorage**, consertando o usuário
+  afetado no primeiro reload. O `changeTheme` só conhece light/dark (ramo `system` aposentado) e a opção
+  System saiu do customizer. Cache-busters em `config.js`/`app.js`, que não tinham nenhum.
+- **Topbar: nav central não sobrepõe os controles** (`e56c3fe`) — o nav é `position: absolute` para ficar
+  centrado na página, e fora do fluxo passava por cima de sino/tema/idioma/usuário quando a janela
+  encolhia. **Abaixo de 1500px** ele entra no fluxo flex entre o logo e os controles, com `min-width: 0`
+  e scroll horizontal de scrollbar escondida (cobre quem personalizou até 7 atalhos). Acima de 1500px o
+  layout original fica intacto; abaixo de 992px o nav já era escondido. Cache-buster no
+  `visual-refresh.css`, que não tinha.
+- **Electronic Inventory: listagem escondia não-PDF** (`81ecc7f`) — o filtro `ext != .pdf` deixava uma
+  SSI escaneada em **JPG** (caso AMAGGI) invisível: a página mostrava 0 arquivos com o documento na
+  pasta. O filtro passa a aceitar o **mesmo whitelist do Upload** (.pdf, imagens, .msg/.eml, office,
+  .zip). Lixo de sistema segue fora por não estar no whitelist.
+- **Reference Data: edit de conta bancária dava `not_found`** (`d7cb876`) — causa-raiz: registros
+  antigos do `CounterpartyDetails.json` guardam BANKING como PAY/RECEIVE, **sem lista ACCOUNTS nem ids**.
+  O modal (que lê o JSON estático) inventava um id aleatório no navegador e o backend re-migrava o
+  legado **em memória a cada request com outros uuids, sem nunca persistir** — o id nunca batia (caso
+  SUZANO SA). Agora o `_cpd_load` **migra todos os registros para o formato canônico** (ACCOUNTS/contatos
+  com id estável, CGD em itens, NET presente) e **persiste na primeira leitura em que algo mudou**;
+  a normalização é idempotente e também roda na subida do app. O JSON versionado foi junto já migrado;
+  na instância da equipe o arquivo local é migrado na subida (com `.bak` automático).
+- **OTM Settlements** (`ea0e4bb`): ordenação padrão **Cpty Name A→Z, depois Trade Id A→Z** (a tabela
+  abria com `order: []`, na ordem crua do arquivo). Os índices são resolvidos **pelo nome da coluna**
+  (+3 das fixas), então sobrevivem a mudanças na lista de colunas do servidor.
+- **Operations B3 / Mensageria** (`ed12d8c`): resgate de TER saía como "Resgate NDF" no subject — a
+  macro que a página substitui usa **"Vencimento de Termo"** e o time reconhece o e-mail por esse nome.
+  O "Favor considerar" comparava as somatórias com tolerância de meio centavo **sem arredondar**, o que
+  podia engolir divergência real de R$ 0,01: agora os dois lados são arredondados ao centavo e qualquer
+  diferença ≥ 1 centavo mostra a linha.
+- **Daily Metric vira draft** (`960ce05`): o card do Control Panel disparava o e-mail direto pelo SMTP,
+  sem revisão. `_send_daily_metric_email` virou **`_build_daily_metric_eml`** — mesma mensagem, com
+  `X-Unsent: 1`, devolvida em base64 e baixada pela página (padrão dos avisos de prêmio). **O draft leva
+  o header `Bcc`** (diferente do envio real, onde o BCC fica só no envelope) para o campo aparecer
+  preenchido no Outlook. Não havia agendador — o único caminho era o botão Run. Textos do card e da
+  notificação: Sent → **Draft**.
+- **Daily Metric e Weekly Escalation leem do DB** (`f9621da`): passam a ler direto do DB pending
+  (Aging/Status recalculados na leitura) — o snapshot diário podia estar defasado e vira apenas fallback.
+- **`update_base_from_xlsx` grava SIGNATURE TYPE** (`a2add2e`): a planilha Atualizar Base ganhou a
+  coluna K; o script grava no RefData casando pelo SPN, com a regra dos demais campos (célula vazia não
+  sobrescreve). Contador novo no relatório de dry-run/apply.
+
+## 128. ⚠️ Scripts a rodar UMA VEZ na instância da equipe (após o pull)
+
+Migrações idempotentes — rodar na raiz do projeto, com o venv ativo:
+
+```bash
+python scripts/update_pending_confirmation_dbs.py       # 57c7eca — remove Baixa Sem Abono/Abono dos 3 DuckDBs
+                                                        #           e preenche Economic Group/Signature Type pelo RefData
+python scripts/update_pending_confirmation_bankers.py   # 8c15508 — regrava Owner (banker) pelo BANKER do RefData
+                                                        #           (chave SPN sem zeros à esquerda; fallback nome do Client)
+```
+
+- Os dois são **idempotentes**; a página lê dos DBs, então corrigir os DBs corrige a página.
+- O `CounterpartyDetails.json` **não** precisa de script: a migração roda sozinha na subida do app, com
+  `.bak` automático (`d7cb876`).
+- Dependências novas na instância JPM: `pip install -r requirements.txt` (traz `requests` e `reportlab`)
+  **e, para o SSO da API Athena no Windows**, descomentar/instalar `requests-negotiate-sspi`.
