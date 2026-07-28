@@ -203,7 +203,7 @@
 
     <!-- Zonas (preenchidas pelo JS a partir de /api/new-deals/monitor):
          esquerda = registro na B3, direita = Intrag; subgrupos NDF/Options/Swaps -->
-    <div class="row g-4" id="ndmZones"></div>
+    <div class="row g-3 gy-4" id="ndmZones"></div>
 
 </div>
 {% endblock page_content %}
@@ -289,23 +289,19 @@
             '</div>');
     }
 
-    // Zonas: esquerda = registro na B3, direita = Intrag — ambas com os
-    // subgrupos NDF / Options / Swaps na mesma ordem.
-    var LAYOUT = [
-        { cls: 'col-xl-8', zone: '', icon: 'ti-building-bank',
-          titleKey: 'ndm-zone-b3', title: 'B3 Registration', cols: 'row-cols-xxl-3 row-cols-md-2 row-cols-1',
-          groups: [
-              { key: 'ndm-grp-ndf',     label: 'NDF',     cards: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla'] },
-              { key: 'ndm-grp-options', label: 'Options', cards: ['opt-commodities', 'opt-fxo', 'opt-equity'] },
-              { key: 'ndm-grp-swaps',   label: 'Swaps',   cards: ['swap-equities', 'swap-cem'] }
-          ] },
-        { cls: 'col-xl-4', zone: ' ndm-zone--intrag', icon: 'ti-building',
-          titleKey: 'ndm-zone-intrag', title: 'Intrag', cols: 'row-cols-1',
-          groups: [
-              { key: 'ndm-grp-ndf',     label: 'NDF',     cards: ['intrag-ndf'] },
-              { key: 'ndm-grp-options', label: 'Options', cards: ['intrag-option'] },
-              { key: 'ndm-grp-swaps',   label: 'Swaps',   cards: ['intrag-swap'] }
-          ] }
+    // Zonas alinhadas por LINHA: cada subgrupo (NDF / Options / Swaps) é uma
+    // linha com o lado B3 à esquerda e o card Intrag correspondente à direita,
+    // então os cards da mesma família ficam sempre na mesma altura.
+    var GROUPS = [
+        { key: 'ndm-grp-ndf',     label: 'NDF',
+          b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla'],
+          intrag: ['intrag-ndf'] },
+        { key: 'ndm-grp-options', label: 'Options',
+          b3: ['opt-commodities', 'opt-fxo', 'opt-equity'],
+          intrag: ['intrag-option'] },
+        { key: 'ndm-grp-swaps',   label: 'Swaps',
+          b3: ['swap-equities', 'swap-cem'],
+          intrag: ['intrag-swap'] }
     ];
 
     function render(cards) {
@@ -317,19 +313,32 @@
                                      soon: true, total: 0, statuses: {} };
         }
         var used = {};
-        var html = LAYOUT.map(function (z) {
-            var groups = z.groups.map(function (g) {
-                var cs = g.cards.filter(function (k) { return byKey[k]; })
-                    .map(function (k) { used[k] = true; return cardHtml(byKey[k]); }).join('');
-                if (!cs) return '';
-                return '<div class="ndm-grp">' +
-                       '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
-                       '<div class="row ' + z.cols + ' g-3">' + cs + '</div></div>';
-            }).join('');
-            return '<div class="' + z.cls + '"><div class="ndm-zone' + z.zone + '">' +
-                   '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ' + z.icon + '"></i></span>' +
-                   esc(t(z.titleKey, z.title)) + '</h5>' + groups + '</div></div>';
-        }).join('');
+        function pick(keys) {
+            return keys.filter(function (k) { return byKey[k]; })
+                       .map(function (k) { used[k] = true; return cardHtml(byKey[k]); }).join('');
+        }
+        // Cabeçalhos das zonas (uma vez, no topo das duas metades)
+        var html =
+            '<div class="col-xl-9">' +
+              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-building-bank"></i></span>' +
+              esc(t('ndm-zone-b3', 'B3 Registration')) + '</h5></div>' +
+            '<div class="col-xl-3 d-none d-xl-block"><div class="ndm-zone--intrag">' +
+              '<h5 class="ndm-zone-title"><span class="ndm-zone-ico"><i class="ti ti-building"></i></span>' +
+              esc(t('ndm-zone-intrag', 'Intrag')) + '</h5></div></div>';
+        GROUPS.forEach(function (g) {
+            var left  = pick(g.b3);
+            var right = pick(g.intrag);
+            var title = '<div class="ndm-grp-title"><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>';
+            html +=
+                '<div class="col-xl-9"><div class="ndm-grp">' + title +
+                    '<div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">' + left + '</div>' +
+                '</div></div>' +
+                '<div class="col-xl-3"><div class="ndm-zone--intrag h-100"><div class="ndm-grp">' +
+                    '<div class="ndm-grp-title"><span class="d-xl-none" data-lang-ignore>' +
+                    esc(t('ndm-zone-intrag', 'Intrag')) + ' — </span><span data-lang-ignore>' + esc(t(g.key, g.label)) + '</span></div>' +
+                    '<div class="row row-cols-1 g-3">' + right + '</div>' +
+                '</div></div></div>';
+        });
         // Produtos fora do catálogo ("e etc") — grupo Others no fim, largura total
         var extras = cards.filter(function (c) { return !used[c.key]; });
         if (extras.length) {
