@@ -2,14 +2,12 @@
 athena_api.py
 =============
 
-Client for the Brazil CEM AI (M3A) Athena Market Data REST API ``getTrades``
-endpoint. One product per call; today only **NDF** and **FXO** are functional
-on the API side — Commodities and Swaps are already routed here but raise
-``NotImplementedError`` until the endpoint goes live for them.
+Client for the Brazil Athena Trade Data REST API ``getTrades`` endpoint.
+One product per call — NDF, Commodities, FXO and Swaps respondem no PROD.
 
-Endpoint (UAT)::
+Endpoint (PROD)::
 
-    https://athena-app-uat.jpmchase.net/FXCASH/brazil-cem-ai-market-data-api/api/v1/getTrades?product=NDF&date=20260723
+    https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=NDF&date=20260728
 
 Authentication is ADFS / IDAnywhere (Kerberos single sign-on); the current
 Windows identity is used, so no credentials are prompted. The SSO handshake
@@ -45,7 +43,7 @@ except ImportError:  # pragma: no cover - only fails outside a Windows/JPMC host
 # Configuration
 # --------------------------------------------------------------------------- #
 
-BASE_URL = "https://athena-app-uat.jpmchase.net/FXCASH/brazil-cem-ai-market-data-api"
+BASE_URL = "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api"
 TRADES_ENDPOINT = "/api/v1/getTrades"
 
 # Canonical key → value of the ``product`` query-string parameter.
@@ -55,8 +53,8 @@ PRODUCTS = {
     "COMMODITIES": "Commodities",
     "SWAPS": "Swaps",
 }
-# Only these products answer on the API today; the others are wired but dormant.
-FUNCTIONAL_PRODUCTS = ("NDF", "FXO")
+# All four products answer on the PROD endpoint.
+FUNCTIONAL_PRODUCTS = ("NDF", "FXO", "COMMODITIES", "SWAPS")
 
 # ADFS only issues the Kerberos 'Negotiate' challenge for User-Agents on its
 # WIASupportedUserAgents allow-list. The default python-requests UA is not on it,
