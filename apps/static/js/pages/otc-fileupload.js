@@ -623,6 +623,7 @@ var OTCFileUpload = (function () {
         var settleDate   = fmtDateStr(getField(deal, 'SettlementDate') || getField(deal, 'SettleDate'));
         var spotDate     = fmtDateStr(getField(deal, 'SpotDate'));
         var fxConvDate   = fmtDateStr(getField(deal, 'FXConvDate') || getField(deal, 'FxConvDate'));
+        var spotFxRate   = getField(deal, 'SpotFXRate') || getField(deal, 'SpotFxRate') || getField(deal, 'Spot FX Rate');
 
         // Numeric / text fields — try multiple header-name variants
         var notionalRaw  = getField(deal, 'TotalNotional') ||
@@ -699,15 +700,16 @@ var OTCFileUpload = (function () {
             premiumPU,                                                                                              // col 24 PremiumPerUnit
             premiumCcy,                                                                                             // col 25 PremiumCCY (normalized)
             spotDate,                                                                                               // col 26 SpotDate
-            fxConvDate,                                                                                             // col 27 FXConvDate
-            fixStart,                                                                                               // col 28 FixingStartDate
-            fixEnd,                                                                                                 // col 29 FixingEndDate
-            tradingBook,                                                                                            // col 30 TradingBook
-            otherBook,                                                                                              // col 31 OtherBook
-            quotedCents,                                                                                            // col 32 Quoted in Cents?
-            makerSid,                                                                                               // col 33 Maker   (hidden)
-            rowId                                                                                                   // col 34 RowID   (hidden)
-        ], {0:1,1:1,2:1,10:1,11:1,32:1});
+            spotFxRate,                                                                                             // col 27 SpotFXRate
+            fxConvDate,                                                                                             // col 28 FXConvDate
+            fixStart,                                                                                               // col 29 FixingStartDate
+            fixEnd,                                                                                                 // col 30 FixingEndDate
+            tradingBook,                                                                                            // col 31 TradingBook
+            otherBook,                                                                                              // col 32 OtherBook
+            quotedCents,                                                                                            // col 33 Quoted in Cents?
+            makerSid,                                                                                               // col 34 Maker   (hidden)
+            rowId                                                                                                   // col 35 RowID   (hidden)
+        ], {0:1,1:1,2:1,10:1,11:1,33:1});
 
         // NDF-specific row (31 cols): no Premium, PremiumPerUnit, PremiumCCY, SpotDate
         var rowArrayNDF = _escRow([
@@ -734,14 +736,15 @@ var OTCFileUpload = (function () {
             strike,                                                                                                 // col 20 Strike
             strikeCcy,                                                                                              // col 21 Strike Currency
             direction,                                                                                              // col 22 Direction
-            fxConvDate,                                                                                             // col 23 FXConvDate
-            fixStart,                                                                                               // col 24 FixingStartDate
-            fixEnd,                                                                                                 // col 25 FixingEndDate
-            tradingBook,                                                                                            // col 26 TradingBook
-            otherBook,                                                                                              // col 27 OtherBook
-            quotedCents,                                                                                            // col 28 Quoted in Cents?
-            makerSid,                                                                                               // col 29 Maker   (hidden)
-        ], {0:1,1:1,2:1,10:1,11:1,28:1});
+            spotFxRate,                                                                                             // col 23 SpotFXRate
+            fxConvDate,                                                                                             // col 24 FXConvDate
+            fixStart,                                                                                               // col 25 FixingStartDate
+            fixEnd,                                                                                                 // col 26 FixingEndDate
+            tradingBook,                                                                                            // col 27 TradingBook
+            otherBook,                                                                                              // col 28 OtherBook
+            quotedCents,                                                                                            // col 29 Quoted in Cents?
+            makerSid,                                                                                               // col 30 Maker   (hidden)
+        ], {0:1,1:1,2:1,10:1,11:1,29:1});
 
         var isNDF = (layout === 'ndf');
 
@@ -767,6 +770,7 @@ var OTCFileUpload = (function () {
             Strike:            strike,
             StrikeCurrency:    strikeCcy,
             Direction:         direction,
+            SpotFXRate:        spotFxRate,
             FXConvDate:        fxConvDate,
             FixingStartDate:   fixStart,
             FixingEndDate:     fixEnd,
@@ -1036,7 +1040,7 @@ var OTCFileUpload = (function () {
     function importDealsFromHtml(htmlText, refMap, subjacenteIdx, tableInstance, makerSid, cacheEndpoint, rowLayout) {
         var deals   = parseEmailHtml(htmlText);
         var isNDF   = (rowLayout === 'ndf');
-        var dataEnd = isNDF ? 28 : 32; // last data column index
+        var dataEnd = isNDF ? 29 : 33; // last data column index
 
         if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
 
@@ -1103,9 +1107,9 @@ var OTCFileUpload = (function () {
                 var existingClient = _stripHtml(String(existingRowData[10] || ''));
                 var patchUrl = isNDF
                     ? cacheEndpoint + '/' + encodeURIComponent(dealName) + '?client=' + encodeURIComponent(existingClient)
-                    : cacheEndpoint + '/' + String(existingRowData[34] || '');
+                    : cacheEndpoint + '/' + String(existingRowData[35] || '');
                 if (!isNDF) {
-                    var existingId = String(existingRowData[34] || '');
+                    var existingId = String(existingRowData[35] || '');
                     if (!existingId) {
                         // OPT: no UUID — treat as new row
                         tableInstance.row.add(newRow).draw(false);
@@ -1115,7 +1119,7 @@ var OTCFileUpload = (function () {
                         }).catch(function (err) { console.warn('OTCFileUpload: cache save failed', err); });
                         return;
                     }
-                    newRow[34]   = existingId;
+                    newRow[35]   = existingId;
                     newData.id   = existingId;
                     patchUrl     = cacheEndpoint + '/' + existingId;
                 }
