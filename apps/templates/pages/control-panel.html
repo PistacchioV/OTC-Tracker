@@ -453,9 +453,10 @@
                     <div class="cp-card__icon"><i class="ti ti-mail-check"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-dm-title">Daily Metric — Outstanding Confirmation Brazil OTC</h3>
                     <p class="cp-card__desc" data-lang="cp-r-dm-desc">
-                        E-mails the Outstanding Confirmation Brazil OTC daily metric to a saved recipient
-                        list. Set the recipients (TO) once — they are saved and reused on every run, so you
-                        don't have to retype them. The reference date is always today.
+                        Builds the Outstanding Confirmation Brazil OTC daily metric as an Outlook draft
+                        (.eml download) addressed to the saved recipient list — open the file to review
+                        and send it yourself. Set the recipients (TO) once — they are saved and reused
+                        on every run. The reference date is always today.
                     </p>
                     <div class="cp-field">
                         <label data-lang="cp-dm-to">TO</label>
@@ -471,7 +472,7 @@
                     </div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-dm-meta">Saved recipients → e-mail</span>
+                            <i class="ti ti-mail"></i><span data-lang="cp-dm-meta">Saved recipients → .eml draft</span>
                         </span>
                         <button type="button" class="cp-run-btn" data-metric-run data-date-input="cp-dm-date">
                             <i class="ti ti-player-play"></i>
@@ -837,6 +838,19 @@ document.addEventListener('click', function (e) {
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
             if (res.ok && res.body && res.body.success !== false) {
+                // The routine no longer sends: it returns the e-mail as an .eml
+                // draft (base64) saved locally — the person opens it in Outlook,
+                // reviews and sends.
+                if (res.body.b64) {
+                    var bin = atob(res.body.b64);
+                    var bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    var url = URL.createObjectURL(new Blob([bytes], { type: 'message/rfc822' }));
+                    var a = document.createElement('a');
+                    a.href = url; a.download = res.body.filename || 'daily_metric_draft.eml';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+                }
                 Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
                             html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
             } else {

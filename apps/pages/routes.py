@@ -3875,10 +3875,12 @@ def _fmt_day_lbl(date):         # "2026-07-01" -> "01/07"
         return date
 
 
-def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
-    """Deliver the 'Daily Metric — Outstanding Confirmation Brazil OTC' e-mail to
-    the saved recipients. Best-effort — returns True or an error string. Renders
-    the growth metric (>30d) + the per-client aging pivot from the latest snapshot."""
+def _build_daily_metric_eml(ref, to_list, cc_list, bcc_list):
+    """Build the 'Daily Metric — Outstanding Confirmation Brazil OTC' e-mail as an
+    Outlook draft (.eml bytes, X-Unsent) instead of delivering it — the person
+    downloads the file, reviews and sends it themselves. Returns (bytes, None) on
+    success or (None, error string). Renders the growth metric (>30d) + the
+    per-client aging pivot from the latest snapshot."""
     from email.mime.image import MIMEImage
     try:
         ref_fmt = ref.strftime('%d/%m/%Y')
@@ -3921,6 +3923,11 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
             msg['To'] = ', '.join(to_list)
         if cc_list:
             msg['Cc'] = ', '.join(cc_list)
+        if bcc_list:
+            # Unlike a real delivery (BCC only in the envelope), a draft needs the
+            # header so Outlook pre-fills the Bcc field for the person to review.
+            msg['Bcc'] = ', '.join(bcc_list)
+        msg['X-Unsent'] = '1'               # → Outlook opens the .eml as an editable draft
         alt = MIMEMultipart('alternative')
         alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
         alt.attach(MIMEText(html, 'html', 'utf-8'))
@@ -3937,15 +3944,12 @@ def _send_daily_metric_email(ref, to_list, cc_list, bcc_list):
         # (which ignores CSS gradients). Modern clients keep the CSS linear-gradient.
         _attach_email_gradient(msg)
 
-        recipients = to_list + cc_list + bcc_list          # BCC only in the envelope, never in headers
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
-            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
-        log.info('[daily-metric] e-mail sent — to=%s cc=%s bcc=%d (%d clients, source=%s)',
+        log.info('[daily-metric] draft built — to=%s cc=%s bcc=%d (%d clients, source=%s)',
                  to_list, cc_list, len(bcc_list), len(pivot), source)
-        return True
+        return msg.as_bytes(), None
     except Exception as e:
-        log.error('[daily-metric] e-mail FAILED:\n%s', traceback.format_exc())
-        return '{}: {}'.format(type(e).__name__, e)
+        log.error('[daily-metric] draft FAILED:\n%s', traceback.format_exc())
+        return None, '{}: {}'.format(type(e).__name__, e)
 
 
 @blueprint.route('/api/control-panel/daily-metric/recipients', methods=['GET', 'POST'])
@@ -3968,7 +3972,8 @@ def api_cp_daily_metric_recipients():
 
 @blueprint.route('/api/control-panel/daily-metric/run', methods=['POST'])
 def api_cp_daily_metric_run():
-    """Send the Daily Metric e-mail to the saved recipients for today's date."""
+    """Build the Daily Metric e-mail as a downloadable .eml draft (X-Unsent) for
+    the saved recipients — the person opens it in Outlook, reviews and sends."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
@@ -3984,15 +3989,19 @@ def api_cp_daily_metric_run():
     if not (to_list or cc_list or bcc_list):
         return jsonify({'success': False,
                         'error': 'Nenhum destinatário salvo. Preencha TO/CC/BCC antes de rodar.'}), 400
-    result = _send_daily_metric_email(ref, to_list, cc_list, bcc_list)
-    if result is not True:
-        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    raw, err = _build_daily_metric_eml(ref, to_list, cc_list, bcc_list)
+    if err:
+        return jsonify({'success': False, 'error': 'Draft failed: {}'.format(err)}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Daily Metric Sent', 'Control Panel',
-                         'Outstanding Confirmation Brazil OTC e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+                         'Daily Metric Draft', 'Control Panel',
+                         'Outstanding Confirmation Brazil OTC draft generated ({})'.format(ref.strftime('%Y-%m-%d')))
     n = len(to_list) + len(cc_list) + len(bcc_list)
+    # The .eml ships as base64 in the JSON (New Deals premium-notice pattern) and
+    # the page saves the file — Outlook opens it as an editable draft.
     return jsonify({'success': True,
-                    'message': 'Daily Metric enviado para {} destinatário(s).'.format(n)})
+                    'filename': 'Daily_Metric_Outstanding_Confirmation_{}.eml'.format(ref.strftime('%d%m%Y')),
+                    'b64': base64.b64encode(raw).decode('ascii'),
+                    'message': 'Draft gerado com {} destinatário(s). Abra o arquivo baixado no Outlook para revisar e enviar.'.format(n)})
 
 
 # ──────────────────────────────────────────────────────────────────────────
