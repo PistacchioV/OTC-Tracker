@@ -714,6 +714,197 @@ def build_ndf_settlement_emails(trades, ref_date=None):
     return drafts
 
 
+# ── Ficha de Liquidação em PDF (NDF de Moeda) ─────────────────────────────
+# Para estas contrapartes o aviso de liquidação leva ANEXO um PDF com o mesmo
+# conteúdo do cartão branco do e-mail (logo, data, título, tabela, totais,
+# instrução, aviso TED, dados bancários e assinatura). Lista espelhada da
+# macro legada (CommodiXchange).
+_NDF_PDF_COUNTERPARTIES = (
+    'ABB AUTOMACAO LTDA',
+    'ABB ELETRIFICACAO LTDA - FILIAL 0003',
+    'ABB ELETRIFICACAO LTDA',
+    'HITACHI ENERGY BRASIL LTDA',
+    'PHINIA DO BRASIL PRODUTOS AUTOMOTIVOS LTDA',
+    'VEOLIA WATER TECHNOLOGIES AND SOLUTIONS BRASIL TRATAMENTO DE AGUAS LTDA',
+)
+
+
+def _ndf_pdf_norm(name):
+    """Nome → chave de comparação (sem acento, caixa alta, traços e espaços
+    normalizados) — tolera diferenças de grafia entre RefData e a lista."""
+    s = str(name or '').replace('–', '-').replace('—', '-')
+    s = unicodedata.normalize('NFKD', s)
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    return ' '.join(s.upper().split())
+
+
+_NDF_PDF_SET = {_ndf_pdf_norm(n) for n in _NDF_PDF_COUNTERPARTIES}
+
+
+def _ndf_settlement_pdf(ref_date, headers, data_rows, summary_pairs,
+                        instr_text, notice_text, bank_title, bank_pairs):
+    """Ficha de Liquidação em PDF — réplica do cartão branco do e-mail.
+    Retorna os bytes do PDF, ou None quando o reportlab não está instalado
+    (o e-mail sai sem o anexo em vez de falhar)."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                        Table, TableStyle, Image, HRFlowable)
+    except ImportError:
+        return None
+
+    BLUE  = colors.HexColor(_E_BLUE)
+    NAVY  = colors.HexColor(_E_NAVY)
+    INK   = colors.HexColor(_E_INK)
+    MUTED = colors.HexColor(_E_MUTED)
+    HAIR  = colors.HexColor('#e6e6ea')
+    ZEBRA = colors.HexColor('#f6f7f9')
+
+    body_style = ParagraphStyle('body', fontName='Helvetica', fontSize=9.5,
+                                leading=14.5, textColor=colors.HexColor('#333333'),
+                                alignment=4)          # 4 = justify
+    muted_style = ParagraphStyle('muted', parent=body_style,
+                                 textColor=colors.HexColor('#6c6c72'))
+    title_style = ParagraphStyle('title', fontName='Helvetica-Bold', fontSize=15,
+                                 leading=19, textColor=INK)
+    kv_head_style = ParagraphStyle('kvhead', fontName='Helvetica-Bold', fontSize=7.5,
+                                   leading=10, textColor=MUTED)
+    foot_style = ParagraphStyle('foot', fontName='Helvetica', fontSize=7.5,
+                                leading=12, textColor=MUTED)
+
+    story = []
+
+    # Cabeçalho: logo à esquerda, data à direita (mesma proporção do e-mail)
+    try:
+        logo = Image(_E_LOGO_FILE, width=110, height=110.0 * _E_LOGO_H / _E_LOGO_W)
+    except Exception:
+        logo = Paragraph('<b>J.P.Morgan</b>', title_style)
+    date_p = Paragraph(str(ref_date or ''), ParagraphStyle(
+        'date', fontName='Helvetica-Bold', fontSize=8, textColor=MUTED, alignment=2))
+    head = Table([[logo, date_p]], colWidths=[300, 215])
+    head.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                              ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                              ('RIGHTPADDING', (0, 0), (-1, -1), 0)]))
+    story.append(head)
+    story.append(Spacer(1, 14))
+    story.append(HRFlowable(width=33, thickness=2.5, color=BLUE, hAlign='LEFT'))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph('Liquidação de Operação de Derivativo', title_style))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('Prezados Senhores,', body_style))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) '
+                           'de derivativos abaixo especificada(s):', body_style))
+    story.append(Spacer(1, 12))
+
+    # Tabela de operações — cabeçalho navy, zebra, hairlines (como no e-mail).
+    # Cabeçalhos como Paragraph para os títulos longos quebrarem linha em vez
+    # de invadirem a coluna vizinha.
+    head_cell = ParagraphStyle('thead', fontName='Helvetica-Bold', fontSize=6.5,
+                               leading=8.5, textColor=colors.white, alignment=1)
+    tbl = Table([[Paragraph(str(h).upper(), head_cell) for h in headers]] +
+                [[str(c) for c in r] for r in data_rows],
+                colWidths=[515.0 / len(headers)] * len(headers), repeatRows=1)
+    zebra_cmds = [('BACKGROUND', (0, i), (-1, i), ZEBRA)
+                  for i in range(2, len(data_rows) + 1, 2)]
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 7.5),
+        ('TEXTCOLOR', (0, 1), (-1, -1), INK),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('BOX', (0, 0), (-1, -1), 0.5, HAIR),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#edeef1')),
+    ] + zebra_cmds))
+    story.append(tbl)
+    story.append(Spacer(1, 14))
+
+    # Painel de totais (última linha em azul, como no e-mail)
+    sum_rows = [[lbl, val] for lbl, val, _tot in summary_pairs]
+    sums = Table(sum_rows, colWidths=[140, 110], hAlign='LEFT')
+    sum_cmds = [
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f3f6fb')),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#dbe6f3')),
+        ('LINEABOVE', (0, 1), (-1, -1), 0.5, colors.HexColor('#dbe6f3')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+    ]
+    for i, (_lbl, _val, is_total) in enumerate(summary_pairs):
+        sum_cmds += [('FONTNAME', (0, i), (-1, i), 'Helvetica-Bold'),
+                     ('FONTSIZE', (0, i), (-1, i), 10.5 if is_total else 8.5),
+                     ('TEXTCOLOR', (1, i), (1, i), BLUE if is_total else INK)]
+    sums.setStyle(TableStyle(sum_cmds))
+    story.append(sums)
+
+    if instr_text:
+        story.append(Spacer(1, 14))
+        story.append(Paragraph(instr_text, body_style))
+    if notice_text:
+        story.append(Spacer(1, 6))
+        notice = Table([[Paragraph('<b>Importante:</b> ' + notice_text,
+                                   ParagraphStyle('notice', parent=body_style,
+                                                  fontSize=8.5, leading=12.5,
+                                                  alignment=0))]],
+                       colWidths=[515])
+        notice.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#d9d9de')),
+            ('TOPPADDING', (0, 0), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10)]))
+        story.append(notice)
+    story.append(Spacer(1, 12))
+
+    # Dados bancários (título + tabela chave/valor, como no e-mail)
+    story.append(Paragraph(str(bank_title or '').upper(), kv_head_style))
+    story.append(Spacer(1, 4))
+    kv = Table([[lbl, val] for lbl, val in bank_pairs],
+               colWidths=[150, 190], hAlign='LEFT')
+    kv.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 0.5, HAIR),
+        ('LINEABOVE', (0, 1), (-1, -1), 0.5, colors.HexColor('#ececf0')),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#6c6c72')),
+        ('TEXTCOLOR', (1, 0), (1, -1), INK),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10)]))
+    story.append(kv)
+    story.append(Spacer(1, 14))
+    story.append(Paragraph('A presente Ficha de Liquidação é parte integrante e inseparável do '
+                           'Contrato e/ou da Confirmação de Operação de Derivativo em referência.',
+                           muted_style))
+
+    # Assinatura (rodapé do cartão)
+    story.append(Spacer(1, 18))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=colors.HexColor('#ececf0')))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph('<b>Atenciosamente,</b>', foot_style))
+    story.append(Paragraph('Banco J.P. Morgan S.A. &nbsp;|&nbsp; Av. Brigadeiro Faria Lima, 3729 '
+                           '– 15º andar – São Paulo – SP<br/>'
+                           'T: 55 11 4950 6717 &nbsp;|&nbsp; brsp_otc_derivatives_ops@jpmorgan.com '
+                           '&nbsp;|&nbsp; jpmorgan.com<br/>'
+                           'Ouvidoria JPMorgan: 0800 – 7700847 &middot; '
+                           'ouvidoria.jp.morgan@jpmorgan.com', foot_style))
+
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=40, rightMargin=40,
+                      topMargin=36, bottomMargin=36,
+                      title='Liquidação de Operação de Derivativo').build(story)
+    return buf.getvalue()
+
+
 def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     apurado = sum(float(t.get('settlement') or 0.0) for t in items)
     ir = sum(float(t.get('tax') or 0.0) for t in items)
@@ -740,11 +931,12 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
          'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido'],
         data_rows)
 
-    summary = _email_summary([
+    summary_pairs = [
         ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
         ('IR (0,005%)',       'R$ ' + _br(ir),               False),
         ('Resultado Final',   'R$ ' + _br_currency(final),   True),
-    ])
+    ]
+    summary = _email_summary(summary_pairs)
 
     # Same settlement-instruction / banking logic as the premium notice: the
     # sign of the final result decides who transfers (negative → JPMorgan pays
@@ -763,29 +955,34 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         ('Conta-corrente nº', '985181643'),
         ('CNPJ/MF nº', '46.518.205/0001-64'),
     ]
-    notice = ''
+    notice_text = ''
     if final < 0:
-        instr = _ep('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
-                    'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
-                    'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
-                    'Financeira e/ou confirmados por ligação telefônica:')
+        instr_text = ('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
+                      'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
+                      'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
+                      'Financeira e/ou confirmados por ligação telefônica:')
         bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM pays → PAY details
-        bank = _email_kv('Dados para pagamento', [
+        bank_title = 'Dados para pagamento'
+        bank_pairs = [
             ('Nome e nº do banco', bank_name or '—'),
             ('Nº e nome da agência', agency or '—'),
             ('Conta-corrente nº', account or '—'),
             ('CNPJ/MF nº', _fmt_cnpj(taxid)),
-        ])
+        ]
     else:
-        instr = _ep('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
-                    'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
-                    'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
-                    'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
-                    'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        instr_text = ('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
+                      'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
+                      'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
+                      'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
+                      'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
         if final > 0:
-            notice = _email_notice('Não são aceitas transferências via PIX. As transferências devem ser '
-                                   'realizadas exclusivamente por meio de TED.')
-        bank = _email_kv('Dados bancários', _JPM_BANK_KV)
+            notice_text = ('Não são aceitas transferências via PIX. As transferências devem ser '
+                           'realizadas exclusivamente por meio de TED.')
+        bank_title = 'Dados bancários'
+        bank_pairs = list(_JPM_BANK_KV)
+    instr = _ep(instr_text) if instr_text else ''
+    notice = _email_notice(notice_text) if notice_text else ''
+    bank = _email_kv(bank_title, bank_pairs)
 
     def _gap(h):
         return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
@@ -806,13 +1003,34 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 
-    return {
+    draft = {
         'subject': subject,
         'html': html,
         'cc': 'Liquidação',                    # FX flow — Comm Sales isn't copied
         'to': to_emails,
         'counterparty': contraparte,           # for the caller's per-cpty count; not emitted in the .eml
     }
+
+    # Contrapartes que exigem a Ficha de Liquidação também em PDF anexo (mesmo
+    # conteúdo do cartão branco do e-mail). Nome do anexo: "<cpty> - <yyyymmdd>".
+    if _ndf_pdf_norm(contraparte) in _NDF_PDF_SET:
+        try:
+            ymd = datetime.strptime(ref_date, '%d/%m/%Y').strftime('%Y%m%d')
+        except ValueError:
+            ymd = datetime.now().strftime('%Y%m%d')
+        pdf = _ndf_settlement_pdf(
+            ref_date=ref_date,
+            headers=['Nº da Confirmação', 'Data de Início da Operação',
+                     'Notional Original da Operação', 'Resultado Apurado',
+                     'IR (0,005%)', 'Resultado Líquido'],
+            data_rows=data_rows, summary_pairs=summary_pairs,
+            instr_text=instr_text, notice_text=notice_text,
+            bank_title=bank_title, bank_pairs=bank_pairs)
+        if pdf:
+            draft['attachments'] = [{
+                'filename': _safe_filename('{} - {}'.format(contraparte, ymd)) + '.pdf',
+                'mime': 'application/pdf', 'data': pdf}]
+    return draft
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -991,35 +1209,72 @@ def build_eml_bytes(draft, sender_email=None):
         lines.append('Bcc: ' + bcc)
     lines.append('X-Unsent: 1')                 # → opens as editable draft in Outlook
     html = draft.get('html', '') or ''
+    attachments = [a for a in (draft.get('attachments') or []) if a.get('data')]
+
+    def _b64_wrap(data):
+        b64 = base64.b64encode(data).decode('ascii')
+        return '\r\n'.join(b64[i:i + 76] for i in range(0, len(b64), 76))
 
     logo = _logo_bytes() if ('cid:' + _E_LOGO_CID) in html else None
-    if not logo:
-        # No inline image (or the asset is missing) — keep the simple single-part
-        # message. The header cell still carries the styled alt text, so a draft
-        # built without the logo reads as the old wordmark rather than breaking.
-        lines.append('Content-Type: text/html; charset=utf-8')
-        lines.append('Content-Transfer-Encoding: 8bit')
-        return ('\r\n'.join(lines) + '\r\n\r\n' + html).encode('utf-8')
+    md5 = hashlib.md5(subj.encode('utf-8')).hexdigest()[:16]
 
-    # multipart/related is what makes Outlook render the wordmark inline instead
-    # of hanging it off the message as an attachment.
-    boundary = '=_otctracker_related_' + hashlib.md5(subj.encode('utf-8')).hexdigest()[:16]
-    lines.append('Content-Type: multipart/related; type="text/html"; boundary="' + boundary + '"')
-    out = ['\r\n'.join(lines), '']
-    out.append('--' + boundary)
-    out.append('Content-Type: text/html; charset=utf-8')
-    out.append('Content-Transfer-Encoding: 8bit')
-    out.append('')
-    out.append(html)
-    out.append('--' + boundary)
-    out.append('Content-Type: image/png')
-    out.append('Content-Transfer-Encoding: base64')
-    out.append('Content-ID: <' + _E_LOGO_CID + '>')
-    out.append('Content-Disposition: inline; filename="' + os.path.basename(_E_LOGO_FILE) + '"')
-    out.append('')
-    b64 = base64.b64encode(logo).decode('ascii')
-    out.append('\r\n'.join(b64[i:i + 76] for i in range(0, len(b64), 76)))
-    out.append('--' + boundary + '--')
+    # Conteúdo "visível" (sem os headers top-level): single-part html, ou
+    # multipart/related (html + wordmark inline) — o related é o que faz o
+    # Outlook renderizar o logo no corpo em vez de pendurá-lo como anexo.
+    if logo:
+        rel = '=_otctracker_related_' + md5
+        inner_ct = 'multipart/related; type="text/html"; boundary="' + rel + '"'
+        inner_lines = [
+            '--' + rel,
+            'Content-Type: text/html; charset=utf-8',
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            html,
+            '--' + rel,
+            'Content-Type: image/png',
+            'Content-Transfer-Encoding: base64',
+            'Content-ID: <' + _E_LOGO_CID + '>',
+            'Content-Disposition: inline; filename="' + os.path.basename(_E_LOGO_FILE) + '"',
+            '',
+            _b64_wrap(logo),
+            '--' + rel + '--',
+        ]
+    else:
+        # No inline image (or the asset is missing) — simple single-part html.
+        # The header cell still carries the styled alt text, so a draft built
+        # without the logo reads as the old wordmark rather than breaking.
+        inner_ct = 'text/html; charset=utf-8'
+        inner_lines = None
+
+    if not attachments:
+        lines.append('Content-Type: ' + inner_ct)
+        if inner_lines is None:
+            lines.append('Content-Transfer-Encoding: 8bit')
+            return ('\r\n'.join(lines) + '\r\n\r\n' + html).encode('utf-8')
+        return ('\r\n'.join(lines) + '\r\n\r\n' + '\r\n'.join(inner_lines) + '\r\n').encode('utf-8')
+
+    # Com anexos (ex.: Ficha de Liquidação em PDF): multipart/mixed envolvendo
+    # o conteúdo visível + um part base64 por anexo.
+    mixed = '=_otctracker_mixed_' + md5
+    lines.append('Content-Type: multipart/mixed; boundary="' + mixed + '"')
+    out = ['\r\n'.join(lines), '', '--' + mixed, 'Content-Type: ' + inner_ct]
+    if inner_lines is None:
+        out.append('Content-Transfer-Encoding: 8bit')
+        out.append('')
+        out.append(html)
+    else:
+        out.append('')
+        out.extend(inner_lines)
+    for a in attachments:
+        fn = _safe_filename(a.get('filename') or 'attachment')
+        out.append('--' + mixed)
+        out.append('Content-Type: ' + (a.get('mime') or 'application/octet-stream') +
+                   '; name="' + fn + '"')
+        out.append('Content-Transfer-Encoding: base64')
+        out.append('Content-Disposition: attachment; filename="' + fn + '"')
+        out.append('')
+        out.append(_b64_wrap(a['data']))
+    out.append('--' + mixed + '--')
     out.append('')
     return '\r\n'.join(out).encode('utf-8')
 

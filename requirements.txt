@@ -23,5 +23,6 @@ seaborn>=0.13.0
 duckdb>=1.0.0
 flask-minify>=0.42
 requests>=2.31.0
+reportlab>=4.0.0
 # Athena API Kerberos SSO — Windows-only, install on the JPM instance:
 # requests-negotiate-sspi>=0.5.2
