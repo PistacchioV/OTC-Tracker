@@ -14235,12 +14235,30 @@ _ND_INTERBOOK_PAIRS = frozenset(
     ))
 
 
+# Segunda forma de interbook, por (End Counterparty × Trading Book): aqui a
+# contraparte do negócio é o PRÓPRIO book do outro lado, então o par identifica a
+# perna interna sem depender da location. Os pares abaixo são NÃO ORDENADOS — as
+# duas direções são geradas, porque a mesma operação chega uma vez por ponta,
+# com contraparte e book trocados.
+_ND_INTERBOOK_CPTY_BOOK = frozenset(
+    direcao
+    for cpty, book in (
+        ('DERIV NDF BJPM FXC', 'GN NDF BJPM'),
+    )
+    for direcao in ((_ndf_flat(cpty), _ndf_flat(book)),
+                    (_ndf_flat(book), _ndf_flat(cpty)))
+)
+
+
 def _ndf_is_interbook(norm):
-    """True quando o registro da API é uma perna interbook (ver a lista acima).
-    Predicado compartilhado: o mapeamento usa para descartar e o pull para contar
-    quantos foram descartados, sem duplicar a regra."""
-    return (_ndf_flat(norm.get('OTHER BOOK')),
-            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in _ND_INTERBOOK_PAIRS
+    """True quando o registro da API é uma perna interbook (ver as duas listas
+    acima). Predicado compartilhado: o mapeamento usa para descartar e o pull
+    para contar quantos foram descartados, sem duplicar a regra."""
+    if (_ndf_flat(norm.get('OTHER BOOK')),
+            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in _ND_INTERBOOK_PAIRS:
+        return True
+    return (_ndf_flat(norm.get('END COUNTERPARTY')),
+            _ndf_flat(norm.get('TRADING BOOK'))) in _ND_INTERBOOK_CPTY_BOOK
 
 
 def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
