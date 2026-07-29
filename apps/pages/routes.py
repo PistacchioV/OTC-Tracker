@@ -8540,8 +8540,13 @@ def _opb3_refdata_by_account():
 
 
 def _opb3_internal_ter_map(ref):
-    """Contrato B3 (upper) → Σ SETTLEMENT interno (Cockpit NDF) — lado JP do
-    batimento do e-mail para Tipo Título = TER."""
+    """B3 ID (upper) → Σ SETTLEMENT interno — lado JP do batimento para
+    Tipo Título = TER (NDF de moeda).
+
+    É exatamente o par (B3 ID, SETTLEMENT) do card Trade Level do NDF Summary:
+    as mesmas linhas de exibição do Cockpit (CD_CETIP_RETURN já com os resgates
+    de contrato aplicados) e a coluna SETTLEMENT pura — não a SETTLEMENT B3, que
+    é o lado da B3 e é justamente o outro lado da comparação."""
     out = {}
     try:
         ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
@@ -8610,11 +8615,23 @@ def api_opb3_mensageria():
     # o que ainda não foi gerado.
     picked = {str(i) for i in (p.get('ids') or []) if str(i).strip()}
 
-    # Linhas elegíveis: Modalidade de Liquidação Bilateral* ou Bruta*, ainda não
-    # geradas (ou explicitamente marcadas para regerar).
-    def _eligible(rec):
+    # Intragrupo: a visão "MGT x Banco" (casa = MGT, contraparte = Banco) é a
+    # MESMA liquidação da visão "Banco x MGT", só com o fluxo invertido — o
+    # arquivo mgt.* traz a outra ponta do que já veio no operacoes-jpm. Ela nunca
+    # vira e-mail, nem marcando o checkbox: sem essa regra, o segundo clique
+    # gerava justamente o e-mail espelhado.
+    def _mgt_view(rec):
+        return (_acc_digits(rec.get('Conta', '')) == _OPB3_ACCT_MGT
+                and _acc_digits(rec.get('Conta Contraparte', '')) == _OPB3_ACCT_BANCO)
+
+    def _bilateral(rec):
         m = _fcst_norm(str(rec.get('Modalidade Liquidação', '') or ''))
-        if not (m.startswith('bilateral') or m.startswith('bruta')):
+        return m.startswith('bilateral') or m.startswith('bruta')
+
+    # Linhas elegíveis: Bilateral*/Bruta*, fora da visão MGT, ainda não geradas
+    # (ou explicitamente marcadas para regerar).
+    def _eligible(rec):
+        if not _bilateral(rec) or _mgt_view(rec):
             return False
         if str(rec.get('_ob_status', '') or '') == _OPB3_STATUS_GENERATED:
             return str(rec.get('_ob_id', '') or '') in picked
@@ -8630,31 +8647,6 @@ def api_opb3_mensageria():
         gkey = (tipo, conta_cp, _fcst_norm(tipo_op))
         groups.setdefault(gkey, {'tipo': tipo, 'conta_cp': conta_cp, 'tipo_op': tipo_op,
                                  'recs': []})['recs'].append(rec)
-
-    # Intragrupo Banco × MGT: o negócio chega duas vezes — o arquivo do Banco traz
-    # a visão "Banco x MGT" e o do MGT a mesma mensagem espelhada ("MGT x Banco").
-    # Quando as duas pontas estão presentes só a visão Banco vira e-mail. O par é
-    # reconhecido pelo CONTRATO (Título), não pelo Type/Tipo Operação derivados —
-    # a visão MGT pode não casar com a posição do Banco e ficar sem Type.
-    def _casa(g):
-        return _acc_digits(str(g['recs'][0].get('Conta', '') or ''))
-
-    def _titulos(recs):
-        return {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
-
-    banco_titulos = set()
-    for g in groups.values():
-        if _casa(g) == _OPB3_ACCT_BANCO and _acc_digits(g['conta_cp']) == _OPB3_ACCT_MGT:
-            banco_titulos |= _titulos(g['recs'])
-    if banco_titulos:
-        for gkey in list(groups):
-            g = groups[gkey]
-            if _casa(g) != _OPB3_ACCT_MGT or _acc_digits(g['conta_cp']) != _OPB3_ACCT_BANCO:
-                continue
-            g['recs'] = [r for r in g['recs']
-                         if str(r.get('Título', '') or '').strip().upper() not in banco_titulos]
-            if not g['recs']:
-                del groups[gkey]
 
     if not groups:
         return jsonify({'success': False,
@@ -8675,15 +8667,17 @@ def api_opb3_mensageria():
         cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
         total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
-        # Lado interno: TER → SETTLEMENT do Cockpit (a mesma coluna Settlement do
-        # card Trade Level do NDF Summary); SWAP prêmio → DAGENDAPREMIOS. Soma só
-        # as operações do grupo que casam por contrato — nenhuma casando significa
-        # que não há fonte para comparar e o e-mail sai sem "Favor considerar".
+        # Lado interno: TER → SETTLEMENT do card Trade Level do NDF Summary
+        # (_opb3_internal_ter_map); SWAP prêmio → DAGENDAPREMIOS. A soma é por
+        # B3 ID DISTINTO: o mapa já traz o total do contrato, então iterar linha
+        # a linha contaria o mesmo contrato duas vezes quando o grupo tem mais de
+        # uma operação sobre ele. Nenhum id casando = sem fonte para comparar e o
+        # e-mail sai sem "Favor considerar".
         src = ter_map if 'ter' in titn else (prem_map if ('swap' in titn and opn == 'pagamento de premio') else None)
         internal = None
         if src:
-            vals = [v for v in (src.get(str(r.get('Título', '') or '').strip().upper()) for r in recs)
-                    if v is not None]
+            ids = {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
+            vals = [v for v in (src.get(i) for i in ids) if v is not None]
             if vals:
                 internal = sum(vals)
 
@@ -8732,6 +8726,11 @@ def api_opb3_mensageria():
     for rec in used:
         rec['_ob_status'] = _OPB3_STATUS_GENERATED
         rec['Status'] = _OPB3_B3_STATUS_DONE
+    # A visão MGT não gera e-mail, mas a liquidação dela saiu na visão Banco —
+    # fica Generated para a tabela não sugerir que ficou algo pendente.
+    for rec in data:
+        if _bilateral(rec) and _mgt_view(rec):
+            rec['_ob_status'] = _OPB3_STATUS_GENERATED
     try:
         _otm_save(jp, data)
     except Exception:
