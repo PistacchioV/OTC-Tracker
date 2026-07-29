@@ -404,6 +404,7 @@
   "bm-symbol": "Currency Code",
   "bm-quot-type": "Quotation Type",
   "bm-decimals": "Decimal Places",
+  "bm-rows": "rows",
   "b3-class": "Class",
   "b3-underlying-asset-code": "Underlying Asset Code",
   "b3-exchange": "Exchange",

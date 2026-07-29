@@ -216,13 +216,14 @@
                         <i class="ti ti-currency-dollar me-1 text-primary"></i>
                         <span data-lang="b3-tab-base-moeda">Currency Base</span>
                     </h5>
-                    <input type="text" class="form-control form-control-sm" id="bmFilter"
-                           style="max-width:240px" placeholder="Filter…" data-lang-placeholder="bm-filter">
+                    <span class="text-muted fs-xs">
+                        <span id="bmCount">0</span> <span data-lang="bm-rows">rows</span>
+                    </span>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height:62vh">
                         <table class="table table-sm table-striped table-hover mb-0 align-middle" id="baseMoedaTable">
-                            <thead class="thead-sm text-uppercase fs-xxs" style="position:sticky;top:0;z-index:1">
+                            <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr>
                                     <th data-lang="bm-type">Type</th>
                                     <th data-lang="bm-indicator-type">Indicator Type</th>
@@ -232,6 +233,16 @@
                                     <th data-lang="bm-symbol">Currency Code</th>
                                     <th data-lang="bm-quot-type">Quotation Type</th>
                                     <th data-lang="bm-decimals">Decimal Places</th>
+                                </tr>
+                                <tr class="bm-filter-row">
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="0" placeholder="Type" data-lang-placeholder="bm-type" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="1" placeholder="Indicator Type" data-lang-placeholder="bm-indicator-type" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="2" placeholder="Field" data-lang-placeholder="bm-field" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="3" placeholder="Field Description" data-lang-placeholder="bm-field-desc" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="4" placeholder="Registration Code" data-lang-placeholder="bm-reg-code" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="5" placeholder="Currency Code" data-lang-placeholder="bm-symbol" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="6" placeholder="Quotation Type" data-lang-placeholder="bm-quot-type" autocomplete="off"></th>
+                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="7" placeholder="Decimal Places" data-lang-placeholder="bm-decimals" autocomplete="off"></th>
                                 </tr>
                             </thead>
                             <tbody id="bmTbody"></tbody>
@@ -461,18 +472,28 @@
                     const COLS = ['TIPO', 'TIPO DE INDICADOR', 'CAMPO', 'DESCRICAO DO CAMPO',
                                   'CODIGO DE CADASTRO', 'SIMBOLO', 'TIPO COTACAO', 'CASAS DECIMAIS'];
                     const tbody = document.getElementById('bmTbody');
-                    const render = filter => {
-                        const f = (filter || '').trim().toUpperCase();
-                        tbody.innerHTML = rows
-                            .filter(r => !f || COLS.some(c => String(r[c] || '').toUpperCase().includes(f)))
+                    const filters = [...document.querySelectorAll('.bm-col-filter')];
+                    // Filtro por coluna (AND entre as colunas preenchidas), no
+                    // lugar do campo único do canto do card.
+                    const render = () => {
+                        const terms = filters
+                            .map(i => ({ col: COLS[+i.dataset.col], v: i.value.trim().toUpperCase() }))
+                            .filter(t => t.v);
+                        const out = rows.filter(r =>
+                            terms.every(t => String(r[t.col] || '').toUpperCase().includes(t.v)));
+                        tbody.innerHTML = out
                             .map(r => '<tr>' + COLS.map((c, i) =>
                                 '<td' + (i === 5 ? ' class="fw-semibold"' : '') + '>' +
                                 esc(r[c]) + '</td>').join('') + '</tr>')
                             .join('');
+                        const cnt = document.getElementById('bmCount');
+                        if (cnt) cnt.textContent = out.length;
                     };
-                    render('');
-                    const inp = document.getElementById('bmFilter');
-                    if (inp) inp.addEventListener('input', () => render(inp.value));
+                    render();
+                    filters.forEach(i => i.addEventListener('input', () => {
+                        i.classList.toggle('bm-has-val', !!i.value);
+                        render();
+                    }));
                 })
                 .catch(() => {});
 

@@ -403,6 +403,7 @@
   "bm-symbol": "Código de Moneda",
   "bm-quot-type": "Tipo de Cotización",
   "bm-decimals": "Decimales",
+  "bm-rows": "filas",
   "b3-class": "Clase",
   "b3-underlying-asset-code": "Código del Activo Subyacente",
   "b3-exchange": "Bolsa de Negociación",
