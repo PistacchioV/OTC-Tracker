@@ -14571,6 +14571,8 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         'Rate':              ('{:,.8f}'.format(strike_v) if strike_v is not None else ''),
         'IsBRRFixed':        ('YES' if qty_ccy == 'BRL' else 'NO'),
         'TradingBook':       str(get('TRADING BOOK') or '').strip(),
+        # `loc` é o SETTLEMENT LOCATION cru (upper) já lido para derivar a LE.
+        'SettlementLocation': loc,
         'Maker':             sid,
     }
     if target == 'fwd-start':

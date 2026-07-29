@@ -881,7 +881,8 @@
                                     <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-rate">Rate</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-is-brr-fixed">Is BRR Fixed?</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trading-book">TradingBook</th>
-                                    <th></th><!-- col 25: Maker  (hidden) -->
+                                    <th data-table-sort="" data-format="text" data-lang="nd-col-settle-loc">Settlement Location</th>
+                                    <th></th><!-- Maker (hidden) -->
                                 </tr>
 
                                 <!-- Linha de inputs para busca por coluna -->
@@ -912,7 +913,8 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Rate" data-lang-placeholder="col-rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Is BRR Fixed?" data-lang-placeholder="col-is-brr-fixed"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="TradingBook" data-lang-placeholder="col-trading-book"></th>
-                                    <th></th><!-- Maker  (hidden) -->
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Location" data-lang-placeholder="col-settle-loc"></th>
+                                    <th></th><!-- Maker (hidden) -->
                                 </tr>
                             </thead>
                             <tbody>
@@ -1236,9 +1238,10 @@ var COL_TO_JSON_FIELD = {
     14: 'LastFixingDate',  15: 'Instrument',
     16: 'TradeType',       17: 'Direction',
     18: 'FXPair',          19: 'QuantityCurrency',
-    20: 'Publisher',       21: 'Notional',
-    22: 'Rate',            23: 'IsBRRFixed',
-    24: 'TradingBook',     25: 'Maker'
+    20: 'OtherQuantityCurrency', 21: 'Publisher',
+    22: 'Notional',        23: 'Rate',
+    24: 'IsBRRFixed',      25: 'TradingBook',
+    26: 'SettlementLocation', 27: 'Maker'
 };
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
@@ -1271,7 +1274,7 @@ function dealJsonToRow(deal) {
     // alterados; aqui viram índices de coluna para o drawCallback pintar as
     // células (mesmo mecanismo do amend por e-mail).
     if (st === 'Amend' && deal.AmendChanged && deal.AmendChanged.length) {
-        var AMEND_FIELD_COLS = { LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, Instrument: 15, TradeType: 16, Direction: 17, FXPair: 18, QuantityCurrency: 19, OtherQuantityCurrency: 20, Publisher: 21, Notional: 22, Rate: 23, IsBRRFixed: 24, TradingBook: 25 };
+        var AMEND_FIELD_COLS = { LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, Instrument: 15, TradeType: 16, Direction: 17, FXPair: 18, QuantityCurrency: 19, OtherQuantityCurrency: 20, Publisher: 21, Notional: 22, Rate: 23, IsBRRFixed: 24, TradingBook: 25, SettlementLocation: 26 };
         if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
         window._OTC_AMEND_CHANGED_COLS[deal.Deal] = deal.AmendChanged
             .map(function (f) { return AMEND_FIELD_COLS[f]; })
@@ -1313,6 +1316,7 @@ function dealJsonToRow(deal) {
         deal.Rate              || '',
         deal.IsBRRFixed        || '',
         deal.TradingBook       || '',
+        deal.SettlementLocation || '',
         deal.Maker             || ''
     ], {0:1,1:1,2:1,11:1,12:1});
 }
@@ -1372,7 +1376,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [24, 26]   // Is BRR Fixed (dropped from this page) + Maker SID
+                targets: [24, 27]   // Is BRR Fixed (dropped from this page) + Maker SID
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1896,7 +1900,8 @@ $(document).ready(function() {
                 "First Fixing Date", "Last Fixing Date",
                 "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
                 "Other Quantity Currency",
-                "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook"
+                "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook",
+                "Settlement Location"
             ];
 
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
@@ -1982,11 +1987,13 @@ $(document).ready(function() {
                     '<option value="17">Direction</option>' +
                     '<option value="18">FX Pair</option>' +
                     '<option value="19">Quantity Currency</option>' +
-                    '<option value="20">Publisher</option>' +
-                    '<option value="21">Notional</option>' +
-                    '<option value="22">Rate</option>' +
-                    '<option value="23">Is BRR Fixed?</option>' +
-                    '<option value="24">TradingBook</option>';
+                    '<option value="20">Other Quantity Currency</option>' +
+                    '<option value="21">Publisher</option>' +
+                    '<option value="22">Notional</option>' +
+                    '<option value="23">Rate</option>' +
+                    '<option value="24">Is BRR Fixed?</option>' +
+                    '<option value="25">TradingBook</option>' +
+                    '<option value="26">Settlement Location</option>';
 
                 // Botão Send
                 var confirmBtn = document.createElement('button');
@@ -2053,17 +2060,18 @@ $(document).ready(function() {
         { label: 'Direction',         type: 'text',   dtCol: 17 },
         { label: 'FX Pair',           type: 'text',   dtCol: 18 },
         { label: 'Quantity Currency', type: 'text',   dtCol: 19 },
-        { label: 'Publisher',         type: 'text',   dtCol: 20 },
-        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 23 },
-        { label: 'TradingBook',       type: 'text',   dtCol: 24 },
+        { label: 'Publisher',         type: 'text',   dtCol: 21 },
+        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 24 },
+        { label: 'TradingBook',       type: 'text',   dtCol: 25 },
+        { label: 'Settlement Location', type: 'text', dtCol: 26 },
         // date columns
         { label: 'Trade Date',        type: 'date',   dtCol: 6  },
         { label: 'Settlement Date',   type: 'date',   dtCol: 8  },
         { label: 'First Fixing Date', type: 'date',   dtCol: 13 },
         { label: 'Last Fixing Date',  type: 'date',   dtCol: 14 },
         // number columns
-        { label: 'Notional',          type: 'number', dtCol: 21 },
-        { label: 'Rate',              type: 'number', dtCol: 22 }
+        { label: 'Notional',          type: 'number', dtCol: 22 },
+        { label: 'Rate',              type: 'number', dtCol: 23 }
     ];
 
     var sfActive = [];      // [{col, value}]
@@ -2675,7 +2683,7 @@ $(document).ready(function() {
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[26] || '';
+            var rowMaker  = d[27] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -3290,7 +3298,8 @@ $(document).ready(function() {
             Publisher:        _sh(d[21]),
             Notional:         _sh(d[22]),
             Rate:             _sh(d[23]),
-            IsBRRFixed:       _sh(d[24])
+            IsBRRFixed:       _sh(d[24]),
+            SettlementLocation: _sh(d[26])
         };
     }
 
@@ -3322,7 +3331,8 @@ $(document).ready(function() {
             Rate:             _sh(d[23]),
             IsBRRFixed:       _sh(d[24]),
             TradingBook:      _sh(d[25]),
-            Maker:            d[26] || '',
+            SettlementLocation: _sh(d[26]),
+            Maker:            d[27] || '',
             Checker:          ''
         };
         if (overrides) {

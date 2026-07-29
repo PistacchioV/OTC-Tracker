@@ -1440,5 +1440,7 @@
   "map-saved": "Saved",
   "map-deleted": "Deleted",
   "map-copied": "Copied",
-  "map-tab-bank-name": "Bank Name"
+  "map-tab-bank-name": "Bank Name",
+  "nd-col-settle-loc": "Settlement Location",
+  "col-settle-loc": "Settlement Location"
 }

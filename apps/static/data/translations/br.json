@@ -1440,5 +1440,7 @@
   "map-saved": "Salvo",
   "map-deleted": "Excluído",
   "map-copied": "Copiado",
-  "map-tab-bank-name": "Bancos (Bank Name)"
+  "map-tab-bank-name": "Bancos (Bank Name)",
+  "nd-col-settle-loc": "Local de Liquidação",
+  "col-settle-loc": "Local de Liquidação"
 }
