@@ -14215,9 +14215,11 @@ def _ndf_flat(s):
 
 
 # Interbook: pernas internas entre books do próprio banco, não são negócio de
-# cliente e nunca entram na aplicação. A regra é o PAR (Trading Book ×
+# cliente e nunca entram na aplicação. A regra é o PAR (Other Book ×
 # Settlement Location) — o book sozinho não basta, porque o mesmo book opera
-# cliente em outra location. Lista fechada, definida pela mesa.
+# cliente em outra location. O book olhado é o da CONTRAPARTE (Other Book), não o
+# Trading Book: é a outra ponta que identifica a perna como interna.
+# Lista fechada, definida pela mesa.
 _ND_INTERBOOK_PAIRS = frozenset(
     (_ndf_flat(book), _ndf_flat(loc)) for book, loc in (
         ('GN ON BRL',             'BRAZIL'),
@@ -14237,7 +14239,7 @@ def _ndf_is_interbook(norm):
     """True quando o registro da API é uma perna interbook (ver a lista acima).
     Predicado compartilhado: o mapeamento usa para descartar e o pull para contar
     quantos foram descartados, sem duplicar a regra."""
-    return (_ndf_flat(norm.get('TRADING BOOK')),
+    return (_ndf_flat(norm.get('OTHER BOOK')),
             _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in _ND_INTERBOOK_PAIRS
 
 
@@ -14258,7 +14260,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # Internal holding book — not a client trade, never imported
     if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_'):
         return None, None
-    # Interbook (Trading Book × Settlement Location) — mesma natureza do holding
+    # Interbook (Other Book × Settlement Location) — mesma natureza do holding
     # book acima: perna interna, não é negócio de cliente.
     if _ndf_is_interbook(norm):
         return None, None
@@ -14465,7 +14467,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
                 os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
                              rd.strftime('%Y%m%d') + cfg['suffix']), nm)
     if skipped_interbook:
-        log.info('[ndf-api] %d interbook leg(s) skipped (Trading Book × Settlement Location)',
+        log.info('[ndf-api] %d interbook leg(s) skipped (Other Book × Settlement Location)',
                  skipped_interbook)
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,
