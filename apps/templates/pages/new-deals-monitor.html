@@ -137,6 +137,49 @@
     }
 }
 
+/* Sombreado de progresso — cor calculada no JS (--ndm-prog = "r, g, b"):
+   vermelho enquanto as operações não saíram do New, âmbar no meio do caminho,
+   verde quando o card inteiro está Success. Só em cards COM operações.
+   Sombra em CAMADAS (contato + média + halo largo), não um contorno chapado:
+   é a receita de elevação — o card parece flutuar sobre uma luz colorida. A
+   borda fica quase neutra de propósito, para não ler como "cor do card".
+   Sem animação própria (é um estado, não um evento — a transição do card já
+   cobre a troca de data). Fica DEPOIS do bloco :hover para vencer o azul. */
+#ndm-page .ndm-card--prog {
+    border-color: rgba(var(--ndm-prog), .3);
+    box-shadow: 0 2px 5px rgba(var(--ndm-prog), .12),
+                0 10px 24px rgba(var(--ndm-prog), .22),
+                0 22px 50px rgba(var(--ndm-prog), .14);
+}
+/* Concluído (tudo Success) fala mais baixo: o card resolvido não precisa gritar */
+#ndm-page .ndm-card--prog.is-done {
+    border-color: rgba(var(--ndm-prog), .22);
+    box-shadow: 0 2px 5px rgba(var(--ndm-prog), .08),
+                0 10px 24px rgba(var(--ndm-prog), .14),
+                0 22px 50px rgba(var(--ndm-prog), .09);
+}
+[data-bs-theme=dark] #ndm-page .ndm-card--prog {
+    border-color: rgba(var(--ndm-prog), .38);
+    box-shadow: 0 2px 6px rgba(var(--ndm-prog), .18),
+                0 12px 28px rgba(var(--ndm-prog), .3),
+                0 26px 58px rgba(var(--ndm-prog), .2);
+}
+/* Hover: o card já sobe 6px — a sombra acompanha, mais espalhada e mais funda */
+@media (hover: hover) and (pointer: fine) {
+    #ndm-page .ndm-card--prog:hover {
+        border-color: rgba(var(--ndm-prog), .42);
+        box-shadow: 0 4px 10px rgba(var(--ndm-prog), .16),
+                    0 18px 38px rgba(var(--ndm-prog), .3),
+                    0 34px 70px rgba(var(--ndm-prog), .2);
+    }
+    #ndm-page .ndm-card--prog.is-done:hover {
+        border-color: rgba(var(--ndm-prog), .3);
+        box-shadow: 0 4px 10px rgba(var(--ndm-prog), .1),
+                    0 18px 38px rgba(var(--ndm-prog), .19),
+                    0 34px 70px rgba(var(--ndm-prog), .12);
+    }
+}
+
 /* Entrada em cascata */
 @media (prefers-reduced-motion: no-preference) {
     #ndm-page .ndm-col { opacity: 0; transform: translateY(12px); animation: ndmIn 420ms var(--ndm-ease) both; }
@@ -274,6 +317,28 @@
     function slug(status) { return String(status).toLowerCase(); }
     function known(status) { return STATUS_ORDER.indexOf(status) !== -1; }
 
+    /* ── Anel de progresso do card ────────────────────────────────────────────
+       Card com operações ganha um contorno que sai do VERMELHO (nada saiu do
+       New) e caminha pelo âmbar até o VERDE quando tudo está Success. O peso é
+       por status, não só "é Success ou não" — assim a cor já se move quando as
+       operações avançam para Sent/Approved. Status desconhecido pesa 0 (ainda
+       não está pronto), o que mantém o vermelho honesto. */
+    var STATUS_WEIGHT = { 'New': 0, 'Pending': 0.25, 'Generated': 0.4, 'Approved': 0.6, 'Sent': 0.8, 'Success': 1 };
+    var PROG_STOPS = [[220, 53, 69], [247, 184, 75], [26, 138, 74]];  // #dc3545 → #f7b84b → #1a8a4a
+    function progressOf(c) {
+        if (!c.total) return null;
+        var sum = 0;
+        Object.keys(c.statuses || {}).forEach(function (s) {
+            sum += (STATUS_WEIGHT[s] || 0) * (c.statuses[s] || 0);
+        });
+        return Math.max(0, Math.min(1, sum / c.total));
+    }
+    function progressRgb(p) {
+        var half = p <= 0.5, a = PROG_STOPS[half ? 0 : 1], b = PROG_STOPS[half ? 1 : 2];
+        var k = half ? p * 2 : (p - 0.5) * 2;
+        return [0, 1, 2].map(function (n) { return Math.round(a[n] + (b[n] - a[n]) * k); }).join(', ');
+    }
+
     function cardHtml(c) {
         var statuses = Object.keys(c.statuses || {});
         statuses.sort(function (a, b) {
@@ -320,9 +385,12 @@
         } else {
             foot = '<span></span><span></span>';
         }
+        var prog = progressOf(c);
+        var progCls = prog === null ? '' : ' ndm-card--prog' + (prog >= 1 ? ' is-done' : '');
+        var progVar = prog === null ? '' : ' style="--ndm-prog: ' + progressRgb(prog) + '"';
         return (
             '<div class="col ndm-col">' +
-              '<div class="ndm-card' + (c.soon && !c.total ? ' is-soon' : '') + '">' +
+              '<div class="ndm-card' + (c.soon && !c.total ? ' is-soon' : '') + progCls + '"' + progVar + '>' +
                 '<div class="ndm-card__head">' +
                   '<span class="ndm-card__icon"><i class="ti ' + (ICONS[c.key] || 'ti-package') + '"></i></span>' +
                   '<h3 class="ndm-card__title">' + esc(c.label) + '</h3>' +
