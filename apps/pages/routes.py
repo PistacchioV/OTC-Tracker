@@ -14208,6 +14208,39 @@ def _api_rec_is_dead(norm):
 _ND_WEAK_CCYS = ('CNH', 'MXN', 'COP', 'PEN', 'CLP')
 
 
+def _ndf_flat(s):
+    """Só letras e números, em maiúsculas — o nome do book casa independente de
+    espaço e hífen ("BR ON - LN LAWTON NDF" ≡ "BR ON-LN LAWTON NDF")."""
+    return re.sub(r'[^A-Z0-9]', '', str(s or '').upper())
+
+
+# Interbook: pernas internas entre books do próprio banco, não são negócio de
+# cliente e nunca entram na aplicação. A regra é o PAR (Trading Book ×
+# Settlement Location) — o book sozinho não basta, porque o mesmo book opera
+# cliente em outra location. Lista fechada, definida pela mesa.
+_ND_INTERBOOK_PAIRS = frozenset(
+    (_ndf_flat(book), _ndf_flat(loc)) for book, loc in (
+        ('GN ON BRL',             'BRAZIL'),
+        ('JB ON BRL',             'BRAZIL'),
+        ('JB LAWTON BRL',         'LAWTON'),
+        ('LM-FWDECOMBRR FXC',     'BRAZIL'),
+        ('BR ON - LN LAWTON NDF', 'LAWTON'),
+        ('CLIENT FX NDF LAWTON',  'LAWTON'),
+        ('DERIV NDF BJPM FXC',    'BRAZIL'),
+        ('GN NDF BJPM',           'BRAZIL'),
+        ('LM-FXECOMBRR FXC',      'BRAZIL'),
+        ('JB NDF BJPM',           'BRAZIL'),
+    ))
+
+
+def _ndf_is_interbook(norm):
+    """True quando o registro da API é uma perna interbook (ver a lista acima).
+    Predicado compartilhado: o mapeamento usa para descartar e o pull para contar
+    quantos foram descartados, sem duplicar a regra."""
+    return (_ndf_flat(norm.get('TRADING BOOK')),
+            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in _ND_INTERBOOK_PAIRS
+
+
 def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
@@ -14224,6 +14257,10 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         return None, None
     # Internal holding book — not a client trade, never imported
     if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_'):
+        return None, None
+    # Interbook (Trading Book × Settlement Location) — mesma natureza do holding
+    # book acima: perna interna, não é negócio de cliente.
+    if _ndf_is_interbook(norm):
         return None, None
 
     # LE: Settlement Location BRAZIL → JPM; JPMCBB → MGT (else raw, visible)
@@ -14377,7 +14414,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
             refmap_acr[_a] = _r
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
-    skipped_fwd_today, dead = 0, []
+    skipped_fwd_today, skipped_interbook, dead = 0, 0, []
     for rec in records:
         if not isinstance(rec, dict):
             continue
@@ -14389,6 +14426,9 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
                 nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
                 if nm:
                     dead.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
+                continue
+            if _ndf_is_interbook(norm):
+                skipped_interbook += 1
                 continue
             instr = str(norm.get('INSTRUMENT TYPE') or '')
             if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
@@ -14424,8 +14464,12 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
             canceled += _nd_cancel_in_file(
                 os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
                              rd.strftime('%Y%m%d') + cfg['suffix']), nm)
+    if skipped_interbook:
+        log.info('[ndf-api] %d interbook leg(s) skipped (Trading Book × Settlement Location)',
+                 skipped_interbook)
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
-            'skipped_fwd_strike_today': skipped_fwd_today, 'canceled': canceled,
+            'skipped_fwd_strike_today': skipped_fwd_today,
+            'skipped_interbook': skipped_interbook, 'canceled': canceled,
             'targets': targets}
 
 
