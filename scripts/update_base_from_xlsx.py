@@ -5,11 +5,20 @@ Planilha de origem (aba "Base"), uma linha por contraparte:
 
     A Counterparty   B SPN    C CASID   D UCN   E ECI
     F Client Role Status      G Contatos        H Banker   I Grupo Economico
+    K Signature Type          L B3 Account
 
 O que é atualizado, casando pelo SPN:
-  * RefData.json          → BANKER (col. H), ECONOMIC GROUP (col. I) e
-                            SIGNATURE TYPE (col. K; vazio na planilha = não mexe)
+  * RefData.json          → BANKER (col. H), ECONOMIC GROUP (col. I),
+                            SIGNATURE TYPE (col. K) e B3 ACCOUNT (col. L)
+                            — coluna vazia na planilha = não mexe no que já está na base
   * CounterpartyDetails   → CONTACTS a partir da col. G (e-mails separados por ';')
+
+SPN sem match no RefData
+------------------------
+Vira um registro NOVO, com o que a planilha traz (COUNTERPARTY, SPN, CASID, UCN,
+ECI, STATUS, BANKER, ECONOMIC GROUP, SIGNATURE TYPE, B3 ACCOUNT). Os campos que a
+planilha não tem (TAX ID, os dois acrônimos, MAKER, CHECKER) e as colunas vazias
+ficam em branco — o cadastro é completado na tela de Reference Data.
 
 Regras aplicadas aos contatos
 -----------------------------
@@ -54,8 +63,16 @@ DEFAULT_XLSX = r'C:\Users\e930179\Downloads\Atualizar Base.xlsx'
 SHEET = 'Base'
 
 # Colunas (1-based, como na planilha).
-COL_COUNTERPARTY, COL_SPN, COL_CONTATOS, COL_BANKER, COL_GRUPO = 1, 2, 7, 8, 9
+COL_COUNTERPARTY, COL_SPN, COL_CASID, COL_UCN, COL_ECI = 1, 2, 3, 4, 5
+COL_STATUS, COL_CONTATOS, COL_BANKER, COL_GRUPO = 6, 7, 8, 9
 COL_SIGNATURE = 11   # K — Signature Type
+COL_B3 = 12          # L — B3 Account
+
+# Ordem/conjunto de chaves de um registro do RefData — registros criados por este
+# script nascem com TODAS elas (a tela lê r['CAMPO'] direto e quebra se faltar).
+REF_KEYS = ['STATUS', 'COUNTERPARTY', 'ECONOMIC GROUP', 'BANKER', 'SIGNATURE TYPE',
+            'TAX ID', 'ECI', 'SPN', 'CASID', 'UCN', 'B3 ACCOUNT',
+            'COMMODITIES ACCRONYM', 'FX CASH ACCRONYM', 'MAKER', 'CHECKER']
 
 # Todas as regras que um contato importado recebe. Espelha o que a Reference
 # Data exibe hoje; manter em sincronia com CP_RULES em reference-data.html.
@@ -80,6 +97,26 @@ def norm_spn(v):
         s = s[:-2]
     d = ''.join(ch for ch in s if ch.isdigit())
     return d.lstrip('0')
+
+
+def norm_b3(v):
+    """Conta B3 na máscara da base ('73760.10-2'). O consumidor
+    (_opb3_refdata_by_account em routes.py) casa a STRING exata, então uma conta
+    que venha só em dígitos ('73760102') precisa entrar mascarada. Qualquer outro
+    formato passa como veio — melhor manter o texto do que inventar máscara."""
+    s = str(v or '').strip()
+    d = ''.join(ch for ch in s if ch.isdigit())
+    if len(d) == 8 and not any(ch in s for ch in '.-'):
+        return '%s.%s-%s' % (d[:5], d[5:7], d[7])
+    return s
+
+
+def norm_status(v):
+    """Col. F ('Client Role Status') → STATUS do RefData, que só conhece
+    ACTIVE/PENDING. Rótulo diferente disso vira PENDING (registro novo entra
+    para ser revisado na tela, não já valendo como ativo)."""
+    s = str(v or '').strip().upper()
+    return s if s in ('ACTIVE', 'PENDING') else 'PENDING'
 
 
 def load_email_predicate():
@@ -132,6 +169,11 @@ def read_sheet(path):
             'banker': cell(COL_BANKER),
             'grupo': cell(COL_GRUPO),
             'signature': cell(COL_SIGNATURE),
+            'b3': norm_b3(cell(COL_B3)),
+            'casid': cell(COL_CASID),
+            'ucn': cell(COL_UCN),
+            'eci': cell(COL_ECI),
+            'status': cell(COL_STATUS),
         })
     wb.close()
     return rows
@@ -164,16 +206,32 @@ def main():
     for r in cpd:
         cpd_by_spn.setdefault(norm_spn(r.get('SPN')), r)
 
-    n_banker = n_grupo = n_signature = n_contacts_new = n_contacts_upd = 0
-    dropped, no_ref, no_cpd, created_cpd = [], [], [], []
+    n_banker = n_grupo = n_signature = n_b3 = n_contacts_new = n_contacts_upd = 0
+    dropped, created_ref, created_cpd = [], [], []
 
     for row in rows:
         spn = row['spn']
 
-        # ── RefData: banker e grupo econômico ────────────────────────────
+        # ── RefData: banker, grupo econômico, assinatura e conta B3 ──────
         ref = ref_by_spn.get(spn)
         if ref is None:
-            no_ref.append('%s · %s' % (spn, row['counterparty']))
+            # SPN novo: entra na base com o que a planilha tem; o resto em branco.
+            ref = dict.fromkeys(REF_KEYS, '')
+            ref.update({
+                'STATUS': norm_status(row['status']),
+                'COUNTERPARTY': row['counterparty'],
+                'ECONOMIC GROUP': row['grupo'],
+                'BANKER': row['banker'],
+                'SIGNATURE TYPE': row['signature'],
+                'ECI': row['eci'],
+                'SPN': row['spn'],
+                'CASID': row['casid'],
+                'UCN': row['ucn'],
+                'B3 ACCOUNT': row['b3'],
+            })
+            refdata.append(ref)
+            ref_by_spn[spn] = ref
+            created_ref.append('%s · %s' % (spn, row['counterparty']))
         else:
             if row['banker'] and str(ref.get('BANKER') or '').strip() != row['banker']:
                 ref['BANKER'] = row['banker']
@@ -184,6 +242,9 @@ def main():
             if row['signature'] and str(ref.get('SIGNATURE TYPE') or '').strip() != row['signature']:
                 ref['SIGNATURE TYPE'] = row['signature']
                 n_signature += 1
+            if row['b3'] and str(ref.get('B3 ACCOUNT') or '').strip() != row['b3']:
+                ref['B3 ACCOUNT'] = row['b3']
+                n_b3 += 1
 
         # ── CounterpartyDetails: contatos ────────────────────────────────
         emails, seen = [], set()
@@ -232,7 +293,8 @@ def main():
 
     # ── Relatório ────────────────────────────────────────────────────────
     print('RefData    : BANKER atualizado em %d · ECONOMIC GROUP em %d · SIGNATURE TYPE em %d'
-          % (n_banker, n_grupo, n_signature))
+          ' · B3 ACCOUNT em %d' % (n_banker, n_grupo, n_signature, n_b3))
+    print('RefData    : %d registros criados (SPN sem match)' % len(created_ref))
     print('Contatos   : %d novos · %d com regras atualizadas' % (n_contacts_new, n_contacts_upd))
     print('Placeholder: %d e-mails descartados' % len(dropped))
     if dropped:
@@ -240,12 +302,12 @@ def main():
             print('     ', d)
         if len(dropped) > 30:
             print('      … e mais %d' % (len(dropped) - 30))
-    if no_ref:
-        print('\nSPN sem registro no RefData: %d' % len(no_ref))
-        for s in no_ref[:20]:
+    if created_ref:
+        print('\nRegistros criados no RefData: %d' % len(created_ref))
+        for s in created_ref[:20]:
             print('     ', s)
-        if len(no_ref) > 20:
-            print('      … e mais %d' % (len(no_ref) - 20))
+        if len(created_ref) > 20:
+            print('      … e mais %d' % (len(created_ref) - 20))
     if created_cpd:
         print('\nRegistros criados no CounterpartyDetails: %d' % len(created_cpd))
         for s in created_cpd[:20]:
