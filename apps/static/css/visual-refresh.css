@@ -946,3 +946,80 @@ body.vr-nav-pinned .vr-pin-btn {
     filter: none;
   }
 }
+
+/* ============================================================================
+   Cabeçalho fixo das tabelas — project-wide (header + linha de filtros)
+   ----------------------------------------------------------------------------
+   O header (e a linha de filtros por coluna, quando existe) acompanha o scroll
+   da tabela. `position: sticky` só gruda dentro do scrollport mais próximo, e o
+   .table-responsive tem overflow mas altura automática — por isso o scrollport
+   é criado aqui com um max-height: sem ele o header não teria contra o que
+   grudar e o efeito simplesmente não aconteceria.
+
+   O alvo é o pai DIRETO da tabela: em tabela simples é o próprio
+   .table-responsive; com DataTables é a célula de layout dentro do
+   .dt-container, o que mantém info/paginação FORA da área que rola.
+
+   O fundo precisa ser SÓLIDO: --vr-card-bg é translúcido (no dark é branco a
+   2.8%), então herdá-lo deixaria as linhas do corpo passando por baixo do
+   header — só o texto ficaria visível, misturado com os valores.
+   ========================================================================== */
+:root {
+  --vr-thead-bg: #ffffff;
+  --vr-thead-line: rgba(9, 9, 30, 0.12);
+  --vr-tscroll-max: calc(100vh - 230px);
+}
+[data-bs-theme=dark] {
+  /* #08080d (page) + branco 2.8% (card) — o tom que a tabela já tem por baixo */
+  --vr-thead-bg: #0d0d12;
+  --vr-thead-line: rgba(255, 255, 255, 0.14);
+}
+
+.table-responsive:has(> table),
+.table-responsive :has(> table) {
+  max-height: var(--vr-tscroll-max);
+  overflow: auto;
+}
+
+.table-responsive table > thead > tr > th {
+  position: sticky;
+  z-index: 3;
+  background-color: var(--vr-thead-bg);
+}
+/* thead com cor própria do Bootstrap (table-dark/table-light/…) mantém a dela —
+   só precisa continuar opaco, e ele já é. */
+.table-responsive table > thead[class*="table-"] > tr > th,
+.table-responsive table > thead > tr[class*="table-"] > th {
+  background-color: inherit;
+}
+/* Cada linha do thead gruda logo abaixo da anterior. Os offsets são medidos em
+   runtime (sticky-tables.js) porque a altura do header varia por página; os
+   defaults abaixo só evitam sobreposição enquanto o script não roda. */
+.table-responsive table > thead > tr:nth-child(1) > th { top: var(--vr-thead-row0, 0px); }
+.table-responsive table > thead > tr:nth-child(2) > th { top: var(--vr-thead-row1, 34px); }
+.table-responsive table > thead > tr:nth-child(3) > th { top: var(--vr-thead-row2, 68px); }
+
+/* A borda inferior não viaja com a célula sticky (o border-collapse a atribui à
+   linha do corpo) — o inset shadow faz o papel dela e separa header de dados. */
+.table-responsive table > thead > tr:last-child > th {
+  box-shadow: inset 0 -1px 0 var(--vr-thead-line);
+}
+
+/* Primeira coluna congelada (checkbox/ações) continua funcionando: quando a
+   página define sticky lateral, o cruzamento com o header precisa vir na frente. */
+.table-responsive table > thead > tr > th[style*="left"] { z-index: 4; }
+
+/* Linha de filtros por coluna dentro do thead. O header é uppercase e espaçado;
+   o campo digitado não pode herdar isso. Especificidade baixa de propósito —
+   páginas que já têm o próprio estilo do filtro continuam mandando. */
+.table-responsive thead input.form-control {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  height: 30px;
+  font-size: 0.72rem;
+}
+.table-responsive thead th:has(> input.form-control) {
+  padding-top: 0.3rem;
+  padding-bottom: 0.45rem;
+}
