@@ -1440,6 +1440,8 @@
   "map-deleted": "Eliminado",
   "map-copied": "Copiado",
   "map-tab-bank-name": "Bancos (Bank Name)",
+  "nd-col-other-book": "Otro Book",
+  "col-other-book": "Other Book",
   "nd-col-settle-loc": "Lugar de Liquidación",
   "col-settle-loc": "Lugar de Liquidación"
 }

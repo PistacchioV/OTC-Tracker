@@ -889,6 +889,7 @@
                                     <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-rate">Rate</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-is-brr-fixed">Is BRR Fixed?</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trading-book">TradingBook</th>
+                                    <th data-table-sort="" data-format="text" data-lang="nd-col-other-book">Other Book</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-settle-loc">Settlement Location</th>
                                     <th></th><!-- Maker (hidden) -->
                                 </tr>
@@ -923,6 +924,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Rate" data-lang-placeholder="col-rate"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Is BRR Fixed?" data-lang-placeholder="col-is-brr-fixed"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="TradingBook" data-lang-placeholder="col-trading-book"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Other Book" data-lang-placeholder="col-other-book"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Location" data-lang-placeholder="col-settle-loc"></th>
                                     <th></th><!-- Maker (hidden) -->
                                 </tr>
@@ -1261,7 +1263,8 @@ var COL_TO_JSON_FIELD = {
     22: 'OtherQuantityCurrency', 23: 'Publisher',
     24: 'Notional',        25: 'Rate',
     26: 'IsBRRFixed',      27: 'TradingBook',
-    28: 'SettlementLocation', 29: 'Maker'
+    28: 'OtherBook',       29: 'SettlementLocation',
+    30: 'Maker'
 };
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
@@ -1294,7 +1297,7 @@ function dealJsonToRow(deal) {
     // alterados; aqui viram índices de coluna para o drawCallback pintar as
     // células (mesmo mecanismo do amend por e-mail).
     if (st === 'Amend' && deal.AmendChanged && deal.AmendChanged.length) {
-        var AMEND_FIELD_COLS = { LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, StrikeSetDate: 15, StrikeSetOffset: 16, Instrument: 17, TradeType: 18, Direction: 19, FXPair: 20, QuantityCurrency: 21, OtherQuantityCurrency: 22, Publisher: 23, Notional: 24, Rate: 25, IsBRRFixed: 26, TradingBook: 27, SettlementLocation: 28 };
+        var AMEND_FIELD_COLS = { LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, StrikeSetDate: 15, StrikeSetOffset: 16, Instrument: 17, TradeType: 18, Direction: 19, FXPair: 20, QuantityCurrency: 21, OtherQuantityCurrency: 22, Publisher: 23, Notional: 24, Rate: 25, IsBRRFixed: 26, TradingBook: 27, OtherBook: 28, SettlementLocation: 29 };
         if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
         window._OTC_AMEND_CHANGED_COLS[deal.Deal] = deal.AmendChanged
             .map(function (f) { return AMEND_FIELD_COLS[f]; })
@@ -1338,6 +1341,7 @@ function dealJsonToRow(deal) {
         deal.Rate              || '',
         deal.IsBRRFixed        || '',
         deal.TradingBook       || '',
+        deal.OtherBook         || '',
         deal.SettlementLocation || '',
         deal.Maker             || ''
     ], {0:1,1:1,2:1,11:1,12:1});
@@ -1411,7 +1415,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [25, 29]   // Rate (not applicable to FWD Start) + Maker SID
+                targets: [25, 30]   // Rate (not applicable to FWD Start) + Maker SID
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1585,8 +1589,10 @@ $(document).ready(function() {
                 'nd-col-notional'           // col 24
                 // col 25 Rate — hidden, not in scroll head
                 ,'nd-col-is-brr-fixed',     // col 26
-                'nd-col-trading-book'       // col 27
-                // col 28 — Maker (hidden, no label)
+                'nd-col-trading-book',      // col 27
+                'nd-col-other-book',        // col 28
+                'nd-col-settle-loc'         // col 29
+                // col 30 — Maker (hidden, no label)
             ];
             var container = api.table().container();
             // DT2.x uses .dt-scroll-head; DT1.x used .dataTables_scrollHead
@@ -1939,7 +1945,7 @@ $(document).ready(function() {
                 "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
                 "Other Quantity Currency",
                 "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook",
-                "Settlement Location"
+                "Other Book", "Settlement Location"
             ];
 
             var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
@@ -2033,7 +2039,8 @@ $(document).ready(function() {
                     '<option value="25">Rate</option>' +
                     '<option value="26">Is BRR Fixed?</option>' +
                     '<option value="27">TradingBook</option>' +
-                    '<option value="28">Settlement Location</option>';
+                    '<option value="28">Other Book</option>' +
+                    '<option value="29">Settlement Location</option>';
 
                 // Botão Send
                 var confirmBtn = document.createElement('button');
@@ -2104,7 +2111,8 @@ $(document).ready(function() {
         { label: 'Publisher',         type: 'text',   dtCol: 23 },
         { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 26 },
         { label: 'TradingBook',       type: 'text',   dtCol: 27 },
-        { label: 'Settlement Location', type: 'text', dtCol: 28 },
+        { label: 'Other Book',        type: 'text',   dtCol: 28 },
+        { label: 'Settlement Location', type: 'text', dtCol: 29 },
         // date columns
         { label: 'Trade Date',        type: 'date',   dtCol: 6  },
         { label: 'Settlement Date',   type: 'date',   dtCol: 8  },
@@ -2287,6 +2295,8 @@ $(document).ready(function() {
         'Publisher':         'Publisher',
         'Is BRR Fixed?':     'IsBRRFixed',
         'TradingBook':       'TradingBook',
+        'Other Book':        'OtherBook',
+        'Settlement Location': 'SettlementLocation',
         'Trade Date':        'TradeDate',
         'Settlement Date':   'SettlementDate',
         'First Fixing Date': 'FirstFixingDate',
@@ -2727,7 +2737,7 @@ $(document).ready(function() {
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[29] || '';
+            var rowMaker  = d[30] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -2924,7 +2934,7 @@ $(document).ready(function() {
                 );
                 changedFields['Status'] = newStatus;
                 // Whoever edits (→Pending) or approves (→Approved) becomes the new Maker
-                table.cell(rowIdx, 27).data(CURRENT_USER_SID);
+                table.cell(rowIdx, MAKER_COL_INDEX).data(CURRENT_USER_SID);
                 changedFields['Maker'] = CURRENT_USER_SID;
                 processedCount++;
                 patches.push({ deal_id: rowId, client: clientClean, updates: changedFields });
@@ -3271,6 +3281,7 @@ $(document).ready(function() {
     var DATE_COL_INDICES      = [6, 8, 13, 14, 15];
     var QUOTED_COL_INDEX      = -1;   // no Quoted-in-Cents column on this page
     var STATUS_COL_INDEX      = 2;
+    var MAKER_COL_INDEX       = 30;  // SID do maker — coluna oculta no fim
     // Columns never turned into inputs (auto-populated or structural)
     var SKIP_EDIT_COLS        = [0, 1, 2, 9, 11, 12]; // checkbox, actions, status, SPN, Client, TaxID
 
@@ -3345,7 +3356,8 @@ $(document).ready(function() {
             Notional:         _sh(d[24]),
             Rate:             _sh(d[25]),
             IsBRRFixed:       _sh(d[26]),
-            SettlementLocation: _sh(d[28])
+            OtherBook:        _sh(d[28]),
+            SettlementLocation: _sh(d[29])
         };
     }
 
@@ -3379,8 +3391,9 @@ $(document).ready(function() {
             Rate:             _sh(d[25]),
             IsBRRFixed:       _sh(d[26]),
             TradingBook:      _sh(d[27]),
-            SettlementLocation: _sh(d[28]),
-            Maker:            d[29] || '',
+            OtherBook:        _sh(d[28]),
+            SettlementLocation: _sh(d[29]),
+            Maker:            d[30] || '',
             Checker:          ''
         };
         if (overrides) {
@@ -3625,7 +3638,7 @@ $(document).ready(function() {
 
         // Maker = editor's SID; sync to DataTable hidden col
         var rowId = _sh(table.cell(tr[0], 4).data()) || '';
-        table.cell(tr[0], 27).data(CURRENT_USER_SID);
+        table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
         changedFields['Maker'] = CURRENT_USER_SID;
 
         // Status always becomes Pending after an edit
@@ -3695,7 +3708,7 @@ $(document).ready(function() {
             if (statusNode) {
                 $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
             }
-            table.cell(tr[0], 27).data(CURRENT_USER_SID);
+            table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 4).data()) || '';
             if (pendRowId) {
                 fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
@@ -3723,7 +3736,7 @@ $(document).ready(function() {
                 });
                 return;
             }
-            var approverMaker = table.cell(tr[0], 27).data() || '';
+            var approverMaker = table.cell(tr[0], MAKER_COL_INDEX).data() || '';
             if (approverMaker && approverMaker === CURRENT_USER_SID) {
                 Swal.fire({
                     title: t('swal-not-allowed-title', 'Not Allowed'),
@@ -3738,7 +3751,7 @@ $(document).ready(function() {
                 $(statusNode).html('<span class="badge text-bg-secondary bg-gradient">Approved</span>');
             }
             // Approver becomes the new Maker → next step (Send) must be a different user
-            table.cell(tr[0], 27).data(CURRENT_USER_SID);
+            table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
             var approveRowId = _sh(table.cell(tr[0], 4).data()) || '';
             if (approveRowId) {
                 fetch('/api/new-deals/fwd-start/cache/' + encodeURIComponent(approveRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
@@ -3786,7 +3799,7 @@ $(document).ready(function() {
         var tr = $(this).closest('tr');
         var statusNode = table.cell(tr[0], STATUS_COL_INDEX).node();
         var currentStatus = statusNode ? $(statusNode).find('.badge').text().trim() : '';
-        var makerSid = table.cell(tr[0], 27).data() || '';
+        var makerSid = table.cell(tr[0], MAKER_COL_INDEX).data() || '';
 
         if (currentStatus !== 'Approved' && currentStatus !== 'Error') {
             var msg = currentStatus === 'New'

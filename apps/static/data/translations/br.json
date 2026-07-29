@@ -1441,6 +1441,8 @@
   "map-deleted": "Excluído",
   "map-copied": "Copiado",
   "map-tab-bank-name": "Bancos (Bank Name)",
+  "nd-col-other-book": "Outro Book",
+  "col-other-book": "Other Book",
   "nd-col-settle-loc": "Local de Liquidação",
   "col-settle-loc": "Local de Liquidação"
 }

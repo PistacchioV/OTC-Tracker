@@ -14214,9 +14214,35 @@ def _ndf_flat(s):
 #  por mtime — edição vale na requisição seguinte, sem restart do servidor.
 _MAPPINGS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mappings'))
 
-# Regras do interbook (valores da coluna RULE) — startswith casa as duas.
-_MAP_RULE_OTHER = 'OTHER BOOK x SETTLEMENT LOCATION'
-_MAP_RULE_CPTY = 'END COUNTERPARTY x TRADING BOOK'
+# Campos da API getTrades que podem formar o par do filtro interbook. Os nomes
+# são os da API já normalizados (espaço/underscore → espaço, maiúsculas), do
+# jeito que _ndf_api_norm devolve.
+_MAP_INTERBOOK_FIELDS = [
+    'OTHER BOOK', 'TRADING BOOK', 'SETTLEMENT LOCATION', 'END COUNTERPARTY',
+    'COUNTERPARTY', 'PUBLISHER', 'INSTRUMENT TYPE', 'INSTRUMENT',
+    'QUANTITY CURRENCY', 'OTHER QUANTITY UNITS', 'TYPE', 'DEAL NAME',
+]
+
+
+def _interbook_upgrade(rows):
+    """Converte linhas do formato antigo (coluna RULE com o par fixo, FIELD A/B
+    guardando só os valores) para o par genérico campo+valor. Vale para arquivos
+    de instâncias que ainda não pegaram o novo formato."""
+    out = []
+    for r in rows:
+        if 'RULE' not in r:
+            out.append(r)
+            continue
+        cpty = str(r.get('RULE') or '').strip().upper().startswith(('END', 'CPTY'))
+        out.append({
+            'FIELD A': 'END COUNTERPARTY' if cpty else 'OTHER BOOK',
+            'VALUE A': str(r.get('FIELD A') or ''),
+            'FIELD B': 'TRADING BOOK' if cpty else 'SETTLEMENT LOCATION',
+            'VALUE B': str(r.get('FIELD B') or ''),
+            'BOTH WAYS': 'YES' if cpty else '',
+        })
+    return out
+
 
 _MAPPING_DEFS = {
     # Aba movida do Index B3 — edita o MESMO BaseMoeda.json que os previews de
@@ -14242,20 +14268,24 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
-    # Filtro interbook do import da API NDF. Regra OTHER: par Other Book ×
-    # Settlement Location. Regra END: End Counterparty × Trading Book — par NÃO
-    # ordenado, as duas direções são geradas na carga (a mesma operação chega
-    # uma vez por ponta, com contraparte e book trocados).
+    # Filtro interbook do import da API NDF. Cada linha é um par livre: escolha
+    # QUAIS campos da API formam a dupla (Field A/Field B) e os valores que
+    # caracterizam a perna interna. BOTH WAYS = YES também casa com os valores
+    # trocados entre os dois campos — é o caso de End Counterparty × Trading
+    # Book, em que a mesma operação chega uma vez por ponta.
     'interbook-ndf': {
         'label': 'Interbook API (NDF)',
         'columns': [
-            {'key': 'RULE', 'label': 'Rule', 'type': 'select',
-             'options': [_MAP_RULE_OTHER, _MAP_RULE_CPTY]},
-            {'key': 'FIELD A', 'label': 'Book / End Counterparty'},
-            {'key': 'FIELD B', 'label': 'Settlement Location / Trading Book'},
+            {'key': 'FIELD A', 'label': 'Field A', 'type': 'select', 'options': _MAP_INTERBOOK_FIELDS},
+            {'key': 'VALUE A', 'label': 'Value A'},
+            {'key': 'FIELD B', 'label': 'Field B', 'type': 'select', 'options': _MAP_INTERBOOK_FIELDS},
+            {'key': 'VALUE B', 'label': 'Value B'},
+            {'key': 'BOTH WAYS', 'label': 'Both Ways', 'type': 'select', 'options': ['', 'YES']},
         ],
+        'upgrade': _interbook_upgrade,
         'seed': (
-            [{'RULE': _MAP_RULE_OTHER, 'FIELD A': b, 'FIELD B': l} for b, l in (
+            [{'FIELD A': 'OTHER BOOK', 'VALUE A': b, 'FIELD B': 'SETTLEMENT LOCATION',
+              'VALUE B': l, 'BOTH WAYS': ''} for b, l in (
                 ('GN ON BRL',             'BRAZIL'),
                 ('JB ON BRL',             'BRAZIL'),
                 ('JB LAWTON BRL',         'LAWTON'),
@@ -14267,7 +14297,8 @@ _MAPPING_DEFS = {
                 ('LM-FXECOMBRR FXC',      'BRAZIL'),
                 ('JB NDF BJPM',           'BRAZIL'),
             )] +
-            [{'RULE': _MAP_RULE_CPTY, 'FIELD A': 'DERIV NDF BJPM FXC', 'FIELD B': 'GN NDF BJPM'}]
+            [{'FIELD A': 'END COUNTERPARTY', 'VALUE A': 'DERIV NDF BJPM FXC',
+              'FIELD B': 'TRADING BOOK', 'VALUE B': 'GN NDF BJPM', 'BOTH WAYS': 'YES'}]
         ),
     },
     # Market da Athena → Código do Ativo Subjacente B3 (commodities). FIXED =
@@ -14381,6 +14412,9 @@ def _mapping_rows(key):
         if not isinstance(rows, list):
             rows = []
         rows = [r for r in rows if isinstance(r, dict)]
+        up = d.get('upgrade')
+        if up:
+            rows = up(rows)
         _mapping_cache[key] = (mtime, rows)
         return rows
     except Exception:
@@ -14404,21 +14438,25 @@ def _mapping_ccy_maps():
     return ath, weak, inv
 
 
-def _ndf_interbook_sets():
-    """(pares Other Book × Location, pares Cpty × Trading Book já nas duas
-    direções) a partir do mapping interbook-ndf."""
-    pairs, cpty_book = set(), set()
+def _ndf_api_key(name):
+    """Nome de campo da tela → chave do registro normalizado (_ndf_api_norm)."""
+    return re.sub(r'[\s_]+', ' ', str(name or '').strip().upper())
+
+
+def _ndf_interbook_rules():
+    """Regras do filtro interbook como (campo A, valor A, campo B, valor B), com
+    valores já achatados por _ndf_flat. BOTH WAYS = YES gera também a linha com
+    os valores trocados entre os dois campos."""
+    out = []
     for r in _mapping_rows('interbook-ndf'):
-        rule = str(r.get('RULE', '') or '').strip().upper()
-        a, b = _ndf_flat(r.get('FIELD A')), _ndf_flat(r.get('FIELD B'))
-        if not a or not b:
+        fa, fb = _ndf_api_key(r.get('FIELD A')), _ndf_api_key(r.get('FIELD B'))
+        va, vb = _ndf_flat(r.get('VALUE A')), _ndf_flat(r.get('VALUE B'))
+        if not (fa and fb and va and vb):
             continue
-        if rule.startswith('OTHER'):
-            pairs.add((a, b))
-        elif rule.startswith('END') or rule.startswith('CPTY'):
-            cpty_book.add((a, b))
-            cpty_book.add((b, a))
-    return pairs, cpty_book
+        out.append((fa, va, fb, vb))
+        if str(r.get('BOTH WAYS', '') or '').strip().upper() == 'YES':
+            out.append((fa, vb, fb, va))
+    return out
 
 
 @blueprint.route('/mapping')
@@ -14462,12 +14500,10 @@ def _ndf_is_interbook(norm):
     """True quando o registro da API é uma perna interbook — pares cadastrados na
     tela Mapping (aba Interbook API). Predicado compartilhado: o mapeamento usa
     para descartar e o pull para contar, sem duplicar a regra."""
-    pairs, cpty_book = _ndf_interbook_sets()
-    if (_ndf_flat(norm.get('OTHER BOOK')),
-            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in pairs:
-        return True
-    return (_ndf_flat(norm.get('END COUNTERPARTY')),
-            _ndf_flat(norm.get('TRADING BOOK'))) in cpty_book
+    for fa, va, fb, vb in _ndf_interbook_rules():
+        if _ndf_flat(norm.get(fa)) == va and _ndf_flat(norm.get(fb)) == vb:
+            return True
+    return False
 
 
 def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
@@ -14571,6 +14607,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         'Rate':              ('{:,.8f}'.format(strike_v) if strike_v is not None else ''),
         'IsBRRFixed':        ('YES' if qty_ccy == 'BRL' else 'NO'),
         'TradingBook':       str(get('TRADING BOOK') or '').strip(),
+        'OtherBook':         str(get('OTHER BOOK') or '').strip(),
         # `loc` é o SETTLEMENT LOCATION cru (upper) já lido para derivar a LE.
         'SettlementLocation': loc,
         'Maker':             sid,
@@ -14697,7 +14734,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
                 os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
                              rd.strftime('%Y%m%d') + cfg['suffix']), nm)
     if skipped_interbook:
-        log.info('[ndf-api] %d interbook leg(s) skipped (Other Book × Settlement Location)',
+        log.info('[ndf-api] %d interbook leg(s) skipped (pares do mapping Interbook API)',
                  skipped_interbook)
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,

@@ -1441,6 +1441,8 @@
   "map-deleted": "Deleted",
   "map-copied": "Copied",
   "map-tab-bank-name": "Bank Name",
+  "nd-col-other-book": "Other Book",
+  "col-other-book": "Other Book",
   "nd-col-settle-loc": "Settlement Location",
   "col-settle-loc": "Settlement Location"
 }
