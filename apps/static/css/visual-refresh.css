@@ -976,9 +976,23 @@ body.vr-nav-pinned .vr-pin-btn {
 }
 
 .table-responsive:has(> table),
-.table-responsive :has(> table) {
+.table-responsive :has(> table):not([class*="dt-scroll"]) {
   max-height: var(--vr-tscroll-max);
   overflow: auto;
+}
+
+/* DataTables em modo scroll (scrollX/scrollY) NÃO entra na regra acima. Ali o
+   cabeçalho não fica dentro da tabela de dados: o DataTables move o <thead>
+   (com a linha de filtros junto) para uma TABELA IRMÃ em .dt-scroll-head e
+   deixa no corpo um thead de altura zero só para dimensionar as colunas.
+   Grudar um thead invisível não faria nada, e limitar a altura de
+   .dt-scroll-body por CSS criaria uma barra vertical que o DataTables não
+   compensa na largura do head — as colunas sairiam desalinhadas. Nessas
+   tabelas quem congela o cabeçalho é a própria opção scrollY do init. */
+.table-responsive .dt-scroll-body > table > thead > tr > th {
+  position: static;
+  background-color: transparent;
+  box-shadow: none;
 }
 
 .table-responsive table > thead > tr > th {

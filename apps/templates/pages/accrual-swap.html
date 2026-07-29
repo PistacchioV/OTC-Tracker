@@ -734,6 +734,11 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
             data: rows, columns: columns,
             order: [[2, 'asc']],                             // permanent: Missing status first
             orderCellsTop: true, autoWidth: true, scrollX: true,
+        // Congela cabeçalho + linha de filtros: em modo scroll o thead vira uma
+        // tabela irmã acima do corpo, então quem faz o header acompanhar o scroll
+        // é o scrollY — o DataTables ainda compensa a barra na largura do head.
+        scrollY: '60vh',
+        scrollCollapse: true,   // poucas linhas → a caixa encolhe, sem vão vazio
             pageLength: 25, lengthChange: false,
             dom: "rt<'d-flex justify-content-between align-items-center flex-wrap'ip>",
             language: {

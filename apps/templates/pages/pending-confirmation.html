@@ -1379,7 +1379,11 @@ $(document).ready(function() {
     var table = $('#pending-confirmation-table').DataTable({
         responsive: false,
         scrollX: true,
-        scrollY: true,
+        // Congela cabeçalho + linha de filtros: em modo scroll o thead vira uma
+        // tabela irmã acima do corpo, então quem faz o header acompanhar o scroll
+        // é o scrollY — o DataTables ainda compensa a barra na largura do head.
+        scrollY: '60vh',
+        scrollCollapse: true,   // poucas linhas → a caixa encolhe, sem vão vazio
         autoWidth: false,
         // deferRender: only build the DOM for the rows on the visible page instead
         // of every row up front. This is the key fix for the typing freeze — with

@@ -1236,7 +1236,7 @@ $(document).ready(function () {
     /* ── Init Subjacente ─────────────────────────────────────────────── */
     var dtSubj = $('#tblSubjacente').DataTable({
         data: buildSubjRows(subjDataArr),
-        responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+        responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
         dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7,8,9,10,11,12,13,14,15]),
         language: dtLang(),
         columnDefs: [
@@ -1269,7 +1269,7 @@ $(document).ready(function () {
         if (dtVCP) return dtVCP;
         dtVCP = $('#tblVCP').DataTable({
             data: buildVCPRows(vcpDataArr),
-            responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+            responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
             dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6]),
             language: dtLang(),
             columnDefs: [
@@ -1294,7 +1294,7 @@ $(document).ready(function () {
         if (dtDom) return dtDom;
         dtDom = $('#tblDominio').DataTable({
             data: buildDomRows(dominioDataArr),
-            responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+            responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
             dom: makeDom(), buttons: makeExportButtons([2,3,4,5,6,7]),
             language: dtLang(),
             columnDefs: [
@@ -1319,7 +1319,7 @@ $(document).ready(function () {
         if (dtSwap) return dtSwap;
         dtSwap = $('#tblSwapIndex').DataTable({
             data: buildSwapRows(swapIndexDataArr),
-            responsive: false, scrollX: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
+            responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: true, pageLength: 25, orderCellsTop: true,
             dom: makeDom(), buttons: makeExportButtons([2,3,4]),
             language: dtLang(),
             columnDefs: [

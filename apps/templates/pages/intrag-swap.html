@@ -434,7 +434,7 @@ $(document).ready(function() {
     }
 
     var table = window.intragSwapTable = $('#intrag-swap-table').DataTable({
-        responsive: false, scrollX: true, autoWidth: false, pageLength: 15, orderCellsTop: true,
+        responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: false, pageLength: 15, orderCellsTop: true,
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: [
             { orderable: false, targets: [0, 1] },

@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Per-table setup ─────────────────────────────────────────────────────
     function initTable(id, dataCols, pageLen) {
         var dt = $('#' + id).DataTable({
-            autoWidth: false, scrollX: true, orderCellsTop: true, paging: true, pageLength: pageLen || 25,
+            autoWidth: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, orderCellsTop: true, paging: true, pageLength: pageLen || 25,
             dom: "<'row'<'col-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
             columnDefs: [{ orderable: false, targets: [0, 1] }],
             language: { emptyTable: t('ops-empty', 'No rows for this date yet — add one or pick another date.') }
