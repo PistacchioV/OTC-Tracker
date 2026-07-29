@@ -182,8 +182,16 @@
             ? 'Latest: ' + fmtDay(latest.date) + ' (day-over-day)'
             : 'Latest month (month-over-month)';
         setTxt('pcm-kpi-note', noteLbl);
-        // monthly context
-        const prev = monthly.length ? monthly[monthly.length - 1] : null;
+        // monthly context. O último ponto da série é o mês CORRENTE (ainda em
+        // andamento), então "Previous month" tem de casar o período do mês
+        // anterior; sem esse ponto, cai no último mês fechado que existir.
+        const now = new Date();
+        const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const prevKey = ymOf(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        const curKey = ymOf(now);
+        const closed = monthly.filter(m => m.period < curKey);
+        const prev = monthly.filter(m => m.period === prevKey)[0]
+            || (closed.length ? closed[closed.length - 1] : null);
         setTxt('pcm-mini-prev', prev ? prev.volume : '—');
         const last12 = monthly.slice(-12);
         setTxt('pcm-mini-avg', last12.length ? Math.round(last12.reduce((a, m) => a + m.volume, 0) / last12.length) : '—');
