@@ -8211,9 +8211,9 @@ def _opb3_tipo_maps(ref):
     """{'TER'|'OPC'|'SWAP': {contrato_upper: tipo}} a partir dos snapshots de
     posição (DPOSICAO*) mais recentes até D-1 ANBIMA de `ref` (walk-back de até
     10 dias úteis por categoria — mesmo fallback do Live Position):
-      TER  → valor da coluna "Classe do Ativo Subjacente" (como está, upper)
-      OPC  → CAMB/MOEDA → TAXAS DE CAMBIO; COMMOD/MERCAD → COMMODITIES; resto → EQUITIES
-      SWAP → valor do "Código Identificador"
+      TER  → chave "Contrato";   valor da "Classe do Ativo Subjacente" (como está)
+      OPC  → chave "Código IF";  valor da "Classe do ativo subjacente" (como está)
+      SWAP → chave "Contrato";   valor do "Código Identificador"
     """
     specs = {
         'TER':  ('NDF',    lambda r: '73760_{}_DPOSICAO-TER.json'.format(r)),
@@ -8241,7 +8241,14 @@ def _opb3_tipo_maps(ref):
         if not data:
             continue
         keys = list(data[0].keys())
-        k_contr = _fcst_resolve_key(keys, ('Contrato', 'Título', 'Titulo', 'Codigo do Contrato'))
+        # A posição de opções não tem coluna "Contrato" — o contrato dela é o
+        # "Código IF". Procurar por 'Contrato' ali caía no fallback por substring
+        # e resolvia para "Situação do contrato", então o Título do Operations B3
+        # nunca casava e a coluna Type saía vazia para todo OPC.
+        if key == 'OPC':
+            k_contr = _fcst_resolve_key(keys, ('Código IF', 'Codigo IF', 'Contrato'))
+        else:
+            k_contr = _fcst_resolve_key(keys, ('Contrato', 'Título', 'Titulo', 'Codigo do Contrato'))
         k_classe = _fcst_resolve_key(keys, ('Classe do Ativo Subjacente', 'Classe do Ativo', 'Classe'))
         k_ident = _fcst_resolve_key(keys, ('Código Identificador', 'Codigo Identificador'))
         for rec in data:
@@ -8250,17 +8257,8 @@ def _opb3_tipo_maps(ref):
                 continue
             if key == 'SWAP':
                 tipo = str(rec.get(k_ident, '') or '').strip().upper() if k_ident else ''
-            else:
-                classe = _fcst_norm(str(rec.get(k_classe, '') or '')) if k_classe else ''
-                if key == 'OPC':
-                    if 'camb' in classe or 'moeda' in classe:
-                        tipo = 'TAXAS DE CAMBIO'
-                    elif 'commod' in classe or 'mercad' in classe:
-                        tipo = 'COMMODITIES'
-                    else:
-                        tipo = 'EQUITIES'
-                else:                                   # TER: classe como está
-                    tipo = str(rec.get(k_classe, '') or '').strip().upper() if k_classe else ''
+            else:                                       # TER e OPC: classe como está
+                tipo = str(rec.get(k_classe, '') or '').strip().upper() if k_classe else ''
             if tipo:
                 out[key].setdefault(contrato, tipo)
     return out
@@ -8539,14 +8537,35 @@ def _opb3_refdata_by_account():
     return out
 
 
-def _opb3_internal_ter_map(ref):
-    """B3 ID (upper) → Σ SETTLEMENT interno — lado JP do batimento para
-    Tipo Título = TER (NDF de moeda).
+# LEGAL do Cockpit ↔ conta de casa da B3. O Cockpit exibe as duas entidades
+# (`_ndfc_collect` filtra por BANCOJP*/JPMORGANCHASE*), então um negócio
+# intragrupo aparece DUAS vezes sob o mesmo contrato, uma perna por entidade e
+# com sinais opostos.
+_OPB3_LEGAL_SIDES = ((_OPB3_ACCT_BANCO, 'BANCOJP'), (_OPB3_ACCT_MGT, 'JPMORGANCHASE'))
 
-    É exatamente o par (B3 ID, SETTLEMENT) do card Trade Level do NDF Summary:
-    as mesmas linhas de exibição do Cockpit (CD_CETIP_RETURN já com os resgates
-    de contrato aplicados) e a coluna SETTLEMENT pura — não a SETTLEMENT B3, que
-    é o lado da B3 e é justamente o outro lado da comparação."""
+
+def _opb3_legal_side(legal):
+    """LEGAL do Cockpit → conta de casa correspondente ('' quando não classifica).
+    Ignora pontuação/espaço ("J.P." ≡ "JP"), como o filtro do próprio Cockpit."""
+    s = re.sub(r'[^A-Z0-9]', '', str(legal or '').upper())
+    for acct, prefix in _OPB3_LEGAL_SIDES:
+        if s.startswith(prefix):
+            return acct
+    return ''
+
+
+def _opb3_internal_ter_map(ref):
+    """B3 ID (upper) → {conta de casa: Σ SETTLEMENT interno} — lado JP do
+    batimento para Tipo Título = TER (NDF de moeda).
+
+    É o par (B3 ID, SETTLEMENT) do card Trade Level do NDF Summary: as mesmas
+    linhas de exibição do Cockpit (CD_CETIP_RETURN já com os resgates de contrato
+    aplicados) e a coluna SETTLEMENT pura — não a SETTLEMENT B3, que é o lado da
+    B3 e é justamente o outro lado da comparação.
+
+    A quebra por conta de casa existe por causa do intragrupo: somar as duas
+    pernas do mesmo contrato dava exatamente zero, e o "Favor considerar" saía
+    R$ 0,00 em vez do valor da perna que assina a mensagem."""
     out = {}
     try:
         ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
@@ -8555,11 +8574,26 @@ def _opb3_internal_ter_map(ref):
             if not b3 or b3 == _NDFC_MISSING_B3.upper():
                 continue
             v = _mtm_parse_num(row[ci['[PROD] Cockpit.SETTLEMENT']])
-            if v is not None:
-                out[b3] = out.get(b3, 0.0) + v
+            if v is None:
+                continue
+            legs = out.setdefault(b3, {})
+            side = _opb3_legal_side(row[ci['LEGAL']])
+            legs[side] = legs.get(side, 0.0) + v
     except Exception:
         return {}
     return out
+
+
+def _opb3_internal_leg(ter_map, contrato, casa):
+    """SETTLEMENT interno do contrato pela ótica de `casa` (conta do participante
+    do e-mail). Sem perna daquele lado — negócio de uma entidade só, ou LEGAL que
+    não classifica — soma o que houver, que é o valor único do contrato."""
+    legs = ter_map.get(contrato)
+    if not legs:
+        return None
+    if casa and casa in legs:
+        return legs[casa]
+    return sum(legs.values())
 
 
 def _opb3_internal_swapprem_map(ref):
@@ -8667,19 +8701,22 @@ def api_opb3_mensageria():
         cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
         total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
-        # Lado interno: TER → SETTLEMENT do card Trade Level do NDF Summary
-        # (_opb3_internal_ter_map); SWAP prêmio → DAGENDAPREMIOS. A soma é por
-        # B3 ID DISTINTO: o mapa já traz o total do contrato, então iterar linha
-        # a linha contaria o mesmo contrato duas vezes quando o grupo tem mais de
-        # uma operação sobre ele. Nenhum id casando = sem fonte para comparar e o
-        # e-mail sai sem "Favor considerar".
-        src = ter_map if 'ter' in titn else (prem_map if ('swap' in titn and opn == 'pagamento de premio') else None)
-        internal = None
-        if src:
-            ids = {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
-            vals = [v for v in (src.get(i) for i in ids) if v is not None]
-            if vals:
-                internal = sum(vals)
+        # Lado interno: TER → SETTLEMENT do card Trade Level do NDF Summary, pela
+        # ótica da conta que assina a mensagem; SWAP prêmio → DAGENDAPREMIOS. A
+        # soma é por B3 ID DISTINTO: o mapa já traz o total do contrato, então
+        # iterar linha a linha contaria o mesmo contrato duas vezes quando o grupo
+        # tem mais de uma operação sobre ele. Nenhum id casando = sem fonte para
+        # comparar e o e-mail sai sem "Favor considerar".
+        ids = {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
+        casa = _acc_digits(recs[0].get('Conta', ''))
+        if 'ter' in titn:
+            vals = [_opb3_internal_leg(ter_map, i, casa) for i in ids]
+        elif 'swap' in titn and opn == 'pagamento de premio':
+            vals = [prem_map.get(i) for i in ids]
+        else:
+            vals = []
+        vals = [v for v in vals if v is not None]
+        internal = sum(vals) if vals else None
 
         rows = [[
             'JPMORGANBM',
