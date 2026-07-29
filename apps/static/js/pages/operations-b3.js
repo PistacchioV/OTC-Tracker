@@ -18,6 +18,10 @@
   var COLS = [];               // current data columns (for the Add/Edit modal)
   var CURRENT_ROWS = [];       // last-loaded rows (each: [...data..., status, maker, checker, id])
   var EDIT_ID = null;          // id of the row being edited (null → Add mode)
+  // Linhas marcadas. Vive fora da tabela porque o DataTables recria o HTML das
+  // células a cada draw (paginação/filtro), o que perderia o `checked`. Só serve
+  // à Mensageria: destrava a REgeração das linhas já com status Generated.
+  var SELECTED = Object.create(null);
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
@@ -27,21 +31,33 @@
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
-          sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
+          sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.',
+          generated: 'Generated', msgTitle: 'Generate mensageria e-mails?',
+          msgText: 'Drafts will be generated for the Bilateral/Bruta operations not yet generated. Rows already marked as Generated are only included when their checkbox is ticked.',
+          msgTextSel: 'Drafts will be generated for the Bilateral/Bruta operations not yet generated, plus the {n} ticked row(s).',
+          msgYes: 'Yes, generate' },
     br: { ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'Nenhum arquivo Operações na pasta de origem.',
           imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
-          sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
+          sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.',
+          generated: 'Gerado', msgTitle: 'Gerar os e-mails de mensageria?',
+          msgText: 'Serão gerados drafts das operações Bilateral/Bruta ainda não geradas. Linhas já com status Gerado só entram com o checkbox marcado.',
+          msgTextSel: 'Serão gerados drafts das operações Bilateral/Bruta ainda não geradas, mais a(s) {n} linha(s) marcada(s).',
+          msgYes: 'Sim, gerar' },
     es: { ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'Ningún archivo Operações en la carpeta de origen.',
           imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
-          sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.' },
+          sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.',
+          generated: 'Generado', msgTitle: '¿Generar los correos de mensajería?',
+          msgText: 'Se generarán borradores de las operaciones Bilateral/Bruta aún no generadas. Las filas ya marcadas como Generado solo entran con su casilla tildada.',
+          msgTextSel: 'Se generarán borradores de las operaciones Bilateral/Bruta aún no generadas, más la(s) {n} fila(s) tildada(s).',
+          msgYes: 'Sí, generar' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -85,11 +101,13 @@
       .catch(function () {});
   }
 
-  // Standard status badge (project format): OK=success, Pending=warning, New=info.
+  // Standard status badge (project format): OK=success, Pending=warning, New=info,
+  // Generated=primary (linha que já virou e-mail de mensageria).
   function statusBadge(status) {
     var s = String(status || 'New').toLowerCase();
-    if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'ok')      return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'pending')   return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'ok')        return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'generated') return '<span class="badge text-bg-primary bg-gradient">' + esc(t('generated')) + '</span>';
     return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
   }
 
@@ -118,6 +136,9 @@
       columns.map(function (c) {
         // Coluna derivada Type (match do Título × Live Position): inglês default + i18n.
         if (c === 'Type') return '<th data-lang="ob-col-type">Type</th>';
+        // O "Status" que vem do arquivo é o da B3 — o da terceira coluna é o
+        // maker/checker da página. Renomeado para não confundir os dois.
+        if (c === 'Status') return '<th data-lang="ob-col-status-b3">Status B3</th>';
         return '<th>' + esc(c) + '</th>';
       }).join('') + '</tr>';
     var filterRow =
@@ -126,13 +147,15 @@
       '<th><input type="text" class="form-control form-control-sm ob-col-filter" data-col="2" placeholder="Status" autocomplete="off"></th>' +
       columns.map(function (c, i) {
         return '<th><input type="text" class="form-control form-control-sm ob-col-filter" data-col="' +
-          (i + 3) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
+          (i + 3) + '" placeholder="' + esc(c === 'Status' ? 'Status B3' : c) + '" autocomplete="off"></th>';
       }).join('') + '</tr>';
     document.querySelector('#opb3-table thead').innerHTML = titleRow + filterRow;
 
+    SELECTED = Object.create(null);          // dados novos → seleção antiga não vale mais
     var data = rows.map(function (r) {
       var m = metaOf(r);
-      return ['<input type="checkbox" class="form-check-input ob-row-check">', actionsHtml(m.id), statusBadge(m.status)]
+      return ['<input type="checkbox" class="form-check-input ob-row-check" data-id="' + esc(m.id) + '">',
+              actionsHtml(m.id), statusBadge(m.status)]
         .concat(r.slice(0, COLS.length).map(function (v) { return esc(v); }));
     });
 
@@ -176,9 +199,26 @@
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
 
+    // Seleção fora da tabela: guarda o id no change e repõe o `checked` a cada
+    // draw (o DataTables recria a célula a partir do HTML original).
+    jQuery('#opb3-table tbody').off('change.obsel')
+      .on('change.obsel', '.ob-row-check', function () {
+        var id = this.getAttribute('data-id');
+        if (this.checked) SELECTED[id] = true; else delete SELECTED[id];
+      });
+    jQuery('#opb3-table').off('draw.obsel').on('draw.obsel', function () {
+      document.querySelectorAll('#opb3-table tbody .ob-row-check').forEach(function (c) {
+        c.checked = !!SELECTED[c.getAttribute('data-id')];
+      });
+    });
+
     var checkAll = document.getElementById('obCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
-      document.querySelectorAll('#opb3-table tbody .ob-row-check').forEach(function (c) { c.checked = checkAll.checked; });
+      document.querySelectorAll('#opb3-table tbody .ob-row-check').forEach(function (c) {
+        c.checked = checkAll.checked;
+        var id = c.getAttribute('data-id');
+        if (checkAll.checked) SELECTED[id] = true; else delete SELECTED[id];
+      });
     });
   }
 
@@ -409,13 +449,22 @@
     var btn = document.getElementById('obMsgBtn');
     if (!btn) return;
     btn.addEventListener('click', function () {
+      var ids = Object.keys(SELECTED);
+      var text = ids.length ? t('msgTextSel').replace('{n}', ids.length) : t('msgText');
+      if (!window.Swal) return runMensageria(ids);
+      Swal.fire({ icon: 'question', title: t('msgTitle'), text: text, showCancelButton: true,
+        confirmButtonText: t('msgYes'), cancelButtonText: t('cancel') })
+        .then(function (r) { if (r.isConfirmed) runMensageria(ids); });
+    });
+
+    function runMensageria(ids) {
       btn.disabled = true;
       // Salva os TO/CC primeiro para a geração usar exatamente o que está nos cards.
       msgSaveRecipients().then(function () {
         return fetch('/api/operations-b3/mensageria', {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: currentDate() }),
+          body: JSON.stringify({ date: currentDate(), ids: ids }),
         });
       }).then(function (r) {
         var ct = r.headers.get('Content-Type') || '';
@@ -435,12 +484,14 @@
           a.download = (m && m[1]) || 'mensageria.zip';
           document.body.appendChild(a); a.click();
           setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+          // Status/Status B3 mudaram no servidor → recarrega para refletir.
+          load(currentDate());
           if (window.Swal) Swal.fire({ icon: 'success', title: 'Mensageria',
             text: count ? (count + ' draft(s) generated.') : 'Drafts generated.',
             timer: 2200, showConfirmButton: false });
         });
       }).catch(function () { btn.disabled = false; });
-    });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', function () {

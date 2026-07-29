@@ -8466,6 +8466,16 @@ def api_opb3_row_confirm():
 _OPB3_MSG_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'operations_b3_mensageria_recipients.json')
 # BCC de compliance (GDT) dos intragrupo — ver regra no loop da geração.
 _OPB3_MSG_GDT_BCC = 'gdt.br.derivatives@restricted.chase.com'
+# Contas de casa dos dois arquivos que alimentam a página (ver _DS_IMPORTS):
+# operacoes-jpm = Banco J.P. Morgan, mgt.* = MGT. O mesmo negócio intragrupo
+# chega pelos dois, espelhado — a dedupe de grupos abaixo usa essas contas.
+_OPB3_ACCT_BANCO = '73760009'
+_OPB3_ACCT_MGT = '04880006'
+# Status local de uma linha já transformada em e-mail de mensageria.
+_OPB3_STATUS_GENERATED = 'Generated'
+# Status B3 gravado na linha quando o e-mail sai (a B3 fecha a operação depois
+# da mensagem; a página passa a refletir isso sem esperar o próximo arquivo).
+_OPB3_B3_STATUS_DONE = 'FINALIZADA'
 
 
 def _opb3_msg_load_recipients():
@@ -8587,7 +8597,7 @@ def api_opb3_mensageria():
     from apps.pages import otc_emails
     p = request.get_json(silent=True) or {}
     ref = _opb3_ref_from(p)
-    _, data = _opb3_load(ref)
+    jp, data = _opb3_load(ref)
     if not data:
         return jsonify({'success': False, 'error': 'No Operations B3 data for {}.'.format(
             ref.strftime('%d/%m/%Y'))}), 400
@@ -8595,11 +8605,20 @@ def api_opb3_mensageria():
     recips = _opb3_msg_load_recipients()
     tipo_maps = _opb3_tipo_maps(ref)
     names = _opb3_refdata_by_account()
+    # Linhas marcadas na tabela: só elas destravam a REgeração de uma operação
+    # que já virou e-mail (status Generated). Sem marcação, o botão pega apenas
+    # o que ainda não foi gerado.
+    picked = {str(i) for i in (p.get('ids') or []) if str(i).strip()}
 
-    # Linhas elegíveis: Modalidade de Liquidação Bilateral* ou Bruta*.
+    # Linhas elegíveis: Modalidade de Liquidação Bilateral* ou Bruta*, ainda não
+    # geradas (ou explicitamente marcadas para regerar).
     def _eligible(rec):
         m = _fcst_norm(str(rec.get('Modalidade Liquidação', '') or ''))
-        return m.startswith('bilateral') or m.startswith('bruta')
+        if not (m.startswith('bilateral') or m.startswith('bruta')):
+            return False
+        if str(rec.get('_ob_status', '') or '') == _OPB3_STATUS_GENERATED:
+            return str(rec.get('_ob_id', '') or '') in picked
+        return True
 
     groups = {}
     for rec in data:
@@ -8611,16 +8630,44 @@ def api_opb3_mensageria():
         gkey = (tipo, conta_cp, _fcst_norm(tipo_op))
         groups.setdefault(gkey, {'tipo': tipo, 'conta_cp': conta_cp, 'tipo_op': tipo_op,
                                  'recs': []})['recs'].append(rec)
+
+    # Intragrupo Banco × MGT: o negócio chega duas vezes — o arquivo do Banco traz
+    # a visão "Banco x MGT" e o do MGT a mesma mensagem espelhada ("MGT x Banco").
+    # Quando as duas pontas estão presentes só a visão Banco vira e-mail. O par é
+    # reconhecido pelo CONTRATO (Título), não pelo Type/Tipo Operação derivados —
+    # a visão MGT pode não casar com a posição do Banco e ficar sem Type.
+    def _casa(g):
+        return _acc_digits(str(g['recs'][0].get('Conta', '') or ''))
+
+    def _titulos(recs):
+        return {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
+
+    banco_titulos = set()
+    for g in groups.values():
+        if _casa(g) == _OPB3_ACCT_BANCO and _acc_digits(g['conta_cp']) == _OPB3_ACCT_MGT:
+            banco_titulos |= _titulos(g['recs'])
+    if banco_titulos:
+        for gkey in list(groups):
+            g = groups[gkey]
+            if _casa(g) != _OPB3_ACCT_MGT or _acc_digits(g['conta_cp']) != _OPB3_ACCT_BANCO:
+                continue
+            g['recs'] = [r for r in g['recs']
+                         if str(r.get('Título', '') or '').strip().upper() not in banco_titulos]
+            if not g['recs']:
+                del groups[gkey]
+
     if not groups:
         return jsonify({'success': False,
-                        'error': 'No Bilateral/Bruta operations for {}.'.format(ref.strftime('%d/%m/%Y'))}), 400
+                        'error': 'No pending Bilateral/Bruta operations for {} — tick the rows to '
+                                 'regenerate the ones already marked as Generated.'.format(
+                                     ref.strftime('%d/%m/%Y'))}), 400
 
     # Batimentos internos (carregados uma vez, usados por grupo conforme o caso).
     ter_map = _opb3_internal_ter_map(ref)
     prem_map = _opb3_internal_swapprem_map(ref)
 
     ref_fmt = ref.strftime('%d/%m/%Y')
-    drafts, missing = [], set()
+    drafts, missing, used = [], set(), []
     for g in groups.values():
         recs = g['recs']
         titn = _fcst_norm(str(recs[0].get('Tipo Título', '') or ''))
@@ -8628,14 +8675,16 @@ def api_opb3_mensageria():
         cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
         total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
-        # Lado interno: TER → Cockpit SETTLEMENT; SWAP prêmio → DAGENDAPREMIOS.
-        # None (sem fonte / contrato não encontrado) → e-mail sai sem a linha
-        # "Favor considerar" — não há o que comparar.
+        # Lado interno: TER → SETTLEMENT do Cockpit (a mesma coluna Settlement do
+        # card Trade Level do NDF Summary); SWAP prêmio → DAGENDAPREMIOS. Soma só
+        # as operações do grupo que casam por contrato — nenhuma casando significa
+        # que não há fonte para comparar e o e-mail sai sem "Favor considerar".
         src = ter_map if 'ter' in titn else (prem_map if ('swap' in titn and opn == 'pagamento de premio') else None)
         internal = None
         if src:
-            vals = [src.get(str(r.get('Título', '') or '').strip().upper()) for r in recs]
-            if vals and all(v is not None for v in vals):
+            vals = [v for v in (src.get(str(r.get('Título', '') or '').strip().upper()) for r in recs)
+                    if v is not None]
+            if vals:
                 internal = sum(vals)
 
         rows = [[
@@ -8672,10 +8721,21 @@ def api_opb3_mensageria():
             'rows': rows, 'total': total, 'internal': internal, 'to': to, 'cc': cc,
             'bcc': bcc,
         }))
+        used.extend(recs)
 
     if missing:
         return jsonify({'success': False,
                         'error': 'Set the TO recipients on the {} card(s) first.'.format(' and '.join(sorted(missing)))}), 400
+
+    # Só depois de os drafts estarem prontos: as linhas que viraram e-mail ficam
+    # Generated (o botão passa a ignorá-las) e o Status B3 vai a FINALIZADA.
+    for rec in used:
+        rec['_ob_status'] = _OPB3_STATUS_GENERATED
+        rec['Status'] = _OPB3_B3_STATUS_DONE
+    try:
+        _otm_save(jp, data)
+    except Exception:
+        log.error('[opb3-msg] status save failed:\n%s', traceback.format_exc())
     return _email_drafts_response(drafts, zip_name='mensageria_{}'.format(ref.strftime('%Y%m%d')))
 
 

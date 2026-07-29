@@ -1356,6 +1356,10 @@ def build_opb3_mensageria_email(group):
     elif opn == 'resgate' and tit == 'ter':
         # Nomenclatura da macro atual: resgate de TER é "Vencimento de Termo"
         base = 'Vencimento de Termo'
+    elif opn == 'exercicio opcao':
+        # O Tipo Operação da B3 já nomeia o produto; concatenar tit_label sairia
+        # "Exercicio Opcao Opção". O arquivo também vem sem acento.
+        base = 'Exercício Opção'
     else:
         base = (tipo_op.title() + (' ' + tit_label if tit_label else '')).strip()
     subject = '{} - Liquidação Banco x {} - {}'.format(base, cpty, ref_date)
