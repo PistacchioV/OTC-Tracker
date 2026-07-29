@@ -20442,11 +20442,23 @@ def api_generic_nd_send_conecta(product):
         # Boletim: no OP sai em branco; no FWD Start segue a fonte (PTAX=3, demais=1).
         boletim    = ('3' if fonte_info == '   0' else '1') if is_fwd else ' '
 
-        # Notional: integer right-justified to 14 + '00'. Os deals de OP mandam a
-        # coluna como Notional (só o NDF Comm usa TotalNotional) — aceita ambos.
-        notional_s = _s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))
+        # Valor Base / Quantidade: inteiro alinhado à direita em 14 + '00'. Estas
+        # páginas mandam a coluna como Notional (só o NDF Comm usa TotalNotional)
+        # — aceita os dois. O valor gravado é US ('{:,.2f}'), mas uma edição
+        # manual pode chegar em BR; quando os dois separadores aparecem, quem
+        # define o decimal é o que vem por último. Sem isso, '5.158.000,00' não
+        # parseia e o campo sai com 16 zeros em silêncio.
+        notional_s = (_s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))).replace(' ', '')
+        if ',' in notional_s and '.' in notional_s:
+            notional_s = (notional_s.replace('.', '').replace(',', '.')
+                          if notional_s.rfind(',') > notional_s.rfind('.')
+                          else notional_s.replace(',', ''))
+        elif notional_s.count('.') > 1:
+            notional_s = notional_s.replace('.', '')     # 5.158.000 — dois pontos só podem ser milhar
+        else:
+            notional_s = notional_s.replace(',', '')     # US, o formato que a aplicação grava
         try:
-            qty_int = int(round(float(notional_s.replace(',', ''))))
+            qty_int = int(round(float(notional_s)))
             qty_str = str(qty_int).rjust(14, '0') + '00'
         except Exception:
             qty_str = '0' * 16

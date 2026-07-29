@@ -3969,12 +3969,15 @@ $(document).ready(function() {
             if (s.indexOf('e') !== -1) s = n.toFixed(15).replace(/\.?0+$/, '');
             return s.replace('.', ',');
         }
-        function _qty(val) {
-            val = _sh(String(val || ''));
-            if (!val) return '';
-            var n = parseFloat(val.replace(/,/g, ''));
-            if (isNaN(n)) return '';
-            return String(Math.round(n)) + ',00';
+        /* Valor Base / Quantidade no PREVIEW: #,##0.00, só para leitura. O
+           arquivo NÃO passa por aqui — ele é montado no servidor, no formato
+           posicional próprio (inteiro alinhado à direita em 14 + '00'). */
+        function _qtyView(val) {
+            var s = _sh(String(val || ''));
+            if (!s) return '';
+            var n = parseFloat(s.replace(/,/g, ''));   // valor gravado é US ('{:,.2f}')
+            if (isNaN(n)) return s;
+            return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         function _isJpMorgan(c) {
             return /J\.?P\.?\s*MORGAN/i.test(c);
@@ -4051,7 +4054,6 @@ $(document).ready(function() {
         f[9]  = 'S';
         f[10] = '4';
         f[11] = fonteInfo;
-        f[15] = _qty(deal.TotalNotional || '');
         f[16] = _sh(deal.UnderlyingAsset || '');
         f[17] = _num(deal.Strike || '', qic);
         f[18] = fixSingle;
@@ -4129,7 +4131,9 @@ $(document).ready(function() {
         var _brlFixed = _sh(deal.IsBRRFixed || '').toUpperCase() === 'YES';
         f[12] = _moedaCode(_brlFixed ? deal.OtherQuantityCurrency : deal.QuantityCurrency);   // Moeda de Referência (3 dígitos)
         f[13] = _moedaCode(_brlFixed ? deal.QuantityCurrency : deal.OtherQuantityCurrency);   // Moeda Cotada (3 dígitos)
-        f[15] = _qty(deal.TotalNotional || deal.Notional || '');  // Valor Base = coluna (Total) Notional
+        // A coluna destes deals é Notional (TotalNotional é do NDF Commodities e
+        // vinha undefined aqui — o campo saía vazio no preview).
+        f[15] = _qtyView(deal.TotalNotional || deal.Notional || '');
         // LE Lawton: parte Lawton (00041007) × contraparte banco JPM (73760009, sem CNPJ)
         if (le.indexOf('LAWTON') !== -1) { f[4] = '00041007'; f[7] = '73760009'; f[8] = ''; }
         f[56] = String(deal.Deal || '').slice(-14);     // Código Identificador (14 da direita)
