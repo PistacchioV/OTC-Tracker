@@ -5636,3 +5636,48 @@ python scripts/update_pending_confirmation_bankers.py   # 8c15508 — regrava Ow
   `.bak` automático (`d7cb876`).
 - Dependências novas na instância JPM: `pip install -r requirements.txt` (traz `requests` e `reportlab`)
   **e, para o SSO da API Athena no Windows**, descomentar/instalar `requests-negotiate-sspi`.
+
+## 129. Sessão 2026-07-28 — New Deals Monitor: sombreado de progresso nos cards (`9ac78d8`)
+
+Pedido: card com operação e status ainda ≠ Success mostra um **sombreado que dá sensação de
+profundidade** (não a cor do card, não um anel duro), mudando de cor conforme os deals avançam —
+vermelho em New, verde quando tudo vira Success.
+
+- **Progresso ponderado por status**, não binário: `STATUS_WEIGHT = {New: 0, Pending: .25,
+  Generated: .4, Approved: .6, Sent: .8, Success: 1}`; `progressOf(c)` = Σ(peso × contagem) / total,
+  clampado em [0,1]. Status desconhecido pesa 0 (fica vermelho — chama atenção, que é o desejado).
+  Card **sem operação nenhuma** devolve `null` e não ganha halo.
+- **Cor interpolada em duas pernas** (`progressRgb`): #dc3545 → #f7b84b (0→.5) → #1a8a4a (.5→1). O JS
+  escreve só os canais RGB numa CSS var (`--ndm-prog: 220, 53, 69`) e o CSS monta os `rgba(...)` com
+  os alfas de cada camada — uma var por card, sem gerar CSS por estado.
+- **Três camadas de sombra** (contato 2px, média 10–24px, halo largo 22–50px) + borda em alfa .3.
+  Sem `0 0 0 1px`: o anel colorido era exatamente o que o usuário rejeitou. Variantes para
+  `.is-done` (verde mais discreto, o card pronto não precisa gritar), `[data-bs-theme=dark]`
+  (alfas maiores) e hover.
+- **O bloco `.ndm-card--prog` fica DEPOIS do `:hover`** no CSS — mesma especificidade, quem vem por
+  último ganha; se subir, o hover padrão engole o halo.
+- Testado com a matemática isolada no JavaScriptCore (9 casos: tudo New → rgb(220,53,69); tudo
+  Success → verde + `.is-done`; 2 Generated → âmbar; status desconhecido → vermelho).
+
+## 130. Sessão 2026-07-28 — Intrag NDF: termo de moeda uma coluna à esquerda (`bc3cd5e`)
+
+`_save_intrag_ndf_moeda_entry` (routes.py ~15049) grava a linha do Intrag quando um NDF de **moeda**
+vira Success. Da coluna **Trade Price** até **Observation** cada valor andava uma casa à direita em
+relação ao layout de mercadoria: a taxa forward caía em Asian Fwd Avg Rate, o publisher em Comm
+Fixing e o offset do fixing em Adjustment Type.
+
+- Layout correto (chave interna → coluna da tabela): `strike` = Trade Price `0` · `strike_currency` =
+  Settlement Parity `BRL` · `expiry_month_year` = Maturity Month/Year `N/A` · `anbima_bizdays` =
+  Spot Fixing `N/A` · **`fixed_0` = Forward Rate (R$/CCY) = taxa** · `na_1` = Asian Fwd Avg Rate `N/A` ·
+  **`na_2` = Information Source = publisher** · **`weekday_bizdays` = Comm Fixing = D-N** ·
+  `trade_type_label` = Adjustment Type `N/A` · `strike_ccy_label` = Observation `N/A` · `na_3` =
+  Discount Factor `N/A`. Antes de Trade Price nada se move.
+- ⚠️ **As chaves têm nomes legados** (`na_1`, `weekday_bizdays`, `strike_ccy_label`) e é exatamente
+  isso que escondia o desalinhamento — cada uma agora tem o nome da coluna em comentário ao lado.
+  A ordem real das colunas está em `NDF_COLS`/`ENTRY_FIELDS` no `intrag-ndf.html` (~linha 519):
+  **confira lá antes de mexer**, não pelo nome da chave.
+- Com o shift, Comm Fixing passa a levar o D-N igual às linhas de mercadoria — era o sinal de que o
+  layout de moeda é que estava errado, não o de commodity.
+- **Linhas já gravadas no cache mantêm o layout antigo** — a correção vale para os deals que virarem
+  Success daqui pra frente. Migrar as existentes precisa de script (não feito; pedir informando a
+  data de corte).
