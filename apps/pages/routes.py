@@ -20407,8 +20407,9 @@ def api_generic_nd_send_conecta(product):
         is_ptax  = publisher.strip().upper() == 'PTAX'
         qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
         oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
-        trade_type = _s(deal.get('TradeType', '')).upper()
-        asian    = trade_type == 'ASIAN'
+        # O flag de asiático NÃO vem do TradeType: ele é derivado das datas de
+        # fixing logo abaixo (asian_fix), para o arquivo não depender de um
+        # rótulo que pode ter vindo do XLSX ou de uma edição manual.
 
         # Entity bucket + participant / counterparty accounts
         if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
@@ -20450,8 +20451,16 @@ def api_generic_nd_send_conecta(product):
 
         fix_start = _d8(deal.get('FirstFixingDate', ''))
         fix_end   = _d8(deal.get('LastFixingDate', ''))
-        fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
-        tipo_media = 'N' if fix_single else 'A'
+        # Asiático exige JANELA de fixing: primeira E última preenchidas e
+        # DIFERENTES. First fixing vazio (fixing único) ou datas iguais = vanilla.
+        # A regra antiga só testava a igualdade das duas, então o first vazio
+        # caía em 'A' — um fixing único ia para a B3 como média asiática.
+        asian_fix  = bool(fix_start and fix_end and fix_start != fix_end)
+        # Vanilla: Data de Fixing do Ativo Subjacente = a data do fixing único
+        # (a última preenchida). Asiático deixa em branco — as datas da janela
+        # vão nas linhas de verificação.
+        fix_single = '' if asian_fix else (fix_end or fix_start)
+        tipo_media = 'A' if asian_fix else 'N'
 
         if is_fwd:
             taxa_termo   = _pos('', 20)
@@ -20555,7 +20564,7 @@ def api_generic_nd_send_conecta(product):
             _pos(str(_anbima_biz_diff(
                 _parse_date_any(_s(deal.get('FirstFixingDate', ''))),
                 _parse_date_any(_s(deal.get('LastFixingDate', ''))))
-                 + (1 if asian else 0)).zfill(3) if asian else '000', 3)  # Qtde Datas Verificação
+                 + 1).zfill(3) if asian_fix else '000', 3)  # Qtde Datas Verificação
         )
         buckets[bucket].append(line)
         counts[bucket] += 1

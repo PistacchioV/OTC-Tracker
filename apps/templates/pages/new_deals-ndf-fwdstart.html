@@ -4055,8 +4055,6 @@ $(document).ready(function() {
         var strikeCcy  = _sh(deal.StrikeCurrency || '').toUpperCase();
         var underlying = _sh(deal.UnderlyingAsset || '').toUpperCase();
         var qic        = _sh(deal.QuotedInCents || 'NO').toUpperCase() === 'YES';
-        var vanilla    = tradeType === 'VANILLA';
-        var asian      = tradeType === 'ASIAN';
         var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
@@ -4065,14 +4063,21 @@ $(document).ready(function() {
         var tipoCotacao = isFixed ? 'F' : 'A';
         var fonteInfo   = isFixed ? '340' : '358';
 
-        var fixStart  = _date(deal.FixingStartDate || '');
-        var fixEnd    = _date(deal.FixingEndDate || '');
+        // O deal montado pela tabela expõe First/LastFixingDate. FixingStart/EndDate
+        // veio junto na cópia do NDF Commodities e nunca existiu aqui: lia undefined,
+        // então fixStart/fixEnd ficavam sempre vazios e o preview caía sempre em 'A'.
+        var fixStart  = _date(deal.FirstFixingDate || '');
+        var fixEnd    = _date(deal.LastFixingDate  || '');
         var fxconv    = _date(deal.FXConvDate || '');
         var tradeDate = _date(deal.TradeDate || '');
         var settlDate = _date(deal.SettlementDate || '');
 
-        var fixSingle = (fixStart && fixEnd && fixStart === fixEnd) ? fixStart : '';
-        var tipoMedia = fixSingle ? 'N' : 'A';
+        // Asiático exige JANELA de fixing: primeira E última preenchidas e
+        // DIFERENTES. First fixing vazio (fixing único) ou datas iguais = vanilla.
+        var asianFix  = !!(fixStart && fixEnd && fixStart !== fixEnd);
+        // Vanilla: Data de Fixing do Ativo Subjacente = a data do fixing único.
+        var fixSingle = asianFix ? '' : (fixEnd || fixStart);
+        var tipoMedia = asianFix ? 'A' : 'N';
 
         var f = new Array(59).fill('');
 
@@ -4105,7 +4110,7 @@ $(document).ready(function() {
         f[54] = brl ? 'S' : '';
         f[56] = _sh(deal.Deal || '');
         f[57] = tipoMedia;
-        if (!vanilla) {
+        if (asianFix) {
             f[58] = bizDayCount !== undefined ? String(bizDayCount).padStart(3, '0') : '';
         }
 
@@ -4153,6 +4158,11 @@ $(document).ready(function() {
         var deal = extractRowDeal(tr);
         var isAsian   = _sh(deal.TradeType || '').toUpperCase() === 'ASIAN';
         var isVanilla = _sh(deal.TradeType || '').toUpperCase() === 'VANILLA';
+        // Janela de fixing de verdade — mesma regra do tipo média asiático:
+        // primeira e última preenchidas e diferentes. É ela que decide as linhas
+        // de verificação, não o rótulo TradeType.
+        var hasFixWindow = !!(deal.FirstFixingDate && deal.LastFixingDate
+                              && String(deal.FirstFixingDate).trim() !== String(deal.LastFixingDate).trim());
         var fxSched   = _sh(deal.FXHolidaySchedule || '');
         var isBrl     = _sh(deal.StrikeCurrency || '').toUpperCase() === 'BRL';
 
@@ -4318,9 +4328,9 @@ $(document).ready(function() {
             });
 
             var bizList = [], skippedHols = [];
-            if (!isVanilla && deal.FixingStartDate && deal.FixingEndDate) {
-                var _s = _bizParseDate(deal.FixingStartDate);
-                var _e = _bizParseDate(deal.FixingEndDate);
+            if (hasFixWindow) {
+                var _s = _bizParseDate(deal.FirstFixingDate);
+                var _e = _bizParseDate(deal.LastFixingDate);
                 if (_s && _e) {
                     var _cur = new Date(_s.getTime());
                     while (_cur <= _e) {
@@ -4351,7 +4361,7 @@ $(document).ready(function() {
                 showPreview(cnt, null, calInfo);
             }
         }
-        if (!isVanilla && fxSched && deal.FixingStartDate && deal.FixingEndDate) {
+        if (hasFixWindow && fxSched) {
             fetch('{{ config.ASSETS_ROOT }}/data/' + encodeURIComponent(fxSched.replace(/-/g, '_')) + '.json')
                 .then(function(r) {
                     return r.ok
