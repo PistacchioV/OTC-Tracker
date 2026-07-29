@@ -5,20 +5,21 @@ Planilha de origem (aba "Base"), uma linha por contraparte:
 
     A Counterparty   B SPN    C CASID   D UCN   E ECI
     F Client Role Status      G Contatos        H Banker   I Grupo Economico
-    K Signature Type          L B3 Account
+    J Tax ID (só dígitos)     K Signature Type  L B3 Account
 
 O que é atualizado, casando pelo SPN:
   * RefData.json          → BANKER (col. H), ECONOMIC GROUP (col. I),
-                            SIGNATURE TYPE (col. K) e B3 ACCOUNT (col. L)
+                            TAX ID (col. J), SIGNATURE TYPE (col. K) e
+                            B3 ACCOUNT (col. L)
                             — coluna vazia na planilha = não mexe no que já está na base
   * CounterpartyDetails   → CONTACTS a partir da col. G (e-mails separados por ';')
 
 SPN sem match no RefData
 ------------------------
 Vira um registro NOVO, com o que a planilha traz (COUNTERPARTY, SPN, CASID, UCN,
-ECI, STATUS, BANKER, ECONOMIC GROUP, SIGNATURE TYPE, B3 ACCOUNT). Os campos que a
-planilha não tem (TAX ID, os dois acrônimos, MAKER, CHECKER) e as colunas vazias
-ficam em branco — o cadastro é completado na tela de Reference Data.
+ECI, STATUS, BANKER, ECONOMIC GROUP, TAX ID, SIGNATURE TYPE, B3 ACCOUNT). Os
+campos que a planilha não tem (os dois acrônimos, MAKER, CHECKER) e as colunas
+vazias ficam em branco — o cadastro é completado na tela de Reference Data.
 
 Regras aplicadas aos contatos
 -----------------------------
@@ -65,6 +66,7 @@ SHEET = 'Base'
 # Colunas (1-based, como na planilha).
 COL_COUNTERPARTY, COL_SPN, COL_CASID, COL_UCN, COL_ECI = 1, 2, 3, 4, 5
 COL_STATUS, COL_CONTATOS, COL_BANKER, COL_GRUPO = 6, 7, 8, 9
+COL_TAXID = 10       # J — Tax ID (só dígitos na planilha)
 COL_SIGNATURE = 11   # K — Signature Type
 COL_B3 = 12          # L — B3 Account
 
@@ -108,6 +110,28 @@ def norm_b3(v):
     d = ''.join(ch for ch in s if ch.isdigit())
     if len(d) == 8 and not any(ch in s for ch in '.-'):
         return '%s.%s-%s' % (d[:5], d[5:7], d[7])
+    return s
+
+
+def norm_taxid(v):
+    """Col. J vem só com dígitos; a base guarda com máscara ('45.985.371/0001-08')
+    — os 438 registros preenchidos hoje são todos CNPJ mascarado.
+
+    Excel entrega a coluna como número quando ela não é texto, o que corta os
+    zeros à esquerda ('01.234.567/…' vira 13 dígitos) e pode trazer o '.0' do
+    float; por isso 12 ou 13 dígitos são completados com zeros à esquerda antes
+    de mascarar. 11 dígitos = CPF. Qualquer outro tamanho passa como veio — sem
+    palpite sobre onde vai cada separador."""
+    s = str(v or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    d = ''.join(ch for ch in s if ch.isdigit())
+    if 12 <= len(d) <= 13:
+        d = d.zfill(14)
+    if len(d) == 14:
+        return '%s.%s.%s/%s-%s' % (d[:2], d[2:5], d[5:8], d[8:12], d[12:])
+    if len(d) == 11:
+        return '%s.%s.%s-%s' % (d[:3], d[3:6], d[6:9], d[9:])
     return s
 
 
@@ -170,6 +194,7 @@ def read_sheet(path):
             'grupo': cell(COL_GRUPO),
             'signature': cell(COL_SIGNATURE),
             'b3': norm_b3(cell(COL_B3)),
+            'taxid': norm_taxid(cell(COL_TAXID)),
             'casid': cell(COL_CASID),
             'ucn': cell(COL_UCN),
             'eci': cell(COL_ECI),
@@ -206,7 +231,8 @@ def main():
     for r in cpd:
         cpd_by_spn.setdefault(norm_spn(r.get('SPN')), r)
 
-    n_banker = n_grupo = n_signature = n_b3 = n_contacts_new = n_contacts_upd = 0
+    n_banker = n_grupo = n_signature = n_b3 = n_taxid = 0
+    n_contacts_new = n_contacts_upd = 0
     dropped, created_ref, created_cpd = [], [], []
 
     for row in rows:
@@ -223,6 +249,7 @@ def main():
                 'ECONOMIC GROUP': row['grupo'],
                 'BANKER': row['banker'],
                 'SIGNATURE TYPE': row['signature'],
+                'TAX ID': row['taxid'],
                 'ECI': row['eci'],
                 'SPN': row['spn'],
                 'CASID': row['casid'],
@@ -245,6 +272,9 @@ def main():
             if row['b3'] and str(ref.get('B3 ACCOUNT') or '').strip() != row['b3']:
                 ref['B3 ACCOUNT'] = row['b3']
                 n_b3 += 1
+            if row['taxid'] and str(ref.get('TAX ID') or '').strip() != row['taxid']:
+                ref['TAX ID'] = row['taxid']
+                n_taxid += 1
 
         # ── CounterpartyDetails: contatos ────────────────────────────────
         emails, seen = [], set()
@@ -293,7 +323,8 @@ def main():
 
     # ── Relatório ────────────────────────────────────────────────────────
     print('RefData    : BANKER atualizado em %d · ECONOMIC GROUP em %d · SIGNATURE TYPE em %d'
-          ' · B3 ACCOUNT em %d' % (n_banker, n_grupo, n_signature, n_b3))
+          ' · B3 ACCOUNT em %d · TAX ID em %d'
+          % (n_banker, n_grupo, n_signature, n_b3, n_taxid))
     print('RefData    : %d registros criados (SPN sem match)' % len(created_ref))
     print('Contatos   : %d novos · %d com regras atualizadas' % (n_contacts_new, n_contacts_upd))
     print('Placeholder: %d e-mails descartados' % len(dropped))
