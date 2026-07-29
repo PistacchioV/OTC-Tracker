@@ -255,13 +255,13 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap, monthly
         data: {
             labels: months,
             datasets: [
-                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'NDF Vanilla', data: monthlyNdfVan || [], backgroundColor: vGradient('#5e5ce6', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'NDF Other Publisher', data: monthlyNdfOP || [], backgroundColor: vGradient('#8b5cf6', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'NDF FWD Start', data: monthlyNdfFS || [], backgroundColor: vGradient('#d946ef', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
-                { type: 'bar', label: 'Swap', data: monthlySwap || [], backgroundColor: vGradient('#f59e0b', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 20, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'NDF Commodities', data: monthlyNdf, backgroundColor: vGradient(ins('chart-primary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'NDF Vanilla', data: monthlyNdfVan || [], backgroundColor: vGradient('#5e5ce6', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'NDF Other Publisher', data: monthlyNdfOP || [], backgroundColor: vGradient('#8b5cf6', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'NDF FWD Start', data: monthlyNdfFS || [], backgroundColor: vGradient('#d946ef', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Swap', data: monthlySwap || [], backgroundColor: vGradient('#f59e0b', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
             ]
         },
         options: {
@@ -559,7 +559,7 @@ function buildForecastProductChart(data) {
         return {
             type: 'bar', label: p.label, data: p.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
-            stack: 'fc', maxBarThickness: 24, borderRadius: 0, borderSkipped: false
+            stack: 'fc', maxBarThickness: 30, borderRadius: 0, borderSkipped: false
         };
     });
     forecastChart = new Chart(ctx, {
@@ -585,7 +585,7 @@ function buildForecastEntityChart(data) {
         return {
             type: 'bar', label: en.label, data: en.values,
             backgroundColor: vGradient(c, 1, 0.45), borderColor: 'transparent',
-            stack: 'fc', maxBarThickness: 24, borderRadius: 0, borderSkipped: false
+            stack: 'fc', maxBarThickness: 30, borderRadius: 0, borderSkipped: false
         };
     });
     forecastEntityChart = new Chart(ctx, {
@@ -679,7 +679,10 @@ function buildProductsChart(top5) {
     if (!ctx) return;
     if (productsChart) productsChart.destroy();
     if (_setChartEmpty(ctx, !top5.length)) return;
-    const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), ins('chart-gray'), ins('chart-primary')];
+    // 4ª cor: chart-gray é #edeff3 no light — a fatia ficava quase branca e o
+    // valor, escrito em branco por cima, sumia. Violeta é o mesmo tom que a
+    // NDF Vanilla já tem no Deal Flow Analytics.
+    const baseColors = [ins('chart-primary'), ins('chart-secondary'), ins('chart-dark'), '#5e5ce6', ins('chart-primary')];
     productsChart = new Chart(ctx, {
         type: 'doughnut',
         plugins: [valueLabelPlugin],
