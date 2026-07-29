@@ -13715,17 +13715,15 @@ def api_fxo_bulk_patch_deal_cache():
 # OPT FXO — XLSX blotter import (Brazil_FXO_Blotter_Extended_*_YYYYMMDD.xlsx)
 # ──────────────────────────────────────────────────────────────────────────
 # Internal 3-letter currency codes (feed) → ISO. Extend as new codes appear.
-_FXO_CCY_MAP = {
-    'BRR': 'BRL', 'USB': 'USD', 'EUB': 'EUR', 'GBB': 'GBP',
-    'CHB': 'CHF', 'NOB': 'NOK', 'COB': 'COP', 'MXB': 'MXN',
-}
 _FXO_MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
                   'August', 'September', 'October', 'November', 'December']
 
 
 def _fxo_ccy(code):
+    """Código de moeda da Athena → ISO. O de-para vem da tela Mapping (aba
+    Currency Codes); código não cadastrado passa como veio."""
     c = str(code or '').strip().upper()
-    return _FXO_CCY_MAP.get(c, c)
+    return _mapping_ccy_maps()[0].get(c, c)
 
 
 def _fxo_num(v):
@@ -14202,63 +14200,269 @@ def _api_rec_is_dead(norm):
     return False
 
 
-# Moedas fracas (cotação invertida vs BRL) — mesmo conjunto usado na geração
-# do arquivo Conecta (_INV); lá a inversão cobre o caso QuantityCurrency fraca,
-# aqui o caso OtherQuantityCurrency fraca (BRL/MXN etc.).
-_ND_WEAK_CCYS = ('CNH', 'MXN', 'COP', 'PEN', 'CLP')
-
-
 def _ndf_flat(s):
     """Só letras e números, em maiúsculas — o nome do book casa independente de
     espaço e hífen ("BR ON - LN LAWTON NDF" ≡ "BR ON-LN LAWTON NDF")."""
     return re.sub(r'[^A-Z0-9]', '', str(s or '').upper())
 
 
-# Interbook: pernas internas entre books do próprio banco, não são negócio de
-# cliente e nunca entram na aplicação. A regra é o PAR (Other Book ×
-# Settlement Location) — o book sozinho não basta, porque o mesmo book opera
-# cliente em outra location. O book olhado é o da CONTRAPARTE (Other Book), não o
-# Trading Book: é a outra ponta que identifica a perna como interna.
-# Lista fechada, definida pela mesa.
-_ND_INTERBOOK_PAIRS = frozenset(
-    (_ndf_flat(book), _ndf_flat(loc)) for book, loc in (
-        ('GN ON BRL',             'BRAZIL'),
-        ('JB ON BRL',             'BRAZIL'),
-        ('JB LAWTON BRL',         'LAWTON'),
-        ('LM-FWDECOMBRR FXC',     'BRAZIL'),
-        ('BR ON - LN LAWTON NDF', 'LAWTON'),
-        ('CLIENT FX NDF LAWTON',  'LAWTON'),
-        ('DERIV NDF BJPM FXC',    'BRAZIL'),
-        ('GN NDF BJPM',           'BRAZIL'),
-        ('LM-FXECOMBRR FXC',      'BRAZIL'),
-        ('JB NDF BJPM',           'BRAZIL'),
-    ))
+# ── Mappings (página Mapping, seção Data Base) ────────────────────────────────
+#  De-paras que viviam hardcoded no código viram arquivos JSON editáveis pela
+#  tela /mapping. Cada tipo tem colunas fixas e um SEED com exatamente os
+#  valores que estavam no código: na primeira leitura o arquivo nasce com eles,
+#  então o comportamento não muda até alguém editar na tela. O loader cacheia
+#  por mtime — edição vale na requisição seguinte, sem restart do servidor.
+_MAPPINGS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mappings'))
+
+# Regras do interbook (valores da coluna RULE) — startswith casa as duas.
+_MAP_RULE_OTHER = 'OTHER BOOK x SETTLEMENT LOCATION'
+_MAP_RULE_CPTY = 'END COUNTERPARTY x TRADING BOOK'
+
+_MAPPING_DEFS = {
+    # Aba movida do Index B3 — edita o MESMO BaseMoeda.json que os previews de
+    # NDF já leem para o código de moeda (CODIGO DE CADASTRO).
+    'currency-base': {
+        'label': 'Currency Base',
+        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'BaseMoeda.json')),
+        'columns': [
+            {'key': 'TIPO', 'label': 'Type'},
+            {'key': 'TIPO DE INDICADOR', 'label': 'Indicator Type'},
+            {'key': 'CAMPO', 'label': 'Field'},
+            {'key': 'DESCRICAO DO CAMPO', 'label': 'Field Description'},
+            {'key': 'CODIGO DE CADASTRO', 'label': 'Registration Code'},
+            {'key': 'SIMBOLO', 'label': 'Currency Code'},
+            {'key': 'TIPO COTACAO', 'label': 'Quotation Type'},
+            {'key': 'CASAS DECIMAIS', 'label': 'Decimal Places'},
+        ],
+        'seed': [],
+    },
+    # Filtro interbook do import da API NDF. Regra OTHER: par Other Book ×
+    # Settlement Location. Regra END: End Counterparty × Trading Book — par NÃO
+    # ordenado, as duas direções são geradas na carga (a mesma operação chega
+    # uma vez por ponta, com contraparte e book trocados).
+    'interbook-ndf': {
+        'label': 'Interbook API (NDF)',
+        'columns': [
+            {'key': 'RULE', 'label': 'Rule', 'type': 'select',
+             'options': [_MAP_RULE_OTHER, _MAP_RULE_CPTY]},
+            {'key': 'FIELD A', 'label': 'Book / End Counterparty'},
+            {'key': 'FIELD B', 'label': 'Settlement Location / Trading Book'},
+        ],
+        'seed': (
+            [{'RULE': _MAP_RULE_OTHER, 'FIELD A': b, 'FIELD B': l} for b, l in (
+                ('GN ON BRL',             'BRAZIL'),
+                ('JB ON BRL',             'BRAZIL'),
+                ('JB LAWTON BRL',         'LAWTON'),
+                ('LM-FWDECOMBRR FXC',     'BRAZIL'),
+                ('BR ON - LN LAWTON NDF', 'LAWTON'),
+                ('CLIENT FX NDF LAWTON',  'LAWTON'),
+                ('DERIV NDF BJPM FXC',    'BRAZIL'),
+                ('GN NDF BJPM',           'BRAZIL'),
+                ('LM-FXECOMBRR FXC',      'BRAZIL'),
+                ('JB NDF BJPM',           'BRAZIL'),
+            )] +
+            [{'RULE': _MAP_RULE_CPTY, 'FIELD A': 'DERIV NDF BJPM FXC', 'FIELD B': 'GN NDF BJPM'}]
+        ),
+    },
+    # Código de moeda da Athena → ISO, moedas fracas (cotação invertida vs BRL)
+    # e casas decimais da inversão do Rate no arquivo Conecta.
+    'currency-codes': {
+        'label': 'Currency Codes (Athena)',
+        'columns': [
+            {'key': 'ATHENA CODE', 'label': 'Athena Code'},
+            {'key': 'ISO CODE', 'label': 'ISO Code'},
+            {'key': 'WEAK', 'label': 'Weak Ccy (inverted)', 'type': 'select', 'options': ['', 'YES']},
+            {'key': 'INV DECIMALS', 'label': 'Inverse Decimals'},
+        ],
+        'seed': [
+            {'ATHENA CODE': 'BRR', 'ISO CODE': 'BRL', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'USB', 'ISO CODE': 'USD', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'EUB', 'ISO CODE': 'EUR', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'GBB', 'ISO CODE': 'GBP', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'CHB', 'ISO CODE': 'CHF', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'NOB', 'ISO CODE': 'NOK', 'WEAK': '', 'INV DECIMALS': ''},
+            {'ATHENA CODE': 'COB', 'ISO CODE': 'COP', 'WEAK': 'YES', 'INV DECIMALS': '6'},
+            {'ATHENA CODE': 'MXB', 'ISO CODE': 'MXN', 'WEAK': 'YES', 'INV DECIMALS': '4'},
+            {'ATHENA CODE': '',    'ISO CODE': 'CNH', 'WEAK': 'YES', 'INV DECIMALS': '4'},
+            {'ATHENA CODE': '',    'ISO CODE': 'PEN', 'WEAK': 'YES', 'INV DECIMALS': '4'},
+            {'ATHENA CODE': '',    'ISO CODE': 'CLP', 'WEAK': 'YES', 'INV DECIMALS': '6'},
+        ],
+    },
+    # Market da Athena → Código do Ativo Subjacente B3 (commodities). FIXED =
+    # código fechado; PREFIX = prefixo + mês/ano do contrato (o cálculo continua
+    # no código — os casos especiais BRT_IPE e FCPO também). Atenção: espaço no
+    # fim de códigos como 'C ' faz parte do código B3.
+    'commodities-b3': {
+        'label': 'Commodities × B3 Code',
+        'columns': [
+            {'key': 'TYPE', 'label': 'Type', 'type': 'select', 'options': ['FIXED', 'PREFIX']},
+            {'key': 'MARKET', 'label': 'Market (Athena)'},
+            {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
+        ],
+        'seed': (
+            [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c} for m, c in (
+                ('MPB_LME', 'LOPBDY'), ('MCU_LME', 'LOCADY'), ('MAL_LME', 'LOAHDY'),
+                ('MZN_LME', 'LOZSDY'), ('MSN_LME', 'LOSNDY'), ('MNI_LME', 'LONIDY'),
+                ('FO_0.5%_ROT_BRG_FOB', 'NAEB0011'), ('FO_0.5%_SING_FOB', 'NACX0005'),
+                ('MAL_MW_PREMIUM', 'PMMUAKE0'), ('BRT_DTD', 'PCRUDTB1'),
+                ('NG_NYMEX', 'NG1'), ('MFE_TSI', 'PFATIOCH'),
+                ('COAL_HCC_FOB_AUS_TSI', 'PMTCLAUS'),
+            )] +
+            [{'TYPE': 'PREFIX', 'MARKET': m, 'B3 CODE': c} for m, c in (
+                ('HU_RBOB_NYMEX', 'XB'), ('HO_NYMEX', 'HO'), ('SB_ICE', 'SB'),
+                ('C_CBOT', 'C '), ('S_CBOT', 'S '), ('BO_CBOT', 'BO'),
+                ('CC_ICE', 'CC'), ('W_CBOT', 'W '), ('SM_CBOT', 'SM'),
+                ('CT_ICE', 'CT'), ('KC_ICE', 'KC'), ('WTI_NYMEX', 'WTI'),
+            )]
+        ),
+    },
+    # Underlyings de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) nos arquivos
+    # Conecta de NDF. SCOPE limita onde o código vale: NAEB0011 é SÓ das
+    # commodities — as páginas de NDF moeda não o tratam como fixo.
+    'fixed-underlyings': {
+        'label': 'Fixed Underlyings',
+        'columns': [
+            {'key': 'CODE', 'label': 'B3 Underlying Code'},
+            {'key': 'SCOPE', 'label': 'Scope', 'type': 'select',
+             'options': ['ALL', 'COMMODITIES', 'CURRENCY']},
+        ],
+        'seed': (
+            [{'CODE': c, 'SCOPE': 'ALL'} for c in
+             ('NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS')] +
+            [{'CODE': 'NAEB0011', 'SCOPE': 'COMMODITIES'}]
+        ),
+    },
+    # Curvas de swap Athena × B3 — cadastro pronto para os fluxos de swap; nasce
+    # vazio porque não havia de-para hardcoded no código.
+    'swap-curves': {
+        'label': 'Swap Curves (Athena × B3)',
+        'columns': [
+            {'key': 'ATHENA CURVE', 'label': 'Athena Curve'},
+            {'key': 'B3 CURVE', 'label': 'B3 Curve / Code'},
+        ],
+        'seed': [],
+    },
+}
+
+_mapping_cache = {}
 
 
-# Segunda forma de interbook, por (End Counterparty × Trading Book): aqui a
-# contraparte do negócio é o PRÓPRIO book do outro lado, então o par identifica a
-# perna interna sem depender da location. Os pares abaixo são NÃO ORDENADOS — as
-# duas direções são geradas, porque a mesma operação chega uma vez por ponta,
-# com contraparte e book trocados.
-_ND_INTERBOOK_CPTY_BOOK = frozenset(
-    direcao
-    for cpty, book in (
-        ('DERIV NDF BJPM FXC', 'GN NDF BJPM'),
-    )
-    for direcao in ((_ndf_flat(cpty), _ndf_flat(book)),
-                    (_ndf_flat(book), _ndf_flat(cpty)))
-)
+def _mapping_path(key):
+    d = _MAPPING_DEFS[key]
+    return d.get('file') or os.path.join(_MAPPINGS_DIR, key + '.json')
+
+
+def _mapping_rows(key):
+    """Linhas do mapping `key` (lista de dicts). Cria o arquivo com o SEED na
+    primeira leitura; cacheia por mtime, então edição pela tela vale na
+    requisição seguinte."""
+    d = _MAPPING_DEFS.get(key)
+    if not d:
+        return []
+    path = _mapping_path(key)
+    if not os.path.isfile(path):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            _atomic_write_json(path, list(d.get('seed') or []))
+        except Exception:
+            log.warning('[mappings] seed write failed for %s:\n%s', key, traceback.format_exc())
+            return list(d.get('seed') or [])
+    try:
+        mtime = os.path.getmtime(path)
+        cached = _mapping_cache.get(key)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        with open(path, encoding='utf-8') as fh:
+            rows = json.load(fh) or []
+        if not isinstance(rows, list):
+            rows = []
+        rows = [r for r in rows if isinstance(r, dict)]
+        _mapping_cache[key] = (mtime, rows)
+        return rows
+    except Exception:
+        return list(d.get('seed') or [])
+
+
+def _mapping_ccy_maps():
+    """(athena→iso, ISO fracas, ISO→casas da inversão) do mapping currency-codes."""
+    ath, weak, inv = {}, set(), {}
+    for r in _mapping_rows('currency-codes'):
+        a = str(r.get('ATHENA CODE', '') or '').strip().upper()
+        i = str(r.get('ISO CODE', '') or '').strip().upper()
+        if a and i and a not in ath:
+            ath[a] = i
+        if i and str(r.get('WEAK', '') or '').strip().upper() in ('YES', 'Y', 'SIM', 'S', 'TRUE', '1'):
+            weak.add(i)
+        dec = str(r.get('INV DECIMALS', '') or '').strip()
+        if i and dec.isdigit():
+            inv[i] = int(dec)
+    return ath, weak, inv
+
+
+def _ndf_interbook_sets():
+    """(pares Other Book × Location, pares Cpty × Trading Book já nas duas
+    direções) a partir do mapping interbook-ndf."""
+    pairs, cpty_book = set(), set()
+    for r in _mapping_rows('interbook-ndf'):
+        rule = str(r.get('RULE', '') or '').strip().upper()
+        a, b = _ndf_flat(r.get('FIELD A')), _ndf_flat(r.get('FIELD B'))
+        if not a or not b:
+            continue
+        if rule.startswith('OTHER'):
+            pairs.add((a, b))
+        elif rule.startswith('END') or rule.startswith('CPTY'):
+            cpty_book.add((a, b))
+            cpty_book.add((b, a))
+    return pairs, cpty_book
+
+
+@blueprint.route('/mapping')
+def mapping_page():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/mapping.html', segment='mapping')
+
+
+@blueprint.route('/api/mappings/<key>', methods=['GET', 'POST'])
+def api_mappings(key):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    d = _MAPPING_DEFS.get(key)
+    if not d:
+        return jsonify({'success': False, 'error': 'Unknown mapping.'}), 404
+    if request.method == 'GET':
+        return jsonify({'success': True, 'label': d['label'], 'columns': d['columns'],
+                        'rows': _mapping_rows(key)})
+    p = request.get_json(silent=True) or {}
+    rows = p.get('rows')
+    if not isinstance(rows, list):
+        return jsonify({'success': False, 'error': 'rows must be a list.'}), 400
+    keys = [c['key'] for c in d['columns']]
+    # Valores NÃO são trimados de propósito: em códigos B3 como 'C ' o espaço
+    # final faz parte do código.
+    clean = [{k: str((r or {}).get(k, '') or '') for k in keys} for r in rows if isinstance(r, dict)]
+    try:
+        _atomic_write_json(_mapping_path(key), clean)
+        _mapping_cache.pop(key, None)
+    except Exception as e:
+        log.error('[mappings] save failed for %s:\n%s', key, traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Mapping Updated', 'Mapping',
+                         '{} ({} row(s))'.format(d['label'], len(clean)))
+    return jsonify({'success': True, 'rows': clean})
 
 
 def _ndf_is_interbook(norm):
-    """True quando o registro da API é uma perna interbook (ver as duas listas
-    acima). Predicado compartilhado: o mapeamento usa para descartar e o pull
-    para contar quantos foram descartados, sem duplicar a regra."""
+    """True quando o registro da API é uma perna interbook — pares cadastrados na
+    tela Mapping (aba Interbook API). Predicado compartilhado: o mapeamento usa
+    para descartar e o pull para contar, sem duplicar a regra."""
+    pairs, cpty_book = _ndf_interbook_sets()
     if (_ndf_flat(norm.get('OTHER BOOK')),
-            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in _ND_INTERBOOK_PAIRS:
+            _ndf_flat(norm.get('SETTLEMENT LOCATION'))) in pairs:
         return True
     return (_ndf_flat(norm.get('END COUNTERPARTY')),
-            _ndf_flat(norm.get('TRADING BOOK'))) in _ND_INTERBOOK_CPTY_BOOK
+            _ndf_flat(norm.get('TRADING BOOK'))) in cpty_book
 
 
 def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
@@ -14314,8 +14518,9 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # Moedas fracas cotam invertido vs BRL: a API manda o strike como
     # Moeda/BRL (ex.: 3,33 MXN por BRL) — a página e os arquivos (Conecta,
     # Intrag) trabalham com BRL por unidade da moeda (0,30...), então o Rate
-    # é gravado já invertido quando a perna cotada é uma moeda fraca.
-    if strike_v and other_ccy in _ND_WEAK_CCYS:
+    # é gravado já invertido quando a perna cotada é uma moeda fraca (flag
+    # Weak Ccy da aba Currency Codes na tela Mapping).
+    if strike_v and other_ccy in _mapping_ccy_maps()[1]:
         strike_v = 1.0 / strike_v
     instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
@@ -16810,7 +17015,12 @@ def api_ndf_send_conecta():
         except Exception:
             return '0' * (int_digits + dec_digits)
 
-    FIXED_UNDERLYINGS = {'NACX0005', 'NAEB0011', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'}
+    # Cadastro pela tela Mapping (aba Fixed Underlyings); o seed traz os códigos
+    # que estavam fixos aqui. Este gerador é o das COMMODITIES → entram os
+    # escopos ALL e COMMODITIES (NAEB0011 é só daqui).
+    FIXED_UNDERLYINGS = {str(r.get('CODE', '') or '').strip().upper()
+                         for r in _mapping_rows('fixed-underlyings')
+                         if str(r.get('SCOPE', 'ALL') or 'ALL').strip().upper() != 'CURRENCY'} - {''}
 
     import json as _json
     lawton_lines = []
@@ -20506,11 +20716,12 @@ def api_generic_nd_send_conecta(product):
             forma_atu    = 'V'
             valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
         else:
-            # Weak currencies quote inverted vs BRL: 1/rate rounded per table
+            # Weak currencies quote inverted vs BRL: 1/rate arredondado pelas
+            # casas da aba Currency Codes (Inverse Decimals) da tela Mapping.
             rate_raw = _fxo_num(_s(deal.get('Rate', '')))
-            _INV = {'CNH': 4, 'MXN': 4, 'COP': 6, 'PEN': 4, 'CLP': 6}
-            if rate_raw and qty_ccy in _INV:
-                rate_val = round(1.0 / rate_raw, _INV[qty_ccy])
+            _inv = _mapping_ccy_maps()[2]
+            if rate_raw and qty_ccy in _inv:
+                rate_val = round(1.0 / rate_raw, _inv[qty_ccy])
             else:
                 rate_val = rate_raw
             taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)

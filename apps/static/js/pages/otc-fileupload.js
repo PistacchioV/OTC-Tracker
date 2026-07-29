@@ -186,6 +186,29 @@ var OTCFileUpload = (function () {
         'WTI_NYMEX':     'WTI'  // not confirmed in B3 data; best guess
     };
 
+    // De-para agora cadastrado na página Mapping (aba Commodities × B3). Os
+    // literais acima são o fallback até o fetch responder — e se ele falhar, o
+    // comportamento antigo continua. No sucesso os dois objetos são esvaziados
+    // e repovoados, para uma linha REMOVIDA na tela não continuar valendo aqui.
+    fetch('/api/mappings/commodities-b3', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success || !d.rows || !d.rows.length) return;
+            Object.keys(MARKET_FIXED_CODES).forEach(function (k) { delete MARKET_FIXED_CODES[k]; });
+            Object.keys(MARKET_DYNAMIC_PREFIX).forEach(function (k) { delete MARKET_DYNAMIC_PREFIX[k]; });
+            d.rows.forEach(function (row) {
+                var mkt  = String(row['MARKET'] || '').trim().toUpperCase();
+                var code = String(row['B3 CODE'] || '');   // sem trim: 'C ' tem espaço no código
+                if (!mkt || !code) return;
+                if (String(row['TYPE'] || '').toUpperCase().indexOf('PREFIX') !== -1) {
+                    MARKET_DYNAMIC_PREFIX[mkt] = code;
+                } else {
+                    MARKET_FIXED_CODES[mkt] = code;
+                }
+            });
+        })
+        .catch(function () {});
+
     // -------------------------------------------------------------------------
     // Calculate B3 Underlying Asset Code from market + contract + vanilla flag
     // contract format: "May27", "Dec26", etc.

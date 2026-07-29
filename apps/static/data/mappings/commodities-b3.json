@@ -1,0 +1,127 @@
+[
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MPB_LME",
+    "B3 CODE": "LOPBDY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MCU_LME",
+    "B3 CODE": "LOCADY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MAL_LME",
+    "B3 CODE": "LOAHDY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MZN_LME",
+    "B3 CODE": "LOZSDY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MSN_LME",
+    "B3 CODE": "LOSNDY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MNI_LME",
+    "B3 CODE": "LONIDY"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "FO_0.5%_ROT_BRG_FOB",
+    "B3 CODE": "NAEB0011"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "FO_0.5%_SING_FOB",
+    "B3 CODE": "NACX0005"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MAL_MW_PREMIUM",
+    "B3 CODE": "PMMUAKE0"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "BRT_DTD",
+    "B3 CODE": "PCRUDTB1"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "NG_NYMEX",
+    "B3 CODE": "NG1"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "MFE_TSI",
+    "B3 CODE": "PFATIOCH"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "COAL_HCC_FOB_AUS_TSI",
+    "B3 CODE": "PMTCLAUS"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "HU_RBOB_NYMEX",
+    "B3 CODE": "XB"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "HO_NYMEX",
+    "B3 CODE": "HO"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "SB_ICE",
+    "B3 CODE": "SB"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "C_CBOT",
+    "B3 CODE": "C "
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "S_CBOT",
+    "B3 CODE": "S "
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "BO_CBOT",
+    "B3 CODE": "BO"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "CC_ICE",
+    "B3 CODE": "CC"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "W_CBOT",
+    "B3 CODE": "W "
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "SM_CBOT",
+    "B3 CODE": "SM"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "CT_ICE",
+    "B3 CODE": "CT"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "KC_ICE",
+    "B3 CODE": "KC"
+  },
+  {
+    "TYPE": "PREFIX",
+    "MARKET": "WTI_NYMEX",
+    "B3 CODE": "WTI"
+  }
+]

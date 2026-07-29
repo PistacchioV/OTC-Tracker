@@ -40,15 +40,11 @@
         </div>
     </div>
 
+    <!-- Currency Base saiu daqui: virou aba da página Mapping (Data Base) -->
     <ul class="nav nav-tabs nav-bordered mb-3" role="tablist">
         <li class="nav-item" role="presentation">
             <a class="nav-link active" data-bs-toggle="tab" href="#tabIndexSearch" role="tab">
                 <i class="ti ti-filter me-1"></i><span data-lang="b3-tab-search">Index Search</span>
-            </a>
-        </li>
-        <li class="nav-item" role="presentation">
-            <a class="nav-link" data-bs-toggle="tab" href="#tabBaseMoeda" role="tab">
-                <i class="ti ti-currency-dollar me-1"></i><span data-lang="b3-tab-base-moeda">Currency Base</span>
             </a>
         </li>
     </ul>
@@ -207,52 +203,6 @@
     </div>
     </div><!-- /tabIndexSearch -->
 
-    <div class="tab-pane" id="tabBaseMoeda" role="tabpanel">
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <h5 class="card-title mb-0">
-                        <i class="ti ti-currency-dollar me-1 text-primary"></i>
-                        <span data-lang="b3-tab-base-moeda">Currency Base</span>
-                    </h5>
-                    <span class="text-muted fs-xs">
-                        <span id="bmCount">0</span> <span data-lang="bm-rows">rows</span>
-                    </span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height:62vh">
-                        <table class="table table-sm table-striped table-hover mb-0 align-middle" id="baseMoedaTable">
-                            <thead class="thead-sm text-uppercase fs-xxs">
-                                <tr>
-                                    <th data-lang="bm-type">Type</th>
-                                    <th data-lang="bm-indicator-type">Indicator Type</th>
-                                    <th data-lang="bm-field">Field</th>
-                                    <th data-lang="bm-field-desc">Field Description</th>
-                                    <th data-lang="bm-reg-code">Registration Code</th>
-                                    <th data-lang="bm-symbol">Currency Code</th>
-                                    <th data-lang="bm-quot-type">Quotation Type</th>
-                                    <th data-lang="bm-decimals">Decimal Places</th>
-                                </tr>
-                                <tr class="bm-filter-row">
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="0" placeholder="Type" data-lang-placeholder="bm-type" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="1" placeholder="Indicator Type" data-lang-placeholder="bm-indicator-type" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="2" placeholder="Field" data-lang-placeholder="bm-field" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="3" placeholder="Field Description" data-lang-placeholder="bm-field-desc" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="4" placeholder="Registration Code" data-lang-placeholder="bm-reg-code" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="5" placeholder="Currency Code" data-lang-placeholder="bm-symbol" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="6" placeholder="Quotation Type" data-lang-placeholder="bm-quot-type" autocomplete="off"></th>
-                                    <th><input type="text" class="form-control form-control-sm bm-col-filter" data-col="7" placeholder="Decimal Places" data-lang-placeholder="bm-decimals" autocomplete="off"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="bmTbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    </div><!-- /tabBaseMoeda -->
     </div><!-- /tab-content -->
 
 </div>
@@ -463,40 +413,7 @@
             fillSelect('selCodigo', unique(DATA.subj, 'Codigo do Ativo Subjacente'));
             fillSelect('selTipoIF', unique(DATA.subj, 'Tipo IF'), '-- All --');
 
-            // ── Currency Base tab (BaseMoeda.json) ────────────────────────
-            fetch('{{ config.ASSETS_ROOT }}/data/BaseMoeda.json')
-                .then(r => r.json())
-                .then(rows => {
-                    const esc = s => String(s == null ? '' : s)
-                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    const COLS = ['TIPO', 'TIPO DE INDICADOR', 'CAMPO', 'DESCRICAO DO CAMPO',
-                                  'CODIGO DE CADASTRO', 'SIMBOLO', 'TIPO COTACAO', 'CASAS DECIMAIS'];
-                    const tbody = document.getElementById('bmTbody');
-                    const filters = [...document.querySelectorAll('.bm-col-filter')];
-                    // Filtro por coluna (AND entre as colunas preenchidas), no
-                    // lugar do campo único do canto do card.
-                    const render = () => {
-                        const terms = filters
-                            .map(i => ({ col: COLS[+i.dataset.col], v: i.value.trim().toUpperCase() }))
-                            .filter(t => t.v);
-                        const out = rows.filter(r =>
-                            terms.every(t => String(r[t.col] || '').toUpperCase().includes(t.v)));
-                        tbody.innerHTML = out
-                            .map(r => '<tr>' + COLS.map((c, i) =>
-                                '<td' + (i === 5 ? ' class="fw-semibold"' : '') + '>' +
-                                esc(r[c]) + '</td>').join('') + '</tr>')
-                            .join('');
-                        const cnt = document.getElementById('bmCount');
-                        if (cnt) cnt.textContent = out.length;
-                    };
-                    render();
-                    filters.forEach(i => i.addEventListener('input', () => {
-                        i.classList.toggle('bm-has-val', !!i.value);
-                        render();
-                    }));
-                })
-                .catch(() => {});
-
+            // Currency Base saiu daqui — virou aba da página Mapping (Data Base).
             btnPes.disabled = false;
         } catch (err) {
             console.error('Error loading data:', err);

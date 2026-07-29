@@ -3996,6 +3996,22 @@ $(document).ready(function() {
         return n.toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
     }
 
+    /* Fixed Underlyings: cadastro na página Mapping; a lista literal é o
+       fallback até o fetch responder (e se ele falhar). */
+    var _FIXED_UND = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
+    fetch('/api/mappings/fixed-underlyings', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success || !d.rows) return;
+            var codes = d.rows.filter(function (r) {
+                    return String(r['SCOPE'] || 'ALL').trim().toUpperCase() !== 'COMMODITIES';
+                })
+                .map(function (r) { return String(r['CODE'] || '').trim().toUpperCase(); })
+                .filter(function (c) { return !!c; });
+            if (codes.length) _FIXED_UND = codes;
+        })
+        .catch(function () {});
+
     function buildConectaFields(deal, bizDayCount) {
         function _date(val) {
             val = _sh(val);
@@ -4066,7 +4082,7 @@ $(document).ready(function() {
         var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
-        var FIXED_UND   = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
+        var FIXED_UND   = _FIXED_UND;
         var isFixed     = FIXED_UND.indexOf(underlying) !== -1;
         var tipoCotacao = isFixed ? 'F' : 'A';
         var fonteInfo   = isFixed ? '340' : '358';

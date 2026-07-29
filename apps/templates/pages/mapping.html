@@ -1,0 +1,426 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Mapping{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
+<style>
+    #mapping-page { --map-ease: cubic-bezier(0.22, 1, 0.36, 1); }
+    #mapping-page .map-page-icon {
+        width: 44px; height: 44px; border-radius: 12px;
+        background: rgba(0, 102, 204, 0.1);
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; color: #0066cc;
+    }
+
+    /* Rail esquerdo — mesmo desenho dos Document Types do Electronic Inventory */
+    #mapping-page .map-type-item {
+        display: flex; align-items: center; gap: .6rem;
+        padding: .6rem .75rem; border-radius: 10px; cursor: pointer;
+        color: var(--ins-body-color); text-decoration: none;
+        border: 1px solid transparent;
+        transition: background-color .18s var(--map-ease), border-color .18s var(--map-ease), color .18s var(--map-ease);
+    }
+    #mapping-page .map-type-item .map-type-ico { font-size: 1.15rem; opacity: .8; }
+    #mapping-page .map-type-item .map-type-badge {
+        margin-left: auto; font-size: .68rem; font-weight: 600;
+        background: var(--ins-secondary-bg); color: var(--ins-secondary-color);
+        padding: .1rem .45rem; border-radius: 999px; min-width: 1.6rem; text-align: center;
+    }
+    #mapping-page .map-type-item.is-active {
+        background: rgba(0, 102, 204, .10); border-color: rgba(0, 102, 204, .22);
+        color: #0066cc; font-weight: 600;
+    }
+    #mapping-page .map-type-item.is-active .map-type-badge { background: #0066cc; color: #fff; }
+    [data-bs-theme=dark] #mapping-page .map-type-item.is-active { color: #6ea8fe; background: rgba(41,151,255,.14); border-color: rgba(41,151,255,.30); }
+    [data-bs-theme=dark] #mapping-page .map-type-item.is-active .map-type-badge { background: #2997ff; }
+    #mapping-page .map-type-hint { font-size: .72rem; color: var(--ins-secondary-color); }
+
+    /* Tabela do mapping selecionado */
+    #mapping-page tbody td { font-size: 0.8rem; }
+    #mapping-page thead th { white-space: nowrap; }
+    /* espaço significativo no fim de códigos B3 (ex.: 'C ') fica visível */
+    #mapping-page td.map-code { white-space: pre; }
+    #mapping-page .map-filter-row input { height: 30px; font-size: .72rem; font-weight: 400; }
+    #mapping-page .mapExportWrapper .dropdown-menu { min-width: 9rem; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="mapping-page" data-content="">
+
+    <div class="page-title-head d-flex align-items-center">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="map-page-icon"><i data-lucide="arrow-left-right"></i></div>
+            <h4 class="fs-xl fw-bold m-0" data-lang="nav-mapping">Mapping</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="data-base-title">Data Base</a></li>
+                <li class="breadcrumb-item active" data-lang="nav-mapping">Mapping</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- ══════════ Rail esquerdo: mappings disponíveis ══════════ -->
+        <div class="col-xl-3 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-uppercase text-muted fw-semibold fs-xxs mb-2 ps-1" data-lang="map-list-title">Available Mappings</div>
+                    <!-- Itens gerados pelo JS a partir do registro do servidor
+                         (_MAPPING_DEFS) — mapping novo no back aparece aqui
+                         sem tocar no template. -->
+                    <div id="mapTypeList" class="d-flex flex-column gap-1"></div>
+                    <div class="map-type-hint mt-3 pt-2 border-top" data-lang="map-list-hint">
+                        Changes apply immediately — the API import, Conecta files and previews read from here.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════ Main: linhas do mapping selecionado ══════════ -->
+        <div class="col-xl-9 col-lg-8">
+            <div class="card mb-0">
+                <div class="card-header border-light d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 min-w-0">
+                        <i class="ti ti-arrows-exchange text-primary fs-4" id="mapCurIcon"></i>
+                        <h4 class="header-title mb-0" id="mapCurTitle">—</h4>
+                        <span class="badge bg-secondary-subtle text-secondary" id="mapCurCount">0</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div class="d-flex align-items-center gap-1">
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="map-show">Show</label>
+                            <select class="form-select form-select-sm" id="mapPageLen" style="width:84px;">
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                                <option value="-1" data-lang="map-all">All</option>
+                            </select>
+                            <label class="form-label mb-0 fs-xs text-muted" data-lang="map-entries">entries</label>
+                        </div>
+                        <button class="btn btn-sm btn-primary bg-gradient" type="button" id="mapAddBtn">
+                            <i class="ti ti-plus me-1"></i><span data-lang="map-add">Add</span>
+                        </button>
+                        <div class="dropdown mapExportWrapper">
+                            <button class="btn btn-sm btn-info bg-gradient dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" id="mapExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                                <li><a class="dropdown-item" href="#" id="mapExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-sm btn-soft-secondary" type="button" id="mapClearFilters">
+                            <i class="ti ti-filter-off me-1"></i><span data-lang="map-clear-filters">Clear filters</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted fs-xs">
+                            <span data-lang="map-showing">Showing</span> <span id="mapShown">0</span> <span data-lang="map-rows">rows</span>
+                        </span>
+                    </div>
+                    <div class="table-responsive" style="max-height:64vh">
+                        <table class="table table-sm table-striped table-hover mb-0 align-middle" id="mapTable">
+                            <thead class="thead-sm text-uppercase fs-xxs" id="mapHead"></thead>
+                            <tbody id="mapBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit modal (padrão glass do projeto) -->
+    <div class="modal fade" id="mapModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span id="mapModalTitle" data-lang="map-add-title">Add mapping</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="mapModalFields"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="mapModalSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    // Mappings na ordem do rail; label default em inglês + chave i18n.
+    var TYPES = [
+        { key: 'currency-base',     icon: 'ti-currency-dollar', lang: 'map-tab-currency-base',  label: 'Currency Base' },
+        { key: 'interbook-ndf',     icon: 'ti-arrows-exchange', lang: 'map-tab-interbook',      label: 'Interbook API (NDF)' },
+        { key: 'currency-codes',    icon: 'ti-abc',             lang: 'map-tab-currency-codes', label: 'Currency Codes (Athena)' },
+        { key: 'commodities-b3',    icon: 'ti-chart-candle',    lang: 'map-tab-commodities',    label: 'Commodities × B3' },
+        { key: 'fixed-underlyings', icon: 'ti-anchor',          lang: 'map-tab-fixed-und',      label: 'Fixed Underlyings' },
+        { key: 'swap-curves',       icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',    label: 'Swap Curves (Athena × B3)' },
+    ];
+
+    var STATE = {};          // key → {columns, rows, loaded}
+    var CUR = TYPES[0].key;  // mapping selecionado
+    var EDIT = null;         // índice em edição (null = Add)
+    var PAGE_LEN = 50;
+
+    var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en');
+    var _TRANS = {};
+    fetch('/static/data/translations/' + LANG + '.json')
+        .then(function (r) { return r.json(); })
+        .then(function (tr) { _TRANS = tr || {}; applyLang(); })
+        .catch(function () {});
+    function t(k, fb) { return _TRANS[k] || fb || k; }
+    function applyLang() {
+        document.querySelectorAll('#mapping-page [data-lang]').forEach(function (el) {
+            var k = el.getAttribute('data-lang');
+            if (_TRANS[k]) el.innerHTML = _TRANS[k];
+        });
+        buildRail();
+        renderHeader();
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function typeOf(key) {
+        for (var i = 0; i < TYPES.length; i++) if (TYPES[i].key === key) return TYPES[i];
+        return TYPES[0];
+    }
+
+    // ── Rail esquerdo ────────────────────────────────────────────────────────
+    function buildRail() {
+        document.getElementById('mapTypeList').innerHTML = TYPES.map(function (tp) {
+            var n = STATE[tp.key] ? STATE[tp.key].rows.length : '…';
+            return '<a class="map-type-item' + (tp.key === CUR ? ' is-active' : '') + '" data-key="' + tp.key + '">' +
+                '<i class="ti ' + tp.icon + ' map-type-ico"></i>' +
+                '<span>' + esc(t(tp.lang, tp.label)) + '</span>' +
+                '<span class="map-type-badge">' + n + '</span></a>';
+        }).join('');
+    }
+
+    // ── Dados ────────────────────────────────────────────────────────────────
+    function load(key, force) {
+        if (STATE[key] && STATE[key].loaded && !force) { if (key === CUR) render(); return; }
+        fetch('/api/mappings/' + encodeURIComponent(key), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                STATE[key] = { columns: d.columns || [], rows: d.rows || [], loaded: true };
+                buildRail();
+                if (key === CUR) render();
+            })
+            .catch(function () {});
+    }
+
+    function save(okMsgKey) {
+        var st = STATE[CUR];
+        return fetch('/api/mappings/' + encodeURIComponent(CUR), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: st.rows }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d || !d.success) throw new Error((d && d.error) || 'save failed');
+            st.rows = d.rows || st.rows;
+            buildRail();
+            render();
+            if (window.Swal) Swal.fire({ icon: 'success', title: t(okMsgKey, 'Saved'), timer: 1300, showConfirmButton: false });
+            if (window.fetchNotifications) window.fetchNotifications();
+        }).catch(function (e) {
+            // recarrega do servidor para o estado local não mentir
+            STATE[CUR].loaded = false; load(CUR, true);
+            if (window.Swal) Swal.fire({ icon: 'error', title: 'Mapping', text: e.message });
+        });
+    }
+
+    // ── Render do mapping selecionado ────────────────────────────────────────
+    function renderHeader() {
+        var tp = typeOf(CUR);
+        document.getElementById('mapCurTitle').textContent = t(tp.lang, tp.label);
+        document.getElementById('mapCurIcon').className = 'ti ' + tp.icon + ' text-primary fs-4';
+        var st = STATE[CUR];
+        document.getElementById('mapCurCount').textContent = st ? st.rows.length : 0;
+    }
+
+    function render() {
+        var st = STATE[CUR];
+        renderHeader();
+        if (!st) return;
+        var head = document.getElementById('mapHead');
+        head.innerHTML =
+            '<tr><th style="width:76px" data-lang="map-actions">' + esc(t('map-actions', 'Actions')) + '</th>' +
+            st.columns.map(function (c) { return '<th>' + esc(c.label || c.key) + '</th>'; }).join('') + '</tr>' +
+            '<tr class="map-filter-row"><th></th>' +
+            st.columns.map(function (c, i) {
+                return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(c.label || c.key) + '" autocomplete="off"></th>';
+            }).join('') + '</tr>';
+        head.querySelectorAll('.map-col-filter').forEach(function (inp) {
+            inp.addEventListener('input', function () { drawBody(); });
+        });
+        drawBody();
+        if (window.vrSyncStickyTables) window.vrSyncStickyTables();
+    }
+
+    function filteredRows() {
+        var st = STATE[CUR];
+        var filters = [];
+        document.querySelectorAll('#mapHead .map-col-filter').forEach(function (inp) {
+            var v = inp.value.trim().toUpperCase();
+            if (v) filters.push({ col: +inp.getAttribute('data-col'), v: v });
+        });
+        var out = [];
+        st.rows.forEach(function (row, idx) {
+            var cells = st.columns.map(function (c) { return String(row[c.key] == null ? '' : row[c.key]); });
+            var ok = filters.every(function (f) { return cells[f.col].toUpperCase().indexOf(f.v) !== -1; });
+            if (ok) out.push({ idx: idx, cells: cells });
+        });
+        return out;
+    }
+
+    function drawBody() {
+        var st = STATE[CUR];
+        var rows = filteredRows();
+        var shown = PAGE_LEN === -1 ? rows : rows.slice(0, PAGE_LEN);
+        document.getElementById('mapBody').innerHTML = shown.map(function (r) {
+            return '<tr>' +
+                '<td><div class="d-inline-flex gap-1">' +
+                '<button class="btn btn-info btn-sm rounded-circle btn-row-edit map-edit" data-idx="' + r.idx + '" title="' + esc(t('map-edit', 'Edit')) + '"><i class="ti ti-pencil"></i></button>' +
+                '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete map-del" data-idx="' + r.idx + '" title="' + esc(t('map-del', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
+                '</div></td>' +
+                r.cells.map(function (v) { return '<td class="map-code">' + esc(v) + '</td>'; }).join('') + '</tr>';
+        }).join('');
+        document.getElementById('mapShown').textContent = shown.length + (shown.length < rows.length ? '/' + rows.length : '');
+        document.getElementById('mapCurCount').textContent = st.rows.length;
+    }
+
+    // ── Export (client-side, sobre as linhas filtradas) ──────────────────────
+    function exportMatrix() {
+        var st = STATE[CUR];
+        var head = st.columns.map(function (c) { return c.label || c.key; });
+        return [head].concat(filteredRows().map(function (r) { return r.cells; }));
+    }
+    function toCsv(matrix) {
+        return matrix.map(function (row) {
+            return row.map(function (v) {
+                v = String(v == null ? '' : v);
+                return /[",;\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+            }).join(';');
+        }).join('\r\n');
+    }
+    document.getElementById('mapExportCsv').addEventListener('click', function (e) {
+        e.preventDefault();
+        var blob = new Blob(['﻿' + toCsv(exportMatrix())], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mapping_' + CUR + '.csv';
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    });
+    document.getElementById('mapExportCopy').addEventListener('click', function (e) {
+        e.preventDefault();
+        var txt = exportMatrix().map(function (r) { return r.join('\t'); }).join('\n');
+        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+            .then(function () {
+                if (window.Swal) Swal.fire({ icon: 'success', title: t('map-copied', 'Copied'), timer: 1100, showConfirmButton: false });
+            })
+            .catch(function () {});
+    });
+
+    // ── Add / Edit (modal glass) ─────────────────────────────────────────────
+    function openModal(idx) {
+        EDIT = (idx == null ? null : idx);
+        var st = STATE[CUR];
+        if (!st) return;
+        var row = EDIT == null ? {} : (st.rows[EDIT] || {});
+        document.getElementById('mapModalTitle').textContent =
+            (EDIT == null ? t('map-add-title', 'Add mapping') : t('map-edit-title', 'Edit mapping')) +
+            ' — ' + t(typeOf(CUR).lang, typeOf(CUR).label);
+        document.getElementById('mapModalFields').innerHTML = st.columns.map(function (c, i) {
+            var val = String(row[c.key] == null ? '' : row[c.key]);
+            var fld;
+            if (c.type === 'select') {
+                fld = '<select class="form-select form-select-sm map-fld" data-i="' + i + '">' +
+                    (c.options || []).map(function (o) {
+                        return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o || '—') + '</option>';
+                    }).join('') + '</select>';
+            } else {
+                fld = '<input type="text" class="form-control form-control-sm map-fld" data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">';
+            }
+            return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(c.label || c.key) + '</label>' + fld + '</div>';
+        }).join('');
+        if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).show();
+    }
+
+    document.getElementById('mapModalSave').addEventListener('click', function () {
+        var st = STATE[CUR];
+        if (!st) return;
+        var row = {};
+        document.querySelectorAll('#mapModalFields .map-fld').forEach(function (f) {
+            var c = st.columns[+f.getAttribute('data-i')];
+            if (c) row[c.key] = f.value;
+        });
+        if (EDIT == null) st.rows.push(row);
+        else st.rows[EDIT] = row;
+        var inst = window.bootstrap && bootstrap.Modal.getInstance(document.getElementById('mapModal'));
+        if (inst) inst.hide();
+        save('map-saved');
+    });
+
+    // ── Wiring ───────────────────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var item = e.target.closest('.map-type-item');
+        if (item) {
+            CUR = item.getAttribute('data-key');
+            buildRail();
+            if (STATE[CUR] && STATE[CUR].loaded) render(); else { renderHeader(); load(CUR); }
+            return;
+        }
+        var ed = e.target.closest('.map-edit');
+        if (ed) { openModal(+ed.getAttribute('data-idx')); return; }
+        var del = e.target.closest('.map-del');
+        if (del) {
+            var idx = +del.getAttribute('data-idx');
+            var doDel = function () { STATE[CUR].rows.splice(idx, 1); save('map-deleted'); };
+            if (window.Swal) {
+                Swal.fire({ icon: 'warning', title: t('map-del-title', 'Delete mapping?'),
+                    text: t('map-del-text', 'This row will be removed and the change saved.'),
+                    showCancelButton: true, confirmButtonText: t('map-del-yes', 'Yes, delete'),
+                    cancelButtonText: t('map-cancel', 'Cancel'), confirmButtonColor: '#dc3545' })
+                    .then(function (r) { if (r.isConfirmed) doDel(); });
+            } else { doDel(); }
+        }
+    });
+    document.getElementById('mapAddBtn').addEventListener('click', function () { openModal(null); });
+    document.getElementById('mapPageLen').addEventListener('change', function () {
+        PAGE_LEN = parseInt(this.value, 10);
+        drawBody();
+    });
+    document.getElementById('mapClearFilters').addEventListener('click', function () {
+        document.querySelectorAll('#mapHead .map-col-filter').forEach(function (i) { i.value = ''; });
+        drawBody();
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        buildRail();
+        renderHeader();
+        // carrega todos: os badges do rail mostram a contagem de cada mapping
+        TYPES.forEach(function (tp) { load(tp.key); });
+        if (window.lucide && lucide.createIcons) lucide.createIcons();
+    });
+}());
+</script>
+{% endblock extra_javascript %}
