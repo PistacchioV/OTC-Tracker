@@ -15051,8 +15051,9 @@ def _save_intrag_ndf_moeda_entry(deal):
     Intrag NDF no layout do arquivo "Instrucao NDF Moeda" (NDF - TERMO DE
     MOEDAS): campos de mercadoria em N/A, moeda = perna estrangeira do par,
     valor nocional na moeda estrangeira, taxa forward em R$/moeda na coluna
-    Asian Fwd Avg Rate e o publisher na coluna Comm Fixing — espelho campo a
-    campo das linhas do template legado."""
+    Forward Rate (R$/CCY) e o publisher na coluna Information Source — da
+    coluna Trade Price em diante o layout de moeda anda uma casa à esquerda
+    em relação ao de mercadoria."""
     td = _parse_deal_date(deal.get('TradeDate', '') or '')
     sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
     lf = _parse_deal_date(deal.get('LastFixingDate', '') or '')
@@ -15111,17 +15112,20 @@ def _save_intrag_ndf_moeda_entry(deal):
         'underlying_asset':       'N/A',
         'quantity':               'N/A',
         'unit_of_negotiation':    '0',
-        'strike':                 'N/A',
-        'strike_currency':        '0',
-        'expiry_month_year':      'BRL',
-        'anbima_bizdays':         'N/A',
-        'fixed_0':                'N/A',
-        'na_1':                   rate_str,
-        'na_2':                   'N/A',
-        'weekday_bizdays':        publisher,
-        'trade_type_label':       fixing_off,
-        'strike_ccy_label':       'N/A',
-        'na_3':                   'N/A',
+        # Da coluna Trade Price em diante o termo de MOEDA anda uma casa à
+        # esquerda em relação ao termo de mercadoria (as chaves são nomes
+        # legados; o comentário ao lado é a coluna que cada uma alimenta).
+        'strike':                 '0',         # Trade Price
+        'strike_currency':        'BRL',       # Settlement Parity
+        'expiry_month_year':      'N/A',       # Maturity Month/Year
+        'anbima_bizdays':         'N/A',       # Spot Fixing
+        'fixed_0':                rate_str,    # Forward Rate (R$/CCY)
+        'na_1':                   'N/A',       # Asian Fwd Avg Rate
+        'na_2':                   publisher,   # Information Source
+        'weekday_bizdays':        fixing_off,  # Comm Fixing
+        'trade_type_label':       'N/A',       # Adjustment Type
+        'strike_ccy_label':       'N/A',       # Observation
+        'na_3':                   'N/A',       # Discount Factor
         '_deal':                  deal.get('Deal', '') or '',
         '_client':                deal.get('Client', '') or '',
         'status':                 'New',
