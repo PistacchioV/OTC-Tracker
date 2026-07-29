@@ -118,16 +118,24 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted fs-xs">
-                            <span data-lang="map-showing">Showing</span> <span id="mapShown">0</span> <span data-lang="map-rows">rows</span>
-                        </span>
-                    </div>
-                    <div class="table-responsive" style="max-height:64vh">
+                    <div class="table-responsive" style="max-height:60vh">
                         <table class="table table-sm table-striped table-hover mb-0 align-middle" id="mapTable">
                             <thead class="thead-sm text-uppercase fs-xxs" id="mapHead"></thead>
                             <tbody id="mapBody"></tbody>
                         </table>
+                    </div>
+                    <!-- Paginação: intervalo exibido + navegação de páginas -->
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
+                        <span class="text-muted fs-xs">
+                            <span data-lang="map-showing">Showing</span> <span id="mapShown">0</span> <span data-lang="map-rows">rows</span>
+                        </span>
+                        <nav class="d-flex align-items-center gap-1" id="mapPager">
+                            <button class="btn btn-sm btn-soft-secondary" id="mapPgFirst" title="First"><i class="ti ti-chevrons-left"></i></button>
+                            <button class="btn btn-sm btn-soft-secondary" id="mapPgPrev" title="Previous"><i class="ti ti-chevron-left"></i></button>
+                            <span class="fs-xs text-muted px-2" id="mapPgInfo">1/1</span>
+                            <button class="btn btn-sm btn-soft-secondary" id="mapPgNext" title="Next"><i class="ti ti-chevron-right"></i></button>
+                            <button class="btn btn-sm btn-soft-secondary" id="mapPgLast" title="Last"><i class="ti ti-chevrons-right"></i></button>
+                        </nav>
                     </div>
                 </div>
             </div>
@@ -176,6 +184,7 @@
     var CUR = TYPES[0].key;  // mapping selecionado
     var EDIT = null;         // índice em edição (null = Add)
     var PAGE_LEN = 50;
+    var PAGE = 0;            // página atual (0-based); volta a 0 em filtro/troca/salvar
 
     var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en');
     var _TRANS = {};
@@ -270,7 +279,7 @@
                 return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(c.label || c.key) + '" autocomplete="off"></th>';
             }).join('') + '</tr>';
         head.querySelectorAll('.map-col-filter').forEach(function (inp) {
-            inp.addEventListener('input', function () { drawBody(); });
+            inp.addEventListener('input', function () { PAGE = 0; drawBody(); });
         });
         drawBody();
         if (window.vrSyncStickyTables) window.vrSyncStickyTables();
@@ -295,7 +304,11 @@
     function drawBody() {
         var st = STATE[CUR];
         var rows = filteredRows();
-        var shown = PAGE_LEN === -1 ? rows : rows.slice(0, PAGE_LEN);
+        var pages = PAGE_LEN === -1 ? 1 : Math.max(1, Math.ceil(rows.length / PAGE_LEN));
+        if (PAGE > pages - 1) PAGE = pages - 1;        // filtro encolheu a lista
+        if (PAGE < 0) PAGE = 0;
+        var start = PAGE_LEN === -1 ? 0 : PAGE * PAGE_LEN;
+        var shown = PAGE_LEN === -1 ? rows : rows.slice(start, start + PAGE_LEN);
         document.getElementById('mapBody').innerHTML = shown.map(function (r) {
             return '<tr>' +
                 '<td><div class="d-inline-flex gap-1">' +
@@ -304,9 +317,22 @@
                 '</div></td>' +
                 r.cells.map(function (v) { return '<td class="map-code">' + esc(v) + '</td>'; }).join('') + '</tr>';
         }).join('');
-        document.getElementById('mapShown').textContent = shown.length + (shown.length < rows.length ? '/' + rows.length : '');
+        document.getElementById('mapShown').textContent = rows.length
+            ? (start + 1) + '–' + (start + shown.length) + ' / ' + rows.length
+            : '0';
         document.getElementById('mapCurCount').textContent = st.rows.length;
+        document.getElementById('mapPgInfo').textContent = (PAGE + 1) + '/' + pages;
+        document.getElementById('mapPgFirst').disabled = PAGE === 0;
+        document.getElementById('mapPgPrev').disabled = PAGE === 0;
+        document.getElementById('mapPgNext').disabled = PAGE >= pages - 1;
+        document.getElementById('mapPgLast').disabled = PAGE >= pages - 1;
     }
+
+    function goPage(p) { PAGE = p; drawBody(); }
+    document.getElementById('mapPgFirst').addEventListener('click', function () { goPage(0); });
+    document.getElementById('mapPgPrev').addEventListener('click', function () { goPage(PAGE - 1); });
+    document.getElementById('mapPgNext').addEventListener('click', function () { goPage(PAGE + 1); });
+    document.getElementById('mapPgLast').addEventListener('click', function () { goPage(1e9); });
 
     // ── Export (client-side, sobre as linhas filtradas) ──────────────────────
     function exportMatrix() {
@@ -386,6 +412,7 @@
         var item = e.target.closest('.map-type-item');
         if (item) {
             CUR = item.getAttribute('data-key');
+            PAGE = 0;
             buildRail();
             if (STATE[CUR] && STATE[CUR].loaded) render(); else { renderHeader(); load(CUR); }
             return;
@@ -408,10 +435,12 @@
     document.getElementById('mapAddBtn').addEventListener('click', function () { openModal(null); });
     document.getElementById('mapPageLen').addEventListener('change', function () {
         PAGE_LEN = parseInt(this.value, 10);
+        PAGE = 0;
         drawBody();
     });
     document.getElementById('mapClearFilters').addEventListener('click', function () {
         document.querySelectorAll('#mapHead .map-col-filter').forEach(function (i) { i.value = ''; });
+        PAGE = 0;
         drawBody();
     });
 

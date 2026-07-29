@@ -14237,7 +14237,7 @@ _MAPPING_DEFS = {
             {'key': 'TIPO COTACAO', 'label': 'Quotation Type'},
             {'key': 'CASAS DECIMAIS', 'label': 'Decimal Places'},
             {'key': 'ATHENA CODE', 'label': 'Athena Code'},
-            {'key': 'WEAK', 'label': 'Weak Ccy (inverted)', 'type': 'select', 'options': ['', 'YES']},
+            {'key': 'WEAK', 'label': 'Weak Ccy', 'type': 'select', 'options': ['', 'YES']},
             {'key': 'INV DECIMALS', 'label': 'Inverse Decimals'},
         ],
         'seed': [],
