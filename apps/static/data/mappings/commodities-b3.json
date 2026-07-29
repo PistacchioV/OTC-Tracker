@@ -2,126 +2,218 @@
   {
     "TYPE": "FIXED",
     "MARKET": "MPB_LME",
-    "B3 CODE": "LOPBDY"
+    "B3 CODE": "LOPBDY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MCU_LME",
-    "B3 CODE": "LOCADY"
+    "B3 CODE": "LOCADY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MAL_LME",
-    "B3 CODE": "LOAHDY"
+    "B3 CODE": "LOAHDY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MZN_LME",
-    "B3 CODE": "LOZSDY"
+    "B3 CODE": "LOZSDY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MSN_LME",
-    "B3 CODE": "LOSNDY"
+    "B3 CODE": "LOSNDY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MNI_LME",
-    "B3 CODE": "LONIDY"
+    "B3 CODE": "LONIDY",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "FO_0.5%_ROT_BRG_FOB",
-    "B3 CODE": "NAEB0011"
+    "B3 CODE": "NAEB0011",
+    "HOLIDAY CALENDAR": "PLATTS-EUROPE",
+    "FIXED QUOTE": "YES"
   },
   {
     "TYPE": "FIXED",
     "MARKET": "FO_0.5%_SING_FOB",
-    "B3 CODE": "NACX0005"
+    "B3 CODE": "NACX0005",
+    "HOLIDAY CALENDAR": "PLATTS-ASIA",
+    "FIXED QUOTE": "YES"
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MAL_MW_PREMIUM",
-    "B3 CODE": "PMMUAKE0"
+    "B3 CODE": "PMMUAKE0",
+    "HOLIDAY CALENDAR": "LME",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "BRT_DTD",
-    "B3 CODE": "PCRUDTB1"
+    "B3 CODE": "PCRUDTB1",
+    "HOLIDAY CALENDAR": "PLATTS-EUROPE",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "NG_NYMEX",
-    "B3 CODE": "NG1"
+    "B3 CODE": "NG1",
+    "HOLIDAY CALENDAR": "NYMEX",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "MFE_TSI",
-    "B3 CODE": "PFATIOCH"
+    "B3 CODE": "PFATIOCH",
+    "HOLIDAY CALENDAR": "PLATTS-ASIA",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "FIXED",
     "MARKET": "COAL_HCC_FOB_AUS_TSI",
-    "B3 CODE": "PMTCLAUS"
+    "B3 CODE": "PMTCLAUS",
+    "HOLIDAY CALENDAR": "PLATTS-ASIA",
+    "FIXED QUOTE": "YES"
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "HU_RBOB_NYMEX",
-    "B3 CODE": "XB"
+    "B3 CODE": "XB",
+    "HOLIDAY CALENDAR": "NYMEX",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "HO_NYMEX",
-    "B3 CODE": "HO"
+    "B3 CODE": "HO",
+    "HOLIDAY CALENDAR": "NYMEX",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "SB_ICE",
-    "B3 CODE": "SB"
+    "B3 CODE": "SB",
+    "HOLIDAY CALENDAR": "ICEAGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "C_CBOT",
-    "B3 CODE": "C "
+    "B3 CODE": "C ",
+    "HOLIDAY CALENDAR": "CBY_AGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "S_CBOT",
-    "B3 CODE": "S "
+    "B3 CODE": "S ",
+    "HOLIDAY CALENDAR": "CBY_AGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "BO_CBOT",
-    "B3 CODE": "BO"
+    "B3 CODE": "BO",
+    "HOLIDAY CALENDAR": "CBY_AGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "CC_ICE",
-    "B3 CODE": "CC"
+    "B3 CODE": "CC",
+    "HOLIDAY CALENDAR": "ICEAGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "W_CBOT",
-    "B3 CODE": "W "
+    "B3 CODE": "W ",
+    "HOLIDAY CALENDAR": "CBY_AGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "SM_CBOT",
-    "B3 CODE": "SM"
+    "B3 CODE": "SM",
+    "HOLIDAY CALENDAR": "CBY_AGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "CT_ICE",
-    "B3 CODE": "CT"
+    "B3 CODE": "CT",
+    "HOLIDAY CALENDAR": "ICEAGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "KC_ICE",
-    "B3 CODE": "KC"
+    "B3 CODE": "KC",
+    "HOLIDAY CALENDAR": "ICEAGS",
+    "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "WTI_NYMEX",
-    "B3 CODE": "WTI"
+    "B3 CODE": "WTI",
+    "HOLIDAY CALENDAR": "NYMEX",
+    "FIXED QUOTE": ""
+  },
+  {
+    "TYPE": "SPECIAL",
+    "MARKET": "BRT_IPE",
+    "B3 CODE": "",
+    "HOLIDAY CALENDAR": "IPE",
+    "FIXED QUOTE": ""
+  },
+  {
+    "TYPE": "SPECIAL",
+    "MARKET": "FCPO_BURSA_MYR",
+    "B3 CODE": "",
+    "HOLIDAY CALENDAR": "BURSA",
+    "FIXED QUOTE": ""
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "",
+    "B3 CODE": "PTS005",
+    "HOLIDAY CALENDAR": "",
+    "FIXED QUOTE": "YES"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "",
+    "B3 CODE": "PTS002",
+    "HOLIDAY CALENDAR": "",
+    "FIXED QUOTE": "YES"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "",
+    "B3 CODE": "PTS006",
+    "HOLIDAY CALENDAR": "",
+    "FIXED QUOTE": "YES"
+  },
+  {
+    "TYPE": "FIXED",
+    "MARKET": "",
+    "B3 CODE": "PTS003",
+    "HOLIDAY CALENDAR": "",
+    "FIXED QUOTE": "YES"
   }
 ]

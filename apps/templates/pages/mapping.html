@@ -162,13 +162,14 @@
     'use strict';
 
     // Mappings na ordem do rail; label default em inglês + chave i18n.
+    // currency-codes foi absorvido pela Currency Base (colunas Athena/Weak/Inv)
+    // e fixed-underlyings pela Commodities × B3 (coluna Fixed Quote).
     var TYPES = [
-        { key: 'currency-base',     icon: 'ti-currency-dollar', lang: 'map-tab-currency-base',  label: 'Currency Base' },
-        { key: 'interbook-ndf',     icon: 'ti-arrows-exchange', lang: 'map-tab-interbook',      label: 'Interbook API (NDF)' },
-        { key: 'currency-codes',    icon: 'ti-abc',             lang: 'map-tab-currency-codes', label: 'Currency Codes (Athena)' },
-        { key: 'commodities-b3',    icon: 'ti-chart-candle',    lang: 'map-tab-commodities',    label: 'Commodities × B3' },
-        { key: 'fixed-underlyings', icon: 'ti-anchor',          lang: 'map-tab-fixed-und',      label: 'Fixed Underlyings' },
-        { key: 'swap-curves',       icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',    label: 'Swap Curves (Athena × B3)' },
+        { key: 'currency-base',  icon: 'ti-currency-dollar', lang: 'map-tab-currency-base', label: 'Currency Base' },
+        { key: 'interbook-ndf',  icon: 'ti-arrows-exchange', lang: 'map-tab-interbook',     label: 'Interbook API (NDF)' },
+        { key: 'commodities-b3', icon: 'ti-chart-candle',    lang: 'map-tab-commodities',   label: 'Commodities × B3' },
+        { key: 'bank-name',      icon: 'ti-building-bank',   lang: 'map-tab-bank-name',     label: 'Bank Name' },
+        { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
     ];
 
     var STATE = {};          // key → {columns, rows, loaded}

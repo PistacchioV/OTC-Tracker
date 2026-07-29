@@ -186,21 +186,28 @@ var OTCFileUpload = (function () {
         'WTI_NYMEX':     'WTI'  // not confirmed in B3 data; best guess
     };
 
-    // De-para agora cadastrado na página Mapping (aba Commodities × B3). Os
+    // De-para agora cadastrado na página Mapping (Commodities × B3). Os
     // literais acima são o fallback até o fetch responder — e se ele falhar, o
-    // comportamento antigo continua. No sucesso os dois objetos são esvaziados
-    // e repovoados, para uma linha REMOVIDA na tela não continuar valendo aqui.
+    // comportamento antigo continua. No sucesso os objetos são esvaziados e
+    // repovoados, para uma linha REMOVIDA na tela não continuar valendo aqui.
+    // A mesma resposta traz o HOLIDAY CALENDAR por market (MARKET_TO_FX_HOLIDAY)
+    // e as linhas SPECIAL (BRT_IPE/FCPO), cujo código é calculado no código mas
+    // cujo calendário vem daqui.
     fetch('/api/mappings/commodities-b3', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (d) {
             if (!d || !d.success || !d.rows || !d.rows.length) return;
             Object.keys(MARKET_FIXED_CODES).forEach(function (k) { delete MARKET_FIXED_CODES[k]; });
             Object.keys(MARKET_DYNAMIC_PREFIX).forEach(function (k) { delete MARKET_DYNAMIC_PREFIX[k]; });
+            Object.keys(MARKET_TO_FX_HOLIDAY).forEach(function (k) { delete MARKET_TO_FX_HOLIDAY[k]; });
             d.rows.forEach(function (row) {
+                var typ  = String(row['TYPE'] || '').toUpperCase();
                 var mkt  = String(row['MARKET'] || '').trim().toUpperCase();
                 var code = String(row['B3 CODE'] || '');   // sem trim: 'C ' tem espaço no código
-                if (!mkt || !code) return;
-                if (String(row['TYPE'] || '').toUpperCase().indexOf('PREFIX') !== -1) {
+                var cal  = String(row['HOLIDAY CALENDAR'] || '').trim();
+                if (mkt && cal) MARKET_TO_FX_HOLIDAY[mkt] = cal;
+                if (!mkt || !code || typ === 'SPECIAL') return;
+                if (typ.indexOf('PREFIX') !== -1) {
                     MARKET_DYNAMIC_PREFIX[mkt] = code;
                 } else {
                     MARKET_FIXED_CODES[mkt] = code;

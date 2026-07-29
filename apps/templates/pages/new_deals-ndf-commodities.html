@@ -4207,17 +4207,17 @@ $(document).ready(function() {
         return list;
     }
 
-    /* Fixed Underlyings: cadastro na página Mapping; a lista literal é o
-       fallback até o fetch responder (e se ele falhar). */
+    /* Fixed Underlyings: linhas FIXED QUOTE = YES do mapping Commodities × B3;
+       a lista literal é o fallback até o fetch responder (e se ele falhar). */
     var _FIXED_UND = ['NACX0005', 'NAEB0011', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
-    fetch('/api/mappings/fixed-underlyings', { credentials: 'same-origin' })
+    fetch('/api/mappings/commodities-b3', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (d) {
             if (!d || !d.success || !d.rows) return;
             var codes = d.rows.filter(function (r) {
-                    return String(r['SCOPE'] || 'ALL').trim().toUpperCase() !== 'CURRENCY';
+                    return String(r['FIXED QUOTE'] || '').trim().toUpperCase() === 'YES';
                 })
-                .map(function (r) { return String(r['CODE'] || '').trim().toUpperCase(); })
+                .map(function (r) { return String(r['B3 CODE'] || '').trim().toUpperCase(); })
                 .filter(function (c) { return !!c; });
             if (codes.length) _FIXED_UND = codes;
         })

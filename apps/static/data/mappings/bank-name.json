@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "001",
+    "NAME": "BANCO DO BRASIL S/A",
+    "ISPB": "00000000",
+    "TAX ID": "00.000.000/0001-91"
+  },
+  {
+    "ID": "033",
+    "NAME": "BANCO SANTANDER S/A",
+    "ISPB": "90400888",
+    "TAX ID": "90.400.888/0001-42"
+  },
+  {
+    "ID": "217",
+    "NAME": "BANCO JOHN DEERE S/A",
+    "ISPB": "91884981",
+    "TAX ID": "91.884.981/0001-32"
+  },
+  {
+    "ID": "237",
+    "NAME": "BANCO BRADESCO S/A",
+    "ISPB": "60746948",
+    "TAX ID": "60.746.948/0001-12"
+  },
+  {
+    "ID": "341",
+    "NAME": "BANCO ITAU S/A",
+    "ISPB": "60701190",
+    "TAX ID": "60.701.190/0001-04"
+  },
+  {
+    "ID": "376",
+    "NAME": "BANCO JP MORGAN S/A",
+    "ISPB": "33172537",
+    "TAX ID": "33.172.537/0001-98"
+  },
+  {
+    "ID": "745",
+    "NAME": "BANCO CITIBANK S/A",
+    "ISPB": "33479023",
+    "TAX ID": "33.479.023/0001-80"
+  },
+  {
+    "ID": "755",
+    "NAME": "BOFA MERRILL LYNCH BM S/A",
+    "ISPB": "62073200",
+    "TAX ID": "62.073.200/0001-21"
+  }
+]

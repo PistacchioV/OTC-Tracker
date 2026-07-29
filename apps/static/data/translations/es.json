@@ -1438,5 +1438,6 @@
   "map-cancel": "Cancelar",
   "map-saved": "Guardado",
   "map-deleted": "Eliminado",
-  "map-copied": "Copiado"
+  "map-copied": "Copiado",
+  "map-tab-bank-name": "Bancos (Bank Name)"
 }

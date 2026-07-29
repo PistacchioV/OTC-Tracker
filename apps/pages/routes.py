@@ -14220,7 +14220,10 @@ _MAP_RULE_CPTY = 'END COUNTERPARTY x TRADING BOOK'
 
 _MAPPING_DEFS = {
     # Aba movida do Index B3 — edita o MESMO BaseMoeda.json que os previews de
-    # NDF já leem para o código de moeda (CODIGO DE CADASTRO).
+    # NDF já leem para o código de moeda (CODIGO DE CADASTRO). Absorveu o antigo
+    # mapping currency-codes: ATHENA CODE (código da moeda no getTrades → o
+    # SIMBOLO é o ISO), WEAK (cotação invertida vs BRL) e INV DECIMALS (casas do
+    # 1/rate no arquivo Conecta) viraram colunas daqui.
     'currency-base': {
         'label': 'Currency Base',
         'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'BaseMoeda.json')),
@@ -14233,6 +14236,9 @@ _MAPPING_DEFS = {
             {'key': 'SIMBOLO', 'label': 'Currency Code'},
             {'key': 'TIPO COTACAO', 'label': 'Quotation Type'},
             {'key': 'CASAS DECIMAIS', 'label': 'Decimal Places'},
+            {'key': 'ATHENA CODE', 'label': 'Athena Code'},
+            {'key': 'WEAK', 'label': 'Weak Ccy (inverted)', 'type': 'select', 'options': ['', 'YES']},
+            {'key': 'INV DECIMALS', 'label': 'Inverse Decimals'},
         ],
         'seed': [],
     },
@@ -14264,73 +14270,71 @@ _MAPPING_DEFS = {
             [{'RULE': _MAP_RULE_CPTY, 'FIELD A': 'DERIV NDF BJPM FXC', 'FIELD B': 'GN NDF BJPM'}]
         ),
     },
-    # Código de moeda da Athena → ISO, moedas fracas (cotação invertida vs BRL)
-    # e casas decimais da inversão do Rate no arquivo Conecta.
-    'currency-codes': {
-        'label': 'Currency Codes (Athena)',
-        'columns': [
-            {'key': 'ATHENA CODE', 'label': 'Athena Code'},
-            {'key': 'ISO CODE', 'label': 'ISO Code'},
-            {'key': 'WEAK', 'label': 'Weak Ccy (inverted)', 'type': 'select', 'options': ['', 'YES']},
-            {'key': 'INV DECIMALS', 'label': 'Inverse Decimals'},
-        ],
-        'seed': [
-            {'ATHENA CODE': 'BRR', 'ISO CODE': 'BRL', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'USB', 'ISO CODE': 'USD', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'EUB', 'ISO CODE': 'EUR', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'GBB', 'ISO CODE': 'GBP', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'CHB', 'ISO CODE': 'CHF', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'NOB', 'ISO CODE': 'NOK', 'WEAK': '', 'INV DECIMALS': ''},
-            {'ATHENA CODE': 'COB', 'ISO CODE': 'COP', 'WEAK': 'YES', 'INV DECIMALS': '6'},
-            {'ATHENA CODE': 'MXB', 'ISO CODE': 'MXN', 'WEAK': 'YES', 'INV DECIMALS': '4'},
-            {'ATHENA CODE': '',    'ISO CODE': 'CNH', 'WEAK': 'YES', 'INV DECIMALS': '4'},
-            {'ATHENA CODE': '',    'ISO CODE': 'PEN', 'WEAK': 'YES', 'INV DECIMALS': '4'},
-            {'ATHENA CODE': '',    'ISO CODE': 'CLP', 'WEAK': 'YES', 'INV DECIMALS': '6'},
-        ],
-    },
     # Market da Athena → Código do Ativo Subjacente B3 (commodities). FIXED =
-    # código fechado; PREFIX = prefixo + mês/ano do contrato (o cálculo continua
-    # no código — os casos especiais BRT_IPE e FCPO também). Atenção: espaço no
+    # código fechado; PREFIX = prefixo + mês/ano do contrato; SPECIAL = o código
+    # é calculado no código-fonte (BRT_IPE, FCPO) e a linha existe pelas outras
+    # colunas. HOLIDAY CALENDAR = calendário de feriados do market. FIXED QUOTE
+    # = underlying de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) — absorveu
+    # o antigo mapping fixed-underlyings, que era todo de escopo commodities; os
+    # PTS* não têm market na Athena e entram só com o código. Atenção: espaço no
     # fim de códigos como 'C ' faz parte do código B3.
     'commodities-b3': {
         'label': 'Commodities × B3 Code',
         'columns': [
-            {'key': 'TYPE', 'label': 'Type', 'type': 'select', 'options': ['FIXED', 'PREFIX']},
+            {'key': 'TYPE', 'label': 'Type', 'type': 'select', 'options': ['FIXED', 'PREFIX', 'SPECIAL']},
             {'key': 'MARKET', 'label': 'Market (Athena)'},
             {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
+            {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
+            {'key': 'FIXED QUOTE', 'label': 'Fixed Quote', 'type': 'select', 'options': ['', 'YES']},
         ],
         'seed': (
-            [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c} for m, c in (
-                ('MPB_LME', 'LOPBDY'), ('MCU_LME', 'LOCADY'), ('MAL_LME', 'LOAHDY'),
-                ('MZN_LME', 'LOZSDY'), ('MSN_LME', 'LOSNDY'), ('MNI_LME', 'LONIDY'),
-                ('FO_0.5%_ROT_BRG_FOB', 'NAEB0011'), ('FO_0.5%_SING_FOB', 'NACX0005'),
-                ('MAL_MW_PREMIUM', 'PMMUAKE0'), ('BRT_DTD', 'PCRUDTB1'),
-                ('NG_NYMEX', 'NG1'), ('MFE_TSI', 'PFATIOCH'),
-                ('COAL_HCC_FOB_AUS_TSI', 'PMTCLAUS'),
+            [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': q} for m, c, h, q in (
+                ('MPB_LME', 'LOPBDY', 'LME', ''), ('MCU_LME', 'LOCADY', 'LME', ''),
+                ('MAL_LME', 'LOAHDY', 'LME', ''), ('MZN_LME', 'LOZSDY', 'LME', ''),
+                ('MSN_LME', 'LOSNDY', 'LME', ''), ('MNI_LME', 'LONIDY', 'LME', ''),
+                ('FO_0.5%_ROT_BRG_FOB', 'NAEB0011', 'PLATTS-EUROPE', 'YES'),
+                ('FO_0.5%_SING_FOB', 'NACX0005', 'PLATTS-ASIA', 'YES'),
+                ('MAL_MW_PREMIUM', 'PMMUAKE0', 'LME', ''),
+                ('BRT_DTD', 'PCRUDTB1', 'PLATTS-EUROPE', ''),
+                ('NG_NYMEX', 'NG1', 'NYMEX', ''), ('MFE_TSI', 'PFATIOCH', 'PLATTS-ASIA', ''),
+                ('COAL_HCC_FOB_AUS_TSI', 'PMTCLAUS', 'PLATTS-ASIA', 'YES'),
             )] +
-            [{'TYPE': 'PREFIX', 'MARKET': m, 'B3 CODE': c} for m, c in (
-                ('HU_RBOB_NYMEX', 'XB'), ('HO_NYMEX', 'HO'), ('SB_ICE', 'SB'),
-                ('C_CBOT', 'C '), ('S_CBOT', 'S '), ('BO_CBOT', 'BO'),
-                ('CC_ICE', 'CC'), ('W_CBOT', 'W '), ('SM_CBOT', 'SM'),
-                ('CT_ICE', 'CT'), ('KC_ICE', 'KC'), ('WTI_NYMEX', 'WTI'),
-            )]
+            [{'TYPE': 'PREFIX', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': ''} for m, c, h in (
+                ('HU_RBOB_NYMEX', 'XB', 'NYMEX'), ('HO_NYMEX', 'HO', 'NYMEX'),
+                ('SB_ICE', 'SB', 'ICEAGS'), ('C_CBOT', 'C ', 'CBY_AGS'),
+                ('S_CBOT', 'S ', 'CBY_AGS'), ('BO_CBOT', 'BO', 'CBY_AGS'),
+                ('CC_ICE', 'CC', 'ICEAGS'), ('W_CBOT', 'W ', 'CBY_AGS'),
+                ('SM_CBOT', 'SM', 'CBY_AGS'), ('CT_ICE', 'CT', 'ICEAGS'),
+                ('KC_ICE', 'KC', 'ICEAGS'), ('WTI_NYMEX', 'WTI', 'NYMEX'),
+            )] +
+            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''},
+             {'TYPE': 'SPECIAL', 'MARKET': 'FCPO_BURSA_MYR', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'BURSA', 'FIXED QUOTE': ''}] +
+            [{'TYPE': 'FIXED', 'MARKET': '', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
+             ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
         ),
     },
-    # Underlyings de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) nos arquivos
-    # Conecta de NDF. SCOPE limita onde o código vale: NAEB0011 é SÓ das
-    # commodities — as páginas de NDF moeda não o tratam como fixo.
-    'fixed-underlyings': {
-        'label': 'Fixed Underlyings',
+    # Bancos oferecidos no editor de contraparte (Reference Data, duplo clique →
+    # contas BANKING/PAY-REC). ID = código COMPE de 3 dígitos; ISPB e TAX ID
+    # (CNPJ mascarado) vêm do cadastro público do Bacen. O front monta o rótulo
+    # 'NAME - ID' que a página já usa.
+    'bank-name': {
+        'label': 'Bank Name',
         'columns': [
-            {'key': 'CODE', 'label': 'B3 Underlying Code'},
-            {'key': 'SCOPE', 'label': 'Scope', 'type': 'select',
-             'options': ['ALL', 'COMMODITIES', 'CURRENCY']},
+            {'key': 'ID', 'label': 'ID (3-digit code)'},
+            {'key': 'NAME', 'label': 'Bank Name'},
+            {'key': 'ISPB', 'label': 'ISPB'},
+            {'key': 'TAX ID', 'label': 'Tax ID'},
         ],
-        'seed': (
-            [{'CODE': c, 'SCOPE': 'ALL'} for c in
-             ('NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS')] +
-            [{'CODE': 'NAEB0011', 'SCOPE': 'COMMODITIES'}]
-        ),
+        'seed': [
+            {'ID': '001', 'NAME': 'BANCO DO BRASIL S/A',        'ISPB': '00000000', 'TAX ID': '00.000.000/0001-91'},
+            {'ID': '033', 'NAME': 'BANCO SANTANDER S/A',        'ISPB': '90400888', 'TAX ID': '90.400.888/0001-42'},
+            {'ID': '217', 'NAME': 'BANCO JOHN DEERE S/A',       'ISPB': '91884981', 'TAX ID': '91.884.981/0001-32'},
+            {'ID': '237', 'NAME': 'BANCO BRADESCO S/A',         'ISPB': '60746948', 'TAX ID': '60.746.948/0001-12'},
+            {'ID': '341', 'NAME': 'BANCO ITAU S/A',             'ISPB': '60701190', 'TAX ID': '60.701.190/0001-04'},
+            {'ID': '376', 'NAME': 'BANCO JP MORGAN S/A',        'ISPB': '33172537', 'TAX ID': '33.172.537/0001-98'},
+            {'ID': '745', 'NAME': 'BANCO CITIBANK S/A',         'ISPB': '33479023', 'TAX ID': '33.479.023/0001-80'},
+            {'ID': '755', 'NAME': 'BOFA MERRILL LYNCH BM S/A',  'ISPB': '62073200', 'TAX ID': '62.073.200/0001-21'},
+        ],
     },
     # Curvas de swap Athena × B3 — cadastro pronto para os fluxos de swap; nasce
     # vazio porque não havia de-para hardcoded no código.
@@ -14384,11 +14388,12 @@ def _mapping_rows(key):
 
 
 def _mapping_ccy_maps():
-    """(athena→iso, ISO fracas, ISO→casas da inversão) do mapping currency-codes."""
+    """(athena→iso, ISO fracas, ISO→casas da inversão) da Currency Base — o ISO
+    é o SIMBOLO da própria linha da moeda."""
     ath, weak, inv = {}, set(), {}
-    for r in _mapping_rows('currency-codes'):
+    for r in _mapping_rows('currency-base'):
         a = str(r.get('ATHENA CODE', '') or '').strip().upper()
-        i = str(r.get('ISO CODE', '') or '').strip().upper()
+        i = str(r.get('SIMBOLO', '') or '').strip().upper()
         if a and i and a not in ath:
             ath[a] = i
         if i and str(r.get('WEAK', '') or '').strip().upper() in ('YES', 'Y', 'SIM', 'S', 'TRUE', '1'):
@@ -17015,12 +17020,11 @@ def api_ndf_send_conecta():
         except Exception:
             return '0' * (int_digits + dec_digits)
 
-    # Cadastro pela tela Mapping (aba Fixed Underlyings); o seed traz os códigos
-    # que estavam fixos aqui. Este gerador é o das COMMODITIES → entram os
-    # escopos ALL e COMMODITIES (NAEB0011 é só daqui).
-    FIXED_UNDERLYINGS = {str(r.get('CODE', '') or '').strip().upper()
-                         for r in _mapping_rows('fixed-underlyings')
-                         if str(r.get('SCOPE', 'ALL') or 'ALL').strip().upper() != 'CURRENCY'} - {''}
+    # Cadastro pela tela Mapping: são as linhas de Commodities × B3 com
+    # FIXED QUOTE = YES (fixed underlying é propriedade da commodity).
+    FIXED_UNDERLYINGS = {str(r.get('B3 CODE', '') or '').strip().upper()
+                         for r in _mapping_rows('commodities-b3')
+                         if str(r.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'} - {''}
 
     import json as _json
     lawton_lines = []

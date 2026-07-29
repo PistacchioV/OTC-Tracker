@@ -1010,6 +1010,9 @@ $(document).ready(function () {
     function _txt(html) { return $('<div>').html(html == null ? '' : html).text().trim(); }
 
     /* ── Counterparty editor: option data ────────────────────────────── */
+    /* Bancos agora cadastrados na página Mapping (Bank Name); a lista literal é
+       o fallback até o fetch responder (e se ele falhar). O rótulo continua
+       'NAME - ID', que é o formato que as contas salvas já carregam. */
     var CP_BANKS = [
         'BANCO DO BRASIL S/A - 001',
         'BANCO SANTANDER S/A - 033',
@@ -1020,6 +1023,18 @@ $(document).ready(function () {
         'BANCO CITIBANK S/A - 745',
         'BOFA MERRILL LYNCH BM S/A - 755'
     ];
+    fetch('/api/mappings/bank-name', { credentials: 'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if (!d || !d.success || !d.rows || !d.rows.length) return;
+            var labels = d.rows.map(function(r){
+                var name = String(r['NAME'] || '').trim();
+                var id = String(r['ID'] || '').trim();
+                return name && id ? (name + ' - ' + id) : '';
+            }).filter(function(x){ return !!x; });
+            if (labels.length) { CP_BANKS.length = 0; labels.forEach(function(x){ CP_BANKS.push(x); }); }
+        })
+        .catch(function(){});
     // Inclui os rótulos que vieram verbatim da planilha de origem ('NEGOTIATION
     // LETTER', 'Only for …'). Sem eles na lista, o multiselect não os oferecia e
     // salvar um contato APAGAVA silenciosamente essas regras.
