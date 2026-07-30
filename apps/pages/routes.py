@@ -14689,23 +14689,88 @@ def _fxo_persist_deals(deals):
 _ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'SPN', 'Client', 'TaxID',
                   'AmendChanged'}
 
+# Campos que mudam o DADO mas não o NEGÓCIO: a célula é destacada como qualquer
+# outra, mas quem já está Success não volta para a fila por causa deles. É uma
+# lista curta de propósito — o default é econômico, porque um campo em que
+# ninguém pensou aparecendo como Amend custa uma revisão, e o contrário custa uma
+# operação registrada errada.
+_ND_AMEND_COSMETIC = {'OtherBook'}
+
+
+def _nd_amend_entity(acr):
+    """Entidade de um accronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
+    no mapping le-accronym e, quando o código não está cadastrado, o sufixo
+    depois do último hífen — é assim que a API sufixa o End Counterparty
+    ('CMBB-LAW' → 'LAW'), o mesmo corte que _ndf_accronym_variants usa. Sem
+    nenhum dos dois devolve '' (entidade desconhecida)."""
+    le = _ndf_le_from_accronym(acr)
+    if le:
+        return le
+    a = str(acr or '').strip().upper()
+    return a.rsplit('-', 1)[-1].strip() if '-' in a else ''
+
+
+def _nd_amend_same_entity(old, new, stored, incoming):
+    """Dois accronyms são da MESMA entidade (JPM→JPM, MGT→MGT, LAW→LAW)?
+    Trocar o código dentro da entidade é registro; trocar de entidade muda a
+    ponta do negócio.
+
+    Quando o produto carrega a coluna LE (os três NDFs), ela é a resposta: é
+    derivada do accronym e da settlement location, e é justamente a entidade.
+    O FXO não tem essa coluna, e aí a entidade sai do próprio accronym.
+    Entidade desconhecida nunca empata — dois códigos que ninguém sabe de onde
+    vêm podem ser de entidades diferentes, e o seguro é tratar como econômico."""
+    le_old = str(stored.get('LE', '') or '').strip().upper()
+    le_new = str(incoming.get('LE', '') or '').strip().upper()
+    if le_old or le_new:
+        return bool(le_old) and le_old == le_new
+    ent_old, ent_new = _nd_amend_entity(old), _nd_amend_entity(new)
+    return bool(ent_old) and ent_old == ent_new
+
+
+def _nd_amend_is_economic(field, old, new, stored, incoming):
+    """A mudança desse campo justifica derrubar um deal já Success para Amend?"""
+    if field in _ND_AMEND_COSMETIC:
+        return False
+    if field == 'Acronym':
+        return not _nd_amend_same_entity(old, new, stored, incoming)
+    return True
+
 
 def _nd_api_amend(stored, incoming):
     """Bate um deal já importado com a versão atual da API. Campo de dado
-    diferente → aplica o valor novo, Status = 'Amend' e registra o nome do
-    campo em AmendChanged (o front destaca as células). Deal já Canceled não
-    é reaberto. Retorna a lista de campos alterados."""
+    diferente → aplica o valor novo e registra o nome do campo em AmendChanged
+    (o front destaca as células). Deal já Canceled não é reaberto. Retorna a
+    lista de campos alterados.
+
+    Status: a mudança normalmente joga o deal para 'Amend'. A exceção é quem já
+    está **Success** — esse só cai para Amend quando alguma informação
+    **econômica** mudou (contraparte/entidade, vencimento, notional, strike,
+    compra × venda, put × call, prêmio, data de pagamento do prêmio…). Mexer só
+    no Other Book, ou trocar o accronym dentro da mesma entidade, destaca a
+    célula e mantém o Success: são detalhes de booking, e devolver para a fila
+    uma operação já registrada gera retrabalho à toa."""
     if str(stored.get('Status', '') or '').strip() == 'Canceled':
         return []
-    changed = []
+    was_success = str(stored.get('Status', '') or '').strip() == 'Success'
+    # Foto do deal ANTES de qualquer escrita: o loop já gravou os campos
+    # anteriores em `stored`, então perguntar a ele "a LE mudou?" no meio do
+    # caminho responderia sempre que não.
+    before = dict(stored)
+    changed, economic = [], False
     for k, v in incoming.items():
         if k in _ND_AMEND_SKIP:
             continue
-        if str(stored.get(k, '') or '').strip() != str(v or '').strip():
+        old = str(stored.get(k, '') or '').strip()
+        new = str(v or '').strip()
+        if old != new:
             stored[k] = v
             changed.append(k)
+            if _nd_amend_is_economic(k, old, new, before, incoming):
+                economic = True
     if changed:
-        stored['Status'] = 'Amend'
+        if economic or not was_success:
+            stored['Status'] = 'Amend'
         prev = stored.get('AmendChanged') or []
         stored['AmendChanged'] = sorted(set(prev) | set(changed))
     return changed
@@ -15533,9 +15598,12 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # são Other Publisher.
     if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
         strike_set = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
-        if strike_set and strike_set == today_dmy:
-            return None, None       # will be cancelled + re-booked as vanilla
-        target = 'fwd-start'
+        # Fixa hoje: será cancelada e re-bookada como vanilla, então não entra em
+        # página nenhuma. Ainda assim o deal é MONTADO e devolvido no alvo
+        # `_fwd-start-fixing` — é dele que sai a chave que reconhece o
+        # re-booking do outro lado (ver _ndf_rebook_key).
+        target = '_fwd-start-fixing' if (strike_set and strike_set == today_dmy) \
+            else 'fwd-start'
     elif publisher and publisher.upper() != 'PTAX':
         target = 'other-publishers'
     else:
@@ -15571,7 +15639,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         'SettlementLocation': loc,
         'Maker':             sid,
     }
-    if target == 'fwd-start':
+    if target in ('fwd-start', '_fwd-start-fixing'):
         deal['StrikeSetDate']   = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
         deal['StrikeSetOffset'] = str(_ndf_api_get(norm, 'STRIKE OFFSET', 'STRIKEOFFSET',
                                                    'STRIKE SET OFFSET') or '').strip()
@@ -15623,6 +15691,111 @@ def _generic_nd_persist_new_deals(product, deals):
     return fresh, amended
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# FWD Start → Vanilla: o re-booking do dia da fixação não entra no Vanilla
+# ──────────────────────────────────────────────────────────────────────────
+# No dia em que um FWD Start fixa (Strike Set Date), a mesa CANCELA a operação e
+# faz um booking novo, com outro Deal ID, já como NDF vanilla. As duas pontas são
+# a MESMA operação — importar o re-booking encheria a página de Vanilla de
+# duplicatas que ninguém pediu, e o Deal ID novo faz com que nenhuma regra de
+# chave (Deal+Client) as reconheça como par.
+#
+# O par é reconhecido por **contraparte + notional + data de vencimento**, com a
+# **Trade Date do vanilla igual à Strike Set Date do FWD Start**. Strike e trade
+# date NÃO entram na comparação: o strike é justamente o que a fixação define
+# (o FWD Start nem tem strike gravado, ver `deal['Rate'] = ''` acima), e a data
+# de negociação do re-booking é outra por construção.
+#
+# Os FWD Start comparados vêm de duas fontes, unidas:
+#   1. o próprio pull — os registros roteados para `_fwd-start-fixing`, que a
+#      regra de roteamento já tira de circulação;
+#   2. o cache das páginas de FWD Start dos últimos meses, porque a operação foi
+#      bookada semanas antes e mora no arquivo do dia DELA, não no de hoje.
+# A (2) é o que salva quando a API não devolve mais o FWD Start original no dia
+# da fixação; a (1) é o que salva quando ele nunca chegou a ser importado.
+
+_NDF_REBOOK_LOOKBACK_MONTHS = 24
+
+
+def _ndf_rebook_key(deal, when_field):
+    """(contraparte, notional, vencimento, data) de uma operação — a chave que
+    emparelha um FWD Start (`when_field='StrikeSetDate'`) com o vanilla que o
+    substituiu (`when_field='TradeDate'`).
+
+    Devolve None quando falta qualquer uma das quatro partes. Chave incompleta
+    não casa com nada, e é o lado seguro: na dúvida o deal É importado e o
+    operador decide — o contrário some com a operação sem ninguém ver."""
+    cp = str(deal.get('SPN') or '').strip() or str(deal.get('Acronym') or '').strip().upper()
+    notional = _conf_to_float(deal.get('Notional'))
+    settle = _parse_date_any(deal.get('SettlementDate'))
+    when = _parse_date_any(deal.get(when_field))
+    if not cp or notional is None or not settle or not when:
+        return None
+    # abs: a direção da operação viaja no campo Direction, não no sinal do
+    # notional — e o re-booking pode gravar o sinal do outro jeito.
+    return (cp, round(abs(notional), 2), settle, when)
+
+
+def _ndf_fwdstart_cached_keys(ref):
+    """Chaves dos FWD Start já importados que podem ter virado vanilla: varre o
+    cache das duas grafias de pasta em produção (FwdStart / FWD Start) nos
+    últimos _NDF_REBOOK_LOOKBACK_MONTHS meses. Cancelado entra também — pelo
+    contrário, está cancelado justamente porque o re-booking aconteceu."""
+    months, first = [], datetime(ref.year, ref.month, 1)
+    for _ in range(_NDF_REBOOK_LOOKBACK_MONTHS):
+        months.append(first)
+        first = datetime(first.year, first.month, 1) - timedelta(days=1)
+        first = datetime(first.year, first.month, 1)
+    keys = {}
+    for base in (os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
+                 os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')):
+        for m in months:
+            dpath = os.path.join(base, m.strftime('%Y'), m.strftime('%m'))
+            if not os.path.isdir(dpath):
+                continue
+            try:
+                fnames = os.listdir(dpath)
+            except OSError:
+                continue
+            for fname in fnames:
+                if not fname.endswith('_ndffwdstart.json'):
+                    continue
+                try:
+                    with open(os.path.join(dpath, fname), encoding='utf-8') as fh:
+                        data = json.load(fh)
+                except (IOError, OSError, json.JSONDecodeError):
+                    continue
+                for e in (data if isinstance(data, list) else []):
+                    if not isinstance(e, dict):
+                        continue
+                    k = _ndf_rebook_key(e, 'StrikeSetDate')
+                    if k:
+                        keys.setdefault(k, str(e.get('Deal') or '').strip())
+    return keys
+
+
+def _ndf_drop_fwdstart_rebooks(vanilla_deals, fixing_deals, ref):
+    """Tira da lista de vanilla os re-bookings de FWD Start que fixaram.
+    Retorna (deals_que_ficam, [(deal_vanilla, deal_fwdstart_casado)])."""
+    if not vanilla_deals:
+        return vanilla_deals, []
+    keys = _ndf_fwdstart_cached_keys(ref)
+    for d in fixing_deals:
+        k = _ndf_rebook_key(d, 'StrikeSetDate')
+        if k:
+            keys.setdefault(k, str(d.get('Deal') or '').strip())
+    if not keys:
+        return vanilla_deals, []
+    kept, dropped = [], []
+    for d in vanilla_deals:
+        k = _ndf_rebook_key(d, 'TradeDate')
+        if k is not None and k in keys:
+            dropped.append((d, keys[k]))
+        else:
+            kept.append(d)
+    return kept, dropped
+
+
 def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     """Fetch the reference date's NDF trades from the Athena API and route/insert
     the new ones into FWD Start / Other Publisher / Vanilla. `ref_date` vem do
@@ -15647,11 +15820,15 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
             refmap_acr[_a] = _r
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
-    skipped_fwd_today, skipped_interbook, dead = 0, 0, []
+    fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
+    skipped_interbook, dead = 0, []
     for rec in records:
         if not isinstance(rec, dict):
             continue
         target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
+        if target == '_fwd-start-fixing':
+            fixing_today.append(deal)
+            continue
         if target is None:
             norm = _ndf_api_norm(rec)
             if _api_rec_is_dead(norm):
@@ -15662,12 +15839,19 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
                 continue
             if _ndf_is_interbook(norm):
                 skipped_interbook += 1
-                continue
-            instr = str(norm.get('INSTRUMENT TYPE') or '')
-            if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
-                skipped_fwd_today += 1
             continue
         routed[target].append(deal)
+    skipped_fwd_today = len(fixing_today)
+
+    # O re-booking do FWD Start que fixou hoje chega como vanilla, com Deal ID
+    # novo — sai antes de qualquer gravação.
+    routed['vanilla'], rebooks = _ndf_drop_fwdstart_rebooks(
+        routed['vanilla'], fixing_today, now)
+    for d, fwd_name in rebooks:
+        log.info('[ndf-api] vanilla %s não importado: re-booking do FWD Start %s '
+                 '(contraparte %s · notional %s · vencimento %s)',
+                 d.get('Deal') or '?', fwd_name or '?', d.get('Acronym') or '?',
+                 d.get('Notional') or '?', d.get('SettlementDate') or '?')
 
     targets = {}
     for product, deals in routed.items():
@@ -15703,14 +15887,16 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # registros — os três somem no mesmo zero da tela.
     log.info('[ndf-api] pull ref=%s: %d fetched · roteados fwd=%d op=%d vanilla=%d · '
              'importados=%d amendados=%d · dead/cancelados na API=%d (marcados=%d) · '
-             'interbook=%d · strike set na data=%d',
+             'interbook=%d · strike set na data=%d · re-booking de FWD Start=%d',
              now.strftime('%Y%m%d'), len(records),
              len(routed['fwd-start']), len(routed['other-publishers']), len(routed['vanilla']),
              sum(t['imported'] for t in targets.values()),
              sum(t['amended'] for t in targets.values()),
-             len(dead), canceled, skipped_interbook, skipped_fwd_today)
+             len(dead), canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,
+            'skipped_fwd_rebook': len(rebooks),
+            'skipped_fwd_rebook_deals': [d.get('Deal') or '' for d, _f in rebooks],
             'skipped_interbook': skipped_interbook, 'canceled': canceled,
             'dead': len(dead), 'targets': targets}
 
