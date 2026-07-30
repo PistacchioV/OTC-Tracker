@@ -1406,6 +1406,16 @@ $(document).ready(function() {
         },
         columnDefs: [
             {
+                // Badge de status SEMPRE centralizado. O conteúdo da célula é
+                // reescrito por vários caminhos (rowMaker, mapping B3, aprovação,
+                // edição em massa) e nem todos embrulhavam o <span class="badge">
+                // do mesmo jeito — o resultado era a coluna com badge ora à
+                // esquerda, ora no meio, dependendo de quem escreveu por último.
+                // Centralizar na COLUNA independe de quem escreveu a célula.
+                targets: [2],
+                className: 'text-center'
+            },
+            {
                 orderable: false,
                 targets: [0, 1],
                 width: "50px"
@@ -1882,25 +1892,18 @@ $(document).ready(function() {
                 var _mappingNdfRunning = false;
                 mappingBtn.addEventListener('click', function() {
                     if (_mappingNdfRunning) return;
-                    var sentDeals = [], _seenDeals = {};
-                    table.rows({search: 'none', page: 'all'}).every(function() {
-                        var d = this.data();
-                        var deal   = _sh(d[4]);
-                        var status = _sh(d[2]);
-                        if ((status === 'Sent' || status === 'Error') && deal) {
-                            // Dedupe by Deal+Client so duplicate rows aren't sent/counted twice
-                            var client = _sh(d[11]);
-                            var key = deal + '|' + client;
-                            if (_seenDeals[key]) return;
-                            _seenDeals[key] = true;
-                            sentDeals.push({ Deal: deal, Client: client });
-                        }
-                    });
-
-                    if (!sentDeals.length) {
+                    // A lista NÃO sai mais da tabela. A tabela mostra o resultado
+                    // da última busca, então varrer as linhas renderizadas deixava
+                    // de fora operações do mesmo dia que ninguém tinha filtrado.
+                    // Agora vai só a Reference Date e o servidor monta a lista a
+                    // partir do arquivo do dia — é ele que grava o B3 ID, então o
+                    // que não está na tela também é atualizado.
+                    var _refInp = document.getElementById('apiRefDate');
+                    var refDate = _refInp ? _refInp.value : '';
+                    if (!refDate) {
                         Swal.fire({
                             title: t('swal-mapping-b3-title', 'Mapping B3 ID'),
-                            text: t('swal-mapping-no-sent', 'No operations with status "Sent" or "Error" to map.'),
+                            text: t('swal-mapping-no-ref-date', 'Set the Reference Date before mapping.'),
                             icon: 'info',
                             confirmButtonText: t('swal-ok', 'OK'),
                             confirmButtonColor: '#198754'
@@ -1915,7 +1918,7 @@ $(document).ready(function() {
                     fetch('/api/new-deals/fwd-start/mapping-b3', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deals: sentDeals })
+                        body: JSON.stringify({ ref_date: refDate })
                     })
                     .then(function(r) { return r.json(); })
                     .then(function(res) {

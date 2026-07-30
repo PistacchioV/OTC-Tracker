@@ -23054,6 +23054,64 @@ def api_generic_nd_send_conecta(product):
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
+# Status que ESPERAM retorno da B3: só esses viram 'Error' quando o deal não
+# aparece no arquivo. Um deal em Approved/Pending ainda nem foi registrado, e um
+# já Success não pode regredir por causa de um arquivo que já foi consumido.
+_ND_MAPPING_ERRORABLE = {'New', 'Sent', 'Error'}
+
+
+def _generic_nd_mapping_candidates(cfg, product, ref_date):
+    """Deals da Reference Date que entram no mapping do arquivo de retorno.
+
+    Sai do ARQUIVO DO DIA, não da tabela. A tabela mostra o resultado da última
+    busca — mapear o que estava renderizado deixava para trás operações do mesmo
+    dia que ninguém tinha filtrado.
+
+    Entram todos os status, exceto:
+      • 'Canceled' — cancelado na API, fora do fluxo;
+      • já 'Success' COM B3 ID — não há o que mapear e uma segunda passada só
+        poderia perder informação.
+    Nas outras páginas o filtro antigo (New/Sent/Error) é mantido: o Vanilla é
+    que é registrado por outra ferramenta, e por isso precisa olhar qualquer
+    status."""
+    ref = _parse_date_any(ref_date)
+    if not ref:
+        return []
+    fpath = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
+                         ref.strftime('%Y%m%d') + cfg['suffix'])
+    if not os.path.isfile(fpath):
+        return []
+    try:
+        with open(fpath, encoding='utf-8') as fh:
+            deals = json.load(fh)
+        if not isinstance(deals, list):
+            deals = [deals]
+    except (IOError, json.JSONDecodeError):
+        return []
+
+    out, seen = [], set()
+    for d in deals:
+        if not isinstance(d, dict):
+            continue
+        deal = str(d.get('Deal', '') or '').strip()
+        if not deal:
+            continue
+        status = str(d.get('Status', '') or '').strip()
+        if status == 'Canceled':
+            continue
+        if status == 'Success' and str(d.get('B3_ID', '') or '').strip():
+            continue
+        if product != 'vanilla' and status not in _ND_MAPPING_ERRORABLE:
+            continue
+        client = str(d.get('Client', '') or '').strip()
+        key = (deal, client)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({'Deal': deal, 'Client': client, 'Status': status})
+    return out
+
+
 @blueprint.route('/api/new-deals/<product>/mapping-b3', methods=['POST'])
 def api_generic_nd_mapping_b3(product):
     """B3 return-file scan for the generic NDF pages — same logic as the
@@ -23066,7 +23124,13 @@ def api_generic_nd_mapping_b3(product):
         return jsonify({'ok': False, 'error': 'Unknown product'}), 404
 
     data = request.get_json(silent=True) or {}
-    sent_deals = data.get('deals', [])
+    # `ref_date` = campo Reference Date da página. Com ele a lista sai do ARQUIVO
+    # DO DIA e não da tabela: a tabela mostra o resultado da última busca, então
+    # mapear o que estava renderizado deixava de fora operações do mesmo dia que
+    # ninguém tinha filtrado. `deals` continua aceito para chamadas com lista
+    # explícita.
+    sent_deals = (_generic_nd_mapping_candidates(cfg, product, data.get('ref_date'))
+                  if data.get('ref_date') else data.get('deals', []))
     if not sent_deals:
         return jsonify({'ok': True, 'results': []})
 
@@ -23121,12 +23185,22 @@ def api_generic_nd_mapping_b3(product):
             new_status = 'Success'
             updates    = {'Status': new_status, 'B3_ID': b3_id}
         else:
-            b3_id      = ''
-            new_status = 'Error'
-            updates    = {'Status': new_status}
+            b3_id = ''
+            # Não achou no retorno: só vira 'Error' quem estava esperando
+            # retorno. Agora que a varredura pega o dia inteiro em qualquer
+            # status, marcar todo mundo derrubaria para Error operações que nem
+            # sequer foram registradas ainda (Approved/Pending) — e, pior, um
+            # Success sem B3 ID.
+            prev = str(sd.get('Status', '') or '').strip()
+            if prev and prev not in _ND_MAPPING_ERRORABLE:
+                new_status = prev
+                updates    = {}
+            else:
+                new_status = 'Error'
+                updates    = {'Status': new_status}
 
         success_deal = None
-        if deal_text:
+        if deal_text and updates:
             file_path, idx = _find_generic_nd_deal(cfg, deal_text, client_name)
             if file_path is not None:
                 with _cache_lock:
@@ -23152,12 +23226,16 @@ def api_generic_nd_mapping_b3(product):
                               product, deal_text, exc)
             _generic_nd_pc_trigger(product, success_deal)   # → pending confirmation
 
-        results.append({
-            'id':     deal_text,
-            'deal':   deal_text,
-            'b3_id':  b3_id,
-            'status': new_status,
-        })
+        # Só entra no resultado quem MUDOU. Varrendo o dia inteiro, a lista
+        # passa a incluir deals que ficaram como estavam — contá-los inflaria o
+        # "N deal(s) mapped" da notificação e os contadores da tela.
+        if updates:
+            results.append({
+                'id':     deal_text,
+                'deal':   deal_text,
+                'b3_id':  b3_id,
+                'status': new_status,
+            })
 
     for fpath in files_to_delete:
         try:
