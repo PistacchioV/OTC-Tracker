@@ -544,6 +544,40 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="dealsmonitor">
+                    <div class="cp-card__icon"><i class="ti ti-clock-exclamation"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-dm2-title">Deals Monitor — Pending Action</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-dm2-desc">
+                        Sent automatically at 19:00 and 19:30 with every Deals Monitor card that still
+                        has deals outside Success — by type (Registration / Confirmation / Intrag),
+                        product and detail. Nothing pending, no e-mail. Set the TO / CC once — they are
+                        saved and reused on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-dm2-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-dm2-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-dm2-meta">Daily 19:00 &amp; 19:30 → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-dealsmonitor-run>
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
@@ -954,6 +988,62 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// ── Deals Monitor — Pending Action: persisted TO/CC + Run (aviso das 19h) ──
+(function () {
+    var toEl   = document.getElementById('cp-dm2-to');
+    var ccEl   = document.getElementById('cp-dm2-cc');
+    var runBtn = document.querySelector('[data-dealsmonitor-run]');
+    if (!toEl || !ccEl || !runBtn) return;
+    var REC_URL = '/api/control-panel/deals-monitor/recipients';
+    var RUN_URL = '/api/control-panel/deals-monitor/run';
+
+    fetch(REC_URL, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!d || !d.success) return; toEl.value = d.to || ''; ccEl.value = d.cc || ''; })
+        .catch(function () {});
+
+    function saveRecipients() {
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify({ to: toEl.value, cc: ccEl.value })
+        }).catch(function () {});
+    }
+    [toEl, ccEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+
+    runBtn.addEventListener('click', function () {
+        if (runBtn.disabled) return;
+        var label = runBtn.querySelector('span'); var orig = label ? label.textContent : '';
+        var icon = runBtn.querySelector('i'); var origIcon = icon ? icon.className : '';
+        runBtn.disabled = true;
+        if (label) label.textContent = t('cp-running', 'Running…');
+        if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        saveRecipients().then(function () {
+            return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin', body: '{}' });
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success !== false) {
+                Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
+                            html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
+            } else {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                            confirmButtonColor: '#0066cc' });
+            }
+        })
+        .catch(function () {
+            Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                        html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+        })
+        .finally(function () {
+            runBtn.disabled = false;
+            if (label) label.textContent = orig;
+            if (icon) icon.className = origIcon || 'ti ti-player-play';
+        });
+    });
+})();
+
 // ── Pending Signature Confirmations — Collection (download .eml/.zip drafts) ──
 (function () {
     var btn = document.querySelector('[data-sigcoll-generate]');
@@ -1044,7 +1134,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

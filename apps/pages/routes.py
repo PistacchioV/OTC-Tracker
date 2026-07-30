@@ -221,6 +221,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
     {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
     {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
+    {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -238,6 +239,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
     '/api/control-panel/signature-collection/preview': 'signaturecollection',
     '/api/control-panel/signature-collection/generate': 'signaturecollection',
+    '/api/control-panel/deals-monitor/recipients': 'dealsmonitor',
+    '/api/control-panel/deals-monitor/run': 'dealsmonitor',
 }
 
 
@@ -21999,8 +22002,9 @@ _NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
 
 
 def _load_ndm_pending_recipients():
-    """TO/CC do aviso. O arquivo em control-panel/ (não versionado) permite
-    trocar destinatário sem deploy; sem arquivo vale o default da mesa."""
+    """TO/CC do aviso, do card Deals Monitor do Control Panel. Sem nada salvo
+    vale o default da mesa — assim a rotina já funciona no pull, antes de
+    alguém abrir o Control Panel."""
     try:
         with open(_NDM_PENDING_RECIPIENTS_FILE, encoding='utf-8') as fh:
             d = json.load(fh)
@@ -22009,6 +22013,12 @@ def _load_ndm_pending_recipients():
     except Exception:
         pass
     return {'to': _NDM_PENDING_DEFAULT_TO, 'cc': ''}
+
+
+def _save_ndm_pending_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_NDM_PENDING_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
 
 
 def _send_ndm_pending_email(ref, to_list, cc_list):
@@ -22055,13 +22065,29 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
         return '{}: {}'.format(type(e).__name__, e)
 
 
-@blueprint.route('/api/new-deals/monitor/pending-email', methods=['POST'])
-def api_ndm_pending_email():
-    """Dispara o aviso na hora (teste / envio manual fora do horário)."""
+@blueprint.route('/api/control-panel/deals-monitor/recipients', methods=['GET', 'POST'])
+def api_cp_deals_monitor_recipients():
+    """TO/CC do aviso diário, do card Deals Monitor. Salvar vazio nos dois
+    campos volta ao default da mesa em vez de desligar a rotina em silêncio."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    if not _session_is_admin():
-        return jsonify({'success': False, 'error': 'Admin only'}), 403
+    if request.method == 'GET':
+        return jsonify({'success': True, **_load_ndm_pending_recipients()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        _save_ndm_pending_recipients((payload.get('to') or '').strip(),
+                                     (payload.get('cc') or '').strip())
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[deals-monitor] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/control-panel/deals-monitor/run', methods=['POST'])
+def api_cp_deals_monitor_run():
+    """Dispara o aviso na hora, sem esperar os horários agendados."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
     ds = (payload.get('date') or '').strip()
     try:
@@ -22071,15 +22097,19 @@ def api_ndm_pending_email():
     rec = _load_ndm_pending_recipients()
     to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
     if not (to_list or cc_list):
-        return jsonify({'success': False, 'error': 'Nenhum destinatário configurado.'}), 400
+        return jsonify({'success': False,
+                        'error': 'Nenhum destinatário salvo. Preencha o TO antes de rodar.'}), 400
     result = _send_ndm_pending_email(ref, to_list, cc_list)
     if result == 'empty':
-        return jsonify({'success': True, 'sent': False,
-                        'message': 'Nada pendente no Monitor — e-mail não enviado.'})
+        return jsonify({'success': True,
+                        'message': 'Nothing pending on the Deals Monitor — no e-mail sent.'})
     if result is not True:
         return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
-    return jsonify({'success': True, 'sent': True,
-                    'message': 'Aviso enviado para {} destinatário(s).'.format(
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deals Monitor Sent', 'Control Panel',
+                         'Pending Action e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True,
+                    'message': 'Pending Action enviado para {} destinatário(s).'.format(
                         len(to_list) + len(cc_list))})
 
 

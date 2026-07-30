@@ -6414,13 +6414,23 @@ do Werkzeug ligado o módulo é importado em **dois processos**, cada um com o s
 de deal é idempotente e sobrevive a isso — **e-mail não**. `_ndm_pending_claim_slot('YYYY-MM-DD 19:00')`
 reserva o disparo antes de enviar; o segundo processo lê o arquivo e desiste. Guarda só os últimos 16.
 
-### Destinatários e envio manual
+### Destinatários e envio manual — card no Control Panel
 
-`_load_ndm_pending_recipients()` lê `deals_monitor_pending_recipients.json` (em `control-panel/`, **não
-versionado**) e, sem arquivo, usa o default `brazil.otc.ops@jpmorgan.com` — ou seja, funciona no pull sem
-configurar nada, e o destinatário troca sem deploy. `POST /api/new-deals/monitor/pending-email`
-(**admin**) dispara na hora, aceitando `date` opcional; devolve `sent: false` quando não há pendência.
+Card **`dealsmonitor`** ("Deals Monitor — Pending Action"), no grupo **Reporting**, com TO / CC salvos no
+blur e botão **Run**. É por ele que se troca o destinatário — nada de editar código.
+
+- `GET/POST /api/control-panel/deals-monitor/recipients` grava
+  `deals_monitor_pending_recipients.json` (em `control-panel/`, **não versionado**).
+- **Sem nada salvo vale o default `brazil.otc.ops@jpmorgan.com`**, e **limpar os dois campos volta ao
+  default** em vez de desligar a rotina: um card em branco não pode significar "aviso desligado" sem
+  ninguém perceber. Para trocar o destinatário, escreva o novo — não apague.
+- `POST /api/control-panel/deals-monitor/run` dispara na hora (aceita `date`), útil para não esperar as
+  19h. Devolve "Nothing pending" quando não há o que avisar.
+- Registrado em `_CONTROL_PANEL_CARDS` + `_CP_ENDPOINT_CARD` (gate por card do before_request) e no
+  `CP_GROUP` do template — **os três**: sem o `CP_GROUP` o cabeçalho da seção some quando o usuário só
+  tem esse card.
 
 **Teste**: `check_monitor_email.py` (scratchpad) monta um dia sintético no cache, confere o que a regra
 considera pendente (incluindo os três detalhes acima) e renderiza o template de verdade — sem SMTP.
-`check_slot.py` cobre a trava de disparo duplo.
+`check_slot.py` cobre a trava de disparo duplo. `check_cp_card.py` cobre o card: registro, GET/POST dos
+destinatários, o Run e o gate por card.
