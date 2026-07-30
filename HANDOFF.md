@@ -5900,3 +5900,79 @@ registros foram parar — API vazia, tudo cancelado na origem e filtro de interb
   ele **não fecha sozinho** — antes sumia em 2–3 s levando a informação embora.
 - Ao investigar isso: `_generic_nd_persist_new_deals` grava pelo **TradeDate do deal**, não pela data de
   referência, então import retroativo cai no arquivo certo — o zero não vinha daí.
+
+## 135. Sessão 2026-07-30 — Varredura de SQL injection e de concorrência dos bancos
+
+### SQL injection: nada injetável
+
+Levantamento por **AST** (grep não pega chamada multilinha): **102 pontos de execução de SQL** em todos os
+`.py` do projeto. 78 são string literal, 6 são `pandas.read_csv`/`_pc_write_exec`, e as **18 montadas** foram
+conferidas uma a uma:
+
+- **DDL sobre identificador do próprio código** — `_PC_TABLE` / `_PC_COLUMNS` (constantes de módulo), e
+  `TABLE`/`PAGE_COLUMNS`/`DROP_COLS` nos scripts. Nome de tabela e coluna **não podem ser bindados**; é o
+  caso em que o cheat sheet do OWASP admite montar string. ⚠️ Se um dia um desses nomes puder vir de
+  request, o caminho é **allow-list contra tupla fixa**, não escaping.
+- **`IN ({})`** (`_conf_pc_set_fepweb`) — o `{}` recebe `?, ?, ?`; os valores vão como parâmetros.
+- **`INTERVAL '{}'`** (2FA, linhas ~1068 e ~1155) — DuckDB não aceita bind dentro de literal de intervalo;
+  os valores são `int` constantes (`CODE_EXPIRY_MINUTES`, cooldown, janela).
+
+Nenhum valor de request, sessão, planilha ou e-mail é interpolado em SQL. Referência incorporada em
+`Docs/SQL_Injection_Prevention_Cheat_Sheet.md`, regra no CLAUDE.md.
+
+### Concorrência: como o app aguenta vários usuários
+
+Produção é **um único processo** (waitress do `start-prod.bat`, default de 4 threads; `gunicorn-cfg.py`
+fixa `workers = 1`). Dentro dele:
+
+- **DuckDB de usuários = conexão singleton atrás de lock global.** `get_db_connection()` devolve um
+  `_DuckDBHandle` que **segura `_duckdb_conn_lock` até o `close()`**. Auditado: os **20** callers têm
+  `conn = get_db_connection()` seguido imediatamente de `try/finally: conn.close()`. Um `finally`
+  faltando trava a aplicação para **todos** — não é um erro localizado.
+- **Nada lento sob esse lock** (conferido por AST): sem SMTP, HTTP, varredura de share ou render de
+  template com a conexão na mão. `_push_notify` é o modelo: lê os inscritos, fecha, e só então manda os
+  pushes. O topbar consulta notificações a cada 8 s por aba, então esse lock é pedido o tempo todo.
+- **Corrigido**: `_pc_ensure_db` fechava fora de `finally` — erro no `CREATE TABLE` vazava a conexão e o
+  DuckDB ficava **travado até o processo morrer**, derrubando a página de Pending Confirmation para todos.
+
+### Lost update nos caches JSON (corrigido)
+
+`_atomic_write_json` garante que o arquivo nunca fica pela metade; **não** garante que a alteração de
+outro usuário sobreviva. Os ciclos ler → alterar → gravar precisam de `_cache_lock` inteiro. New Deals já
+estava correto (39 pontos); faltavam 12:
+
+- **`_cache_lock` virou `RLock`.** Era `Lock`: helper que trancasse por conta própria, chamado de um bloco
+  que já trancava, seria **deadlock** — e é exatamente o caso de `_conf_state_save` (os 4 callers trancam).
+- **MtM Swap**: os 5 endpoints de linha, o normalize-zeros do `api_mtm_data` e o mapping-add passaram a
+  envolver load → alterar → gravar.
+- **Os três pesados** (`process`, `validation`, `recon`) **não** podem ter o lock em volta da leitura de
+  planilha nem da escrita no share — travaria todo mundo por segundos. Neles o lock cobre um **reload
+  dentro do bloco** + alteração + gravação, então o objeto lido antes da parte lenta nunca é regravado
+  em cima do trabalho de outro.
+- `_opb3_msg_save_recipients` (payload traz só um card), semente do `_mapping_rows` (com re-teste dentro
+  do lock) e a gravação + invalidação de cache do `api_mappings`.
+- ⚠️ **O que o lock não resolve**: dois usuários editando o **mesmo mapping** em abas separadas. O POST
+  manda a tabela inteira, então quem salvar depois sobrescreve as linhas do outro. Resolver pede
+  versionamento (mtime devolvido pelo front) — **não implementado**, está comentado no código.
+- `api_mtm_import_folder` ficou como está de propósito: ele reconstrói o dataset do zero, não é
+  read-modify-write.
+
+Verificação: teste com **24 threads** comentando linhas diferentes do mesmo dataset MtM — 24/24
+sobrevivem, zero deadlock. Para provar que o teste não é vazio, rodei o mesmo cenário com o lock
+neutralizado: **22 das 24 alterações se perdem**.
+
+### ⚠️ Manter em um processo
+
+Com mais de um processo o lock do singleton e o `_cache_lock` **não protegem nada**: o DuckDB de usuários
+não abre no segundo processo (lock de escrita), os JSONs voltam a ter lost update e **cada processo sobe
+seus próprios schedulers** (pull duplicado da Athena). Escalar aqui é aumentando **threads**, não workers.
+O teto de concorrência hoje é o do waitress (4 threads): endpoint lento — pull da API, varredura do share,
+export — ocupa uma thread do início ao fim.
+
+## 136. Sessão 2026-07-30 — Top menu: 8 atalhos por usuário
+
+`MAX` em `visual-refresh.js` (`initTopNavCustom`) de 7 → 8, com o texto do hint atualizado nos três
+idiomas (o número aparece escrito nas traduções, além de interpolado no default do JS). **Cache-buster do
+`visual-refresh.js` bumpado** (`?v=20260730a`) — sem isso o navegador serve o JS antigo e o oitavo atalho
+continua bloqueado. O overflow do nav já era tratado (abaixo de 1500px entra no fluxo com scroll
+horizontal, §127), então o 8º item degrada igual aos outros.

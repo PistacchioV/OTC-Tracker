@@ -449,7 +449,13 @@ def _ensure_counterparty_folders(company):
             os.makedirs(os.path.join(parent, sub), exist_ok=True)
     except Exception as exc:
         log.warning('Electronic Inventory folder creation failed for %r: %s', company, exc)
-_cache_lock = threading.Lock()
+# Serializa o ciclo ler → alterar → gravar dos caches JSON (New Deals, MtM,
+# mappings, estado de confirmação). O _atomic_write_json garante que o arquivo
+# nunca fica pela metade; só ele NÃO evita lost update: dois requests que leem a
+# mesma versão e gravam em seguida fazem o segundo apagar a alteração do primeiro.
+# RLock e não Lock: helper que tranca sozinho pode ser chamado de um bloco que já
+# tranca (é o caso do _conf_state_save), e com Lock isso seria deadlock.
+_cache_lock = threading.RLock()
 
 
 def _atomic_write_json(file_path, data):
@@ -8490,14 +8496,17 @@ def _opb3_msg_load_recipients():
 
 
 def _opb3_msg_save_recipients(payload):
-    cur = _opb3_msg_load_recipients()
-    for k in ('cem', 'equities'):
-        v = (payload or {}).get(k)
-        if isinstance(v, dict):
-            cur[k] = {'to': str(v.get('to', '') or '').strip(),
-                      'cc': str(v.get('cc', '') or '').strip()}
-    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-    _atomic_write_json(_OPB3_MSG_RECIPIENTS_FILE, cur)
+    # Ler → mesclar → gravar sob o lock: o payload traz só os cards alterados, e
+    # sem isso dois usuários salvando cards diferentes perderiam um dos dois.
+    with _cache_lock:
+        cur = _opb3_msg_load_recipients()
+        for k in ('cem', 'equities'):
+            v = (payload or {}).get(k)
+            if isinstance(v, dict):
+                cur[k] = {'to': str(v.get('to', '') or '').strip(),
+                          'cc': str(v.get('cc', '') or '').strip()}
+        os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+        _atomic_write_json(_OPB3_MSG_RECIPIENTS_FILE, cur)
     return cur
 
 
@@ -10247,9 +10256,13 @@ def _mtm_build_from_folder(folder):
 
 
 def _mtm_save(path, data):
-    """Persist the MtM dataset, creating the YYYY/MM/DD dir first (mkstemp needs it)."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    _atomic_write_json(path, data)
+    """Persist the MtM dataset, creating the YYYY/MM/DD dir first (mkstemp needs it).
+    Trava por conta própria; como _cache_lock é RLock, isso não conflita com o
+    caller que já tranca o ciclo ler → alterar → gravar (o correto, e o que todos
+    fazem hoje). Aqui é só a garantia de que uma gravação nunca sai sem lock."""
+    with _cache_lock:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        _atomic_write_json(path, data)
 
 
 def _mtm_load(date_str):
@@ -10288,16 +10301,18 @@ def _mtm_find_row(data, lob, rid):
 def api_mtm_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    path, data = _mtm_load(request.args.get('date'))
-    if not data:
-        return jsonify({'success': True, 'empty': True})
-    # Repair legacy datasets: canonicalize any zero MtM to 0.00 + zero comment so the
-    # table shows the exact spreadsheet value (the preview/files bump it to 1 cent).
-    if path and _mtm_normalize_zeros(data):
-        try:
-            _atomic_write_json(path, data)
-        except Exception:
-            log.error('[mtm] zero-normalize save failed:\n%s', traceback.format_exc())
+    # Ler → alterar → gravar sob o _cache_lock (só trabalho em memória aqui).
+    with _cache_lock:
+        path, data = _mtm_load(request.args.get('date'))
+        if not data:
+            return jsonify({'success': True, 'empty': True})
+        # Repair legacy datasets: canonicalize any zero MtM to 0.00 + zero comment so the
+        # table shows the exact spreadsheet value (the preview/files bump it to 1 cent).
+        if path and _mtm_normalize_zeros(data):
+            try:
+                _atomic_write_json(path, data)
+            except Exception:
+                log.error('[mtm] zero-normalize save failed:\n%s', traceback.format_exc())
     data['success'] = True
     return jsonify(data)
 
@@ -10321,13 +10336,16 @@ def api_mtm_mapping_add():
     name = str(p.get('trade_name') or '').strip()
     if not (b3 and hyb and name):
         return jsonify({'success': False, 'error': 'All three fields are required.'}), 400
-    mapping = _mtm_load_hyb_mapping()
-    mapping.append({'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name})
-    try:
-        _atomic_write_json(_MTM_HYB_MAP_PATH, mapping)
-    except Exception:
-        log.error('[mtm] mapping add failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    # Ler → append → gravar sob o lock: dois usuários cadastrando ao mesmo tempo
+    # perderiam um dos mapeamentos (cada um gravaria a lista que leu).
+    with _cache_lock:
+        mapping = _mtm_load_hyb_mapping()
+        mapping.append({'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name})
+        try:
+            _atomic_write_json(_MTM_HYB_MAP_PATH, mapping)
+        except Exception:
+            log.error('[mtm] mapping add failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     return jsonify({'success': True, 'count': len(mapping),
                     'entry': {'b3_id': b3, 'hybrids_id': hyb, 'trade_name': name}})
 
@@ -10370,17 +10388,18 @@ def api_mtm_row_comment():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
-    path, data = _mtm_load(p.get('date'))
-    if not data:
-        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
-    if not r:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    r[len(r) - 5] = str(p.get('comment', ''))            # Comments = last data cell
-    try:
-        _atomic_write_json(path, data)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _cache_lock:                        # ler → alterar → gravar
+        path, data = _mtm_load(p.get('date'))
+        if not data:
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+        if not r:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        r[len(r) - 5] = str(p.get('comment', ''))            # Comments = last data cell
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     return jsonify({'success': True})
 
 
@@ -10390,21 +10409,22 @@ def api_mtm_row_edit():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     sid = session.get('user_sid', '')
-    path, data = _mtm_load(p.get('date'))
-    if not data:
-        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
-    if not r:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    cells = p.get('cells', [])
-    for i, v in enumerate(cells):
-        if i < len(r) - 4:
-            r[i] = v
-    r[-4], r[-3], r[-2] = 'Pending', sid, ''             # status, maker, checker (reset)
-    try:
-        _atomic_write_json(path, data)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _cache_lock:                        # ler → alterar → gravar
+        path, data = _mtm_load(p.get('date'))
+        if not data:
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+        if not r:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        cells = p.get('cells', [])
+        for i, v in enumerate(cells):
+            if i < len(r) - 4:
+                r[i] = v
+        r[-4], r[-3], r[-2] = 'Pending', sid, ''             # status, maker, checker (reset)
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'MTM Updated', 'MtM',
                          '{} · {}'.format(p.get('lob', ''), p.get('id', '')) + _nd_token(p.get('date')))
     return jsonify({'success': True, 'row': r})
@@ -10418,19 +10438,22 @@ def api_mtm_row_send():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     sid = session.get('user_sid', '')
-    path, data = _mtm_load(p.get('date'))
-    if not data:
-        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
-    if not r:
-        return jsonify({'success': False, 'error': 'Row not found.'}), 404
-    if str(r[-3] or '') == sid:                          # maker == current user → blocked
-        return jsonify({'success': False, 'error': 'same_user'}), 403
-    r[-4], r[-2] = 'Sent', sid                           # status, checker
-    try:
-        _atomic_write_json(path, data)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    # Ler → checar maker → gravar sob o lock: fora dele, dois usuários podiam
+    # passar a checagem de quatro olhos na mesma linha ao mesmo tempo.
+    with _cache_lock:
+        path, data = _mtm_load(p.get('date'))
+        if not data:
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        r = _mtm_find_row(data, p.get('lob', ''), p.get('id', ''))
+        if not r:
+            return jsonify({'success': False, 'error': 'Row not found.'}), 404
+        if str(r[-3] or '') == sid:                          # maker == current user → blocked
+            return jsonify({'success': False, 'error': 'same_user'}), 403
+        r[-4], r[-2] = 'Sent', sid                           # status, checker
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'MTM Sent', 'MtM',
                          '{} · {}'.format(p.get('lob', ''), p.get('id', '')) + _nd_token(p.get('date')))
     return jsonify({'success': True, 'row': r})
@@ -10442,18 +10465,19 @@ def api_mtm_row_delete():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     lob, rid = p.get('lob', ''), str(p.get('id', ''))
-    path, data = _mtm_load(p.get('date'))
-    if not data:
-        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    rows = (data.get('tables') or {}).get(lob)
-    if rows is None:
-        return jsonify({'success': False, 'error': 'Book not found.'}), 404
-    data['tables'][lob] = [r for r in rows if not (r and str(r[-1]) == rid)]
-    data['counts'][lob] = len(data['tables'][lob])
-    try:
-        _atomic_write_json(path, data)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _cache_lock:                        # ler → remover → gravar
+        path, data = _mtm_load(p.get('date'))
+        if not data:
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        rows = (data.get('tables') or {}).get(lob)
+        if rows is None:
+            return jsonify({'success': False, 'error': 'Book not found.'}), 404
+        data['tables'][lob] = [r for r in rows if not (r and str(r[-1]) == rid)]
+        data['counts'][lob] = len(data['tables'][lob])
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Deleted', 'MtM', '{} · 1 row'.format(lob) + _nd_token(p.get('date')))
     return jsonify({'success': True, 'counts': data['counts']})
@@ -10466,15 +10490,16 @@ def api_mtm_rows_delete():
     p = request.get_json(silent=True) or {}
     lob = p.get('lob', '')
     ids = {str(x) for x in (p.get('ids') or [])}
-    path, data = _mtm_load(p.get('date'))
-    if not data or lob not in (data.get('tables') or {}):
-        return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) in ids)]
-    data['counts'][lob] = len(data['tables'][lob])
-    try:
-        _atomic_write_json(path, data)
-    except Exception:
-        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    with _cache_lock:                        # ler → remover → gravar
+        path, data = _mtm_load(p.get('date'))
+        if not data or lob not in (data.get('tables') or {}):
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) in ids)]
+        data['counts'][lob] = len(data['tables'][lob])
+        try:
+            _atomic_write_json(path, data)
+        except Exception:
+            return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Deleted', 'MtM', '{} · {} rows'.format(lob, len(ids)) + _nd_token(p.get('date')))
     return jsonify({'success': True, 'counts': data['counts']})
@@ -10498,56 +10523,60 @@ def api_mtm_process():
         log.error('[mtm] process read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the file.'}), 500
 
-    # Load existing dataset for the date (or start a fresh skeleton).
-    _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
-    if not data:
-        data = {'success': True, 'tables': {k: [] for k in _MTM_SWAP_BOOKS},
-                'counts': {}, 'ref_date': None, 'coe_ref_date': None,
-                'date': datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')}
-        data['tables']['COE'] = []
+    # Ler → mesclar → gravar sob o lock. A leitura da planilha já aconteceu
+    # acima, então aqui dentro só roda trabalho em memória — importar dois
+    # arquivos para a mesma data ao mesmo tempo não perde mais um deles.
+    with _cache_lock:
+        # Load existing dataset for the date (or start a fresh skeleton).
+        _, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+        if not data:
+            data = {'success': True, 'tables': {k: [] for k in _MTM_SWAP_BOOKS},
+                    'counts': {}, 'ref_date': None, 'coe_ref_date': None,
+                    'date': datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d')}
+            data['tables']['COE'] = []
 
-    if _mtm_is_cem_value_name(f.filename):
-        cem_rows = (data.get('tables') or {}).get('CEM', [])
-        if not cem_rows:
-            return jsonify({'success': False,
-                            'error': 'No CEM contracts loaded for this date — import the swap file first.'}), 400
-        m, z, miss = _mtm_apply_cem_values(cem_rows, rows)   # Valor MTM + Missing MtM on CEM
-        data['diagnostics'] = dict(data.get('diagnostics') or {},
-                                   cem_value_file=f.filename, cem_matched=m, cem_zeros=z, cem_missing=miss)
-    elif _mtm_is_edg_value_name(f.filename):
-        if not (data.get('tables') or {}).get('EDG') and not (data.get('tables') or {}).get('COE'):
-            return jsonify({'success': False,
-                            'error': 'No EDG/COE rows loaded for this date — import the swap/COE files first.'}), 400
-        em, cm, z, miss = _mtm_apply_edg_values(data, rows)  # JP* → COE, else EDG; + Missing MtM
-        data['diagnostics'] = dict(data.get('diagnostics') or {},
-                                   edg_value_file=f.filename, edg_matched=em, edg_coe_matched=cm,
-                                   edg_zeros=z, edg_missing=miss)
-    elif _mtm_is_coe_name(f.filename):
-        coe_rows, coe_ref = _mtm_build_coe(rows)
-        for i, rw in enumerate(coe_rows):
-            rw.extend(['New', '', ''])
-            rw.append('COE-{}'.format(i))
-        data['tables']['COE'] = coe_rows
-        data['coe_ref_date'] = coe_ref
-    elif _mtm_is_swap_name(f.filename):
-        buckets, ref_date, _kept, _matched = _mtm_build_swap(rows)
-        for lob in _MTM_SWAP_BOOKS:
-            rws = buckets.get(lob, [])
-            for i, rw in enumerate(rws):
+        if _mtm_is_cem_value_name(f.filename):
+            cem_rows = (data.get('tables') or {}).get('CEM', [])
+            if not cem_rows:
+                return jsonify({'success': False,
+                                'error': 'No CEM contracts loaded for this date — import the swap file first.'}), 400
+            m, z, miss = _mtm_apply_cem_values(cem_rows, rows)   # Valor MTM + Missing MtM on CEM
+            data['diagnostics'] = dict(data.get('diagnostics') or {},
+                                       cem_value_file=f.filename, cem_matched=m, cem_zeros=z, cem_missing=miss)
+        elif _mtm_is_edg_value_name(f.filename):
+            if not (data.get('tables') or {}).get('EDG') and not (data.get('tables') or {}).get('COE'):
+                return jsonify({'success': False,
+                                'error': 'No EDG/COE rows loaded for this date — import the swap/COE files first.'}), 400
+            em, cm, z, miss = _mtm_apply_edg_values(data, rows)  # JP* → COE, else EDG; + Missing MtM
+            data['diagnostics'] = dict(data.get('diagnostics') or {},
+                                       edg_value_file=f.filename, edg_matched=em, edg_coe_matched=cm,
+                                       edg_zeros=z, edg_missing=miss)
+        elif _mtm_is_coe_name(f.filename):
+            coe_rows, coe_ref = _mtm_build_coe(rows)
+            for i, rw in enumerate(coe_rows):
                 rw.extend(['New', '', ''])
-                rw.append('{}-{}'.format(lob, i))
-            data['tables'][lob] = rws
-        data['ref_date'] = ref_date
-    else:
-        return jsonify({'success': False,
-                        'error': 'Unrecognized file. Expected the swap (…SemAtualMID), COE (…ConsultaMTMCOE), CEM values (VCP_CETIP_MTM) or EDG/COE values (Stream_level_MTM) file.'}), 400
+                rw.append('COE-{}'.format(i))
+            data['tables']['COE'] = coe_rows
+            data['coe_ref_date'] = coe_ref
+        elif _mtm_is_swap_name(f.filename):
+            buckets, ref_date, _kept, _matched = _mtm_build_swap(rows)
+            for lob in _MTM_SWAP_BOOKS:
+                rws = buckets.get(lob, [])
+                for i, rw in enumerate(rws):
+                    rw.extend(['New', '', ''])
+                    rw.append('{}-{}'.format(lob, i))
+                data['tables'][lob] = rws
+            data['ref_date'] = ref_date
+        else:
+            return jsonify({'success': False,
+                            'error': 'Unrecognized file. Expected the swap (…SemAtualMID), COE (…ConsultaMTMCOE), CEM values (VCP_CETIP_MTM) or EDG/COE values (Stream_level_MTM) file.'}), 400
 
-    data['counts'] = {k: len(v) for k, v in data['tables'].items()}
-    try:
-        _mtm_save(_mtm_path_for(ymd), data)
-    except Exception:
-        log.error('[mtm] process save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Failed to save.'}), 500
+        data['counts'] = {k: len(v) for k, v in data['tables'].items()}
+        try:
+            _mtm_save(_mtm_path_for(ymd), data)
+        except Exception:
+            log.error('[mtm] process save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Failed to save.'}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Imported', 'MtM', f.filename + _nd_token(ymd))
     return jsonify(data)
@@ -10906,15 +10935,21 @@ def api_mtm_validation():
 
     # All batch files generated → mark EVERY row in ALL tables as 'Sent'
     # (checker = current user) and persist, so the page reflects the finished run.
+    # Recarrega DENTRO do lock: o `data` acima é de antes da geração dos arquivos,
+    # que escreve no share e leva tempo — gravar aquele objeto apagaria qualquer
+    # edição feita nesse meio. O lock NÃO cobre a geração, senão a aplicação
+    # inteira ficaria parada durante a escrita no share.
     sid = session.get('user_sid', '')
-    for lob_rows in (data.get('tables') or {}).values():
-        for r in lob_rows or []:
-            if r and len(r) >= 4:
-                r[-4], r[-2] = 'Sent', sid
-    try:
-        _mtm_save(path, data)
-    except Exception:
-        log.error('[mtm] validation status save failed:\n%s', traceback.format_exc())
+    with _cache_lock:
+        path, data = _mtm_load(datetime.strptime(ymd, '%Y%m%d').strftime('%Y-%m-%d'))
+        for lob_rows in (data.get('tables') or {}).values():
+            for r in lob_rows or []:
+                if r and len(r) >= 4:
+                    r[-4], r[-2] = 'Sent', sid
+        try:
+            _mtm_save(path, data)
+        except Exception:
+            log.error('[mtm] validation status save failed:\n%s', traceback.format_exc())
 
     ref = datetime.strptime(ymd, '%Y%m%d')
     summary = [{'filename': fn + '.txt', 'view': fd['view'], 'count': len(fd['rows'])}
@@ -11070,12 +11105,19 @@ def api_mtm_recon():
         log.error('[mtm] recon read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the recon file.'}), 500
 
-    summary = _mtm_run_recon(data, rows)
-    try:
-        _mtm_save(path, data)
-    except Exception:
-        log.error('[mtm] recon save failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
+    # Recarrega dentro do lock: entre o load do começo e aqui houve leitura do
+    # arquivo de retorno (dropzone ou share), tempo suficiente para outro usuário
+    # ter mexido no dataset. A leitura do arquivo fica FORA do lock de propósito.
+    with _cache_lock:
+        path, data = _mtm_load(date_arg)
+        if not data or not data.get('tables'):
+            return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
+        summary = _mtm_run_recon(data, rows)
+        try:
+            _mtm_save(path, data)
+        except Exception:
+            log.error('[mtm] recon save failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
 
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Mapped', 'MtM',
@@ -12646,10 +12688,15 @@ def _pc_ensure_db(path):
         return
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        # close() em finally: se o CREATE TABLE falhar, a conexão vazada mantém
+        # o lock de escrita do DuckDB até o processo morrer — e aí a página some
+        # para TODOS os usuários, não só para quem tropeçou no erro.
         con = duckdb.connect(path)
-        cols = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
-        con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(_PC_TABLE, cols))
-        con.close()
+        try:
+            cols = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
+            con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(_PC_TABLE, cols))
+        finally:
+            con.close()
         log.info('[pending-confirmation] created empty DB %s', path)
     except Exception:
         log.warning('[pending-confirmation] could not create %s', path)
@@ -14488,12 +14535,17 @@ def _mapping_rows(key):
         return []
     path = _mapping_path(key)
     if not os.path.isfile(path):
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            _atomic_write_json(path, list(d.get('seed') or []))
-        except Exception:
-            log.warning('[mappings] seed write failed for %s:\n%s', key, traceback.format_exc())
-            return list(d.get('seed') or [])
+        # Semear sob o lock: dois requests simultâneos na primeira leitura
+        # gravariam o mesmo arquivo ao mesmo tempo. O re-teste de existência
+        # dentro do lock evita a segunda escrita.
+        with _cache_lock:
+            if not os.path.isfile(path):
+                try:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    _atomic_write_json(path, list(d.get('seed') or []))
+                except Exception:
+                    log.warning('[mappings] seed write failed for %s:\n%s', key, traceback.format_exc())
+                    return list(d.get('seed') or [])
     try:
         mtime = os.path.getmtime(path)
         cached = _mapping_cache.get(key)
@@ -14662,12 +14714,18 @@ def api_mappings(key):
     # Valores NÃO são trimados de propósito: em códigos B3 como 'C ' o espaço
     # final faz parte do código.
     clean = [{k: str((r or {}).get(k, '') or '') for k in keys} for r in rows if isinstance(r, dict)]
-    try:
-        _atomic_write_json(_mapping_path(key), clean)
-        _mapping_cache.pop(key, None)
-    except Exception as e:
-        log.error('[mappings] save failed for %s:\n%s', key, traceback.format_exc())
-        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    # Gravação + invalidação do cache sob o lock, para ninguém ler o arquivo novo
+    # com o cache velho. ⚠️ Isto NÃO resolve dois usuários editando o mesmo
+    # mapping em abas separadas: o POST manda a tabela inteira, então quem salvar
+    # depois sobrescreve as linhas do outro. Resolver isso pede versionamento
+    # (mtime que o front devolve) — não implementado.
+    with _cache_lock:
+        try:
+            _atomic_write_json(_mapping_path(key), clean)
+            _mapping_cache.pop(key, None)
+        except Exception as e:
+            log.error('[mappings] save failed for %s:\n%s', key, traceback.format_exc())
+            return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Mapping Updated', 'Mapping',
                          '{} ({} row(s))'.format(d['label'], len(clean)))
@@ -19209,9 +19267,13 @@ def _conf_state_load(ref, product='ndf-comm'):
 
 
 def _conf_state_save(ref, state, product='ndf-comm'):
-    fp = _conf_state_path(ref, product)
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
-    _atomic_write_json(fp, state)
+    """Os 4 callers já envolvem _conf_state_load + este save num `with
+    _cache_lock` — é lá que o ciclo tem de ser atômico. O lock aqui é
+    reentrante e serve de rede: gravação de estado nunca sai destravada."""
+    with _cache_lock:
+        fp = _conf_state_path(ref, product)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        _atomic_write_json(fp, state)
 
 
 def _conf_segregate(deals, family_fn):

@@ -102,7 +102,15 @@ row in `publisher-ndf` must stay without a match token).
 Two separate databases are in use:
 
 - **DuckDB** (`Users_OTCTracker.db`): stores `users` and `verification_codes` tables. Connection is managed manually via `get_db_connection()` / `conn.close()` in every function. `DB_PATH` is now a **relative** path (`apps/static/data/db/Users_OTCTracker.db`) resolved from the module dir — no longer a hardcoded Windows path, so it works cross-machine. If DuckDB refuses to open the DB after running under a different duckdb version (`INTERNAL Error … replaying WAL`), rename the stray `Users_OTCTracker.db.wal` aside; the main `.db` is intact.
-- **SQLite** (`apps/db.sqlite3`): managed by Flask-SQLAlchemy. Currently unused by application logic but initialised by `configure_database()` on every request.
+- **SQLite** (`apps/db.sqlite3`): managed by Flask-SQLAlchemy. Currently unused by application logic; `configure_database()` calls `db.create_all()` **once at app startup** (not per request).
+
+**Concurrency — the app serves several users from a single process, so this matters:**
+
+- The users DuckDB is a **singleton connection behind a global lock** (`_duckdb_conn_lock`). `get_db_connection()` hands out a `_DuckDBHandle` that **holds that lock until `close()`**. Every caller must therefore be `conn = get_db_connection()` immediately followed by `try: … finally: conn.close()` — all 20 current callers are. Miss the `finally` and the lock is never released: the whole app hangs for **everyone**, not just the failing request.
+- **Never do slow work while holding it** (network, SMTP, file scans, template rendering). `_push_notify` is the model: it reads the subscriber list, closes, and only then sends the HTTP pushes. The topbar polls notifications every 8 s per open tab, so that lock is taken constantly.
+- Per-DB connections (pending-confirmation DuckDBs) are opened ad hoc with a retry/backoff loop and **must close in `finally`** — a leaked connection keeps DuckDB's write lock for the life of the process and takes the page down for all users.
+- JSON caches (New Deals day files, mappings, MTM) are read-modify-write, so they need `with _cache_lock:` around the **whole** read → change → `_atomic_write_json` cycle; the atomic write alone only prevents corruption, not lost updates. `_cache_lock` is a plain `Lock` (**not reentrant**): never call a locking helper from inside a locked block.
+- **Keep it single-process.** Production is waitress (`start-prod.bat`, default 4 threads) and `gunicorn-cfg.py` pins `workers = 1`. With more than one process the DuckDB singleton lock and `_cache_lock` protect nothing, the users DB fails to open in the second process, and each process starts its own API schedulers (duplicate pulls). Scale with threads, not workers.
 
 ### SQL injection
 
