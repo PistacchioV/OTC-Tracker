@@ -1307,7 +1307,13 @@ class _WordHtmlToFlowables(HTMLParser):
             tbl = Table(rows, colWidths=widths, repeatRows=1)
         else:
             widths = [self.width / float(ncol)] * ncol
-            cmds = [('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            # Tabelas sem borda são as de assinatura e a de testemunhas. O Word
+            # alinha as duas colunas empilhando parágrafos VAZIOS, que o _emit
+            # descarta (viram respiro, não linha) — sem eles o "Por:/Nome:" da
+            # direita subia para o topo da célula. Alinhar pelo rodapé dispensa
+            # a contagem de linhas em branco e ainda aguenta o nome da
+            # contraparte quebrar em duas linhas, que desalinhava até no Word.
+            cmds = [('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
                     ('LEFTPADDING', (0, 0), (-1, -1), 0),
                     ('RIGHTPADDING', (0, 0), (-1, -1), 6)]
             tbl = Table(rows, colWidths=widths)

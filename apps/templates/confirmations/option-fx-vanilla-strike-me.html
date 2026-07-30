@@ -2432,6 +2432,35 @@ table.MsoTableGrid
      A classe doc-only vem do Jinja na tag body — CSS puro, sem template tags
      aqui (o linter do editor valida este bloco como CSS). */
   body.doc-only { padding-right: 0; }
+
+  /* ── Leitura na tela ───────────────────────────────────────────────────
+     O documento é um export do Word em PAISAGEM (@page WordSection1), então
+     no navegador o texto corria de ponta a ponta do monitor e o parágrafo
+     ficava largo demais para ser lido — "esparramado". Aqui ele ganha a
+     mesma coluna centrada dos documentos de Commodities.
+     Só na tela: o modo doc-only (o que vira o .doc) fica intocado, para o
+     arquivo que a contraparte recebe continuar sendo o do Word. */
+  body:not(.doc-only) .WordSection1 {
+    max-width: 940px;
+    margin: 0 auto;
+  }
+  /* As tabelas do Word têm largura fixa em pontos e são mais largas que a
+     coluna de leitura (o Anexo I tem 11 a 16 colunas). Elas rolam dentro do
+     próprio bloco em vez de esticar a página inteira de volta. */
+  body:not(.doc-only) .WordSection1 > table,
+  body:not(.doc-only) .WordSection1 table.MsoNormalTable[border="1"] {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* ── Alinhamento das assinaturas ───────────────────────────────────────
+     As duas colunas são alinhadas no Word por parágrafos vazios, o que só
+     funciona enquanto o nome da contraparte couber em UMA linha. Um nome
+     longo ("RAINBOW DEFENSIVOS AGRICOLAS LTDA") quebra em duas e empurra o
+     "Por:/Nome:" da esquerda para baixo, deixando as colunas desencontradas.
+     Alinhar pelo rodapé da célula resolve para qualquer tamanho de nome. */
+  #sig-table > tbody > tr > td { vertical-align: bottom; }
 </style>
 </head>
 
@@ -3065,7 +3094,7 @@ Derivativo]<o:p></o:p></span></i></p>
 
 <p class="MsoBodyText" style="text-indent: 27pt;"><i style="mso-bidi-font-style: normal;"><span style="color: black; mso-ansi-language: PT-BR;"><o:p>&nbsp;</o:p></span></i></p>
 
-<table class="MsoNormalTable" style="margin-left: 0.9pt; border-collapse: collapse; mso-padding-alt: 0cm 5.4pt 0cm 5.4pt; mso-yfti-tbllook: 480;" border="0" cellspacing="0" cellpadding="0">
+<table id="sig-table" class="MsoNormalTable" style="margin-left: 0.9pt; border-collapse: collapse; mso-padding-alt: 0cm 5.4pt 0cm 5.4pt; mso-yfti-tbllook: 480;" border="0" cellspacing="0" cellpadding="0">
  <tbody><tr style="mso-yfti-irow: 0; mso-yfti-firstrow: yes;">
   <td width="317" valign="top" style="padding: 0cm 5.4pt; width: 237.95pt;">
   <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><span style="mso-ansi-language: PT-BR;">São Paulo, </span><span lang="EN-US"><span class="dyn" id="out_data_extenso">{{ conf.data_extenso }}</span></span><span style="mso-ansi-language: PT-BR;">.<o:p></o:p></span></p>
@@ -3259,7 +3288,7 @@ I À CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS<o:p></o:p></span></b></p>
   </td>
   
  </tr>
-</tbody>{% endfor %}</table>
+{% endfor %}</tbody></table>
 
 <span style="mso-bookmark: _Hlk61528914;"></span>
 
@@ -3636,15 +3665,26 @@ var fields = [{ k: 'num', label: 'Nº (Deal name)' }, { k: 'tipo', label: 'Tipo 
 var emptyRow = { num: '', tipo: 'Compra', forma: 'Europeia', comprador: 'Parte B', moedaBase: 'USD', valorBase: '', premio: '', dtPremio: '', strike: '', dtExerc: '', dtVenc: '' };
 
 // A linha do Anexo I é a do próprio documento do Word: guardamos a primeira
-// como molde e clonamos. Reconstruir os <td> em HTML simples (como fazem os
-// templates redigitados) apagaria a formatação do Word — bordas, larguras e
-// alturas vêm todas do style inline de cada célula.
+// LINHA DE DADOS como molde e clonamos. Reconstruir os <td> em HTML simples
+// (como fazem os templates redigitados) apagaria a formatação do Word —
+// bordas, larguras e alturas vêm todas do style inline de cada célula.
+// O cabeçalho mora DENTRO deste mesmo <tbody> (é assim que o Word exporta),
+// então tbody.rows[0] é ele, não uma operação: clonar o índice 0 fazia o
+// renderTable substituir a tabela inteira por N cópias do cabeçalho.
+// O molde é a primeira linha que tem células de dado ([data-k]).
 var tbody = document.getElementById('ops-tbody');
-var rowProto = (tbody && tbody.rows.length) ? tbody.rows[0].cloneNode(true) : null;
+var headerRow = (tbody && tbody.rows.length) ? tbody.rows[0] : null;
+var rowProto = null;
+if (tbody) {
+  for (var _i = 0; _i < tbody.rows.length; _i++) {
+    if (tbody.rows[_i].querySelector('[data-k]')) { rowProto = tbody.rows[_i].cloneNode(true); break; }
+  }
+}
 
 function renderTable() {
   if (!tbody || !rowProto) return;
   tbody.innerHTML = '';
+  if (headerRow) tbody.appendChild(headerRow);     // o cabeçalho não é uma operação
   rows.forEach(function (row, idx) {
     var tr = rowProto.cloneNode(true);
     Array.prototype.forEach.call(tr.querySelectorAll('[data-k]'), function (el) {

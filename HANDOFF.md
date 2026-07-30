@@ -6605,3 +6605,97 @@ correspondentes saíram.
 Páginas: `new_deals-opt-fxo` e `new_deals-opt-commodities` (os três botões) e `new_deals-ndf-commodities`
 (Confirmation e Econ. Affirmation — não tem Premium). As demais páginas de New Deals (NDF Vanilla,
 FWD Start, Other Publisher) **não têm nenhum dos três**, então não havia o que mover.
+
+---
+
+## §146 — Confirmação de FXO: Anexo I com 3 cabeçalhos e operações faltando
+
+**Sintoma** (30/07/2026): na tela da confirmação de Opção de Câmbio, o Anexo I aparecia com **três
+cabeçalhos empilhados** e só **2 das 3** operações; a assinatura ficava desalinhada; e o documento
+corria de ponta a ponta do monitor ("esparramado").
+
+**Duas causas somadas**, e é a soma que produz o sintoma exato.
+
+**1. `</tbody>` dentro do laço** (`option-fx-vanilla-strike-me.html`, linha 3262):
+`</tbody>{% endfor %}</table>`. Cada iteração fechava o `<tbody>`, então o parser do navegador punha a
+1ª operação em `#ops-tbody` e jogava as demais em `<tbody>` implícitos criados por ele. No Asian era a
+outra ponta do mesmo erro: `{% endfor %}</table>` sem `</tbody>` nenhum. Agora `{% endfor %}</tbody></table>`
+nos dois.
+
+**2. O molde de linha do editor era o CABEÇALHO** (`rowProto = tbody.rows[0]`). O cabeçalho mora dentro
+do mesmo `<tbody>` — é assim que o Word exporta —, então `renderTable()` limpava o tbody e colava N
+cópias dele. Como o cabeçalho não tem célula `[data-k]`, nada era preenchido.
+
+Juntando: `renderTable()` substituía `#ops-tbody` (cabeçalho + operação 1) por 3 cabeçalhos, enquanto as
+operações 2 e 3 — que estavam nos `<tbody>` implícitos — ficavam intocadas. **3 cabeçalhos + operações
+2 e 3.** Exatamente o print. O molde passou a ser a primeira linha com `[data-k]`, e `renderTable()`
+recoloca o cabeçalho antes das operações.
+
+**Assinatura desalinhada.** As duas colunas são alinhadas no Word empilhando parágrafos VAZIOS, o que
+só funciona enquanto o nome da contraparte couber em **uma linha** — "RAINBOW DEFENSIVOS AGRICOLAS
+LTDA" quebra em duas e empurra o "Por:/Nome:" da esquerda para baixo. No PDF era pior: `_emit`
+descarta parágrafo vazio (vira respiro, não linha), então a coluna da direita perdia todo o
+espaçamento. Resolvido alinhando a célula pelo **rodapé** — `#sig-table > tbody > tr > td
+{ vertical-align: bottom }` na tela e `VALIGN BOTTOM` nas tabelas sem borda do
+`_WordHtmlToFlowables` (as duas são a de assinatura e a de testemunhas).
+
+**"Esparramado".** O documento é export do Word em **paisagem** (`@page WordSection1`), e no navegador
+não havia largura máxima: o parágrafo ocupava o monitor inteiro. Ganhou a mesma coluna centrada dos
+documentos de Commodities (`max-width: 940px`), **só na tela** — `body:not(.doc-only)`. O `.doc` que a
+contraparte recebe continua sendo o do Word, sem uma linha de diferença. As tabelas largas (Anexo I
+tem 11 no Vanilla e 16 no Asian) rolam dentro do próprio bloco em vez de esticar a página de volta.
+
+**Teste**: `check_conf_fxo_doc.py` (scratchpad) roda os dois templates nos dois modos (tela e
+documento) e verifica: 1 cabeçalho + N operações dentro do `#ops-tbody`, cabeçalho como primeira linha
+e única sem `[data-k]`, nenhuma operação fora do tbody, o molde do editor, a coluna de leitura só na
+tela, o alinhamento da assinatura, e gera os dois PDFs de verdade.
+
+---
+
+## §147 — NDF trazendo a contraparte ERRADA (cliente virava o próprio Banco J.P. Morgan)
+
+**Sintoma** (30/07/2026): uma operação de Other Publisher com `End Counterparty: "SOMICHEL"` e
+`End Counterparty Description: "SOCIEDADE MICHELIN…"` chegou na tela como **SPN 23779 · GN NDF BJPM ·
+BANCO J.P MORGAN S.A · 33.172.537/0001-98**.
+
+**Causa-raiz — a Settlement Location decidindo quem é a contraparte.** Em `_ndf_deal_from_api`:
+
+```python
+le = _ndf_le_from_accronym(end_cp) or _ndf_le_from_location(loc) or loc
+ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le)     # <- le vinha da location
+```
+
+`SOMICHEL` não está cadastrado como accronym, então a LE caía para a da **Settlement Location**
+(`BRAZIL` → `JPM`). E o último passo de `_ndf_ref_by_accronym` varre os accronyms daquela LE no
+Reference Data: achou `GN NDF BJPM` e devolveu o **Banco J.P. Morgan**. Silenciosamente, numa operação
+que segue para registro na B3 e para confirmação.
+
+A Settlement Location é a **nossa** perna, não a da contraparte. Esse passo existe para perna interna
+(End Counterparty que é nome de book JPM) e só pode ser alcançado quando o **próprio accronym da
+contraparte** identifica uma entidade.
+
+**Correção**:
+
+- `le_cp = _ndf_le_from_accronym(end_cp)` — entidade **da contraparte**, `None` quando ela não é perna
+  interna. A coluna LE da tela continua caindo para a Settlement Location; só a busca da contraparte
+  deixou de usá-la.
+- `_ndf_ref_by_accronym(..., le, refmap_spn=, spn=)` ganhou um passo intermediário: **o SPN que a
+  própria API manda**. Ele identifica a contraparte sozinho, então vem antes do passo da LE, que é
+  palpite. É por ele que a Michelin (cadastrada com accronym `MICHBRA`, diferente do `SOMICHEL` da
+  API) é resolvida corretamente.
+- Ordem final: accronym exato → accronym sem sufixo de entidade → **SPN da API** → accronyms da LE
+  (só se a contraparte for perna interna).
+- `_generic_nd_reenrich` tinha o mesmo defeito aplicado a quem já está no arquivo (caía para
+  `deal['LE']`, que veio da location). Passa `le_map` apenas.
+
+Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing Counterparty" — que é o erro
+certo: pede cadastro em vez de inventar contraparte.
+
+**Teste**: `check_ndf_cp.py` (scratchpad) usa o record real da API e um Reference Data montado para o
+cenário (Banco J.P. Morgan com `GN NDF BJPM`, Michelin com accronym diferente): a operação resolve
+para a Michelin pelo SPN, contraparte desconhecida fica vazia em vez de virar JPMorgan, perna interna
+continua resolvendo pela LE do próprio accronym, e o re-enriquecimento não reintroduz o erro.
+
+**Depende de restart** e de novo pull. As operações já gravadas com a contraparte errada **não são
+corrigidas sozinhas**: o `_generic_nd_reenrich` só mexe em deal com SPN vazio, e essas têm o SPN
+(errado) do banco preenchido. Precisam ser conferidas à mão.
