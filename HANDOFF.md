@@ -6337,7 +6337,8 @@ novo à toa. Agora:
   é destacada como sempre** (`AmendChanged`), mas o Success fica de pé.
 
 **O que é cosmético** — lista curta de propósito, em `_ND_AMEND_COSMETIC`:
-- **`OtherBook`**;
+- **`OtherBook` e `TradingBook`** — os dois books são onde a operação está pendurada dentro do banco;
+  contraparte, valor e prazo do negócio não mudam quando ela troca de book;
 - **troca de accronym dentro da MESMA entidade** (JPM→JPM, MGT→MGT, LAWTON→LAWTON).
 
 Todo o resto é econômico **por default** — vencimento, notional, strike/`Rate`, `Direction` (compra ×

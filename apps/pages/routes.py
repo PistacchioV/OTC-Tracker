@@ -14690,11 +14690,13 @@ _ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'SPN', 'Client', 'TaxID
                   'AmendChanged'}
 
 # Campos que mudam o DADO mas não o NEGÓCIO: a célula é destacada como qualquer
-# outra, mas quem já está Success não volta para a fila por causa deles. É uma
-# lista curta de propósito — o default é econômico, porque um campo em que
-# ninguém pensou aparecendo como Amend custa uma revisão, e o contrário custa uma
+# outra, mas quem já está Success não volta para a fila por causa deles. Os dois
+# books são onde a operação está pendurada dentro do banco — a contraparte, o
+# valor e o prazo do negócio não mudam quando ela troca de book. É uma lista
+# curta de propósito: o default é econômico, porque um campo em que ninguém
+# pensou aparecendo como Amend custa uma revisão, e o contrário custa uma
 # operação registrada errada.
-_ND_AMEND_COSMETIC = {'OtherBook'}
+_ND_AMEND_COSMETIC = {'OtherBook', 'TradingBook'}
 
 
 def _nd_amend_entity(acr):
