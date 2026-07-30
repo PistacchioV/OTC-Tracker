@@ -177,7 +177,7 @@
         { key: 'interbook-ndf',  icon: 'ti-arrows-exchange', lang: 'map-tab-interbook',     label: 'Interbook API (NDF)' },
         { key: 'commodities-b3', icon: 'ti-chart-candle',    lang: 'map-tab-commodities',   label: 'Commodities × B3' },
         { key: 'publisher-ndf',  icon: 'ti-rss',             lang: 'map-tab-publisher',     label: 'Publisher × B3 (NDF)' },
-        { key: 'le-acronym',     icon: 'ti-id-badge-2',      lang: 'map-tab-le-acronym',    label: 'Legal Entity × Acronym' },
+        { key: 'le-accronym',    icon: 'ti-id-badge-2',      lang: 'map-tab-le-accronym',   label: 'Legal Entity × Accronym' },
         { key: 'bank-name',      icon: 'ti-building-bank',   lang: 'map-tab-bank-name',     label: 'Bank Name' },
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
     ];
@@ -382,7 +382,8 @@
             var val = String(row[c.key] == null ? '' : row[c.key]);
             var fld;
             if (c.type === 'select') {
-                fld = '<select class="form-select form-select-sm map-fld" data-i="' + i + '">' +
+                fld = '<select class="form-select form-select-sm map-fld" data-i="' + i + '"' +
+                    (c.autofill ? ' data-autofill="' + esc(c.autofill) + '"' : '') + '>' +
                     (c.options || []).map(function (o) {
                         return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o || '—') + '</option>';
                     }).join('') + '</select>';
@@ -391,7 +392,43 @@
             }
             return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(c.label || c.key) + '</label>' + fld + '</div>';
         }).join('');
+        wireAutofill(st);
         if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).show();
+    }
+
+    /* Coluna com `autofill: 'OUTRA COLUNA'`: ao escolher o valor, copia para a
+       outra coluna o que as linhas já cadastradas usam para esse valor (LE JPM →
+       Settlement Location BRAZIL). Só preenche quando o destino está vazio ou
+       tem o valor da LE anterior, para não apagar edição manual. */
+    function wireAutofill(st) {
+        document.querySelectorAll('#mapModalFields select[data-autofill]').forEach(function (sel) {
+            var srcCol = st.columns[+sel.getAttribute('data-i')];
+            var dstKey = sel.getAttribute('data-autofill');
+            var dstIdx = -1;
+            st.columns.forEach(function (c, i) { if (c.key === dstKey) dstIdx = i; });
+            if (dstIdx < 0 || !srcCol) return;
+            var dst = document.querySelector('#mapModalFields .map-fld[data-i="' + dstIdx + '"]');
+            if (!dst) return;
+
+            function known(v) {   // valor de destino cadastrado para esse valor de origem
+                var hit = '';
+                (st.rows || []).forEach(function (r) {
+                    if (hit) return;
+                    var rv = String(r[srcCol.key] == null ? '' : r[srcCol.key]).trim().toUpperCase();
+                    var dv = String(r[dstKey] == null ? '' : r[dstKey]).trim();
+                    if (dv && rv === String(v || '').trim().toUpperCase()) hit = dv;
+                });
+                return hit;
+            }
+
+            var prev = sel.value;
+            sel.addEventListener('change', function () {
+                var cur = String(dst.value || '').trim();
+                if (cur && cur !== known(prev)) { prev = sel.value; return; }   // preenchido à mão
+                dst.value = known(sel.value);
+                prev = sel.value;
+            });
+        });
     }
 
     document.getElementById('mapModalSave').addEventListener('click', function () {

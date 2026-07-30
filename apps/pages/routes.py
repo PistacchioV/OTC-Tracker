@@ -14381,17 +14381,19 @@ _MAPPING_DEFS = {
     # nesta ordem: ACCRONYM (o End Counterparty exato, para o código que não
     # segue padrão nenhum) e SETTLEMENT LOCATION (era o de-para fixo
     # BRAZIL→JPM / JPMCBB→MGT no código). Linha só com LE + ACCRONYM é o uso
-    # normal — não precisa preencher a location.
-    # O acronym sufixado por entidade ('CMBB-LAW') NÃO precisa de linha aqui nem
+    # normal: 'autofill' faz a tela copiar a Settlement Location da linha que já
+    # existe para aquela LE quando você escolhe a LE no dropdown.
+    # O accronym sufixado por entidade ('CMBB-LAW') NÃO precisa de linha aqui nem
     # no Reference Data: o lookup de contraparte tenta o código exato e depois o
-    # acronym sem o último trecho depois do hífen, então uma linha de cadastro
+    # accronym sem o último trecho depois do hífen, então uma linha de cadastro
     # atende Banco, Lawton e MGT.
-    'le-acronym': {
-        'label': 'Legal Entity × Acronym',
+    'le-accronym': {
+        'label': 'Legal Entity × Accronym',
         'columns': [
-            {'key': 'LE', 'label': 'Legal Entity'},
-            {'key': 'ACCRONYM', 'label': 'Accronym (API)'},
-            {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location (API)'},
+            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select',
+             'options': ['', 'JPM', 'MGT', 'LAWTON'], 'autofill': 'SETTLEMENT LOCATION'},
+            {'key': 'ACCRONYM', 'label': 'Accronym'},
+            {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location'},
         ],
         'seed': [
             {'LE': 'JPM', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'BRAZIL'},
@@ -14494,35 +14496,35 @@ def _mapping_ccy_maps():
 
 
 def _ndf_le_from_location(loc):
-    """Settlement Location da API → Legal Entity da página (mapping le-acronym).
+    """Settlement Location da API → Legal Entity da página (mapping le-accronym).
     None quando não há linha cadastrada para aquela location."""
     l = str(loc or '').strip().upper()
     if not l:
         return None
-    for r in _mapping_rows('le-acronym'):
+    for r in _mapping_rows('le-accronym'):
         if str(r.get('SETTLEMENT LOCATION', '') or '').strip().upper() == l:
             return str(r.get('LE', '') or '').strip().upper() or None
     return None
 
 
-def _ndf_le_from_acronym(acr):
+def _ndf_le_from_accronym(acr):
     """LE cadastrada para esse End Counterparty na coluna ACCRONYM do mapping
-    le-acronym. Casa o código exato e também o acronym base (o mesmo corte de
-    _ndf_acronym_variants), para a linha valer com ou sem o sufixo da entidade.
+    le-accronym. Casa o código exato e também o accronym base (o mesmo corte de
+    _ndf_accronym_variants), para a linha valer com ou sem o sufixo da entidade.
     None quando não há linha."""
-    cands = _ndf_acronym_variants(acr)
+    cands = _ndf_accronym_variants(acr)
     if not cands:
         return None
-    for r in _mapping_rows('le-acronym'):
+    for r in _mapping_rows('le-accronym'):
         a = str(r.get('ACCRONYM', '') or '').strip().upper()
         if a and a in cands:
             return str(r.get('LE', '') or '').strip().upper() or None
     return None
 
 
-def _ndf_acronym_variants(acr):
+def _ndf_accronym_variants(acr):
     """Códigos a tentar no Reference Data para um End Counterparty da API: o
-    próprio e, quando ele vem sufixado por entidade, o acronym sem o último
+    próprio e, quando ele vem sufixado por entidade, o accronym sem o último
     trecho depois do hífen ('CMBB-LAW' → 'CMBB'). É o que dispensa cadastrar a
     mesma contraparte uma vez por LE, sem precisar configurar sufixo nenhum."""
     a = str(acr or '').strip().upper()
@@ -14536,10 +14538,10 @@ def _ndf_acronym_variants(acr):
     return out
 
 
-def _ndf_ref_by_acronym(refmap_acr, acr):
+def _ndf_ref_by_accronym(refmap_acr, acr):
     """Linha do Reference Data do End Counterparty, tentando o código exato e
-    depois o acronym sem o sufixo da entidade. {} quando não está cadastrado."""
-    for cand in _ndf_acronym_variants(acr):
+    depois o accronym sem o sufixo da entidade. {} quando não está cadastrado."""
+    for cand in _ndf_accronym_variants(acr):
         rec = refmap_acr.get(cand)
         if rec:
             return rec
@@ -14636,11 +14638,11 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     if _ndf_is_interbook(norm):
         return None, None
 
-    # LE: mapping Legal Entity × Acronym — a linha do acronym vence (é a
+    # LE: mapping Legal Entity × Accronym — a linha do accronym vence (é a
     # específica), senão a da Settlement Location; sem nenhuma das duas, a
     # location crua fica visível na coluna.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
-    le = _ndf_le_from_acronym(end_cp) or _ndf_le_from_location(loc) or loc
+    le = _ndf_le_from_accronym(end_cp) or _ndf_le_from_location(loc) or loc
 
     # Counterparty enrichment is keyed by End Counterparty (FX Cash
     # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM,
@@ -14648,7 +14650,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # cadastrar a mesma contraparte uma vez por LE. Código não cadastrado de
     # jeito nenhum: SPN/Client/TaxID ficam vazios e a página marca o badge
     # "Missing Counterparty" nessas colunas.
-    ref = _ndf_ref_by_acronym(refmap_acr, end_cp)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp)
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -20406,9 +20408,9 @@ def _generic_nd_reenrich(deals, refmap_cache):
                     m[_a] = _r
             refmap_cache['map'] = m
         # Tenta o código exato e o acronym sem o sufixo da entidade (mapping
-        # Legal Entity × Acronym) — deals importados antes do sufixo existir
+        # Legal Entity × Accronym) — deals importados antes do sufixo existir
         # ficaram com 'CMBB-LAW' gravado e são resolvidos aqui, sem novo pull.
-        rec = _ndf_ref_by_acronym(refmap_cache['map'], acr)
+        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr)
         if not rec:
             continue
         deal['SPN'] = str(rec.get('SPN', '') or '')
