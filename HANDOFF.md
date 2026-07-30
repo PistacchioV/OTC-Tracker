@@ -6699,3 +6699,55 @@ continua resolvendo pela LE do próprio accronym, e o re-enriquecimento não rei
 **Depende de restart** e de novo pull. As operações já gravadas com a contraparte errada **não são
 corrigidas sozinhas**: o `_generic_nd_reenrich` só mexe em deal com SPN vazio, e essas têm o SPN
 (errado) do banco preenchido. Precisam ser conferidas à mão.
+
+---
+
+## §148 — O SPN da API não identifica a contraparte (traz o da LE)
+
+Correção da §147: o passo "SPN da API" que eu tinha acabado de acrescentar **foi removido**.
+
+O usuário confirmou (30/07/2026) que a API hoje devolve em `SPN` o SPN da **Legal Entity**, não o da
+contraparte — é correção pendente no time responsável pela API. Usar esse campo como chave
+reintroduziria exatamente o erro da §147 por outro caminho: a linha resolveria para a entidade JPM em
+vez do cliente.
+
+**Onde isso mudou**:
+
+- `_ndf_ref_by_accronym` voltou à assinatura `(refmap_acr, acr, le=None)`. Ordem: accronym exato →
+  accronym sem sufixo de entidade → accronyms da LE (só quando a contraparte é perna interna).
+  Quando a API for corrigida, o SPN volta como passo **entre** o accronym e a LE — está anotado no
+  docstring.
+- `_fxo_deal_from_row` **inverteu a ordem**: agora procura primeiro pelo accronym da contraparte
+  (End Counterparty) e só usa o SPN da API como último recurso, para não perder o que já resolvia por
+  ele. Antes o SPN era a chave primária — o FXO enriquecia toda linha pelo campo que traz a LE.
+- O `SPN` mostrado na tela do FXO passa a ser o do **Reference Data** quando a contraparte foi
+  resolvida; o da API só aparece enquanto não há cadastro nenhum a que recorrer.
+
+Sem cadastro, a linha fica vazia e a página marca "Missing Counterparty" — que é o comportamento
+desejado: pedir cadastro em vez de inventar contraparte.
+
+**Teste**: `check_ndf_cp.py` foi atualizado para a regra nova — a operação da Michelin fica vazia
+enquanto o accronym não estiver no Reference Data, resolve certo assim que estiver, e em nenhum dos
+casos vira o Banco J.P. Morgan.
+
+---
+
+## §149 — Confirmar um deal New na coluna Actions vai direto para Approved
+
+Antes, o botão de confirmar (✓) levava `New` **e** `Amend` para `Pending`. O passo `Pending` existe
+para quem **editou** submeter a alteração à revisão — e nesse caminho, clicando o ✓ direto na linha
+sem abrir o modal, não houve edição nenhuma. Agora:
+
+- **New → Approved** direto;
+- **Amend → Pending**, sem mudança: ali a API alterou dado econômico e alguém tem de olhar.
+
+Indo direto para Approved valem as **mesmas travas** do Pending → Approved, porque de Approved o deal
+segue para Send/B3: contraparte não cadastrada (`_cp().rowMissing`) e ativo fora do Index B3
+(`_isAssetMissing`) barram a aprovação com o mesmo aviso de sempre. A trava de *maker ≠ approver*
+**não** se aplica aqui — é justamente o atalho que se está pedindo —, mas o aprovador vira o Maker,
+então o **Send continua exigindo outro usuário**. A cadeia perdeu um par de olhos (o de New→Pending),
+não os dois.
+
+Vale nas 6 páginas de New Deals (NDF Vanilla / Commodities / FWD Start / Other Publisher, Opt
+Commodities / FXO). A única diferença entre elas é o índice da coluna do ativo (13 no FXO, 14 nas
+demais) — o mesmo que a trava do Pending já usava em cada página.

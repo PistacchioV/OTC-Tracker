@@ -3761,10 +3761,38 @@ $(document).ready(function() {
         var badge = statusNode ? $(statusNode).find('.badge') : $();
         var currentStatus = badge.length ? badge.text().trim() : '';
 
-        // New/Amend → Pending (maker submits for approval — same user allowed)
+        // New → Approved direto; Amend → Pending.
+        // Confirmar um deal NOVO aqui na coluna Actions já o aprova: o passo
+        // Pending existe para quem EDITOU submeter a alteração à revisão, e
+        // neste caminho não houve edição nenhuma. Amend continua indo para
+        // Pending — ali a API mudou dado econômico e alguém tem de olhar.
+        // O Send segue exigindo outro usuário: o aprovador vira o Maker.
         if (currentStatus === 'New' || currentStatus === 'Amend') {
+            var directToApproved = (currentStatus === 'New');
+            // Indo direto para Approved valem as MESMAS travas do Pending →
+            // Approved: de Approved o deal segue para Send/B3, e deixar passar
+            // contraparte ou ativo sem cadastro é o que essas travas existem
+            // para impedir. Amend, que continua parando em Pending, não precisa
+            // delas agora — vai passar por aqui de novo na aprovação.
+            if (directToApproved) {
+                if (_cp() && _cp().rowMissing(tr[0])) { _cp().promptRegister(); return; }
+                var colAssetNew = table.cell(tr[0], 14).node();
+                var assetCodeNew = colAssetNew ? $(colAssetNew).clone().find('.missing-b3-badge').remove().end().text().trim() : '';
+                if (_isAssetMissing(assetCodeNew)) {
+                    Swal.fire({
+                        title: t('swal-missing-asset-title', 'Asset Not Registered'),
+                        html: 'The underlying asset <b>' + assetCodeNew + '</b> is not registered in Index B3. Please register it on the <b>Index B3</b> page before approving.',
+                        icon: 'warning',
+                        confirmButtonText: t('swal-ok', 'OK'),
+                        confirmButtonColor: '#6c757d'
+                    });
+                    return;
+                }
+            }
+            var directStatus = directToApproved ? 'Approved' : 'Pending';
+            var directBadge  = directToApproved ? 'text-bg-secondary' : 'text-bg-warning';
             if (statusNode) {
-                $(statusNode).html('<span class="badge text-bg-warning bg-gradient">Pending</span>');
+                $(statusNode).html('<span class="badge ' + directBadge + ' bg-gradient">' + directStatus + '</span>');
             }
             table.cell(tr[0], MAKER_COL_INDEX).data(CURRENT_USER_SID);
             var pendRowId = _sh(table.cell(tr[0], 4).data()) || '';
@@ -3772,7 +3800,7 @@ $(document).ready(function() {
                 fetch('/api/new-deals/other-publishers/cache/' + encodeURIComponent(pendRowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr[0], 11).data())), {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ Status: 'Pending', Maker: CURRENT_USER_SID })
+                    body:    JSON.stringify({ Status: directStatus, Maker: CURRENT_USER_SID })
                 }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
             }
             table.row(tr[0]).invalidate('dom');
