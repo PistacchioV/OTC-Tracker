@@ -1375,7 +1375,7 @@
   "ndf-r-ok": "OK",
   "ndf-r-check": "Verificar",
   "vr-cfg-title": "Personalizar menu",
-  "vr-cfg-hint": "Escolha quais atalhos aparecem no topo (máx. 7).",
+  "vr-cfg-hint": "Escolha quais atalhos aparecem no topo (máx. 8).",
   "vr-cfg-reset": "Padrão",
   "vr-cfg-cancel": "Cancelar",
   "vr-cfg-save": "Salvar",

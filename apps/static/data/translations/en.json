@@ -1375,7 +1375,7 @@
   "ndf-r-ok": "OK",
   "ndf-r-check": "Check",
   "vr-cfg-title": "Customize menu",
-  "vr-cfg-hint": "Choose which shortcuts appear at the top (max 7).",
+  "vr-cfg-hint": "Choose which shortcuts appear at the top (max 8).",
   "vr-cfg-reset": "Default",
   "vr-cfg-cancel": "Cancel",
   "vr-cfg-save": "Save",

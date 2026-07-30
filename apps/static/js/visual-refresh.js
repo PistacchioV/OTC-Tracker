@@ -312,7 +312,7 @@
     if (!nav) return;
     var SID = (nav.getAttribute("data-sid") || "").trim().toUpperCase();
     var KEY = "otc_topnav_" + (SID || "anon");
-    var MAX = 7;
+    var MAX = 8;   // atalhos customizados por usuário no topo
     var DEFAULTS = ["/dashboard", "/live-position-ndf", "/pending-confirmation", "/reconciliation-payrec", "/reference-data"];
     var allowed = null; // {href:1} ou null = tudo liberado
 
