@@ -6547,3 +6547,61 @@ Amend, JPM→JPM continua Success, Strike vira Amend, SPN+accronym juntos viram 
 
 **Depende de restart** (`routes.py`) na instância do time. Os deals já importados são corrigidos
 sozinhos no próximo pull da API (horário no FXO) ou clicando Import.
+
+---
+
+## §144 — Prêmio D0 não gerava nada com a Spot Date de hoje em todas as linhas
+
+**Sintoma** (30/07/2026): em New Deals FXO, com **Spot Date = hoje** em todas as operações, o botão
+**Premium** respondia "Nothing to Generate — No operations with premium payment (Spot Date) due today".
+
+**A Spot Date não era a culpada.** O filtro `_date_br(d['SpotDate']) == _today_br()` passava. O que
+derrubava tudo vinha depois: `build_premium_emails` resolvia a contraparte **só pelo accronym**
+(`ref = _build_refdata_index(ref_key)`, `rec = ref.get(acronym)`). A conta B3 sai desse registro, e o
+e-mail só é gerado para o bucket `73760.10-2` — com `rec = {}` a conta vem vazia, nunca bate, e o deal
+é descartado **em silêncio**.
+
+E o accronym é **opcional** no Reference Data: há contraparte cadastrada com a coluna em branco. A
+própria tela provava isso — Client e Tax ID preenchidos (achados pelo **SPN**) e a coluna Accronym
+vazia na mesma linha.
+
+**Segundo defeito, achado junto.** `_group_by_acronym_commodity` agrupava por `(Acronym, Commodities)`.
+Com o accronym vazio, **contrapartes diferentes caíam no mesmo grupo** — um e-mail só, com os deals de
+todo mundo, endereçado a quem calhasse de estar em primeiro. Nunca apareceu porque o grupo de accronym
+vazio morria no filtro da conta B3 logo em seguida; consertar o primeiro defeito sem este teria
+transformado um e-mail que não saía num e-mail errado que sai.
+
+**Correção** (`otc_emails.py`):
+
+- `_build_refdata_spn_index()` + `_ref_for_deal(by_acronym, by_spn, deal)`: resolve pelo accronym e,
+  quando ele não resolve, **pelo SPN** — que é obrigatório e é a chave usada no resto do projeto.
+- `_group_by_acronym_commodity` cai para `'SPN:<normalizado>'` na chave quando não há accronym.
+- `build_premium_emails` e `build_economic_affirmation_emails` passam a usar `_ref_for_deal`; nome e
+  Tax ID caem para os do próprio deal quando o Reference Data não tem.
+
+**Efeito colateral corrigido de propósito na Econ. Affirmation**: a afirmação é para instituição
+financeira, e exclui quem está em `EXCLUDED_B3_AFFIRMATION`. Com o accronym vazio a conta B3 vinha em
+branco, não batia com nenhuma da lista de exclusão, e **um cliente passava por instituição financeira
+e recebia uma afirmação que não é dele**. Resolvendo pelo SPN, ele volta a ser excluído.
+
+**Testes**: `check_premium.py` (scratchpad) reproduz o caso da tela — mesmo deal, mesma Spot Date, com
+e sem accronym —, isola o filtro de Spot Date para provar que não era ele, cobre o agrupamento de duas
+contrapartes sem accronym e as regressões (Lawton fora, bucket errado fora, cliente sem afirmação de
+IF, IF continua recebendo).
+
+---
+
+## §145 — Confirmation / Premium / Econ. Affirmation subiram para junto do "Show entries"
+
+Os três botões viviam na barra de ferramentas da DataTable, dividindo espaço com Columns, Add Row,
+Export, Reference Date, Import e Clear Filters — fila longa demais para achar o botão certo de
+primeira. Passaram para o `card-header` do "Show N entries", à direita do seletor.
+
+**Só o lugar no DOM mudou.** Os contêineres mantêm as classes `confirmationBtn` / `premiumBtn` /
+`econAffBtn`, que é o que o JS de cada página procura (`document.querySelector('.premiumBtn')`) para
+criar o botão dentro — nenhum handler foi tocado. Nos três `dom:` das DataTables os `<'...Btn me-2'>`
+correspondentes saíram.
+
+Páginas: `new_deals-opt-fxo` e `new_deals-opt-commodities` (os três botões) e `new_deals-ndf-commodities`
+(Confirmation e Econ. Affirmation — não tem Premium). As demais páginas de New Deals (NDF Vanilla,
+FWD Start, Other Publisher) **não têm nenhum dos três**, então não havia o que mover.

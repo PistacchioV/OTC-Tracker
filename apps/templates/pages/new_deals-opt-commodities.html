@@ -861,6 +861,18 @@
                                 </select>
                                 <label class="form-label mb-0" data-lang="b3-entries">entries</label>
                             </div>
+                            <!-- Ações de documento/e-mail: ficam aqui, ao lado do seletor de
+                                 linhas, e não na barra de ferramentas da tabela — lá embaixo
+                                 elas dividiam espaço com Columns/Export/Import/Reference Date
+                                 e o botão certo custava a ser achado. Os contêineres mantêm as
+                                 MESMAS classes: o JS que cria os botões procura por elas
+                                 (document.querySelector('.premiumBtn') e afins), então mudou
+                                 só o lugar no DOM, nada do comportamento. -->
+                            <div class="d-flex flex-wrap align-items-center gap-2 ms-3">
+                                <div class="confirmationBtn"></div>
+                                <div class="premiumBtn"></div>
+                                <div class="econAffBtn"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1519,9 +1531,6 @@ $(document).ready(function() {
             "B" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
-            "<'premiumBtn me-2'>" +
-            "<'econAffBtn me-2'>" +
-            "<'confirmationBtn me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center'>" +
             ">" +
