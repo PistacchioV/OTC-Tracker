@@ -27,8 +27,15 @@ except ImportError:
     sys.exit('Falta a dependência: rode  pip install python-docx')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, 'SOP_PROCESSAMENTO_OTC.md')
-OUT = os.path.join(ROOT, 'SOP_PROCESSAMENTO_OTC.docx')
+
+# Sem argumentos, gera o SOP (comportamento de sempre). Com argumentos, converte
+# qualquer Markdown do repositório — é assim que o Guia do Usuário é gerado, sem
+# precisar de um segundo conversor:
+#     python scripts/build_sop_docx.py GUIA_DO_USUARIO_OTC_TRACKER.md
+_ARGS = [a for a in sys.argv[1:] if not a.startswith('-')]
+SRC = os.path.join(ROOT, _ARGS[0]) if _ARGS else os.path.join(ROOT, 'SOP_PROCESSAMENTO_OTC.md')
+OUT = (os.path.join(ROOT, _ARGS[1]) if len(_ARGS) > 1
+       else os.path.splitext(SRC)[0] + '.docx')
 BLUE = RGBColor(0x00, 0x66, 0xCC)
 GREY = RGBColor(0x55, 0x55, 0x55)
 IMG_W = Inches(6.6)
