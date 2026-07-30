@@ -5976,3 +5976,14 @@ idiomas (o número aparece escrito nas traduções, além de interpolado no defa
 `visual-refresh.js` bumpado** (`?v=20260730a`) — sem isso o navegador serve o JS antigo e o oitavo atalho
 continua bloqueado. O overflow do nav já era tratado (abaixo de 1500px entra no fluxo com scroll
 horizontal, §127), então o 8º item degrada igual aos outros.
+
+**Correção seguinte (o painel continuava dizendo "max 7").** O JS interpolava o `MAX` certo, mas
+`applyI18n()` sobrescreve o `innerHTML` do hint com o valor de `vr-cfg-hint` do JSON de tradução — e
+`I18nManager` (`apps/static/js/app.js`) busca `/static/data/translations/<lang>.json` **sem cache-buster**,
+então o navegador serve a tradução antiga indefinidamente. Bumpar o `?v=` do JS não resolve: quem manda no
+texto é o JSON. Consertado tirando o número do JSON: as três traduções passaram a usar o placeholder
+`{max}` e o painel roda `fixHintMax()` — `.replace(/\{max\}/g, MAX).replace(/\b\d+\b/, MAX)` — antes **e**
+depois da tradução (`applyI18n()` agora devolve a promise justamente para isso). O segundo `replace` é o que
+salva o usuário com JSON velho em cache: um número escrito à mão no arquivo é reescrito para o `MAX` real.
+Regra geral: **número de limite nunca escrito na tradução**, sempre placeholder, senão o texto diverge do
+comportamento até o cache expirar.

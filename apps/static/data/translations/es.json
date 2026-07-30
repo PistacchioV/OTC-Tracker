@@ -1374,7 +1374,7 @@
   "ndf-r-ok": "OK",
   "ndf-r-check": "Verificar",
   "vr-cfg-title": "Personalizar menú",
-  "vr-cfg-hint": "Elige qué accesos aparecen arriba (máx. 8).",
+  "vr-cfg-hint": "Elige qué accesos aparecen arriba (máx. {max}).",
   "vr-cfg-reset": "Predeterminado",
   "vr-cfg-cancel": "Cancelar",
   "vr-cfg-save": "Guardar",

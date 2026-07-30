@@ -199,8 +199,12 @@
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   // Re-aplica as traduções (default EN nos data-lang) ao conteúdo gerado por JS.
+  // Devolve a promise para quem precisa mexer no texto DEPOIS da tradução.
   function applyI18n() {
-    try { if (window.otcI18n && window.otcI18n.applyTranslations) window.otcI18n.applyTranslations(); } catch (e) {}
+    try {
+      if (window.otcI18n && window.otcI18n.applyTranslations) return Promise.resolve(window.otcI18n.applyTranslations());
+    } catch (e) {}
+    return Promise.resolve();
   }
   function textOf(a) {
     var mt = a.querySelector(".menu-text");
@@ -448,12 +452,21 @@
       panel.className = "vr-navcfg";
       panel.innerHTML =
         '<div class="vr-navcfg__head"><span data-lang="vr-cfg-title">Customize menu</span><button class="vr-navcfg__x" type="button" aria-label="Close">&times;</button></div>' +
-        '<div class="vr-navcfg__hint" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max ' + MAX + ").</div>" +
+        '<div class="vr-navcfg__hint" data-lang="vr-cfg-hint">Choose which shortcuts appear at the top (max {max}).</div>' +
         '<div class="vr-navcfg__body">' + groupsHtml + "</div>" +
         '<div class="vr-navcfg__foot"><button class="vr-navcfg__reset" type="button" data-lang="vr-cfg-reset">Default</button><span class="vr-navcfg__spacer"></span><span class="vr-navcfg__count"></span><button class="vr-navcfg__cancel" type="button" data-lang="vr-cfg-cancel">Cancel</button><button class="vr-navcfg__save" type="button" data-lang="vr-cfg-save">Save</button></div>';
       document.body.appendChild(backdrop);
       document.body.appendChild(panel);
-      applyI18n();
+
+      // O número do texto vem SEMPRE do MAX daqui. A tradução é buscada sem
+      // cache-busting, então o JSON do navegador pode estar com o limite antigo
+      // (era 7): troca-se o placeholder e, se vier um número fixo, ele também.
+      function fixHintMax() {
+        var h = panel.querySelector(".vr-navcfg__hint");
+        if (h) h.textContent = h.textContent.replace(/\{max\}/g, MAX).replace(/\b\d+\b/, MAX);
+      }
+      fixHintMax();
+      applyI18n().then(fixHintMax);
 
       var countEl = panel.querySelector(".vr-navcfg__count");
       function close() { backdrop.remove(); panel.remove(); document.removeEventListener("keydown", onKey); }
