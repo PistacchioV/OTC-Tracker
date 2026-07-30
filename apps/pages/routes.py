@@ -20250,15 +20250,41 @@ def confirmation_ndfcomm_palmoil_strike_myrusd():
 
 
 # ── XML do contrato (FepWeb) por confirmação ─────────────────────────────────
-# Cada confirmação gerada produz um XML de mesmo nome do contrato na mesma
-# pasta. Códigos numéricos ISO-4217 das moedas de strike usuais.
-_CONF_CCY_NUM = {
-    'USD': '840', 'EUR': '978', 'GBP': '826', 'JPY': '392', 'CHF': '756',
-    'CAD': '124', 'AUD': '036', 'NZD': '554', 'MYR': '458', 'CNY': '156',
-    'CNH': '156', 'MXN': '484', 'ZAR': '710', 'SEK': '752', 'NOK': '578',
-    'DKK': '208', 'BRL': '986', 'BRR': '986',
-}
+# Cada confirmação gerada produz um XML de mesmo nome-base do documento na mesma
+# pasta.
+#
+# A moeda do XML NÃO é o ISO-4217 numérico: é o "código de cadastro" do BACEN,
+# que a tabela Currency Base (/mapping) já registra por moeda — USD é 220 e não
+# 840, BRL é 790 e não 986. Havia um dicionário ISO fixo aqui, e era ele que
+# punha 840 no arquivo. Fora estar errado, era um de-para no código: o mapping
+# é a fonte, e uma moeda nova passa a valer sem release.
 _CONF_CNPJ_BANCO = '33172537000198'
+
+
+def _conf_ccy_num(ccy):
+    """Código de cadastro (3 dígitos) da moeda pelo mapping Currency Base.
+
+    Aceita o SIMBOLO (USD) e o ATHENA CODE (USB, BRR) — o cache de deals traz
+    ora um, ora outro. Vazio quando a moeda não está cadastrada; quem chama
+    avisa, em vez de inventar um código."""
+    s = str(ccy or '').strip().upper()
+    if not s:
+        return ''
+    code = _moeda_num_code(s)
+    if code:
+        return code
+    ath, _weak, _inv = _mapping_ccy_maps()          # Athena → ISO
+    return _moeda_num_code(ath.get(s, '')) if ath.get(s) else ''
+
+
+def _conf_ccy_is_brl(ccy):
+    """True para a moeda nacional em qualquer das grafias que aparecem nos
+    caches (BRL, BRR e o próprio código de cadastro 790)."""
+    s = str(ccy or '').strip().upper()
+    if s in ('BRL', 'BRR', '790'):
+        return True
+    ath, _weak, _inv = _mapping_ccy_maps()
+    return ath.get(s, '') == 'BRL'
 
 
 def _conf_strike_adj(deal, subj):
@@ -20299,9 +20325,14 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
             numero = numero + '_' + merc_tag
 
     ccy = str(first.get('StrikeCurrency') or '').strip().upper()
-    ccy_num = _CONF_CCY_NUM.get(ccy, '')
-    if not ccy_num:
-        warnings.append('Moeda do strike "{}" sem código numérico mapeado no XML.'.format(ccy))
+    # Strike em Reais não tem perna estrangeira: moedaEstrangeira e
+    # valorEstrangeiro saem VAZIOS (preenchê-los com 790/valor em BRL declararia
+    # uma operação em moeda estrangeira que não existe).
+    is_brl = _conf_ccy_is_brl(ccy)
+    ccy_num = '' if is_brl else _conf_ccy_num(ccy)
+    if not is_brl and not ccy_num:
+        warnings.append('Moeda do strike "{}" sem código de cadastro na tabela Currency Base '
+                        '(/mapping) — moedaEstrangeira ficou vazia no XML.'.format(ccy))
 
     valor = 0.0
     valor_estr = 0.0
@@ -20333,14 +20364,22 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
         warnings.append('CNPJ da contraparte fora do padrão (14 dígitos): "{}".'
                         .format(first.get('TaxID')))
 
-    xml = (
+    return numero, _conf_xml_doc(numero, tipo, valor, ccy_num,
+                                 '' if is_brl else valor_estr, cnpj_cli,
+                                 trade_dt, venc), warnings
+
+
+def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, venc):
+    """XML do contrato. `valor_estr` vazio (strike em BRL) sai como tag vazia,
+    igual aos campos que o FepWeb já recebe em branco."""
+    return (
         '<contrato>\n'
         '  <numeroContrato>{numero}</numeroContrato>\n'
         '  <tipoOperacao>{tipo}</tipoOperacao>\n'
         '  <tipoEvento>N</tipoEvento>\n'
         '  <valor>{valor:.2f}</valor>\n'
         '  <moedaEstrangeira>{ccy}</moedaEstrangeira>\n'
-        '  <valorEstrangeiro>{valor_estr:.2f}</valorEstrangeiro>\n'
+        '  <valorEstrangeiro>{valor_estr}</valorEstrangeiro>\n'
         '  <codigoNatureza></codigoNatureza>\n'
         '  <descricaoNatureza></descricaoNatureza>\n'
         '  <pagadorRecebidorExterior></pagadorRecebidorExterior>\n'
@@ -20350,11 +20389,11 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
         '  <dataOperacao>{dt_op}</dataOperacao>\n'
         '  <dataVencimento>{dt_venc}</dataVencimento>\n'
         '</contrato>\n'
-    ).format(numero=numero, tipo=tipo, valor=valor, ccy=ccy_num, valor_estr=valor_estr,
+    ).format(numero=numero, tipo=tipo, valor=valor, ccy=ccy_num,
+             valor_estr=('{:.2f}'.format(valor_estr) if valor_estr != '' else ''),
              cnpj_banco=_CONF_CNPJ_BANCO, cnpj_cli=cnpj_cli,
              dt_op=trade_dt.strftime('%Y%m%d'),
              dt_venc=venc.strftime('%Y%m%d') if venc else '')
-    return numero, xml, warnings
 
 
 def _conf_pc_set_fepweb(trade_numbers, numero):
