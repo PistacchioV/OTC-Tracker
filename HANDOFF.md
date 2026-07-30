@@ -6286,3 +6286,83 @@ O card **FX Options** do Monitor deixou de ser contagem e passou ao ciclo comple
 + 1 vanilla + 1 perna interna JPM, passando por segregação → páginas de geração → XML → trava do CGD.
 Tudo verde. Vale recriar se mexer no fluxo. Atenção ao montar teste com `test_client`: o
 `enforce_session_expiry` derruba sessão sem `session_expires_at` e **tudo volta 401**.
+
+## 140. Sessão 2026-07-30 — Batch das APIs: re-booking de FWD Start e Amend só por dado econômico
+
+Duas regras de negócio novas no pull automático da Athena. As duas são **invisíveis no código de quem
+só lê o roteamento** — leia esta seção antes de mexer em `_ndf_api_pull` ou em `_nd_api_amend`.
+
+### 1. O re-booking de um FWD Start que fixou não entra no NDF Vanilla
+
+**O que a mesa faz:** no dia em que um FWD Start fixa (Strike Set Date), a operação é **cancelada** e
+**re-bookada** com **outro Deal ID**, já como NDF vanilla. As duas pontas são a mesma operação — mas
+como o Deal ID é novo, nenhuma chave (`Deal`+`Client`) as reconhece como par, e o re-booking entrava na
+página de Vanilla como negócio novo.
+
+**Como o par é reconhecido** (`_ndf_rebook_key`): **contraparte + notional + data de vencimento**, com a
+**Trade Date do vanilla igual à Strike Set Date do FWD Start**. Strike e trade date **não** entram:
+o strike é justamente o que a fixação define (o FWD Start nem chega a ter `Rate` gravado) e a data de
+negociação do re-booking é outra por construção. A contraparte casa por SPN, com o accronym de reserva;
+o notional entra em valor absoluto (a direção viaja no `Direction`, não no sinal).
+
+**De onde saem os FWD Start comparados — duas fontes, unidas:**
+1. **o próprio pull**: o registro do FWD Start que fixa na data de referência. Ele deixou de ser
+   descartado com `(None, None)` e agora volta no alvo `_fwd-start-fixing` — não é gravado em página
+   nenhuma (era esse o comportamento e continua sendo), mas o deal é montado para virar chave;
+2. **o cache das páginas de FWD Start** dos últimos `_NDF_REBOOK_LOOKBACK_MONTHS` (24) meses, nas **duas
+   grafias de pasta** de produção (`FwdStart` e `FWD Start`). Esta é a fonte que importa no dia a dia: o
+   FWD Start foi bookado semanas ou meses antes e mora no arquivo do dia **dele**, não no de hoje.
+   Cancelado entra na varredura de propósito — estar cancelado é justamente o sinal de que o re-booking
+   aconteceu.
+
+⚠️ **Direção do erro, de propósito:** chave incompleta (falta notional, vencimento, contraparte ou data)
+**não casa com nada** e o deal **é importado**. Descartar de menos custa uma linha duplicada que o
+operador apaga; descartar de mais some com uma operação sem ninguém ver. Todo descarte sai no
+`log.info` com o Deal do vanilla, o Deal do FWD Start casado e os três valores que bateram, e vai no
+retorno do pull em `skipped_fwd_rebook` / `skipped_fwd_rebook_deals`.
+
+**Só o pull da API.** O import por XLSX não passa por aqui.
+
+### 2. Deal já **Success** só cai para Amend quando muda informação econômica
+
+`_nd_api_amend` é **compartilhado pelos quatro produtos que puxam da API** (NDF Vanilla, Other Publisher,
+FWD Start e FXO) — a mudança vale para todos de uma vez.
+
+Antes, qualquer diferença entre o deal guardado e a versão da API virava `Status = 'Amend'`. Uma operação
+já **registrada** voltava para a fila por causa de um detalhe de booking, e alguém tinha de revisar de
+novo à toa. Agora:
+
+- **quem não está Success**: nada mudou — qualquer diferença vira Amend;
+- **quem está Success**: só cai para Amend com mudança **econômica**. O valor novo é gravado e **a célula
+  é destacada como sempre** (`AmendChanged`), mas o Success fica de pé.
+
+**O que é cosmético** — lista curta de propósito, em `_ND_AMEND_COSMETIC`:
+- **`OtherBook`**;
+- **troca de accronym dentro da MESMA entidade** (JPM→JPM, MGT→MGT, LAWTON→LAWTON).
+
+Todo o resto é econômico **por default** — vencimento, notional, strike/`Rate`, `Direction` (compra ×
+venda), `Instrument` (put × call), `Premium`, `SpotDate` (pagamento do prêmio) e qualquer campo que
+ninguém previu. É a direção segura: um campo esquecido aparecendo como Amend custa uma revisão; o
+contrário custa uma operação registrada errada.
+
+**Como a "mesma entidade" é decidida** (`_nd_amend_same_entity`), em duas fontes:
+1. **a coluna `LE` do deal** quando o produto tem uma (os três NDFs) — ela já é derivada do accronym e da
+   settlement location, ou seja, *é* a entidade;
+2. **o accronym**, quando não há coluna LE (é o caso do **FXO**): LE cadastrada no mapping `le-accronym`
+   e, se o código não estiver cadastrado, o **sufixo depois do último hífen** (`CMBB-LAW` → `LAW`) — o
+   mesmo corte de `_ndf_accronym_variants`. Entidade desconhecida **nunca empata**: dois códigos que
+   ninguém sabe de onde vêm podem ser de entidades diferentes.
+
+⚠️ **A armadilha que quase entrou:** o loop de comparação **grava** cada campo em `stored` conforme
+percorre. Perguntar a `stored` "a LE mudou?" no meio do caminho responderia sempre que **não**, porque a
+LE já teria sido sobrescrita se viesse antes do `Acronym` na iteração. Por isso existe o
+`before = dict(stored)` — a decisão é sempre contra a foto do deal **antes** de qualquer escrita.
+
+**Contraparte propriamente dita não chega aqui:** `SPN`, `Client` e `TaxID` estão em `_ND_AMEND_SKIP`
+(vêm do RefData e o re-enriquecimento os mexe sem a operação ter mudado), e `Client` ainda é **parte da
+chave** de persistência — um cliente diferente é um deal novo, não um amend.
+
+**Testes** (scratchpad, não versionados): `check_amend_rebook.py` cobre as duas regras no nível das
+funções (8 casos de amend em NDF + 5 em FXO, e 10 casos de emparelhamento incluindo os que **não** podem
+casar); `check_ndf_pull.py` roda o `_ndf_api_pull` inteiro com um payload falso da Athena e confere o que
+foi gravado em cada arquivo do dia.
