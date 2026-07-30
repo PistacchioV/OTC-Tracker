@@ -73,6 +73,30 @@ Authorization lives in `apps/pages/routes.py` and is enforced in three layers (b
 - **Per-card access (Control Panel).** The Control Panel is card-gated: allowlist tokens `"/control-panel#<id>"` (registry `_CONTROL_PANEL_CARDS`) grant individual routine cards. The page opens if ≥1 card is granted (`_cp_page_allowed`); `enforce_control_panel_cards` (before_request) blocks each routine's API endpoint unless its card is granted (`_CP_ENDPOINT_CARD`). A legacy whole-page `/control-panel` grant implies all cards.
 - **Admin UI.** `/page-access` (admin/master only) is the editor; `/api/page-access/<sid>` GET/POST persists the allowlist. The Page Access checklist is built client-side from the live sidebar DOM, grouped by full menu hierarchy, with Control Panel exploded into its own card section.
 
+### Mappings (lookup tables edited in the UI, not in code)
+
+**Never hardcode a new de-para (lookup table) in the code** — the user's standing rule is that anything
+mappable must be registrable through the `/mapping` page. Add an entry to `_MAPPING_DEFS` in
+`apps/pages/routes.py` instead (`key → {label, columns, seed[, file, upgrade]}`) and an item to the
+`TYPES` array in `apps/templates/pages/mapping.html`.
+
+- Files live in `apps/static/data/mappings/` (one JSON per mapping, versioned). `BaseMoeda.json` is there
+  too (moved in `f789d02` — the old `apps/static/data/BaseMoeda.json` path is gone).
+- `_mapping_rows(key)` seeds the file on first read and caches by mtime: **UI edits apply on the next
+  request, no restart** (unlike `routes.py` changes, which do need a restart on the team instance).
+- Seeds must carry **exactly** the values that were hardcoded, so behaviour is identical until someone
+  edits the table.
+- Generic API `/api/mappings/<key>` GET/POST. POST replaces the whole file. Values are **not trimmed** on
+  purpose (trailing space in B3 codes like `'C '` is part of the code).
+- Front-end consumers `fetch` the endpoint and keep the old literals as a fallback, so a failed fetch
+  degrades to the previous behaviour.
+- Optional per-mapping `upgrade` callable converts legacy row formats on read; optional per-column
+  `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
+
+Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `commodities-b3`,
+`bank-name`, `swap-curves`. See HANDOFF §131–§133 for what each one feeds and the traps (e.g. the PTAX
+row in `publisher-ndf` must stay without a match token).
+
 ### Database
 
 Two separate databases are in use:
@@ -107,3 +131,5 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **Athena `getTrades` API** (`apps/pages/athena_api.py`): imports New Deals for NDF/FXO (manual button + in-app schedulers, NDF every 20 min, FXO hourly). Needs the JPM network — off-network the scheduler fails silently (repeated errors demoted to `debug`). `build_session()` sets `trust_env=False` on purpose: inheriting the corporate proxy is what caused `WinError 10061` on the team's Windows box. Kerberos SSO on Windows needs `requests-negotiate-sspi`, which is **commented out** in `requirements.txt` (Windows-only) — install it on the JPM instance.
 - **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
 - **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128.
+- **The team instance runs with the reloader off**: after a `git pull` that touched `routes.py` or a template, Flask must be **restarted** or the old code keeps serving. Several "it's not working" reports traced back to this. Mapping table edits made in the UI are the exception — they apply on the next request.
+- **Inserting a column into the New Deals NDF pages touches 14 places** (header `<th>`, filter-row `<th>`, `COL_TO_JSON_FIELD`, `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, hidden `columnDefs`, `columnLabels`, mass-edit options, `SF_COLS`, `SF_LABEL_TO_FIELD`, `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`). Stale indexes here have caused silent data corruption twice — see HANDOFF §132. The Maker column is reached through the `MAKER_COL_INDEX` constant; keep it that way.

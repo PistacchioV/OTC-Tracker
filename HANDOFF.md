@@ -5681,3 +5681,161 @@ Fixing e o offset do fixing em Adjustment Type.
 - **Linhas já gravadas no cache mantêm o layout antigo** — a correção vale para os deals que virarem
   Success daqui pra frente. Migrar as existentes precisa de script (não feito; pedir informando a
   data de corte).
+
+## 131. Framework de Mapping — de-paras saem do código e viram cadastro em tela
+
+Pedido do usuário: **"não pode ter nenhum mapping hardcoded, tudo que ser possível cadastrar novos
+mappings via tela"**. Nasceu em `bc5aea4` e cresceu em `2b168a9`, `f579d26`, `2feb2bd`, `4e4992c`,
+`f789d02`, `88dc43d`. Leia esta seção antes de acrescentar qualquer de-para novo ao código.
+
+### Como funciona
+
+- **Registro único** `_MAPPING_DEFS` em `routes.py` (~14240): `chave → {label, columns, seed[, file,
+  upgrade]}`. Cada coluna é `{key, label[, type:'select', options[, autofill]]}`.
+- **Arquivos** em `apps/static/data/mappings/` (`_MAPPINGS_DIR`), um JSON por mapping, **versionados**.
+  `file` sobrescreve o caminho (é o caso do `BaseMoeda.json`, que mora na mesma pasta desde `f789d02`).
+- **`_mapping_rows(key)`** cria o arquivo com o SEED na primeira leitura e **cacheia por mtime** — o
+  comportamento não muda até alguém editar, e **edição pela tela vale na requisição seguinte, sem
+  restart** (diferente de mudança em `routes.py`, que exige restart na instância da equipe).
+- **API genérica** `/api/mappings/<key>` GET/POST. O POST **substitui o arquivo inteiro** e coerciona as
+  chaves para as colunas do registro. ⚠️ Valores **não são trimados de propósito**: em código B3 como
+  `'C '` o espaço final faz parte do código.
+- **Tela** `/mapping` (`mapping.html`, item Mapping na seção Data Base do sidenav), layout do Electronic
+  Inventory: rail à esquerda com a lista (array `TYPES`, um item por mapping) e card à direita com Add
+  (modal glass, um campo por coluna), Export (CSV `;` com BOM + copiar tab-separated, sobre as linhas
+  filtradas), filtro por coluna, Show N entries e **paginação** (`f579d26`).
+- **`upgrade`** (opcional): callable que converte linhas de formato antigo na leitura — usado no
+  `interbook-ndf` para arquivos que ficaram no formato `RULE`.
+- **`autofill`** (opcional, numa coluna `select`): nome de OUTRA coluna. Ao escolher o valor, a tela
+  copia para essa outra coluna o que as linhas **já cadastradas** usam para aquele valor (LE `JPM` →
+  Settlement Location `BRAZIL`). Respeita edição manual: só sobrescreve se o destino está vazio ou tem
+  o valor da opção anterior. É genérico — qualquer mapping pode usar.
+
+### Mappings existentes
+
+| chave | label | para quê |
+|---|---|---|
+| `currency-base` | Currency Base | `BaseMoeda.json`: código B3 da moeda + **Athena Code**, **Weak Ccy** e **Inverse Decimals** (absorveu o antigo `currency-codes`) |
+| `interbook-ndf` | Interbook API (NDF) | pares que marcam perna interbook no import da API |
+| `publisher-ndf` | Publisher × B3 (NDF) | feeder → Fonte de Informação / Fonte de Consulta / Tela ou Função de Consulta |
+| `le-accronym` | Legal Entity × Accronym | LE por accronym e por Settlement Location |
+| `commodities-b3` | Commodities × B3 Code | market Athena → código B3, Holiday Calendar e **Fixed Quote** (absorveu `fixed-underlyings`) |
+| `bank-name` | Bank Name | bancos do editor de contraparte (ID COMPE, nome, ISPB, Tax ID) |
+| `swap-curves` | Swap Curves (Athena × B3) | vazio, criado para uso futuro |
+
+### Consumidores no front
+
+Páginas que precisavam dos valores em JS fazem `fetch('/api/mappings/<key>')` e **substituem literais
+que ficam como fallback** (se o fetch falhar, o comportamento é o de antes): `_FIXED_UND` e os mapas
+`MARKET_*`/`MARKET_TO_FX_HOLIDAY` (`otc-fileupload.js`, `deals-processing-table.js`), `CP_BANKS`
+(`reference-data.html`), `_PUB_ROWS` (NDF Other Publisher e FWD Start). O `BaseMoeda.json` é lido por
+`fetch('/static/data/mappings/BaseMoeda.json')` — **o caminho mudou em `f789d02`**, quem copiar código
+antigo vai pegar 404.
+
+## 132. Sessão 2026-07-29 — Interbook por par livre + coluna Other Book (`2feb2bd`)
+
+### Interbook: o par virou configuração, não regra fechada
+
+O mapping `interbook-ndf` tinha as combinações de campos presas na coluna `RULE` (`OTHER BOOK x
+SETTLEMENT LOCATION` / `END COUNTERPARTY x TRADING BOOK`): dava para cadastrar valores novos, mas não um
+**par de campos** novo. Agora cada linha escolhe os dois campos:
+
+- Colunas: `FIELD A` (select com os campos do getTrades) · `VALUE A` · `FIELD B` · `VALUE B` ·
+  `BOTH WAYS`. Opções de campo em `_MAP_INTERBOOK_FIELDS`.
+- `_ndf_interbook_rules()` devolve `(campo A, valor A, campo B, valor B)` com os valores achatados por
+  `_ndf_flat`; `_ndf_is_interbook(norm)` lê o campo **direto do registro normalizado**, então par inédito
+  (ex. Publisher × Quantity Currency) funciona sem tocar em código.
+- **`BOTH WAYS = YES`** casa também com os valores **trocados entre os dois campos** — é o que a regra de
+  End Counterparty × Trading Book precisa, porque a mesma operação chega uma vez por ponta.
+- As 11 linhas antigas foram convertidas; `_interbook_upgrade` converte na leitura arquivo que ainda
+  esteja no formato `RULE`.
+
+### Coluna Other Book nas três páginas
+
+Entre TradingBook e Settlement Location: **vanilla/OP col 26, FWD Start col 28**, alimentada pelo campo
+`Other Book` da API (era a informação que decidia o descarte do interbook e não aparecia na tela).
+Deals importados antes disso ficam com a coluna vazia até o próximo pull.
+
+⚠️ **Inserir coluna nessas páginas mexe em 14 lugares**: `<th>` do header, `<th>` da linha de filtro,
+`COL_TO_JSON_FIELD`, `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS` (i18n do header), `columnDefs`
+(colunas ocultas), `columnLabels`, options do mass edit, `SF_COLS`, `SF_LABEL_TO_FIELD`,
+`extractRowDeal`, `rowDataToNdfDeal` e `rowMaker`.
+
+### Dois índices defasados que apareceram no caminho
+
+- **Maker parado em `e1beb7f`**: as seis referências de célula do Maker apontavam para a coluna 25
+  (27 no FWD), que era o Maker naquele commit. Depois entraram Is BRR Fixed e Settlement Location e a 25
+  passou a ser o **TradingBook** — editar ou aprovar gravava o SID na célula do book, a checagem de
+  quatro olhos comparava SID com nome de book (não bloqueava depois de um reload) e o fallback POST do
+  `rowDataToNdfDeal` persistia esse SID **como TradingBook**. Agora é a constante **`MAKER_COL_INDEX`**
+  ao lado de `STATUS_COL_INDEX`: ao inserir coluna nova, atualize só ela. ⚠️ Deals com `TradingBook` em
+  formato de SID perderam o book original e precisam voltar do Athena.
+- **Settlement Location no smart filter**: estava em `SF_COLS` mas não em `SF_LABEL_TO_FIELD`, então o
+  filtro era descartado antes do POST e a tela não reagia. Ao adicionar coluna ao smart filter, as
+  **duas** listas precisam da entrada.
+
+## 133. Sessão 2026-07-29 — Publisher × B3 e Legal Entity × Accronym (`4e4992c`, `f789d02`, `88dc43d`)
+
+### Publisher (feeder) × B3
+
+O feeder da Athena decidia Fonte de Informação, Fonte de Consulta e Tela/Função de Consulta por
+dicionário hardcoded — um no servidor (send-conecta genérico) e outro **repetido em cada página**.
+
+- Colunas: `PUBLISHER` (nome exato) · `TOKENS` (casa por trecho, separado por vírgula) · `FONTE INFO` ·
+  `FONTE CONSULTA` · `TELA CONSULTA` · `NOTES` (guarda o que eram comentários: BLOOMBERG / REUTERS /
+  OUTROS, que explicam o código da Fonte de Consulta).
+- Ordem de resolução: **nome exato primeiro, token depois** (`_ndf_publisher_row`). A Athena manda o
+  feeder composto (`PTAX|USB|WMR|4` → REUTERS - WMR).
+- ⚠️ **A linha do PTAX fica sem token de propósito**: é isso que mantém o PTAX puro em Fonte de
+  Informação `0` sem arrastar as variantes, que valem `1`. Se alguém preencher `PTAX` em TOKENS, todo
+  feeder composto passa a valer 0 e o arquivo sai errado.
+- Sem linha casada: Fonte de Informação `1` e os dois códigos em branco (era o comportamento antigo).
+  No FWD Start o **Boletim** é derivado (`0` → `3`, senão `1`), não duplicado.
+- **Corrigiu divergência preview × arquivo**: o FWD Start decidia por `indexOf('PTAX')` e o servidor por
+  igualdade, então feeder composto aparecia como Fonte 0 / Boletim 3 na tela e saía 1 / 1 no arquivo.
+
+### Legal Entity × Accronym (grafia com dois C, no nome e no header)
+
+- Colunas: `LE` (**dropdown** — / JPM / MGT / LAWTON, com `autofill` da Settlement Location) ·
+  `ACCRONYM` · `SETTLEMENT LOCATION`.
+- Resolução da LE em `_ndf_deal_from_api`: **linha do accronym vence** (é a específica), senão a da
+  Settlement Location, senão a location crua. O de-para `BRAZIL→JPM / JPMCBB→MGT` que estava no código
+  virou as três linhas do seed.
+- **O "não quero criar 200 linhas de Lawton/Banco/MGT no Reference Data" foi resolvido sem coluna de
+  sufixo**: `_ndf_accronym_variants` tenta o End Counterparty exato e depois **o código sem o último
+  trecho depois do hífen** (`CMBB-LAW` → `CMBB`), exigindo base ≥ 3 caracteres. Então o cadastro segue
+  com **uma linha por contraparte** servindo as três entidades. O mapping fica para o caso que não segue
+  padrão nenhum (código do cliente na entidade que não é base+sufixo).
+- `_generic_nd_reenrich` usa a mesma regra e **normaliza o Acronym gravado** para o do RefData: deal já
+  importado com `CMBB-LAW` se resolve na próxima visita à página, **sem novo pull da API**.
+
+### O caso das pernas internas (End Counterparty = nome de book) — `7e4a7f8`
+
+Sintoma que motivou o ajuste: nas três páginas de NDF, operações com accronym `LM-FXECOMBRR FXC` e
+`LM-FXECOMBRR JPMCBB FXC` apareciam com **LE JPM** (vinha da Settlement Location `BRAZIL`, que para essas
+pernas está errada) e **Missing Counterparty** em SPN/Client/Tax ID — a contraparte é a própria entidade,
+não um cliente, e o accronym que a API manda é nome de book.
+
+- **`_ndf_le_accronyms(le)`** resolve isso sem coluna nova: cadastre para a LE **tanto os códigos que a
+  API manda** (os nomes de book) **quanto o accronym da entidade no Reference Data**. O
+  `_ndf_ref_by_accronym` tenta, em ordem: código exato → accronym base → **qualquer código cadastrado
+  para aquela LE** (o nome da LE entra como último candidato). Assim uma linha de cadastro por entidade
+  atende todos os books dela, e cliente normal nunca é sequestrado pela entidade, porque o exato vem
+  primeiro.
+- Entidades já presentes no `RefData.json`: **`JPMORGANBM`** (BANCO J.P MORGAN S.A, SPN 23779) e
+  **`LAWTON`** (LAWTON MULTIMERCADO EXCLUSIVO, SPN 37862). ⚠️ **Não existe linha do MGT** — enquanto
+  ninguém criar essa contraparte no Reference Data, as pernas de MGT continuam Missing Counterparty (a LE
+  já sai certa). É **uma** linha, não 200.
+- O `Acronym` da tabela passa a mostrar o código do Reference Data (ex. `JPMORGANBM`) quando a linha é
+  encontrada. O nome do book segue visível nas colunas **Trading Book / Other Book**.
+- No re-enriquecimento, quando o accronym gravado identifica a LE pelo mapping, **a LE é corrigida** —
+  as linhas que já estão no cache se acertam na próxima visita à página. Só mexe em linha sem SPN, então
+  operação já enriquecida não é tocada.
+
+### BaseMoeda.json mudou de lugar
+
+Foi para `apps/static/data/mappings/BaseMoeda.json` (`git mv`, histórico preservado). Acompanharam: o
+`file` do registro `currency-base`, os dois `fetch` das páginas de NDF e o `_moeda_num_code` — que
+aproveitou para **ler pelo loader do mapping** em vez de abrir o arquivo na mão: antes cacheava em
+módulo e só pegava edição da tela depois de **reiniciar o servidor**, ou seja, os códigos de moeda dos
+arquivos TER usavam o valor antigo.
