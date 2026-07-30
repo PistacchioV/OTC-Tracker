@@ -94,8 +94,10 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
   `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
 
 Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `commodities-b3`,
-`bank-name`, `swap-curves`. See HANDOFF §131–§133 for what each one feeds and the traps (e.g. the PTAX
-row in `publisher-ndf` must stay without a match token).
+`bank-name`, `fxo-conv-rate`, `swap-curves`. See HANDOFF §131–§133 for what each one feeds and the
+traps (e.g. the PTAX row in `publisher-ndf` must stay without a match token). `fxo-conv-rate` feeds
+the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
+Compra) and ships seeded only with USD → USD PTAX / Venda.
 
 ### Database
 

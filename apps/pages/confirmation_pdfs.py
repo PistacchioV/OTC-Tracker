@@ -8,6 +8,7 @@ Tabela de Referência (Anexo I) em página própria.
 Import é lazy no chamador: se o reportlab não estiver instalado, o save
 retorna erro claro em vez de derrubar o app.
 """
+import re
 from io import BytesIO
 
 from reportlab.lib.pagesizes import A4, landscape
@@ -1108,4 +1109,243 @@ def opcao_pdf(conf, variant='usd'):
     st.append(tbl)
 
     doc.build(st)
+    return buf.getvalue()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# OPÇÃO DE CÂMBIO (FXO) — PDF a partir do PRÓPRIO documento
+# ------------------------------------------------------------------------------
+# As confirmações anteriores têm duas cópias do texto legal: o template Jinja e
+# a réplica em reportlab deste módulo, mantidas em sincronia à mão. Nos dois
+# documentos de FXO isso não serve: eles são o export do Word intocado ("não
+# misture templates nem altere nada, tem que manter 100% do texto original"), e
+# uma segunda cópia digitada seria justamente o que pode divergir.
+#
+# Então aqui o PDF é gerado a partir do HTML do documento já renderizado — o
+# mesmo que vira o .doc. O texto não tem como divergir porque é o mesmo texto;
+# o que este conversor faz é só transpor a estrutura (parágrafos, negrito,
+# tabelas, quebras de página) para flowables do reportlab. O layout fica no
+# padrão dos outros PDFs do módulo, não pixel a pixel igual ao Word — como já
+# acontece com as demais réplicas.
+# ══════════════════════════════════════════════════════════════════════════════
+from html.parser import HTMLParser                                    # noqa: E402
+
+from reportlab.platypus import HRFlowable                             # noqa: E402
+
+_FX_INLINE = {'b': 'b', 'strong': 'b', 'i': 'i', 'em': 'i', 'u': 'u',
+              'sub': 'sub', 'sup': 'super'}
+_FX_DROP = {'style', 'script', 'title', 'head', 'meta', 'link'}
+
+
+class _WordHtmlToFlowables(HTMLParser):
+    """Converte o HTML do documento do Word em flowables do reportlab.
+
+    Só o que o documento realmente usa: parágrafos, ênfases inline, tabelas
+    (as duas de assinatura, sem borda, e o Anexo I com borda), a régua acima
+    da página de assinaturas e as quebras de página do Word
+    (<br style="page-break-before: always">)."""
+
+    def __init__(self, S, width):
+        HTMLParser.__init__(self, convert_charrefs=True)
+        self.S, self.width = S, width
+        self.flow = []
+        self.buf = []          # trechos inline do parágrafo/célula corrente
+        self.drop = 0          # dentro de <style>/<script>/…
+        self.align = None      # alinhamento do <p> corrente
+        self.block = 'p'       # tag do bloco corrente (h2 = título do documento)
+        self.tables = []       # pilha de tabelas (o documento não aninha, mas custa nada)
+        self.open = []         # ênfases abertas, para fechar/reabrir a cada bloco
+
+    # ── coleta ──────────────────────────────────────────────────────────────
+    def _txt(self):
+        """Texto do bloco corrente com as ênfases balanceadas.
+
+        No Word um <i> costuma abrir antes de um <p> e fechar depois dele; o
+        reportlab exige a marcação fechada dentro do parágrafo, então cada
+        bloco fecha o que estiver aberto e o próximo reabre."""
+        s = ''.join(self.buf) + ''.join('</%s>' % t for t in reversed(self.open))
+        self.buf = ['<%s>' % t for t in self.open]
+        s = s.replace('\n', ' ')
+        while '  ' in s:
+            s = s.replace('  ', ' ')
+        s = s.strip()
+        return '' if not re.sub(r'<[^>]*>|&nbsp;|\s|\xa0', '', s) else s
+
+    def _style(self, name):
+        # h1..h6 são os títulos do documento (no Word: centralizados e em
+        # negrito) — no corpo o que manda é o align do parágrafo.
+        if self.block and self.block[0] == 'h' and self.block[1:].isdigit():
+            return self.S['doctitle']
+        if self.align == 'center' and name in ('body', 'sig'):
+            return self.S['centered']
+        return self.S[name]
+
+    def _emit(self, text):
+        """Fecha o bloco corrente: vai para a célula da tabela ou para o corpo."""
+        if self.tables and self.tables[-1]['cell'] is not None:
+            if text:
+                self.tables[-1]['cell'].append(text)
+            return
+        if not text:
+            # parágrafo vazio do Word (<o:p>&nbsp;</o:p>) — vira respiro, não
+            # uma linha em branco de altura cheia
+            if self.flow and not isinstance(self.flow[-1], Spacer):
+                self.flow.append(Spacer(1, 5))
+        else:
+            self.flow.append(Paragraph(text, self._style('body')))
+
+    def _flush(self):
+        text = self._txt()
+        self._emit(text)
+        return text
+
+    # ── HTMLParser ──────────────────────────────────────────────────────────
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in _FX_DROP:
+            self.drop += 1
+            return
+        if self.drop:
+            return
+        if tag in _FX_INLINE:
+            self.open.append(_FX_INLINE[tag])
+            self.buf.append('<%s>' % _FX_INLINE[tag])
+        elif tag == 'br':
+            if 'page-break-before' in (a.get('style') or ''):
+                self._flush()
+                if not self.tables:
+                    self.flow.append(PageBreak())
+            else:
+                self.buf.append('<br/>')
+        elif tag in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            self._flush()
+            style = (a.get('style') or '')
+            self.align = a.get('align') or ('center' if 'text-align: center' in style else None)
+            self.block = tag
+        elif tag == 'table':
+            self._flush()
+            self.tables.append({'rows': [], 'row': None, 'cell': None,
+                                'grid': str(a.get('border') or '0') != '0'})
+        elif tag == 'tr' and self.tables:
+            self.tables[-1]['row'] = []
+        elif tag in ('td', 'th') and self.tables:
+            self.buf, self.open = [], []
+            self.tables[-1]['cell'] = []
+        elif tag == 'div' and 'solid' in (a.get('style') or ''):
+            # a régua que o Word desenha como borda inferior de um <div> vazio
+            self._flush()
+            self.flow.append(HRFlowable(width='100%', thickness=1.2, color=_BLACK,
+                                        spaceBefore=10, spaceAfter=6))
+
+    def handle_endtag(self, tag):
+        if tag in _FX_DROP:
+            self.drop = max(0, self.drop - 1)
+            return
+        if self.drop:
+            return
+        if tag in _FX_INLINE:
+            name = _FX_INLINE[tag]
+            if name in self.open:                 # o Word fecha o que não abriu
+                self.open.reverse()
+                self.open.remove(name)
+                self.open.reverse()
+                self.buf.append('</%s>' % name)
+        elif tag in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            self._flush()
+            self.align, self.block = None, 'p'
+        elif tag in ('td', 'th') and self.tables:
+            t = self.tables[-1]
+            self._flush()
+            # a célula guarda TEXTO: o tamanho da fonte depende de quantas
+            # colunas a tabela tem, e isso só se sabe no </table>
+            cell = [c for c in (t['cell'] or []) if c]
+            t['cell'] = None
+            if t['row'] is None:
+                t['row'] = []
+            t['row'].append(cell)
+        elif tag == 'tr' and self.tables:
+            t = self.tables[-1]
+            if t['row']:
+                t['rows'].append(t['row'])
+            t['row'] = None
+        elif tag == 'table' and self.tables:
+            self._table(self.tables.pop())
+
+    def handle_data(self, data):
+        if self.drop or not data:
+            return
+        self.buf.append(_e(data))
+
+    # ── tabelas ─────────────────────────────────────────────────────────────
+    def _table(self, t):
+        raw = [r for r in t['rows'] if r]
+        if not raw:
+            return
+        ncol = max(len(r) for r in raw)
+        # Anexo I do Asian tem 16 colunas em A4 paisagem: a 7,5pt do estilo
+        # padrão um deal name ('D5XO-S7U6K') não cabe na célula e quebra no
+        # meio. A fonte acompanha a largura disponível, com piso de 5,5pt.
+        if t['grid'] and ncol > 12:
+            size = max(5.5, 7.5 * 12.0 / ncol)
+            style = ParagraphStyle('tdn', parent=self.S['tdc'],
+                                   fontSize=size, leading=size + 1.5)
+        else:
+            style = self.S['tdc'] if t['grid'] else self.S['sig']
+        rows = [[[Paragraph(c, style) for c in cell] or Paragraph('', style)
+                 for cell in r] for r in raw]
+        rows = [r + [''] * (ncol - len(r)) for r in rows]
+        if t['grid']:
+            # Anexo I: primeira coluna estreita (o índice i), o resto igual.
+            unit = self.width / (ncol - 0.6)
+            widths = [unit * 0.4] + [unit] * (ncol - 1)
+            cmds = [('GRID', (0, 0), (-1, -1), 0.5, _BLACK),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 3),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 1.5),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 1.5)]
+            tbl = Table(rows, colWidths=widths, repeatRows=1)
+        else:
+            widths = [self.width / float(ncol)] * ncol
+            cmds = [('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6)]
+            tbl = Table(rows, colWidths=widths)
+        tbl.setStyle(TableStyle(cmds))
+        target = (self.tables[-1]['cell'] if (self.tables and self.tables[-1]['cell'] is not None)
+                  else None)
+        if target is None:
+            self.flow.append(tbl)
+
+
+def opcao_fx_pdf(conf, variant='vanilla', doc_html=None):
+    """Bytes do PDF da confirmação de Opção de Câmbio (FXO).
+
+    `doc_html` é o documento já renderizado (o mesmo HTML que vira o .doc) —
+    é dele que sai TODO o texto, para não existir uma segunda transcrição do
+    documento do Word. `variant` ('vanilla' | 'asian') só escolhe o template
+    quando o chamador não manda o HTML pronto, e serve de rótulo do arquivo."""
+    if not doc_html:
+        raise ValueError('opcao_fx_pdf: doc_html é obrigatório (HTML do documento renderizado)')
+    S = _styles()
+    S['centered'] = ParagraphStyle('centered', parent=S['body'], alignment=1)
+    S['doctitle'] = ParagraphStyle('doctitle', parent=S['body'], fontName='Times-Bold',
+                                   fontSize=12, leading=15, alignment=1,
+                                   spaceBefore=6, spaceAfter=10)
+    S['tdc'] = ParagraphStyle('tdc', parent=S['td'], alignment=1)
+
+    buf = BytesIO()
+    doc = BaseDocTemplate(buf, pagesize=landscape(A4),
+                          leftMargin=18 * mm, rightMargin=18 * mm,
+                          topMargin=15 * mm, bottomMargin=15 * mm,
+                          title='Confirmação de Operações de Derivativos')
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='f')
+    doc.addPageTemplates([PageTemplate(id='p', frames=[frame])])
+
+    body = doc_html[doc_html.find('<body'):] or doc_html
+    parser = _WordHtmlToFlowables(S, doc.width)
+    parser.feed(body)
+    parser.close()
+    parser._flush()
+    doc.build(parser.flow or [Paragraph('', S['body'])])
     return buf.getvalue()

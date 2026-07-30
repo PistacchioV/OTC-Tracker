@@ -15205,6 +15205,26 @@ _MAPPING_DEFS = {
             {'ID': '755', 'NAME': 'BOFA MERRILL LYNCH BM S/A',  'ISPB': '62073200', 'TAX ID': '62.073.200/0001-21'},
         ],
     },
+    # Moeda Base × Taxa de Conversão das confirmações de Opção de Câmbio
+    # (Anexo I do documento Asian, colunas "Taxa de Conversão" e "Tipo de Taxa
+    # de Conversão"). O Anexo II define uma taxa por moeda — "USD PTAX" é a de
+    # venda do dólar pelo Bacen, "ARS MAE" a média do mercado eletrônico
+    # argentino, e há moeda com mais de uma taxa possível (ARS MAE × ARS WMCO),
+    # o que faz disto cadastro e não constante. Nasce só com o USD, que é a
+    # linha do documento-modelo; moeda sem linha cai como aviso no painel, em
+    # vez de sair em branco na confirmação sem ninguém ver.
+    'fxo-conv-rate': {
+        'label': 'FXO Conversion Rate',
+        'columns': [
+            {'key': 'MOEDA BASE', 'label': 'Base Currency'},
+            {'key': 'TAXA DE CONVERSAO', 'label': 'Conversion Rate'},
+            {'key': 'TIPO', 'label': 'Rate Type', 'type': 'select',
+             'options': ['', 'Venda', 'Compra']},
+        ],
+        'seed': [
+            {'MOEDA BASE': 'USD', 'TAXA DE CONVERSAO': 'USD PTAX', 'TIPO': 'Venda'},
+        ],
+    },
     # Curvas de swap Athena × B3 — cadastro pronto para os fluxos de swap; nasce
     # vazio porque não havia de-para hardcoded no código.
     'swap-curves': {
@@ -20301,7 +20321,8 @@ def _conf_strike_adj(deal, subj):
     return strike
 
 
-def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
+def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
+                  ccy_field='StrikeCurrency', warn_no_spot=True):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
 
     valor            = Σ notional × strike ajustado × Spot FXRate
@@ -20310,7 +20331,11 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
                        (Mondelez: DealName_Mercadoria); com várias,
                        <prefixo>_YYYYMMDD_Mercadoria.
     Opções de Commodities usam o mesmo contrato com tipo='Option' e
-    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF."""
+    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF.
+    Opções de Câmbio (FXO) usam prefixo='Opt_FXO' e leem a moeda do
+    ccy_field='UnderlyingAsset'; nelas o strike já é a cotação em BRL, então
+    não há Spot FXRate para buscar e warn_no_spot=False cala o aviso que só
+    faria sentido em commodities."""
     warnings = []
     first = picked[0][0]
     trade_dt = _parse_date_any(first.get('TradeDate')) or ref
@@ -20324,7 +20349,7 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
         if 'MONDELEZ' in str(first.get('Client') or '').upper():
             numero = numero + '_' + merc_tag
 
-    ccy = str(first.get('StrikeCurrency') or '').strip().upper()
+    ccy = str(first.get(ccy_field) or '').strip().upper()
     # Strike em Reais não tem perna estrangeira: moedaEstrangeira e
     # valorEstrangeiro saem VAZIOS (preenchê-los com 790/valor em BRL declararia
     # uma operação em moeda estrangeira que não existe).
@@ -20348,10 +20373,8 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm'):
         valor_estr += leg
         spot = _conf_to_float(deal.get('SpotFXRate'))
         if spot is None:
-            if ccy in ('BRL', 'BRR'):
-                spot = 1.0
-            else:
-                spot = 1.0
+            spot = 1.0
+            if warn_no_spot and ccy not in ('BRL', 'BRR'):
                 warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao estrangeiro.'
                                 .format(deal.get('Deal')))
         valor += leg * spot
@@ -21031,6 +21054,411 @@ def api_conf_optcomm_validate():
 
 
 # ==============================================================================
+# NEW DEALS — CONFIRMATIONS (FX Options · Opção de Câmbio)
+# Mesmo fluxo dos outros produtos (segregação contraparte × moeda base ×
+# família, ciclo New → Generated → Success, Word+PDF+XML no Inventory). O que
+# muda aqui:
+#   • a família vem do TradeType da operação (VANILLA / ASIAN) e não da moeda
+#     do strike — são dois documentos diferentes, não duas variantes do mesmo;
+#   • no Vanilla a Data de Exercício é a Last Fixing Date; no Asian ela é "Não
+#     Aplicável" e quem aparece é o par Data Inicial / Data Final de
+#     Verificação (First e Last Fixing Date);
+#   • a "mercadoria" da segregação é a Moeda Base (Underlying Asset) — opção de
+#     câmbio não tem mercadoria;
+#   • o XML sai com tipoOperacao Option, prefixo Opt_FXO e a moeda estrangeira
+#     lida do Underlying Asset.
+# ==============================================================================
+
+_CONF_FXO_FAMILY_TEMPLATES = {
+    'vanilla': ('confirmations/option-fx-vanilla-strike-me.html', '/confirmation/opt-fxo/vanilla'),
+    'asian':   ('confirmations/option-fx-asian-strike-me.html',   '/confirmation/opt-fxo/asian'),
+}
+
+
+def _conf_load_optfxo(ref):
+    """Deals do day-file de Opção de Câmbio (FXO) da reference date."""
+    fname = ref.strftime('%Y%m%d') + '_optfxo.json'
+    fp = os.path.join(OPT_FXO_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
+    if not os.path.isfile(fp):
+        return []
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+    except Exception:
+        log.warning('[conf] cannot read %s', fp)
+        return []
+
+
+def _conf_fxo_family(deal, subj):
+    """Família do template de uma opção de câmbio: o Trade Type da operação.
+    Sem First/Last Fixing Date o import já classifica como VANILLA, então o
+    default aqui vale para o deal digitado à mão sem o campo."""
+    return 'asian' if str(deal.get('TradeType') or '').strip().upper() == 'ASIAN' else 'vanilla'
+
+
+def _conf_optfxo_groups(ref):
+    return _conf_segregate(_conf_load_optfxo(ref), _conf_fxo_family)
+
+
+def _conf_pick_optfxo(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_optfxo(ref), acr, merc, family,
+                               _conf_fxo_family)
+
+
+def _conf_fxo_strike(v):
+    """Preço de Exercício: no mínimo 4 casas, mais do que isso quando a taxa
+    tem — o cache grava sempre 6 ('{:.6f}'), então zero à direita que não
+    significa nada sai fora antes do piso de 4 casas."""
+    n = _conf_to_float(v)
+    if n is None:
+        return str(v or '').strip()
+    dec = len(('{:.8f}'.format(abs(n)).rstrip('0').split('.') + [''])[1])
+    return _conf_fmt_num(n, dec=max(4, dec))
+
+
+def _conf_fxo_conv_rate(moeda):
+    """(Taxa de Conversão, Tipo) da Moeda Base pelo mapping FXO Conversion Rate.
+
+    O Anexo II do documento define uma taxa por moeda ("USD PTAX" é a de venda
+    do dólar, "ARS MAE" a do peso etc.), então isto é de-para de cadastro, não
+    constante de código: moeda nova entra pela tela /mapping."""
+    key = str(moeda or '').strip().upper()
+    for row in _mapping_rows('fxo-conv-rate'):
+        if str(row.get('MOEDA BASE') or '').strip().upper() == key:
+            return (str(row.get('TAXA DE CONVERSAO') or '').strip(),
+                    str(row.get('TIPO') or '').strip())
+    return '', ''
+
+
+@blueprint.route('/api/new-deals/opt-fxo/confirmations')
+def api_optfxo_confirmations():
+    """Grupos de confirmação de Opção de Câmbio da reference date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    groups, _statuses, _total = _conf_optfxo_groups(ref)
+    state = _conf_state_load(ref, 'opt-fxo')
+    out = []
+    for g in groups:
+        available = g['family'] in _CONF_FXO_FAMILY_TEMPLATES
+        entry = state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        status = entry.get('status') or 'New'
+        qs = ('date=' + ref.strftime('%Y-%m-%d')
+              + '&acronym=' + quote(g['acronym'])
+              + '&mercadoria=' + quote(g['mercadoria']))
+        url = _CONF_FXO_FAMILY_TEMPLATES[g['family']][1] + '?' + qs if available else None
+        validate_url = ('/confirmation/opt-fxo/validate?' + qs + '&family=' + quote(g['family'])) \
+            if status in ('Generated', 'Success') else None
+        out.append({
+            'acronym': g['acronym'], 'client': g['client'],
+            'mercadoria': g['mercadoria'], 'family': g['family'],
+            'count': g['count'], 'eligible': g['eligible'],
+            'available': available, 'url': url,
+            'status': status, 'validate_url': validate_url,
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
+
+
+def _conf_fxo_generation_page(family):
+    """Renderiza a confirmação de Opção de Câmbio pré-preenchida para um grupo
+    contraparte × moeda base da reference date."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    picked = _conf_pick_optfxo(ref, acr, merc, family)
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+
+    first = picked[0][0]
+    rows, warnings, sem_taxa = [], [], set()
+    for deal, _subj in picked:
+        moeda = str(deal.get('UnderlyingAsset') or '').strip()
+        premium = _conf_to_float(str(deal.get('Premium') or '').replace('-', ''))
+        direction = str(deal.get('Direction') or '').strip().upper()
+        instrument = str(deal.get('Instrument') or '').upper()
+        row = {
+            'num':       str(deal.get('Deal') or '').strip(),
+            # Option (Call) = a contraparte compra; Option (Put) = vende.
+            'tipo':      'Venda' if 'PUT' in instrument else 'Compra',
+            'forma':     'Europeia',
+            'comprador': 'Parte B' if direction.startswith('S') else 'Parte A',
+            'moedaBase': moeda,
+            'valorBase': _conf_fmt_num(str(deal.get('TotalNotional') or '').replace('-', ''), dec=2),
+            'premio':    'R$ ' + _conf_fmt_num(premium, dec=2) if premium is not None
+                         else str(deal.get('Premium') or '').strip() or 'Não Aplicável',
+            'dtPremio':  _conf_fmt_date(deal.get('SpotDate')) or 'Não Aplicável',
+            'strike':    _conf_fxo_strike(deal.get('Strike')),
+            'dtVenc':    _conf_fmt_date(deal.get('SettlementDate')),
+        }
+        if family == 'asian':
+            # Asiática: a janela de verificação é o par First/Last Fixing Date
+            # e a Data de Exercício não se aplica (é a Data Final, por definição
+            # da cláusula 4.2.c — por isso a coluna sai "Não Aplicável").
+            row['dtIni'] = _conf_fmt_date(deal.get('FixingStartDate'))
+            row['dtFim'] = _conf_fmt_date(deal.get('FixingEndDate'))
+            row['dtExerc'] = 'Não Aplicável'
+            taxa, tipo_taxa = _conf_fxo_conv_rate(moeda)
+            row['taxaConv'] = taxa
+            row['tipoTaxaConv'] = tipo_taxa
+            if not taxa:
+                sem_taxa.add(moeda or '(sem moeda)')
+        else:
+            row['dtExerc'] = _conf_fmt_date(deal.get('FixingEndDate'))
+        rows.append(row)
+    if sem_taxa:
+        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping FXO Conversion Rate) '
+                        '— preencha as colunas no painel.'.format(', '.join(sorted(sem_taxa))))
+
+    cgd_txt = _conf_cgd_lookup(first)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+
+    trade_date = first.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        'cgd_date':     cgd_txt,
+        'parteb_nome':  str(first.get('Client') or '').strip(),
+        'parteb_cnpj':  _conf_fmt_cnpj(first.get('TaxID')),
+        'data_neg':     _conf_fmt_date(trade_date),
+        'data_extenso': _conf_date_extenso(trade_date),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'rows':         rows,
+        'warnings':     warnings,
+    }
+    return render_template(_CONF_FXO_FAMILY_TEMPLATES[family][0], conf=conf)
+
+
+@blueprint.route('/confirmation/opt-fxo/vanilla')
+def confirmation_optfxo_vanilla():
+    return _conf_fxo_generation_page('vanilla')
+
+
+@blueprint.route('/confirmation/opt-fxo/asian')
+def confirmation_optfxo_asian():
+    return _conf_fxo_generation_page('asian')
+
+
+@blueprint.route('/api/confirmation/opt-fxo/save', methods=['POST'])
+def api_conf_optfxo_save():
+    """Salva a confirmação de Opção de Câmbio (Word + PDF + XML) no Electronic
+    Inventory e grava o numeroContrato na coluna FepWeb ID."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'vanilla').strip()
+    if family not in _CONF_FXO_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
+    if not rows:
+        return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+    # CGD é cláusula do documento ("ambos firmados entre as Partes em <data>"):
+    # sem ela a confirmação sai com a lacuna em branco e vai assim para a
+    # contraparte. Trava no servidor, não só no painel.
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
+
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
+        'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
+        'data_neg':     str(fields.get('data_neg') or '').strip(),
+        'data_extenso': str(fields.get('data_extenso') or '').strip(),
+        'acronym':      acr,
+        'mercadoria':   merc,
+        'rows':         rows,
+        'warnings':     [],
+    }
+
+    # O documento sai PRIMEIRO: nas confirmações de FXO o PDF é gerado a partir
+    # deste mesmo HTML (ver opcao_fx_pdf), e não de uma segunda transcrição do
+    # texto do Word — assim os dois arquivos não têm como divergir.
+    doc_html = render_template(_CONF_FXO_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+    try:
+        from apps.pages.confirmation_pdfs import opcao_fx_pdf
+        pdf_bytes = opcao_fx_pdf(conf, variant=family, doc_html=doc_html)
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
+    # Pasta da contraparte no Electronic Inventory (mesma árvore do upload
+    # manual) — ver api_conf_ndfcomm_save.
+    client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), 'FX Options')
+    if len(rows) == 1 and str(rows[0].get('num') or '').strip():
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
+            acr, merc, str(rows[0]['num']).strip())
+    else:
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS - {}'.format(
+            acr, merc, ref.strftime('%Y%m%d'))
+    base = _ei_sanitize(base)
+
+    try:
+        os.makedirs(_ei_long_path(dir_path), exist_ok=True)
+        candidate, n = base, 0
+        while os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(_ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(_ei_long_path(pdf_path), 'wb') as fh:
+            fh.write(pdf_bytes)
+
+        # XML do contrato: tipoOperacao Option, prefixo Opt_FXO e a moeda
+        # estrangeira do Underlying Asset (na opção de câmbio é ele que diz a
+        # moeda da operação; StrikeCurrency guarda a mesma coisa, mas quem
+        # manda no documento e no registro é o Underlying).
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        picked = _conf_pick_optfxo(ref, acr, merc, family)
+        if picked:
+            numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
+                picked, merc, ref, tipo='Option', prefixo='Opt_FXO',
+                ccy_field='UnderlyingAsset', warn_no_spot=False)
+            # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
+            # ficam juntos na listagem da pasta.
+            xbase = candidate
+            xcand, xn = xbase, 0
+            while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+                xn += 1
+                xcand = '{} ({})'.format(xbase, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(_ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            fep_updated = _conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+                                              numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
+    except Exception as exc:
+        log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    ref_state = _parse_date_any(payload.get('date')) or ref
+    with _cache_lock:
+        state = _conf_state_load(ref_state, 'opt-fxo')
+        state[_conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _conf_state_save(ref_state, state, 'opt-fxo')
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Saved', 'Opt FXO',
+                         '{} · {} ({} op{})'.format(acr, merc, len(rows),
+                                                    '' if len(rows) == 1 else 's'))
+    validate_url = ('/confirmation/opt-fxo/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
+                    + '&family=' + quote(family))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato,
+                    'fepweb_updated': fep_updated,
+                    'warnings': xml_warns,
+                    'validate_url': validate_url})
+
+
+@blueprint.route('/api/confirmation/opt-fxo/pdf')
+def api_conf_optfxo_pdf():
+    """Preview inline do PDF salvo da confirmação de Opção de Câmbio."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'opt-fxo')
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+
+@blueprint.route('/confirmation/opt-fxo/validate')
+def confirmation_optfxo_validate():
+    """Janela de validação da confirmação de Opção de Câmbio (checklist + preview)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'opt-fxo')
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'vanilla').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + quote(acr)
+          + '&mercadoria=' + quote(merc) + '&family=' + quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/opt-fxo',
+                           pdf_url='/api/confirmation/opt-fxo/pdf?' + qs)
+
+
+@blueprint.route('/api/confirmation/opt-fxo/validate', methods=['POST'])
+def api_conf_optfxo_validate():
+    """Marca a confirmação de Opção de Câmbio como Success após o checklist."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _conf_state_entry_or_404(payload, 'opt-fxo')
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _cache_lock:
+        state = _conf_state_load(ref, 'opt-fxo')
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _conf_state_save(ref, state, 'opt-fxo')
+    acr, merc = (key.split('|') + ['', ''])[:2]
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Validated', 'Opt FXO', '{} · {}'.format(acr, merc))
+    return jsonify({'success': True, 'status': 'Success'})
+
+
+# ==============================================================================
 # NEW DEALS — MONITOR
 # Visão por produto × status das operações importadas na reference date. Os
 # caches de New Deals já são particionados por dia (YYYYMMDD_*.json), então o
@@ -21167,8 +21595,8 @@ def api_new_deals_monitor():
     # Zona Confirmations: segregação contraparte × mercadoria (pontas
     # banco/lawton fora). O ciclo aqui é o DA CONFIRMAÇÃO (New → Generated →
     # Success), não o status dos deals: cada grupo segregado conta 1 no chip do
-    # seu estágio. NDF Commodities e Commodities Options têm o fluxo completo;
-    # FX Options ainda só conta a segregação (template de confirmação vem depois).
+    # seu estágio. NDF Commodities, Commodities Options e FX Options têm o
+    # fluxo completo; os demais produtos só contam a segregação.
     conf_groups, _deal_statuses, _conf_deal_total = _conf_ndfcomm_groups(ref)
     conf_state = _conf_state_load(ref)
     conf_statuses = Counter()
@@ -21241,9 +21669,21 @@ def api_new_deals_monitor():
         'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
                     'family': g['family'], 'count': g['count']} for g in opt_groups],
     })
-    conf_cards.append(_conf_option_card(
-        'conf-opt-fxo', 'FX Options', '/new_deals-opt-fxo',
-        OPT_FXO_CACHE_DIR, '_optfxo.json', False))
+    # FX Options: ciclo próprio da confirmação também (Vanilla × Asian), igual
+    # ao Commodities Options — a segregação aqui é por contraparte × moeda base.
+    fxo_groups, _fxo_deal_statuses, _fxo_total = _conf_optfxo_groups(ref)
+    fxo_state = _conf_state_load(ref, 'opt-fxo')
+    fxo_statuses = Counter()
+    for g in fxo_groups:
+        entry = fxo_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        fxo_statuses[entry.get('status') or 'New'] += 1
+    conf_cards.append({
+        'key': 'conf-opt-fxo', 'label': 'FX Options',
+        'url': '/new_deals-opt-fxo', 'soon': False,
+        'total': len(fxo_groups), 'statuses': dict(fxo_statuses),
+        'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
+                    'family': g['family'], 'count': g['count']} for g in fxo_groups],
+    })
 
     return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'cards': cards, 'conf_cards': conf_cards})
