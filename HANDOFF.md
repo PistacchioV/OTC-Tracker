@@ -6798,3 +6798,60 @@ quando não há nada pendente (decisão da §141).
 **Teste**: `check_tz_conecta.py` (scratchpad) confere o offset e o tipo de retorno de `_br_now()`,
 recupera dois slots perdidos num start às 23h, garante que um segundo restart no mesmo dia **não**
 repete o e-mail, que slot futuro não dispara, e cobre o campo de fixing da §150.
+
+---
+
+## §152 — Mapping do arquivo de retorno pegava só o que estava na tela
+
+**Sintoma** (30/07/2026): o botão **Mapping B3** mapeava apenas parte das operações do dia.
+
+**Causa-raiz.** A lista de deals era montada varrendo `table.rows({search:'none', page:'all'})` —
+e, apesar do `search:'none'`, a **tabela pode ser o resultado de uma busca no servidor**
+(`/cache/search`, as fichas de filtro da barra). Ou seja: `page:'all'` traz todas as linhas
+*carregadas*, não todas as do dia. Filtrou antes de mapear → o que ficou de fora não foi mapeado, sem
+aviso nenhum.
+
+**Correção.** O cliente não monta mais a lista: manda só a **Reference Date** (`ref_date`, o campo
+`#apiRefDate`), e o servidor monta a partir do **arquivo do dia** em
+`_generic_nd_mapping_candidates()`. É o servidor que grava o B3 ID no cache, então operação que não
+está na tela também é atualizada — a tela só não redesenha o que não está renderizado. O parâmetro
+`deals` continua aceito para chamadas com lista explícita.
+
+**Qualquer status no Vanilla.** No Vanilla o registro na B3 é feito por outra ferramenta, então o
+mapping tem de olhar **todos** os status, e não só New/Sent/Error. As outras páginas mantêm o filtro
+antigo (o `product != 'vanilla'` em `_generic_nd_mapping_candidates`). Ficam sempre de fora:
+
+- `Canceled` — cancelado na API, fora do fluxo;
+- `Success` **com B3 ID** — não há o que mapear, e uma segunda passada só poderia perder informação.
+
+**A armadilha que isso criou, e a trava.** A regra antiga era "não achou no retorno → `Error`".
+Varrendo o dia inteiro em qualquer status, isso derrubaria para `Error` operações que **nem foram
+registradas ainda** (Approved/Pending) — e um `Success` sem B3 ID. Só vira `Error` quem estava num
+status que espera retorno (`_ND_MAPPING_ERRORABLE = {New, Sent, Error}`); os demais ficam como estão,
+e sem `updates` não há escrita no arquivo.
+
+**Contagem.** Só entra em `results` quem **mudou** — senão o "N deal(s) mapped" da notificação e os
+contadores da tela passariam a contar o dia inteiro.
+
+**Vale para as três páginas do endpoint genérico** (Vanilla, Other Publisher, FWD Start). Opt FXO,
+Opt Commodities e NDF Commodities têm endpoints próprios e **continuam montando a lista pela tabela** —
+mesma limitação, ainda não corrigida.
+
+**Teste**: `check_mapping_b3.py` (scratchpad) cria um dia com um deal por status e um arquivo de
+retorno de verdade (com `TER` nas posições 57-59), e confere: quem entra na varredura, quem é
+promovido a Success com B3 ID, que o `Pending` sem retorno não vira Error, que o `Success` e o
+`Canceled` ficam intocados, e que a contagem só considera quem mudou.
+
+---
+
+## §153 — Badge da coluna Status sempre centralizado
+
+O conteúdo da célula de Status é reescrito por vários caminhos (rowMaker, mapping B3, aprovação na
+coluna Actions, edição em massa) e nem todos embrulhavam o `<span class="badge">` do mesmo jeito — a
+coluna ficava com badge ora à esquerda, ora no meio, dependendo de quem escreveu por último.
+
+Centralizar por **coluna** (`columnDefs` com `targets: [2]`, `className: 'text-center'`) independe de
+quem escreveu a célula, e é por isso que a correção é ali e não em cada ponto de escrita. `targets: 2`
+vale para as 6 páginas — `STATUS_COL_INDEX` é 2 em todas. Usar `columnDefs` em vez de CSS com
+`nth-child` também é o que sobrevive a coluna escondida: o DataTables tira a coluna oculta do DOM e os
+índices de `nth-child` andariam.

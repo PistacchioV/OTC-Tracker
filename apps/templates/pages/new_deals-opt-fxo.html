@@ -1457,6 +1457,16 @@ $(document).ready(function() {
         },
         columnDefs: [
             {
+                // Badge de status SEMPRE centralizado. O conteúdo da célula é
+                // reescrito por vários caminhos (rowMaker, mapping B3, aprovação,
+                // edição em massa) e nem todos embrulhavam o <span class="badge">
+                // do mesmo jeito — o resultado era a coluna com badge ora à
+                // esquerda, ora no meio, dependendo de quem escreveu por último.
+                // Centralizar na COLUNA independe de quem escreveu a célula.
+                targets: [2],
+                className: 'text-center'
+            },
+            {
                 orderable: false,
                 targets: [0, 1],
                 width: "50px"
