@@ -57,6 +57,156 @@ def _sub(txt):
     return txt.replace('[i]', '<sub>i</sub>')
 
 
+# ── Anexo II (só Palm Oil) — moedas e taxas de câmbio ────────────────────────
+# Texto do TERMO - PALM OIL.doc. O mesmo conteúdo está no template Jinja: os
+# dois documentos são réplicas independentes (é o padrão deste módulo desde as
+# primeiras confirmações), então mexer no texto legal exige mexer nos dois.
+_PALM_MOEDAS = [
+    ('ARS', 'o Peso Argentino ou seu sucessor legal'),
+    ('AUD', 'o Dólar Australiano ou seu sucessor legal'),
+    ('BRL', 'o Real ou seu sucessor legal'),
+    ('CLP', 'o Peso Chileno ou seu sucessor legal'),
+    ('CAD', 'o Dólar Canadense ou seu sucessor legal'),
+    ('CHF', 'o Franco Suíço ou seu sucessor legal'),
+    ('CNY', 'o Yuan Renminbi ou seu sucessor legal'),
+    ('CNH', 'o Yuan Renminbi de Hong Kong ou seu sucessor legal'),
+    ('COP', 'o Peso Colombiano ou seu sucessor legal'),
+    ('DKK', 'a Coroa Dinamarquesa ou sua sucessora legal'),
+    ('EUR', 'o Euro ou seu sucessor legal'),
+    ('GBP', 'a Libra Esterlina ou sua sucessora legal'),
+    ('INR', 'a Rúpia Indiana ou sua sucessora legal'),
+    ('JPY', 'o Yen Japonês ou seu sucessor legal'),
+    ('MXN', 'o Peso Mexicano ou seu sucessor legal'),
+    ('MYR', 'o Ringgit Malaio ou seu sucessor legal'),
+    ('NOK', 'a Coroa Norueguesa ou sua sucessora legal'),
+    ('PEN', 'o Novo Sol ou seu sucessor legal'),
+    ('SEK', 'o Coroa Suéca ou seu sucessor legal'),
+    ('USD', 'o Dólar norte-americano ou seu sucessor legal'),
+]
+
+_PALM_PTAX = ('significa a taxa de câmbio de compra ou de venda do {c}, conforme o Tipo de Taxa de '
+              'Conversão[i], expressa pela quantidade de BRL por cada {c}, conforme divulgada pelo '
+              'Banco Central do Brasil em sua página da internet na respectiva Data de Verificação.')
+_PALM_WMCO = ('significa a taxa de câmbio, expressa por uma quantidade de {c} por cada unidade de '
+              'USD, apurada conforme metodologia de apuração das taxas spot de fechamento do '
+              'WM/Reuters, com publicação diária, às 16h do horário de Londres, a ser obtida '
+              'através de consulta ao sistema de informação Bloomberg na página "{p} WMCO CRNCY '
+              '&lt;GO&gt;" na respectiva Data de Verificação.')
+
+_PALM_TAXAS = [
+    ('USD PTAX', _PALM_PTAX.format(c='USD')),
+    ('ARS MAE', 'significa a taxa de câmbio, expressa em uma quantidade de ARS por cada unidade de '
+     'USD, determinada a partir da média das negociações realizadas no mercado eletrônico para '
+     'liquidação no mesmo dia, conforme divulgada pela Mercado Abierto Electronico ("MAE") por '
+     'volta das 15:00 horas de Buenos Aires, e que pode ser obtida na página da internet da '
+     'FOREX-MAE (www.mae.com.ar) como a taxa "PPN" ("Promedio Ponderado Noticiado") na respectiva '
+     'Data de Verificação.'),
+    ('AUD PTAX', _PALM_PTAX.format(c='AUD')),
+    ('ARS WMCO', _PALM_WMCO.format(c='ARS', p='ARS')),
+    ('CAD PTAX', _PALM_PTAX.format(c='CAD')),
+    ('CHF PTAX', _PALM_PTAX.format(c='CHF')),
+    ('CNY USD', 'significa a taxa de câmbio, expressa por uma quantidade de CNY por cada unidade '
+     'de USD, com publicação diária no sistema de informação Bloomberg na tela "CNYMUSD Index '
+     '&lt;GO&gt;" às 9h15 do horário de Beijing na respectiva Data de Verificação.'),
+    ('CNY PTAX', _PALM_PTAX.format(c='CNY')),
+    ('CNH BBG', 'significa a taxa de câmbio da CNH, expressa pela quantidade de CNH por cada USD, '
+     'conforme divulgada pela Bloomberg na página "CNH L160 Curncy" na respectiva Data de '
+     'Verificação.'),
+    # A página citada na CNH WMCO é a "PEN WMCO CRNCY" no documento de origem —
+    # está assim no .doc, não é erro de transcrição.
+    ('CNH WMCO', _PALM_WMCO.format(c='CNH', p='PEN')),
+    ('EURO BBG L160', 'significa a taxa de câmbio do Euro, expressa pela quantidade de USD por '
+     'cada EUR, conforme divulgada pela Bloomberg na página "EUR L160 Curncy" às 16 horas de '
+     'Londres na respectiva Data de Verificação.'),
+    ('EURO PTAX', _PALM_PTAX.format(c='EUR')),
+    ('EURO WMCO', 'significa a taxa de câmbio, expressa por uma quantidade de USD por cada unidade '
+     'de EUR, apurada conforme metodologia de apuração das taxas spot de fechamento do WM/Reuters, '
+     'com publicação diária, às 16h do horário de Londres, a ser obtida através de consulta ao '
+     'sistema de informação Bloomberg na página "EUR WMCO CRNCY &lt;GO&gt;" na respectiva Data de '
+     'Verificação.'),
+    ('INR USD', 'significa a taxa de câmbio, expressa por uma quantidade de INR por cada unidade '
+     'de USD, divulgada pelo Reserve Bank of India (www.rbi.org.in) por volta das 13:30 horário '
+     'local na respectiva Data de Verificação.'),
+    ('NOK PTAX', _PALM_PTAX.format(c='NOK')),
+    ('USD EUR', 'significa a taxa de câmbio entre USD e EUR, expressa pela quantidade de USD por '
+     'cada EUR, apurada utilizando a metodologia do Banco Central Europeu e publicada através do '
+     'website www.ecb.int/stats/exchange/eurofxref/html/index.en.html e no sistema de informação '
+     'Bloomberg na página "EUCFUSD INDEX &lt;GO&gt;" às 15:00 CET (Central European Time) na '
+     'respectiva Data de Verificação.'),
+    ('GBP PTAX', _PALM_PTAX.format(c='GBP')),
+    ('JPY PTAX', _PALM_PTAX.format(c='JPY')),
+    ('SEK PTAX', _PALM_PTAX.format(c='SEK')),
+    ('CLP OBSERVADO', 'significa a taxa de câmbio, expressa por uma quantidade de CLP por cada '
+     'unidade de USD, determinada a partir da média das negociações realizadas no mercado à vista '
+     'de compra e venda entre CLP e USD efetuadas no Mercado Cambiario Formal ("MCF") durante o '
+     'dia útil bancário imediatamente anterior, a ser divulgada na página da internet do Banco '
+     'Central do Chile (www.bcentral.cl) como "Dolar Observado" na respectiva Data de Verificação.'),
+    ('COP TRM', 'significa a taxa de câmbio, expressa por uma quantidade de COP por cada unidade '
+     'de USD, determinada a partir da média ponderada das operações de compra e venda entre as '
+     'moedas, efetuadas pelos Intermediarios del Mercado Cambiario colombiano, para serem '
+     'exercidas no mesmo dia da negociação, a ser obtida na página da Superitendencia Financeira '
+     'de Colombia (www.superfinanceira.gov.co) referente à Tasa de Cambio Representativa del '
+     'Mercado – TRM na respectiva Data de Verificação.'),
+    ('MXN PTAX', _PALM_PTAX.format(c='MXN')),
+    ('MXN WMCO', _PALM_WMCO.format(c='MXN', p='MXN')),
+    ('PEN WMCO', _PALM_WMCO.format(c='PEN', p='PEN')),
+    ('PEN INTERBANK AVE" ou "PEN05" ou "BCRPAVER Index',
+     'significa a taxa de câmbio, expressa por uma quantidade de PEN por cada unidade de USD, '
+     'determinada a partir da média das operações de câmbio interbancárias para liquidação no '
+     'mesmo dia, a ser obtida na página do Banco Central de Reserva del Peru referente ao "Tipo de '
+     'Cambio Interbancario Promedio" na respectiva Data de Verificação.'),
+    ('DKK PTAX', _PALM_PTAX.format(c='DKK')),
+    ('MYR USD', 'significa a taxa de câmbio, expressa por uma quantidade de MYR por cada unidade '
+     'de USD, divulgada na página "MYR BNMK Currency" do terminal Bloomberg às 15h30 (horário de '
+     'Kuala Lumpur) na respectiva Data de Verificação.'),
+]
+
+
+def _anexo_ii(S):
+    """Flowables do Anexo II (moedas + taxas de câmbio) da confirmação Palm Oil."""
+    out = [PageBreak(),
+           Paragraph('ANEXO II À CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS', S['annex']),
+           Paragraph('Os termos em letra maiúscula utilizados na Confirmação e Operações de '
+                     'Derivativos terão os significados que lhes são atribuídos neste Anexo II.',
+                     S['body']),
+           Paragraph('1) Definições das Moedas', S['section'])]
+    for code, meaning in _PALM_MOEDAS:
+        out.append(Paragraph('<b>"{}"</b> – significa {}.'.format(code, meaning), S['item']))
+    out.append(Paragraph('2) Definições das Taxas de Câmbio', S['section']))
+    for name, meaning in _PALM_TAXAS:
+        out.append(Paragraph(_sub('<b>"{}"</b> {}'.format(name, meaning)), S['item']))
+    return out
+
+
+def _parties_block(doc, S, nome, cnpj):
+    """Seção 2 (a./b.) igual ao HTML: rótulo à esquerda, e à direita o nome em
+    negrito com o CNPJ na linha de baixo.
+
+    Antes era um parágrafo corrido ('Parte A: BANCO ... — CNPJ/MF: ...'), o que
+    fazia o PDF salvo sair diferente do documento que o usuário revisou na tela
+    — e é o PDF que vai para a contraparte. Tabela de duas colunas porque o
+    alinhamento do CNPJ sob o nome não sobrevive a um parágrafo justificado."""
+    def _pair(letter, label, name, doc_id):
+        return [Paragraph('{} &nbsp;&nbsp; <b>{}</b>'.format(letter, label), S['sig']),
+                Paragraph('<b>{}</b><br/>CNPJ/MF: &nbsp; {}'.format(name, doc_id), S['sig'])]
+
+    label_w = 86
+    tbl = Table([_pair('a.', 'Parte A:', 'BANCO J.P. MORGAN S.A.', '33.172.537/0001–98'),
+                 [Paragraph('', S['sig']), Paragraph('', S['sig'])],
+                 _pair('b.', 'Parte B:', nome, cnpj)],
+                colWidths=[label_w, doc.width - label_w - 28])
+    tbl.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, -1), 28),      # mesmo recuo do estilo 'item'
+        ('LEFTPADDING', (1, 0), (1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 1), (-1, 1), 8),        # respiro entre a. e b.
+    ]))
+    return tbl
+
+
 def termo_strike_usd_pdf(conf):
     return termo_pdf(conf, variant='usd')
 
@@ -72,10 +222,13 @@ def termo_strike_brl_pdf(conf):
 def termo_pdf(conf, variant='usd'):
     """Bytes do PDF da confirmação Termo de Mercadoria.
 
-    variant: 'usd' (TERMO.doc), 'platts' (Código/Fonte de Divulgação no Anexo)
-    ou 'brl' (sem PTAX pontual — USD PTAX = média entre as Datas Inicial/Final
-    de Verificação USD PTAX; Anexo com 15 colunas e Forward em R$)."""
+    variant: 'usd' (TERMO.doc), 'platts' (Código/Fonte de Divulgação no Anexo),
+    'brl' (sem PTAX pontual — USD PTAX = média entre as Datas Inicial/Final de
+    Verificação USD PTAX; Anexo com 15 colunas e Forward em R$) ou 'palmoil'
+    (TERMO - PALM OIL.doc: Taxa de Conversão da Mercadoria, Anexo I com 17
+    colunas e o Anexo II com as definições de moedas e taxas de câmbio)."""
     S = _styles()
+    palm = variant == 'palmoil'
     buf = BytesIO()
     page = landscape(A4)
     doc = BaseDocTemplate(buf, pagesize=page,
@@ -96,8 +249,10 @@ def termo_pdf(conf, variant='usd'):
     st.append(Paragraph(
         'Esta Confirmação ("Confirmação") tem por objetivo reger as Operações de Derivativos a '
         'Parte A e a Parte B abaixo qualificadas, de acordo com as disposições legais e '
-        'regulamentares aplicáveis e no âmbito do <i>Contrato Global de Derivativos e do Apêndice '
-        'ao Contrato Global de Derivativos</i>, ambos firmados entre as Partes em ' + cgd +
+        'regulamentares aplicáveis e no âmbito do ' +
+        ('<i>Contrato Global de Derivativos</i>' if palm else
+         '<i>Contrato Global de Derivativos e do Apêndice ao Contrato Global de Derivativos</i>') +
+        ', ambos firmados entre as Partes em ' + cgd +
         ' ("Contrato"), cujos termos são incorporados por referência a este instrumento.', S['body']))
     st.append(Paragraph(
         'Esta Confirmação formaliza uma ou mais Operações de Derivativos contratadas na mesma data '
@@ -113,18 +268,32 @@ def termo_pdf(conf, variant='usd'):
 
     # Seção 1
     st.append(Paragraph('1. &nbsp;&nbsp; <u>Definições Gerais</u>', S['section']))
-    st.append(Paragraph(
-        'Os termos não definidos nesta Confirmação terão os mesmos significados a eles atribuídos '
-        'no Contrato. Em caso de conflito entre uma definição do Contrato e a desta Confirmação, '
-        'prevalecerá, para os fins desta Operação de Derivativo, a definição que constar desta '
-        'Confirmação.', S['body']))
+    if palm:
+        st.append(Paragraph(
+            'Os termos não definidos nesta Confirmação terão os mesmos significados a eles no '
+            'Anexo II. Caso um termo em letras maísculas não esteja definido no Anexo II ou nesta '
+            'Confirmação, eles terão os mesmos significados atribuídos a eles no Contrato. Em caso '
+            'de conflito entre uma definição do Contrato e a desta Confirmação, prevalecerá, para '
+            'os fins desta Operação de Derivativo, a definição que constar desta Confirmação.',
+            S['body']))
+        st.append(Paragraph(
+            'O Anexo II contém as definições das moedas e das taxas de câmbio utilizadas como '
+            'referência às Operações de Derivativos e para o cálculo do respectivo do Valor de '
+            'Liquidação de cada Operação. Portanto, o Anexo II é parte inseparável e essencial '
+            'desta Confirmação e ambos devem ser lidos em conjunto. Para se evitar dúvidas, os '
+            'termos definidos no Anexo II e não utilizados nesta Confirmação, não serão aplicáveis '
+            'a uma Operação.', S['body']))
+    else:
+        st.append(Paragraph(
+            'Os termos não definidos nesta Confirmação terão os mesmos significados a eles atribuídos '
+            'no Contrato. Em caso de conflito entre uma definição do Contrato e a desta Confirmação, '
+            'prevalecerá, para os fins desta Operação de Derivativo, a definição que constar desta '
+            'Confirmação.', S['body']))
 
     # Seção 2
     st.append(Paragraph('2. &nbsp;&nbsp; <u>Definição das Partes</u>', S['section']))
-    st.append(Paragraph('a. &nbsp;&nbsp; <b>Parte A:</b> &nbsp;&nbsp; <b>BANCO J.P. MORGAN S.A.</b> '
-                        '— CNPJ/MF: 33.172.537/0001–98', S['item']))
-    st.append(Paragraph('b. &nbsp;&nbsp; <b>Parte B:</b> &nbsp;&nbsp; <b>' + nome + '</b> '
-                        '— CNPJ/MF: ' + cnpj, S['item']))
+    st.append(_parties_block(doc, S, nome, cnpj))
+    st.append(Spacer(1, 8))
     st.append(Paragraph(
         'A Parte A e a Parte B, além destas denominações, são também aqui individualmente '
         'denominadas "Parte", e em conjunto "Partes".', S['item']))
@@ -159,6 +328,13 @@ def termo_pdf(conf, variant='usd'):
             'a. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i], '
             'convertido para Reais, for superior à Taxa Forward[i] aplicável, o Vendedor[i] '
             'pagará ao Comprador[i] o resultado da seguinte fórmula:'), S['item']))
+    elif palm:
+        st.append(Paragraph(_sub(
+            'a. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i] for '
+            'superior à Taxa Forward[i] aplicável, o Vendedor[i] pagará ao Comprador[i] o resultado '
+            'da seguinte fórmula. O Valor de Liquidação[i] será convertido para Reais utilizando o '
+            'USD PTAX de venda, conforme definido no Anexo II, divulgado na Data de Verificação da '
+            'PTAX[i]:'), S['item']))
     else:
         st.append(Paragraph(_sub(
             'a. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i] for '
@@ -174,6 +350,13 @@ def termo_pdf(conf, variant='usd'):
             'b. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i] for '
             'inferior à Taxa Forward[i] aplicável, o Comprador[i] pagará ao Vendedor[i] o '
             'resultado da seguinte fórmula:'), S['item']))
+    elif palm:
+        st.append(Paragraph(_sub(
+            'b. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i] for '
+            'inferior à Taxa Forward[i] aplicável, o Comprador[i] pagará ao Vendedor[i] o resultado '
+            'da seguinte fórmula. O Valor de Liquidação[i] será convertido para Reais utilizando o '
+            'USD PTAX de venda, conforme definido no Anexo II, divulgado na Data de Verificação da '
+            'PTAX[i]:'), S['item']))
     else:
         st.append(Paragraph(_sub(
             'b. &nbsp; Se, na Data de Vencimento[i], o Preço da Mercadoria na Liquidação[i] for '
@@ -270,7 +453,34 @@ def termo_pdf(conf, variant='usd'):
         'l. <b>Vendedor[i]:</b> Para cada Operação[i], significa a outra Parte que não a Parte '
         'indicada como Comprador na Tabela da Referência.',
     ]
-    for d in (defs42_brl if variant == 'brl' else defs42):
+    # Palm Oil: a "Taxa de Conversão da Mercadoria" entra como letra i., a USD
+    # PTAX sai daqui (foi para o Anexo II) e as letras seguintes andam junto.
+    defs42_palm = [
+        defs42[0], defs42[1], defs42[2],
+        'd. <b>Data de Verificação:</b> Significa i) a Data Inicial de Verificação da Mercadoria, '
+        'a Data Final de Verificação da Mercadoria, qualquer dia útil dentro do Período de '
+        'Verificação do Preço da Mercadoria, conforme o caso, em que o Preço da Mercadoria[i] '
+        'tenha que ser apurado para quaisquer fins desta Confirmação ou ii) a Data de Verificação '
+        'da Ptax, a Data de Verificação da Taxa de Conversão da Mercadoria ou qualquer dia em que '
+        'uma taxa de câmbio deva ser apurada para quaisquer fins desta Confirmação;',
+        defs42[4], defs42[5], defs42[6],
+        'h. <b>Preço da Mercadoria[i]:</b> significa o preço de fechamento da mercadoria à vista '
+        'referente ao Ticker[i], caso esse represente uma mercadoria para entrega à vista, ou o '
+        'contrato futuro referente ao Ticker[i], caso esse represente um contrato futuro sobre a '
+        'Mercadoria, divulgado pela Bolsa de Valores[i] na Data de Verificação[i] e que, se '
+        'aplicável, poderá ser obtido mediante consulta à tela do terminal Bloomberg que estiver '
+        'indicada na Tabela de Referência e convertido para USD por meio da divisão deste preço '
+        'pela Taxa de Conversão da Mercadoria.',
+        'i. <b>Taxa de Conversão da Mercadoria:</b> significa a taxa de câmbio cuja definição '
+        'consta no Anexo II aplicável à respectiva Operação[i] conforme indicado na Tabela de '
+        'Referência que será divulgada na Data de Verificação da Taxa de Conversão da '
+        'Mercadoria[i] indicada na Tabela de Referência;',
+        defs42[8].replace('i. <b>', 'j. <b>', 1),
+        'k. <b>Taxa Forward[i]:</b> Para cada Operação[i], será a taxa indicada na Tabela de '
+        'Referência; e',
+        defs42[11],
+    ]
+    for d in (defs42_brl if variant == 'brl' else defs42_palm if palm else defs42):
         st.append(Paragraph(_sub(d), S['item']))
 
     # Seção 5
@@ -357,6 +567,32 @@ def termo_pdf(conf, variant='usd'):
         'Preço da Mercadoria[i] seja um número negativo. Ainda assim, as Partes concordam em '
         'manter os parâmetros de cálculo previstos no Contrato e nesta Confirmação.',
     ]
+    if palm:
+        # Palm Oil traz duas declarações a mais (customização/CVM e Regras e
+        # Parâmetros), que empurram as três últimas de m./n./o. para o./p./q.
+        decls = decls[:12] + [
+            'm. Que esta Operação foi customizada para a Parte B atendendo aos critérios definidos '
+            'pela Parte B no momento da contratação, que a Parte B solicitou a contratação desta '
+            'Operação à Parte A e que esta Operação não possui garantia de contraparte central '
+            'garantidora. Por conta dessas características, a Parte B entende que o custo total '
+            'desta Operação, representado pelos parâmetros financeiros aqui estabelecidos, já '
+            'constituem informação suficiente para a tomada de decisão de contratação pela Parte B '
+            'e portanto, conforme entendimentos da CVM, a Parte A não está obrigada a informar à '
+            'Parte B o valor de sua remuneração na qualidade de intermediária de valores '
+            'mobiliários para esta Operação;',
+            'n. Que as Operações de Derivativos, bem como os direitos e as obrigações delas '
+            'decorrentes, sujeitam-se às Regras e Parâmetros de Atuação da Parte A ("Regras e '
+            'Parâmetros"), à legislação em vigor, às normas, regulamentos, procedimentos, usos, '
+            'práticas e costumes adotados e geralmente aceitos no mercado de capitais brasileiro. '
+            'Nesse sentido, A Parte B está ciente que o documento Regras e Parâmetros é parte '
+            'integrante do Contrato e sua versão mais recente encontra-se disponível na página '
+            'eletrônica da Parte A. A Parte B concorda que as Regras e Parâmetros poderão ser '
+            'alteradas unilateralmente pela Parte A e as alterações serão comunicadas '
+            'imediatamente à Parte B;',
+            decls[12].replace('m. ', 'o. ', 1),
+            decls[13].replace('n. ', 'p. ', 1),
+            decls[14].replace('o. ', 'q. ', 1),
+        ]
     for d in decls:
         st.append(Paragraph(_sub(d), S['item']))
 
@@ -433,6 +669,14 @@ def termo_pdf(conf, variant='usd'):
                  'Taxa Forward[i] (expresso em R$)',
                  'Data Inicial de Verificação da Mercadoria[i]',
                  'Data Final de Verificação da Mercadoria[i]', 'Data de Vencimento[i]']
+    elif palm:
+        heads = ['i', 'Nº', 'Comprador[i]', ticker_h, fonte_h, 'Código da Bloomberg', 'Quantidade',
+                 'Taxa de Conversão da Mercadoria',
+                 'Data de Verificação da Taxa de Conversão da Mercadoria',
+                 'Prêmio[i]', 'Parte Devedora do Prêmio[i]', 'Data de Pagamento do Prêmio[i]',
+                 'Data de Verificação da PTAX[i]', 'Taxa Forward[i]',
+                 'Data Inicial de Verificação da Mercadoria[i]',
+                 'Data Final de Verificação da Mercadoria[i]', 'Data de Vencimento[i]']
     else:
         heads = ['i', 'Nº', 'Comprador[i]', ticker_h, fonte_h, 'Quantidade',
                  'Prêmio[i]', 'Parte Devedora do Prêmio[i]', 'Data de Pagamento do Prêmio[i]',
@@ -447,7 +691,14 @@ def termo_pdf(conf, variant='usd'):
             Paragraph(_e(r.get('comprador')), S['td']),
             Paragraph(_e(r.get('ticker')), S['td']),
             Paragraph(_e(r.get('bolsa')), S['td']),
-            Paragraph(_e(r.get('qtd')), S['td']),
+        ]
+        if palm:
+            cells.append(Paragraph(_e(r.get('bbg')), S['td']))
+        cells.append(Paragraph(_e(r.get('qtd')), S['td']))
+        if palm:
+            cells.append(Paragraph(_e(r.get('taxaConv')), S['td']))
+            cells.append(Paragraph(_e(r.get('dtTaxaConv')), S['td']))
+        cells += [
             Paragraph(_e(r.get('premio')), S['td']),
             Paragraph(_e(r.get('devedor')), S['td']),
             Paragraph(_e(r.get('dtPremio')), S['td']),
@@ -468,6 +719,9 @@ def termo_pdf(conf, variant='usd'):
     if variant == 'brl':
         widths = [w * f for f in (0.025, 0.085, 0.055, 0.09, 0.06, 0.06, 0.05, 0.065,
                                   0.07, 0.075, 0.075, 0.065, 0.08, 0.08, 0.065)]
+    elif palm:
+        widths = [w * f for f in (0.02, 0.075, 0.05, 0.07, 0.075, 0.055, 0.05, 0.055,
+                                  0.075, 0.045, 0.06, 0.06, 0.06, 0.055, 0.065, 0.065, 0.06)]
     else:
         widths = [w * f for f in (0.025, 0.09, 0.06, 0.10, 0.065, 0.06, 0.055, 0.07,
                                   0.075, 0.075, 0.065, 0.09, 0.09, 0.08)]
@@ -481,6 +735,9 @@ def termo_pdf(conf, variant='usd'):
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
     ]))
     st.append(tbl)
+
+    if palm:
+        st += _anexo_ii(S)
 
     doc.build(st)
     return buf.getvalue()
@@ -540,10 +797,8 @@ def opcao_pdf(conf, variant='usd'):
 
     # Seção 2
     st.append(Paragraph('2. &nbsp;&nbsp; <u>Definição das Partes</u>', S['section']))
-    st.append(Paragraph('a. &nbsp;&nbsp; <b>Parte A:</b> &nbsp;&nbsp; <b>BANCO J.P. MORGAN S.A.</b> '
-                        '— CNPJ/MF: 33.172.537/0001–98', S['item']))
-    st.append(Paragraph('b. &nbsp;&nbsp; <b>Parte B:</b> &nbsp;&nbsp; <b>' + nome + '</b> '
-                        '— CNPJ/MF: ' + cnpj, S['item']))
+    st.append(_parties_block(doc, S, nome, cnpj))
+    st.append(Spacer(1, 8))
     st.append(Paragraph(
         'A Parte A e a Parte B, além destas denominações, são também aqui individualmente '
         'denominadas "Parte", e em conjunto "Partes".', S['item']))

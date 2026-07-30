@@ -20088,12 +20088,21 @@ def _conf_cgd_lookup(first):
     return cgd_txt
 
 
+# Palm Oil: no TERMO - PALM OIL.doc a bolsa e a taxa de conversão são texto
+# fixo do documento (a macro escrevia as duas constantes, não o cadastro do
+# Subjacente) — o Anexo II define a "MYR USD" nominalmente e o Anexo I cita a
+# Bursa. Não é de-para: não há chave, é o texto legal desta família.
+_CONF_PALMOIL_BOLSA = 'MDE-BURSA MALAYSIA'
+_CONF_PALMOIL_TAXA_CONV = 'MYR USD'
+
 # Famílias com template web disponível: template Jinja + rota de geração.
-# (brl-platts e palm-oil entram quando os respectivos .doc forem enviados.)
+# (brl-platts entra quando o respectivo .doc for enviado.)
 _CONF_FAMILY_TEMPLATES = {
     'strike-usd': ('confirmations/ndf-comm-strike-usd.html',        '/confirmation/ndf-comm/strike-usd'),
     'platts':     ('confirmations/ndf-comm-platts-strike-usd.html', '/confirmation/ndf-comm/platts-strike-usd'),
     'brl':        ('confirmations/ndf-comm-strike-brl.html',        '/confirmation/ndf-comm/strike-brl'),
+    'palm-oil':   ('confirmations/ndf-comm-palmoil-strike-myrusd.html',
+                   '/confirmation/ndf-comm/palmoil-strike-myrusd'),
 }
 
 
@@ -20165,8 +20174,12 @@ def _conf_generation_page(family):
             'num':       str(deal.get('Deal') or '').strip(),
             'comprador': 'Parte B' if direction.startswith('S') else 'Parte A',
             'ticker':    ticker,
-            # No Platts a coluna é "Fonte de Divulgação" e o valor é PLATTS
-            'bolsa':     'PLATTS' if family == 'platts' else str((subj or {}).get('bolsa') or '').strip(),
+            # No Platts a coluna é "Fonte de Divulgação" e o valor é PLATTS;
+            # no Palm Oil a bolsa é fixa (a macro escrevia a constante, não o
+            # cadastro do Subjacente — o documento cita a Bursa nominalmente).
+            'bolsa':     'PLATTS' if family == 'platts'
+                         else _CONF_PALMOIL_BOLSA if family == 'palm-oil'
+                         else str((subj or {}).get('bolsa') or '').strip(),
             'qtd':       _conf_fmt_num(str(deal.get('TotalNotional') or '').replace('-', ''), dec=None),
             'premio':    'Não Aplicável',
             'devedor':   'Não Aplicável',
@@ -20176,6 +20189,14 @@ def _conf_generation_page(family):
             'dtFim':     _conf_fmt_date(deal.get('FixingEndDate')),
             'dtVenc':    _conf_fmt_date(deal.get('SettlementDate')),
         }
+        if family == 'palm-oil':
+            # Três colunas a mais no Anexo I. A Data de Verificação da Taxa de
+            # Conversão é a Data Final de Verificação da Mercadoria (na macro,
+            # os dois campos saem do mesmo values[17]) — inclusive no bullet,
+            # onde só a data INICIAL vira 'Não Aplicável'.
+            row['bbg'] = 'Não Aplicável'
+            row['taxaConv'] = _CONF_PALMOIL_TAXA_CONV
+            row['dtTaxaConv'] = _conf_fmt_date(deal.get('FixingEndDate'))
         if family == 'brl':
             # BRL: janela de verificação da USD PTAX = janela de fixing (macro
             # legada usava as mesmas datas); bullet zera a inicial também.
@@ -20221,6 +20242,11 @@ def confirmation_ndfcomm_platts_strike_usd():
 @blueprint.route('/confirmation/ndf-comm/strike-brl')
 def confirmation_ndfcomm_strike_brl():
     return _conf_generation_page('brl')
+
+
+@blueprint.route('/confirmation/ndf-comm/palmoil-strike-myrusd')
+def confirmation_ndfcomm_palmoil_strike_myrusd():
+    return _conf_generation_page('palm-oil')
 
 
 # ── XML do contrato (FepWeb) por confirmação ─────────────────────────────────
@@ -20379,6 +20405,15 @@ def api_conf_ndfcomm_save():
     rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
     if not rows:
         return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+    # CGD é cláusula do documento ("ambos firmados entre as Partes em <data>"):
+    # sem ela a confirmação sai com a lacuna em branco e vai assim para a
+    # contraparte. Trava no servidor, não só no painel — o POST é público para
+    # qualquer sessão autenticada.
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
 
     acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
     merc = str(payload.get('mercadoria') or '').strip()
@@ -20398,7 +20433,7 @@ def api_conf_ndfcomm_save():
     try:
         from apps.pages.confirmation_pdfs import termo_pdf
         pdf_bytes = termo_pdf(conf, variant={'strike-usd': 'usd', 'platts': 'platts',
-                                             'brl': 'brl'}[family])
+                                             'brl': 'brl', 'palm-oil': 'palmoil'}[family])
     except ImportError:
         return jsonify({'success': False,
                         'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
@@ -20447,7 +20482,12 @@ def api_conf_ndfcomm_save():
         picked = _conf_pick_ndfcomm(ref, acr, merc, family)
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(picked, merc, ref)
-            xbase = _ei_sanitize(numero_contrato) or candidate
+            # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
+            # ficam juntos na listagem da pasta. O numeroContrato continua
+            # dentro do XML (é ele que o FepWeb lê), só não nomeia mais o
+            # arquivo — com vários deals ele era genérico
+            # (NDF_Comm_YYYYMMDD_MERC) e não dizia de qual confirmação era.
+            xbase = candidate
             xcand, xn = xbase, 0
             while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
@@ -20760,6 +20800,15 @@ def api_conf_optcomm_save():
     rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
     if not rows:
         return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+    # CGD é cláusula do documento ("ambos firmados entre as Partes em <data>"):
+    # sem ela a confirmação sai com a lacuna em branco e vai assim para a
+    # contraparte. Trava no servidor, não só no painel — o POST é público para
+    # qualquer sessão autenticada.
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
 
     acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
     merc = str(payload.get('mercadoria') or '').strip()
@@ -20825,7 +20874,12 @@ def api_conf_optcomm_save():
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
                 picked, merc, ref, tipo='Option', prefixo='Opt_Comm')
-            xbase = _ei_sanitize(numero_contrato) or candidate
+            # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
+            # ficam juntos na listagem da pasta. O numeroContrato continua
+            # dentro do XML (é ele que o FepWeb lê), só não nomeia mais o
+            # arquivo — com vários deals ele era genérico
+            # (NDF_Comm_YYYYMMDD_MERC) e não dizia de qual confirmação era.
+            xbase = candidate
             xcand, xn = xbase, 0
             while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1

@@ -287,8 +287,32 @@
   .italic { font-style: italic; }
   sub { font-size: 0.75em; }
 
+  /* ── VALIDAÇÃO NA MESMA TELA ──────────────────────────── */
+  /* Antes o save abria a validate.html numa aba nova; com o overlay o
+     checklist e o preview do PDF ficam sobre o próprio editor, então dá para
+     voltar ao documento sem perder o que já foi ajustado no painel. */
+  #validate-overlay {
+    position: fixed; inset: 0; z-index: 3000; background: #12121f;
+    display: none; flex-direction: column;
+  }
+  #validate-overlay.open { display: flex; }
+  #validate-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #1a1a2e; color: #e0e0e0; padding: 8px 14px;
+    font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold;
+    border-bottom: 1px solid #2a2a5a;
+  }
+  #validate-bar button {
+    background: #2a2a5a; border: 1px solid #5555cc; color: #aaaaee;
+    padding: 5px 12px; border-radius: 4px; cursor: pointer;
+    font-family: Arial, sans-serif; font-size: 9pt;
+  }
+  #validate-bar button:hover { background: #333380; }
+  #validate-overlay iframe { flex: 1 1 auto; width: 100%; border: none; background: #12121f; }
+
   @media print {
     #editor-panel { display: none; }
+    #validate-overlay { display: none !important; }
     #doc-body { margin-right: 0; }
     body { padding: 18pt; }
     .page-break { page-break-before: always; border: none; }
@@ -356,6 +380,15 @@
 
   <button class="btn-print" style="background:#1a3a6e" onclick="saveToInventory(this)">💾 Salvar Word + PDF no Inventory</button>
   <div id="save-status" style="font-size:8pt;color:#9090b0;margin-top:6px;word-break:break-all;"></div>
+</div>
+
+<!-- Checklist + preview do PDF, sobre o editor (sem abrir aba nova) -->
+<div id="validate-overlay">
+  <div id="validate-bar">
+    <span>✓ Validação da confirmação</span>
+    <button type="button" onclick="closeValidate()">✕ Fechar e voltar ao documento</button>
+  </div>
+  <iframe id="validate-frame" title="Validação da confirmação"></iframe>
 </div>
 {% endif %}
 
@@ -673,6 +706,17 @@ function saveToInventory(btn) {
     var inp = document.getElementById('inp_' + k);
     fields[k] = inp ? inp.value : '';
   });
+  // Sem CGD o documento sai com a data do contrato em branco na cláusula de
+  // abertura — e é o PDF que vai para a contraparte. O servidor recusa do
+  // mesmo jeito; aqui o aviso é imediato e o foco vai para o campo.
+  if (!String(fields.cgd_date || '').trim()) {
+    st.style.color = '#ee6666';
+    st.textContent = '✖ Data do CGD não cadastrada para esta contraparte. Cadastre o CGD no '
+      + 'Reference Data (ou preencha o campo Data do CGD acima) antes de salvar.';
+    var cgdInp = document.getElementById('inp_cgd_date');
+    if (cgdInp) { cgdInp.style.borderColor = '#ee6666'; cgdInp.focus(); }
+    return;
+  }
   btn.disabled = true; btn.textContent = '⏳ Salvando…';
   st.textContent = '';
   fetch('/api/confirmation/ndf-comm/save', {
@@ -694,8 +738,8 @@ function saveToInventory(btn) {
         (res.numero_contrato ? ' · contrato ' + res.numero_contrato : '') +
         (res.fepweb_updated ? ' · FepWeb ID em ' + res.fepweb_updated + ' linha(s)' : '') +
         ((res.warnings && res.warnings.length) ? ' · ⚠ ' + res.warnings.join(' | ') : '');
-      // Gerada → abre a janela de validação (checklist + preview do PDF)
-      if (res.validate_url) window.open(res.validate_url, '_blank');
+      // Gerada → validação na mesma tela (checklist + preview do PDF)
+      if (res.validate_url) openValidate(res.validate_url);
     } else {
       st.style.color = '#ee6666';
       st.textContent = '✖ ' + (res.message || 'Falha ao salvar.');
@@ -707,6 +751,28 @@ function saveToInventory(btn) {
     st.textContent = '✖ ' + e.message;
   });
 }
+
+// ── Validação sobre o editor ────────────────────────────────
+function openValidate(url) {
+  var ov = document.getElementById('validate-overlay');
+  var fr = document.getElementById('validate-frame');
+  if (!ov || !fr) { window.open(url, '_blank'); return; }   // overlay ausente → aba, como antes
+  fr.src = url;
+  ov.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeValidate() {
+  var ov = document.getElementById('validate-overlay');
+  var fr = document.getElementById('validate-frame');
+  if (ov) ov.classList.remove('open');
+  if (fr) fr.src = 'about:blank';        // solta o PDF em vez de mantê-lo carregado
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeValidate();
+});
 
 // ── Dados de exemplo (usados só se o servidor não mandar linhas) ──────
 const defaultRows = [
@@ -828,7 +894,12 @@ function update() {
               data_neg: 'data_neg', data_extenso: 'data_extenso' };
   Object.keys(map).forEach(function (k) {
     var inp = document.getElementById('inp_' + k);
-    if (inp && __CONF__[map[k]]) inp.value = __CONF__[map[k]];
+    // O CGD segue o servidor mesmo quando vem VAZIO: manter o exemplo do
+    // template (uma data de outro cliente) faria a confirmação sair com uma
+    // data plausível e errada, sem ninguém perceber.
+    if (!inp) return;
+    if (k === 'cgd_date') inp.value = __CONF__[map[k]] || '';
+    else if (inp && __CONF__[map[k]]) inp.value = __CONF__[map[k]];
   });
   update();
 })();
