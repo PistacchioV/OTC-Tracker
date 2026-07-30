@@ -1,0 +1,319 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Latam Desk Position{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#ldp-page {
+    --ldp-hairline: rgba(0,0,0,.08);
+    --ldp-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #ldp-page { --ldp-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets ────────────────────────────────────────────────────────────── */
+#ldp-page .ldp-widgets .col { display: flex; margin-bottom: .5rem; }
+#ldp-page .ldp-widget {
+    flex: 1; border: 1px solid var(--ldp-hairline); border-radius: 14px; padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--ldp-ease-out), box-shadow 220ms var(--ldp-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #ldp-page .ldp-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#ldp-page .ldp-widget__head { display: flex; align-items: center; gap: .6rem; }
+#ldp-page .ldp-widget__icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+}
+#ldp-page .ldp-widget__title { font-size: .8rem; font-weight: 700; letter-spacing: -.2px; margin: 0; text-transform: uppercase; }
+#ldp-page .ldp-widget__value { font-size: 1.8rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#ldp-page .ldp-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#ldp-page .ldp-widget--total .ldp-widget__title,
+#ldp-page .ldp-widget--total .ldp-widget__value { color: #fff; }
+#ldp-page .ldp-widget--total .ldp-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Reference date picker + Import ─────────────────────────────────────── */
+#ldp-page .ldp-datewrap { position: relative; width: 170px; }
+#ldp-page .ldp-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--ldp-ease-out), box-shadow 0.16s var(--ldp-ease-out);
+}
+#ldp-page .ldp-datewrap input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18); }
+#ldp-page .ldp-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#ldp-page .btn:active { transform: scale(0.97); }
+/* Row action buttons — solid circular (project standard, matches Intrag/OTM). */
+#ldp-table td .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
+  font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; box-sizing: border-box; }
+/* Toolbar buttons — compact project standard. */
+#ldp-page .ldp-toolbar .btn {
+    padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
+}
+#ldp-page .ldp-toolbar .btn i { font-size: .95em; }
+#ldp-page .ldp-addrow-btn { transition: transform 150ms var(--ldp-ease-out), box-shadow 150ms var(--ldp-ease-out); }
+@media (hover: hover) and (pointer: fine) {
+    #ldp-page .ldp-addrow-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+}
+/* Add-row modal — centered (not origin-aware): scale 0.96 + opacity, strong ease-out ~200ms */
+.ldp-add-modal .modal-content { border-radius: 16px; }
+.ldp-add-modal.fade .modal-dialog {
+    transform: scale(0.96); opacity: 0;
+    transition: transform 200ms var(--ldp-ease-out), opacity 200ms var(--ldp-ease-out);
+}
+.ldp-add-modal.show .modal-dialog { transform: scale(1); opacity: 1; }
+.ldp-add-modal .form-control:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
+@media (prefers-reduced-motion: reduce) {
+    #ldp-page .ldp-addrow-btn { transition: none; }
+    #ldp-page .ldp-addrow-btn:hover { transform: none; }
+    .ldp-add-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#ldp-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#ldp-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
+
+/* Larguras: (1)=checkbox (2)=actions (3)=Status (4…)=colunas do relatório, na
+   ordem de _LATAM_COLUMNS. As colunas de nome/entidade são as largas. */
+  #ldp-table th:nth-child(1),  #ldp-table td:nth-child(1)  { min-width: 38px;  width: 38px; }   /* checkbox */
+  #ldp-table th:nth-child(2),  #ldp-table td:nth-child(2)  { min-width: 64px;  width: 64px; }   /* actions */
+  #ldp-table th:nth-child(3),  #ldp-table td:nth-child(3)  { min-width: 90px;  width: 90px; }   /* Status */
+  #ldp-table th:nth-child(4),  #ldp-table td:nth-child(4)  { min-width: 120px; width: 120px; }  /* Instrument_ID */
+  #ldp-table th:nth-child(5),  #ldp-table td:nth-child(5)  { min-width: 280px; width: 280px; }  /* Instrument_Name */
+  #ldp-table th:nth-child(6),  #ldp-table td:nth-child(6)  { min-width: 90px;  width: 90px; }   /* RIC */
+  #ldp-table th:nth-child(7),  #ldp-table td:nth-child(7)  { min-width: 110px; width: 110px; }  /* Instrument_Currency */
+  #ldp-table th:nth-child(8),  #ldp-table td:nth-child(8)  { min-width: 110px; width: 110px; }  /* Imnt_Ccy_Issuer */
+  #ldp-table th:nth-child(9),  #ldp-table td:nth-child(9)  { min-width: 120px; width: 120px; }  /* FX Rate */
+  #ldp-table th:nth-child(10), #ldp-table td:nth-child(10) { min-width: 110px; width: 110px; }  /* Maturity_Date */
+  #ldp-table th:nth-child(11), #ldp-table td:nth-child(11) { min-width: 80px;  width: 80px; }   /* Type */
+  #ldp-table th:nth-child(12), #ldp-table td:nth-child(12) { min-width: 90px;  width: 90px; }   /* Subtype */
+  #ldp-table th:nth-child(13), #ldp-table td:nth-child(13) { min-width: 260px; width: 260px; }  /* Underlying_Name */
+  #ldp-table th:nth-child(14), #ldp-table td:nth-child(14) { min-width: 120px; width: 120px; }  /* Underlying Currency */
+  #ldp-table th:nth-child(15), #ldp-table td:nth-child(15) { min-width: 200px; width: 200px; }  /* Country_Name */
+  #ldp-table th:nth-child(16), #ldp-table td:nth-child(16) { min-width: 110px; width: 110px; }  /* Deal_Ref */
+  #ldp-table th:nth-child(17), #ldp-table td:nth-child(17) { min-width: 110px; width: 110px; }  /* Deal_ID */
+  #ldp-table th:nth-child(18), #ldp-table td:nth-child(18) { min-width: 200px; width: 200px; }  /* Counterparty */
+  #ldp-table th:nth-child(19), #ldp-table td:nth-child(19) { min-width: 120px; width: 120px; }  /* Counterparty_SPN */
+  #ldp-table th:nth-child(20), #ldp-table td:nth-child(20) { min-width: 130px; width: 130px; }  /* Counterparty_Type */
+  #ldp-table th:nth-child(21), #ldp-table td:nth-child(21) { min-width: 110px; width: 110px; }  /* Trade_Date */
+  #ldp-table th:nth-child(22), #ldp-table td:nth-child(22) { min-width: 90px;  width: 90px; }   /* CALLPUT */
+  #ldp-table th:nth-child(23), #ldp-table td:nth-child(23) { min-width: 130px; width: 130px; }  /* Strike */
+  #ldp-table th:nth-child(24), #ldp-table td:nth-child(24) { min-width: 280px; width: 280px; }  /* Legal_Entity */
+  #ldp-table th:nth-child(25), #ldp-table td:nth-child(25) { min-width: 70px;  width: 70px; }   /* id */
+  #ldp-table th:nth-child(26), #ldp-table td:nth-child(26) { min-width: 150px; width: 150px; }  /* CLEARING_TRADE_ID */
+  #ldp-table th:nth-child(27), #ldp-table td:nth-child(27) { min-width: 170px; width: 170px; }  /* CLEARING_TRD_ID_INT */
+  #ldp-table th:nth-child(28), #ldp-table td:nth-child(28) { min-width: 170px; width: 170px; }  /* CLEARING_TRD_ID_CLNT */
+  #ldp-table th:nth-child(29), #ldp-table td:nth-child(29) { min-width: 130px; width: 130px; }  /* TOTAL_PREMIUM */
+  #ldp-table th:nth-child(30), #ldp-table td:nth-child(30) { min-width: 120px; width: 120px; }  /* PREMIUM_SETT */
+  #ldp-table th:nth-child(31), #ldp-table td:nth-child(31) { min-width: 120px; width: 120px; }  /* LAST_PMT_DATE */
+  #ldp-table th:nth-child(32), #ldp-table td:nth-child(32) { min-width: 110px; width: 110px; }  /* REBATE */
+  #ldp-table th:nth-child(33), #ldp-table td:nth-child(33) { min-width: 140px; width: 140px; }  /* REBATE_SCHEDULE */
+  #ldp-table th:nth-child(34), #ldp-table td:nth-child(34) { min-width: 120px; width: 120px; }  /* REBATE_PNL */
+  #ldp-table th:nth-child(35), #ldp-table td:nth-child(35) { min-width: 120px; width: 120px; }  /* BARRIER_TYPE */
+  #ldp-table th:nth-child(36), #ldp-table td:nth-child(36) { min-width: 140px; width: 140px; }  /* BARRIER_SCHEDULE */
+  #ldp-table th:nth-child(37), #ldp-table td:nth-child(37) { min-width: 130px; width: 130px; }  /* CONTRACT_LEVEL */
+  #ldp-table th:nth-child(38), #ldp-table td:nth-child(38) { min-width: 130px; width: 130px; }  /* INITIAL_PRICE */
+  #ldp-table th:nth-child(39), #ldp-table td:nth-child(39) { min-width: 150px; width: 150px; }  /* START_SPOT */
+  #ldp-table th:nth-child(40), #ldp-table td:nth-child(40) { min-width: 160px; width: 160px; }  /* OPTION_EXERCISE_TYPE */
+  #ldp-table th:nth-child(41), #ldp-table td:nth-child(41) { min-width: 130px; width: 130px; }  /* UNDERLYING_RIC */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#ldp-table thead tr.ldp-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ldp-hairline); }
+#ldp-table thead tr.ldp-th-filter input.ldp-col-filter {
+    width: 100%; min-width: 90px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px; border: 1px solid var(--ldp-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms var(--ldp-ease-out), box-shadow 150ms var(--ldp-ease-out),
+                background-color 150ms var(--ldp-ease-out);
+}
+#ldp-table thead tr.ldp-th-filter input.ldp-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+    #ldp-table thead tr.ldp-th-filter input.ldp-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#ldp-table thead tr.ldp-th-filter input.ldp-col-filter:focus {
+    outline: none; border-color: #0066cc; background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#ldp-table thead tr.ldp-th-filter input.ldp-col-filter.ldp-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #ldp-page * { transition: none !important; animation: none !important; }
+    #ldp-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background (project standard, NOT scoped). */
+.dt-button-collection {
+    z-index: 2000; background: #fff !important; border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important; border-radius: .375rem !important;
+    padding: .25rem 0 !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection { background: #2b2f3a !important; border-color: rgba(255,255,255,.15) !important; }
+.dt-button-collection .dt-button, .dt-button-collection .dropdown-item {
+    display: flex; align-items: center; background: transparent !important; color: #212529 !important;
+    border: none !important; width: 100% !important; text-align: left !important;
+    padding: .4rem 1rem !important; font-size: .84rem !important; opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover {
+    background: rgba(13,110,253,.08) !important; color: #0d6efd !important;
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="ldp-page" class="container-fluid" data-content="" data-today="{{ today }}" data-ref="{{ ref_date }}">
+    {% set title='Latam Desk Position' %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Widgets -->
+    <div class="row ldp-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="ldp-widget">
+                <div class="ldp-widget__head">
+                    <span class="ldp-widget__icon bg-primary-subtle text-primary"><i class="ti ti-trending-up"></i></span>
+                    <h3 class="ldp-widget__title" data-lang="ldp-w-calls">Calls</h3>
+                    <span class="ldp-widget__value" id="ldp-w-calls">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ldp-widget">
+                <div class="ldp-widget__head">
+                    <span class="ldp-widget__icon bg-info-subtle text-info"><i class="ti ti-trending-down"></i></span>
+                    <h3 class="ldp-widget__title" data-lang="ldp-w-puts">Puts</h3>
+                    <span class="ldp-widget__value" id="ldp-w-puts">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ldp-widget">
+                <div class="ldp-widget__head">
+                    <span class="ldp-widget__icon bg-warning-subtle text-warning"><i class="ti ti-users"></i></span>
+                    <h3 class="ldp-widget__title" data-lang="ldp-w-cptys">Counterparties</h3>
+                    <span class="ldp-widget__value" id="ldp-w-cptys">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ldp-widget ldp-widget--total">
+                <div class="ldp-widget__head">
+                    <span class="ldp-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="ldp-widget__title" data-lang="ldp-w-total">Total</h3>
+                    <span class="ldp-widget__value" id="ldp-w-total">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-secondary bg-gradient" type="button" id="ldpImportBtn">
+                    <i class="ti ti-file-import fs-xl me-1"></i><span data-lang="ldp-import">Import position file</span>
+                </button>
+                <span class="text-muted fs-xs" id="ldp-import-info"></span>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="text-muted fs-xs text-nowrap" id="ldp-updated"></span>
+                    <label for="ldp-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="ldp-refdate">Reference date</label>
+                    <div class="ldp-datewrap" id="ldpDateWrap">
+                        <input type="text" id="ldp-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                        <span class="ldp-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap ldp-toolbar">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ldp-show">Show</label>
+                        <select class="form-select form-select-sm ldp-page-len" style="width:84px;">
+                            <option value="200" selected>200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                            <option value="1500">1500</option>
+                            <option value="2000">2000</option>
+                            <option value="2500">2500</option>
+                            <option value="3000">3000</option>
+                            <option value="4000">4000</option>
+                            <option value="5000">5000</option>
+                            <option value="7500">7500</option>
+                            <option value="10000">10000</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="ldp-entries">entries</label>
+                    </div>
+                    <button class="btn btn-sm btn-primary bg-gradient ldp-addrow-btn" type="button" id="ldpAddBtn">
+                        <i class="ti ti-plus me-1"></i><span data-lang="ldp-add-row">Add row</span>
+                    </button>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="ldpExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="ldpClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="ldp-clear-filters">Clear filters</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="ldp-showing">Showing</span> <span id="ldp-count">0</span> <span data-lang="ldp-rows">rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="ldp-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="ldp-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit row modal (New Deals glass pattern: a window with all columns) -->
+    <div class="modal fade ldp-add-modal" id="ldpAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i><span id="ldpModalTitle" data-lang="ldp-add-title">Add row</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="ldpAddFields"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="ldpAddSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/other-products-swap-latamdeskposition.js?v=20260730a"></script>
+{% endblock extra_javascript %}

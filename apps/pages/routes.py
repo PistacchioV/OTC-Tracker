@@ -4670,10 +4670,13 @@ _DS_IMPORTS = [
      # are LAWTON MULTIMERCADO EXCLUSIVO* are excluded from the JSON.
      'header': 2, 'match': lambda n: n.startswith('brazilonshoresettlementswarningfile'),
      'filters': [('not_startswith', 3, {'LAWTON MULTIMERCADO EXCLUSIVO'})]},
+    # FbiRptLatamDeskPostion-NY-* → página Latam Desk Position (o nome do arquivo tem
+    # o typo "Postion"; a página é "Position"). `latam` → _ds_handle usa o extractor
+    # da página (_latam_extract: filtro das colunas 62/63 da macro, colunas do
+    # relatório e datas dd/mm/yyyy), então card e página gravam o MESMO JSON.
     {'key': 'latam-desk', 'label': 'Latam Desk Position', 'json': 'latam-desk-position',
-     'header': 1, 'match': lambda n: n.startswith('fbirptlatamdeskpo'),   # VBA name has a typo ("Postion")
-     # Keep a row if col 62 OR col 63 is non-empty (VBA does two <> "" filter passes).
-     'filters': [('nonempty_any', [62, 63])]},
+     'header': 1, 'match': lambda n: n.startswith('fbirptlatamdeskpo'),
+     'latam': True, 'filters': []},
     # Kapital Hybrids — BANCO_UPCOMING_PAYMENTS.csv (comma-delimited). Own extractor
     # (_swaphyb_extract) filters Settlement Date = today; the page aggregates per trade.
     {'key': 'swap-kapital-hybrids', 'label': 'Swap Kapital Hybrids', 'json': _SWAPHYB_JSON,
@@ -4784,6 +4787,15 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         elif spec.get('swaphyb'):                       # BANCO_UPCOMING_PAYMENTS.csv → Kapital Hybrids
             recs, total = _swaphyb_extract(raw, ref)    # filter Settlement Date = today (import date)
             jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
+        elif spec.get('latam'):                         # FbiRptLatamDeskPostion → Latam Desk Position
+            rows = _ds_read_rows(raw)
+            recs, kept, filtered, _cmap, missing = (_latam_extract(rows) if len(rows) >= 2
+                                                    else ([], 0, 0, {}, []))
+            total = kept + filtered
+            jp = _latam_json_path(ref)
+            if missing:
+                log.warning('[latam] colunas não encontradas no header de %s: %s',
+                            name, ', '.join(missing))
         else:
             recs, total = _ds_process(raw, spec)
             jp = os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
@@ -4793,7 +4805,9 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         skipped.append(name)
         return
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
-    if spec.get('otm') or spec.get('ndfc') or spec.get('cog') or spec.get('swaphyb'):   # timestamp = import time (no in-file time)
+    if spec.get('latam'):                              # guarda também o arquivo de origem
+        _latam_write_meta(jp, ref.strftime('%H:%M:%S'), name)
+    elif spec.get('otm') or spec.get('ndfc') or spec.get('cog') or spec.get('swaphyb'):   # timestamp = import time (no in-file time)
         _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     if spec.get('opb3'):                               # operacoes file ALSO feeds the Operations B3 page
         try:                                           # use the FILTERED recs (processed rows), not the raw file;
@@ -6624,6 +6638,532 @@ def api_otm_row_confirm():
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'OTM Row Confirmed', 'OTM Settlements',
                          '{} ({})'.format(rec.get('Trade Id', ''), _otm_ref_from(p).strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Other Products › Latam Desk Position
+#  Source: FbiRptLatamDeskPostion-NY-* dropped in the Settlements folder (the file
+#  name really is "Postion" — a typo in the report; the PAGE is "Position").
+#  Substitui o import VBA legado: a macro aplica AutoFilter <> "" no campo 62,
+#  copia as linhas visíveis, limpa, aplica <> "" no campo 63 e ANEXA — ou seja,
+#  mantém a linha quando a coluna 62 (BJ, CLEARING_TRD_ID_IN…) OU a 63 (BK,
+#  CLEARING_TRD_ID_CLN…) está preenchida. Aqui cada linha entra UMA vez (a macro
+#  duplicaria a linha que tem as duas colunas preenchidas).
+#  O relatório NÃO é diário: a página abre no ÚLTIMO JSON disponível
+#  (_latam_latest_ref), não no de hoje.
+# ══════════════════════════════════════════════════════════════════════════════
+LATAM_SOURCE_ROOT = os.getenv('LATAM_SOURCE_ROOT', SETTLEMENTS_ROOT)
+LATAM_JSON_ROOT = OTM_JSON_ROOT
+_LATAM_JSON_BASE = 'latam-desk-position'
+_LATAM_FILE_PREFIX = 'fbirptlatamdeskpo'        # cobre "Postion" e um futuro "Position"
+
+# (label exibido na página, candidatos de header no arquivo).
+# O primeiro candidato é o nome inteiro; o segundo é o texto como aparece
+# truncado na planilha e serve de PREFIXO — várias colunas do relatório só foram
+# vistas cortadas, então 'CLEARING_TRD_ID_IN' precisa achar
+# 'CLEARING_TRD_ID_INTERNAL' sem que ninguém tenha de digitar o nome exato.
+_LATAM_COLUMNS = [
+    ('Instrument_ID',        ('Instrument_ID', 'Instrument_')),
+    ('Instrument_Name',      ('Instrument_Name',)),
+    ('RIC',                  ('RIC',)),
+    ('Instrument_Currency',  ('Instrument_Currency', 'Instrument_Curren')),
+    ('Imnt_Ccy_Issuer',      ('Imnt_Ccy_Issuer', 'Imnt_Ccy_Iss')),
+    ('FX Rate',              ('FX Rate', 'FX_Rate')),
+    ('Maturity_Date',        ('Maturity_Date',)),
+    ('Type',                 ('Type', 'Ty')),
+    ('Subtype',              ('Subtype', 'Subty')),
+    ('Underlying_Name',      ('Underlying_Name',)),
+    ('Underlying Currency',  ('Underlying Currency', 'Underlying_Currency', 'Underlying Curr')),
+    ('Country_Name',         ('Country_Name',)),
+    ('Deal_Ref',             ('Deal_Ref', 'Deal_R')),
+    ('Deal_ID',              ('Deal_ID',)),
+    ('Counterparty',         ('Counterparty',)),
+    ('Counterparty_SPN',     ('Counterparty_SPN',)),
+    ('Counterparty_Type',    ('Counterparty_Type',)),
+    ('Trade_Date',           ('Trade_Date',)),
+    ('CALLPUT',              ('CALLPUT',)),
+    ('Strike',               ('Strike',)),
+    ('Legal_Entity',         ('Legal_Entity',)),
+    ('id',                   ('id',)),
+    ('CLEARING_TRADE_ID',    ('CLEARING_TRADE_ID', 'CLEARING_TRADE_')),
+    ('CLEARING_TRD_ID_INT',  ('CLEARING_TRD_ID_INT', 'CLEARING_TRD_ID_IN')),
+    ('CLEARING_TRD_ID_CLNT', ('CLEARING_TRD_ID_CLNT', 'CLEARING_TRD_ID_CLN')),
+    ('TOTAL_PREMIUM',        ('TOTAL_PREMIUM',)),
+    ('PREMIUM_SETT',         ('PREMIUM_SETT',)),
+    ('LAST_PMT_DATE',        ('LAST_PMT_DATE',)),
+    ('REBATE',               ('REBATE',)),
+    ('REBATE_SCHEDULE',      ('REBATE_SCHEDULE',)),
+    ('REBATE_PNL',           ('REBATE_PNL', 'REBATE_PN')),
+    ('BARRIER_TYPE',         ('BARRIER_TYPE', 'BARRIER_TYP')),
+    ('BARRIER_SCHEDULE',     ('BARRIER_SCHEDULE',)),
+    ('CONTRACT_LEVEL',       ('CONTRACT_LEVEL',)),
+    ('INITIAL_PRICE',        ('INITIAL_PRICE',)),
+    ('START_SPOT',           ('START_SPOT',)),
+    ('OPTION_EXERCISE_TYPE', ('OPTION_EXERCISE_TYPE', 'OPTION_EXERCISE_TYP')),
+    ('UNDERLYING_RIC',       ('UNDERLYING_RIC', 'UNDERLYING_R')),
+]
+_LATAM_LABELS = [c[0] for c in _LATAM_COLUMNS]
+# Toda coluna de data do relatório vira dd/mm/yyyy (o arquivo mistura
+# '2030-01-16 00:00:00.0' com '20260108').
+_LATAM_DATE_COLS = {'Maturity_Date', 'Trade_Date', 'PREMIUM_SETT', 'LAST_PMT_DATE',
+                    'REBATE_SCHEDULE', 'BARRIER_SCHEDULE'}
+# Sentinela de "sem data": o relatório grava o epoch (1969-12-31 19:00 em EST /
+# 1970-01-01 em UTC) no lugar de vazio. Essas datas NÃO entram — a célula fica ''.
+_LATAM_EPOCH = {(1969, 12, 31), (1970, 1, 1)}
+# Colunas 62/63 da macro (BJ/BK, 1-based) — fallback posicional quando o header
+# dos dois CLEARING_TRD_ID_* não é reconhecido.
+_LATAM_FILTER_COLS = (62, 63)
+
+# Meta de maker/checker por registro (prefixo '_lt_' para não colidir com as
+# colunas do relatório). Importado/adicionado nasce 'OK'; editar → 'Pending'
+# (maker gravado, checker limpo); OUTRO usuário confirma → 'OK'.
+_LATAM_META_KEYS = ('_lt_status', '_lt_maker', '_lt_checker', '_lt_id')
+
+
+def _latam_norm(s):
+    """Header comparável: minúsculo, só letras e dígitos (assim 'FX Rate',
+    'FX_Rate' e 'fx rate' são o mesmo header)."""
+    s = unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
+    return re.sub(r'[^a-z0-9]', '', s.lower())
+
+
+def _latam_col_map(header):
+    """{label → índice da coluna} para o header de um arquivo. Duas passadas:
+    (1) header IGUAL a um dos candidatos; (2) header que COMEÇA com o candidato,
+    do candidato mais longo para o mais curto — assim 'Counterparty_Type' fica com
+    a sua coluna antes de 'Counterparty' tentar o prefixo. Cada coluna do arquivo
+    é usada por um label só."""
+    hn = [_latam_norm(h) for h in header]
+    out, used = {}, set()
+
+    def claim(label, pred):
+        for i, h in enumerate(hn):
+            if i in used or not h or not pred(h):
+                continue
+            out[label] = i
+            used.add(i)
+            return True
+        return False
+
+    for label, cands in _LATAM_COLUMNS:                      # (1) exato
+        for cand in cands:
+            n = _latam_norm(cand)
+            if n and claim(label, lambda h, n=n: h == n):
+                break
+    pending = [(cand, label) for label, cands in _LATAM_COLUMNS
+               if label not in out for cand in cands]
+    pending.sort(key=lambda t: -len(_latam_norm(t[0])))
+    for cand, label in pending:                              # (2) prefixo
+        n = _latam_norm(cand)
+        if label in out or not n:
+            continue
+        claim(label, lambda h, n=n: h.startswith(n))
+    return out
+
+
+def _latam_date(v):
+    """Data do relatório → 'dd/mm/yyyy'. Aceita '2030-01-16 00:00:00.0',
+    '20260108', dd/mm/yyyy e datetime; devolve '' para o sentinela epoch
+    (1969-12-31 / 1970-01-01) e o texto original quando não é data nenhuma."""
+    if v is None:
+        return ''
+    if hasattr(v, 'year') and hasattr(v, 'month') and hasattr(v, 'day'):
+        d = v
+    else:
+        s = str(v).strip()
+        if not s:
+            return ''
+        d = _fcst_parse_date(s)
+        if d is None:
+            return s
+    if (d.year, d.month, d.day) in _LATAM_EPOCH:
+        return ''
+    return '{:02d}/{:02d}/{:04d}'.format(d.day, d.month, d.year)
+
+
+def _latam_new_id():
+    return uuid.uuid4().hex[:10]
+
+
+def _latam_ensure_meta(data, default_status='OK'):
+    """Garante status/maker/checker/id em todo registro. True se algo mudou (o
+    caller pode persistir — migração de JSON antigo, sem meta)."""
+    changed = False
+    for rec in data:
+        if not rec.get('_lt_id'):
+            rec['_lt_id'] = _latam_new_id(); changed = True
+        if '_lt_status' not in rec:
+            rec['_lt_status'] = default_status; changed = True
+        for k in ('_lt_maker', '_lt_checker'):
+            if k not in rec:
+                rec[k] = ''; changed = True
+    return changed
+
+
+def _latam_json_path(ref):
+    return os.path.join(LATAM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        '{}_{}.json'.format(_LATAM_JSON_BASE, ref.strftime('%Y%m%d')))
+
+
+def _latam_load(ref):
+    """(json_path, data|None) para `ref`, com a meta garantida nos registros."""
+    jp = _latam_json_path(ref)
+    if not os.path.isfile(jp):
+        return jp, None
+    try:
+        with open(jp, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:
+        return jp, None
+    _latam_ensure_meta(data)
+    return jp, data
+
+
+def _latam_save(jp, data):
+    os.makedirs(os.path.dirname(jp), exist_ok=True)
+    with open(jp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _latam_find(data, rid):
+    for rec in data:
+        if str(rec.get('_lt_id', '')) == str(rid):
+            return rec
+    return None
+
+
+def _latam_all_dates():
+    """Datas (datetime) que TÊM JSON de Latam Desk Position, da mais nova para a
+    mais antiga. O relatório não é diário, então é isso que a página usa para
+    saber o que existe."""
+    root = os.path.normpath(LATAM_JSON_ROOT)
+    if not os.path.isdir(root):
+        return []
+    pref = _LATAM_JSON_BASE + '_'
+    out = []
+    for _dirpath, _dirs, files in os.walk(root):
+        for f in files:
+            if not (f.startswith(pref) and f.endswith('.json')) or f.endswith('.meta.json'):
+                continue
+            try:
+                out.append(datetime.strptime(f[len(pref):-5], '%Y%m%d'))
+            except ValueError:
+                continue
+    return sorted(set(out), reverse=True)
+
+
+def _latam_latest_ref():
+    """Data do último JSON disponível (None se nunca foi importado)."""
+    dates = _latam_all_dates()
+    return dates[0] if dates else None
+
+
+def _latam_write_meta(jp, hhmmss, fname=''):
+    """Sidecar <json>.meta.json com a hora do import e o arquivo de origem — a
+    página mostra os dois porque o relatório pode ser de qualquer dia."""
+    try:
+        with open(_ds_meta_path(jp), 'w', encoding='utf-8') as fh:
+            json.dump({'updated': hhmmss or '', 'file': fname or ''}, fh)
+    except OSError:
+        pass
+
+
+def _latam_read_meta(jp):
+    mp = _ds_meta_path(jp)
+    if os.path.isfile(mp):
+        try:
+            with open(mp, encoding='utf-8') as fh:
+                d = json.load(fh) or {}
+            return str(d.get('updated', '') or ''), str(d.get('file', '') or '')
+        except Exception:
+            pass
+    return _ds_read_updated(jp), ''
+
+
+def _latam_extract(rows):
+    """Limpa + extrai as colunas do relatório Latam Desk Position (filtro da macro
+    nas colunas 62/63; datas em dd/mm/yyyy com o epoch virando ''). Devolve
+    (registros, kept, filtered, col_map, labels_não_encontrados). Compartilhado
+    pela página e pelo card Save Daily Settlement."""
+    header = [str(h or '').strip() for h in (rows[0] if rows else [])]
+    cmap = _latam_col_map(header)
+    # A macro filtra por POSIÇÃO (campos 62 e 63). Preferimos o header resolvido —
+    # sobrevive a uma coluna inserida no relatório — e caímos na posição da macro
+    # quando o header dos dois CLEARING_TRD_ID_* não foi reconhecido.
+    i_int = cmap.get('CLEARING_TRD_ID_INT', _LATAM_FILTER_COLS[0] - 1)
+    i_cln = cmap.get('CLEARING_TRD_ID_CLNT', _LATAM_FILTER_COLS[1] - 1)
+    out, kept, filtered = [], 0, 0
+    for r in rows[1:]:
+        if not any(_ds_cell(r, i) for i in range(len(r))):
+            continue                                   # linha totalmente vazia
+        if not (_ds_cell(r, i_int) or _ds_cell(r, i_cln)):
+            filtered += 1
+            continue
+        rec = {}
+        for label in _LATAM_LABELS:
+            i = cmap.get(label)
+            v = _ds_cell(r, i) if i is not None else ''
+            rec[label] = _latam_date(v) if label in _LATAM_DATE_COLS else v
+        out.append(rec)
+        kept += 1
+    _latam_ensure_meta(out)                            # status='OK' + id por linha importada
+    missing = [lb for lb in _LATAM_LABELS if lb not in cmap]
+    return out, kept, filtered, cmap, missing
+
+
+def _latam_import(ref=None):
+    """Acha FbiRptLatamDeskPostion-NY-* em LATAM_SOURCE_ROOT, extrai e grava o
+    JSON da data de referência. O arquivo de origem NÃO é apagado: o relatório não
+    é diário e pode precisar ser reprocessado (o card Save Daily Settlement, que
+    segue a macro, é quem apaga)."""
+    ref = ref or datetime.now()
+    if not os.path.isdir(LATAM_SOURCE_ROOT):
+        return {'success': False, 'error': 'Source folder not found: {}'.format(LATAM_SOURCE_ROOT)}
+    matches = sorted(f for f in os.listdir(LATAM_SOURCE_ROOT)
+                     if f.lower().startswith(_LATAM_FILE_PREFIX))
+    if not matches:
+        return {'success': False,
+                'error': 'No FbiRptLatamDeskPostion-NY-* found in {}'.format(LATAM_SOURCE_ROOT)}
+    src = os.path.join(LATAM_SOURCE_ROOT, matches[0])
+    try:
+        with open(src, 'rb') as fh:
+            rows = _ds_read_rows(fh.read())
+    except Exception:
+        log.warning('[latam] read failed for %s:\n%s', src, traceback.format_exc())
+        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+    if not rows or len(rows) < 2:
+        return {'success': False, 'error': 'File {} has no data rows'.format(matches[0])}
+
+    recs, kept, filtered, cmap, missing = _latam_extract(rows)
+    jp = _latam_json_path(ref)
+    _latam_save(jp, recs)
+    _latam_write_meta(jp, ref.strftime('%H:%M:%S'), matches[0])
+    log.info('[latam] imported %s: kept %d (filtered %d) → %s', matches[0], kept, filtered, jp)
+    if missing:
+        log.warning('[latam] colunas não encontradas no header: %s', ', '.join(missing))
+    return {'success': True, 'file': matches[0], 'rows': kept, 'filtered': filtered,
+            'missing': missing, 'date': ref.strftime('%Y-%m-%d'),
+            'date_fmt': ref.strftime('%d/%m/%Y')}
+
+
+def _latam_collect(ref):
+    """JSON de `ref` → linhas de exibição + widgets. As datas são reformatadas
+    aqui também (defensivo: JSON gravado antes desta regra, ou linha inserida à
+    mão, continua saindo dd/mm/yyyy e sem o epoch)."""
+    widgets = {'calls': 0, 'puts': 0, 'counterparties': 0, 'total': 0}
+    jp = _latam_json_path(ref)
+    rows_out = []
+    if os.path.isfile(jp):
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        if _latam_ensure_meta(data) and data:              # JSON legado sem meta → migra uma vez
+            try:
+                _latam_save(jp, data)
+            except Exception:
+                pass
+        cptys = set()
+        for rec in data:
+            row = []
+            for c in _LATAM_LABELS:
+                v = rec.get(c, '')
+                if c in _LATAM_DATE_COLS:
+                    v = _latam_date(v)
+                row.append('' if v is None else v)
+            row += [rec.get('_lt_status', 'OK'), rec.get('_lt_maker', ''),
+                    rec.get('_lt_checker', ''), rec.get('_lt_id', '')]
+            rows_out.append(row)
+            cp = str(rec.get('CALLPUT', '') or '').strip().upper()[:1]
+            if cp == 'C':
+                widgets['calls'] += 1
+            elif cp == 'P':
+                widgets['puts'] += 1
+            name = str(rec.get('Counterparty', '') or '').strip().upper()
+            if name:
+                cptys.add(name)
+        widgets['counterparties'] = len(cptys)
+        widgets['total'] = len(data)
+    updated, fname = _latam_read_meta(jp)
+    return {'widgets': widgets, 'columns': _LATAM_LABELS, 'rows': rows_out,
+            'updated': updated, 'file': fname}
+
+
+@blueprint.route('/other-products-swap-latamdeskposition')
+def other_products_swap_latamdeskposition():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    latest = _latam_latest_ref()
+    return render_template('pages/other-products-swap-latamdeskposition.html',
+                           segment='other-products-swap-latamdeskposition',
+                           today=datetime.now().strftime('%Y-%m-%d'),
+                           ref_date=(latest or datetime.now()).strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/data')
+def api_latam_data():
+    """Sem ?date= a página abre no ÚLTIMO arquivo disponível (o relatório não é
+    diário); com data, mostra exatamente aquele dia."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    ref, latest = None, False
+    if ds:
+        try:
+            ref = datetime.strptime(ds[:10], '%Y-%m-%d')
+        except ValueError:
+            ref = None
+    if ref is None:
+        ref = _latam_latest_ref()
+        latest = ref is not None
+        ref = ref or datetime.now()
+    payload = _latam_collect(ref)
+    payload.update({'success': True, 'latest': latest,
+                    'date': ref.strftime('%Y-%m-%d'), 'date_fmt': ref.strftime('%d/%m/%Y'),
+                    'dates': [d.strftime('%Y-%m-%d') for d in _latam_all_dates()[:60]]})
+    return jsonify(payload)
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/import', methods=['POST'])
+def api_latam_import():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    res = _latam_import(ref)
+    if res.get('success'):
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Latam Desk Imported', 'Latam Desk Position',
+                             '{} row(s) imported ({})'.format(res.get('rows', 0), res.get('date', '')))
+    return jsonify(res)
+
+
+# ── Latam Desk maker/checker CRUD — toda alteração é persistida no JSON do dia ──
+def _latam_ref_from(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else (_latam_latest_ref() or datetime.now())
+    except ValueError:
+        return _latam_latest_ref() or datetime.now()
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/row/add', methods=['POST'])
+def api_latam_row_add():
+    """Linha manual → status 'OK' (maker = usuário atual). Persistida no JSON."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    cells = p.get('cells') or []
+    sid = session.get('user_sid', '')
+    ref = _latam_ref_from(p)
+    jp, data = _latam_load(ref)
+    if data is None:
+        data = []                                     # primeira linha manual em dia sem import
+    rec = {}
+    for i, c in enumerate(_LATAM_LABELS):
+        v = str(cells[i]).strip() if i < len(cells) and cells[i] is not None else ''
+        rec[c] = _latam_date(v) if c in _LATAM_DATE_COLS else v
+    rec['_lt_status'], rec['_lt_maker'], rec['_lt_checker'], rec['_lt_id'] = 'OK', sid, '', _latam_new_id()
+    data.append(rec)
+    try:
+        _latam_save(jp, data)
+    except Exception:
+        log.error('[latam] add save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Latam Desk Row Added',
+                         'Latam Desk Position',
+                         '{} ({})'.format(rec.get('Deal_ID', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'id': rec['_lt_id']})
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/row/edit', methods=['POST'])
+def api_latam_row_edit():
+    """Edita as células → status 'Pending', maker = usuário atual (checker limpo)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid, cells = str(p.get('id', '')), (p.get('cells') or [])
+    sid = session.get('user_sid', '')
+    ref = _latam_ref_from(p)
+    jp, data = _latam_load(ref)
+    rec = _latam_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    for i, c in enumerate(_LATAM_LABELS):
+        if i < len(cells):
+            v = str(cells[i]).strip()
+            rec[c] = _latam_date(v) if c in _LATAM_DATE_COLS else v
+    rec['_lt_status'], rec['_lt_maker'], rec['_lt_checker'] = 'Pending', sid, ''
+    try:
+        _latam_save(jp, data)
+    except Exception:
+        log.error('[latam] edit save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Latam Desk Row Updated',
+                         'Latam Desk Position',
+                         '{} ({})'.format(rec.get('Deal_ID', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/row/delete', methods=['POST'])
+def api_latam_row_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    ref = _latam_ref_from(p)
+    jp, data = _latam_load(ref)
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    rec = _latam_find(data, rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    data.remove(rec)
+    try:
+        _latam_save(jp, data)
+    except Exception:
+        log.error('[latam] delete save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Latam Desk Row Deleted',
+                         'Latam Desk Position',
+                         '{} ({})'.format(rec.get('Deal_ID', ''), ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/api/other-products-swap-latamdeskposition/row/confirm', methods=['POST'])
+def api_latam_row_confirm():
+    """Confirma uma linha Pending → 'OK'. Trava de quatro olhos: quem alterou não
+    pode confirmar (outro usuário precisa)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    rid = str(p.get('id', ''))
+    sid = session.get('user_sid', '')
+    ref = _latam_ref_from(p)
+    jp, data = _latam_load(ref)
+    rec = _latam_find(data or [], rid)
+    if rec is None:
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
+    maker = str(rec.get('_lt_maker', '') or '')
+    if maker and maker == sid:
+        return jsonify({'success': False, 'error': 'same_user',
+                        'message': 'A different user must confirm a row you changed.'}), 403
+    rec['_lt_status'], rec['_lt_checker'] = 'OK', sid
+    try:
+        _latam_save(jp, data)
+    except Exception:
+        log.error('[latam] confirm save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _create_notification(sid, session.get('user_name', ''), 'Latam Desk Row Confirmed',
+                         'Latam Desk Position',
+                         '{} ({})'.format(rec.get('Deal_ID', ''), ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 

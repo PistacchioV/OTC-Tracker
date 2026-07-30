@@ -5987,3 +5987,75 @@ depois da tradução (`applyI18n()` agora devolve a promise justamente para isso
 salva o usuário com JSON velho em cache: um número escrito à mão no arquivo é reescrito para o `MAX` real.
 Regra geral: **número de limite nunca escrito na tradução**, sempre placeholder, senão o texto diverge do
 comportamento até o cache expirar.
+
+## 137. Sessão 2026-07-30 — Other Products › Latam Desk Position (página nova)
+
+Página nova em **Daily Settlements › Other Products › Latam Desk Position**, no URL que já existia no
+sidenav e no horizontal-nav (`/other-products-swap-latamdeskposition`) e que até agora dava 404 — o item de
+menu e a chave de tradução `latam-desk-position` estavam lá desde antes. Modelada na página **OTM
+Settlements**: JSON por dia, widgets, filtro por coluna, Columns/Export e CRUD maker/checker (add → `OK`,
+edit → `Pending` com o maker, confirm por OUTRO usuário → `OK`, trava de quatro olhos igual à do OTM).
+
+**Arquivo de origem:** `FbiRptLatamDeskPostion-NY-*` na pasta **Settlements** (`SETTLEMENTS_ROOT`, override
+`LATAM_SOURCE_ROOT`). O nome do arquivo tem o typo **"Postion"** — o relatório é assim; a **página** é
+"Position". O match é `startswith('fbirptlatamdeskpo')`, então cobre os dois.
+
+**Filtro replicado da macro.** O VBA aplica `AutoFilter Field:=62, Criteria1:="<>"`, copia as visíveis,
+limpa, aplica `Field:=63, Criteria1:="<>"` e ANEXA a partir de A2. Traduzido para: mantém a linha quando a
+coluna **62 (BJ, `CLEARING_TRD_ID_IN…`)** OU a **63 (BK, `CLEARING_TRD_ID_CLN…`)** está preenchida.
+Diferença deliberada: a linha que tem as **duas** colunas preenchidas entra **uma vez** — a macro a copiaria
+duas vezes (uma em cada passada). O índice sai do header resolvido e cai na posição 62/63 da macro só se o
+header dos dois `CLEARING_TRD_ID_*` não for reconhecido, então uma coluna inserida no relatório não quebra o
+filtro.
+
+**Datas.** O arquivo mistura layouts (`2030-01-16 00:00:00.0`, `20260108`) e usa o **epoch como "sem data"**
+(`1969-12-31 19:00:00.0` = 0 em EST; `1970-01-01` em UTC). `_latam_date()` normaliza tudo para
+**dd/mm/yyyy** e devolve `''` para as duas datas de epoch — na importação **e** na exibição (defensivo: JSON
+antigo ou linha inserida à mão também saem limpos). Texto que não é data nenhuma (`N/A`) é preservado.
+Colunas tratadas como data: `_LATAM_DATE_COLS` = Maturity_Date, Trade_Date, PREMIUM_SETT, LAST_PMT_DATE,
+REBATE_SCHEDULE, BARRIER_SCHEDULE.
+
+**Colunas (`_LATAM_COLUMNS`, 38).** Cada entrada é `(label, candidatos de header)`. Vários headers do
+relatório só foram vistos **truncados** na planilha, então o segundo candidato é o texto cortado e vale como
+**prefixo**: `'CLEARING_TRD_ID_IN'` acha `CLEARING_TRD_ID_INTERNAL`, `'Ty'` acha `Type`, `'Instrument_'` acha
+`Instrument_ID`. `_latam_col_map()` resolve em duas passadas — header IGUAL primeiro, depois prefixo **do
+candidato mais longo para o mais curto** — e cada coluna do arquivo é usada por um label só (é isso que
+impede `Counterparty` de roubar a coluna de `Counterparty_Type`, e `id` de roubar `Deal_ID`). O que não
+resolver sai vazio na página e aparece como `missing` na resposta do import + `log.warning`: **se alguma
+coluna vier vazia depois do primeiro import real, o conserto é uma linha em `_LATAM_COLUMNS`**, não código.
+
+**O relatório NÃO é diário.** A página abre no **último JSON disponível** (`_latam_latest_ref()`, que varre
+a árvore `cache/daily settlement/YYYY/MM/DD/latam-desk-position_YYYYMMDD.json`), não no de hoje: o JS chama
+`/data` **sem** `?date=` e o servidor devolve a última data que tem arquivo, com `latest: true`, e o picker é
+sincronizado com ela. Escolher uma data no picker passa a pedir aquele dia exato; dia sem arquivo mostra
+"Sem dados nesta data · Último disponível: dd/mm/yyyy" (o payload traz `dates`, as 60 datas mais recentes).
+O sidecar `<json>.meta.json` guarda `{updated, file}` — a página mostra a hora do import e o **nome do
+arquivo de origem**, que importa justamente porque a posição pode ser de outro dia.
+
+**Card do Control Panel.** O spec `latam-desk` em `_DS_IMPORTS` já existia (filtro genérico
+`nonempty_any [62,63]`) e passou a ter `'latam': True`, com um branch novo em `_ds_handle` que usa
+`_latam_extract` — **card e página gravam exatamente o mesmo JSON** (testado registro por registro). A
+descrição do card agora nomeia o arquivo (`FbiRptLatamDeskPostion-NY-*`) nos três idiomas. Diferença
+proposital: o **card apaga** o arquivo de origem (mirror do `Kill` da macro, como os outros), o **import da
+própria página não apaga** — o relatório não é diário e pode precisar ser reprocessado depois de ajustar um
+label.
+
+**Números não foram tocados.** `Strike` e `START_SPOT` aparecem no Excel como
+`64.605.999.999.999.900.000` porque o Excel em pt-BR lê o `.` de `646.05999999999900000` como separador de
+milhar — lendo o arquivo direto em Python o valor vem certo, e nenhuma formatação/arredondamento foi
+aplicada (`FX Rate` continua `5.09849999999999`). Se a mesa quiser `#,##0.00` nessas colunas, é uma regra a
+mais no `_latam_collect`.
+
+**Widgets** (escolha desta sessão, o pedido não especificou): **Calls** (CALLPUT=C), **Puts** (CALLPUT=P),
+**Counterparties** (distintas) e **Total** (linhas).
+
+Arquivos: `apps/pages/routes.py` (bloco Latam Desk Position + spec/branch do card),
+`apps/templates/pages/other-products-swap-latamdeskposition.html`,
+`apps/static/js/pages/other-products-swap-latamdeskposition.js`, `control-panel.html`, traduções
+(`ldp-*` + `cp-r-ds-desc`). O URL já estava no sidenav, então entra automaticamente no `/page-access`
+(`_load_nav_urls` → 69 páginas controláveis).
+
+**Nota de limpeza nas traduções:** `en.json`/`br.json`/`es.json` tinham `nd-col-other-book` e
+`col-other-book` **duplicados** (dois blocos, valores `OtherBook` e `Other Book`). A reescrita dos arquivos
+deduplicou mantendo o valor que já ganhava no browser (`JSON.parse` fica com a última ocorrência), então o
+comportamento não mudou.
