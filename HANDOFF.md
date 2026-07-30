@@ -65,6 +65,12 @@ Isto vale para qualquer criação/edição de tela (novas páginas, cards, tabel
     flex:0 0 28px;padding:0;font-size:13px;display:inline-flex;align-items:center;justify-content:center;
     border-radius:50%; }`. Aplicado em operations-b3, otm-settlements, ndf-cockpit (paridade com
     intrag-option/ndf). Ref viva: `intrag-option.html` (`_optActionsCell`, `statusBadge`).
+  - **Centralização do badge de status:** centralizar na **COLUNA**, via `columnDefs`
+    (`{ targets: [<STATUS_COL_INDEX>], className: 'text-center' }`), **não** em cada ponto que escreve a
+    célula. A célula de Status é reescrita por vários caminhos (rowMaker, mapping B3, aprovação na coluna
+    Actions, edição em massa) e alinhar em cada um deles volta a desencontrar assim que alguém mexer num.
+    `columnDefs` também é o que sobrevive a coluna escondida — o DataTables tira a coluna oculta do DOM e
+    índices de CSS `nth-child` andam. Ver §153.
 - **DROPDOWN EXPORT — PADRÃO OBRIGATÓRIO (⚠️ evita translúcido):** o dropdown do DataTables Buttons `extend:'collection'` (Copy/CSV/Excel/PDF) nasce **semi-transparente** (opções quase invisíveis). SEMPRE incluir o bloco CSS de `.dt-button-collection` com fundo sólido (`#fff` / dark `#2b2f3a`), sombra, `opacity:1` e texto opaco — **NÃO escopar** sob o `#id` da página (o DataTables anexa o `.dt-button-collection` ao `<body>`, então uma regra escopada não pega). Referência viva: `accrual-swap.html` (linhas ~170-208), `live-position-swap-characteristics.html`. Também garantir `buttons.print.min.js` carregado quando houver Print (senão os Buttons falham em silêncio).
 - **Todo botão** deve ter feedback: `:active` press (`scale(0.97)`, `.9` em ícone-circular) + hover (lift `translateY(-1px)` + sombra) atrás de `@media (hover:hover)`, com guard `prefers-reduced-motion`.
 - **DATE PICKER — PADRÃO OBRIGATÓRIO (⚠️ evita erro recorrente):** usar **jQuery `daterangepicker`** com `singleDatePicker`, EXATAMENTE como em `mtm-swap.html`, `accrual-swap.html` e `control-panel.html`. **NUNCA** usar `<input type="date">` nativo (herda o locale do SO → mostra `mm/dd/yyyy` no ambiente Windows do JP) e **não** confiar num flatpickr "global" do bundle (falhou de forma intermitente em `other-products-summary`).
@@ -6855,3 +6861,33 @@ quem escreveu a célula, e é por isso que a correção é ali e não em cada po
 vale para as 6 páginas — `STATUS_COL_INDEX` é 2 em todas. Usar `columnDefs` em vez de CSS com
 `nth-child` também é o que sobrevive a coluna escondida: o DataTables tira a coluna oculta do DOM e os
 índices de `nth-child` andariam.
+
+---
+
+## §154 — Monitor: o verde do card concluído sumia no tema claro
+
+O sombreado de progresso do New Deals Monitor (§129) ia do vermelho ao verde. No **dark** ficou como
+esperado; no **claro**, o card 100% Success praticamente não mostrava o verde, enquanto o vermelho dos
+pendentes se lia inteiro.
+
+**Duas causas somadas.**
+
+1. O card concluído usa opacidades **menores** de propósito (`.is-done`: .08/.14/.09 contra .12/.22/.14
+   do card em andamento) — "resolvido não precisa gritar". No escuro isso funciona; no claro apagava o
+   halo.
+2. O verde do gradiente é `#1a8a4a`, escuro demais para virar halo sobre fundo branco. O vermelho
+   `#dc3545` sobrevive à mesma redução; o verde não.
+
+**Correção, só no tema claro** (a regra `[data-bs-theme=dark] … .ndm-card--prog` vem depois e tem a
+mesma especificidade, então continua vencendo no escuro — o dark ficou byte a byte como estava; o
+hover do concluído no escuro precisou de uma regra própria porque o `:hover` tem especificidade maior
+e passava por cima):
+
+- opacidades do `.is-done` sobem para .14/.28/.18 (borda .34), o peso do card em andamento;
+- a cor vira **literal `#16a34a`** em vez de `var(--ndm-prog)`.
+
+**Por que literal.** O JS escreve `--ndm-prog` no atributo `style` do card
+(`style="--ndm-prog: r, g, b"`), e **declaração inline vence qualquer seletor** — redefinir a variável
+no CSS não teria efeito nenhum. Como `.is-done` é por definição 100% Success, a cor é conhecida, e
+escrevê-la direto é mais simples do que disputar a cascata. Os cards em andamento continuam com a cor
+interpolada pelo JS.

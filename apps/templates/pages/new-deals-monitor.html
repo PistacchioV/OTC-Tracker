@@ -151,12 +151,24 @@
                 0 10px 24px rgba(var(--ndm-prog), .22),
                 0 22px 50px rgba(var(--ndm-prog), .14);
 }
-/* Concluído (tudo Success) fala mais baixo: o card resolvido não precisa gritar */
+/* Concluído (tudo Success). No DARK ele fala mais baixo — o card resolvido não
+   precisa gritar — e é por isso que estes valores são menores que os do card em
+   andamento. No CLARO essa mesma redução apagava o verde: halo verde escuro
+   sobre fundo branco quase não se lê, enquanto o vermelho do card pendente se lê
+   inteiro. Aqui (base = tema claro) o verde volta ao peso do card em andamento;
+   o bloco [data-bs-theme=dark] mais abaixo vence estes valores e mantém o dark
+   como estava.
+   O verde do gradiente (#1a8a4a) também é escuro demais para virar halo no
+   claro, então aqui a cor é LITERAL (#16a34a, mais vivo) em vez de
+   `var(--ndm-prog)`: o JS escreve `--ndm-prog` no atributo `style` do card, e
+   declaração inline vence qualquer seletor — redefinir a variável no CSS não
+   teria efeito. Como `.is-done` é sempre 100% Success, a cor é conhecida e
+   escrevê-la direto é mais simples do que disputar a cascata. */
 #ndm-page .ndm-card--prog.is-done {
-    border-color: rgba(var(--ndm-prog), .22);
-    box-shadow: 0 2px 5px rgba(var(--ndm-prog), .08),
-                0 10px 24px rgba(var(--ndm-prog), .14),
-                0 22px 50px rgba(var(--ndm-prog), .09);
+    border-color: rgba(22, 163, 74, .34);
+    box-shadow: 0 2px 5px rgba(22, 163, 74, .14),
+                0 10px 24px rgba(22, 163, 74, .28),
+                0 22px 50px rgba(22, 163, 74, .18);
 }
 [data-bs-theme=dark] #ndm-page .ndm-card--prog {
     border-color: rgba(var(--ndm-prog), .38);
@@ -173,6 +185,13 @@
                     0 34px 70px rgba(var(--ndm-prog), .2);
     }
     #ndm-page .ndm-card--prog.is-done:hover {
+        border-color: rgba(22, 163, 74, .42);
+        box-shadow: 0 4px 10px rgba(22, 163, 74, .18),
+                    0 18px 38px rgba(22, 163, 74, .32),
+                    0 34px 70px rgba(22, 163, 74, .21);
+    }
+    /* No escuro o hover do concluído volta a ser o discreto de antes. */
+    [data-bs-theme=dark] #ndm-page .ndm-card--prog.is-done:hover {
         border-color: rgba(var(--ndm-prog), .3);
         box-shadow: 0 4px 10px rgba(var(--ndm-prog), .1),
                     0 18px 38px rgba(var(--ndm-prog), .19),
