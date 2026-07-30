@@ -4271,7 +4271,11 @@ $(document).ready(function() {
         f[11] = fonteInfo;
         f[16] = _sh(deal.UnderlyingAsset || '');
         f[17] = _num(deal.Strike || '', qic);
-        f[18] = fixSingle;
+        // Data de Fixing do Ativo Subjacente: SEMPRE em branco no Other
+        // Publisher — as 8 posições do campo vão preenchidas com espaço.
+        // `fixSingle` continua calculado acima porque `tipoMedia` depende da
+        // mesma janela de fixing.
+        f[18] = '        ';
         f[19] = tradeDate;
         f[20] = settlDate;
         f[22] = tipoCotacao;

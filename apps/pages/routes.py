@@ -13872,6 +13872,31 @@ def _pc_run_daily_maintenance(snapshot=True):
 # (default 11:30). Self-contained (no OS Task Scheduler needed); the maintenance
 # is idempotent so an occasional double-run is harmless.
 _PC_DAILY_TIME = os.getenv('PC_DAILY_TIME', '11:30')
+# ──────────────────────────────────────────────────────────────────────────
+# Horário de Brasília
+# ──────────────────────────────────────────────────────────────────────────
+# Os agendamentos da aplicação (aviso de pendências às 19h, manutenção diária
+# às 11h30) são horários do BRASIL. `datetime.now()` devolve o horário LOCAL do
+# servidor, e a instância do time não roda necessariamente em BRT — foi por isso
+# que o aviso das 19h não saiu na hora esperada.
+#
+# No Windows o `zoneinfo` depende do pacote `tzdata`, que pode não estar
+# instalado; sem ele cai no offset fixo de -03:00, que vale o ano todo desde que
+# o Brasil acabou com o horário de verão (2019). Não é uma aproximação
+# arriscada: é o mesmo offset que o banco de fusos daria hoje.
+try:
+    from zoneinfo import ZoneInfo
+    _BR_TZ = ZoneInfo('America/Sao_Paulo')
+except Exception:                                   # noqa: BLE001
+    _BR_TZ = timezone(timedelta(hours=-3))
+
+
+def _br_now():
+    """Agora em horário de Brasília, como datetime ingênuo (sem tzinfo) — é
+    assim que o resto do código compara, formata e nomeia arquivos por data."""
+    return datetime.now(_BR_TZ).replace(tzinfo=None)
+
+
 _pc_scheduler_started = False
 _pc_scheduler_lock = threading.Lock()
 
@@ -13884,12 +13909,12 @@ def _pc_scheduler_loop():
     last_run = None
     while True:
         try:
-            now = datetime.now()
+            now = _br_now()
             target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
             if target <= now:
                 target += timedelta(days=1)
             time.sleep(max(1.0, (target - now).total_seconds()))
-            today = datetime.now().date()
+            today = _br_now().date()
             if today != last_run:          # once per calendar day
                 last_run = today
                 _pc_run_daily_maintenance(snapshot=True)
@@ -22230,11 +22255,54 @@ def _ndm_pending_times():
     return sorted(set(out)) or [(19, 0), (19, 30)]
 
 
+def _ndm_pending_disparar(slot, fired):
+    """Manda o aviso de um slot, se ninguém já mandou. True quando o slot era
+    deste processo (reivindicado agora)."""
+    if not _ndm_pending_claim_slot(slot):
+        return False
+    rec = _load_ndm_pending_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        log.warning('[deals-monitor] sem destinatário configurado — aviso pulado')
+        return True
+    res = _send_ndm_pending_email(fired, to_list, cc_list)
+    # O resultado vai para o log SEMPRE: quando o aviso não chega, a primeira
+    # pergunta é se ele não foi enviado ou se não havia pendência ('empty'), e
+    # sem esta linha não dava para saber.
+    log.info('[deals-monitor] aviso de %s (BRT): %s', slot,
+             'enviado' if res is True else res)
+    return True
+
+
+def _ndm_pending_catch_up(times):
+    """Slots de HOJE que já passaram e ninguém reivindicou.
+
+    A instância do time é reiniciada várias vezes por dia (o reloader fica
+    desligado, então todo pull pede restart). Subindo depois das 19h30, o loop
+    dormia até o dia seguinte e o aviso do dia simplesmente não saía — sem erro
+    nenhum no log. O arquivo de claim é que garante que isto não vire e-mail
+    repetido quando há mais de um restart."""
+    now = _br_now()
+    for hh, mm in times:
+        cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if cand > now:
+            continue
+        slot = '{} {:02d}:{:02d}'.format(now.strftime('%Y-%m-%d'), hh, mm)
+        try:
+            if _ndm_pending_disparar(slot, now):
+                log.info('[deals-monitor] aviso de %s recuperado no start '
+                         '(processo subiu depois do horário)', slot)
+        except Exception:                              # noqa: BLE001
+            log.error('[deals-monitor] catch-up de %s falhou:\n%s',
+                      slot, traceback.format_exc())
+
+
 def _ndm_pending_scheduler_loop():
     times = _ndm_pending_times()
+    _ndm_pending_catch_up(times)
     while True:
         try:
-            now = datetime.now()
+            now = _br_now()
             # Próximo horário de hoje que ainda não passou; se todos passaram,
             # o primeiro de amanhã.
             nxt = None
@@ -22248,18 +22316,11 @@ def _ndm_pending_scheduler_loop():
                 nxt = (now + timedelta(days=1)).replace(hour=hh, minute=mm,
                                                         second=0, microsecond=0)
             time.sleep(max(1.0, (nxt - now).total_seconds()))
-            fired = datetime.now()
+            fired = _br_now()
             slot = '{} {:02d}:{:02d}'.format(fired.strftime('%Y-%m-%d'),
                                              nxt.hour, nxt.minute)
-            if not _ndm_pending_claim_slot(slot):
+            if not _ndm_pending_disparar(slot, fired):
                 time.sleep(60)
-                continue
-            rec = _load_ndm_pending_recipients()
-            to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
-            if to_list or cc_list:
-                _send_ndm_pending_email(fired, to_list, cc_list)
-            else:
-                log.warning('[deals-monitor] sem destinatário configurado — aviso pulado')
         except Exception:
             log.error('[deals-monitor] scheduler error:\n%s', traceback.format_exc())
             time.sleep(60)
@@ -22273,8 +22334,10 @@ def _ndm_pending_start_scheduler():
         _ndm_pending_scheduler_started = True
     threading.Thread(target=_ndm_pending_scheduler_loop,
                      name='deals-monitor-pending-scheduler', daemon=True).start()
-    log.info('[deals-monitor] scheduler de pendências iniciado (%s)',
-             ', '.join('{:02d}:{:02d}'.format(h, m) for h, m in _ndm_pending_times()))
+    log.info('[deals-monitor] scheduler de pendências iniciado (%s BRT · '
+             'agora são %s no servidor / %s em Brasília)',
+             ', '.join('{:02d}:{:02d}'.format(h, m) for h, m in _ndm_pending_times()),
+             datetime.now().strftime('%H:%M'), _br_now().strftime('%H:%M'))
 
 
 try:
@@ -22846,6 +22909,13 @@ def api_generic_nd_send_conecta(product):
         # (a última preenchida). Asiático deixa em branco — as datas da janela
         # vão nas linhas de verificação.
         fix_single = '' if asian_fix else (fix_end or fix_start)
+        # Other Publisher: a Data de Fixing do Ativo Subjacente vai SEMPRE em
+        # branco (as 8 posições do campo preenchidas com espaço). Só o FWD Start
+        # continua mandando a data do fixing único. `tipo_media` não depende
+        # deste campo — sai de `asian_fix` —, então zerar aqui não muda a
+        # classificação da operação.
+        if not is_fwd:
+            fix_single = ''
         tipo_media = 'A' if asian_fix else 'N'
 
         if is_fwd:

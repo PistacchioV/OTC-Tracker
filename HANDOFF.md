@@ -6751,3 +6751,50 @@ não os dois.
 Vale nas 6 páginas de New Deals (NDF Vanilla / Commodities / FWD Start / Other Publisher, Opt
 Commodities / FXO). A única diferença entre elas é o índice da coluna do ativo (13 no FXO, 14 nas
 demais) — o mesmo que a trava do Pending já usava em cada página.
+
+---
+
+## §150 — NDF Other Publisher: Data de Fixing do Ativo Subjacente sempre em branco
+
+Campo 19 do arquivo Conecta (`f[18]` no builder da página, `_pos(fix_single, 8)` no servidor). No
+Other Publisher ele passa a sair **sempre com as 8 posições preenchidas com espaço**, em vez da data
+do fixing único. Vale para o arquivo **e** para o preview — os dois saem do mesmo
+`buildConectaFields`, e o servidor foi ajustado junto para o arquivo enviado não divergir da tela.
+
+O **FWD Start não mudou**: `api_generic_nd_send_conecta` atende os dois produtos, então o branqueamento
+é condicionado a `if not is_fwd`.
+
+`tipo_media` ('A'/'N') **não** depende deste campo — sai de `asian_fix`, que olha a janela de fixing —,
+então zerar a data não reclassifica a operação. `fixSingle` continua sendo calculado na página pelo
+mesmo motivo.
+
+---
+
+## §151 — Agendamentos em horário de Brasília (o aviso das 19h não saiu)
+
+O aviso de pendências do Deals Monitor não foi disparado em 30/07/2026. **Duas causas possíveis, as
+duas tratadas:**
+
+**1. Fuso.** Os agendamentos usavam `datetime.now()`, que é o horário **local do servidor** — e a
+instância do time não roda necessariamente em BRT. Entraram `_BR_TZ` e `_br_now()` (`zoneinfo`
+`America/Sao_Paulo`, com fallback para o offset fixo `-03:00` quando o `tzdata` não está instalado —
+caso do Windows; o Brasil não tem horário de verão desde 2019, então o offset fixo não é aproximação).
+Passaram a usar `_br_now()` o scheduler do aviso (19:00 / 19:30) **e** o da manutenção diária de
+Pending Confirmation (11:30), que tinha o mesmo defeito silencioso.
+
+**2. Restart depois do horário.** A instância roda com o reloader desligado, então todo pull pede
+restart — e vários aconteceram neste dia. Subindo às 19h31, o loop calculava o próximo slot como
+"amanhã 19:00" e o aviso do dia simplesmente não saía, **sem erro nenhum no log**.
+`_ndm_pending_catch_up()` roda no start e dispara os slots de **hoje** que já passaram e que ninguém
+reivindicou. O arquivo de claim (`deals_monitor_pending_sent.json`) é o que impede que isso vire
+e-mail repetido a cada restart.
+
+**Diagnóstico para a próxima vez.** O log do start agora imprime os horários **e** a hora do servidor
+ao lado da hora de Brasília — se estiverem diferentes, o fuso da máquina está fora. E cada disparo
+registra o resultado (`enviado` / `empty` / erro), o que antes não existia: quando o aviso não chegava,
+não dava para distinguir "não foi enviado" de "não havia pendência", já que o aviso não é mandado
+quando não há nada pendente (decisão da §141).
+
+**Teste**: `check_tz_conecta.py` (scratchpad) confere o offset e o tipo de retorno de `_br_now()`,
+recupera dois slots perdidos num start às 23h, garante que um segundo restart no mesmo dia **não**
+repete o e-mail, que slot futuro não dispara, e cobre o campo de fixing da §150.
