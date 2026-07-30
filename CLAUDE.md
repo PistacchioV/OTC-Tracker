@@ -104,6 +104,25 @@ Two separate databases are in use:
 - **DuckDB** (`Users_OTCTracker.db`): stores `users` and `verification_codes` tables. Connection is managed manually via `get_db_connection()` / `conn.close()` in every function. `DB_PATH` is now a **relative** path (`apps/static/data/db/Users_OTCTracker.db`) resolved from the module dir — no longer a hardcoded Windows path, so it works cross-machine. If DuckDB refuses to open the DB after running under a different duckdb version (`INTERNAL Error … replaying WAL`), rename the stray `Users_OTCTracker.db.wal` aside; the main `.db` is intact.
 - **SQLite** (`apps/db.sqlite3`): managed by Flask-SQLAlchemy. Currently unused by application logic but initialised by `configure_database()` on every request.
 
+### SQL injection
+
+Reference: [`Docs/SQL_Injection_Prevention_Cheat_Sheet.md`](Docs/SQL_Injection_Prevention_Cheat_Sheet.md)
+— the OWASP cheat sheet, vendored into the repo (CC BY-SA 3.0, provenance header at the top; re-download
+it to update, don't hand-edit).
+
+How it applies here — the codebase already follows the primary defense, and it must stay that way:
+
+- **Every value that comes from a request, a session, a spreadsheet or an e-mail goes in as a `?`
+  parameter**, never interpolated: `conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid])`.
+  DuckDB's `execute` takes the parameter list as its second argument; `executemany` for batches.
+- The handful of `'...{}'.format(...)` queries are **DDL over code-owned identifiers** (`_PC_TABLE`,
+  columns from `_PC_COLUMNS`) — table and column names can't be bound as parameters, which is the one
+  case the cheat sheet allows string building for. Keep those lists as module constants: the moment a
+  table or column name can come from a request, it needs allow-list validation against a fixed tuple
+  (cheat sheet "Defense Option 3"), not escaping.
+- Login is by SID from the internal phonebook, but the SID still reaches the DB as a bound parameter —
+  don't "optimize" it into an f-string.
+
 ### Template inheritance
 
 ```

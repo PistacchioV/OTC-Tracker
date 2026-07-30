@@ -4608,7 +4608,7 @@ apps/static/data/translations/{en,br,es}.json          ← 8 chaves do card sign
 
 Varredura de segurança para produção (só correções que **não mudam output nem fluxo** de
 usuário legítimo), limpeza de menções a desenvolvimento fora do ambiente JPM, e um fix no
-cabeçalho do e-mail de fim de dia do Pay/Rec. Detalhe do CSP no `docs/SECURITY-PHASE2.md`
+cabeçalho do e-mail de fim de dia do Pay/Rec. Detalhe do CSP no `Docs/SECURITY-PHASE2.md`
 (itens 2A.1/2A.2 marcados como feitos).
 
 ### Segurança (`9ca309a`, só `routes.py`)
@@ -4674,7 +4674,7 @@ scripts/backfill_cetip_position_files.py    ← comentário do stub awmpy neutra
 scripts/pending_confirmation_daily.py       ← idem
 scripts/sop-capture/capture_screens.py      ← docstring sem menção a stub/dev-login externo
 scripts/sop-capture/devrun.example.py       ← comentários neutralizados (mantém função)
-docs/SECURITY-PHASE2.md                     ← 2A.1/2A.2 marcados feitos + linha do commit 9ca309a
+Docs/SECURITY-PHASE2.md                     ← 2A.1/2A.2 marcados feitos + linha do commit 9ca309a
 ```
 
 ## 104. Sessão 2026-07-23 — Metrics offenders live + polish de toasts (`4962acc`, `39aabc7`, `38230db`, `60f022c`)
