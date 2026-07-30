@@ -4788,11 +4788,13 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
             recs, total = _swaphyb_extract(raw, ref)    # filter Settlement Date = today (import date)
             jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
         elif spec.get('latam'):                         # FbiRptLatamDeskPostion → Latam Desk Position
-            rows = _latam_read_rows(raw)
+            rows, fmt = _latam_read_rows(raw)
             recs, kept, filtered, _cmap, missing = (_latam_extract(rows) if len(rows) >= 2
                                                     else ([], 0, 0, {}, []))
             total = kept + filtered
             jp = _latam_json_path(ref)
+            log.info('[latam] %s lido como %s: %d linha(s), %d filtrada(s)',
+                     name, fmt, kept, filtered)
             if missing:
                 log.warning('[latam] colunas não encontradas no header de %s: %s',
                             name, ', '.join(missing))
@@ -6881,15 +6883,108 @@ def _latam_read_meta(jp):
     return _ds_read_updated(jp), ''
 
 
-def _latam_read_rows(raw):
-    """Linhas do relatório. `_ds_read_rows` assume TAB (como o OpenText da macro),
-    mas este arquivo chega de um extrator externo: se o header partido por TAB der
-    uma coluna só, o separador é outro — testa ; , e | antes de desistir. Sem isso
-    o arquivo "carrega" com uma coluna gigante, as colunas 62/63 ficam vazias e o
+def _latam_sniff_format(raw):
+    """Formato REAL do arquivo, pelo conteúdo e não pela extensão. O relatório
+    chega como `FbiRptLatamDeskPostion-NY-....xls`, mas '.xls' aí é só o nome:
+    pode ser um .xls binário de verdade (OLE2/BIFF), um xlsx (zip), uma TABELA
+    HTML ou um texto delimitado — geradores desse tipo de relatório usam os
+    quatro (o cashflows do OTM, por exemplo, é texto com nome .xlsx). A macro
+    nunca precisou distinguir porque o `Workbooks.Open` do Excel fareja sozinho."""
+    if raw[:2] == b'PK':
+        return 'xlsx'
+    if raw[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':      # OLE2 compound file
+        return 'xls'
+    head = raw[:2048].lstrip().lower()
+    if head[:1] == b'<' and (b'<table' in raw[:65536].lower() or b'<html' in head):
+        return 'html'
+    return 'text'
+
+
+def _latam_read_xls(raw):
+    """.xls binário (BIFF) via xlrd — import tardio, no mesmo espírito do reportlab:
+    sem a lib o erro diz o que instalar, em vez de ler bytes binários como texto e
+    devolver zero linha silenciosamente."""
+    try:
+        import xlrd
+    except ImportError:
+        raise RuntimeError('Arquivo .xls binário (Excel 97-2003): a lib xlrd não está '
+                           'instalada. Rode "pip install xlrd" na instância ou salve o '
+                           'relatório como .xlsx / texto.')
+    book = xlrd.open_workbook(file_contents=raw)
+    sh = book.sheet_by_index(0)
+    out = []
+    for r in range(sh.nrows):
+        row = []
+        for c in range(sh.ncols):
+            cell = sh.cell(r, c)
+            v = cell.value
+            if cell.ctype == xlrd.XL_CELL_DATE:              # serial → ISO, que _latam_date entende
+                y, mo, d, hh, mi, ss = xlrd.xldate_as_tuple(v, book.datemode)
+                v = '{:04d}-{:02d}-{:02d}'.format(y, mo, d) if y else ''
+            elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                v = str(int(v)) if float(v).is_integer() else repr(v)   # SPN 281808.0 → '281808'
+            elif cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                v = ''
+            row.append(v)
+        out.append(row)
+    return out
+
+
+def _latam_read_html(raw):
+    """Tabela HTML salva com nome de planilha (formato comum nesses relatórios):
+    pega a PRIMEIRA <table> e devolve <tr>/<td> como linhas e colunas."""
+    from html.parser import HTMLParser
+
+    class _Table(HTMLParser):
+        def __init__(self):
+            HTMLParser.__init__(self, convert_charrefs=True)
+            self.rows, self._row, self._cell, self._done = [], None, None, False
+
+        def handle_starttag(self, tag, attrs):
+            if self._done:
+                return
+            if tag == 'tr':
+                self._row = []
+            elif tag in ('td', 'th') and self._row is not None:
+                self._cell = []
+            elif tag == 'br' and self._cell is not None:
+                self._cell.append(' ')
+
+        def handle_endtag(self, tag):
+            if self._done:
+                return
+            if tag in ('td', 'th') and self._cell is not None:
+                self._row.append(''.join(self._cell).strip())
+                self._cell = None
+            elif tag == 'tr' and self._row is not None:
+                self.rows.append(self._row)
+                self._row = None
+            elif tag == 'table' and self.rows:
+                self._done = True            # só a primeira tabela
+
+        def handle_data(self, data):
+            if self._cell is not None:
+                self._cell.append(data)
+
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        text = raw.decode('latin-1')
+    p = _Table()
+    p.feed(text)
+    return p.rows
+
+
+def _latam_read_text(raw):
+    """Texto delimitado. `_ds_read_rows` assume TAB (como o OpenText da macro), mas
+    este relatório vem de um extrator externo: se o header partido por TAB der uma
+    coluna só, o separador é outro — testa ; , e | antes de desistir. Sem isso o
+    arquivo "carrega" como uma coluna gigante, as colunas 62/63 ficam vazias e o
     filtro descarta TODAS as linhas, deixando a página vazia sem erro nenhum."""
-    if raw[:2] == b'PK':                       # .xlsx de verdade
-        return _ds_read_rows(raw)
-    text = raw.decode('latin-1')
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = raw.decode('latin-1')
     lines = [ln for ln in text.splitlines() if ln.strip()]
     if not lines:
         return []
@@ -6900,6 +6995,20 @@ def _latam_read_rows(raw):
             if n > best_n:
                 best, best_n = sep, n
     return [ln.split(best) for ln in lines]
+
+
+def _latam_read_rows(raw):
+    """(linhas, formato detectado). O formato volta para a resposta do import: com
+    ele, "0 linhas" deixa de ser um mistério — diz se o arquivo foi lido como
+    planilha, HTML ou texto."""
+    fmt = _latam_sniff_format(raw)
+    if fmt == 'xlsx':
+        return _ds_read_rows(raw), fmt
+    if fmt == 'xls':
+        return _latam_read_xls(raw), fmt
+    if fmt == 'html':
+        return _latam_read_html(raw), fmt
+    return _latam_read_text(raw), fmt
 
 
 def _latam_extract(rows):
@@ -6949,22 +7058,35 @@ def _latam_import(ref=None):
     src = os.path.join(LATAM_SOURCE_ROOT, matches[0])
     try:
         with open(src, 'rb') as fh:
-            rows = _latam_read_rows(fh.read())
-    except Exception:
+            rows, fmt = _latam_read_rows(fh.read())
+    except Exception as exc:
         log.warning('[latam] read failed for %s:\n%s', src, traceback.format_exc())
-        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
+        return {'success': False, 'error': '{}: {}'.format(matches[0], exc)}
     if not rows or len(rows) < 2:
-        return {'success': False, 'error': 'File {} has no data rows'.format(matches[0])}
+        return {'success': False,
+                'error': 'File {} has no data rows (lido como {})'.format(matches[0], fmt)}
 
     recs, kept, filtered, cmap, missing = _latam_extract(rows)
     jp = _latam_json_path(ref)
     _latam_save(jp, recs)
     _latam_write_meta(jp, ref.strftime('%H:%M:%S'), matches[0])
-    log.info('[latam] imported %s: kept %d (filtered %d) → %s', matches[0], kept, filtered, jp)
+    log.info('[latam] imported %s (%s): kept %d (filtered %d) → %s',
+             matches[0], fmt, kept, filtered, jp)
     if missing:
         log.warning('[latam] colunas não encontradas no header: %s', ', '.join(missing))
+    # Consome o arquivo, como a macra fazia — mas SÓ quando alguma linha entrou:
+    # apagar um arquivo que não foi lido (formato inesperado, header diferente)
+    # destruiria a única cópia antes de dar para investigar.
+    deleted = False
+    if kept:
+        try:
+            os.remove(src)
+            deleted = True
+        except OSError:
+            log.warning('[latam] could not delete source %s', src)
     return {'success': True, 'file': matches[0], 'rows': kept, 'filtered': filtered,
             'missing': missing, 'header_cols': len(rows[0]), 'read': len(rows) - 1,
+            'format': fmt, 'deleted': deleted,
             'date': ref.strftime('%Y-%m-%d'), 'date_fmt': ref.strftime('%d/%m/%Y')}
 
 

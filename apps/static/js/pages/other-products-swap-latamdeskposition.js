@@ -36,33 +36,36 @@
           imported: 'Imported', rows: 'row(s)', updated: 'Updated', latest: 'latest available',
           noData: 'No data for this date', lastAvailable: 'Last available',
           dataFrom: 'Data from', loadErr: 'Could not load the data',
+          need404: 'API not found (HTTP 404) — the server still runs the old routes.py: restart Flask after the pull.',
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
           missing: 'Columns not found in the file header', filtered: 'filtered out',
-          read: 'read', cols: 'header columns',
+          read: 'read', cols: 'header columns', consumed: 'source file deleted',
           sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'Nenhum arquivo FbiRptLatamDeskPostion-NY-* na pasta Settlements.',
           imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado', latest: 'último disponível',
           noData: 'Sem dados nesta data', lastAvailable: 'Último disponível',
           dataFrom: 'Dados de', loadErr: 'Não foi possível carregar os dados',
+          need404: 'API não encontrada (HTTP 404) — o servidor ainda está com o routes.py antigo: reinicie o Flask depois do pull.',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
           missing: 'Colunas não encontradas no header do arquivo', filtered: 'filtradas',
-          read: 'lidas', cols: 'colunas no header',
+          read: 'lidas', cols: 'colunas no header', consumed: 'arquivo de origem apagado',
           sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'Ningún archivo FbiRptLatamDeskPostion-NY-* en la carpeta Settlements.',
           imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado', latest: 'último disponible',
           noData: 'Sin datos en esta fecha', lastAvailable: 'Último disponible',
           dataFrom: 'Datos de', loadErr: 'No se pudieron cargar los datos',
+          need404: 'API no encontrada (HTTP 404) — el servidor sigue con el routes.py anterior: reinicie Flask tras el pull.',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
           missing: 'Columnas no encontradas en el encabezado', filtered: 'filtradas',
-          read: 'leídas', cols: 'columnas del encabezado',
+          read: 'leídas', cols: 'columnas del encabezado', consumed: 'archivo de origen eliminado',
           sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
@@ -79,6 +82,13 @@
   function toISO(dmy) {
     var m = String(dmy || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
+  }
+  // O flatpickr só aceita string em defaultDate/setDate se ela estiver no
+  // `dateFormat` configurado (aqui d/m/Y) ou terminar em Z/GMT — um ISO
+  // '2026-07-30' ele tenta ler como dia 20, falha e LIMPA o campo. Date resolve.
+  function isoToDate(iso) {
+    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   }
 
   // dateStr null/undefined → pede o ÚLTIMO arquivo disponível (o relatório não é diário).
@@ -114,7 +124,12 @@
       .catch(function (e) {
         // Falha silenciosa aqui significa "página vazia sem explicação" — mostra o erro.
         if (window.console && console.error) console.error('[latam-desk-position] load falhou:', e);
-        if (info) { info.classList.add('text-danger'); info.textContent = t('loadErr') + ' (' + e.message + ')'; }
+        // 404 = a rota da API não existe no servidor. Como o Flask do time roda com
+        // o reloader desligado, isso é quase sempre "deu pull e não reiniciou": o
+        // template novo já é servido (Jinja recarrega sozinho) mas o routes.py em
+        // memória ainda é o antigo, sem o endpoint.
+        var msg = e.message === 'HTTP 404' ? t('need404') : (t('loadErr') + ' (' + e.message + ')');
+        if (info) { info.classList.add('text-danger'); info.textContent = msg; }
       });
   }
 
@@ -263,11 +278,11 @@
   function setDateField(iso) {
     var inp = document.getElementById('ldp-date');
     if (!inp || !iso) return;
-    inp.value = toDMY(iso);
     try {
-      if (PICKER && PICKER.setDate) PICKER.setDate(iso, false);                    // flatpickr
+      if (PICKER && PICKER.setDate) PICKER.setDate(isoToDate(iso) || iso, false);  // flatpickr
       else if (PICKER && PICKER.setStartDate) PICKER.setStartDate(moment(iso, 'YYYY-MM-DD'));
     } catch (e) {}
+    if (!inp.value) inp.value = toDMY(iso);      // sem calendário, ou se ele limpou
   }
 
   function openPicker() {
@@ -296,15 +311,19 @@
             // delimitador estava errado (header com 1 coluna).
             var txt = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' +
                       (d.read || 0) + ' ' + t('read') + ' · ' + (d.filtered || 0) + ' ' +
-                      t('filtered') + ' · ' + (d.header_cols || 0) + ' ' + t('cols') + ' · ' + d.file;
+                      t('filtered') + ' · ' + (d.header_cols || 0) + ' ' + t('cols') +
+                      ' · ' + (d.format || '?') + ' · ' + d.file +
+                      (d.deleted ? ' · ' + t('consumed') : '');
             if (info) { info.classList.remove('text-danger'); info.textContent = txt; }
             load(d.date);
             if (window.Swal) {
               var warn = !d.rows || (d.missing && d.missing.length);
               var html = d.rows + ' ' + t('rows') + '<br><small>' + esc(d.read || 0) + ' ' + t('read') +
                          ' · ' + esc(d.filtered || 0) + ' ' + t('filtered') +
-                         ' · ' + esc(d.header_cols || 0) + ' ' + t('cols') + '</small>' +
-                         '<br><small>' + esc(d.file) + '</small>';
+                         ' · ' + esc(d.header_cols || 0) + ' ' + t('cols') +
+                         ' · ' + esc(d.format || '?') + '</small>' +
+                         '<br><small>' + esc(d.file) +
+                         (d.deleted ? ' — ' + esc(t('consumed')) : '') + '</small>';
               if (d.missing && d.missing.length) {
                 html += '<br><br><small class="text-warning">' + esc(t('missing')) + ':<br>' +
                         esc(d.missing.join(', ')) + '</small>';
@@ -338,9 +357,10 @@
     // 1) flatpickr — já vem no vendors.js do projeto, sem depender dos plugins da página.
     if (window.flatpickr) {
       PICKER = flatpickr(inp, {
-        dateFormat: 'd/m/Y', defaultDate: today, allowInput: false,
+        dateFormat: 'd/m/Y', defaultDate: isoToDate(today) || undefined, allowInput: false,
         onChange: function (_sel, str) { pick(toISO(str)); },
       });
+      if (!inp.value) inp.value = toDMY(today);   // garante hoje mesmo se o plugin limpar
     // 2) daterangepicker (mesmo componente das outras páginas de settlement).
     } else if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
       var $d = jQuery('#ldp-date');

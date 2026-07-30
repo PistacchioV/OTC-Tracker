@@ -6073,7 +6073,49 @@ depois do primeiro uso real:
    botões Columns/Export, que só existem depois do `buildTable`). O `catch` do `load()` também parou de ser
    mudo: erro vai para o console e para a faixa ao lado do botão de import.
 
-**Leitor com sniff de delimitador.** `_latam_read_rows()` substitui o `_ds_read_rows` nos dois caminhos
+**Armadilha do flatpickr (campo nascia vazio mesmo com a correção acima).** `defaultDate`/`setDate` do
+flatpickr, quando recebem uma **string**, parseiam com o `dateFormat` configurado — aqui `d/m/Y`. Só
+`Date`, timestamp ou string terminando em `Z`/`GMT` escapam disso (dá para ver no `vendors.min.js`:
+`/Z$/.test(c)||/GMT$/.test(c)`). Passando o ISO `'2026-07-30'`, ele tenta ler `20` como dia, falha e
+**LIMPA o input** — inclusive por cima do valor que o nosso código tinha acabado de escrever. Por isso a
+página abria com o placeholder `dd/mm/yyyy` enquanto a OTM (que usa daterangepicker com
+`moment(today,'YYYY-MM-DD')`, formato explícito) abria certa. Corrigido com `isoToDate()` devolvendo um
+`Date` de verdade, mais um `if (!inp.value) inp.value = toDMY(today)` depois de criar o calendário. O
+harness de front tinha um ponto cego aqui: o stub do flatpickr não mexia no input. Agora ele imita o real
+(escreve quando recebe `Date`, limpa quando não consegue parsear) e o teste **falha** contra o código
+anterior — verificado.
+
+**`Could not load the data (HTTP 404)`.** 404 na rota da API significa que o `routes.py` **em memória** não
+tem o endpoint. Como o Flask do time roda com o reloader desligado, o cenário típico é "deu pull e não
+reiniciou": o Jinja recarrega o template sozinho, o `/static` serve o JS novo do disco, mas as rotas
+continuam as antigas — e a página ainda pode aparecer vinda do cache do browser. A mensagem de erro agora
+diz isso explicitamente em vez de só mostrar o código HTTP.
+
+**O arquivo real é `.xls` — e "`.xls`" aqui é só o nome.** O relatório chega como
+`FbiRptLatamDeskPostion-NY-2026-07-29.xls` (~23 MB). O leitor anterior só sabia PK (xlsx) e texto: um
+`.xls` binário caía no ramo de texto, era decodificado como latin-1, o header saía com **uma coluna**, as
+colunas 62/63 ficavam vazias e o filtro descartava **todas** as linhas — a página vazia sem erro. A macro
+nunca precisou disso porque o `Workbooks.Open` do Excel fareja o conteúdo sozinho. `_latam_read_rows()`
+agora fareja também, pela **assinatura do conteúdo** e não pela extensão, e devolve `(linhas, formato)`:
+
+- `PK` → **xlsx** (openpyxl, via `_ds_read_rows`);
+- `D0 CF 11 E0 A1 B1 1A E1` → **xls** binário/OLE2 (`xlrd`, import tardio como o reportlab; sem a lib o
+  erro diz o que instalar em vez de ler bytes como texto). Datas viram ISO pelo `xldate_as_tuple` e número
+  inteiro perde o `.0` (SPN `281808.0` → `281808`);
+- começa com `<` e tem `<table>` → **tabela HTML** salva com nome de planilha (parser de `<tr>/<td>` com
+  `html.parser`, sem dependência nova);
+- resto → **texto** delimitado, com o sniff de TAB → `;` → `,` → `|`.
+
+`xlrd>=2.0.1` entrou no `requirements.txt` (xlrd 2.x lê **só** `.xls`, que é exatamente o caso) — **precisa
+de `pip install -r requirements.txt` na instância**. O formato detectado volta na resposta do import e
+aparece no alerta, então "0 linhas" passa a dizer *como* o arquivo foi lido.
+
+**O arquivo agora é consumido.** O import da página passou a apagar o arquivo de origem, como a macro fazia
+— mas **só quando alguma linha entrou**: apagar um arquivo que não foi lido (formato inesperado, header
+diferente) destruiria a única cópia antes de dar para investigar. A resposta traz `deleted`, e o alerta diz
+"arquivo de origem apagado".
+
+**Sniff de delimitador (primeira versão, hoje parte do leitor acima).** `_latam_read_rows()` substitui o `_ds_read_rows` nos dois caminhos
 (página e card): se o header partido por TAB der **uma coluna só**, testa `;`, `,` e `|`. Sem isso, um
 arquivo com outro separador "carrega" como uma coluna gigante, as colunas 62/63 ficam vazias, o filtro
 descarta **todas** as linhas e a página fica vazia sem erro nenhum. A resposta do import agora traz
