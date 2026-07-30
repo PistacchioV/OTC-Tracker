@@ -14529,6 +14529,19 @@ def _fxo_refdata_by_spn():
     return out
 
 
+def _fxo_refdata_by_accronym(refmap_spn=None):
+    """FX CASH ACCRONYM (upper) → registro do Reference Data. Deriva do índice
+    por SPN já carregado (sem reler o arquivo) quando ele é passado. É o índice
+    que resolve a contraparte pelo código, e não pelo SPN — necessário para as
+    pernas internas, cujo SPN é de book e não está no Reference Data."""
+    out = {}
+    for rec in (refmap_spn if refmap_spn is not None else _fxo_refdata_by_spn()).values():
+        a = str(rec.get('FX CASH ACCRONYM', '') or '').strip().upper()
+        if a and a not in out:
+            out[a] = rec
+    return out
+
+
 # Canonical field order = the New Deals Opt-FXO table column order (same order the
 # XLSX import builds each dict). Persisted _optfxo.json must follow this, not the
 # alphabetical order some legacy writes produced. Maker/Checker are kept last.
@@ -14562,7 +14575,7 @@ def _fxo_order_deal(d):
     return ordered
 
 
-def _fxo_deal_from_row(get, sid, refmap):
+def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
     """Build one Opt-FXO deal dict from a source row. `get(NAME)` returns the
     value of the normalized-uppercase column NAME — the XLSX blotter headers
     and the Athena API field names normalize to the same keys, so both sources
@@ -14571,7 +14584,8 @@ def _fxo_deal_from_row(get, sid, refmap):
     PUT_CALL = {'PUT': 'Option (Put)', 'CALL': 'Option (Call)'}
 
     # Drop rows with empty End Counterparty / Description / SPN
-    if str(get('END COUNTERPARTY') or '').strip() == '':
+    end_cp = str(get('END COUNTERPARTY') or '').strip()
+    if end_cp == '':
         return None
     if str(get('END COUNTERPARTY DESCRIPTION') or '').strip() == '':
         return None
@@ -14588,6 +14602,18 @@ def _fxo_deal_from_row(get, sid, refmap):
     if spn.endswith('.0'):
         spn = spn[:-2]
     ref = refmap.get(_norm_spn(spn), {})
+    # SPN não cadastrado no Reference Data: tenta pelo ACCRONYM DA CONTRAPARTE,
+    # que é o End Counterparty. É o caso das pernas internas (contraparte é outra
+    # entidade JPM): o SPN que a API manda é de book, nunca esteve nem estará no
+    # Reference Data, mas o accronym está cadastrado no mapping Legal Entity ×
+    # Accronym. Sem este passo o NDF resolvia a linha e o FXO — que enriquecia só
+    # por SPN — marcava "Missing Counterparty" com o mapping preenchido.
+    # O Settlement Location NÃO entra aqui: ele diz respeito à nossa perna, não à
+    # contraparte, então usá-lo para achar a contraparte casaria a linha errada.
+    if not ref:
+        if refmap_acr is None:
+            refmap_acr = _fxo_refdata_by_accronym(refmap)
+        ref = _ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))
 
     strike_v = _fxo_num(get('STRIKE'))
     premq_v  = _fxo_num(get('PREMIUM QUANTITY'))
@@ -14619,7 +14645,12 @@ def _fxo_deal_from_row(get, sid, refmap):
         'Month':             month,
         'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
         'SPN':               spn,
-        'Acronym':           ref.get('FX CASH ACCRONYM', '') or '',
+        # Sem cadastro no Reference Data a coluna fica com o código cru da API
+        # (mesma regra do NDF). Além de não esconder a informação, é o que dá ao
+        # badge "Missing Counterparty" da tela o que consultar: ele só limpa a
+        # marcação de perna interna quando há um accronym na célula para procurar
+        # no mapping Legal Entity × Accronym.
+        'Acronym':           (ref.get('FX CASH ACCRONYM', '') or '') or end_cp,
         'Client':            ref.get('COUNTERPARTY', '') or '',
         'TaxID':             ref.get('TAX ID', '') or '',
         'TradeType':         trade_type,
@@ -14733,11 +14764,23 @@ def _nd_amend_same_entity(old, new, stored, incoming):
     return bool(ent_old) and ent_old == ent_new
 
 
+def _nd_amend_flat(v):
+    return str(v or '').strip()
+
+
 def _nd_amend_is_economic(field, old, new, stored, incoming):
     """A mudança desse campo justifica derrubar um deal já Success para Amend?"""
     if field in _ND_AMEND_COSMETIC:
         return False
     if field == 'Acronym':
+        # Accronym aparecendo onde a célula estava VAZIA, com o SPN da operação
+        # intacto, é enriquecimento nosso que melhorou — a contraparte sempre foi
+        # a mesma, ninguém rebookou nada. Sem esta exceção, passar a preencher o
+        # accronym das pernas internas no FXO devolveria para a fila, de uma vez,
+        # todo deal interno que já estava Success. A célula ainda é destacada;
+        # só o status é que não regride.
+        if not old and _nd_amend_flat(stored.get('SPN')) == _nd_amend_flat(incoming.get('SPN')):
+            return False
         return not _nd_amend_same_entity(old, new, stored, incoming)
     return True
 
@@ -14853,6 +14896,7 @@ def _fxo_deals_from_api_records(records, sid):
     registros isCancelled/isDead: (Deal, TradeDate dd/mm/yyyy) para marcar
     Status='Canceled' no cache quando o deal já tiver sido importado."""
     refmap = _fxo_refdata_by_spn()
+    refmap_acr = _fxo_refdata_by_accronym(refmap)
     deals, cancelled = [], []
     for rec in records or []:
         if not isinstance(rec, dict):
@@ -14867,7 +14911,7 @@ def _fxo_deals_from_api_records(records, sid):
             if nm:
                 cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
             continue
-        deal = _fxo_deal_from_row(norm.get, sid, refmap)
+        deal = _fxo_deal_from_row(norm.get, sid, refmap, refmap_acr)
         if deal:
             deals.append(deal)
     return deals, cancelled
@@ -15818,11 +15862,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
-    refmap_acr = {}
-    for _r in _fxo_refdata_by_spn().values():
-        _a = str(_r.get('FX CASH ACCRONYM', '') or '').strip().upper()
-        if _a and _a not in refmap_acr:
-            refmap_acr[_a] = _r
+    refmap_acr = _fxo_refdata_by_accronym()
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
     fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
@@ -16003,6 +16043,7 @@ def api_fxo_import_xlsx():
 
     sid = session.get('user_sid', '') or ''
     refmap = _fxo_refdata_by_spn()
+    refmap_acr = _fxo_refdata_by_accronym(refmap)
     deals, errors = [], []
 
     for f in files:
@@ -16034,7 +16075,7 @@ def api_fxo_import_xlsx():
         for r in it:
             if r is None:
                 continue
-            deal = _fxo_deal_from_row(lambda name: g(r, name), sid, refmap)
+            deal = _fxo_deal_from_row(lambda name: g(r, name), sid, refmap, refmap_acr)
             if deal:
                 deals.append(deal)
         wb.close()
@@ -22306,12 +22347,7 @@ def _generic_nd_reenrich(deals, refmap_cache):
         if not acr:
             continue
         if 'map' not in refmap_cache:
-            m = {}
-            for _r in _fxo_refdata_by_spn().values():
-                _a = str(_r.get('FX CASH ACCRONYM', '') or '').strip().upper()
-                if _a and _a not in m:
-                    m[_a] = _r
-            refmap_cache['map'] = m
+            refmap_cache['map'] = _fxo_refdata_by_accronym()
         # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
         # LE (é o caso do End Counterparty que é nome de book interno, importado
         # antes de a linha existir). Quando ele identifica, a LE gravada estava

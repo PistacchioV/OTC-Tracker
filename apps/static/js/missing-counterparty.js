@@ -38,6 +38,11 @@ window.MissingCounterparty = (function () {
         return s;
     }
     function strip(v) { return String(v == null ? '' : v).replace(/<[^>]+>/g, '').trim(); }
+    // Mesmo achatamento do backend (_ndf_flat): o cadastro do mapping casa o
+    // código da API independente de caixa, espaço e hífen — 'LM-FXECOMBRR FXC'
+    // ≡ 'LM FXECOMBRR FXC'. Sem isso o badge continuava aparecendo por uma
+    // diferença de digitação que o servidor já considera igual.
+    function flat(v) { return String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 
     function Inst(cfg) {
         this.cfg   = cfg || {};
@@ -94,7 +99,7 @@ window.MissingCounterparty = (function () {
                 var rows = (d && d.rows) || [];
                 var set = {};
                 for (var i = 0; i < rows.length; i++) {
-                    var a = String((rows[i] || {}).ACCRONYM || '').trim();
+                    var a = flat((rows[i] || {}).ACCRONYM);
                     if (a) set[a] = true;
                 }
                 self.leAcrSet = set;
@@ -117,7 +122,7 @@ window.MissingCounterparty = (function () {
         if (!sp && !ac) return false;            // no counterparty identifier on the row
         if (sp && this.spnSet[sp]) return false;
         if (ac && this.acrSet[ac]) return false;
-        if (ac && this.leAcrSet && this.leAcrSet[ac]) return false;   // perna interna
+        if (ac && this.leAcrSet && this.leAcrSet[flat(ac)]) return false;   // perna interna
         return true;
     };
 

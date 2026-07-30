@@ -6490,3 +6490,60 @@ de ordem com as 7 páginas que já têm handler próprio.
 **Teste**: `check_clipboard.js` (scratchpad) roda o arquivo no JavaScriptCore com um DOM de mentira
 (não há node nesta máquina) e cobre os dois caminhos de cópia, a rejeição da API moderna, o textarea
 fora da tela e as três condições de desistência do handler global.
+
+---
+
+## §143 — FXO marcava "Missing Counterparty" com o accronym cadastrado no mapping
+
+**Sintoma** (30/07/2026): linhas de perna interna em New Deals FXO com o badge vermelho
+"Missing Counterparty" nas colunas Accronym / Client / Tax ID, mesmo com `CMBB` e `CMBB-LAW`
+cadastrados no mapping **Legal Entity × Accronym**. O NDF resolvia as mesmas contrapartes.
+
+**Causa-raiz — enriquecimento por SPN, e só.** `_fxo_deal_from_row` procurava a contraparte
+**exclusivamente pelo SPN** (`refmap.get(_norm_spn(spn))`, índice do Reference Data) e gravava
+`'Acronym': ref.get('FX CASH ACCRONYM') or ''`. Na perna interna o SPN que a API manda é de
+**book** (`5068198`) — nunca esteve nem estará no Reference Data —, então `ref` vinha `{}` e a
+coluna Accronym ficava **vazia**.
+
+O resgate existe no front (`missing-counterparty.js`): `isMissing()` consulta o mapping
+le-accronym antes de marcar. Mas ele procura **o valor da célula Accronym** no mapping — e com a
+célula vazia não há o que procurar. O cadastro estava certo; o código nunca chegava a consultá-lo.
+
+O NDF não tinha o problema porque `_ndf_deal_from_api` já fazia as duas coisas:
+enriquecia por accronym (`_ndf_ref_by_accronym`) e gravava `'Acronym': ... or end_cp`.
+
+**Correção** (`_fxo_deal_from_row`, vale para o pull da API **e** para o import de XLSX, que
+compartilham o builder):
+
+1. SPN sem registro → tenta pelo **End Counterparty**, que é o accronym da contraparte
+   (`_ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))`).
+2. `'Acronym'` cai para `end_cp` quando o Reference Data não tem nada — a coluna deixa de mentir
+   que não há informação, e o badge passa a ter o que consultar no mapping.
+3. **Settlement Location não entra nessa resolução**: ela diz respeito à *nossa* perna, não à
+   contraparte. Usá-la para achar a contraparte casaria a linha errada. (O NDF usa a location
+   para derivar a coluna LE, que é outra coisa.)
+
+`_fxo_refdata_by_accronym(refmap_spn=None)` passa a ser o único lugar que monta o índice
+FX CASH ACCRONYM → registro; substituiu **três** cópias inline do mesmo laço.
+
+**Armadilha resolvida junto — o backfill não pode devolver o deal para a fila.** Os deals já
+gravados têm `Acronym: ''`; no primeiro pull depois do deploy o campo vira `CMBB`. Como `Acronym`
+é campo comparado no amend (§140), *todo* deal interno que já estava Success voltaria a Amend de
+uma vez. `_nd_amend_is_economic` ganhou a exceção: **accronym aparecendo onde a célula estava
+vazia, com o SPN intacto, é enriquecimento nosso que melhorou, não troca de contraparte** — a
+célula é destacada, o status não regride. SPN diferente junto = é outra contraparte, continua
+Amend.
+
+**Front alinhado**: `missing-counterparty.js` comparava o accronym como string exata enquanto o
+backend compara achatado (`_ndf_flat`: só letras e números). Agora usa o mesmo achatamento, então
+espaço/hífen/caixa a mais no cadastro não fazem o badge reaparecer. Cache-buster `?v=20260730b`
+nas 6 páginas que carregam o arquivo.
+
+**Testes** (scratchpad): `check_fxo_cp.py` monta o deal a partir do **record real** da API que o
+usuário mandou e verifica a premissa (SPN ausente do RefData), o match no mapping, o Accronym
+preenchido, o badge antes/depois e que a contraparte de cliente normal continua vindo do SPN.
+`check_fxo_amend.py` cobre os cinco casos do amend: backfill fica Success, troca de entidade vira
+Amend, JPM→JPM continua Success, Strike vira Amend, SPN+accronym juntos viram Amend.
+
+**Depende de restart** (`routes.py`) na instância do time. Os deals já importados são corrigidos
+sozinhos no próximo pull da API (horário no FXO) ou clicando Import.
