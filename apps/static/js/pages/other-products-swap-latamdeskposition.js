@@ -83,6 +83,37 @@
     var m = String(dmy || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
   }
+  // Casas decimais fixas por coluna do relatório. O arquivo entrega o número
+  // como o extrator gravou ('5.4321', '5.432100000000001', '281808'), então o
+  // formato é decidido AQUI, na exibição — o JSON continua guardando o valor
+  // cru (é ele que volta no modal de Edit e no que a linha grava de novo).
+  var _LDP_DP = { 'FX Rate': 8, 'Strike': 8, 'TOTAL_PREMIUM': 2 };
+
+  // Número em qualquer convenção que o relatório possa usar. Um `replace(/,/g,'')`
+  // seco (o atalho comum) transformaria '5,4321' em 54321 — em coluna de FX é
+  // erro de 4 ordens de grandeza, então cada formato é reconhecido pelo padrão.
+  function toNumber(v) {
+    var s = String(v == null ? '' : v).trim().replace(/\s| /g, '');
+    if (!s) return NaN;
+    var neg = /^\(.*\)$/.test(s);                       // (1,234.56) → negativo
+    if (neg) s = s.slice(1, -1);
+    if (/^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');            // 1,234.56
+    else if (/^[-+]?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56
+    else if (/^[-+]?\d+,\d+$/.test(s)) s = s.replace(',', '.');                        // 5,4321
+    if (!/^[-+]?\d*\.?\d+([eE][-+]?\d+)?$/.test(s)) return NaN;
+    var n = Number(s);
+    return isNaN(n) ? NaN : (neg ? -n : n);
+  }
+
+  // #,##0.00000000 (dp=8) e #,##0.00 (dp=2). Célula vazia continua vazia e o que
+  // não for número sai como veio — a coluna pode trazer um texto ('N/A').
+  function fmtNum(v, dp) {
+    if (v == null || String(v).trim() === '') return '';
+    var n = toNumber(v);
+    if (isNaN(n)) return String(v);
+    return n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  }
+
   // O flatpickr só aceita string em defaultDate/setDate se ela estiver no
   // `dateFormat` configurado (aqui d/m/Y) ou terminar em Z/GMT — um ISO
   // '2026-07-30' ele tenta ler como dia 20, falha e LIMPA o campo. Date resolve.
@@ -173,10 +204,16 @@
       }).join('') + '</tr>';
     document.querySelector('#ldp-table thead').innerHTML = titleRow + filterRow;
 
+    // Casas decimais por POSIÇÃO, resolvidas uma vez: o mapa é por nome de coluna
+    // e as colunas vêm do servidor, então uma coluna a mais no relatório não
+    // desloca o formato para a vizinha.
+    var dps = columns.map(function (c) { return _LDP_DP[c]; });
     var data = rows.map(function (r) {
       var m = metaOf(r);
       return ['<input type="checkbox" class="form-check-input ldp-row-check">', actionsHtml(m.id), statusBadge(m.status)]
-        .concat(r.slice(0, COLS.length).map(function (v) { return esc(v); }));
+        .concat(r.slice(0, COLS.length).map(function (v, i) {
+          return esc(dps[i] === undefined ? v : fmtNum(v, dps[i]));
+        }));
     });
 
     if (dt) { dt.destroy(); }
