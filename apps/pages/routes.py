@@ -20126,9 +20126,20 @@ _CONF_FAMILY_TEMPLATES = {
 }
 
 
+def _conf_sort_key_venc(item):
+    """Ordena a Tabela de Referência pela Data de Vencimento, do vencimento mais
+    próximo ao mais distante. Deal sem data parseável vai para o fim em vez de
+    virar 'ano 1' e encabeçar a tabela; o sort do Python é estável, então
+    vencimentos iguais mantêm a ordem em que o deal entrou no cache."""
+    d = _parse_date_any((item[0] or {}).get('SettlementDate'))
+    return (1, datetime.max.date()) if d is None else (0, d)
+
+
 def _conf_pick_eligible(deals, acr, merc, family, family_fn):
     """Deals elegíveis (status Success, pontas internas fora) de um grupo
-    contraparte × mercadoria × família → [(deal, subj)]."""
+    contraparte × mercadoria × família → [(deal, subj)], **ordenados por Data de
+    Vencimento**: é assim que as linhas saem no Anexo I das confirmações e é
+    também a ordem em que o XML soma as operações."""
     subj_map = _conf_subjacente_map()
     picked = []
     for deal in deals:
@@ -20147,6 +20158,7 @@ def _conf_pick_eligible(deals, acr, merc, family, family_fn):
         if family_fn(deal, subj) != family:
             continue
         picked.append((deal, subj))
+    picked.sort(key=_conf_sort_key_venc)
     return picked
 
 
