@@ -5507,6 +5507,9 @@ separando as regras. Três arquivos por entidade: **BANCO** (`JPMORGANBM`), **LA
   Options e FX Options (segregação contraparte × commodity / contraparte, pontas banco/Lawton fora) e
   **NDF FWD Start** (segregação por contraparte — NDF de moeda não tem mercadoria — somando as duas
   grafias de pasta do cache, `FwdStart` e `FWD Start`). Os que ainda não têm template ficam em New.
+  - **FX Options passou a ciclo completo em `ae8b816`** (§139): o card não conta mais só a segregação —
+    tem estado por grupo (New → Generated → Success) vindo de `_conf_state_load(ref, 'opt-fxo')`, igual
+    ao NDF Commodities.
 - Renomeados no catálogo (`14204f6`): Option Commodities → **Commodities Options**; Option FXO →
   **FX Options**.
 - **Ícones das zonas** (`1ed2cec`): B3 Registration e Intrag usam os **mesmos SVGs do sidenav**
@@ -5721,6 +5724,7 @@ mappings via tela"**. Nasceu em `bc5aea4` e cresceu em `2b168a9`, `f579d26`, `2f
 | `le-accronym` | Legal Entity × Accronym | LE por accronym e por Settlement Location |
 | `commodities-b3` | Commodities × B3 Code | market Athena → código B3, Holiday Calendar e **Fixed Quote** (absorveu `fixed-underlyings`) |
 | `bank-name` | Bank Name | bancos do editor de contraparte (ID COMPE, nome, ISPB, Tax ID) |
+| `fxo-conv-rate` | FXO Conversion Rate | as duas colunas de Taxa de Conversão do Anexo I da confirmação **Asian** de FX Options (Moeda Base → nome da taxa + Venda/Compra). Seed só com `USD → USD PTAX / Venda`; moeda sem cadastro vira aviso no painel (§139) |
 | `swap-curves` | Swap Curves (Athena × B3) | vazio, criado para uso futuro |
 
 ### Consumidores no front
@@ -6167,3 +6171,118 @@ Testes: as três funções de export foram **executadas de verdade** (recortadas
 valores que apareceram na planilha do usuário — 16 asserções, incluindo `&gt;=`/`&lt;`/`&amp;`/`&quot;`,
 badge com tag+entidade, colunas 0/1 fora e 20 de 22 dentro; e o import foi rodado com um .xlsx real
 contendo `#NULL!`, `#REF!` e `#N/A`, conferindo `updated`, `skipped` e que nada com `#` chega ao banco.
+
+## 139. Sessão 2026-07-30 — Confirmações de FX Options: Vanilla e Asian (`ae8b816`)
+
+A página **FX Options** era a última do grupo Confirmations do Monitor que só sabia **contar** a
+segregação: não tinha botão Confirmation, documento, save nem ciclo. Agora tem o caminho completo, igual
+ao NDF Commodities (§122) e ao Commodities Options: botão na página → grupos da data → página de geração
+pré-preenchida com painel de edição → save com **Word + PDF + XML** no Electronic Inventory (pasta
+**`FX Options`**) → New → Generated → Success com o checklist de validação (`validate.html`, `api_base`
+`/api/confirmation/opt-fxo`).
+
+### Os dois documentos foram portados NO LUGAR — e isso foi provado
+
+Regra do usuário, literal: **"não misture templates nem altere nada, tem que manter 100% do texto
+original"**. Cada `.doc` exportado do Word virou template Jinja por um script de porte que **só** faz três
+coisas: troca valor por `{{ }}`, transforma a linha do Anexo I num `{% for r in conf.rows %}` e anexa o
+painel de edição + CSS + JS. O script **aborta se qualquer âncora não for encontrada exatamente uma vez** —
+nada de "quase casou".
+
+- `option-fx-vanilla-strike-me.html` — **12 colunas** no Anexo I, já vinha com os marcadores `<<...>>`.
+- `option-fx-asian-strike-me.html` — **16 colunas** (⚠️ o usuário trocou o arquivo no meio da sessão; o
+  plano anterior assumia 14). As duas colunas a mais são **Taxa de Conversão** e **Tipo de Taxa de
+  Conversão**, entre *Data de Pagamento do Prêmio* e *Preço de Exercício*. Este veio **preenchido com uma
+  operação real** (deal `D5XO-S7U6K`, TAM, 14/07/2026, 4 linhas de exemplo), então o porte teve de
+  remover os literais do exemplo e colapsar as 4 linhas num único `{% for %}`.
+
+**A prova de fidelidade:** um teste renderiza cada template com exatamente os valores que estavam no
+arquivo original e compara **palavra a palavra** (lista de palavras com as tags substituídas por `''` —
+comparar linha a linha dá ~46 falsos positivos, que são só re-segmentação de `<span>`). Resultado
+**4.449/4.449 (Vanilla)** e **3.963/3.963 (Asian)**, com dois deltas documentados e aceitos: `<<ITEM>>`→`1`
+e `S.A.`→`S.A` (a assinatura passou a espelhar o campo Parte B do §2b). Refaça esse teste se um dia
+mexer nos templates.
+
+**Única alteração que não é troca de valor:** o `<meta charset>` dos dois exports dizia `windows-1252` mas
+o arquivo está gravado em UTF-8 — na tela não dava problema (o header HTTP manda), mas o `.doc` salvo
+abriria no Word com os acentos quebrados. Corrigido para `utf-8`.
+
+### ⚠️ O PDF sai do próprio documento, não de uma segunda transcrição
+
+Nas confirmações anteriores o texto legal existe **duas vezes**: o template Jinja e a réplica reportlab em
+`confirmation_pdfs.py`, que precisam ser mantidas em sincronia à mão. Isso brigaria com o "manter 100% do
+original", então aqui **`opcao_fx_pdf(conf, variant, doc_html)` recebe o HTML já renderizado** (o mesmo que
+vira o `.doc`) e o converte para flowables. As duas saídas **não têm como divergir**.
+
+- `_WordHtmlToFlowables(HTMLParser)` (`confirmation_pdfs.py:1140`) transpõe parágrafos, ênfases (`b/i/u/
+  sub/sup`), tabelas com grade, `<hr>`/borda do Word e as quebras de página (`<br style="page-break-before">`
+  → `PageBreak`). Títulos `h1..h6` caem no estilo `doctitle` (Times-Bold 12 centralizado) — o título do
+  documento é um `<h2>` no export, e sem isso saía alinhado à esquerda e sem negrito.
+- **Duas armadilhas resolvidas, não repita:** (1) o Word abre `<i>` **antes** do `<p>` e fecha **depois**,
+  o que faz o reportlab estourar `Parse error: saw </para> instead of expected </i>` — por isso existe a
+  pilha `self.open`, que fecha as ênfases no fim do bloco e reabre no bloco seguinte; (2) com 16 colunas a
+  7,5pt os nomes de deal quebravam no meio (`D5XO-S7U6K` sumia do texto extraído) — tabelas de grade com
+  `ncol > 12` usam fonte adaptativa `max(5.5, 7.5 * 12 / ncol)`, o que obrigou a guardar as células como
+  string crua durante o parse e só virar `Paragraph` no `_table()`, onde `ncol` é conhecido.
+- Verificado com `pypdf`: **todas** as palavras do documento chegam ao PDF, na ordem, nas duas variantes.
+  (`pypdf` foi instalado só para o teste e **desinstalado depois** — não está no `requirements.txt`.)
+
+### As quatro regras do produto que a lógica respeita
+
+Estão comentadas no cabeçalho do bloco (`routes.py:21057`), mas repetindo porque é o que diferencia FXO
+dos outros produtos de confirmação:
+
+1. **A família é o `TradeType`** (`VANILLA` / `ASIAN`), **não** a moeda do strike — são dois documentos
+   diferentes, não duas variantes do mesmo. Sem First/Last Fixing o import já classifica como VANILLA, e o
+   default do `_conf_fxo_family` cobre o deal digitado à mão sem o campo.
+2. **A "mercadoria" da segregação é a Moeda Base** (`UnderlyingAsset`) — opção de câmbio não tem
+   mercadoria. Segregação = contraparte × moeda base × família, pontas internas fora, só status Success.
+3. **Data de Exercício:** no Vanilla é a **Last Fixing Date**; no Asian é **"Não Aplicável"** e quem aparece
+   é o par First/Last Fixing nas Datas Inicial e Final de Verificação (cláusula 4.2.c: na asiática a data de
+   exercício *é* a data final, por definição).
+4. **Preço de Exercício com no mínimo 4 casas decimais**, mais quando a taxa tem. Pedido literal: *"os
+   strikes escreva sempre com no mínimo 4 casas decimais, se tiver mais coloque mais, se tiver menos
+   complete com 0"*. O cache grava sempre 6 casas (`'{:.6f}'`), então `_conf_fxo_strike` **derruba o zero
+   que não significa nada antes de aplicar o piso** — senão todo strike sairia com 6.
+
+Demais campos: Tipo da Opção ← `Instrument` (Call→Compra, Put→Venda) · Comprador ← `Direction` (Sell →
+Parte B) · Valor Base ← `TotalNotional` · Prêmio ← `Premium` em R$ · Data de Pagamento do Prêmio ←
+`SpotDate` · Data de Vencimento ← `SettlementDate`.
+
+### XML do contrato
+
+`_conf_ndf_xml` ganhou dois parâmetros em vez de uma cópia: `ccy_field` (default `StrikeCurrency`, aqui
+**`UnderlyingAsset`**) e `warn_no_spot` (aqui **False** — opção de câmbio não traz Spot FXRate, então o
+aviso do NDF só faria barulho). Sai com `tipoOperacao Option`, `numeroContrato` com prefixo **`Opt_FXO`**,
+`moedaEstrangeira` pelo código de cadastro da Currency Base (USD → 220).
+
+⚠️ **Ponto em aberto, decidido pela regra do usuário** (*"para o valor em moeda estrangeira é o
+totalnotional × strike"*): como o strike já é BRL por USD, `valor` e `valorEstrangeiro` saem com o **mesmo
+número** — no teste, `101400000.00` — ou seja, a perna "estrangeira" carrega um número em reais. Se o
+FepWeb esperar a perna estrangeira em dólar, o certo é `valorEstrangeiro = TotalNotional` puro. Está do
+jeito que foi pedido; confirmar com a mesa antes de mudar.
+
+### Taxa de Conversão é cadastro, não constante — mapping `fxo-conv-rate`
+
+As duas colunas novas do Asian **não** foram hardcoded: o Anexo II define **uma taxa por moeda** e há moeda
+com mais de uma possível (ARS MAE × ARS WMCO), logo é de-para (§131). Nasce com **só a linha do
+documento-modelo**: `USD → USD PTAX / Venda`. **Moeda sem cadastro vira aviso amarelo no painel** — nunca
+sai em branco na confirmação silenciosamente. Cadastre as demais em **/mapping › FXO Conversion Rate**.
+
+### Onde mexer
+
+| arquivo | o quê |
+|---|---|
+| `apps/pages/routes.py:21057` | bloco inteiro da confirmação FXO (~411 linhas) |
+| `apps/pages/confirmation_pdfs.py:1140` | `_WordHtmlToFlowables` + `opcao_fx_pdf` |
+| `apps/templates/confirmations/option-fx-{vanilla,asian}-strike-me.html` | os dois documentos portados |
+| `apps/templates/pages/new_deals-opt-fxo.html` | botão Confirmation (`dom` do DataTables + bloco do modal) |
+| `apps/static/data/mappings/fxo-conv-rate.json` | seed do de-para |
+
+O card **FX Options** do Monitor deixou de ser contagem e passou ao ciclo completo (`_conf_optfxo_groups` +
+`_conf_state_load(ref, 'opt-fxo')`) — ver §123.
+
+**Teste ponta a ponta** (`check_fxo_flow.py`, scratchpad — não versionado): day-file sintético com 2 asian
++ 1 vanilla + 1 perna interna JPM, passando por segregação → páginas de geração → XML → trava do CGD.
+Tudo verde. Vale recriar se mexer no fluxo. Atenção ao montar teste com `test_client`: o
+`enforce_session_expiry` derruba sessão sem `session_expires_at` e **tudo volta 401**.

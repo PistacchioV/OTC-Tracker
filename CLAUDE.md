@@ -46,10 +46,10 @@ Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies thi
 
 `run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~21k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~23.5k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
 
 - `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
-- `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents
+- `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents. **FX Options is the exception and the pattern to follow for new documents**: `opcao_fx_pdf()` builds the PDF from the *rendered document HTML* (the same string that becomes the `.doc`) via `_WordHtmlToFlowables`, so the two outputs cannot drift apart — see HANDOFF §139.
 - `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py`
 
 ### Authentication flow
@@ -97,7 +97,8 @@ Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accrony
 `bank-name`, `fxo-conv-rate`, `swap-curves`. See HANDOFF §131–§133 for what each one feeds and the
 traps (e.g. the PTAX row in `publisher-ndf` must stay without a match token). `fxo-conv-rate` feeds
 the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
-Compra) and ships seeded only with USD → USD PTAX / Venda.
+Compra) and ships seeded only with USD → USD PTAX / Venda — an unregistered currency raises a panel
+warning instead of printing blanks (HANDOFF §139).
 
 ### Database
 
