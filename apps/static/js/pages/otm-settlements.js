@@ -7,6 +7,11 @@
 (function () {
   'use strict';
 
+  // ':gt(1)' NÃO serve aqui: o thead tem duas linhas (títulos + filtros), o jQuery
+  // enumera 2×N <th> e os das colunas 0/1 da segunda linha caem em posição > 1,
+  // devolvendo checkbox e Actions para a exportação. Índice de COLUNA, então.
+  function exportFromData(idx) { return idx > 1; }
+
   var API = '/api/otm-settlements/data';
   var IMPORT_API = '/api/otm-settlements/import';
   var page = document.getElementById('otm-page');
@@ -132,9 +137,9 @@
         text: '<i class="ti ti-download me-1"></i> Export',
         className: 'btn btn-sm btn-info bg-gradient dropdown-toggle', autoClose: true,
         buttons: [
-          { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',  className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
-          { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',   className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
-          { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
+          { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',  className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
+          { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',   className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
+          { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
         ],
       }],
     });

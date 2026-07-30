@@ -6055,7 +6055,73 @@ Arquivos: `apps/pages/routes.py` (bloco Latam Desk Position + spec/branch do car
 (`ldp-*` + `cp-r-ds-desc`). O URL já estava no sidenav, então entra automaticamente no `/page-access`
 (`_load_nav_urls` → 69 páginas controláveis).
 
+**Correção no mesmo dia (página abria vazia e o calendário não abria).** Três coisas foram endurecidas
+depois do primeiro uso real:
+
+1. **Campo de data = HOJE, síncrono.** O campo agora recebe a data de hoje na primeira linha do
+   `wireDatePicker()`, **antes** de qualquer plugin — se o calendário não carregar, o usuário vê a data em
+   vez do placeholder `dd/mm/yyyy`. Os **dados continuam vindo do último arquivo disponível** (`load(null)`),
+   e a data real da posição aparece ao lado, em "Dados de dd/mm/yyyy · Atualizado hh:mm · arquivo".
+2. **Calendário com fallback.** Primário agora é o **flatpickr**, que vem no `vendors.min.js` (JS *e* CSS) de
+   todas as páginas — não depende dos plugins carregados pela própria página, como o daterangepicker. A
+   cadeia é flatpickr → daterangepicker → campo digitável, e tanto o ícone quanto o campo chamam
+   `openPicker()`.
+3. **Boot blindado.** Cada `wire*()` roda dentro do seu próprio `try/catch` e o boot só usa
+   `DOMContentLoaded` se `document.readyState === 'loading'` (senão chama direto). Antes, um único erro —
+   por exemplo `wireActions()` com o jQuery ausente — derrubava tudo o que vinha depois: calendário e
+   `load()`. É exatamente o conjunto de sintomas que apareceu (campo vazio, tabela sem cabeçalho, sem os
+   botões Columns/Export, que só existem depois do `buildTable`). O `catch` do `load()` também parou de ser
+   mudo: erro vai para o console e para a faixa ao lado do botão de import.
+
+**Leitor com sniff de delimitador.** `_latam_read_rows()` substitui o `_ds_read_rows` nos dois caminhos
+(página e card): se o header partido por TAB der **uma coluna só**, testa `;`, `,` e `|`. Sem isso, um
+arquivo com outro separador "carrega" como uma coluna gigante, as colunas 62/63 ficam vazias, o filtro
+descarta **todas** as linhas e a página fica vazia sem erro nenhum. A resposta do import agora traz
+`read`, `filtered`, `header_cols` e `missing`, e o alerta mostra os quatro — `header_cols = 1` diz na hora
+que o problema é o delimitador, não o filtro.
+
 **Nota de limpeza nas traduções:** `en.json`/`br.json`/`es.json` tinham `nd-col-other-book` e
 `col-other-book` **duplicados** (dois blocos, valores `OtherBook` e `Other Book`). A reescrita dos arquivos
 deduplicou mantendo o valor que já ganhava no browser (`JSON.parse` fica com a última ocorrência), então o
 comportamento não mudou.
+
+## 138. Sessão 2026-07-30 — Exportações: checkbox/Actions, entidades HTML e #NULL!
+
+Três defeitos distintos na extração da **Pending Confirmation** (valem para Copy/CSV/Excel/Print/PDF).
+
+**1. Checkbox e Actions saíam na planilha.** O `exportOptions` já dizia `columns: ':gt(1)'`, mas esse
+seletor é **posicional do jQuery** e o `thead` da tabela tem **DUAS linhas** (títulos + linha de filtros):
+o jQuery enumera 2×N elementos `<th>`, e os `<th>` das colunas 0 e 1 da **segunda** linha caem em posição
+> 1 — voltando para a seleção. Resultado: coluna A com o `value="option"` do checkbox e coluna B com
+Actions. Trocado por uma função, que recebe o índice da **coluna** e não do nó:
+`function exportFromStatus(idx) { return idx > 1; }`. Seletor por função é API documentada e já usada no
+repo (`dt.rows(function (idx, data, node) …)` em `ndf-summary.html`).
+**O mesmo `':gt(1)'` estava em mais 9 páginas** (OTM, Cognos, NDF Cockpit, Operations B3, Live Position
+NDF/Option/Swap Characteristics, NDF Other Publisher, Latam Desk Position) — 27 botões, todos corrigidos
+com um `exportFromData(idx)` local.
+
+**2. `&gt;=`, `&lt;` e `H&amp;M` na planilha.** `formatExportData` tem dois caminhos: com nó do DOM usa
+`$(node).text()` (decodifica), sem nó usa o dado do modelo. Como o export roda com
+`modifier: {page:'all'}`, **só as linhas da página atual têm nó** — as demais caíam no fallback, que
+removia as tags mas **não decodificava as entidades**. Por isso as primeiras ~200 linhas saíam certas e o
+resto saía com `&gt;= 30 e &lt; 60 dias de pendência`. O fallback agora remove as tags **e** decodifica via
+`decodeHtmlEntities()` (textarea + innerHTML, o parser do próprio browser; as tags saem antes, então nada
+de HTML chega ao `innerHTML`).
+
+**3. `#NULL!` em algumas células — não era a exportação.** Lendo o `buttons.html5.min.js`: uma célula só
+vira número/erro quando o texto casa com um dos type-matchers (`/^\-?\d+$/`, moeda, `%`, data ISO);
+qualquer outra coisa vira `inlineStr`, ou seja, **texto**. Logo o `#NULL!` estava no **dado**. Origem:
+`_pc_import_update` lê a planilha "Pending Update" com `openpyxl(data_only=True)`, que devolve o **valor em
+cache** da fórmula — e, quando a fórmula está com erro, esse valor é o texto `'#NULL!'`. Ele era gravado no
+banco, aparecia na tela e saía na extração. Agora o `cell()` do import trata os literais de erro do Excel
+(`_XL_ERROR_TEXT`: `#NULL!`, `#N/A`, `#REF!`, `#VALUE!`, `#DIV/0!`, `#NAME?`, `#NUM!`, `#SPILL!`, `#CALC!`,
+`#GETTING_DATA`) como vazio. **Mudança de comportamento:** a linha cujo *Deal Name* é um erro de fórmula
+passa a ser **pulada** (entra na contagem `skipped`), pela regra que já existia para Deal Name vazio — e
+isso é melhor do que antes, porque `#NULL!` como Trade Number é a **chave** da linha: todas as linhas
+quebradas colidiam entre si no `_pc_upsert_row` (delete por Trade Number + insert). Erro de fórmula em
+coluna que não é chave vira vazio e a linha entra normalmente.
+
+Testes: as três funções de export foram **executadas de verdade** (recortadas do template) contra os
+valores que apareceram na planilha do usuário — 16 asserções, incluindo `&gt;=`/`&lt;`/`&amp;`/`&quot;`,
+badge com tag+entidade, colunas 0/1 fora e 20 de 22 dentro; e o import foi rodado com um .xlsx real
+contendo `#NULL!`, `#REF!` e `#N/A`, conferindo `updated`, `skipped` e que nada com `#` chega ao banco.

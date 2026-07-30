@@ -4788,7 +4788,7 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
             recs, total = _swaphyb_extract(raw, ref)    # filter Settlement Date = today (import date)
             jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
         elif spec.get('latam'):                         # FbiRptLatamDeskPostion → Latam Desk Position
-            rows = _ds_read_rows(raw)
+            rows = _latam_read_rows(raw)
             recs, kept, filtered, _cmap, missing = (_latam_extract(rows) if len(rows) >= 2
                                                     else ([], 0, 0, {}, []))
             total = kept + filtered
@@ -6881,6 +6881,27 @@ def _latam_read_meta(jp):
     return _ds_read_updated(jp), ''
 
 
+def _latam_read_rows(raw):
+    """Linhas do relatório. `_ds_read_rows` assume TAB (como o OpenText da macro),
+    mas este arquivo chega de um extrator externo: se o header partido por TAB der
+    uma coluna só, o separador é outro — testa ; , e | antes de desistir. Sem isso
+    o arquivo "carrega" com uma coluna gigante, as colunas 62/63 ficam vazias e o
+    filtro descarta TODAS as linhas, deixando a página vazia sem erro nenhum."""
+    if raw[:2] == b'PK':                       # .xlsx de verdade
+        return _ds_read_rows(raw)
+    text = raw.decode('latin-1')
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return []
+    best, best_n = '\t', len(lines[0].split('\t'))
+    if best_n < 2:
+        for sep in (';', ',', '|'):
+            n = len(lines[0].split(sep))
+            if n > best_n:
+                best, best_n = sep, n
+    return [ln.split(best) for ln in lines]
+
+
 def _latam_extract(rows):
     """Limpa + extrai as colunas do relatório Latam Desk Position (filtro da macro
     nas colunas 62/63; datas em dd/mm/yyyy com o epoch virando ''). Devolve
@@ -6928,7 +6949,7 @@ def _latam_import(ref=None):
     src = os.path.join(LATAM_SOURCE_ROOT, matches[0])
     try:
         with open(src, 'rb') as fh:
-            rows = _ds_read_rows(fh.read())
+            rows = _latam_read_rows(fh.read())
     except Exception:
         log.warning('[latam] read failed for %s:\n%s', src, traceback.format_exc())
         return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
@@ -6943,8 +6964,8 @@ def _latam_import(ref=None):
     if missing:
         log.warning('[latam] colunas não encontradas no header: %s', ', '.join(missing))
     return {'success': True, 'file': matches[0], 'rows': kept, 'filtered': filtered,
-            'missing': missing, 'date': ref.strftime('%Y-%m-%d'),
-            'date_fmt': ref.strftime('%d/%m/%Y')}
+            'missing': missing, 'header_cols': len(rows[0]), 'read': len(rows) - 1,
+            'date': ref.strftime('%Y-%m-%d'), 'date_fmt': ref.strftime('%d/%m/%Y')}
 
 
 def _latam_collect(ref):
@@ -13360,6 +13381,12 @@ _PC_UPDATE_HEADERS = {
 }
 
 
+# Erros de fórmula do Excel, como o openpyxl os entrega (texto) quando lê o valor
+# em cache de uma célula com fórmula quebrada.
+_XL_ERROR_TEXT = {'#NULL!', '#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NAME?', '#NUM!',
+                  '#SPILL!', '#CALC!', '#GETTING_DATA'}
+
+
 def _pc_signature_status(rec, trade_dt, maturity_dt):
     """(Pending Status, Status) per the Pending Update rules. `rec` is the RefData
     record for the counterparty (or None)."""
@@ -13401,7 +13428,17 @@ def _pc_import_update(raw_bytes):
         if i is None or i >= len(row):
             return ''
         v = row[i]
-        return '' if v is None else v
+        if v is None:
+            return ''
+        # openpyxl com data_only=True devolve o valor EM CACHE da fórmula; quando a
+        # fórmula está com erro, o que chega é o TEXTO '#NULL!' / '#N/A' / '#REF!'.
+        # Isso não é dado: entrava no banco, aparecia na tela e saía na planilha
+        # como #NULL!. Vira vazio — e no Trade Number, que é a chave da linha, a
+        # linha passa a ser pulada pela regra que já existe para número vazio (uma
+        # chave '#NULL!' ainda colidia com todas as outras linhas quebradas).
+        if isinstance(v, str) and v.strip().upper() in _XL_ERROR_TEXT:
+            return ''
+        return v
 
     # RefData maps built once: SPN + signature type by counterparty name.
     by_name = _pc_refdata_by_name()

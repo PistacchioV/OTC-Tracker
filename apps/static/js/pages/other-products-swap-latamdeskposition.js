@@ -4,12 +4,18 @@
  * mostra as linhas filtradas em uma tabela larga com widgets, filtro por coluna,
  * Columns e Export.
  *
- * O relatório NÃO é diário: a página abre SEM data no request e o servidor
- * devolve o último arquivo disponível — o date picker é então sincronizado com a
- * data que veio. Escolher uma data no picker passa a pedir aquele dia exato.
+ * O relatório NÃO é diário. O campo de data nasce em HOJE, mas os dados vêm
+ * sempre do ÚLTIMO arquivo disponível: a página chama /data SEM data e o servidor
+ * escolhe. A data real da posição aparece ao lado do campo ("Dados de dd/mm/yyyy").
+ * Escolher uma data no calendário passa a pedir aquele dia exato.
  */
 (function () {
   'use strict';
+
+  // ':gt(1)' NÃO serve aqui: o thead tem duas linhas (títulos + filtros), o jQuery
+  // enumera 2×N <th> e os das colunas 0/1 da segunda linha caem em posição > 1,
+  // devolvendo checkbox e Actions para a exportação. Índice de COLUNA, então.
+  function exportFromData(idx) { return idx > 1; }
 
   var BASE = '/api/other-products-swap-latamdeskposition';
   var page = document.getElementById('ldp-page');
@@ -21,6 +27,7 @@
   var EDIT_ID = null;          // id da linha em edição (null → modo Add)
   var LOADED_DATE = null;      // data efetivamente carregada (YYYY-MM-DD)
   var AVAILABLE = [];          // datas que têm arquivo, mais nova primeiro
+  var PICKER = null;           // instância do calendário (flatpickr ou daterangepicker)
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
@@ -28,28 +35,34 @@
           noFile: 'No FbiRptLatamDeskPostion-NY-* file found in the Settlements folder.',
           imported: 'Imported', rows: 'row(s)', updated: 'Updated', latest: 'latest available',
           noData: 'No data for this date', lastAvailable: 'Last available',
+          dataFrom: 'Data from', loadErr: 'Could not load the data',
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
           missing: 'Columns not found in the file header', filtered: 'filtered out',
+          read: 'read', cols: 'header columns',
           sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'Nenhum arquivo FbiRptLatamDeskPostion-NY-* na pasta Settlements.',
           imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado', latest: 'último disponível',
           noData: 'Sem dados nesta data', lastAvailable: 'Último disponível',
+          dataFrom: 'Dados de', loadErr: 'Não foi possível carregar os dados',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
           missing: 'Colunas não encontradas no header do arquivo', filtered: 'filtradas',
+          read: 'lidas', cols: 'colunas no header',
           sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'Ningún archivo FbiRptLatamDeskPostion-NY-* en la carpeta Settlements.',
           imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado', latest: 'último disponible',
           noData: 'Sin datos en esta fecha', lastAvailable: 'Último disponible',
+          dataFrom: 'Datos de', loadErr: 'No se pudieron cargar los datos',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
           missing: 'Columnas no encontradas en el encabezado', filtered: 'filtradas',
+          read: 'leídas', cols: 'columnas del encabezado',
           sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
@@ -63,35 +76,46 @@
     var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? (m[3] + '/' + m[2] + '/' + m[1]) : '';
   }
+  function toISO(dmy) {
+    var m = String(dmy || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
+  }
 
   // dateStr null/undefined → pede o ÚLTIMO arquivo disponível (o relatório não é diário).
   function load(dateStr) {
+    var info = document.getElementById('ldp-import-info');
     fetch(BASE + '/data' + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : ''),
           { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then(function (d) {
-        if (!d || !d.success) return;
+        if (!d || !d.success) throw new Error((d && d.error) || 'resposta sem success');
         var w = d.widgets || {};
         setVal('ldp-w-calls', w.calls || 0); setVal('ldp-w-puts', w.puts || 0);
         setVal('ldp-w-cptys', w.counterparties || 0); setVal('ldp-w-total', w.total || 0);
         LOADED_DATE = d.date || null;
         AVAILABLE = d.dates || [];
-        // Nota do cabeçalho: hora do import, arquivo de origem e — quando a data não
-        // foi escolhida pelo usuário — o aviso de que é o último arquivo disponível.
+        // Nota do cabeçalho: DE QUE DATA são os dados (o campo fica em hoje, mas a
+        // posição pode ser de outro dia), hora do import e arquivo de origem.
         var note = [];
+        if (d.date) note.push(t('dataFrom') + ' ' + toDMY(d.date));
         if (d.updated) note.push(t('updated') + ' ' + d.updated);
         if (d.file) note.push(d.file);
-        if (d.latest) note.push('(' + t('latest') + ')');
         setVal('ldp-updated', note.join(' · '));
-        syncPicker(d.date);
         buildTable(d.columns || [], d.rows || []);
-        var info = document.getElementById('ldp-import-info');
-        if (info && !(d.rows || []).length) {
-          info.textContent = t('noData') + (AVAILABLE.length
-            ? ' · ' + t('lastAvailable') + ': ' + toDMY(AVAILABLE[0]) : '');
+        if (info) {
+          info.classList.remove('text-danger');
+          info.textContent = (d.rows || []).length ? ''
+            : t('noData') + (AVAILABLE.length ? ' · ' + t('lastAvailable') + ': ' + toDMY(AVAILABLE[0]) : '');
         }
       })
-      .catch(function () {});
+      .catch(function (e) {
+        // Falha silenciosa aqui significa "página vazia sem explicação" — mostra o erro.
+        if (window.console && console.error) console.error('[latam-desk-position] load falhou:', e);
+        if (info) { info.classList.add('text-danger'); info.textContent = t('loadErr') + ' (' + e.message + ')'; }
+      });
   }
 
   // Status badge padrão do projeto: OK=success, Pending=warning, New=info.
@@ -164,9 +188,9 @@
         text: '<i class="ti ti-download me-1"></i> Export',
         className: 'btn btn-sm btn-info bg-gradient dropdown-toggle', autoClose: true,
         buttons: [
-          { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',  className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
-          { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',   className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
-          { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: { columns: ':gt(1)', modifier: { page: 'all' } } },
+          { extend: 'copy',  text: '<i class="ti ti-copy me-1"></i> Copy',  className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
+          { extend: 'csv',   text: '<i class="ti ti-file-type-csv me-1"></i> CSV',   className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
+          { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: { columns: exportFromData, modifier: { page: 'all' } } },
         ],
       }],
     });
@@ -236,15 +260,21 @@
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : page.getAttribute('data-ref');
   }
 
-  function syncPicker(iso) {
-    if (!iso) return;
-    if (window.jQuery && jQuery('#ldp-date').data && jQuery('#ldp-date').data('daterangepicker')) {
-      jQuery('#ldp-date').data('daterangepicker').setStartDate(moment(iso, 'YYYY-MM-DD'));
-      jQuery('#ldp-date').val(toDMY(iso));
-      return;
-    }
+  function setDateField(iso) {
     var inp = document.getElementById('ldp-date');
-    if (inp) inp.value = toDMY(iso);
+    if (!inp || !iso) return;
+    inp.value = toDMY(iso);
+    try {
+      if (PICKER && PICKER.setDate) PICKER.setDate(iso, false);                    // flatpickr
+      else if (PICKER && PICKER.setStartDate) PICKER.setStartDate(moment(iso, 'YYYY-MM-DD'));
+    } catch (e) {}
+  }
+
+  function openPicker() {
+    try {
+      if (PICKER && PICKER.open) { PICKER.open(); return; }                        // flatpickr
+      if (window.jQuery) jQuery('#ldp-date').trigger('click');                     // daterangepicker
+    } catch (e) {}
   }
 
   function wireImport() {
@@ -261,20 +291,26 @@
         .then(function (d) {
           btn.disabled = false;
           if (d && d.success) {
-            var txt = t('imported') + ': ' + d.rows + ' ' + t('rows') +
-                      ' · ' + (d.filtered || 0) + ' ' + t('filtered') + ' · ' + d.file;
-            if (info) info.textContent = txt;
+            // Detalhamento sempre visível: sem ele, "0 linhas" não diz se o
+            // arquivo veio vazio, se o filtro 62/63 descartou tudo ou se o
+            // delimitador estava errado (header com 1 coluna).
+            var txt = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' +
+                      (d.read || 0) + ' ' + t('read') + ' · ' + (d.filtered || 0) + ' ' +
+                      t('filtered') + ' · ' + (d.header_cols || 0) + ' ' + t('cols') + ' · ' + d.file;
+            if (info) { info.classList.remove('text-danger'); info.textContent = txt; }
             load(d.date);
             if (window.Swal) {
-              var html = d.rows + ' ' + t('rows') + '<br><small>' + esc(d.file) + '</small>';
+              var warn = !d.rows || (d.missing && d.missing.length);
+              var html = d.rows + ' ' + t('rows') + '<br><small>' + esc(d.read || 0) + ' ' + t('read') +
+                         ' · ' + esc(d.filtered || 0) + ' ' + t('filtered') +
+                         ' · ' + esc(d.header_cols || 0) + ' ' + t('cols') + '</small>' +
+                         '<br><small>' + esc(d.file) + '</small>';
               if (d.missing && d.missing.length) {
                 html += '<br><br><small class="text-warning">' + esc(t('missing')) + ':<br>' +
                         esc(d.missing.join(', ')) + '</small>';
               }
-              Swal.fire({ icon: (d.missing && d.missing.length) ? 'warning' : 'success',
-                          title: t('imported'), html: html,
-                          timer: (d.missing && d.missing.length) ? undefined : 2200,
-                          showConfirmButton: !!(d.missing && d.missing.length) });
+              Swal.fire({ icon: warn ? 'warning' : 'success', title: t('imported'), html: html,
+                          timer: warn ? undefined : 2200, showConfirmButton: !!warn });
             }
           } else {
             var msg = (d && d.error) || t('noFile');
@@ -287,28 +323,42 @@
     });
   }
 
-  function wireDatePicker(attempt) {
+  // O campo NASCE em hoje (dd/mm/yyyy) de forma síncrona, antes de qualquer
+  // plugin: se o calendário falhar em carregar, o usuário ainda vê a data certa
+  // em vez do placeholder. Os DADOS continuam vindo do último arquivo disponível
+  // (load(null) no boot) — a data do arquivo aparece ao lado, em "Dados de …".
+  function wireDatePicker() {
     var inp = document.getElementById('ldp-date');
     if (!inp) return;
-    var ref = page.getAttribute('data-ref') || page.getAttribute('data-today');
-    if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
+    var today = page.getAttribute('data-today');
+    inp.value = toDMY(today);
+
+    function pick(iso) { if (iso && iso !== LOADED_DATE) load(iso); }
+
+    // 1) flatpickr — já vem no vendors.js do projeto, sem depender dos plugins da página.
+    if (window.flatpickr) {
+      PICKER = flatpickr(inp, {
+        dateFormat: 'd/m/Y', defaultDate: today, allowInput: false,
+        onChange: function (_sel, str) { pick(toISO(str)); },
+      });
+    // 2) daterangepicker (mesmo componente das outras páginas de settlement).
+    } else if (window.jQuery && jQuery.fn.daterangepicker && window.moment) {
       var $d = jQuery('#ldp-date');
       $d.daterangepicker({
         singleDatePicker: true, autoApply: true, showDropdowns: true,
         locale: { format: 'DD/MM/YYYY' },
-        startDate: ref ? moment(ref, 'YYYY-MM-DD') : moment(),
-      }, function (start) { load(start.format('YYYY-MM-DD')); });
-      jQuery('#ldpDateWrap .ldp-cal-btn').on('click', function () { $d.trigger('click'); });
-      return;
+        startDate: today ? moment(today, 'YYYY-MM-DD') : moment(),
+      }, function (start) { pick(start.format('YYYY-MM-DD')); });
+      PICKER = $d.data('daterangepicker');
+    // 3) Sem calendário: campo digitável em dd/mm/yyyy (nunca um campo morto).
+    } else {
+      inp.removeAttribute('readonly');
+      inp.addEventListener('change', function () { pick(toISO(this.value)); });
     }
-    attempt = attempt || 0;
-    if (attempt < 40) { setTimeout(function () { wireDatePicker(attempt + 1); }, 50); return; }
-    inp.removeAttribute('readonly');
-    if (ref) inp.value = toDMY(ref);
-    inp.addEventListener('change', function () {
-      var m = (this.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (m) load(m[3] + '-' + m[2] + '-' + m[1]);
-    });
+    // O ícone e o próprio campo abrem o calendário.
+    var cal = document.querySelector('#ldpDateWrap .ldp-cal-btn');
+    if (cal) cal.addEventListener('click', openPicker);
+    if (PICKER) inp.addEventListener('click', openPicker);
   }
 
   function wirePageLen() {
@@ -400,13 +450,21 @@
       });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    wireClear();
-    wireImport();
-    wirePageLen();
-    wireAddRow();
-    wireActions();
-    wireDatePicker();
+  // Cada wiring é isolado: um que falte (jQuery/plugin ausente, por exemplo) não
+  // pode derrubar o calendário nem o carregamento dos dados, que é o que deixaria
+  // a página com o campo vazio e a tabela sem cabeçalho.
+  function boot() {
+    [wireDatePicker, wireClear, wireImport, wirePageLen, wireAddRow, wireActions]
+      .forEach(function (fn) {
+        try { fn(); } catch (e) {
+          if (window.console && console.error) console.error('[latam-desk-position] ' + (fn.name || 'wire') + ' falhou:', e);
+        }
+      });
     load(null);          // sem data → servidor devolve o último arquivo disponível
-  });
+  }
+
+  // Se o script entrar depois do DOMContentLoaded (defer, injeção, cache), o
+  // listener nunca dispararia e a página ficaria inteiramente inerte.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

@@ -1300,8 +1300,25 @@
 
 <script>
 // ============================================================================
-// Função auxiliar para formatar dados de export (selects, inputs, texto)
+// Export — todo formato (Copy/CSV/Excel/Print/PDF) sai a partir da coluna Status
 // ============================================================================
+// Seleção de colunas: NÃO usar o seletor posicional ':gt(1)'. O thead tem DUAS
+// linhas (títulos + filtros), então o jQuery enumera 2×N elementos <th> e os th
+// das colunas 0 e 1 da SEGUNDA linha caem em posição > 1 — o que trazia checkbox
+// e Actions de volta para a planilha. Uma função recebe o índice da COLUNA, então
+// a exportação começa sempre em Status, em qualquer formato.
+function exportFromStatus(idx) {
+    return idx > 1;
+}
+
+// Decodifica entidades HTML usando o próprio parser do browser. As tags são
+// removidas ANTES, então nada de HTML chega ao innerHTML.
+function decodeHtmlEntities(s) {
+    var ta = document.createElement('textarea');
+    ta.innerHTML = String(s == null ? '' : s);
+    return ta.value;
+}
+
 function formatExportData(data, row, column, node) {
     // Off-page rows have no DOM node; fall back to the model data.
     if (node) {
@@ -1315,7 +1332,11 @@ function formatExportData(data, row, column, node) {
         }
         return $(node).text().trim();
     }
-    return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
+    // Com modifier {page:'all'} só as linhas da página atual têm nó; as demais
+    // caem aqui com o HTML cru da célula. Tirar as tags não basta — sem decodificar
+    // as entidades a planilha sai com "&gt;= 30 e &lt; 60 dias de pendência" e
+    // "H&amp;M HENNES" justamente nas linhas fora da página.
+    return decodeHtmlEntities(String(data == null ? '' : data).replace(/<[^>]*>/g, '')).trim();
 }
 
 $(document).ready(function() {
@@ -1437,7 +1458,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-copy me-1 fs-lg align-middle"></i> Copy',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: ':gt(1)',   // tudo depois do checkbox e do Actions
+                            columns: exportFromStatus,   // a partir de Status (ver comentário no topo)
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1448,7 +1469,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-type-csv me-1 fs-lg align-middle"></i> CSV',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: ':gt(1)',   // tudo depois do checkbox e do Actions
+                            columns: exportFromStatus,   // a partir de Status (ver comentário no topo)
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1459,7 +1480,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-spreadsheet me-1 fs-lg align-middle"></i> Excel',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: ':gt(1)',   // tudo depois do checkbox e do Actions
+                            columns: exportFromStatus,   // a partir de Status (ver comentário no topo)
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1470,7 +1491,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-printer me-1 fs-lg align-middle"></i> Print',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: ':gt(1)',   // tudo depois do checkbox e do Actions
+                            columns: exportFromStatus,   // a partir de Status (ver comentário no topo)
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
@@ -1481,7 +1502,7 @@ $(document).ready(function() {
                         text: '<i class="ti ti-file-text me-1 fs-lg align-middle"></i> PDF',
                         className: 'dropdown-item',
                         exportOptions: {
-                            columns: ':gt(1)',   // tudo depois do checkbox e do Actions
+                            columns: exportFromStatus,   // a partir de Status (ver comentário no topo)
                             modifier: { page: 'all' },
                             orthogonal: 'export',
                             format: { body: formatExportData }
