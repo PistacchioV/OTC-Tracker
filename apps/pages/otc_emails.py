@@ -266,6 +266,28 @@ def _build_refdata_index(key='COMMODITIES ACCRONYM'):
     return idx
 
 
+def _build_refdata_spn_index():
+    """SPN normalizado → ref record. O accronym é opcional no Reference Data (há
+    contraparte cadastrada com a coluna em branco), o SPN não é — por isso ele é
+    a chave confiável para achar a conta B3 e o nome da contraparte."""
+    idx = {}
+    for r in _load_json('RefData.json'):
+        k = _norm_spn(r.get('SPN'))
+        if k and k not in idx:
+            idx[k] = r
+    return idx
+
+
+def _ref_for_deal(by_acronym, by_spn, deal):
+    """Registro do Reference Data de um deal: pelo accronym e, quando ele não
+    resolve, pelo SPN. Só o accronym não basta — uma contraparte cadastrada sem
+    accronym some do e-mail sem erro nenhum, que é como as operações de prêmio
+    D0 deixaram de ser geradas mesmo com a Spot Date de hoje."""
+    acr = str((deal or {}).get('Acronym', '') or '').strip().upper()
+    rec = by_acronym.get(acr) if acr else None
+    return rec or by_spn.get(_norm_spn((deal or {}).get('SPN'))) or {}
+
+
 def _norm_spn(value):
     """SPN match key: drop a trailing '.0' and leading zeros (both sides), matching
     the project-wide convention so a deal SPN like '0135742' resolves to the
@@ -431,9 +453,14 @@ def _asset_label(deal):
 # Grouping
 # ──────────────────────────────────────────────────────────────────────────
 def _group_by_acronym_commodity(deals):
+    """Um grupo por contraparte (× commodity) = um e-mail. Sem accronym a chave
+    cai para o SPN: agrupar por accronym vazio juntaria contrapartes diferentes
+    num grupo só, e sairia um único e-mail com os deals de todo mundo, endereçado
+    a quem calhasse de estar em primeiro."""
     groups = {}
     for d in deals:
-        key = (str(d.get('Acronym', '') or '').strip().upper(),
+        acr = str(d.get('Acronym', '') or '').strip().upper()
+        key = (acr or ('SPN:' + _norm_spn(d.get('SPN'))),
                str(d.get('Commodities', '') or '').strip().upper())
         groups.setdefault(key, []).append(d)
     return groups
@@ -458,18 +485,20 @@ def build_premium_emails(deals, asset_label='Commodities', ref_key='COMMODITIES 
     flow, so the FXO page turns it off and copies Liquidação only.
     """
     ref = _build_refdata_index(ref_key)
+    ref_spn = _build_refdata_spn_index()
     cpd = _build_cpdetails_index()
     today = _today_br()
 
     todays = [d for d in deals if _date_br(d.get('SpotDate')) == today]
     drafts = []
 
-    for (acronym, _commodity), items in _group_by_acronym_commodity(todays).items():
-        rec   = ref.get(acronym, {})
+    for _key, items in _group_by_acronym_commodity(todays).items():
+        acronym = str(items[0].get('Acronym', '') or '').strip().upper()
+        rec   = _ref_for_deal(ref, ref_spn, items[0])
         b3    = str(rec.get('B3 ACCOUNT', '') or '').strip()
-        name  = rec.get('COUNTERPARTY', '') or acronym
+        name  = rec.get('COUNTERPARTY', '') or items[0].get('Client', '') or acronym
         spn   = str(items[0].get('SPN', '') or rec.get('SPN', '') or '').strip().upper()
-        taxid = rec.get('TAX ID', '')
+        taxid = rec.get('TAX ID', '') or items[0].get('TaxID', '')
 
         if b3 != PREMIUM_CLIENT_B3:          # only the 73760.10-2 bucket
             continue
@@ -1043,6 +1072,7 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
     whose CETIP account (RefData) is none of 73760.00-9 / 73760.10-2 / 00041.00-7.
     """
     ref = _build_refdata_index()
+    ref_spn = _build_refdata_spn_index()
     today = _today_br()
     drafts = []
 
@@ -1050,7 +1080,11 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
         if _date_br(d.get('TradeDate')) != today:
             return False
         acronym = str(d.get('Acronym', '') or '').strip().upper()
-        rec = ref.get(acronym, {})
+        # Pelo SPN também: cadastro sem accronym deixava a conta B3 em branco, e
+        # com ela em branco a contraparte não caía em EXCLUDED_B3_AFFIRMATION —
+        # ou seja, um cliente passava por instituição financeira e recebia uma
+        # afirmação que não é para ele.
+        rec = _ref_for_deal(ref, ref_spn, d)
         b3 = str(rec.get('B3 ACCOUNT', '') or '').strip()
         name = str(rec.get('COUNTERPARTY', '') or d.get('Client', '') or '').upper()
         if b3 in EXCLUDED_B3_AFFIRMATION:
@@ -1061,10 +1095,11 @@ def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):
 
     eligible = [d for d in deals if _eligible(d)]
 
-    for (acronym, _commodity), items in _group_by_acronym_commodity(eligible).items():
-        rec  = ref.get(acronym, {})
+    for _key, items in _group_by_acronym_commodity(eligible).items():
+        acronym = str(items[0].get('Acronym', '') or '').strip().upper()
+        rec  = _ref_for_deal(ref, ref_spn, items[0])
         b3   = str(rec.get('B3 ACCOUNT', '') or '').strip()
-        name = rec.get('COUNTERPARTY', '') or acronym
+        name = rec.get('COUNTERPARTY', '') or items[0].get('Client', '') or acronym
         drafts.append(_economic_affirmation_email(items, name, b3, asset_label))
 
     return drafts
