@@ -21727,15 +21727,11 @@ def new_deals_monitor():
                            today=datetime.now().strftime('%Y-%m-%d'))
 
 
-@blueprint.route('/api/new-deals/monitor')
-def api_new_deals_monitor():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    ds = (request.args.get('date') or '').strip()
-    try:
-        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
-    except ValueError:
-        ref = datetime.now()
+def _ndm_monitor_snapshot(ref):
+    """(cards, conf_cards) do Monitor na reference date — exatamente a estrutura
+    que a página consome. Está fora do endpoint de propósito: o e-mail diário de
+    pendências lê daqui, e assim não existe uma segunda contagem para divergir
+    do que o usuário vê na tela."""
     want = ref.strftime('%Y%m%d')
 
     # Um único walk: agrupa os arquivos DA DATA por produto (caminho sem os
@@ -21885,8 +21881,309 @@ def api_new_deals_monitor():
                     'family': g['family'], 'count': g['count']} for g in fxo_groups],
     })
 
+    return cards, conf_cards
+
+
+@blueprint.route('/api/new-deals/monitor')
+def api_new_deals_monitor():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    cards, conf_cards = _ndm_monitor_snapshot(ref)
     return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'cards': cards, 'conf_cards': conf_cards})
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deals Monitor — e-mail diário de pendências (19h00 e 19h30)
+# ──────────────────────────────────────────────────────────────────────────
+# Varre os cards do Monitor da data e manda para a mesa o que ainda NÃO está
+# 100% Success. Um card entra na lista quando tem operação (total > 0) e pelo
+# menos uma fora de Success; a quantidade é `total - Success`, que é exatamente
+# o que sobra de ação na tela.
+#
+# As contagens saem de _ndm_monitor_snapshot, o MESMO código que alimenta a
+# página — de propósito. Uma segunda contagem própria do e-mail divergiria da
+# tela no primeiro ajuste de regra, e a mesa passaria a não confiar em nenhuma
+# das duas.
+
+# Tipo (zona do Monitor) × produto × detalhe de cada card. As zonas são as três
+# da tela: Registration (B3), Confirmation e Intrag.
+_NDM_TAXONOMY = {
+    'ndf-commodities':    ('NDF', 'Commodities'),
+    'ndf-fwdstart':       ('NDF', 'FWD Start'),
+    'ndf-otherpublisher': ('NDF', 'Other Publisher'),
+    'ndf-vanilla':        ('NDF', 'Vanilla'),
+    'opt-commodities':    ('Option', 'Commodities'),
+    'opt-fxo':            ('Option', 'FX'),
+    'opt-equity':         ('Option', 'Equity'),
+    'swap-equities':      ('Swap', 'Equities'),
+    'swap-cem':           ('Swap', 'CEM'),
+    # Intrag não tem sub-variante: o tipo da linha já diz Intrag, e repetir a
+    # palavra na coluna Detail não acrescenta nada.
+    'intrag-ndf':         ('NDF', '—'),
+    'intrag-option':      ('Option', '—'),
+    'intrag-swap':        ('Swap', '—'),
+}
+_NDM_TYPE_ORDER = ['Registration', 'Confirmation', 'Intrag']
+
+
+def _ndm_card_taxonomy(card, zone):
+    """(tipo, produto, detalhe) de um card. Produto fora do catálogo (os cards
+    'Others', que nascem sozinhos quando aparece um diretório novo no cache)
+    cai no label do próprio card, para nunca sumir do e-mail por falta de
+    cadastro."""
+    key = str(card.get('key') or '')
+    if key in _NDM_TAXONOMY:
+        product, detail = _NDM_TAXONOMY[key]
+    elif key.startswith('conf-') and key[5:] in _NDM_TAXONOMY:
+        product, detail = _NDM_TAXONOMY[key[5:]]
+    else:
+        label = str(card.get('label') or key or '—').strip()
+        parts = label.split(None, 1)
+        product, detail = (parts[0], parts[1]) if len(parts) == 2 else (label, '—')
+    return zone, product, detail
+
+
+def _ndm_pending_blocks(ref):
+    """Blocos (um por tipo) com os cards que ainda não estão 100% Success.
+    Retorna (blocks, grand_total); lista vazia = nada pendente na data."""
+    cards, conf_cards = _ndm_monitor_snapshot(ref)
+    by_type = {}
+    for zone, group in (('Registration', cards), ('Confirmation', conf_cards)):
+        for card in group:
+            # Intrag é zona própria na tela, mas vem junto dos cards de B3.
+            z = 'Intrag' if str(card.get('key') or '').startswith('intrag-') else zone
+            total = int(card.get('total') or 0)
+            statuses = card.get('statuses') or {}
+            # ⚠️ Success comparado SEM caixa: o cache do Intrag grava o status em
+            # minúsculo ('success'), e contar só a grafia 'Success' deixaria os
+            # cards de Intrag eternamente pendentes no aviso — falso alarme
+            # diário é o jeito mais rápido de a mesa parar de ler o e-mail.
+            success = sum(int(v or 0) for k, v in statuses.items()
+                          if str(k).strip().lower() == 'success')
+            pending = total - success
+            if total <= 0 or pending <= 0:
+                continue
+            _z, product, detail = _ndm_card_taxonomy(card, z)
+            # Chips do card, na ordem em que aparecem: diz de QUE ação a
+            # pendência é (New, Amend, Generated…), não só quantas são.
+            breakdown = ', '.join(
+                '{} {}'.format(v, str(k)[:1].upper() + str(k)[1:])
+                for k, v in statuses.items()
+                if str(k).strip().lower() != 'success' and v)
+            by_type.setdefault(_z, []).append(
+                {'product': product, 'detail': detail, 'pending': pending,
+                 'breakdown': breakdown, 'total': total, 'success': success})
+    blocks = []
+    for t in _NDM_TYPE_ORDER + sorted(k for k in by_type if k not in _NDM_TYPE_ORDER):
+        rows = by_type.get(t)
+        if not rows:
+            continue
+        rows.sort(key=lambda r: (-r['pending'], r['product'], r['detail']))
+        blocks.append({'type': t, 'rows': rows,
+                       'total': sum(r['pending'] for r in rows)})
+    return blocks, sum(b['total'] for b in blocks)
+
+
+_NDM_PENDING_DEFAULT_TO = 'brazil.otc.ops@jpmorgan.com'
+_NDM_PENDING_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR,
+                                            'deals_monitor_pending_recipients.json')
+# Dois disparos por dia. O segundo é lembrete: quem não tratou às 19h00 leva o
+# aviso de novo às 19h30, já com a lista atualizada.
+_NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
+
+
+def _load_ndm_pending_recipients():
+    """TO/CC do aviso. O arquivo em control-panel/ (não versionado) permite
+    trocar destinatário sem deploy; sem arquivo vale o default da mesa."""
+    try:
+        with open(_NDM_PENDING_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict) and (d.get('to') or d.get('cc')):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': _NDM_PENDING_DEFAULT_TO, 'cc': ''}
+
+
+def _send_ndm_pending_email(ref, to_list, cc_list):
+    """Envia o aviso de pendências do Monitor. Retorna True, 'empty' (nada
+    pendente — não manda e-mail) ou a mensagem de erro."""
+    from email.mime.image import MIMEImage
+    try:
+        blocks, grand_total = _ndm_pending_blocks(ref)
+        if not blocks:
+            log.info('[deals-monitor] %s: nada pendente, e-mail não enviado',
+                     ref.strftime('%Y-%m-%d'))
+            return 'empty'
+        ref_fmt = ref.strftime('%d/%m/%Y')
+        html = render_template('pages/email-template-deals-monitor.html',
+                               ref_date_fmt=ref_fmt, blocks=blocks,
+                               grand_total=grand_total, current_year=datetime.now().year)
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'Pending Action - Deals Monitor'
+        msg['From'] = SHARED_MAILBOX
+        if to_list:
+            msg['To'] = ', '.join(to_list)
+        if cc_list:
+            msg['Cc'] = ', '.join(cc_list)
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+        _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
+        log.info('[deals-monitor] aviso de pendências enviado — ref=%s · %d item(ns) '
+                 'em %d tipo(s) · to=%s cc=%s', ref.strftime('%Y-%m-%d'), grand_total,
+                 len(blocks), to_list, cc_list)
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[deals-monitor] aviso de pendências FALHOU:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/new-deals/monitor/pending-email', methods=['POST'])
+def api_ndm_pending_email():
+    """Dispara o aviso na hora (teste / envio manual fora do horário)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if not _session_is_admin():
+        return jsonify({'success': False, 'error': 'Admin only'}), 403
+    payload = request.get_json(silent=True) or {}
+    ds = (payload.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    rec = _load_ndm_pending_recipients()
+    to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+    if not (to_list or cc_list):
+        return jsonify({'success': False, 'error': 'Nenhum destinatário configurado.'}), 400
+    result = _send_ndm_pending_email(ref, to_list, cc_list)
+    if result == 'empty':
+        return jsonify({'success': True, 'sent': False,
+                        'message': 'Nada pendente no Monitor — e-mail não enviado.'})
+    if result is not True:
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    return jsonify({'success': True, 'sent': True,
+                    'message': 'Aviso enviado para {} destinatário(s).'.format(
+                        len(to_list) + len(cc_list))})
+
+
+_ndm_pending_scheduler_started = False
+_ndm_pending_scheduler_lock = threading.Lock()
+_NDM_PENDING_SENT_FILE = os.path.join(_DAILY_METRIC_DIR, 'deals_monitor_pending_sent.json')
+
+
+def _ndm_pending_claim_slot(slot):
+    """Reserva um disparo ('YYYY-MM-DD 19:00') EM DISCO. True = ninguém tinha
+    reservado e o e-mail pode sair; False = já foi.
+
+    A trava em memória não basta: com o reloader do Werkzeug ligado o módulo é
+    importado em DOIS processos, cada um com o seu scheduler, e a mesa receberia
+    o aviso duas vezes. Persistência de deal é idempotente e sobrevive a isso —
+    e-mail não. O arquivo guarda só os últimos disparos, para não crescer."""
+    with _cache_lock:
+        try:
+            with open(_NDM_PENDING_SENT_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+            _atomic_write_json(_NDM_PENDING_SENT_FILE, sorted(sent)[-16:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[deals-monitor] não consegui gravar o controle de disparo:\n%s',
+                        traceback.format_exc())
+        return True
+
+
+def _ndm_pending_times():
+    """Horários do dia em (hh, mm), ordenados. Entrada inválida cai no padrão —
+    um typo na variável de ambiente não pode matar o aviso."""
+    out = []
+    for part in str(_NDM_PENDING_TIMES or '').split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            hh, mm = (int(x) for x in part.split(':')[:2])
+        except (ValueError, TypeError):
+            continue
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            out.append((hh, mm))
+    return sorted(set(out)) or [(19, 0), (19, 30)]
+
+
+def _ndm_pending_scheduler_loop():
+    times = _ndm_pending_times()
+    while True:
+        try:
+            now = datetime.now()
+            # Próximo horário de hoje que ainda não passou; se todos passaram,
+            # o primeiro de amanhã.
+            nxt = None
+            for hh, mm in times:
+                cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                if cand > now:
+                    nxt = cand
+                    break
+            if nxt is None:
+                hh, mm = times[0]
+                nxt = (now + timedelta(days=1)).replace(hour=hh, minute=mm,
+                                                        second=0, microsecond=0)
+            time.sleep(max(1.0, (nxt - now).total_seconds()))
+            fired = datetime.now()
+            slot = '{} {:02d}:{:02d}'.format(fired.strftime('%Y-%m-%d'),
+                                             nxt.hour, nxt.minute)
+            if not _ndm_pending_claim_slot(slot):
+                time.sleep(60)
+                continue
+            rec = _load_ndm_pending_recipients()
+            to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
+            if to_list or cc_list:
+                _send_ndm_pending_email(fired, to_list, cc_list)
+            else:
+                log.warning('[deals-monitor] sem destinatário configurado — aviso pulado')
+        except Exception:
+            log.error('[deals-monitor] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+def _ndm_pending_start_scheduler():
+    global _ndm_pending_scheduler_started
+    with _ndm_pending_scheduler_lock:
+        if _ndm_pending_scheduler_started:
+            return
+        _ndm_pending_scheduler_started = True
+    threading.Thread(target=_ndm_pending_scheduler_loop,
+                     name='deals-monitor-pending-scheduler', daemon=True).start()
+    log.info('[deals-monitor] scheduler de pendências iniciado (%s)',
+             ', '.join('{:02d}:{:02d}'.format(h, m) for h, m in _ndm_pending_times()))
+
+
+try:
+    _ndm_pending_start_scheduler()
+except Exception:
+    log.warning('[deals-monitor] could not start the pending scheduler')
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):

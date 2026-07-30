@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Pending Action – Deals Monitor</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="720"><tr><td width="720" style="width:720px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="720"
+                   style="max-width:720px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                {% set header_title = 'Deals Monitor — Pending Action' %}
+                {% set header_subtitle = 'Reference date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = 720 %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Intro ──────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 4px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">All,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
+                            The items below are <strong>not yet fully processed</strong> on the Deals Monitor
+                            for {{ ref_date_fmt }}. Each line is a card that still has deals outside
+                            <strong>Success</strong>, with the number of items awaiting action.</p>
+                    </td>
+                </tr>
+
+                <!-- ══ Pending table ══ -->
+                <tr>
+                    <td style="padding:18px 30px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:13px;">
+                            <thead>
+                                <tr>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;letter-spacing:0.3px;">Type</th>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;letter-spacing:0.3px;">Product</th>
+                                    <th bgcolor="#2e5c9e" align="left"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;letter-spacing:0.3px;">Detail</th>
+                                    <th bgcolor="#2e5c9e" align="right" width="90"
+                                        style="color:#ffffff;padding:8px 12px;font-weight:700;">Pending</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for block in blocks %}
+                                    {% for r in block.rows %}
+                                    <tr>
+                                        {# O tipo é escrito só na PRIMEIRA linha do bloco: repetir
+                                           "Registration" seis vezes seguidas rouba a atenção do que
+                                           muda de linha para linha, que é o produto e a quantidade. #}
+                                        <td valign="top" style="padding:7px 12px;border-top:{{ '2px solid #cfd6e2' if loop.first else '0' }};
+                                                   border-bottom:1px solid #f2f4f7;font-weight:700;color:#1a1a2e;
+                                                   font-size:12px;text-transform:uppercase;letter-spacing:0.3px;">
+                                            {% if loop.first %}{{ block.type }}{% endif %}</td>
+                                        <td valign="top" style="padding:7px 12px;font-weight:700;color:#1a1a2e;
+                                                   border-top:{{ '2px solid #cfd6e2' if loop.first else '0' }};border-bottom:1px solid #f2f4f7;">{{ r.product }}</td>
+                                        <td valign="top" style="padding:7px 12px;color:#444;
+                                                   border-top:{{ '2px solid #cfd6e2' if loop.first else '0' }};border-bottom:1px solid #f2f4f7;">
+                                            {{ r.detail }}
+                                            {% if r.breakdown %}<br/>
+                                            <span style="color:#8a8f98;font-size:11px;">{{ r.breakdown }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td valign="top" align="right" style="padding:7px 12px;font-weight:700;color:#0d6efd;
+                                                   border-top:{{ '2px solid #cfd6e2' if loop.first else '0' }};border-bottom:1px solid #f2f4f7;">{{ r.pending }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                <tr>
+                                    <td colspan="3" style="padding:7px 12px;font-weight:700;color:#1a1a2e;border-bottom:1px solid #eef0f4;">
+                                        Total {{ block.type }}</td>
+                                    <td align="right" style="padding:7px 12px;font-weight:700;color:#1a1a2e;border-bottom:1px solid #eef0f4;">{{ block.total }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr>
+                                    <td colspan="3" bgcolor="#eef1f6"
+                                        style="padding:9px 12px;font-weight:700;color:#1a1a2e;border-top:2px solid #cfd6e2;">
+                                        Total pending action</td>
+                                    <td colspan="1" bgcolor="#eef1f6" align="right"
+                                        style="padding:9px 12px;font-weight:700;color:#0d6efd;border-top:2px solid #cfd6e2;">{{ grand_total }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:20px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>Institutional Services by OTC Tracker</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>
