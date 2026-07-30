@@ -15483,15 +15483,24 @@ def _ndf_accronym_variants(acr):
     return out
 
 
-def _ndf_ref_by_accronym(refmap_acr, acr, le=None):
-    """Linha do Reference Data do End Counterparty, na ordem: código exato,
-    accronym sem o sufixo da entidade e — quando a LE é conhecida — qualquer
-    código cadastrado para ela no mapping le-accronym. O último passo é o que
-    preenche as pernas cujo End Counterparty é nome de book interno: o cadastro
-    da entidade (Banco / MGT / Lawton) vale para todos os books dela. {} quando
-    nada casa."""
+def _ndf_ref_by_accronym(refmap_acr, acr, le=None, refmap_spn=None, spn=None):
+    """Linha do Reference Data do End Counterparty, nesta ordem: código exato,
+    accronym sem o sufixo da entidade, SPN da própria API e — só então — qualquer
+    código cadastrado para `le` no mapping le-accronym. {} quando nada casa.
+
+    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
+    a que sai da Settlement Location, que é a nossa perna: com a location, um
+    cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
+
+    O passo do SPN vem ANTES do da LE de propósito — o SPN identifica a
+    contraparte sozinho, enquanto o passo da LE é o palpite que só vale para
+    perna interna."""
     for cand in _ndf_accronym_variants(acr):
         rec = refmap_acr.get(cand)
+        if rec:
+            return rec
+    if refmap_spn and spn:
+        rec = refmap_spn.get(_norm_spn(spn))
         if rec:
             return rec
     for cand in _ndf_le_accronyms(le):
@@ -15575,7 +15584,7 @@ def _ndf_is_interbook(norm):
     return False
 
 
-def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
+def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
     norm = _ndf_api_norm(rec)
@@ -15597,19 +15606,37 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     if _ndf_is_interbook(norm):
         return None, None
 
-    # LE: mapping Legal Entity × Accronym — a linha do accronym vence (é a
-    # específica), senão a da Settlement Location; sem nenhuma das duas, a
-    # location crua fica visível na coluna.
+    # LE da CONTRAPARTE: só quando o próprio End Counterparty está cadastrado no
+    # mapping Legal Entity × Accronym, ou seja, quando a contraparte é uma perna
+    # interna (outra entidade JPM). Fora esse caso ela é None — e tem de ser.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
-    le = _ndf_le_from_accronym(end_cp) or _ndf_le_from_location(loc) or loc
+    le_cp = _ndf_le_from_accronym(end_cp)
+    # LE da coluna da tela: a NOSSA perna. Cai para a Settlement Location, e sem
+    # cadastro a location crua fica visível.
+    le = le_cp or _ndf_le_from_location(loc) or loc
 
-    # Counterparty enrichment is keyed by End Counterparty (FX Cash
-    # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM,
-    # tentando também o acronym sem o sufixo da entidade — é o que evita
-    # cadastrar a mesma contraparte uma vez por LE. Código não cadastrado de
-    # jeito nenhum: SPN/Client/TaxID ficam vazios e a página marca o badge
-    # "Missing Counterparty" nessas colunas.
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le)
+    # Contraparte, nesta ordem:
+    #   1. accronym exato do End Counterparty no Reference Data (e o accronym
+    #      sem o sufixo de entidade — evita cadastrar a mesma contraparte uma
+    #      vez por LE);
+    #   2. SPN que a própria API manda — cliente cadastrado no Reference Data
+    #      com outro código de accronym é achado por aqui;
+    #   3. só então, e SOMENTE se a contraparte for perna interna (le_cp), os
+    #      demais accronyms daquela entidade.
+    #
+    # O passo 3 recebe `le_cp`, NUNCA a LE da Settlement Location: a location é
+    # a nossa perna, e usá-la aqui fazia um cliente virar a própria JPMorgan.
+    # Foi o que aconteceu com SOMICHEL (Michelin): accronym não cadastrado +
+    # Settlement Location BRAZIL → LE JPM → a linha veio com SPN, nome e CNPJ do
+    # Banco J.P. Morgan, em silêncio, numa operação que vai para registro.
+    #
+    # Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing
+    # Counterparty" — que é o erro certo: pede cadastro em vez de inventar.
+    api_spn = str(get('SPN') or '').strip()
+    if api_spn.endswith('.0'):
+        api_spn = api_spn[:-2]
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp,
+                               refmap_spn=refmap_spn, spn=api_spn)
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -15862,7 +15889,8 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
-    refmap_acr = _fxo_refdata_by_accronym()
+    refmap_spn = _fxo_refdata_by_spn()
+    refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
     fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
@@ -15870,7 +15898,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
+        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn)
         if target == '_fwd-start-fixing':
             fixing_today.append(deal)
             continue
@@ -22353,9 +22381,14 @@ def _generic_nd_reenrich(deals, refmap_cache):
         # antes de a linha existir). Quando ele identifica, a LE gravada estava
         # errada — veio da Settlement Location — e é corrigida aqui, junto com a
         # contraparte da entidade, sem precisar de novo pull da API.
+        #
+        # Só `le_map` entra na busca da contraparte. Caindo para a LE gravada no
+        # deal (que veio da Settlement Location, a NOSSA perna) um cliente sem
+        # accronym cadastrado era re-enriquecido como a própria JPMorgan — o
+        # mesmo erro de _ndf_deal_from_api, aqui aplicado a quem já está no
+        # arquivo.
         le_map = _ndf_le_from_accronym(acr)
-        le = le_map or str(deal.get('LE', '') or '').strip().upper()
-        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le)
+        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le_map)
         if not rec:
             if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
                 deal['LE'] = le_map
