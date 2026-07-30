@@ -1700,30 +1700,51 @@ $(document).ready(function() {
             var refDateWrap = document.querySelector('.refDateWrap');
             if (refDateWrap && !document.getElementById('apiRefDate')) {
                 var _rdToday = new Date();
-                var _rdIso = _rdToday.getFullYear() + '-' +
-                    String(_rdToday.getMonth() + 1).padStart(2, '0') + '-' +
-                    String(_rdToday.getDate()).padStart(2, '0');
+                var _rdDmy = String(_rdToday.getDate()).padStart(2, '0') + '/' +
+                    String(_rdToday.getMonth() + 1).padStart(2, '0') + '/' +
+                    _rdToday.getFullYear();
                 refDateWrap.innerHTML =
                     '<label for="apiRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" ' +
                         'data-lang="nd-ref-date">Reference Date</label>' +
-                    '<input type="date" id="apiRefDate" class="form-control form-control-sm" ' +
-                        'style="width: 9.5rem;" value="' + _rdIso + '" ' +
+                    '<input type="text" id="apiRefDate" class="form-control form-control-sm" ' +
+                        'style="width: 8.5rem;" value="' + _rdDmy + '" placeholder="dd/mm/yyyy" ' +
                         'data-bs-toggle="tooltip" data-bs-placement="bottom" ' +
                         'data-bs-title="Date the Athena API uses to pull the trades" ' +
                         'data-bs-custom-class="tooltip-teal">';
+                // <input type="date"> renderiza no formato do locale do navegador
+                // (mm/dd/yyyy em en-US). flatpickr com d/m/Y força o formato BR,
+                // igual ao resto do sistema (pending-confirmation, control-panel).
+                var _rdEl = document.getElementById('apiRefDate');
+                if (_rdEl && typeof flatpickr !== 'undefined') {
+                    flatpickr(_rdEl, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                }
+                // Trocar a data já leva a tela para aquele dia — o filtro padrão
+                // é Trade Date = hoje, que esconderia o que foi importado.
+                if (_rdEl) {
+                    _rdEl.addEventListener('change', function () { sfSetTradeDate(this.value); });
+                }
             }
 
-            // Data de referência do pull; vazio = hoje (o servidor também cai em hoje)
+            /* Data de referência para o POST, em ISO — o campo mostra dd/mm/yyyy.
+               Vazio = hoje (o servidor também cai em hoje). */
             function apiRefDate() {
+                var el = document.getElementById('apiRefDate');
+                var v = (el && el.value) || '';
+                var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+            }
+
+            /* O que está na tela (dd/mm/yyyy), para o texto da confirmação */
+            function apiRefDateLabel() {
                 var el = document.getElementById('apiRefDate');
                 return (el && el.value) || '';
             }
 
-            /* A mesma data em DD/MM/YYYY, para o texto da confirmação */
-            function apiRefDateLabel() {
-                var v = apiRefDate();
-                var m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                return m ? (m[3] + '/' + m[2] + '/' + m[1]) : v;
+            /* True quando o campo está no dia corrente */
+            function apiRefIsToday() {
+                var n = new Date();
+                return apiRefDateLabel() === (String(n.getDate()).padStart(2, '0') + '/' +
+                    String(n.getMonth() + 1).padStart(2, '0') + '/' + n.getFullYear());
             }
 
             var importBtnContainer = document.querySelector('.importBtn');
@@ -1778,6 +1799,10 @@ $(document).ready(function() {
                                     Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') });
                                     return;
                                 }
+                                // Import de outro dia: leva a tela para aquele dia antes de
+                                // mexer na tabela — o filtro padrão é Trade Date = hoje, que
+                                // esconderia tanto o que entrou agora quanto o que já estava.
+                                if (!apiRefIsToday()) sfSetTradeDate(apiRefDateLabel());
                                 var mine = (res.targets && res.targets['fwd-start'] && res.targets['fwd-start'].deals) || [];
                                 var counts = [];
                                 var LABELS = { 'fwd-start': 'FWD Start', 'other-publishers': 'Other Publisher', 'vanilla': 'Vanilla' };
@@ -2443,6 +2468,21 @@ $(document).ready(function() {
     });
 
     sfWrapper.addEventListener('click', function() { sfInput.focus(); });
+
+    /* Aponta o filtro de Trade Date para uma data dd/mm/yyyy e recarrega do
+       servidor. É o que o campo Reference Date usa: sem isso, importar outro dia
+       entra nos arquivos mas a tabela segue no filtro de hoje e parece que o
+       import não funcionou. */
+    function sfSetTradeDate(dmy) {
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(dmy || ''))) return;
+        var col = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
+        if (!col) return;
+        var key = sfFilterKey(col, 'exact');
+        sfActive = sfActive.filter(function(f) { return f.key !== key; });
+        sfActive.push({ col: col, value: dmy, mode: 'exact', key: key });
+        sfRenderChips();
+        sfApply();
+    }
 
     // Default filter: Trade Date = ?tradedate= (deep-link from a bell notification)
     // else today (dd/mm/yyyy) — auto-search on page load

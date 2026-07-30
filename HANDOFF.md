@@ -5865,3 +5865,19 @@ anterior sem mexer no código.
 - Verificação: 16 casos do parser/sufixo e das assinaturas, 32 checagens de front (campo montado, default
   hoje, rótulo, `ref_date` no corpo do POST) executando o bloco real das quatro páginas, e 6 chamadas dos
   endpoints com o cliente Athena stubado, conferindo a data que chega na API e a devolvida no JSON.
+
+### Ajustes depois do primeiro teste do usuário
+
+- **Formato: `<input type="date">` renderiza no locale do navegador** (mm/dd/yyyy em en-US). Virou input
+  de texto com **flatpickr `dateFormat: 'd/m/Y'`**, o mesmo padrão de `pending-confirmation` e
+  `control-panel`. A tela mostra dd/mm/yyyy; `apiRefDate()` converte para ISO no POST e
+  `apiRefDateLabel()` devolve o que está na tela.
+- ⚠️ **"Import de outra data não funciona"**: o import funcionava — as três páginas de NDF e a de FXO
+  abrem com **filtro padrão Trade Date = hoje** (chip do smart filter, busca server-side), então o que
+  foi importado de outro dia ficava fora da consulta. Pior: numa reimportação o `imported` volta 0 (a
+  persistência é new-only), e o alerta "0" reforçava a impressão de falha. Agora `sfSetTradeDate(dmy)`
+  reposiciona o chip de Trade Date e refaz a busca; ela é chamada **ao trocar a data no campo** e
+  **depois do import quando a data não é hoje** (antes de mexer na tabela, para pegar também o que já
+  estava gravado daquele dia). Quem importa o dia corrente não vê diferença nenhuma.
+- Nada a mudar em `athena_api.py`: o `date` já era parâmetro do `getTrades` (`?product=NDF&date=YYYYMMDD`)
+  e sempre foi repassado — o que estava fixo era o chamador, que mandava o relógio do servidor.
