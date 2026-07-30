@@ -3510,7 +3510,7 @@ $(document).ready(function() {
                     return tempDiv.textContent.trim();
                 }).join('\t');
 
-                navigator.clipboard.writeText(cellsText)
+                otcCopyText(cellsText)
                     .then(function() {
                         console.log('✓ ' + selectedCells.count() + ' cell(s) copied to clipboard');
 

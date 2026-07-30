@@ -363,7 +363,10 @@
     document.getElementById('mapExportCopy').addEventListener('click', function (e) {
         e.preventDefault();
         var txt = exportMatrix().map(function (r) { return r.join('\t'); }).join('\n');
-        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+        // otcCopyText cai no execCommand quando navigator.clipboard não existe
+        // (http por IP não é secure context) — antes daqui saía Promise.reject()
+        // direto e o Copy não fazia nada na instância da equipe.
+        otcCopyText(txt)
             .then(function () {
                 if (window.Swal) Swal.fire({ icon: 'success', title: t('map-copied', 'Copied'), timer: 1100, showConfirmButton: false });
             })

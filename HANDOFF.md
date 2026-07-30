@@ -6434,3 +6434,59 @@ blur e botão **Run**. É por ele que se troca o destinatário — nada de edita
 considera pendente (incluindo os três detalhes acima) e renderiza o template de verdade — sem SMTP.
 `check_slot.py` cobre a trava de disparo duplo. `check_cp_card.py` cobre o card: registro, GET/POST dos
 destinatários, o Run e o gate por card.
+
+## 142. Sessão 2026-07-30 — Ctrl+C das tabelas não copiava nada (secure context)
+
+**Sintoma:** selecionar célula em qualquer tabela (New Deals, Pending Confirmation, Mapping…) e apertar
+Ctrl+C não copiava nada. Sem erro na tela, sem aviso.
+
+### Causa-raiz
+
+`navigator.clipboard` **só existe em secure context**: `https`, ou `http` em `localhost`/`127.0.0.1`. A
+aplicação é servida em **`http://<IP-da-maquina>:8050`** (`start-prod.bat`) — que **não é** secure
+context. Ali o objeto é `undefined`, e `navigator.clipboard.writeText(...)` estoura um `TypeError`
+**antes de existir promise**, então nem o `.catch()` do próprio código rodava. Falha 100% silenciosa.
+
+⚠️ **Por isso passou despercebido:** na máquina de quem desenvolve o acesso é por `localhost`, que **é**
+secure context. O recurso funciona no dev e falha para todo mundo na instância da equipe. Vale para
+qualquer API web restrita a secure context (clipboard, geolocation, notificações, service worker) —
+**teste pelo IP, não pelo localhost**.
+
+O botão **Copy** dos exports do DataTables sempre funcionou: a lib usa `document.execCommand('copy')`, a
+API legada, que não exige secure context. Era a única cópia que a mesa conseguia usar.
+
+### Correção
+
+**`apps/static/js/clipboard.js`** (novo, carregado em `partials/footer-scripts.html`, ou seja, em **toda**
+página) expõe **`window.otcCopyText(texto)`**, que devolve sempre uma promise:
+
+1. secure context com `navigator.clipboard` → API moderna;
+2. senão → `<textarea>` fora da tela + `document.execCommand('copy')`;
+3. API moderna que **rejeita** (aba sem foco, permissão negada) também cai no caminho 2.
+
+Detalhes que o fallback exige: o textarea precisa estar **visível** (`position:fixed; left:-9999px`) —
+com `display:none`/`visibility:hidden` o `execCommand` devolve `false`; e a seleção do usuário é salva e
+restaurada, senão copiar apaga o que estava selecionado na página.
+
+As 8 chamadas diretas a `navigator.clipboard.writeText` (6 páginas de New Deals, Pending Confirmation e o
+Copy do Mapping) passaram a usar o helper. **Não crie chamada nova a `navigator.clipboard` — use
+`otcCopyText`.**
+
+### Ctrl+C genérico para as tabelas que não tinham
+
+Só 7 páginas tinham handler de Ctrl+C. Index B3, Intrag (NDF/Option/Swap), MTM Swap, Accrual Swap e
+Metrics têm seleção de célula e **nenhuma** cópia. O `clipboard.js` instala um handler genérico que
+monta o texto a partir das células/linhas selecionadas de qualquer DataTable, agrupando **por linha**
+(com `\t` entre colunas e `\n` entre linhas) para o conteúdo colar como retângulo no Excel.
+
+Ele sai de cena em três casos: evento já tratado pela página (`defaultPrevented`), foco em
+input/textarea/select/contenteditable, e texto selecionado na página (aí o Ctrl+C nativo faz melhor).
+
+⚠️ **O listener fica em `window`, não em `document`** — e isso é essencial. O evento borbulha
+`target → document → window`, então os handlers das páginas (registrados em `document` via jQuery) rodam
+**antes**, e o `defaultPrevented` já chega decidido no genérico. Registrar em `document` criaria disputa
+de ordem com as 7 páginas que já têm handler próprio.
+
+**Teste**: `check_clipboard.js` (scratchpad) roda o arquivo no JavaScriptCore com um DOM de mentira
+(não há node nesta máquina) e cobre os dois caminhos de cópia, a rejeição da API moderna, o textarea
+fora da tela e as três condições de desistência do handler global.
