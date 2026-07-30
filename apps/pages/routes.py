@@ -14510,16 +14510,41 @@ def _ndf_le_from_location(loc):
 def _ndf_le_from_accronym(acr):
     """LE cadastrada para esse End Counterparty na coluna ACCRONYM do mapping
     le-accronym. Casa o código exato e também o accronym base (o mesmo corte de
-    _ndf_accronym_variants), para a linha valer com ou sem o sufixo da entidade.
-    None quando não há linha."""
-    cands = _ndf_accronym_variants(acr)
+    _ndf_accronym_variants); a comparação é achatada por _ndf_flat, então espaço
+    e hífen a mais no cadastro não impedem o match ('LM-FXECOMBRR JPMCBB FXC' ≡
+    'LM FXECOMBRR JPMCBB FXC'). None quando não há linha."""
+    cands = {_ndf_flat(c) for c in _ndf_accronym_variants(acr)}
+    cands.discard('')
     if not cands:
         return None
     for r in _mapping_rows('le-accronym'):
-        a = str(r.get('ACCRONYM', '') or '').strip().upper()
+        a = _ndf_flat(r.get('ACCRONYM'))
         if a and a in cands:
             return str(r.get('LE', '') or '').strip().upper() or None
     return None
+
+
+def _ndf_le_accronyms(le):
+    """Códigos cadastrados para essa LE no mapping le-accronym (na ordem da
+    tabela), mais o nome da própria LE no fim. É por aqui que a contraparte de
+    uma perna interna é resolvida: cadastre para a LE tanto os códigos que a API
+    manda (nomes de book, ex. 'LM-FXECOMBRR JPMCBB FXC') quanto o accronym da
+    entidade no Reference Data (ex. 'JPMORGANBM', 'LAWTON') — o que existir no
+    cadastro traz SPN/Client/Tax ID, e uma linha por entidade resolve todos os
+    books dela."""
+    l = str(le or '').strip().upper()
+    if not l:
+        return []
+    out = []
+    for r in _mapping_rows('le-accronym'):
+        if str(r.get('LE', '') or '').strip().upper() != l:
+            continue
+        a = str(r.get('ACCRONYM', '') or '').strip().upper()
+        if a and a not in out:
+            out.append(a)
+    if l not in out:
+        out.append(l)
+    return out
 
 
 def _ndf_accronym_variants(acr):
@@ -14538,10 +14563,18 @@ def _ndf_accronym_variants(acr):
     return out
 
 
-def _ndf_ref_by_accronym(refmap_acr, acr):
-    """Linha do Reference Data do End Counterparty, tentando o código exato e
-    depois o accronym sem o sufixo da entidade. {} quando não está cadastrado."""
+def _ndf_ref_by_accronym(refmap_acr, acr, le=None):
+    """Linha do Reference Data do End Counterparty, na ordem: código exato,
+    accronym sem o sufixo da entidade e — quando a LE é conhecida — qualquer
+    código cadastrado para ela no mapping le-accronym. O último passo é o que
+    preenche as pernas cujo End Counterparty é nome de book interno: o cadastro
+    da entidade (Banco / MGT / Lawton) vale para todos os books dela. {} quando
+    nada casa."""
     for cand in _ndf_accronym_variants(acr):
+        rec = refmap_acr.get(cand)
+        if rec:
+            return rec
+    for cand in _ndf_le_accronyms(le):
         rec = refmap_acr.get(cand)
         if rec:
             return rec
@@ -14650,7 +14683,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # cadastrar a mesma contraparte uma vez por LE. Código não cadastrado de
     # jeito nenhum: SPN/Client/TaxID ficam vazios e a página marca o badge
     # "Missing Counterparty" nessas colunas.
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le)
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -20407,12 +20440,21 @@ def _generic_nd_reenrich(deals, refmap_cache):
                 if _a and _a not in m:
                     m[_a] = _r
             refmap_cache['map'] = m
-        # Tenta o código exato e o acronym sem o sufixo da entidade (mapping
-        # Legal Entity × Accronym) — deals importados antes do sufixo existir
-        # ficaram com 'CMBB-LAW' gravado e são resolvidos aqui, sem novo pull.
-        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr)
+        # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
+        # LE (é o caso do End Counterparty que é nome de book interno, importado
+        # antes de a linha existir). Quando ele identifica, a LE gravada estava
+        # errada — veio da Settlement Location — e é corrigida aqui, junto com a
+        # contraparte da entidade, sem precisar de novo pull da API.
+        le_map = _ndf_le_from_accronym(acr)
+        le = le_map or str(deal.get('LE', '') or '').strip().upper()
+        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le)
         if not rec:
+            if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
+                deal['LE'] = le_map
+                changed = True
             continue
+        if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
+            deal['LE'] = le_map
         deal['SPN'] = str(rec.get('SPN', '') or '')
         deal['Client'] = rec.get('COUNTERPARTY', '') or ''
         deal['TaxID'] = rec.get('TAX ID', '') or ''
