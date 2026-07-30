@@ -14601,19 +14601,23 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
     spn = str(get('SPN') or '').strip()
     if spn.endswith('.0'):
         spn = spn[:-2]
-    ref = refmap.get(_norm_spn(spn), {})
-    # SPN não cadastrado no Reference Data: tenta pelo ACCRONYM DA CONTRAPARTE,
-    # que é o End Counterparty. É o caso das pernas internas (contraparte é outra
-    # entidade JPM): o SPN que a API manda é de book, nunca esteve nem estará no
-    # Reference Data, mas o accronym está cadastrado no mapping Legal Entity ×
-    # Accronym. Sem este passo o NDF resolvia a linha e o FXO — que enriquecia só
-    # por SPN — marcava "Missing Counterparty" com o mapping preenchido.
+    # A contraparte é procurada pelo ACCRONYM DA CONTRAPARTE — o End Counterparty
+    # — e não pelo SPN: hoje a API manda no SPN o da LE, não o da contraparte
+    # (correção pendente no time da API), então ele não serve de chave. O SPN da
+    # API fica só como último recurso, para não perder o que já resolvia por ele.
+    #
     # O Settlement Location NÃO entra aqui: ele diz respeito à nossa perna, não à
     # contraparte, então usá-lo para achar a contraparte casaria a linha errada.
+    # É por isso que só `_ndf_le_from_accronym(end_cp)` alimenta o passo da LE —
+    # ele existe para perna interna, cujo End Counterparty é nome de book JPM.
+    if refmap_acr is None:
+        refmap_acr = _fxo_refdata_by_accronym(refmap)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))
     if not ref:
-        if refmap_acr is None:
-            refmap_acr = _fxo_refdata_by_accronym(refmap)
-        ref = _ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))
+        ref = refmap.get(_norm_spn(spn), {})
+    # SPN da tela: o do Reference Data quando a contraparte foi resolvida; o da
+    # API só enquanto não há cadastro nenhum a que recorrer.
+    spn = str(ref.get('SPN', '') or '').strip() or spn
 
     strike_v = _fxo_num(get('STRIKE'))
     premq_v  = _fxo_num(get('PREMIUM QUANTITY'))
@@ -15483,24 +15487,21 @@ def _ndf_accronym_variants(acr):
     return out
 
 
-def _ndf_ref_by_accronym(refmap_acr, acr, le=None, refmap_spn=None, spn=None):
+def _ndf_ref_by_accronym(refmap_acr, acr, le=None):
     """Linha do Reference Data do End Counterparty, nesta ordem: código exato,
-    accronym sem o sufixo da entidade, SPN da própria API e — só então — qualquer
-    código cadastrado para `le` no mapping le-accronym. {} quando nada casa.
+    accronym sem o sufixo da entidade e — só então — qualquer código cadastrado
+    para `le` no mapping le-accronym. {} quando nada casa.
 
     `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
     a que sai da Settlement Location, que é a nossa perna: com a location, um
     cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
 
-    O passo do SPN vem ANTES do da LE de propósito — o SPN identifica a
-    contraparte sozinho, enquanto o passo da LE é o palpite que só vale para
-    perna interna."""
+    O SPN da API NÃO entra aqui de propósito: ele hoje vem com o SPN da LE, não
+    o da contraparte (correção pendente no time da API). Usá-lo como chave
+    reintroduziria exatamente o erro acima, só que por outro caminho — quando a
+    API for corrigida, ele volta como passo entre o accronym e a LE."""
     for cand in _ndf_accronym_variants(acr):
         rec = refmap_acr.get(cand)
-        if rec:
-            return rec
-    if refmap_spn and spn:
-        rec = refmap_spn.get(_norm_spn(spn))
         if rec:
             return rec
     for cand in _ndf_le_accronyms(le):
@@ -15584,7 +15585,7 @@ def _ndf_is_interbook(norm):
     return False
 
 
-def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
+def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
     norm = _ndf_api_norm(rec)
@@ -15619,24 +15620,22 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     #   1. accronym exato do End Counterparty no Reference Data (e o accronym
     #      sem o sufixo de entidade — evita cadastrar a mesma contraparte uma
     #      vez por LE);
-    #   2. SPN que a própria API manda — cliente cadastrado no Reference Data
-    #      com outro código de accronym é achado por aqui;
-    #   3. só então, e SOMENTE se a contraparte for perna interna (le_cp), os
+    #   2. só então, e SOMENTE se a contraparte for perna interna (le_cp), os
     #      demais accronyms daquela entidade.
     #
-    # O passo 3 recebe `le_cp`, NUNCA a LE da Settlement Location: a location é
+    # O passo 2 recebe `le_cp`, NUNCA a LE da Settlement Location: a location é
     # a nossa perna, e usá-la aqui fazia um cliente virar a própria JPMorgan.
     # Foi o que aconteceu com SOMICHEL (Michelin): accronym não cadastrado +
     # Settlement Location BRAZIL → LE JPM → a linha veio com SPN, nome e CNPJ do
     # Banco J.P. Morgan, em silêncio, numa operação que vai para registro.
     #
+    # O SPN da API não é usado: hoje ele traz o SPN da LE e não o da contraparte
+    # (correção pendente no time da API), então serviria só para trocar um erro
+    # por outro. O SPN da tela sai do Reference Data.
+    #
     # Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing
     # Counterparty" — que é o erro certo: pede cadastro em vez de inventar.
-    api_spn = str(get('SPN') or '').strip()
-    if api_spn.endswith('.0'):
-        api_spn = api_spn[:-2]
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp,
-                               refmap_spn=refmap_spn, spn=api_spn)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp)
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -15889,8 +15888,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
-    refmap_spn = _fxo_refdata_by_spn()
-    refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
+    refmap_acr = _fxo_refdata_by_accronym()
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
     fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
@@ -15898,7 +15896,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn)
+        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
         if target == '_fwd-start-fixing':
             fixing_today.append(deal)
             continue
