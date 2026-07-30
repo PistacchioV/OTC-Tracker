@@ -5839,3 +5839,29 @@ Foi para `apps/static/data/mappings/BaseMoeda.json` (`git mv`, histórico preser
 aproveitou para **ler pelo loader do mapping** em vez de abrir o arquivo na mão: antes cacheava em
 módulo e só pegava edição da tela depois de **reiniciar o servidor**, ou seja, os códigos de moeda dos
 arquivos TER usavam o valor antigo.
+
+## 134. Sessão 2026-07-30 — Reference Date no pull da API Athena
+
+Campo **Reference Date** (input `date`, id `apiRefDate`, **default hoje**) na toolbar das quatro páginas
+que puxam da API — Opt FXO, NDF Vanilla, Other Publisher e FWD Start — ao lado do botão Import. É a data
+que o `getTrades` usa; antes era sempre o relógio do servidor, então não havia como reimportar um dia
+anterior sem mexer no código.
+
+- Servidor: `_api_ref_date(value)` aceita `YYYY-MM-DD` (o que o input date manda), `YYYYMMDD` (formato da
+  API) e `DD/MM/YYYY`; **vazio ou inválido cai em hoje** e loga warning. `_ndf_api_pull` e `_fxo_api_pull`
+  ganharam `ref_date=None`; os endpoints `/api/new-deals/{ndf,opt-fxo}/import-api` leem `ref_date` do JSON
+  do POST.
+- ⚠️ Em `_ndf_api_pull` a variável **`now` é a data de referência**, não o relógio — ela decide o arquivo
+  do dia, a regra do Strike Set Date "de hoje" que descarta FWD Start e o dia procurado nos
+  cancelamentos. No FXO o equivalente é `ref_dt`. Se um dia voltar a chamar `datetime.now()` dentro dessas
+  funções, o pull retroativo grava no arquivo errado.
+- **Os schedulers não passam a data** (o default `None` mantém hoje): poll de 20 min do NDF e horário do
+  FXO seguem puxando o dia corrente.
+- Notificação ganha sufixo ` (ref DD/MM/YYYY)` **só quando a data não é hoje**, para import retroativo não
+  se confundir com o do dia no feed.
+- O texto da confirmação passou a mostrar a data escolhida (`{date}` nas chaves `swal-ndf-api-text` /
+  `swal-fxo-api-text`, substituído no front por `apiRefDateLabel()` em DD/MM/YYYY). Chave nova do rótulo:
+  `nd-ref-date`.
+- Verificação: 16 casos do parser/sufixo e das assinaturas, 32 checagens de front (campo montado, default
+  hoje, rótulo, `ref_date` no corpo do POST) executando o bloco real das quatro páginas, e 6 chamadas dos
+  endpoints com o cliente Athena stubado, conferindo a data que chega na API e a devolvida no JSON.

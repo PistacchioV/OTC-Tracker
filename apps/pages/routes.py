@@ -14057,15 +14057,40 @@ def _fxo_deals_from_api_records(records, sid):
     return deals, cancelled
 
 
-def _fxo_api_pull(sid='API', actor_name='Athena API'):
-    """Fetch today's FXO trades from the Athena API and insert the new ones.
-    Shared by the manual Import button and the hourly scheduler. Raises on
+def _api_ref_date(value=None):
+    """Data de referência do pull da API → datetime. Aceita o formato do input
+    date do navegador ('YYYY-MM-DD'), o da própria API ('YYYYMMDD') e o de tela
+    ('DD/MM/YYYY'). Vazio ou inválido cai em hoje, que é o default do campo."""
+    s = str(value or '').strip()
+    if s:
+        for fmt in ('%Y-%m-%d', '%Y%m%d', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+        log.warning('[api-pull] data de referência inválida (%r) — usando hoje', s)
+    return datetime.now()
+
+
+def _api_ref_suffix(ref_dt):
+    """' (ref DD/MM/YYYY)' quando o pull não é do dia — entra na notificação para
+    ninguém confundir import retroativo com importação do dia."""
+    if ref_dt.date() == datetime.now().date():
+        return ''
+    return ' (ref {})'.format(ref_dt.strftime('%d/%m/%Y'))
+
+
+def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
+    """Fetch the reference date's FXO trades from the Athena API and insert the
+    new ones. Shared by the manual Import button (which sends the Reference Date
+    field, default today) and the hourly scheduler (always today). Raises on
     network/SSO errors — callers decide how loud to be about it."""
     from apps.pages import athena_api
     if not athena_api.is_available():
         raise RuntimeError("The 'requests' package is not installed; "
                            "the Athena API client is unavailable.")
-    date = datetime.now().strftime('%Y%m%d')
+    ref_dt = _api_ref_date(ref_date)
+    date = ref_dt.strftime('%Y%m%d')
     payload = athena_api.fetch_fxo_trades(date)
     records = athena_api.extract_records(payload)
     deals, dead = _fxo_deals_from_api_records(records, sid)
@@ -14075,9 +14100,9 @@ def _fxo_api_pull(sid='API', actor_name='Athena API'):
     canceled = 0
     for nm, td in dead:
         try:
-            rd = datetime.strptime(td, '%d/%m/%Y') if td else datetime.now()
+            rd = datetime.strptime(td, '%d/%m/%Y') if td else ref_dt
         except ValueError:
-            rd = datetime.now()
+            rd = ref_dt
         canceled += _nd_cancel_in_file(
             os.path.join(OPT_FXO_CACHE_DIR, rd.strftime('%Y'), rd.strftime('%m'),
                          rd.strftime('%Y%m%d') + '_optfxo.json'), nm)
@@ -14090,7 +14115,8 @@ def _fxo_api_pull(sid='API', actor_name='Athena API'):
         if canceled:
             bits.append('{} canceled'.format(canceled))
         _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
-                             'Athena API: {} deal(s)'.format(', '.join(bits)))
+                             'Athena API{}: {} deal(s)'.format(_api_ref_suffix(ref_dt),
+                                                              ', '.join(bits)))
     return {'success': True, 'date': date, 'fetched': len(records),
             'parsed': len(deals), 'imported': len(inserted),
             'amended': len(amended), 'canceled': canceled, 'deals': inserted}
@@ -14098,12 +14124,14 @@ def _fxo_api_pull(sid='API', actor_name='Athena API'):
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
 def api_fxo_import_api():
-    """Manual trigger of the Athena FXO pull (Import button, empty dropzone)."""
+    """Manual trigger of the Athena FXO pull (Import button, empty dropzone).
+    `ref_date` = campo Reference Date da página (default hoje)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     try:
         result = _fxo_api_pull(sid=session.get('user_sid', '') or 'API',
-                               actor_name=session.get('user_name', '') or 'Athena API')
+                               actor_name=session.get('user_name', '') or 'Athena API',
+                               ref_date=(request.get_json(silent=True) or {}).get('ref_date'))
     except Exception as e:                              # noqa: BLE001
         log.warning('[opt-fxo] manual Athena API import failed: %s', e)
         return jsonify({'success': False, 'message': str(e)}), 502
@@ -14811,15 +14839,20 @@ def _generic_nd_persist_new_deals(product, deals):
     return fresh, amended
 
 
-def _ndf_api_pull(sid='API', actor_name='Athena API'):
-    """Fetch today's NDF trades from the Athena API and route/insert the new
-    ones into FWD Start / Other Publisher / Vanilla. Raises on network/SSO
-    errors — the caller decides how loud to be about it."""
+def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
+    """Fetch the reference date's NDF trades from the Athena API and route/insert
+    the new ones into FWD Start / Other Publisher / Vanilla. `ref_date` vem do
+    campo Reference Date das páginas (default hoje); o scheduler nunca manda, ou
+    seja, sempre puxa o dia. Raises on network/SSO errors — the caller decides
+    how loud to be about it.
+    ⚠️ `now` daqui para baixo é a DATA DE REFERÊNCIA, não o relógio: é ela que
+    decide o arquivo do dia, a regra do Strike Set Date de hoje no FWD Start e o
+    dia procurado nos cancelamentos."""
     from apps.pages import athena_api
     if not athena_api.is_available():
         raise RuntimeError("The 'requests' package is not installed; "
                            "the Athena API client is unavailable.")
-    now = datetime.now()
+    now = _api_ref_date(ref_date)
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
@@ -14863,7 +14896,8 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
             if amended:
                 bits.append('{} amended'.format(len(amended)))
             _create_notification(sid, actor_name, 'New Deals', cfg['label'],
-                                 'Athena API: {} deal(s)'.format(', '.join(bits)))
+                                 'Athena API{}: {} deal(s)'.format(_api_ref_suffix(now),
+                                                                   ', '.join(bits)))
         targets[product] = {'parsed': len(deals), 'imported': len(inserted),
                             'amended': len(amended), 'deals': inserted}
 
@@ -14892,12 +14926,14 @@ def _ndf_api_pull(sid='API', actor_name='Athena API'):
 @blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])
 def api_ndf_import_api():
     """Manual trigger of the Athena NDF pull (Import button, empty dropzone,
-    on the FWD Start / Other Publisher / Vanilla pages)."""
+    on the FWD Start / Other Publisher / Vanilla pages). `ref_date` = campo
+    Reference Date da página (default hoje)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     try:
         result = _ndf_api_pull(sid=session.get('user_sid', '') or 'API',
-                               actor_name=session.get('user_name', '') or 'Athena API')
+                               actor_name=session.get('user_name', '') or 'Athena API',
+                               ref_date=(request.get_json(silent=True) or {}).get('ref_date'))
     except Exception as e:                              # noqa: BLE001
         log.warning('[ndf] manual Athena API import failed: %s', e)
         return jsonify({'success': False, 'message': str(e)}), 502

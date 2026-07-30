@@ -1449,6 +1449,7 @@ $(document).ready(function() {
             "<'columnToggleWrapper me-2'>" +
             "<'addRowBtn me-2'>" +
             "B" +
+            "<'refDateWrap ms-2 d-flex align-items-center'>" +
             "<'importBtn ms-2 me-2'>" +
             "<'refreshBtn me-2'>" +
             "<'premiumBtn me-2'>" +
@@ -1716,6 +1717,40 @@ $(document).ready(function() {
             // ==============================================================
             // IMPORT BUTTON
             // ==============================================================
+            // ==============================================================
+            // REFERENCE DATE — data que a API usa para puxar os trades
+            // ==============================================================
+            // Default hoje. O valor vai no POST do import (ref_date); o
+            // scheduler não passa por aqui e segue sempre puxando o dia.
+            var refDateWrap = document.querySelector('.refDateWrap');
+            if (refDateWrap && !document.getElementById('apiRefDate')) {
+                var _rdToday = new Date();
+                var _rdIso = _rdToday.getFullYear() + '-' +
+                    String(_rdToday.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(_rdToday.getDate()).padStart(2, '0');
+                refDateWrap.innerHTML =
+                    '<label for="apiRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" ' +
+                        'data-lang="nd-ref-date">Reference Date</label>' +
+                    '<input type="date" id="apiRefDate" class="form-control form-control-sm" ' +
+                        'style="width: 9.5rem;" value="' + _rdIso + '" ' +
+                        'data-bs-toggle="tooltip" data-bs-placement="bottom" ' +
+                        'data-bs-title="Date the Athena API uses to pull the trades" ' +
+                        'data-bs-custom-class="tooltip-teal">';
+            }
+
+            // Data de referência do pull; vazio = hoje (o servidor também cai em hoje)
+            function apiRefDate() {
+                var el = document.getElementById('apiRefDate');
+                return (el && el.value) || '';
+            }
+
+            /* A mesma data em DD/MM/YYYY, para o texto da confirmação */
+            function apiRefDateLabel() {
+                var v = apiRefDate();
+                var m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                return m ? (m[3] + '/' + m[2] + '/' + m[1]) : v;
+            }
+
             var importBtnContainer = document.querySelector('.importBtn');
 
             if (importBtnContainer && !document.getElementById('importBtn')) {
@@ -1743,7 +1778,7 @@ $(document).ready(function() {
                         Swal.fire({
                             icon: 'question',
                             title: t('swal-fxo-api-title', 'Import from Athena API'),
-                            text:  t('swal-fxo-api-text', 'No file in the dropzone. Pull today\'s FXO trades from the Athena API?'),
+                            text:  t('swal-fxo-api-text', 'No file in the dropzone. Pull the FXO trades of {date} from the Athena API?').replace('{date}', apiRefDateLabel()),
                             showCancelButton: true,
                             confirmButtonText: t('swal-fxo-api-confirm', 'Yes, import'),
                             cancelButtonText:  t('swal-cancel', 'Cancel'),
@@ -1756,7 +1791,11 @@ $(document).ready(function() {
                                 importBtn.disabled = false;
                                 importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                             }
-                            fetch('/api/new-deals/opt-fxo/import-api', { method: 'POST' })
+                            fetch('/api/new-deals/opt-fxo/import-api', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ref_date: apiRefDate() })
+                            })
                                 .then(function(r){ return r.json(); })
                                 .then(function(res){
                                     _restoreApiBtn();
