@@ -1,0 +1,50 @@
+[
+  {
+    "PUBLISHER": "PTAX",
+    "TOKENS": "",
+    "FONTE INFO": "0",
+    "FONTE CONSULTA": "",
+    "TELA CONSULTA": "",
+    "NOTES": "BACEN"
+  },
+  {
+    "PUBLISHER": "BFIX 4PM LONDON",
+    "TOKENS": "BFIX",
+    "FONTE INFO": "1",
+    "FONTE CONSULTA": "2",
+    "TELA CONSULTA": "14399",
+    "NOTES": "BLOOMBERG"
+  },
+  {
+    "PUBLISHER": "OBSERVADO/BCENTRAL CL",
+    "TOKENS": "BCENTRAL, OBSERVADO",
+    "FONTE INFO": "1",
+    "FONTE CONSULTA": "5",
+    "TELA CONSULTA": "11703",
+    "NOTES": "OUTROS"
+  },
+  {
+    "PUBLISHER": "PEN SBSP/BCRP",
+    "TOKENS": "SBSP, BCRP",
+    "FONTE INFO": "1",
+    "FONTE CONSULTA": "5",
+    "TELA CONSULTA": "11683",
+    "NOTES": "OUTROS"
+  },
+  {
+    "PUBLISHER": "REUTERS - WMR",
+    "TOKENS": "WMR",
+    "FONTE INFO": "1",
+    "FONTE CONSULTA": "0",
+    "TELA CONSULTA": "247",
+    "NOTES": "REUTERS"
+  },
+  {
+    "PUBLISHER": "TRM COP",
+    "TOKENS": "TRM",
+    "FONTE INFO": "1",
+    "FONTE CONSULTA": "5",
+    "TELA CONSULTA": "11682",
+    "NOTES": "OUTROS"
+  }
+]

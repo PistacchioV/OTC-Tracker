@@ -4035,6 +4035,43 @@ $(document).ready(function() {
         })
         .catch(function () {});
 
+    /* Publisher (feeder) → Fonte de Informação: mapping Publisher × B3 (NDF) da
+       tela Mapping. As linhas literais são fallback até o fetch responder (e se
+       ele falhar). No FWD Start só a Fonte de Informação e o Boletim dependem
+       disso — os códigos de consulta saem em branco neste arquivo. */
+    var _PUB_ROWS = [
+        { 'PUBLISHER': 'PTAX',                  'TOKENS': '',                   'FONTE INFO': '0' },
+        { 'PUBLISHER': 'BFIX 4PM LONDON',       'TOKENS': 'BFIX',               'FONTE INFO': '1' },
+        { 'PUBLISHER': 'OBSERVADO/BCENTRAL CL', 'TOKENS': 'BCENTRAL, OBSERVADO','FONTE INFO': '1' },
+        { 'PUBLISHER': 'PEN SBSP/BCRP',         'TOKENS': 'SBSP, BCRP',         'FONTE INFO': '1' },
+        { 'PUBLISHER': 'REUTERS - WMR',         'TOKENS': 'WMR',                'FONTE INFO': '1' },
+        { 'PUBLISHER': 'TRM COP',               'TOKENS': 'TRM',                'FONTE INFO': '1' }
+    ];
+    fetch('/api/mappings/publisher-ndf', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d && d.success && d.rows && d.rows.length) _PUB_ROWS = d.rows;
+        })
+        .catch(function () {});
+
+    /* Nome exato primeiro; senão por token, porque a Athena manda o publisher
+       composto (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR). */
+    function _pubRow(publisher) {
+        var p = String(publisher || '').trim().toUpperCase();
+        if (!p) return {};
+        for (var i = 0; i < _PUB_ROWS.length; i++) {
+            if (String(_PUB_ROWS[i]['PUBLISHER'] || '').trim().toUpperCase() === p) return _PUB_ROWS[i];
+        }
+        for (var j = 0; j < _PUB_ROWS.length; j++) {
+            var toks = String(_PUB_ROWS[j]['TOKENS'] || '').split(/[,;]/);
+            for (var k = 0; k < toks.length; k++) {
+                var t = toks[k].trim().toUpperCase();
+                if (t && p.indexOf(t) !== -1) return _PUB_ROWS[j];
+            }
+        }
+        return {};
+    }
+
     function buildConectaFields(deal, bizDayCount) {
         function _date(val) {
             val = _sh(val);
@@ -4166,7 +4203,10 @@ $(document).ready(function() {
 
         // ── Regras TER do FWD Start (espelham o send-conecta do servidor) ──
         var _diff = _bizDiffX(deal.LastFixingDate || '', deal.SettlementDate || '');
-        var _isPtax = String(deal.Publisher || '').toUpperCase().indexOf('PTAX') !== -1;
+        // Fonte de Informação vem do mapping publisher-ndf, igual ao servidor:
+        // 'PTAX' puro é 0, publisher composto ('PTAX|USB|WMR|4') resolve pelo
+        // token e vale 1 — o indexOf('PTAX') daqui dizia 0 e divergia do arquivo.
+        var _isPtax = String(_pubRow(deal.Publisher)['FONTE INFO'] || '').trim() === '0';
         f[10] = '2';                                    // Classe do Ativo (arquivo: 19 espaços + 2)
         f[16] = '';                                     // Código do Ativo (arquivo: 10 espaços)
         f[14] = String(_diff);                          // Cotação p/ Vencimento = dias úteis last fix → settlement

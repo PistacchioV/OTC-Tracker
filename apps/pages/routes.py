@@ -14344,6 +14344,64 @@ _MAPPING_DEFS = {
              ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
         ),
     },
+    # Publisher (feeder) da Athena → códigos B3 do TER das páginas Other
+    # Publisher e FWD Start. FONTE INFO é o campo "Fonte de Informação" do
+    # arquivo (PTAX puro = 0, demais feeders = 1) e, no FWD Start, define o
+    # Boletim (0 → 3, senão 1). TOKENS casa por trecho quando a Athena manda o
+    # publisher composto ('PTAX|USB|WMR|4' → REUTERS - WMR); separe por vírgula
+    # e deixe em branco para casar só pelo nome exato — é o que mantém o PTAX
+    # puro em 0 sem arrastar as variantes. Publisher sem linha: Fonte de
+    # Informação 1 e os dois códigos de consulta em branco.
+    'publisher-ndf': {
+        'label': 'Publisher × B3 (NDF)',
+        'columns': [
+            {'key': 'PUBLISHER', 'label': 'Publisher (Athena)'},
+            {'key': 'TOKENS', 'label': 'Match Tokens'},
+            {'key': 'FONTE INFO', 'label': 'Fonte de Informação', 'type': 'select', 'options': ['1', '0']},
+            {'key': 'FONTE CONSULTA', 'label': 'Fonte de Consulta'},
+            {'key': 'TELA CONSULTA', 'label': 'Tela ou Função de Consulta'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'PUBLISHER': 'PTAX', 'TOKENS': '', 'FONTE INFO': '0',
+             'FONTE CONSULTA': '', 'TELA CONSULTA': '', 'NOTES': 'BACEN'},
+            {'PUBLISHER': 'BFIX 4PM LONDON', 'TOKENS': 'BFIX', 'FONTE INFO': '1',
+             'FONTE CONSULTA': '2', 'TELA CONSULTA': '14399', 'NOTES': 'BLOOMBERG'},
+            {'PUBLISHER': 'OBSERVADO/BCENTRAL CL', 'TOKENS': 'BCENTRAL, OBSERVADO',
+             'FONTE INFO': '1', 'FONTE CONSULTA': '5', 'TELA CONSULTA': '11703', 'NOTES': 'OUTROS'},
+            {'PUBLISHER': 'PEN SBSP/BCRP', 'TOKENS': 'SBSP, BCRP', 'FONTE INFO': '1',
+             'FONTE CONSULTA': '5', 'TELA CONSULTA': '11683', 'NOTES': 'OUTROS'},
+            {'PUBLISHER': 'REUTERS - WMR', 'TOKENS': 'WMR', 'FONTE INFO': '1',
+             'FONTE CONSULTA': '0', 'TELA CONSULTA': '247', 'NOTES': 'REUTERS'},
+            {'PUBLISHER': 'TRM COP', 'TOKENS': 'TRM', 'FONTE INFO': '1',
+             'FONTE CONSULTA': '5', 'TELA CONSULTA': '11682', 'NOTES': 'OUTROS'},
+        ],
+    },
+    # Legal Entity das páginas de NDF × o que a API manda. SETTLEMENT LOCATION
+    # resolve a LE (era o de-para fixo BRAZIL→JPM / JPMCBB→MGT no código).
+    # ACRONYM SUFFIX é o sufixo que o End Counterparty carrega quando a operação
+    # é daquela entidade ('CMBB-LAW' → contraparte CMBB na LE Lawton): com ele
+    # cadastrado, o Reference Data precisa de UMA linha por contraparte, não uma
+    # por entidade — o import tenta o código exato e depois o acronym sem o
+    # sufixo. Aceita vários sufixos separados por vírgula; em branco = a API
+    # manda o acronym puro nessa entidade.
+    'le-acronym': {
+        'label': 'Legal Entity × Acronym',
+        'columns': [
+            {'key': 'LE', 'label': 'Legal Entity'},
+            {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location (API)'},
+            {'key': 'ACRONYM SUFFIX', 'label': 'Acronym Suffix'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'LE': 'JPM', 'SETTLEMENT LOCATION': 'BRAZIL', 'ACRONYM SUFFIX': '',
+             'NOTES': 'Banco J.P. Morgan'},
+            {'LE': 'MGT', 'SETTLEMENT LOCATION': 'JPMCBB', 'ACRONYM SUFFIX': '',
+             'NOTES': 'Confirmar o sufixo do acronym numa operação da API'},
+            {'LE': 'LAWTON', 'SETTLEMENT LOCATION': 'LAWTON', 'ACRONYM SUFFIX': '-LAW',
+             'NOTES': 'Ex.: CMBB-LAW → CMBB'},
+        ],
+    },
     # Bancos oferecidos no editor de contraparte (Reference Data, duplo clique →
     # contas BANKING/PAY-REC). ID = código COMPE de 3 dígitos; ISPB e TAX ID
     # (CNPJ mascarado) vêm do cadastro público do Bacen. O front monta o rótulo
@@ -14438,6 +14496,67 @@ def _mapping_ccy_maps():
     return ath, weak, inv
 
 
+def _ndf_le_from_location(loc):
+    """Settlement Location da API → Legal Entity da página (mapping le-acronym).
+    None quando não há linha cadastrada para aquela location."""
+    l = str(loc or '').strip().upper()
+    if not l:
+        return None
+    for r in _mapping_rows('le-acronym'):
+        if str(r.get('SETTLEMENT LOCATION', '') or '').strip().upper() == l:
+            return str(r.get('LE', '') or '').strip().upper() or None
+    return None
+
+
+def _ndf_le_suffixes():
+    """[(sufixo, LE)] do mapping le-acronym, do mais longo para o mais curto —
+    assim '-LAWTON' ganha de '-LAW' quando os dois estão cadastrados."""
+    out = []
+    for r in _mapping_rows('le-acronym'):
+        le = str(r.get('LE', '') or '').strip().upper()
+        for sfx in re.split(r'[,;]', str(r.get('ACRONYM SUFFIX', '') or '')):
+            sfx = sfx.strip().upper()
+            if sfx:
+                out.append((sfx, le))
+    return sorted(out, key=lambda t: -len(t[0]))
+
+
+def _ndf_acronym_variants(acr):
+    """Códigos a tentar no Reference Data para um End Counterparty da API: o
+    próprio e, quando termina num sufixo cadastrado, o acronym base
+    ('CMBB-LAW' → 'CMBB'). É o que dispensa uma linha por entidade no cadastro."""
+    a = str(acr or '').strip().upper()
+    if not a:
+        return []
+    out = [a]
+    for sfx, _le in _ndf_le_suffixes():
+        if a.endswith(sfx) and len(a) > len(sfx):
+            base = a[:-len(sfx)].strip(' -')
+            if base and base not in out:
+                out.append(base)
+    return out
+
+
+def _ndf_le_from_acronym(acr):
+    """LE indicada pelo sufixo do End Counterparty ('CMBB-LAW' → LAWTON).
+    None quando nenhum sufixo cadastrado casa."""
+    a = str(acr or '').strip().upper()
+    for sfx, le in _ndf_le_suffixes():
+        if le and a.endswith(sfx) and len(a) > len(sfx):
+            return le
+    return None
+
+
+def _ndf_ref_by_acronym(refmap_acr, acr):
+    """Linha do Reference Data do End Counterparty, tentando o código exato e
+    depois o acronym sem o sufixo da entidade. {} quando não está cadastrado."""
+    for cand in _ndf_acronym_variants(acr):
+        rec = refmap_acr.get(cand)
+        if rec:
+            return rec
+    return {}
+
+
 def _ndf_api_key(name):
     """Nome de campo da tela → chave do registro normalizado (_ndf_api_norm)."""
     return re.sub(r'[\s_]+', ' ', str(name or '').strip().upper())
@@ -14528,15 +14647,19 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     if _ndf_is_interbook(norm):
         return None, None
 
-    # LE: Settlement Location BRAZIL → JPM; JPMCBB → MGT (else raw, visible)
+    # LE: linha do mapping Legal Entity × Acronym pela Settlement Location; sem
+    # linha, o sufixo do acronym decide ('CMBB-LAW' → LAWTON) e, sem os dois, a
+    # location crua fica visível na coluna.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
-    le = {'BRAZIL': 'JPM', 'JPMCBB': 'MGT'}.get(loc, loc)
+    le = _ndf_le_from_location(loc) or _ndf_le_from_acronym(end_cp) or loc
 
     # Counterparty enrichment is keyed by End Counterparty (FX Cash
-    # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM.
-    # When the code is not registered, SPN/Client/TaxID stay blank and the page
-    # stamps the "Missing Counterparty" badge on those columns.
-    ref = refmap_acr.get(end_cp.upper(), {})
+    # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM,
+    # tentando também o acronym sem o sufixo da entidade — é o que evita
+    # cadastrar a mesma contraparte uma vez por LE. Código não cadastrado de
+    # jeito nenhum: SPN/Client/TaxID ficam vazios e a página marca o badge
+    # "Missing Counterparty" nessas colunas.
+    ref = _ndf_ref_by_acronym(refmap_acr, end_cp)
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -20293,12 +20416,18 @@ def _generic_nd_reenrich(deals, refmap_cache):
                 if _a and _a not in m:
                     m[_a] = _r
             refmap_cache['map'] = m
-        rec = refmap_cache['map'].get(acr)
+        # Tenta o código exato e o acronym sem o sufixo da entidade (mapping
+        # Legal Entity × Acronym) — deals importados antes do sufixo existir
+        # ficaram com 'CMBB-LAW' gravado e são resolvidos aqui, sem novo pull.
+        rec = _ndf_ref_by_acronym(refmap_cache['map'], acr)
         if not rec:
             continue
         deal['SPN'] = str(rec.get('SPN', '') or '')
         deal['Client'] = rec.get('COUNTERPARTY', '') or ''
         deal['TaxID'] = rec.get('TAX ID', '') or ''
+        ref_acr = str(rec.get('FX CASH ACCRONYM', '') or '').strip()
+        if ref_acr:
+            deal['Acronym'] = ref_acr
         changed = True
     return changed
 
@@ -20533,32 +20662,41 @@ def api_generic_nd_bulk_patch_cache(product):
 #   • else → *_BANCO file (participant 73760009).
 # Counterparty account follows the LE matrix used on the page previews.
 
-# Athena publisher → B3 fonte de informação / fonte de consulta codes.
-_NDF_PUBLISHER_CODES = {
-    'BFIX 4PM LONDON':       {'info': '14399', 'consulta': '2'},   # BLOOMBERG
-    'OBSERVADO/BCENTRAL CL': {'info': '11703', 'consulta': '5'},   # OUTROS
-    'PEN SBSP/BCRP':         {'info': '11683', 'consulta': '5'},   # OUTROS
-    'REUTERS - WMR':         {'info': '247',   'consulta': '0'},   # REUTERS
-    'TRM COP':               {'info': '11682', 'consulta': '5'},   # OUTROS
-}
+# Athena publisher (feeder) → códigos B3: mapping publisher-ndf, tela Mapping.
+def _ndf_publisher_row(publisher):
+    """Linha do mapping publisher-ndf que casa o publisher: nome exato primeiro,
+    senão por token da coluna TOKENS — a Athena manda o publisher composto
+    (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR). Nada casando → {}."""
+    p = (publisher or '').strip().upper()
+    if not p:
+        return {}
+    rows = _mapping_rows('publisher-ndf')
+    for r in rows:
+        if str(r.get('PUBLISHER', '') or '').strip().upper() == p:
+            return r
+    for r in rows:
+        for tok in re.split(r'[,;]', str(r.get('TOKENS', '') or '')):
+            tok = tok.strip().upper()
+            if tok and tok in p:
+                return r
+    return {}
 
 
 def _ndf_publisher_codes(publisher):
-    """Publisher → códigos B3. Casa o nome exato primeiro; senão, por token —
-    a Athena manda o publisher composto (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR)."""
-    p = (publisher or '').strip().upper()
-    if p in _NDF_PUBLISHER_CODES:
-        return _NDF_PUBLISHER_CODES[p]
-    for token, key in (('BFIX', 'BFIX 4PM LONDON'),
-                       ('BCENTRAL', 'OBSERVADO/BCENTRAL CL'),
-                       ('OBSERVADO', 'OBSERVADO/BCENTRAL CL'),
-                       ('SBSP', 'PEN SBSP/BCRP'),
-                       ('BCRP', 'PEN SBSP/BCRP'),
-                       ('WMR', 'REUTERS - WMR'),
-                       ('TRM', 'TRM COP')):
-        if token in p:
-            return _NDF_PUBLISHER_CODES[key]
-    return {}
+    """Publisher → {'consulta': Fonte de Consulta, 'info': Tela ou Função de
+    Consulta}. Publisher sem linha no mapping devolve {} (campos em branco)."""
+    r = _ndf_publisher_row(publisher)
+    if not r:
+        return {}
+    return {'consulta': str(r.get('FONTE CONSULTA', '') or '').strip(),
+            'info': str(r.get('TELA CONSULTA', '') or '').strip()}
+
+
+def _ndf_publisher_fonte_info(publisher):
+    """Fonte de Informação do TER, 4 chars alinhados à direita. Sem linha no
+    mapping = 1, que era o comportamento de quando isso era hardcoded."""
+    fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
+    return fi.rjust(4)
 
 _moeda_num_codes_cache = None
 
@@ -20676,8 +20814,6 @@ def api_generic_nd_send_conecta(product):
         le       = _s(deal.get('LE', '')).upper()
         deal_id  = _s(deal.get('Deal', ''))
         publisher = _s(deal.get('Publisher', ''))
-        # Fonte de Informação: só o PTAX "puro" vale 0; PTAX* e demais publishers = 1.
-        is_ptax  = publisher.strip().upper() == 'PTAX'
         qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
         oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
         # O flag de asiático NÃO vem do TradeType: ele é derivado das datas de
@@ -20709,9 +20845,11 @@ def api_generic_nd_send_conecta(product):
         strike_set_dt = _parse_date_any(_s(deal.get('StrikeSetDate', '')))
         fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
 
-        fonte_info = '   0' if is_ptax else '   1'
-        # Boletim: no OP sai em branco; no FWD Start segue a fonte (PTAX=3, demais=1).
-        boletim    = ('3' if fonte_info == '   0' else '1') if is_fwd else ' '
+        # Fonte de Informação: coluna do mapping publisher-ndf (PTAX puro = 0,
+        # demais feeders = 1). Boletim: no OP sai em branco; no FWD Start segue
+        # a fonte (0 → 3, senão 1).
+        fonte_info = _ndf_publisher_fonte_info(publisher)
+        boletim    = ('3' if fonte_info.strip() == '0' else '1') if is_fwd else ' '
 
         # Valor Base / Quantidade: inteiro alinhado à direita em 14 + '00'. Estas
         # páginas mandam a coluna como Notional (só o NDF Comm usa TotalNotional)
