@@ -732,6 +732,20 @@
       background: rgba(255,255,255,.08) !important;
       color: #6ea8fe !important;
   }
+  /* Ícone de calendário no campo Reference Date (flatpickr abre no clique) —
+     mesmo tratamento dos campos de data do pending-confirmation. O input é de
+     texto, não type=date, então o ícone nativo do navegador não existe. */
+  #apiRefDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.6rem center;
+      background-size: 1rem 1rem;
+      padding-right: 2rem;
+      cursor: pointer;
+  }
+  [data-bs-theme="dark"] #apiRefDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  }
 </style>
 <!-- ╔══════════════════════════════════════════════════════════════════╗ -->
 <!-- ║  FIM DO AJUSTE DE TAMANHO                                      ║ -->
@@ -1765,6 +1779,19 @@ $(document).ready(function() {
                 return (el && el.value) || '';
             }
 
+            /* Onde os registros da API foram parar. Sem isso, "veio 0" não
+               distingue API vazia de tudo cancelado ou filtrado por interbook. */
+            function apiBreakdown(res) {
+                var p = [(res.fetched || 0) + ' ' + t('swal-api-fetched', 'fetched')];
+                if (res.dead)     p.push(res.dead + ' ' + t('swal-api-dead', 'cancelled/dead on the API'));
+                if (res.canceled) p.push(res.canceled + ' ' + t('swal-api-canceled', 'marked Canceled here'));
+                if (res.skipped_interbook)
+                    p.push(res.skipped_interbook + ' ' + t('swal-api-interbook', 'interbook'));
+                if (res.skipped_fwd_strike_today)
+                    p.push(res.skipped_fwd_strike_today + ' ' + t('swal-api-strike-today', 'strike set on the reference date'));
+                return p.join(' &middot; ');
+            }
+
             /* True quando o campo está no dia corrente */
             function apiRefIsToday() {
                 var n = new Date();
@@ -1831,8 +1858,9 @@ $(document).ready(function() {
                                     var inserted = res.deals || [];
                                     if (!inserted.length) {
                                         Swal.fire({ icon: 'info', title: t('swal-imported', 'Imported'),
-                                            text: t('swal-fxo-api-none', 'No new deals — everything from the API is already in the table.'),
-                                            timer: 2600, showConfirmButton: false });
+                                            html: t('swal-fxo-api-none', 'No new deals — everything from the API is already in the table.') +
+                                                  '<br><small class="text-muted">' + apiBreakdown(res) + '</small>',
+                                            showConfirmButton: true, confirmButtonText: t('swal-ok', 'OK') });
                                         return;
                                     }
                                     var rowMap = {};
@@ -1849,8 +1877,9 @@ $(document).ready(function() {
                                     if (window.fetchNotifications) window.fetchNotifications();
                                     if (window._refreshMissingBadgesOPT) window._refreshMissingBadgesOPT();
                                     Swal.fire({ icon: 'success', title: t('swal-imported', 'Imported'),
-                                        text: inserted.length + ' ' + t('swal-deals-imported', 'deal(s) imported.'),
-                                        timer: 2200, showConfirmButton: false });
+                                        html: inserted.length + ' ' + t('swal-deals-imported', 'deal(s) imported.') +
+                                              '<br><small class="text-muted">' + apiBreakdown(res) + '</small>',
+                                        timer: 4200, showConfirmButton: false });
                                     // Premium D0 alert — same check as the XLSX flow
                                     var _todayMid = new Date(); _todayMid.setHours(0, 0, 0, 0);
                                     var dueToday = inserted.filter(function(d){

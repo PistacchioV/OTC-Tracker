@@ -14117,9 +14117,16 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
         _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
                              'Athena API{}: {} deal(s)'.format(_api_ref_suffix(ref_dt),
                                                               ', '.join(bits)))
+    # Mesma prestação de contas do pull de NDF: "veio 0" tem de dizer se a API
+    # devolveu nada ou se os registros foram descartados, e por quê.
+    log.info('[opt-fxo] pull ref=%s: %d fetched · %d parseados · importados=%d '
+             'amendados=%d · dead/cancelados na API=%d (marcados=%d)',
+             date, len(records), len(deals), len(inserted), len(amended),
+             len(dead), canceled)
     return {'success': True, 'date': date, 'fetched': len(records),
             'parsed': len(deals), 'imported': len(inserted),
-            'amended': len(amended), 'canceled': canceled, 'deals': inserted}
+            'amended': len(amended), 'canceled': canceled,
+            'dead': len(dead), 'deals': inserted}
 
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
@@ -14914,13 +14921,21 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
             canceled += _nd_cancel_in_file(
                 os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
                              rd.strftime('%Y%m%d') + cfg['suffix']), nm)
-    if skipped_interbook:
-        log.info('[ndf-api] %d interbook leg(s) skipped (pares do mapping Interbook API)',
-                 skipped_interbook)
+    # Prestação de contas do pull: sem isso, "veio 0" não diz se a API devolveu
+    # nada, se tudo estava cancelado ou se o filtro de interbook comeu os
+    # registros — os três somem no mesmo zero da tela.
+    log.info('[ndf-api] pull ref=%s: %d fetched · roteados fwd=%d op=%d vanilla=%d · '
+             'importados=%d amendados=%d · dead/cancelados na API=%d (marcados=%d) · '
+             'interbook=%d · strike set na data=%d',
+             now.strftime('%Y%m%d'), len(records),
+             len(routed['fwd-start']), len(routed['other-publishers']), len(routed['vanilla']),
+             sum(t['imported'] for t in targets.values()),
+             sum(t['amended'] for t in targets.values()),
+             len(dead), canceled, skipped_interbook, skipped_fwd_today)
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,
             'skipped_interbook': skipped_interbook, 'canceled': canceled,
-            'targets': targets}
+            'dead': len(dead), 'targets': targets}
 
 
 @blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])

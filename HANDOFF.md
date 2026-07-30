@@ -5881,3 +5881,22 @@ anterior sem mexer no código.
   estava gravado daquele dia). Quem importa o dia corrente não vê diferença nenhuma.
 - Nada a mudar em `athena_api.py`: o `date` já era parâmetro do `getTrades` (`?product=NDF&date=YYYYMMDD`)
   e sempre foi repassado — o que estava fixo era o chamador, que mandava o relógio do servidor.
+- **Ícone de calendário**: o input é de texto (flatpickr), então não tem o ícone nativo do `type=date`.
+  CSS `#apiRefDate` com o SVG em `background-image` nas quatro páginas, com variante dark — mesmo
+  tratamento dos campos de data do `pending-confirmation`.
+- **Scheduler é sempre hoje**, confirmado com o usuário: ele não passa `ref_date` e o default `None` cai
+  em hoje. Só o botão Import manda a data do campo.
+
+### Prestação de contas do pull (o "veio 0, era 128")
+
+Reclamação de import que devolvia 0 quando se esperava 128. O retorno e o alerta não diziam **onde** os
+registros foram parar — API vazia, tudo cancelado na origem e filtro de interbook produziam o mesmo zero.
+
+- Os dois pulls agora **logam a conta fechada** (`[ndf-api] pull ref=... : N fetched · roteados fwd/op/
+  vanilla · importados · amendados · dead/cancelados na API · interbook · strike set na data`) e devolvem
+  **`dead`** no JSON, que antes só existia como efeito colateral (`canceled`, que conta apenas os deals
+  que já estavam num arquivo — numa base recém-apagada é sempre 0 e some da vista).
+- O alerta das quatro páginas mostra a linha de breakdown (`apiBreakdown(res)`), e quando **nada** entrou
+  ele **não fecha sozinho** — antes sumia em 2–3 s levando a informação embora.
+- Ao investigar isso: `_generic_nd_persist_new_deals` grava pelo **TradeDate do deal**, não pela data de
+  referência, então import retroativo cai no arquivo certo — o zero não vinha daí.
