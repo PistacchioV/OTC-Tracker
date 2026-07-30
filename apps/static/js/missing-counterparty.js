@@ -43,7 +43,13 @@ window.MissingCounterparty = (function () {
         this.cfg   = cfg || {};
         this.spnSet = {};
         this.acrSet = {};
+        this.leAcrSet = null;      // accronyms de perna interna (mapping le-accronym)
         this.built  = false;
+        var self = this;
+        // Carrega o mapping já na criação: quando ele chega, redesenha os badges
+        // (o RefData costuma chegar antes, então sem este refresh as linhas de
+        // book interno ficariam marcadas até o próximo draw).
+        this.loadLeAcr(function () { self.refreshAll(); });
     }
 
     Inst.prototype.t = function (k, d) {
@@ -75,6 +81,34 @@ window.MissingCounterparty = (function () {
         return { spn: strip(rd[c.spn]), acr: strip(rd[c.acr]) };
     };
 
+    // Pernas internas (JPM / MGT / LAWTON) NÃO são contrapartes: elas não estão
+    // — nem devem estar — no RefData, mas são cadastradas no mapping Legal
+    // Entity × Accronym. Sem consultar esse mapping, toda linha de book interno
+    // aparecia como "Missing Counterparty" mesmo com SPN, cliente e CNPJ
+    // preenchidos, e o badge bloqueava edit/approve.
+    Inst.prototype.loadLeAcr = function (cb) {
+        var self = this;
+        fetch(this.cfg.leMappingUrl || '/api/mappings/le-accronym', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                var rows = (d && d.rows) || [];
+                var set = {};
+                for (var i = 0; i < rows.length; i++) {
+                    var a = String((rows[i] || {}).ACCRONYM || '').trim();
+                    if (a) set[a] = true;
+                }
+                self.leAcrSet = set;
+                if (cb) cb();
+            })
+            .catch(function (e) {
+                // Mapping fora do ar → volta ao comportamento anterior (só RefData),
+                // que erra para dentro: marca de leve a mais, nunca a menos.
+                self.leAcrSet = self.leAcrSet || {};
+                if (window.console) console.warn('le-accronym mapping load failed:', e);
+                if (cb) cb();
+            });
+    };
+
     Inst.prototype.isMissing = function (spn, acr) {
         var rd = (this.cfg.getRefData && this.cfg.getRefData()) || [];
         if (!rd.length) return false;            // RefData not loaded yet → never flag
@@ -83,6 +117,7 @@ window.MissingCounterparty = (function () {
         if (!sp && !ac) return false;            // no counterparty identifier on the row
         if (sp && this.spnSet[sp]) return false;
         if (ac && this.acrSet[ac]) return false;
+        if (ac && this.leAcrSet && this.leAcrSet[ac]) return false;   // perna interna
         return true;
     };
 
@@ -159,6 +194,10 @@ window.MissingCounterparty = (function () {
     // freshly registered records, then refresh the badges.
     Inst.prototype.reloadAndEnrich = function (cb) {
         var self = this, cfg = this.cfg, t = cfg.table;
+        // O "Reload Data" do aviso serve para os dois cadastros: quem acabou de
+        // registrar o accronym da perna interna no /mapping precisa ver o badge
+        // sair sem recarregar a página inteira.
+        this.loadLeAcr();
         fetch(cfg.refDataUrl || '/static/data/RefData.json')
             .then(function (r) { return r.json(); })
             .then(function (d) {
@@ -195,7 +234,7 @@ window.MissingCounterparty = (function () {
         if (!S) { self.reloadAndEnrich(); return; }
         S.fire({
             title:            self.t('swal-missing-cp-title', 'Counterparty Not Registered'),
-            html:             self.t('swal-missing-cp-html', 'This counterparty is not registered in Reference Data. Please register it, then reload.'),
+            html:             self.t('swal-missing-cp-html', 'This counterparty is not registered in Reference Data (nor as an internal leg in the Legal Entity \u00d7 Accronym mapping). Please register it, then reload.'),
             icon:             'warning',
             showConfirmButton: true,
             confirmButtonText: self.t('swal-reload-data', 'Reload Data'),
