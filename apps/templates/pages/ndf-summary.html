@@ -196,9 +196,21 @@
     padding: 2px 6px; font-size: .74rem; font-weight: 400; background: var(--ins-tertiary-bg, #f6f7fb);
     text-align: center;          /* centres the typed text AND the placeholder */
 }
-/* Direction só carrega PAY/RECEIVE — célula estreita libera espaço para
-   Account e Observation caberem sem scroll na largura total (col-12). */
-#ops-summary-table th:nth-child(8), #ops-summary-table td:nth-child(8) { width: 84px; max-width: 84px; }
+/* Largura mínima por coluna do Settlement Summary — é ela que LIGA o scroll
+   horizontal. O `scrollX: true` já estava no init, mas sozinho não rola nada:
+   sem mínimos a tabela se acomoda em 100% da largura do card, então a largura
+   de rolagem é igual à visível. O que "sumia" era o conteúdo dentro da célula
+   — Account (texto nowrap) e Observation (um <input> que só tem min-width 90px)
+   ficavam com o texto cortado. Com os mínimos a tabela ganha largura própria e
+   o .dt-scroll-body rola; o DataTables mantém cabeçalho e corpo alinhados. */
+#ops-summary-table th:nth-child(4),  #ops-summary-table td:nth-child(4)  { min-width: 440px; }  /* Counterparty */
+#ops-summary-table th:nth-child(5),  #ops-summary-table td:nth-child(5)  { min-width: 130px; }  /* Receive */
+#ops-summary-table th:nth-child(6),  #ops-summary-table td:nth-child(6)  { min-width: 130px; }  /* Pay */
+#ops-summary-table th:nth-child(7),  #ops-summary-table td:nth-child(7)  { min-width: 130px; }  /* Settlement Net */
+/* Direction só carrega PAY/RECEIVE: continua a coluna estreita da linha. */
+#ops-summary-table th:nth-child(8),  #ops-summary-table td:nth-child(8)  { min-width: 96px;  }  /* Direction */
+#ops-summary-table th:nth-child(9),  #ops-summary-table td:nth-child(9)  { min-width: 210px; }  /* Account */
+#ops-summary-table th:nth-child(10), #ops-summary-table td:nth-child(10) { min-width: 230px; }  /* Observation */
 
 #ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
