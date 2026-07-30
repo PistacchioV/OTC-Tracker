@@ -6367,3 +6367,60 @@ chave** de persistência — um cliente diferente é um deal novo, não um amend
 funções (8 casos de amend em NDF + 5 em FXO, e 10 casos de emparelhamento incluindo os que **não** podem
 casar); `check_ndf_pull.py` roda o `_ndf_api_pull` inteiro com um payload falso da Athena e confere o que
 foi gravado em cada arquivo do dia.
+
+## 141. Sessão 2026-07-30 — Deals Monitor: aviso diário de pendências por e-mail (19h00 e 19h30)
+
+E-mail automático para **brazil.otc.ops@jpmorgan.com** com o que ainda não fechou no Monitor.
+Assunto fixo **`Pending Action - Deals Monitor`**, corpo em **inglês**, cabeçalho com o degradê azul e o
+logo dos demais templates (`partials/email-gradient-header.html`).
+
+### O que entra na lista
+
+Um card entra quando **tem operação** (`total > 0`) **e** ainda **não está 100% Success**; a quantidade é
+`total − Success`. Cada linha traz **Type · Product · Detail · Pending**, com os chips do card abaixo do
+detalhe (`2 New, 1 Amend`) — assim o e-mail diz de *que* ação a pendência é, não só quantas são. Subtotal
+por tipo e total geral no fim.
+
+- **Type** = a zona da tela: **Registration** (B3), **Confirmation** e **Intrag**.
+- **Product / Detail** saem de `_NDM_TAXONOMY` (NDF × Commodities/Vanilla/FWD Start/Other Publisher,
+  Option × Commodities/FX/Equity, Swap × …). Card fora do catálogo (os "Others", que nascem sozinhos
+  quando aparece um diretório novo no cache) cai no label do próprio card — **nunca some do e-mail por
+  falta de cadastro**.
+
+⚠️ **As contagens saem de `_ndm_monitor_snapshot`, o MESMO código que alimenta a página.** Ele foi
+extraído do endpoint `/api/new-deals/monitor` justamente para isso. Uma segunda contagem própria do
+e-mail divergiria da tela no primeiro ajuste de regra, e a mesa passaria a não confiar em nenhuma das
+duas.
+
+### Três detalhes que o teste pegou
+
+1. **`Success` é comparado SEM caixa.** O cache do Intrag grava o status em minúsculo (`'success'`), e o
+   Monitor conta a string crua — contar só a grafia `'Success'` deixaria **todo card de Intrag
+   eternamente pendente**. Falso alarme diário é o jeito mais rápido de a mesa parar de ler o e-mail.
+2. **Registro em Success com confirmação não gerada AINDA é pendência** — e está certo assim. O card de
+   Confirmation tem ciclo próprio (New → Generated → Success), então o deal pode estar registrado e a
+   confirmação continuar em aberto. As duas linhas aparecem separadas, uma em cada Type.
+3. **Nada pendente → nenhum e-mail.** `_send_ndm_pending_email` devolve `'empty'` e não envia. Um e-mail
+   intitulado "Pending Action" com a lista vazia é ruído, e resolve sozinho o fim de semana (sem
+   operação, sem aviso).
+
+### Agendamento
+
+`_NDM_PENDING_TIMES` (env `DEALS_MONITOR_PENDING_TIMES`, default `19:00,19:30`) — o segundo disparo é
+lembrete, com a lista já atualizada. Horário inválido na env cai no default em vez de matar o aviso.
+
+⚠️ **Trava de disparo EM DISCO** (`deals_monitor_pending_sent.json`, em `control-panel/`): com o reloader
+do Werkzeug ligado o módulo é importado em **dois processos**, cada um com o seu scheduler. Persistência
+de deal é idempotente e sobrevive a isso — **e-mail não**. `_ndm_pending_claim_slot('YYYY-MM-DD 19:00')`
+reserva o disparo antes de enviar; o segundo processo lê o arquivo e desiste. Guarda só os últimos 16.
+
+### Destinatários e envio manual
+
+`_load_ndm_pending_recipients()` lê `deals_monitor_pending_recipients.json` (em `control-panel/`, **não
+versionado**) e, sem arquivo, usa o default `brazil.otc.ops@jpmorgan.com` — ou seja, funciona no pull sem
+configurar nada, e o destinatário troca sem deploy. `POST /api/new-deals/monitor/pending-email`
+(**admin**) dispara na hora, aceitando `date` opcional; devolve `sent: false` quando não há pendência.
+
+**Teste**: `check_monitor_email.py` (scratchpad) monta um dia sintético no cache, confere o que a regra
+considera pendente (incluindo os três detalhes acima) e renderiza o template de verdade — sem SMTP.
+`check_slot.py` cobre a trava de disparo duplo.
