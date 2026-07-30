@@ -3938,7 +3938,7 @@ $(document).ready(function() {
         (d || []).forEach(function(x){ var k = (x && x.date) || x; if (k) _ANBIMA_HOLS[k] = true; });
     }).catch(function(){});
     var _MOEDA_CODES = {};
-    fetch('/static/data/BaseMoeda.json').then(function(r){ return r.json(); }).then(function(d){
+    fetch('/static/data/mappings/BaseMoeda.json').then(function(r){ return r.json(); }).then(function(d){
         (d || []).forEach(function(x){
             var s = String(x['SIMBOLO'] || '').trim().toUpperCase();
             var cd = String(x['CODIGO DE CADASTRO'] || '').trim();

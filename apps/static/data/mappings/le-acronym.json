@@ -1,20 +1,17 @@
 [
   {
     "LE": "JPM",
-    "SETTLEMENT LOCATION": "BRAZIL",
-    "ACRONYM SUFFIX": "",
-    "NOTES": "Banco J.P. Morgan"
+    "ACCRONYM": "",
+    "SETTLEMENT LOCATION": "BRAZIL"
   },
   {
     "LE": "MGT",
-    "SETTLEMENT LOCATION": "JPMCBB",
-    "ACRONYM SUFFIX": "",
-    "NOTES": "Confirmar o sufixo do acronym numa operação da API"
+    "ACCRONYM": "",
+    "SETTLEMENT LOCATION": "JPMCBB"
   },
   {
     "LE": "LAWTON",
-    "SETTLEMENT LOCATION": "LAWTON",
-    "ACRONYM SUFFIX": "-LAW",
-    "NOTES": "Ex.: CMBB-LAW → CMBB"
+    "ACCRONYM": "",
+    "SETTLEMENT LOCATION": "LAWTON"
   }
 ]

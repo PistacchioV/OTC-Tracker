@@ -14252,7 +14252,7 @@ _MAPPING_DEFS = {
     # 1/rate no arquivo Conecta) viraram colunas daqui.
     'currency-base': {
         'label': 'Currency Base',
-        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'BaseMoeda.json')),
+        'file': os.path.join(_MAPPINGS_DIR, 'BaseMoeda.json'),
         'columns': [
             {'key': 'TIPO', 'label': 'Type'},
             {'key': 'TIPO DE INDICADOR', 'label': 'Indicator Type'},
@@ -14377,29 +14377,26 @@ _MAPPING_DEFS = {
              'FONTE CONSULTA': '5', 'TELA CONSULTA': '11682', 'NOTES': 'OUTROS'},
         ],
     },
-    # Legal Entity das páginas de NDF × o que a API manda. SETTLEMENT LOCATION
-    # resolve a LE (era o de-para fixo BRAZIL→JPM / JPMCBB→MGT no código).
-    # ACRONYM SUFFIX é o sufixo que o End Counterparty carrega quando a operação
-    # é daquela entidade ('CMBB-LAW' → contraparte CMBB na LE Lawton): com ele
-    # cadastrado, o Reference Data precisa de UMA linha por contraparte, não uma
-    # por entidade — o import tenta o código exato e depois o acronym sem o
-    # sufixo. Aceita vários sufixos separados por vírgula; em branco = a API
-    # manda o acronym puro nessa entidade.
+    # Legal Entity das páginas de NDF × o que a API manda. Duas formas de casar,
+    # nesta ordem: ACCRONYM (o End Counterparty exato, para o código que não
+    # segue padrão nenhum) e SETTLEMENT LOCATION (era o de-para fixo
+    # BRAZIL→JPM / JPMCBB→MGT no código). Linha só com LE + ACCRONYM é o uso
+    # normal — não precisa preencher a location.
+    # O acronym sufixado por entidade ('CMBB-LAW') NÃO precisa de linha aqui nem
+    # no Reference Data: o lookup de contraparte tenta o código exato e depois o
+    # acronym sem o último trecho depois do hífen, então uma linha de cadastro
+    # atende Banco, Lawton e MGT.
     'le-acronym': {
         'label': 'Legal Entity × Acronym',
         'columns': [
             {'key': 'LE', 'label': 'Legal Entity'},
+            {'key': 'ACCRONYM', 'label': 'Accronym (API)'},
             {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location (API)'},
-            {'key': 'ACRONYM SUFFIX', 'label': 'Acronym Suffix'},
-            {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
-            {'LE': 'JPM', 'SETTLEMENT LOCATION': 'BRAZIL', 'ACRONYM SUFFIX': '',
-             'NOTES': 'Banco J.P. Morgan'},
-            {'LE': 'MGT', 'SETTLEMENT LOCATION': 'JPMCBB', 'ACRONYM SUFFIX': '',
-             'NOTES': 'Confirmar o sufixo do acronym numa operação da API'},
-            {'LE': 'LAWTON', 'SETTLEMENT LOCATION': 'LAWTON', 'ACRONYM SUFFIX': '-LAW',
-             'NOTES': 'Ex.: CMBB-LAW → CMBB'},
+            {'LE': 'JPM', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'BRAZIL'},
+            {'LE': 'MGT', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'JPMCBB'},
+            {'LE': 'LAWTON', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'LAWTON'},
         ],
     },
     # Bancos oferecidos no editor de contraparte (Reference Data, duplo clique →
@@ -14508,43 +14505,35 @@ def _ndf_le_from_location(loc):
     return None
 
 
-def _ndf_le_suffixes():
-    """[(sufixo, LE)] do mapping le-acronym, do mais longo para o mais curto —
-    assim '-LAWTON' ganha de '-LAW' quando os dois estão cadastrados."""
-    out = []
+def _ndf_le_from_acronym(acr):
+    """LE cadastrada para esse End Counterparty na coluna ACCRONYM do mapping
+    le-acronym. Casa o código exato e também o acronym base (o mesmo corte de
+    _ndf_acronym_variants), para a linha valer com ou sem o sufixo da entidade.
+    None quando não há linha."""
+    cands = _ndf_acronym_variants(acr)
+    if not cands:
+        return None
     for r in _mapping_rows('le-acronym'):
-        le = str(r.get('LE', '') or '').strip().upper()
-        for sfx in re.split(r'[,;]', str(r.get('ACRONYM SUFFIX', '') or '')):
-            sfx = sfx.strip().upper()
-            if sfx:
-                out.append((sfx, le))
-    return sorted(out, key=lambda t: -len(t[0]))
+        a = str(r.get('ACCRONYM', '') or '').strip().upper()
+        if a and a in cands:
+            return str(r.get('LE', '') or '').strip().upper() or None
+    return None
 
 
 def _ndf_acronym_variants(acr):
     """Códigos a tentar no Reference Data para um End Counterparty da API: o
-    próprio e, quando termina num sufixo cadastrado, o acronym base
-    ('CMBB-LAW' → 'CMBB'). É o que dispensa uma linha por entidade no cadastro."""
+    próprio e, quando ele vem sufixado por entidade, o acronym sem o último
+    trecho depois do hífen ('CMBB-LAW' → 'CMBB'). É o que dispensa cadastrar a
+    mesma contraparte uma vez por LE, sem precisar configurar sufixo nenhum."""
     a = str(acr or '').strip().upper()
     if not a:
         return []
     out = [a]
-    for sfx, _le in _ndf_le_suffixes():
-        if a.endswith(sfx) and len(a) > len(sfx):
-            base = a[:-len(sfx)].strip(' -')
-            if base and base not in out:
-                out.append(base)
+    base = a.rsplit('-', 1)[0].strip() if '-' in a else ''
+    # Base curta demais provavelmente não é acronym de contraparte — não tenta.
+    if len(base) >= 3 and base not in out:
+        out.append(base)
     return out
-
-
-def _ndf_le_from_acronym(acr):
-    """LE indicada pelo sufixo do End Counterparty ('CMBB-LAW' → LAWTON).
-    None quando nenhum sufixo cadastrado casa."""
-    a = str(acr or '').strip().upper()
-    for sfx, le in _ndf_le_suffixes():
-        if le and a.endswith(sfx) and len(a) > len(sfx):
-            return le
-    return None
 
 
 def _ndf_ref_by_acronym(refmap_acr, acr):
@@ -14647,11 +14636,11 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     if _ndf_is_interbook(norm):
         return None, None
 
-    # LE: linha do mapping Legal Entity × Acronym pela Settlement Location; sem
-    # linha, o sufixo do acronym decide ('CMBB-LAW' → LAWTON) e, sem os dois, a
+    # LE: mapping Legal Entity × Acronym — a linha do acronym vence (é a
+    # específica), senão a da Settlement Location; sem nenhuma das duas, a
     # location crua fica visível na coluna.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
-    le = _ndf_le_from_location(loc) or _ndf_le_from_acronym(end_cp) or loc
+    le = _ndf_le_from_acronym(end_cp) or _ndf_le_from_location(loc) or loc
 
     # Counterparty enrichment is keyed by End Counterparty (FX Cash
     # acronym-style code, e.g. "CMBB-LAW") against RefData's FX CASH ACCRONYM,
@@ -20698,26 +20687,17 @@ def _ndf_publisher_fonte_info(publisher):
     fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
     return fi.rjust(4)
 
-_moeda_num_codes_cache = None
-
-
 def _moeda_num_code(iso):
-    """ISO 3-letter → B3 3-digit currency code (BaseMoeda.json, SIMBOLO →
-    CODIGO DE CADASTRO). Unknown/blank → ''. """
-    global _moeda_num_codes_cache
-    if _moeda_num_codes_cache is None:
-        m = {}
-        try:
-            with open(os.path.join(_B3_DATA_DIR, 'BaseMoeda.json'), encoding='utf-8') as fh:
-                for r in json.load(fh):
-                    sym = str(r.get('SIMBOLO') or '').strip().upper()
-                    code = str(r.get('CODIGO DE CADASTRO') or '').strip()
-                    if sym and code and sym not in m:
-                        m[sym] = code
-        except (IOError, json.JSONDecodeError):
-            pass
-        _moeda_num_codes_cache = m
-    return _moeda_num_codes_cache.get(str(iso or '').strip().upper(), '')
+    """ISO 3-letter → B3 3-digit currency code (mapping Currency Base, SIMBOLO →
+    CODIGO DE CADASTRO). Unknown/blank → ''. Lê pelo loader do mapping, que
+    cacheia por mtime: edição na tela vale na requisição seguinte."""
+    m = {}
+    for r in _mapping_rows('currency-base'):
+        sym = str(r.get('SIMBOLO') or '').strip().upper()
+        code = str(r.get('CODIGO DE CADASTRO') or '').strip()
+        if sym and code and sym not in m:
+            m[sym] = code
+    return m.get(str(iso or '').strip().upper(), '')
 
 
 _anbima_hols_cache = None
