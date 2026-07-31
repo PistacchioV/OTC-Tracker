@@ -6891,3 +6891,51 @@ e passava por cima):
 no CSS não teria efeito nenhum. Como `.is-done` é por definição 100% Success, a cor é conhecida, e
 escrevê-la direto é mais simples do que disputar a cascata. Os cards em andamento continuam com a cor
 interpolada pelo JS.
+
+---
+
+## §155 — Guia do Usuário em Word e recaptura das 46 telas
+
+**O que foi entregue** (commit `7694bc9`): `GUIA_DO_USUARIO_OTC_TRACKER.md` (fonte única) e o
+`.docx` gerado a partir dele, para circular na área. Cobre visão geral, primeiros passos (login por
+SID + 2FA), o passo a passo por página e três perguntas frequentes.
+
+**As 46 telas foram recapturadas.** As anteriores eram de 20/07 e o layout mudou muito desde então.
+Entraram 14 telas que ainda não existiam: Monitor, Mapping, NDF Vanilla, Electronic Inventory,
+Metrics, Live Position Cashflow/Premium, Intrag Swap e os módulos de Swap.
+
+**Duas armadilhas da captura — anote antes de recapturar de novo.**
+
+1. **As telas de New Deals saem VAZIAS.** O `DATA_EPS` do `capture_screens.py` não cobre os endpoints
+   dessas páginas (elas carregam por `POST /api/new-deals/<produto>/cache/search`, que o interceptor
+   não mocka). Solução usada: popular o **cache do dia** com operações fictícias
+   (`scratchpad/seed_demo_deals.py`) e capturar; a página carrega sozinha. O Monitor se popula junto,
+   porque lê os mesmos arquivos.
+2. **Com dados fictícios, toda linha vira "Missing Counterparty".** As contrapartes inventadas não
+   estão no Reference Data, e o guia mostraria o sistema como se estivesse quebrado. Foi preciso
+   cadastrar **temporariamente** 6 contrapartes fictícias no `RefData.json` (com `B3 ACCOUNT`
+   `73760.10-2` e o mesmo accronym usado nos deals), capturar, e **restaurar o arquivo**. Conferir a
+   restauração por `md5` **e** por `git status` — o arquivo é versionado.
+
+Depois da captura: apagar os arquivos de cache de demonstração e restaurar o `RefData.json`. Nenhum
+dado real de cliente, conta ou credencial pode ficar nas imagens (regra do SOP §8.2).
+
+**Armadilha de repositório — `Docs/` × `docs/`.** O repo tem **as duas grafias** (21 arquivos em
+`Docs/`, 33 em `docs/`), resultado de ter sido criado num filesystem case-insensitive. Os prints ficam
+em **`docs/` minúsculo**, que é o caminho que o SOP e o guia referenciam. Como o diretório em disco se
+chama `Docs`, o `git add docs/sop-screenshots/...` **grava com `D` maiúsculo** e os arquivos novos
+caem numa árvore diferente — no Mac não se nota, mas em Linux/Windows as imagens somem do documento.
+Use `git -c core.ignorecase=false add docs/sop-screenshots/` e confira com
+`git diff --cached --name-only | sed 's|/.*||' | sort | uniq -c`.
+
+**`build_sop_docx.py` passou a aceitar o arquivo de origem por argumento** — sem argumento continua
+gerando o SOP exatamente como antes; com argumento converte qualquer Markdown do repo. Foi assim que
+o guia foi gerado, em vez de existir um segundo conversor. O Word do SOP foi regerado junto, porque
+aponta para as mesmas telas.
+
+**Dependências instaladas no venv:** `playwright` (+ `playwright install chromium`) e `python-docx`.
+O `devrun.py` (launcher com o bypass `/dev-login`) fica na raiz, **gitignored** — confira com
+`git check-ignore -v devrun.py` antes de qualquer commit.
+
+**O que o guia ainda NÃO cobre:** Daily Settlement e os módulos de Swap em profundidade. Os prints
+dessas telas já estão capturados; falta o texto.

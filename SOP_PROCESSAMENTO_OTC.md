@@ -391,6 +391,12 @@ python scripts/build_sop_docx.py  # gera SOP_PROCESSAMENTO_OTC.docx
 
 O conversor entende títulos, tabelas, listas, checkboxes, citações, `código`, imagens `![alt](caminho)` e ignora comentários `<!-- ... -->`. Os caminhos de imagem são relativos à raiz do repositório.
 
+Sem argumentos ele gera o SOP. Com argumento, converte **qualquer** Markdown do repositório — é assim que o Guia do Usuário é gerado, sem precisar de um segundo conversor:
+
+```bash
+python scripts/build_sop_docx.py GUIA_DO_USUARIO_OTC_TRACKER.md
+```
+
 ### 8.2. Recapturar as telas (quando um módulo novo ficar pronto)
 
 As telas foram capturadas com um runner local de desenvolvimento (Flask + Chromium headless) que injeta dados **fictícios** via mock. O runner e os scripts de captura **não ficam no repositório** (contêm um stub de login de desenvolvimento que nunca deve ser commitado). Fluxo resumido:
@@ -398,6 +404,11 @@ As telas foram capturadas com um runner local de desenvolvimento (Flask + Chromi
 1. Suba o app localmente em modo dev e autentique com o bypass local.
 2. Rode o capturador (Playwright/Chromium) apontando para a nova rota; ele intercepta as chamadas `/api/**` e injeta linhas fictícias reaproveitando as colunas reais.
 3. Salve o PNG em `docs/sop-screenshots/<rota-com-hifens>.png`.
+
+**Duas armadilhas conhecidas (30/07/2026):**
+
+- **As telas de New Deals saem vazias.** O mock não cobre os endpoints dessas páginas — elas carregam por `POST /api/new-deals/<produto>/cache/search`. Para capturá-las com conteúdo, popule o **cache do dia** com operações fictícias e deixe a página carregar sozinha; o Monitor se popula junto, porque lê os mesmos arquivos. Com dados fictícios, as linhas aparecem marcadas como **Missing Counterparty** — é preciso cadastrar as contrapartes fictícias no `RefData.json` **temporariamente** e restaurar o arquivo depois (conferir por `md5` **e** `git status`, pois ele é versionado).
+- **`Docs/` × `docs/`.** O repositório tem as duas grafias. Os prints ficam em **`docs/` minúsculo**, mas o diretório em disco chama-se `Docs`, então o `git add` grava com maiúscula e as imagens somem do documento fora do macOS. Use `git -c core.ignorecase=false add docs/sop-screenshots/` e confira o casing no índice antes de commitar.
 4. Inclua o módulo na seção 5 (bloco-modelo abaixo) e regere o Word.
 
 ### 8.3. Bloco-modelo para incluir um módulo
