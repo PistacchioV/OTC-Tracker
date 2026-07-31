@@ -215,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var LOGO_ROOT = '{{ config.ASSETS_ROOT }}/images/';
+    var USERS_ROOT = '{{ config.ASSETS_ROOT }}/images/users/';
     var STATE = { tickets: [], counts: {}, isMaster: false, me: {},
                   statuses: [], priorities: [], agent: 'OTC Tracker Team' };
     var UI = { q: '', status: '', priority: '', page: 1, perPage: 10,
@@ -262,6 +263,34 @@ document.addEventListener('DOMContentLoaded', function () {
         return m[3] + ' ' + MON[parseInt(m[2], 10) - 1] + ', ' + m[1];
     }
 
+    function initials(name, sid) {
+        var s = String(name || sid || '').trim();
+        if (!s) { return '?'; }
+        var parts = s.split(/\s+/);
+        return (parts.length >= 2 ? parts[0][0] + parts[parts.length - 1][0] : parts[0][0]).toUpperCase();
+    }
+
+    // Foto do solicitante. Mesma convenção do sino de notificações (topbar.html):
+    // /static/images/users/<sid minúsculo>.jpg, com as iniciais como fallback —
+    // a maioria dos SIDs não tem foto no disco, e sem o onerror a célula ficaria
+    // com o ícone de imagem quebrada.
+    function requesterCell(tk) {
+        var sid = (tk.requester_sid || '').toLowerCase();
+        var name = tk.requester_name || tk.requester_sid || '';
+        return '<div class="d-flex gap-2 align-items-center">' +
+            '<span class="flex-shrink-0 d-inline-flex">' +
+                '<img alt="' + esc(name) + '" class="avatar-xs rounded-circle" ' +
+                    'src="' + USERS_ROOT + encodeURIComponent(sid) + '.jpg" ' +
+                    'onerror="this.onerror=null;this.style.display=\'none\';' +
+                             'this.nextElementSibling.style.display=\'inline-flex\';" />' +
+                '<span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xxs" ' +
+                    'style="display:none;width:1.5rem;height:1.5rem;">' + esc(initials(name, sid)) + '</span>' +
+            '</span>' +
+            '<span>' + esc(name) + '</span>' +
+            (tk.requester_sid ? '<small class="text-muted">' + esc(tk.requester_sid) + '</small>' : '') +
+        '</div>';
+    }
+
     // O logo do agente: claro no tema escuro, preto no tema claro. Os dois <img>
     // vão no HTML e o CSS mostra um por vez — assim o toggle de tema troca o logo
     // na hora, sem re-render da tabela.
@@ -306,8 +335,7 @@ document.addEventListener('DOMContentLoaded', function () {
             : '';
         return '<tr>' +
             '<td class="ps-3"><a class="fw-semibold link-reset" href="' + href + '">#' + esc(tk.id) + '</a></td>' +
-            '<td><span>' + esc(tk.requester_name || tk.requester_sid) + '</span>' +
-                (tk.requester_sid ? ' <small class="text-muted">' + esc(tk.requester_sid) + '</small>' : '') + '</td>' +
+            '<td>' + requesterCell(tk) + '</td>' +
             '<td>' + esc(tk.subject) + '</td>' +
             '<td>' + agentCell() + '</td>' +
             '<td>' + badgePriority(tk.priority) + '</td>' +

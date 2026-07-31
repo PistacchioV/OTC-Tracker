@@ -44,6 +44,17 @@
                         <div class="col-md-4">
                             <h6 class="tkd-label" data-lang="tkd-requested">Requested By</h6>
                             <div class="d-flex align-items-center gap-2">
+                                <!-- Foto do solicitante: /static/images/users/<sid>.jpg, a mesma
+                                     convenção do sino de notificações. A maioria dos SIDs não tem
+                                     foto no disco, então o onerror troca pelas iniciais em vez de
+                                     deixar o ícone de imagem quebrada. -->
+                                <span class="flex-shrink-0 d-inline-flex">
+                                    <img alt="" class="rounded-circle avatar-sm" id="tkd-requester-img"
+                                         style="display:none;" />
+                                    <span class="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-xs"
+                                          id="tkd-requester-ini"
+                                          style="display:none;width:2rem;height:2rem;"></span>
+                                </span>
                                 <span id="tkd-requester"></span>
                                 <small class="text-muted" id="tkd-requester-sid"></small>
                             </div>
@@ -174,6 +185,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function $(id) { return document.getElementById(id); }
     function show(el, on) { el.classList.toggle('d-none', !on); }
 
+    var USERS_ROOT = '{{ config.ASSETS_ROOT }}/images/users/';
+    function initials(name, sid) {
+        var s = String(name || sid || '').trim();
+        if (!s) { return '?'; }
+        var parts = s.split(/\s+/);
+        return (parts.length >= 2 ? parts[0][0] + parts[parts.length - 1][0] : parts[0][0]).toUpperCase();
+    }
+
     var STATUS_CLASS = {
         'New':         'bg-primary-subtle text-primary',
         'In Progress': 'bg-info-subtle text-info',
@@ -248,8 +267,22 @@ document.addEventListener('DOMContentLoaded', function () {
         badge.className = 'badge badge-label ' + (STATUS_CLASS[tk.status] || 'bg-secondary-subtle text-secondary');
         badge.textContent = tk.status || '';
 
-        $('tkd-requester').textContent = tk.requester_name || tk.requester_sid || '';
+        var rname = tk.requester_name || tk.requester_sid || '';
+        $('tkd-requester').textContent = rname;
         $('tkd-requester-sid').textContent = tk.requester_sid || '';
+        // A foto é tentada a cada paint(); o onerror é rearmado junto porque um
+        // paint anterior pode tê-lo zerado (this.onerror = null) ao falhar.
+        var img = $('tkd-requester-img'), ini = $('tkd-requester-ini');
+        ini.textContent = initials(rname, tk.requester_sid);
+        img.alt = rname;
+        img.style.display = '';
+        ini.style.display = 'none';
+        img.onerror = function () {
+            img.onerror = null;
+            img.style.display = 'none';
+            ini.style.display = 'inline-flex';
+        };
+        img.src = USERS_ROOT + encodeURIComponent((tk.requester_sid || '').toLowerCase()) + '.jpg';
         $('tkd-agent').textContent = tk.agent_name || 'OTC Tracker Team';
         $('tkd-created').innerHTML = fmtDateTime(tk.created_at);
 
