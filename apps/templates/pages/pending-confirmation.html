@@ -557,6 +557,11 @@
                         </div>
                         <div class="mb-1">
                             <span class="text-success"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_under_10 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span class="text-success"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending MO</span>
                             <span class="float-end"><b>{{ pending_mo_under_10 or 0 }}</b></span>
                         </div>
@@ -628,6 +633,11 @@
                             <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending FO</span>
                             <span class="float-end"><b>{{ pending_fo_10_19 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_10_19 or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
                             <span style="color: #99BF00;"><i class="ti ti-point-filled"></i></span>
@@ -705,6 +715,11 @@
                         </div>
                         <div class="mb-1">
                             <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_20_29 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #E0BC00;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending MO</span>
                             <span class="float-end"><b>{{ pending_mo_20_29 or 0 }}</b></span>
                         </div>
@@ -776,6 +791,11 @@
                             <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending FO</span>
                             <span class="float-end"><b>{{ pending_fo_30_59 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_30_59 or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
                             <span style="color: #eaa221;"><i class="ti ti-point-filled"></i></span>
@@ -853,6 +873,11 @@
                         </div>
                         <div class="mb-1">
                             <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_60_89 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #ff7518;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending MO</span>
                             <span class="float-end"><b>{{ pending_mo_60_89 or 0 }}</b></span>
                         </div>
@@ -922,6 +947,11 @@
                             <span class="text-danger"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending FO</span>
                             <span class="float-end"><b>{{ pending_fo_over_90 or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span class="text-danger"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_over_90 or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
                             <span class="text-danger"><i class="ti ti-point-filled"></i></span>
@@ -1696,6 +1726,7 @@ $(document).ready(function() {
                     '<option value="Exception Fepweb">Exception Fepweb</option>' +
                     '<option value="Pending Digital Signature">Pending Digital Signature</option>' +
                     '<option value="Pending FO">Pending FO</option>' +
+                    '<option value="Pending Legal">Pending Legal</option>' +
                     '<option value="Pending MO">Pending MO</option>' +
                     '<option value="Pending MO/FO">Pending MO/FO</option>' +
                     '<option value="Pending Original">Pending Original</option>' +
@@ -2028,10 +2059,11 @@ $(document).ready(function() {
     }
     function updateWidgets() {
         var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
-        var TYPE_ORDER  = ['ds','fo','mo','mofo','orig','otc','poa','sa','others'];
+        var TYPE_ORDER  = ['ds','fo','legal','mo','mofo','orig','otc','poa','sa','others'];
         var pendingToType = {
             'Pending Digital Signature': 'ds',
             'Pending FO':                'fo',
+            'Pending Legal':             'legal',
             'Pending MO':                'mo',
             'Pending MO/FO':             'mofo',
             'Pending Original':          'orig',
@@ -2446,7 +2478,7 @@ $(document).ready(function() {
     var PENDING_STATUS_OPTS = [
         'Abonado via PDF','Client Treasury Allowance','Concluded',
         'Exception','Exception Digital Fep Web','Exception Fepweb',
-        'Pending Digital Signature','Pending FO','Pending MO','Pending MO/FO',
+        'Pending Digital Signature','Pending FO','Pending Legal','Pending MO','Pending MO/FO',
         'Pending Original','Pending OTC','Pending POA',
         'Pending Signature Allowance','Signed Digitally'
     ];
