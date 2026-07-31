@@ -1531,5 +1531,6 @@
   "tkd-nochange": "Nada Cambió",
   "tkd-nochange-text": "Ningún campo era distinto de lo ya guardado.",
   "tkd-mail-ok": "Se envió por correo un aviso de cierre al solicitante.",
-  "tkd-mail-fail": "Guardado, pero no se pudo enviar el correo de cierre:"
+  "tkd-mail-fail": "Guardado, pero no se pudo enviar el correo de cierre:",
+  "map-tab-cetip-files": "Archivos CETIP (Rutina de Guardado)"
 }

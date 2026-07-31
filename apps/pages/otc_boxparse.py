@@ -242,11 +242,42 @@ def _contract_parts(contract):
     return (_MONTH_CODES.get(full, ''), m.group(2)[-1])
 
 
-def _build_dynamic_code(prefix, contract):
+# Notação do padrão B3 (coluna "B3 Code / Prefix" do cadastro Commodities × B3).
+#
+#   "MY"  → onde entram a letra do mês e o último dígito do ano do contrato.
+#           Vai entre ASPAS no cadastro justamente porque um código pode conter
+#           as letras M e Y como texto fixo — sem a marca não daria para saber
+#           qual é qual.
+#   _     → um ESPAÇO no código emitido. O código do milho na B3 é 'C ' (com o
+#           espaço), e um espaço no fim de um campo de texto é invisível na tela
+#           e some num trim distraído; o sublinhado torna-o visível.
+#
+#   KO"MY"BNMK  → KOZ7BNMK        (texto antes E depois do mês/ano)
+#   XB"MY"     → XBZ7
+#   C_"MY"     → 'C Z7'
+#
+# Padrão SEM aspas é lido como formato antigo (só o prefixo, mês/ano no fim), o
+# que mantém uma linha não migrada funcionando como antes.
+_B3_MY_RE = re.compile(r'"\s*MY\s*"', re.I)
+
+
+def split_b3_pattern(pattern):
+    """``'KO"MY"BNMK'`` → ``('KO', 'BNMK')``; ``'XB'`` → ``('XB', '')``.
+    O ``_`` vira espaço nas duas partes."""
+    s = '' if pattern is None else str(pattern)
+    m = _B3_MY_RE.search(s)
+    head, tail = (s[:m.start()], s[m.end():]) if m else (s, '')
+    return head.replace('_', ' '), tail.replace('_', ' ')
+
+
+def build_b3_code(pattern, contract):
+    """Aplica o contrato ao padrão. Contrato ilegível devolve só a parte fixa da
+    frente — mesmo comportamento do ``buildDynamicCode`` antigo."""
+    head, tail = split_b3_pattern(pattern)
     p = _contract_parts(contract)
     if not p:
-        return prefix
-    return prefix + p[0] + p[1]
+        return head
+    return head + p[0] + p[1] + tail
 
 
 def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix):
@@ -257,20 +288,18 @@ def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix):
     mkt = str(market).upper().strip()
     if mkt in fixed_codes:
         return fixed_codes[mkt]
+    # BRT_IPE é o único SPECIAL que sobrou: o código depende de vanilla/asian,
+    # que é lógica, não de-para. O FCPO saiu daqui — virou o padrão KO"MY"BNMK
+    # no cadastro (§164).
     if mkt == 'BRT_IPE':
         if is_vanilla:
-            return _build_dynamic_code('CO', contract) or 'CO1-2'
+            return build_b3_code('CO', contract) or 'CO1-2'
         return 'CO1-2'
-    if mkt == 'FCPO_BURSA_MYR':
-        parts = _contract_parts(contract)
-        if not parts:
-            return ''
-        return 'KO' + parts[0] + parts[1] + 'BNMK'
-    prefix = dynamic_prefix.get(mkt)
-    if not prefix:
+    pattern = dynamic_prefix.get(mkt)
+    if not pattern:
         u = mkt.find('_')
-        prefix = mkt[:u] if u > 0 else mkt
-    return _build_dynamic_code(prefix, contract)
+        pattern = mkt[:u] if u > 0 else mkt
+    return build_b3_code(pattern, contract)
 
 
 # ---------------------------------------------------------------------------

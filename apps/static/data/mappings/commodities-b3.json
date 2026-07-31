@@ -93,84 +93,84 @@
   {
     "TYPE": "PREFIX",
     "MARKET": "HU_RBOB_NYMEX",
-    "B3 CODE": "XB",
+    "B3 CODE": "XB\"MY\"",
     "HOLIDAY CALENDAR": "NYMEX",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "HO_NYMEX",
-    "B3 CODE": "HO",
+    "B3 CODE": "HO\"MY\"",
     "HOLIDAY CALENDAR": "NYMEX",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "SB_ICE",
-    "B3 CODE": "SB",
+    "B3 CODE": "SB\"MY\"",
     "HOLIDAY CALENDAR": "ICEAGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "C_CBOT",
-    "B3 CODE": "C ",
+    "B3 CODE": "C_\"MY\"",
     "HOLIDAY CALENDAR": "CBY_AGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "S_CBOT",
-    "B3 CODE": "S ",
+    "B3 CODE": "S_\"MY\"",
     "HOLIDAY CALENDAR": "CBY_AGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "BO_CBOT",
-    "B3 CODE": "BO",
+    "B3 CODE": "BO\"MY\"",
     "HOLIDAY CALENDAR": "CBY_AGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "CC_ICE",
-    "B3 CODE": "CC",
+    "B3 CODE": "CC\"MY\"",
     "HOLIDAY CALENDAR": "ICEAGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "W_CBOT",
-    "B3 CODE": "W ",
+    "B3 CODE": "W_\"MY\"",
     "HOLIDAY CALENDAR": "CBY_AGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "SM_CBOT",
-    "B3 CODE": "SM",
+    "B3 CODE": "SM\"MY\"",
     "HOLIDAY CALENDAR": "CBY_AGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "CT_ICE",
-    "B3 CODE": "CT",
+    "B3 CODE": "CT\"MY\"",
     "HOLIDAY CALENDAR": "ICEAGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "KC_ICE",
-    "B3 CODE": "KC",
+    "B3 CODE": "KC\"MY\"",
     "HOLIDAY CALENDAR": "ICEAGS",
     "FIXED QUOTE": ""
   },
   {
     "TYPE": "PREFIX",
     "MARKET": "WTI_NYMEX",
-    "B3 CODE": "WTI",
+    "B3 CODE": "WTI\"MY\"",
     "HOLIDAY CALENDAR": "NYMEX",
     "FIXED QUOTE": ""
   },
@@ -182,9 +182,9 @@
     "FIXED QUOTE": ""
   },
   {
-    "TYPE": "SPECIAL",
+    "TYPE": "PREFIX",
     "MARKET": "FCPO_BURSA_MYR",
-    "B3 CODE": "",
+    "B3 CODE": "KO\"MY\"BNMK",
     "HOLIDAY CALENDAR": "BURSA",
     "FIXED QUOTE": ""
   },

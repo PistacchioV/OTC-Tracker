@@ -2369,122 +2369,218 @@ _ensure_cetip_roots()
 CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE', r'I:\CETIP_OPTIONS')
 CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',     r'I:\CETIP_NDF')
 
-# Each rule mirrors one Filter→Formula→Output branch of the Alteryx container.
-#   match      : predicate on the LOWER-CASED source FileName (case-insensitive,
-#                so .TXT / .txt both match — Alteryx Contains was the reference)
-#   date_start : 0-based offset of the YYMMDD date inside the FileName (Alteryx
-#                Substring) — 6 for OPCAO_*, 4 for *-TER/*SIC, 8 for the CETIP21
-#   dest_name  : builds the renamed output FileName from the YYMMDD ref
-#   extra_dest : (optional) a flat network-share folder to also copy the file to
-# Destination is a single per-day folder (CETIP_DEST_ROOT\YYYY\mm. Month\dd),
-# so the per-type subfolders of the original Alteryx flow are not used here.
-_CETIP_RULES = [
-    {'label': 'NDF Position (DPOSICAO C21)',
-     'match': lambda n: 'dposicao_c21.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DPOSICAO.CETIP21'.format(r)},
-    {'label': 'SWAP Position (DPOSICAO-SWAP)',
-     'match': lambda n: 'dposicao-swap.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DPOSICAO-SWAP.CETIP21'.format(r),
-     'attach_sales_support': True,      # SWAP position also e-mailed to Sales Support
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position',
-              # de-dup: Conta Parte (coluna D = "Participante")
-              'filter': {'column': ['participante'], 'index': 3,
-                         'allowed': ['73760009', '04880006']}}},
-    {'label': 'Option Position (OPC DPOSICAO)',
-     'match': lambda n: 'opc_' in n and '_dposicao.txt' in n,
-     'date_start': 4,                  # OPC_YYMMDD_DPOSICAO.TXT → date at index 4
-     'dest_name': lambda r: '73760_{}_DPOSICAO.OPC'.format(r),
-     'extra_dest': CETIP_OPTIONS_SHARE,
-     'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
-     'attach_sales_support': True,      # .OPC position also e-mailed to Sales Support
-     'json': {'category': 'Option', 'has_header': True,
-              # de-dup: keep only our side (Parte/conta = coluna E)
-              'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
-                         'allowed': ['73760009']}}},
-    {'label': 'Option Movement (OPC DMOVIMENTO)',
-     'match': lambda n: ('opc_' in n and '_dmovimento.txt' in n
-                         and '_15h00.txt' not in n and '_18h30.txt' not in n),
-     'date_start': 4,                  # OPC_YYMMDD_DMOVIMENTO.TXT → date at index 4
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO_3.OPC'.format(r)},
-    {'label': 'Term Movement (DMOVIMENTO C21)',
-     'match': lambda n: '_dmovimento_c21.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO.CETIP21'.format(r)},
-    {'label': 'SWAP Movement (DMOVIMENTO-SWAP)',
-     'match': lambda n: '_dmovimento-swap.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DMOVIMENTO-SWAP.CETIP21'.format(r)},
-    {'label': 'SWAP Flow (DFLUXO_SWAP)',
-     'match': lambda n: '_dfluxo_swap.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DFLUXO.CETIP21'.format(r),
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo',
-              # de-dup: Conta Parte (coluna C = "Código Conta Cetip Parte")
-              'filter': {'column': ['código conta cetip parte', 'codigo conta cetip parte',
-                                    'conta cetip parte'], 'index': 2,
-                         'allowed': ['73760009', '04880006']}}},
-    {'label': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
-     'match': lambda n: '_dagendapremios.txt' in n,
-     'date_start': 8,                  # CETIP21_YYMMDD_DAGENDAPREMIOS.TXT → date at index 8
-     'dest_name': lambda r: '73760_{}_DAGENDAPREMIOS.CETIP21'.format(r),
-     'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio',
-              # de-dup: Conta da Parte (coluna D = "Parte")
-              'filter': {'column': ['parte'], 'index': 3,
-                         'allowed': ['73760009', '04880006']}}},
-    {'label': 'SWAP Indexers (INDEXADORESSWAP_VCP)',
-     'match': lambda n: 'indexadoresswap_vcp.txt' in n,
-     'date_start': 8,                  # CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT → date at index 8
-     'dest_name': lambda r: 'CETIP21_{}_INDEXADORESSWAP_VCP.TXT'.format(r),
-     # Not a position file: after saving, its rows refresh the VCP indexer
-     # reference JSON (see _cetip_update_vcp_json), used by the Swap Characteristics
-     # page. A=Qualification ID, B=Description, C=Additional Description,
-     # D=Level 1 Classification, E=Status (Habilitado→Active / Bloqueado→Inactive).
-     'vcp_update': True},
-    {'label': 'Operations (DOPERACOES)',
-     'match': lambda n: '_doperacoes.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_DOPERACOES.CETIP21'.format(r),
-     # DOPERACOES ships WITH a header row (first line); data from the 2nd line —
-     # like the Save-Settlements "operações" file. Keep only our accounts
-     # (Conta = col B) and the derivative title types (Tipo Titulo = col J).
-     'json': {'category': 'Operations', 'has_header': True,
-              'filters': [
-                  {'column': ['conta'], 'index': 1,
-                   'allowed': ['73760009', '04880006']},
-                  {'column': ['tipo titulo', 'tipo título'], 'index': 9,
-                   'allowed': ['TER', 'SWAP', 'OPC'], 'match': 'text'},
-              ]}},
-    {'label': 'COE (DRESUMOEMISSOR-COE)',
-     'match': lambda n: '_dresumoemissor-coe.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: 'CETIP21_{}_SP_DRESUMOEMISSOR-COE.TXT'.format(r)},
-    {'label': 'Accelerator Agent (MID DAGENTEACELERADOR)',
-     'match': lambda n: '_mid_dagenteacelerador.txt' in n,
-     'date_start': 8,
-     'dest_name': lambda r: '73760_{}_MID_DAGENTEACELERADOR.CETIP21'.format(r)},
-    {'label': 'Term Position (DPOSICAO-TER)',
-     'match': lambda n: '_dposicao-ter.txt' in n,
-     'date_start': 4,
-     'dest_name': lambda r: '73760_{}_DPOSICAO-TER.TER'.format(r),
-     'extra_dest': CETIP_NDF_SHARE,
-     'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
-     'json': {'category': 'NDF', 'has_header': True,
-              # de-dup: keep only our side (Código da Parte = coluna B)
-              'filter': {'column': ['código da parte', 'codigo da parte'], 'index': 1,
-                         'allowed': ['73760009', '04880006']}}},
-    {'label': 'SIC Contract Position (DPOSCONTRATOSIC)',
-     'match': lambda n: '_dposcontratosic.txt' in n,
-     'date_start': 4,
-     'dest_name': lambda r: '73760_{}_DPOSCONTRATOSIC.txt'.format(r),
-     'attach_sales_support': True},   # this file is e-mailed to Sales Support
-    {'label': 'Comitente Registry (DCADCOMITENTES)',
-     'match': lambda n: '_dcadcomitentes.txt' in n,
-     'date_start': 4,                 # SIC_YYMMDD_DCADCOMITENTES.TXT → date at index 4
+# ── Quais arquivos a rotina Save CETIP Files considera ────────────────────────
+#
+# A LISTA (que arquivo entra, com que nome ele chega e com que nome é salvo) é
+# cadastrada na tela /mapping → "CETIP Files"; o COMPORTAMENTO de cada tipo
+# (como o arquivo vira JSON, se atualiza o VCP, a que e-mail ele é anexado) mora
+# aqui, porque é lógica de parsing e não de-para. As duas metades se juntam em
+# `_cetip_rules()` pela chave TYPE.
+#
+# Padrão dos nomes no cadastro: o literal `YYMMDD` marca ONDE a data está.
+#   CETIP21_YYMMDD_DPOSICAO-SWAP   →  CETIP21_260731_DPOSICAO-SWAP.TXT
+# A data que entra no nome de destino é a que veio no nome do arquivo de origem;
+# a data do card do Control Panel é o que escolhe a PASTA do dia (origem e
+# destino são `…\YYYY\mm. Month\dd`), e é ela que monta o nome esperado quando o
+# arquivo não aparece (a linha "Not found" do e-mail).
+_CETIP_BEHAVIOUR = {
+    'NDF Position (DPOSICAO C21)': {},
+    'SWAP Position (DPOSICAO-SWAP)': {
+        'attach_sales_support': True,      # SWAP position also e-mailed to Sales Support
+        'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position',
+                 # de-dup: Conta Parte (coluna D = "Participante")
+                 'filter': {'column': ['participante'], 'index': 3,
+                            'allowed': ['73760009', '04880006']}}},
+    'Option Position (OPC DPOSICAO)': {
+        'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
+        'attach_sales_support': True,      # .OPC position also e-mailed to Sales Support
+        'json': {'category': 'Option', 'has_header': True,
+                 # de-dup: keep only our side (Parte/conta = coluna E)
+                 'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
+                            'allowed': ['73760009']}}},
+    'Option Movement (OPC DMOVIMENTO)': {},
+    'Term Movement (DMOVIMENTO C21)': {},
+    'SWAP Movement (DMOVIMENTO-SWAP)': {},
+    'SWAP Flow (DFLUXO_SWAP)': {
+        'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo',
+                 # de-dup: Conta Parte (coluna C = "Código Conta Cetip Parte")
+                 'filter': {'column': ['código conta cetip parte', 'codigo conta cetip parte',
+                                       'conta cetip parte'], 'index': 2,
+                            'allowed': ['73760009', '04880006']}}},
+    'SWAP Premium Agenda (DAGENDAPREMIOS)': {
+        'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio',
+                 # de-dup: Conta da Parte (coluna D = "Parte")
+                 'filter': {'column': ['parte'], 'index': 3,
+                            'allowed': ['73760009', '04880006']}}},
+    'SWAP Indexers (INDEXADORESSWAP_VCP)': {
+        # Not a position file: after saving, its rows refresh the VCP indexer
+        # reference JSON (see _cetip_update_vcp_json), used by the Swap
+        # Characteristics page. A=Qualification ID, B=Description, C=Additional
+        # Description, D=Level 1 Classification, E=Status
+        # (Habilitado→Active / Bloqueado→Inactive).
+        'vcp_update': True},
+    'Operations (DOPERACOES)': {
+        # DOPERACOES ships WITH a header row (first line); data from the 2nd line —
+        # like the Save-Settlements "operações" file. Keep only our accounts
+        # (Conta = col B) and the derivative title types (Tipo Titulo = col J).
+        'json': {'category': 'Operations', 'has_header': True,
+                 'filters': [
+                     {'column': ['conta'], 'index': 1,
+                      'allowed': ['73760009', '04880006']},
+                     {'column': ['tipo titulo', 'tipo título'], 'index': 9,
+                      'allowed': ['TER', 'SWAP', 'OPC'], 'match': 'text'},
+                 ]}},
+    'COE (DRESUMOEMISSOR-COE)': {},
+    'Accelerator Agent (MID DAGENTEACELERADOR)': {},
+    'Term Position (DPOSICAO-TER)': {
+        'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
+        'json': {'category': 'NDF', 'has_header': True,
+                 # de-dup: keep only our side (Código da Parte = coluna B)
+                 'filter': {'column': ['código da parte', 'codigo da parte'], 'index': 1,
+                            'allowed': ['73760009', '04880006']}}},
+    'SIC Contract Position (DPOSCONTRATOSIC)': {
+        'attach_sales_support': True},   # this file is e-mailed to Sales Support
+    'Comitente Registry (DCADCOMITENTES)': {},
+}
+
+# Seed do cadastro: exatamente os 15 tipos que estavam no código, com o padrão
+# de origem reconstruído a partir do par (token do `match`, `date_start`) antigo
+# — o `date_start` dizia o TAMANHO do prefixo e o token dizia o final do nome.
+_CETIP_FILES_SEED = [
+    {'TYPE': 'NDF Position (DPOSICAO C21)',
+     'SOURCE': 'CETIP21_YYMMDD_DPOSICAO_C21',
+     'DEST': '73760_YYMMDD_DPOSICAO.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'SWAP Position (DPOSICAO-SWAP)',
+     'SOURCE': 'CETIP21_YYMMDD_DPOSICAO-SWAP',
+     'DEST': '73760_YYMMDD_DPOSICAO-SWAP.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'Option Position (OPC DPOSICAO)',
+     'SOURCE': 'OPC_YYMMDD_DPOSICAO',
+     'DEST': '73760_YYMMDD_DPOSICAO.OPC', 'EXTRA DEST': CETIP_OPTIONS_SHARE},
+    {'TYPE': 'Option Movement (OPC DMOVIMENTO)',
+     'SOURCE': 'OPC_YYMMDD_DMOVIMENTO',
+     'DEST': '73760_YYMMDD_DMOVIMENTO_3.OPC', 'EXTRA DEST': ''},
+    {'TYPE': 'Term Movement (DMOVIMENTO C21)',
+     'SOURCE': 'CETIP21_YYMMDD_DMOVIMENTO_C21',
+     'DEST': '73760_YYMMDD_DMOVIMENTO.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'SWAP Movement (DMOVIMENTO-SWAP)',
+     'SOURCE': 'CETIP21_YYMMDD_DMOVIMENTO-SWAP',
+     'DEST': '73760_YYMMDD_DMOVIMENTO-SWAP.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'SWAP Flow (DFLUXO_SWAP)',
+     'SOURCE': 'CETIP21_YYMMDD_DFLUXO_SWAP',
+     'DEST': '73760_YYMMDD_DFLUXO.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
+     'SOURCE': 'CETIP21_YYMMDD_DAGENDAPREMIOS',
+     'DEST': '73760_YYMMDD_DAGENDAPREMIOS.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'SWAP Indexers (INDEXADORESSWAP_VCP)',
+     'SOURCE': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP',
+     'DEST': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT', 'EXTRA DEST': ''},
+    {'TYPE': 'Operations (DOPERACOES)',
+     'SOURCE': 'CETIP21_YYMMDD_DOPERACOES',
+     'DEST': '73760_YYMMDD_DOPERACOES.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'COE (DRESUMOEMISSOR-COE)',
+     'SOURCE': 'CETIP21_YYMMDD_DRESUMOEMISSOR-COE',
+     'DEST': 'CETIP21_YYMMDD_SP_DRESUMOEMISSOR-COE.TXT', 'EXTRA DEST': ''},
+    {'TYPE': 'Accelerator Agent (MID DAGENTEACELERADOR)',
+     'SOURCE': 'CETIP21_YYMMDD_MID_DAGENTEACELERADOR',
+     'DEST': '73760_YYMMDD_MID_DAGENTEACELERADOR.CETIP21', 'EXTRA DEST': ''},
+    {'TYPE': 'Term Position (DPOSICAO-TER)',
+     'SOURCE': 'TER_YYMMDD_DPOSICAO-TER',
+     'DEST': '73760_YYMMDD_DPOSICAO-TER.TER', 'EXTRA DEST': CETIP_NDF_SHARE},
+    {'TYPE': 'SIC Contract Position (DPOSCONTRATOSIC)',
+     'SOURCE': 'SIC_YYMMDD_DPOSCONTRATOSIC',
+     'DEST': '73760_YYMMDD_DPOSCONTRATOSIC.txt', 'EXTRA DEST': ''},
+    {'TYPE': 'Comitente Registry (DCADCOMITENTES)',
+     'SOURCE': 'SIC_YYMMDD_DCADCOMITENTES',
      # Keep the original SIC name so the Comitente reconciliation finds it unchanged.
-     'dest_name': lambda r: 'SIC_{}_DCADCOMITENTES.txt'.format(r)},
+     'DEST': 'SIC_YYMMDD_DCADCOMITENTES.txt', 'EXTRA DEST': ''},
 ]
+
+_CETIP_DATE_TOKEN = 'YYMMDD'
+
+
+def _cetip_split_pattern(pattern):
+    """`'CETIP21_YYMMDD_DPOSICAO-SWAP'` → `(8, '_dposicao-swap')`.
+
+    Devolve (offset da data, final do nome em minúsculas) ou None se o padrão
+    não tiver o `YYMMDD`. A extensão é descartada: o cadastro guarda o nome sem
+    `.TXT` (é o formato que o usuário digita) e a comparação é feita contra o
+    nome do arquivo sem extensão, o que faz `.TXT` e `.txt` casarem sozinhos.
+    """
+    s = os.path.splitext(str(pattern or '').strip())[0]
+    i = s.upper().find(_CETIP_DATE_TOKEN)
+    if i < 0:
+        return None
+    return i, s[i + len(_CETIP_DATE_TOKEN):].lower()
+
+
+def _cetip_apply_date(pattern, yymmdd):
+    """Troca o `YYMMDD` do padrão pela data (case-insensitive, todas as ocorrências)."""
+    return re.sub(_CETIP_DATE_TOKEN, yymmdd, str(pattern or ''), flags=re.I)
+
+
+def _cetip_make_matcher(pattern, label):
+    """Predicado de match do padrão, ou None se o padrão for inválido.
+
+    Casa pelo FINAL do nome (sem extensão) mais 6 dígitos na posição que o
+    padrão indica. O prefixo literal ('CETIP21_', 'TER_') NÃO é comparado, só
+    o seu tamanho: os nomes de origem nunca foram confirmados com a B3 (era uma
+    pendência aberta desde a §27) e exigir o prefixo poderia parar de salvar um
+    arquivo que hoje funciona. Quando o prefixo do arquivo não bate com o do
+    cadastro fica um aviso no log — dá o diagnóstico sem o risco.
+    """
+    parts = _cetip_split_pattern(pattern)
+    if not parts:
+        return None
+    idx, tail = parts
+    head = os.path.splitext(str(pattern or '').strip())[0][:idx].lower()
+
+    def _match(name_lower):
+        stem = os.path.splitext(name_lower)[0]
+        if tail and not stem.endswith(tail):
+            return False
+        date = stem[idx:idx + 6]
+        if len(date) != 6 or not date.isdigit():
+            return False
+        if head and stem[:idx] != head:
+            log.warning('[cetip] %s: prefixo do arquivo (%r) difere do cadastro (%r) — '
+                        'salvando mesmo assim', label, stem[:idx], head)
+        return True
+
+    return _match
+
+
+def _cetip_rules():
+    """Regras da rotina = cadastro (/mapping) + comportamento (código), unidos
+    pela coluna TYPE. Uma linha com padrão inválido é ignorada com aviso no log,
+    para um erro de digitação na tela não derrubar a rotina inteira."""
+    rules = []
+    for row in _mapping_rows('cetip-files'):
+        label = str(row.get('TYPE') or '').strip()
+        source = str(row.get('SOURCE') or '').strip()
+        dest = str(row.get('DEST') or '').strip()
+        if not label or not source or not dest:
+            continue
+        matcher = _cetip_make_matcher(source, label)
+        parts = _cetip_split_pattern(source)
+        if matcher is None or parts is None:
+            log.warning('[cetip] %r ignorado: SOURCE %r não tem %s',
+                        label, source, _CETIP_DATE_TOKEN)
+            continue
+        if _CETIP_DATE_TOKEN not in dest.upper():
+            log.warning('[cetip] %r: DEST %r não tem %s — o nome salvo não terá data',
+                        label, dest, _CETIP_DATE_TOKEN)
+        rule = dict(_CETIP_BEHAVIOUR.get(label) or {})
+        rule.update({
+            'label': label,
+            'match': matcher,
+            'date_start': parts[0],
+            'dest_name': (lambda d: (lambda r: _cetip_apply_date(d, r)))(dest),
+        })
+        extra = str(row.get('EXTRA DEST') or '').strip()
+        if extra:
+            rule['extra_dest'] = extra
+        rules.append(rule)
+    return rules
 
 
 # ── B3 JSON export (feeds the Settlement Forecast) ────────────────────────────
@@ -2869,7 +2965,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     ref_fmt    = ref.strftime('%d/%m/%Y')
     attach_paths, attach_saved = [], []   # Sales Support (SIC + positions)
     opc_paths,    opc_saved    = [], []   # CEM Latam (.OPC)
-    for rule in _CETIP_RULES:
+    for rule in _cetip_rules():
         if not (rule.get('attach_sales_support') or rule.get('attach_cem_latam')):
             continue
         try:
@@ -3021,7 +3117,7 @@ def api_cp_cetip_settlement():
     # expected-but-absent files (expected name derived from the reference date).
     ref_yymmdd = ref.strftime('%y%m%d')
     missing = []
-    for rule in _CETIP_RULES:
+    for rule in _cetip_rules():
         rule_matched = False
         for name in files:
             if not rule['match'](name.lower()):
@@ -15231,6 +15327,38 @@ def _interbook_upgrade(rows):
     return out
 
 
+def _commodities_b3_upgrade(rows):
+    """Migra as linhas gravadas antes da notação de padrão (§164).
+
+    Antes, a coluna B3 CODE de uma linha PREFIX guardava só o prefixo ('XB',
+    'C ') e o mês/ano era concatenado no código-fonte; o FCPO era SPECIAL com o
+    código inteiro embutido em três lugares diferentes. Agora o padrão inteiro
+    mora na coluna.
+
+    Roda na LEITURA, então uma instância que já tem o arquivo em disco passa a
+    ver o formato novo sem script de migração. Idempotente: uma linha que já
+    tenha aspas não é tocada.
+    """
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        typ = str(r.get('TYPE') or '').strip().upper()
+        mkt = str(r.get('MARKET') or '').strip().upper()
+        code = str(r.get('B3 CODE') or '')
+
+        # FCPO deixou de ser SPECIAL: o padrão expressa o código inteiro.
+        if mkt == 'FCPO_BURSA_MYR' and typ == 'SPECIAL':
+            r['TYPE'] = 'PREFIX'
+            r['B3 CODE'] = 'KO"MY"BNMK'
+            continue
+
+        if 'PREFIX' not in typ or '"' in code or not code:
+            continue
+        # Formato antigo: o mês/ano vinha sempre no fim, e o espaço era literal.
+        r['B3 CODE'] = code.replace(' ', '_') + '"MY"'
+    return rows
+
+
 _MAPPING_DEFS = {
     # Aba movida do Index B3 — edita o MESMO BaseMoeda.json que os previews de
     # NDF já leem para o código de moeda (CODIGO DE CADASTRO). Absorveu o antigo
@@ -15288,14 +15416,29 @@ _MAPPING_DEFS = {
               'FIELD B': 'TRADING BOOK', 'VALUE B': 'GN NDF BJPM', 'BOTH WAYS': 'YES'}]
         ),
     },
-    # Market da Athena → Código do Ativo Subjacente B3 (commodities). FIXED =
-    # código fechado; PREFIX = prefixo + mês/ano do contrato; SPECIAL = o código
-    # é calculado no código-fonte (BRT_IPE, FCPO) e a linha existe pelas outras
-    # colunas. HOLIDAY CALENDAR = calendário de feriados do market. FIXED QUOTE
-    # = underlying de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) — absorveu
-    # o antigo mapping fixed-underlyings, que era todo de escopo commodities; os
-    # PTS* não têm market na Athena e entram só com o código. Atenção: espaço no
-    # fim de códigos como 'C ' faz parte do código B3.
+    # Market da Athena → Código do Ativo Subjacente B3 (commodities).
+    #
+    #   FIXED   = código fechado, sai como está.
+    #   PREFIX  = PADRÃO: texto fixo + mês/ano do contrato + texto fixo.
+    #   SPECIAL = o código é calculado no código-fonte porque depende de algo que
+    #             não é de-para. Sobrou só o BRT_IPE (vanilla × asian).
+    #
+    # Notação da coluna B3 CODE quando o tipo é PREFIX (ver `split_b3_pattern` em
+    # otc_boxparse.py, espelhada nos dois JS):
+    #
+    #   "MY"  → onde entram a letra do mês e o último dígito do ano. Vai entre
+    #           ASPAS porque um código pode ter M e Y como texto fixo — sem a
+    #           marca não daria para saber qual é qual.
+    #   _     → um ESPAÇO no código emitido. O milho na B3 é 'C ' COM o espaço, e
+    #           espaço no fim de um campo é invisível na tela e some num trim
+    #           distraído; o sublinhado torna-o visível.
+    #
+    #   XB"MY"     → XBZ7        C_"MY" → 'C Z7'        KO"MY"BNMK → KOZ7BNMK
+    #
+    # HOLIDAY CALENDAR = calendário de feriados do market. FIXED QUOTE =
+    # underlying de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) — absorveu o
+    # antigo mapping fixed-underlyings, que era todo de escopo commodities; os
+    # PTS* não têm market na Athena e entram só com o código.
     'commodities-b3': {
         'label': 'Commodities × B3 Code',
         'columns': [
@@ -15305,6 +15448,7 @@ _MAPPING_DEFS = {
             {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
             {'key': 'FIXED QUOTE', 'label': 'Fixed Quote', 'type': 'select', 'options': ['', 'YES']},
         ],
+        'upgrade': _commodities_b3_upgrade,
         'seed': (
             [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': q} for m, c, h, q in (
                 ('MPB_LME', 'LOPBDY', 'LME', ''), ('MCU_LME', 'LOCADY', 'LME', ''),
@@ -15318,15 +15462,18 @@ _MAPPING_DEFS = {
                 ('COAL_HCC_FOB_AUS_TSI', 'PMTCLAUS', 'PLATTS-ASIA', 'YES'),
             )] +
             [{'TYPE': 'PREFIX', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': ''} for m, c, h in (
-                ('HU_RBOB_NYMEX', 'XB', 'NYMEX'), ('HO_NYMEX', 'HO', 'NYMEX'),
-                ('SB_ICE', 'SB', 'ICEAGS'), ('C_CBOT', 'C ', 'CBY_AGS'),
-                ('S_CBOT', 'S ', 'CBY_AGS'), ('BO_CBOT', 'BO', 'CBY_AGS'),
-                ('CC_ICE', 'CC', 'ICEAGS'), ('W_CBOT', 'W ', 'CBY_AGS'),
-                ('SM_CBOT', 'SM', 'CBY_AGS'), ('CT_ICE', 'CT', 'ICEAGS'),
-                ('KC_ICE', 'KC', 'ICEAGS'), ('WTI_NYMEX', 'WTI', 'NYMEX'),
+                ('HU_RBOB_NYMEX', 'XB"MY"', 'NYMEX'), ('HO_NYMEX', 'HO"MY"', 'NYMEX'),
+                ('SB_ICE', 'SB"MY"', 'ICEAGS'), ('C_CBOT', 'C_"MY"', 'CBY_AGS'),
+                ('S_CBOT', 'S_"MY"', 'CBY_AGS'), ('BO_CBOT', 'BO"MY"', 'CBY_AGS'),
+                ('CC_ICE', 'CC"MY"', 'ICEAGS'), ('W_CBOT', 'W_"MY"', 'CBY_AGS'),
+                ('SM_CBOT', 'SM"MY"', 'CBY_AGS'), ('CT_ICE', 'CT"MY"', 'ICEAGS'),
+                ('KC_ICE', 'KC"MY"', 'ICEAGS'), ('WTI_NYMEX', 'WTI"MY"', 'NYMEX'),
+                # Era SPECIAL com o código no código-fonte — e as duas cópias JS
+                # discordavam ('KOZ7BNMK' no otc-fileupload, '.KOZ7BNMK F' no
+                # deals-processing-table). Agora é um padrão só, aqui. §164
+                ('FCPO_BURSA_MYR', 'KO"MY"BNMK', 'BURSA'),
             )] +
-            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''},
-             {'TYPE': 'SPECIAL', 'MARKET': 'FCPO_BURSA_MYR', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'BURSA', 'FIXED QUOTE': ''}] +
+            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
             [{'TYPE': 'FIXED', 'MARKET': '', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
              ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
         ),
@@ -15440,6 +15587,24 @@ _MAPPING_DEFS = {
             {'key': 'B3 CURVE', 'label': 'B3 Curve / Code'},
         ],
         'seed': [],
+    },
+    # Lista de arquivos que a rotina Save CETIP Files (Control Panel) considera.
+    # TYPE é a CHAVE que liga a linha ao comportamento no código (_CETIP_BEHAVIOUR:
+    # exportação do JSON, atualização do VCP, anexos de e-mail) — renomear o TYPE
+    # desliga esse comportamento e o arquivo passa a ser só copiado/renomeado.
+    # SOURCE e DEST usam YYMMDD para marcar onde a data fica; a data que entra no
+    # nome salvo vem do nome do arquivo de origem, e a data do card escolhe a
+    # pasta do dia. EXTRA DEST = cópia extra numa pasta de rede (o Alteryx tinha
+    # uma segunda saída plana para .OPC e .TER).
+    'cetip-files': {
+        'label': 'CETIP Files (Save Routine)',
+        'columns': [
+            {'key': 'TYPE', 'label': 'File Type'},
+            {'key': 'SOURCE', 'label': 'Source Name (YYMMDD = date)'},
+            {'key': 'DEST', 'label': 'Saved As (YYMMDD = date)'},
+            {'key': 'EXTRA DEST', 'label': 'Extra Copy Folder'},
+        ],
+        'seed': _CETIP_FILES_SEED,
     },
 }
 

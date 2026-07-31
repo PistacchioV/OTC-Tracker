@@ -1532,5 +1532,6 @@
   "tkd-nochange": "Nada Mudou",
   "tkd-nochange-text": "Nenhum campo estava diferente do que já estava salvo.",
   "tkd-mail-ok": "Um aviso de encerramento foi enviado por e-mail ao solicitante.",
-  "tkd-mail-fail": "Salvo, mas o e-mail de encerramento não pôde ser enviado:"
+  "tkd-mail-fail": "Salvo, mas o e-mail de encerramento não pôde ser enviado:",
+  "map-tab-cetip-files": "Arquivos CETIP (Rotina de Save)"
 }

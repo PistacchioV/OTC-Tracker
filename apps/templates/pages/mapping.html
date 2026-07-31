@@ -41,6 +41,25 @@
     #mapping-page thead th { white-space: nowrap; }
     /* espaço significativo no fim de códigos B3 (ex.: 'C ') fica visível */
     #mapping-page td.map-code { white-space: pre; }
+
+    /* Trecho VARIÁVEL de um padrão (o "MY" do B3 Code, o YYMMDD dos arquivos
+       CETIP). Âmbar/laranja: é a única família que não colide com nada já em uso
+       na tabela (azul = ação, verde = ok, vermelho = excluir) e mantém contraste
+       nos dois temas — #a05a00 sobre o branco e #ffb545 sobre o #08080d do dark
+       passam de 4.5:1. O fundo levíssimo delimita o trecho mesmo para quem não
+       distingue a cor, que é o ponto: bater o olho e ver o que muda. */
+    #mapping-page .map-var {
+        color: #a05a00;
+        background: rgba(255, 170, 40, .16);
+        border-radius: 4px;
+        padding: 0 3px;
+        font-weight: 700;
+    }
+    [data-bs-theme=dark] #mapping-page .map-var {
+        color: #ffb545;
+        background: rgba(255, 170, 40, .14);
+    }
+
     #mapping-page .map-filter-row input { height: 30px; font-size: .72rem; font-weight: 400; }
     #mapping-page .mapExportWrapper .dropdown-menu { min-width: 9rem; }
 </style>
@@ -181,7 +200,43 @@
         { key: 'bank-name',      icon: 'ti-building-bank',   lang: 'map-tab-bank-name',     label: 'Bank Name' },
         { key: 'fxo-conv-rate',  icon: 'ti-currency-exchange', lang: 'map-tab-fxo-conv-rate', label: 'FXO Conversion Rate' },
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
+        { key: 'cetip-files',    icon: 'ti-file-download',   lang: 'map-tab-cetip-files',   label: 'CETIP Files (Save Routine)' },
     ];
+
+    // Colunas cujo valor é um PADRÃO, não um literal: o trecho variável ganha
+    // destaque na tabela para dar, de relance, o que é fixo e o que muda.
+    //   commodities-b3 › B3 CODE     "MY"   → mês/ano do contrato
+    //   cetip-files    › SOURCE/DEST YYMMDD → data do arquivo
+    // No B3 CODE só vale para linha PREFIX: em FIXED o código é literal e um
+    // "MY" ali seria texto mesmo.
+    var PATTERN_COLS = {
+        'commodities-b3': { cols: ['B3 CODE'], token: /"\s*MY\s*"/ig, show: 'MY',
+                            onlyWhen: function (row) {
+                                return String(row['TYPE'] || '').toUpperCase().indexOf('PREFIX') !== -1;
+                            } },
+        'cetip-files':    { cols: ['SOURCE', 'DEST'], token: /YYMMDD/ig, show: null },
+    };
+
+    // Célula de uma coluna-padrão: destaca o trecho variável e come as aspas da
+    // marca (elas existem para o parser, não para leitura).
+    //
+    // O escape é feito por PEDAÇO, não no valor inteiro: `esc()` transforma as
+    // aspas em &quot; e aí a regex do token não acharia mais nada.
+    function patternCell(key, colKey, value, row) {
+        var cfg = PATTERN_COLS[key];
+        if (!cfg || cfg.cols.indexOf(colKey) === -1) return null;
+        if (cfg.onlyWhen && !cfg.onlyWhen(row)) return null;
+        var re = new RegExp(cfg.token.source, 'gi');
+        var out = '', last = 0, m, found = false;
+        while ((m = re.exec(value)) !== null) {
+            found = true;
+            out += esc(value.slice(last, m.index)) +
+                   '<span class="map-var">' + esc(cfg.show || m[0]) + '</span>';
+            last = m.index + m[0].length;
+            if (m[0].length === 0) { re.lastIndex++; }   // guarda contra match vazio
+        }
+        return found ? out + esc(value.slice(last)) : null;
+    }
 
     var STATE = {};          // key → {columns, rows, loaded}
     var CUR = TYPES[0].key;  // mapping selecionado
@@ -299,7 +354,9 @@
         st.rows.forEach(function (row, idx) {
             var cells = st.columns.map(function (c) { return String(row[c.key] == null ? '' : row[c.key]); });
             var ok = filters.every(function (f) { return cells[f.col].toUpperCase().indexOf(f.v) !== -1; });
-            if (ok) out.push({ idx: idx, cells: cells });
+            // `row` vai junto: o destaque de padrão depende de outra coluna da
+            // MESMA linha (o B3 CODE só é padrão quando o TYPE é PREFIX).
+            if (ok) out.push({ idx: idx, cells: cells, row: row });
         });
         return out;
     }
@@ -318,7 +375,11 @@
                 '<button class="btn btn-info btn-sm rounded-circle btn-row-edit map-edit" data-idx="' + r.idx + '" title="' + esc(t('map-edit', 'Edit')) + '"><i class="ti ti-pencil"></i></button>' +
                 '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete map-del" data-idx="' + r.idx + '" title="' + esc(t('map-del', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
                 '</div></td>' +
-                r.cells.map(function (v) { return '<td class="map-code">' + esc(v) + '</td>'; }).join('') + '</tr>';
+                r.cells.map(function (v, ci) {
+                    var col = st.columns[ci] || {};
+                    var html = patternCell(CUR, col.key, v, r.row);
+                    return '<td class="map-code">' + (html === null ? esc(v) : html) + '</td>';
+                }).join('') + '</tr>';
         }).join('');
         document.getElementById('mapShown').textContent = rows.length
             ? (start + 1) + '–' + (start + shown.length) + ' / ' + rows.length

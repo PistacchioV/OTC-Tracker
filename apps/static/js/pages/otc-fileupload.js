@@ -152,7 +152,7 @@ var OTCFileUpload = (function () {
     // Market → B3 Underlying Asset Code
     // Fixed codes: returned as-is regardless of contract month.
     // Dynamic codes: prefix + MONTH_CODE(contract[:3]) + contract[-1]
-    // Special: BRT_IPE depends on vanilla/asian; FCPO has a compound format.
+    // Special: só BRT_IPE (depende de vanilla/asian). O FCPO virou padrão no cadastro.
     // (Mirrors Python's market-to-code logic exactly.)
     // -------------------------------------------------------------------------
     var MARKET_FIXED_CODES = {
@@ -171,19 +171,21 @@ var OTCFileUpload = (function () {
         'COAL_HCC_FOB_AUS_TSI': 'PMTCLAUS'
     };
 
+    // Padrões: "MY" = mês/ano do contrato, _ = espaço (ver buildB3Code).
     var MARKET_DYNAMIC_PREFIX = {
-        'HU_RBOB_NYMEX': 'XB',
-        'HO_NYMEX':      'HO',
-        'SB_ICE':        'SB',
-        'C_CBOT':        'C ',   // space is part of the B3 code
-        'S_CBOT':        'S ',
-        'BO_CBOT':       'BO',
-        'CC_ICE':        'CC',
-        'W_CBOT':        'W ',
-        'SM_CBOT':       'SM',
-        'CT_ICE':        'CT',
-        'KC_ICE':        'KC',
-        'WTI_NYMEX':     'WTI'  // not confirmed in B3 data; best guess
+        'HU_RBOB_NYMEX':  'XB"MY"',
+        'HO_NYMEX':       'HO"MY"',
+        'SB_ICE':         'SB"MY"',
+        'C_CBOT':         'C_"MY"',   // o _ é um espaço, e faz parte do código B3
+        'S_CBOT':         'S_"MY"',
+        'BO_CBOT':        'BO"MY"',
+        'CC_ICE':         'CC"MY"',
+        'W_CBOT':         'W_"MY"',
+        'SM_CBOT':        'SM"MY"',
+        'CT_ICE':         'CT"MY"',
+        'KC_ICE':         'KC"MY"',
+        'WTI_NYMEX':      'WTI"MY"', // not confirmed in B3 data; best guess
+        'FCPO_BURSA_MYR': 'KO"MY"BNMK'
     };
 
     // De-para agora cadastrado na página Mapping (Commodities × B3). Os
@@ -227,30 +229,26 @@ var OTCFileUpload = (function () {
         // Fixed code — return immediately
         if (MARKET_FIXED_CODES[mkt]) return MARKET_FIXED_CODES[mkt];
 
-        // BRT_IPE special: vanilla → CO + month + last_char, asian → CO1-2
+        // BRT_IPE special: vanilla → CO + month + last_char, asian → CO1-2.
+        // É o ÚNICO SPECIAL que sobrou: o código depende de vanilla/asian, que é
+        // lógica, não de-para. O FCPO saiu daqui — virou o padrão KO"MY"BNMK no
+        // cadastro Commodities × B3 (§164).
         if (mkt === 'BRT_IPE') {
             if (isVanilla) {
-                var mo = buildDynamicCode('CO', contract);
+                var mo = buildB3Code('CO', contract);
                 return mo || 'CO1-2';
             }
             return 'CO1-2';
         }
 
-        // FCPO special: ".KO" + month + last_char + "BNMK F"
-        if (mkt === 'FCPO_BURSA_MYR') {
-            var parts = contractParts(contract);
-            if (!parts) return '';
-            return 'KO' + parts.monthCode + parts.yearLast + 'BNMK';
-        }
-
-        // Dynamic: prefix + month_code + last_char_of_year
-        var prefix = MARKET_DYNAMIC_PREFIX[mkt];
-        if (!prefix) {
+        // Padrão do cadastro: parte fixa + mês/ano + parte fixa
+        var pattern = MARKET_DYNAMIC_PREFIX[mkt];
+        if (!pattern) {
             // Fallback: use part before first underscore
             var uIdx = mkt.indexOf('_');
-            prefix = uIdx > 0 ? mkt.slice(0, uIdx) : mkt;
+            pattern = uIdx > 0 ? mkt.slice(0, uIdx) : mkt;
         }
-        return buildDynamicCode(prefix, contract);
+        return buildB3Code(pattern, contract);
     }
 
     function contractParts(contract) {
@@ -264,10 +262,37 @@ var OTCFileUpload = (function () {
         return { monthCode: monthCode, yearLast: yearLast };
     }
 
-    function buildDynamicCode(prefix, contract) {
+    // Notação do padrão B3 (coluna "B3 Code / Prefix" do cadastro Commodities × B3).
+    //
+    //   "MY"  → onde entram a letra do mês e o último dígito do ano do contrato.
+    //           Vai entre ASPAS no cadastro justamente porque um código pode
+    //           conter as letras M e Y como texto fixo — sem a marca não daria
+    //           para saber qual é qual.
+    //   _     → um ESPAÇO no código emitido. O código do milho na B3 é 'C ' (com
+    //           o espaço), e um espaço no fim de um campo de texto é invisível na
+    //           tela e some num trim distraído; o sublinhado torna-o visível.
+    //
+    //   KO"MY"BNMK  → KOZ7BNMK      XB"MY" → XBZ7      C_"MY" → 'C Z7'
+    //
+    // Padrão SEM aspas é lido como formato antigo (só o prefixo, mês/ano no
+    // fim), o que mantém uma linha não migrada funcionando como antes.
+    // ⚠️ Espelho de split_b3_pattern/build_b3_code em apps/pages/otc_boxparse.py —
+    //    mexeu aqui, rode scripts/tests/check_b3_pattern.py.
+    var B3_MY_RE = /"\s*MY\s*"/i;
+
+    function splitB3Pattern(pattern) {
+        var s = pattern == null ? '' : String(pattern);
+        var m = B3_MY_RE.exec(s);
+        var head = m ? s.slice(0, m.index) : s;
+        var tail = m ? s.slice(m.index + m[0].length) : '';
+        return { head: head.replace(/_/g, ' '), tail: tail.replace(/_/g, ' ') };
+    }
+
+    function buildB3Code(pattern, contract) {
+        var parts = splitB3Pattern(pattern);
         var p = contractParts(contract);
-        if (!p) return prefix;
-        return prefix + p.monthCode + p.yearLast;
+        if (!p) return parts.head;
+        return parts.head + p.monthCode + p.yearLast + parts.tail;
     }
 
     // -------------------------------------------------------------------------
