@@ -3,11 +3,39 @@
 {% block title %}Support Tickets{% endblock title %}
 
 {% block extra_css %}
+<!-- SweetAlert2 CSS: sem ela o Swal.fire renderiza sem estilo. O formulário de
+     novo ticket vive dentro de um Swal (a página /ticket-create foi removida). -->
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#tk-page { --tk-hairline: #e0e0e0; }
+[data-bs-theme=dark] #tk-page { --tk-hairline: rgba(255,255,255,.09); }
 
+/* Agente atribuído: não há fila de atendentes, o dono é sempre o time. O logo
+   troca com o TEMA, não com o menu — por isso as regras se penduram em
+   [data-bs-theme] (o atributo que o toggle de tema escreve no <html>) e não nas
+   classes .logo-light/.logo-dark do layout, que reagem também a data-menu-color. */
+#tk-page .tk-agent-logo { width: 22px; height: 22px; object-fit: contain; }
+#tk-page .tk-agent-logo--dark  { display: none; }
+[data-bs-theme=dark] #tk-page .tk-agent-logo--dark  { display: inline-block; }
+[data-bs-theme=dark] #tk-page .tk-agent-logo--light { display: none; }
+
+#tk-page .tk-empty { padding: 44px 16px; text-align: center; color: var(--ins-secondary-color); }
+#tk-page .tk-due-empty { color: var(--ins-secondary-color); }
+#tk-page th[data-tk-sort] { cursor: pointer; user-select: none; }
+#tk-page th[data-tk-sort]:hover { color: var(--ins-emphasis-color); }
+
+/* Campos do Swal: o tema escuro do SweetAlert não alcança inputs nativos. */
+.tk-swal-form { text-align: left; }
+.tk-swal-form .form-label { font-size: .78rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ins-secondary-color); margin-bottom: .25rem; }
+.tk-swal-form .form-control:disabled,
+.tk-swal-form .form-control[readonly] { background: var(--ins-tertiary-bg); opacity: 1; }
+.tk-swal-form .tk-locked-hint { font-size: .72rem; color: var(--ins-secondary-color); margin-top: .2rem; }
+</style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid" data-content="">
+<div class="container-fluid" data-content="" id="tk-page">
 
     {% set subtitle='Support' %}
     {% set title='Tickets' %}
@@ -25,26 +53,8 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="148">0</span></h3>
-                            <p class="mb-0 text-muted"><span>Open Tickets</span></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- end col -->
-        <!-- Resolved Tickets Widget -->
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-success-subtle text-success rounded-circle fs-24">
-                                <i class="ti ti-check"></i>
-                            </span>
-                        </div>
-                        <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="1289">0</span></h3>
-                            <p class="mb-0 text-muted"><span>Resolved Tickets</span></p>
+                            <h3 class="mb-2 fw-normal"><span id="tk-count-open">0</span></h3>
+                            <p class="mb-0 text-muted"><span data-lang="tk-open">Open Tickets</span></p>
                         </div>
                     </div>
                 </div>
@@ -61,77 +71,86 @@
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="93">0</span></h3>
-                            <p class="mb-0 text-muted"><span>Pending Tickets</span></p>
+                            <h3 class="mb-2 fw-normal"><span id="tk-count-pending">0</span></h3>
+                            <p class="mb-0 text-muted"><span data-lang="tk-pending">Pending Tickets</span></p>
                         </div>
                     </div>
                 </div>
             </div>
         </div><!-- end col -->
-        <!-- Escalated Tickets Widget -->
+        <!-- Resolved Tickets Widget -->
         <div class="col">
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="avatar fs-60 avatar-img-size flex-shrink-0">
-                            <span class="avatar-title bg-danger-subtle text-danger rounded-circle fs-24">
-                                <i class="ti ti-alert-triangle"></i>
+                            <span class="avatar-title bg-success-subtle text-success rounded-circle fs-24">
+                                <i class="ti ti-check"></i>
                             </span>
                         </div>
                         <div class="text-end">
-                            <h3 class="mb-2 fw-normal"><span data-target="25">0</span></h3>
-                            <p class="mb-0 text-muted"><span>Escalated Tickets</span></p>
+                            <h3 class="mb-2 fw-normal"><span id="tk-count-resolved">0</span></h3>
+                            <p class="mb-0 text-muted"><span data-lang="tk-resolved">Resolved Tickets</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end col -->
+        <!-- Closed Tickets Widget -->
+        <div class="col">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="avatar fs-60 avatar-img-size flex-shrink-0">
+                            <span class="avatar-title bg-secondary-subtle text-secondary rounded-circle fs-24">
+                                <i class="ti ti-archive"></i>
+                            </span>
+                        </div>
+                        <div class="text-end">
+                            <h3 class="mb-2 fw-normal"><span id="tk-count-closed">0</span></h3>
+                            <p class="mb-0 text-muted"><span data-lang="tk-closed">Closed Tickets</span></p>
                         </div>
                     </div>
                 </div>
             </div>
         </div><!-- end col -->
     </div><!-- end row -->
+
     <div class="row">
         <div class="col-12">
-            <div class="card" data-table="" data-table-rows-per-page="8">
+            <div class="card">
                 <div class="card-header border-light justify-content-between">
                     <div class="d-flex gap-2">
                         <div class="app-search">
-                            <input class="form-control" data-table-search="" placeholder="Search tickets..."
-                                type="search" />
+                            <input class="form-control" id="tk-search" type="search"
+                                   placeholder="Search tickets..." data-lang-placeholder="tk-search-ph" />
                             <i class="app-search-icon text-muted" data-lucide="search"></i>
                         </div>
-                        <a class="btn btn-primary" href="/ticket-create">
-                            <i class="ti ti-plus me-1"></i> New Ticket
-                        </a>
-                        <button class="btn btn-danger d-none" data-table-delete-selected="">Delete</button>
+                        <button class="btn btn-primary" id="tk-new-btn" type="button">
+                            <i class="ti ti-plus me-1"></i> <span data-lang="tk-new">New Ticket</span>
+                        </button>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <span class="me-2 fw-semibold">Filter By:</span>
+                        <span class="me-2 fw-semibold" data-lang="tk-filter-by">Filter By:</span>
                         <!-- Status Filter -->
                         <div class="app-search">
-                            <select class="form-select form-control my-1 my-md-0" data-table-filter="status">
-                                <option value="">Status</option>
-                                <option value="Open">Open</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Resolved">Resolved</option>
-                                <option value="Closed">Closed</option>
-                                <option value="Escalated">Escalated</option>
+                            <select class="form-select form-control my-1 my-md-0" id="tk-filter-status">
+                                <option value="" data-lang="tk-status">Status</option>
                             </select>
                             <i class="app-search-icon text-muted" data-lucide="shuffle"></i>
                         </div>
                         <!-- Priority Filter -->
                         <div class="app-search">
-                            <select class="form-select form-control my-1 my-md-0" data-table-range-filter="priority">
-                                <option value="">Priority</option>
-                                <option value="Low">Low</option>
-                                <option value="Medium">Medium</option>
-                                <option value="High">High</option>
-                                <option value="Urgent">Urgent</option>
+                            <select class="form-select form-control my-1 my-md-0" id="tk-filter-priority">
+                                <option value="" data-lang="tk-priority">Priority</option>
                             </select>
                             <i class="app-search-icon text-muted" data-lucide="alert-triangle"></i>
                         </div>
                         <!-- Records Per Page -->
                         <div>
-                            <select class="form-select form-control my-1 my-md-0" data-table-set-rows-per-page="">
+                            <select class="form-select form-control my-1 my-md-0" id="tk-per-page">
                                 <option value="5">5</option>
-                                <option selected="" value="10">10</option>
+                                <option selected value="10">10</option>
                                 <option value="15">15</option>
                                 <option value="20">20</option>
                             </select>
@@ -140,511 +159,32 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-custom table-centered table-select table-hover w-100 mb-0">
+                        <table class="table table-custom table-centered table-hover w-100 mb-0">
                             <thead class="bg-light align-middle bg-opacity-25 thead-sm text-nowrap">
                                 <tr class="text-uppercase fs-xxs">
-                                    <th class="ps-3" style="width: 1%;">
-                                        <input class="form-check-input form-check-input-light fs-14 mt-0"
-                                            data-table-select-all="" type="checkbox" />
-                                    </th>
-                                    <th data-table-sort="">ID</th>
-                                    <th>Requested By</th>
-                                    <th>Ticket Subject</th>
-                                    <th>Assigned Agent</th>
-                                    <th data-column="priority" data-table-sort="">Priority</th>
-                                    <th data-column="status" data-table-sort="">Status</th>
-                                    <th data-table-sort="">Date Created</th>
-                                    <th data-table-sort="">Due Date</th>
-                                    <th class="text-center" style="width: 1%;">Actions</th>
+                                    <th class="ps-3" data-tk-sort="seq" data-lang="tk-col-id">ID</th>
+                                    <th data-tk-sort="requester_name" data-lang="tk-col-requested">Requested By</th>
+                                    <th data-tk-sort="subject" data-lang="tk-col-subject">Ticket Subject</th>
+                                    <th data-lang="tk-col-agent">Assigned Agent</th>
+                                    <th data-tk-sort="priority" data-lang="tk-col-priority">Priority</th>
+                                    <th data-tk-sort="status" data-lang="tk-col-status">Status</th>
+                                    <th data-tk-sort="created_at" data-lang="tk-col-created">Date Created</th>
+                                    <th data-tk-sort="due_date" data-lang="tk-col-due">Due Date</th>
+                                    <th class="text-center" style="width: 1%;" data-lang="tk-col-actions">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="text-nowrap">
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2451</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Emily Clark" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-3.jpg" />
-                                            <span>Emily Clark</span>
-                                        </div>
-                                    </td>
-                                    <td>Unable to login with 2FA</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg" />
-                                            <a class="link-reset" href="#!">Daniel Ray</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-danger">High</span></td>
-                                    <td><span class="badge bg-warning-subtle text-warning badge-label">Pending</span>
-                                    </td>
-                                    <td>04 Aug, 2025 <small class="text-muted">11:30 AM</small></td>
-                                    <td>08 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2517</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Lucas Graham" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-9.jpg" />
-                                            <span>Lucas Graham</span>
-                                        </div>
-                                    </td>
-                                    <td>Cannot upload profile image</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-1.jpg" />
-                                            <a class="link-reset" href="#!">Sarah Lee</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-warning">Medium</span></td>
-                                    <td><span class="badge bg-info-subtle text-info badge-label">In
-                                            Progress</span></td>
-                                    <td>05 Aug, 2025 <small class="text-muted">2:05 PM</small></td>
-                                    <td>10 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 1 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2518</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Nina Patel" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-4.jpg" />
-                                            <span>Nina Patel</span>
-                                        </div>
-                                    </td>
-                                    <td>Incorrect invoice total shown</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-8.jpg" />
-                                            <a class="link-reset" href="#!">Alex Morgan</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-danger">High</span></td>
-                                    <td><span class="badge bg-warning-subtle text-warning badge-label">Pending</span>
-                                    </td>
-                                    <td>05 Aug, 2025 <small class="text-muted">10:42 AM</small></td>
-                                    <td>07 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 2 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2519</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Michael Foster" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-6.jpg" />
-                                            <span>Michael Foster</span>
-                                        </div>
-                                    </td>
-                                    <td>Website not loading on Safari</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg" />
-                                            <a class="link-reset" href="#!">Jessica Hughes</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-success">Low</span></td>
-                                    <td><span class="badge bg-success-subtle text-success badge-label">Resolved</span>
-                                    </td>
-                                    <td>04 Aug, 2025 <small class="text-muted">6:20 PM</small></td>
-                                    <td>06 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 3 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2520</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Isabella Reed" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-7.jpg" />
-                                            <span>Isabella Reed</span>
-                                        </div>
-                                    </td>
-                                    <td>Cannot change account email</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg" />
-                                            <a class="link-reset" href="#!">Daniel Ray</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-warning">Medium</span></td>
-                                    <td><span class="badge bg-info-subtle text-info badge-label">In
-                                            Progress</span></td>
-                                    <td>03 Aug, 2025 <small class="text-muted">9:50 AM</small></td>
-                                    <td>08 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 4 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2521</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Olivia White" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-1.jpg" />
-                                            <span>Olivia White</span>
-                                        </div>
-                                    </td>
-                                    <td>Can't access dashboard after update</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-9.jpg" />
-                                            <a class="link-reset" href="#!">James Carter</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-danger">High</span></td>
-                                    <td><span class="badge bg-danger-subtle text-danger badge-label">Escalated</span>
-                                    </td>
-                                    <td>05 Aug, 2025 <small class="text-muted">7:45 AM</small></td>
-                                    <td>06 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 5 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2522</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Emma King" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-10.jpg" />
-                                            <span>Emma King</span>
-                                        </div>
-                                    </td>
-                                    <td>Feature request: export as PDF</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-3.jpg" />
-                                            <a class="link-reset" href="#!">Harper Wells</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-primary">Low</span></td>
-                                    <td><span class="badge bg-secondary-subtle text-secondary badge-label">Closed</span>
-                                    </td>
-                                    <td>01 Aug, 2025 <small class="text-muted">4:10 PM</small></td>
-                                    <td>05 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 6 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2523</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Ava Sullivan" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-1.jpg" />
-                                            <span>Ava Sullivan</span>
-                                        </div>
-                                    </td>
-                                    <td>App freezes when uploading files</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-4.jpg" />
-                                            <a class="link-reset" href="#!">Liam Brooks</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-danger">High</span></td>
-                                    <td><span class="badge bg-warning-subtle text-warning badge-label">Pending</span>
-                                    </td>
-                                    <td>05 Aug, 2025 <small class="text-muted">1:20 PM</small></td>
-                                    <td>09 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 7 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2524</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Sophie Bennett" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-3.jpg" />
-                                            <span>Sophie Bennett</span>
-                                        </div>
-                                    </td>
-                                    <td>Missing transaction history</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-6.jpg" />
-                                            <a class="link-reset" href="#!">Lucas Shaw</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-warning">Medium</span></td>
-                                    <td><span class="badge bg-info-subtle text-info badge-label">In
-                                            Progress</span></td>
-                                    <td>04 Aug, 2025 <small class="text-muted">4:30 PM</small></td>
-                                    <td>08 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 8 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2525</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Noah Allen" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-4.jpg" />
-                                            <span>Noah Allen</span>
-                                        </div>
-                                    </td>
-                                    <td>Feedback form submission error</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg" />
-                                            <a class="link-reset" href="#!">Sophia Reed</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-success">Low</span></td>
-                                    <td><span class="badge bg-success-subtle text-success badge-label">Resolved</span>
-                                    </td>
-                                    <td>03 Aug, 2025 <small class="text-muted">12:00 PM</small></td>
-                                    <td>06 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 9 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2526</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Ethan James" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg" />
-                                            <span>Ethan James</span>
-                                        </div>
-                                    </td>
-                                    <td>Can't generate report summary</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-7.jpg" />
-                                            <a class="link-reset" href="#!">Chloe Adams</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-danger">High</span></td>
-                                    <td><span class="badge bg-danger-subtle text-danger badge-label">Escalated</span>
-                                    </td>
-                                    <td>05 Aug, 2025 <small class="text-muted">8:50 AM</small></td>
-                                    <td>07 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- Row 10 -->
-                                <tr>
-                                    <td class="ps-3">
-                                        <input
-                                            class="form-check-input form-check-input-light fs-14 product-item-check mt-0"
-                                            type="checkbox" />
-                                    </td>
-                                    <td><a class="fw-semibold link-reset" href="/ticket-details">#SUP-2527</a>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Grace Carter" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-8.jpg" />
-                                            <span>Grace Carter</span>
-                                        </div>
-                                    </td>
-                                    <td>Feature request: Dark mode toggle</td>
-                                    <td>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <img alt="Agent" class="avatar-xs rounded-circle"
-                                                src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg" />
-                                            <a class="link-reset" href="#!">Daniel Ray</a>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge text-bg-primary">Low</span></td>
-                                    <td><span class="badge bg-secondary-subtle text-secondary badge-label">Closed</span>
-                                    </td>
-                                    <td>02 Aug, 2025 <small class="text-muted">5:25 PM</small></td>
-                                    <td>06 Aug, 2025</td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-details"><i
-                                                    class="ti ti-eye fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" href="/ticket-create"><i
-                                                    class="ti ti-edit fs-lg"></i></a>
-                                            <a class="btn btn-default btn-icon btn-sm rounded" data-table-delete-row=""
-                                                href="#"><i class="ti ti-trash fs-lg"></i></a>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
+                            <tbody class="text-nowrap" id="tk-tbody"></tbody>
                         </table>
+                    </div>
+                    <div class="tk-empty d-none" id="tk-empty">
+                        <i class="ti ti-ticket-off fs-24 d-block mb-2"></i>
+                        <span data-lang="tk-none">No tickets yet. Use “New Ticket” to open one.</span>
                     </div>
                 </div>
                 <div class="card-footer border-0">
                     <div class="d-flex justify-content-between align-items-center">
-                        <div data-table-pagination-info="Support Tickets"></div>
-                        <div data-table-pagination=""></div>
+                        <div id="tk-pag-info"></div>
+                        <div id="tk-pagination"></div>
                     </div>
                 </div>
             </div>
@@ -654,5 +194,382 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
-<script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+
+    // Minimal i18n (falls back to the data-lang English text already in the DOM).
+    var _T = {};
+    fetch('/static/data/translations/' +
+          (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0, 2) + '.json')
+        .then(function (r) { return r.json(); })
+        .then(function (d) { _T = d || {}; render(); })
+        .catch(function () {});
+    function t(k, fb) { return _T[k] || fb; }
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    var LOGO_ROOT = '{{ config.ASSETS_ROOT }}/images/';
+    var STATE = { tickets: [], counts: {}, isMaster: false, me: {},
+                  statuses: [], priorities: [], agent: 'OTC Tracker Team' };
+    var UI = { q: '', status: '', priority: '', page: 1, perPage: 10,
+               sort: 'seq', dir: 'desc' };
+
+    var STATUS_CLASS = {
+        'New':         'bg-primary-subtle text-primary',
+        'In Progress': 'bg-info-subtle text-info',
+        'Pending':     'bg-warning-subtle text-warning',
+        'Resolved':    'bg-success-subtle text-success',
+        'Closed':      'bg-secondary-subtle text-secondary'
+    };
+    var PRIORITY_CLASS = {
+        'Low': 'text-bg-success', 'Medium': 'text-bg-warning',
+        'High': 'text-bg-danger', 'Urgent': 'text-bg-dark'
+    };
+    // Ordena por severidade, não alfabeticamente: por nome, "Urgent" cairia
+    // depois de "Low" e a coluna ficaria inútil como triagem.
+    var PRIORITY_RANK = { 'Low': 1, 'Medium': 2, 'High': 3, 'Urgent': 4 };
+    var STATUS_RANK = { 'New': 1, 'In Progress': 2, 'Pending': 3, 'Resolved': 4, 'Closed': 5 };
+
+    function badgeStatus(s) {
+        return '<span class="badge badge-label ' + (STATUS_CLASS[s] || 'bg-secondary-subtle text-secondary') +
+               '">' + esc(s) + '</span>';
+    }
+    function badgePriority(p) {
+        return '<span class="badge ' + (PRIORITY_CLASS[p] || 'text-bg-secondary') + '">' + esc(p) + '</span>';
+    }
+
+    function fmtDateTime(s) {
+        // '2026-07-31 14:22:10' → '31 Jul, 2026 · 14:22'. Sem Date.parse: em
+        // Safari a string com espaço vira Invalid Date.
+        var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s || ''));
+        if (!m) { return esc(s || ''); }
+        var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return m[3] + ' ' + MON[parseInt(m[2], 10) - 1] + ', ' + m[1] +
+               ' <small class="text-muted">' + m[4] + ':' + m[5] + '</small>';
+    }
+    function fmtDate(s) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+        if (!m) { return ''; }
+        var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return m[3] + ' ' + MON[parseInt(m[2], 10) - 1] + ', ' + m[1];
+    }
+
+    // O logo do agente: claro no tema escuro, preto no tema claro. Os dois <img>
+    // vão no HTML e o CSS mostra um por vez — assim o toggle de tema troca o logo
+    // na hora, sem re-render da tabela.
+    function agentCell() {
+        return '<div class="d-flex gap-2 align-items-center">' +
+               '<img alt="OTC Tracker" class="tk-agent-logo tk-agent-logo--dark" src="' + LOGO_ROOT + 'logo-sm.png" />' +
+               '<img alt="OTC Tracker" class="tk-agent-logo tk-agent-logo--light" src="' + LOGO_ROOT + 'logo-sm-black.png" />' +
+               '<span>' + esc(STATE.agent) + '</span></div>';
+    }
+
+    function sortValue(tk, key) {
+        if (key === 'priority') { return PRIORITY_RANK[tk.priority] || 0; }
+        if (key === 'status') { return STATUS_RANK[tk.status] || 0; }
+        if (key === 'seq') { return tk.seq || 0; }
+        return String(tk[key] || '').toLowerCase();
+    }
+
+    function filtered() {
+        var q = UI.q.trim().toLowerCase();
+        var out = STATE.tickets.filter(function (tk) {
+            if (UI.status && tk.status !== UI.status) { return false; }
+            if (UI.priority && tk.priority !== UI.priority) { return false; }
+            if (!q) { return true; }
+            return [tk.id, tk.requester_name, tk.requester_sid, tk.subject,
+                    tk.status, tk.priority, (tk.tags || []).join(' ')]
+                .join(' ').toLowerCase().indexOf(q) !== -1;
+        });
+        out.sort(function (a, b) {
+            var va = sortValue(a, UI.sort), vb = sortValue(b, UI.sort);
+            if (va < vb) { return UI.dir === 'asc' ? -1 : 1; }
+            if (va > vb) { return UI.dir === 'asc' ? 1 : -1; }
+            return 0;
+        });
+        return out;
+    }
+
+    function rowHtml(tk) {
+        var href = '/ticket-details?id=' + encodeURIComponent(tk.id);
+        var del = tk.can_delete
+            ? '<a class="btn btn-default btn-icon btn-sm rounded tk-del" href="#" data-id="' + esc(tk.id) +
+              '" title="' + esc(t('tk-delete', 'Delete')) + '"><i class="ti ti-trash fs-lg"></i></a>'
+            : '';
+        return '<tr>' +
+            '<td class="ps-3"><a class="fw-semibold link-reset" href="' + href + '">#' + esc(tk.id) + '</a></td>' +
+            '<td><span>' + esc(tk.requester_name || tk.requester_sid) + '</span>' +
+                (tk.requester_sid ? ' <small class="text-muted">' + esc(tk.requester_sid) + '</small>' : '') + '</td>' +
+            '<td>' + esc(tk.subject) + '</td>' +
+            '<td>' + agentCell() + '</td>' +
+            '<td>' + badgePriority(tk.priority) + '</td>' +
+            '<td>' + badgeStatus(tk.status) + '</td>' +
+            '<td>' + fmtDateTime(tk.created_at) + '</td>' +
+            // Due Date nasce vazio de propósito: só o master preenche.
+            '<td>' + (tk.due_date ? esc(fmtDate(tk.due_date))
+                                  : '<span class="tk-due-empty">&mdash;</span>') + '</td>' +
+            '<td><div class="d-flex align-items-center justify-content-center gap-1">' +
+                '<a class="btn btn-default btn-icon btn-sm rounded" href="' + href + '" title="' +
+                    esc(t('tk-view', 'View')) + '"><i class="ti ti-eye fs-lg"></i></a>' + del +
+            '</div></td></tr>';
+    }
+
+    function render() {
+        var rows = filtered();
+        var total = rows.length;
+        var pages = Math.ceil(total / UI.perPage) || 1;
+        if (UI.page > pages) { UI.page = pages; }
+        var start = (UI.page - 1) * UI.perPage;
+        var slice = rows.slice(start, start + UI.perPage);
+
+        document.getElementById('tk-tbody').innerHTML = slice.map(rowHtml).join('');
+        document.getElementById('tk-empty').classList.toggle('d-none', total > 0);
+
+        var c = STATE.counts || {};
+        document.getElementById('tk-count-open').textContent = c.open || 0;
+        document.getElementById('tk-count-pending').textContent = c.pending || 0;
+        document.getElementById('tk-count-resolved').textContent = c.resolved || 0;
+        document.getElementById('tk-count-closed').textContent = c.closed || 0;
+
+        document.getElementById('tk-pag-info').textContent = total
+            ? t('tk-showing', 'Showing') + ' ' + (start + 1) + '–' + Math.min(start + UI.perPage, total) +
+              ' ' + t('tk-of', 'of') + ' ' + total
+            : '';
+
+        var pag = '';
+        if (pages > 1) {
+            pag = '<ul class="pagination pagination-sm mb-0">';
+            pag += '<li class="page-item' + (UI.page === 1 ? ' disabled' : '') +
+                   '"><a class="page-link tk-page" href="#" data-p="' + (UI.page - 1) + '">&laquo;</a></li>';
+            for (var i = 1; i <= pages; i++) {
+                pag += '<li class="page-item' + (i === UI.page ? ' active' : '') +
+                       '"><a class="page-link tk-page" href="#" data-p="' + i + '">' + i + '</a></li>';
+            }
+            pag += '<li class="page-item' + (UI.page === pages ? ' disabled' : '') +
+                   '"><a class="page-link tk-page" href="#" data-p="' + (UI.page + 1) + '">&raquo;</a></li></ul>';
+        }
+        document.getElementById('tk-pagination').innerHTML = pag;
+
+        if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
+    }
+
+    function fillSelect(el, values, allLabel) {
+        el.innerHTML = '<option value="">' + esc(allLabel) + '</option>' +
+            values.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+    }
+
+    function load() {
+        return fetch('/api/tickets', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) { throw new Error((d && d.error) || 'load failed'); }
+                STATE.tickets = d.tickets || [];
+                STATE.counts = d.counts || {};
+                STATE.isMaster = !!d.is_master;
+                STATE.me = d.me || {};
+                STATE.statuses = d.statuses || [];
+                STATE.priorities = d.priorities || [];
+                STATE.agent = d.agent_name || STATE.agent;
+                fillSelect(document.getElementById('tk-filter-status'), STATE.statuses, t('tk-status', 'Status'));
+                fillSelect(document.getElementById('tk-filter-priority'), STATE.priorities, t('tk-priority', 'Priority'));
+                document.getElementById('tk-filter-status').value = UI.status;
+                document.getElementById('tk-filter-priority').value = UI.priority;
+                render();
+            })
+            .catch(function (e) {
+                if (window.Swal) {
+                    Swal.fire({ title: t('swal-err-title', 'Error'), text: String(e.message || e),
+                                icon: 'error', confirmButtonText: t('swal-close', 'Close') });
+                }
+            });
+    }
+
+    // ── New Ticket (Swal) ────────────────────────────────────────────────
+    // Requester Name e Requester SID são readonly e vêm da sessão: o servidor
+    // ignora qualquer valor que o cliente mande nesses campos, e Status nasce
+    // sempre 'New' — por isso nem aparecem como escolha aqui.
+    function openNewTicket() {
+        var prio = STATE.priorities.length ? STATE.priorities : ['Low', 'Medium', 'High', 'Urgent'];
+        var html =
+            '<div class="tk-swal-form">' +
+              '<div class="row g-2 mb-2">' +
+                '<div class="col-md-6">' +
+                  '<label class="form-label" for="tk-f-name">' + esc(t('tk-f-requester', 'Requester Name')) + '</label>' +
+                  '<input class="form-control" id="tk-f-name" type="text" readonly value="' + esc(STATE.me.name || '') + '" />' +
+                '</div>' +
+                '<div class="col-md-6">' +
+                  '<label class="form-label" for="tk-f-sid">' + esc(t('tk-f-sid', 'Requester SID')) + '</label>' +
+                  '<input class="form-control" id="tk-f-sid" type="text" readonly value="' + esc(STATE.me.sid || '') + '" />' +
+                '</div>' +
+              '</div>' +
+              '<div class="mb-2">' +
+                '<label class="form-label" for="tk-f-subject">' + esc(t('tk-f-subject', 'Ticket Subject')) + '</label>' +
+                '<input class="form-control" id="tk-f-subject" type="text" placeholder="' +
+                    esc(t('tk-f-subject-ph', 'Brief summary of the issue')) + '" />' +
+              '</div>' +
+              '<div class="row g-2 mb-2">' +
+                '<div class="col-md-6">' +
+                  '<label class="form-label" for="tk-f-priority">' + esc(t('tk-f-priority', 'Priority')) + '</label>' +
+                  '<select class="form-select" id="tk-f-priority">' +
+                    prio.map(function (p) {
+                        return '<option value="' + esc(p) + '"' + (p === 'Medium' ? ' selected' : '') + '>' + esc(p) + '</option>';
+                    }).join('') +
+                  '</select>' +
+                '</div>' +
+                '<div class="col-md-6">' +
+                  '<label class="form-label" for="tk-f-status">' + esc(t('tk-f-status', 'Status')) + '</label>' +
+                  '<input class="form-control" id="tk-f-status" type="text" readonly value="New" />' +
+                  '<div class="tk-locked-hint">' + esc(t('tk-f-status-hint', 'Every new ticket starts as New.')) + '</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="mb-2">' +
+                '<label class="form-label" for="tk-f-tags">' + esc(t('tk-f-tags', 'Tags (comma-separated)')) + '</label>' +
+                '<input class="form-control" id="tk-f-tags" type="text" placeholder="' +
+                    esc(t('tk-f-tags-ph', 'e.g. login, error, report')) + '" />' +
+              '</div>' +
+              '<div>' +
+                '<label class="form-label" for="tk-f-desc">' + esc(t('tk-f-desc', 'Description')) + '</label>' +
+                '<textarea class="form-control" id="tk-f-desc" rows="5" placeholder="' +
+                    esc(t('tk-f-desc-ph', 'Describe the issue in detail...')) + '"></textarea>' +
+              '</div>' +
+            '</div>';
+
+        Swal.fire({
+            title: t('tk-new-title', 'Create New Support Ticket'),
+            html: html,
+            width: 640,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: t('tk-submit', 'Submit Ticket'),
+            cancelButtonText: t('swal-cancel', 'Cancel'),
+            customClass: { confirmButton: 'btn btn-primary', cancelButton: 'btn btn-outline-secondary' },
+            buttonsStyling: false,
+            didOpen: function () {
+                var s = document.getElementById('tk-f-subject');
+                if (s) { s.focus(); }
+            },
+            preConfirm: function () {
+                var subject = (document.getElementById('tk-f-subject').value || '').trim();
+                var desc = (document.getElementById('tk-f-desc').value || '').trim();
+                if (!subject) {
+                    Swal.showValidationMessage(t('tk-err-subject', 'Subject is required'));
+                    return false;
+                }
+                if (!desc) {
+                    Swal.showValidationMessage(t('tk-err-desc', 'Description is required'));
+                    return false;
+                }
+                var body = {
+                    subject: subject,
+                    description: desc,
+                    priority: document.getElementById('tk-f-priority').value,
+                    tags: (document.getElementById('tk-f-tags').value || '')
+                            .split(',').map(function (x) { return x.trim(); }).filter(Boolean)
+                };
+                return fetch('/api/tickets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d || !d.success) { throw new Error((d && d.error) || 'Could not create the ticket'); }
+                        return d.ticket;
+                    })
+                    .catch(function (e) {
+                        Swal.showValidationMessage(String(e.message || e));
+                        return false;
+                    });
+            }
+        }).then(function (res) {
+            if (!res || !res.isConfirmed || !res.value) { return; }
+            load().then(function () {
+                Swal.fire({
+                    title: t('tk-created-title', 'Ticket Created'),
+                    html: t('tk-created-text', 'Your ticket was registered as') +
+                          ' <strong>#' + esc(res.value.id) + '</strong>.',
+                    icon: 'success',
+                    confirmButtonText: t('swal-close', 'Close'),
+                    customClass: { confirmButton: 'btn btn-primary' },
+                    buttonsStyling: false
+                });
+            });
+        });
+    }
+
+    function deleteTicket(id) {
+        Swal.fire({
+            title: t('tk-del-title', 'Delete Ticket'),
+            html: t('tk-del-text', 'This will permanently remove ticket') + ' <strong>#' + esc(id) + '</strong>.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: t('tk-delete', 'Delete'),
+            cancelButtonText: t('swal-cancel', 'Cancel'),
+            customClass: { confirmButton: 'btn btn-danger', cancelButton: 'btn btn-outline-secondary' },
+            buttonsStyling: false
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            fetch('/api/tickets/' + encodeURIComponent(id), { method: 'DELETE' })
+                .then(function (res) { return res.json(); })
+                .then(function (d) {
+                    if (!d || !d.success) { throw new Error((d && d.error) || 'delete failed'); }
+                    return load();
+                })
+                .catch(function (e) {
+                    Swal.fire({ title: t('swal-err-title', 'Error'), text: String(e.message || e),
+                                icon: 'error', confirmButtonText: t('swal-close', 'Close') });
+                });
+        });
+    }
+
+    // ── Wiring ──────────────────────────────────────────────────────────
+    document.getElementById('tk-new-btn').addEventListener('click', openNewTicket);
+
+    document.getElementById('tk-search').addEventListener('input', function () {
+        UI.q = this.value; UI.page = 1; render();
+    });
+    document.getElementById('tk-filter-status').addEventListener('change', function () {
+        UI.status = this.value; UI.page = 1; render();
+    });
+    document.getElementById('tk-filter-priority').addEventListener('change', function () {
+        UI.priority = this.value; UI.page = 1; render();
+    });
+    document.getElementById('tk-per-page').addEventListener('change', function () {
+        UI.perPage = parseInt(this.value, 10) || 10; UI.page = 1; render();
+    });
+
+    document.querySelectorAll('#tk-page th[data-tk-sort]').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var key = th.getAttribute('data-tk-sort');
+            if (UI.sort === key) { UI.dir = UI.dir === 'asc' ? 'desc' : 'asc'; }
+            else { UI.sort = key; UI.dir = 'asc'; }
+            render();
+        });
+    });
+
+    // Delegação: as linhas são reescritas a cada render, então listener por
+    // botão morreria no primeiro re-render.
+    document.getElementById('tk-tbody').addEventListener('click', function (ev) {
+        var del = ev.target.closest('.tk-del');
+        if (del) { ev.preventDefault(); deleteTicket(del.getAttribute('data-id')); }
+    });
+    document.getElementById('tk-pagination').addEventListener('click', function (ev) {
+        var a = ev.target.closest('.tk-page');
+        if (!a) { return; }
+        ev.preventDefault();
+        var p = parseInt(a.getAttribute('data-p'), 10);
+        if (p >= 1) { UI.page = p; render(); }
+    });
+
+    load();
+});
+</script>
 {% endblock extra_javascript %}

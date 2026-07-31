@@ -22,7 +22,8 @@ var PAGE_URL = {
     'Reconciliation': '/reconciliation-payrec', 'Pending Confirmation': '/pending-confirmation',
     'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
-    'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf'
+    'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
+    'Support': '/tickets-list'
 };
 
 self.addEventListener('push', function (event) {

@@ -34,6 +34,9 @@ from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
 from apps.pages import otc_boxparse
+# Armazenamento dos tickets do Support Center (camada de dados pura — sessão,
+# notificação e e-mail ficam aqui, nas rotas).
+from apps.pages import otc_tickets
 
 # ==============================================================================
 # LOGGING CONFIG
@@ -193,6 +196,7 @@ _NOTIF_PAGE_URL = {
     'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
     'Reconciliation': '/reconciliation-payrec',
     'Pending Confirmation': '/pending-confirmation',
+    'Support': '/tickets-list',
 }
 
 
@@ -706,6 +710,7 @@ def init_db():
                 page        VARCHAR NOT NULL DEFAULT '',
                 detail      VARCHAR DEFAULT '',
                 target_role VARCHAR DEFAULT '',
+                target_sid  VARCHAR DEFAULT '',
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -817,11 +822,26 @@ def _migrate_schema():
                     page        VARCHAR NOT NULL DEFAULT '',
                     detail      VARCHAR DEFAULT '',
                     target_role VARCHAR DEFAULT '',
+                    target_sid  VARCHAR DEFAULT '',
                     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             conn.commit()
             log.info("[migrate] notifications table created")
+
+        # notifications.target_sid — endereçamento a UM usuário, que target_role
+        # não cobre: as atualizações de ticket vão só para o requester, e o papel
+        # dele (BO/MO/FO/…) é compartilhado com o resto do time.
+        try:
+            ncols = [c[0] for c in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='notifications'"
+            ).fetchall()]
+            if ncols and 'target_sid' not in ncols:
+                log.warning("[migrate] Adding missing column notifications.target_sid")
+                conn.execute("ALTER TABLE notifications ADD COLUMN target_sid VARCHAR DEFAULT ''")
+                conn.commit()
+        except Exception:
+            log.debug("[migrate] notifications.target_sid check skipped: %s", traceback.format_exc())
 
         # Ensure push_subscriptions table exists (Web Push)
         try:
@@ -842,13 +862,19 @@ def _migrate_schema():
         conn.close()
 
 
-def _create_notification(actor_sid, actor_name, action, page, detail='', target_role=''):
+def _create_notification(actor_sid, actor_name, action, page, detail='', target_role='',
+                         target_sid=''):
+    """Publica uma notificação no sino. `target_role` restringe a um papel,
+    `target_sid` a UM usuário (os dois vazios = todo mundo). Ver o filtro em
+    `api_get_notifications`."""
     try:
         conn = get_db_connection()
         try:
             conn.execute(
-                "INSERT INTO notifications (actor_sid, actor_name, action, page, detail, target_role) VALUES (?, ?, ?, ?, ?, ?)",
-                [actor_sid or '', actor_name or '', action, page, detail or '', target_role or '']
+                "INSERT INTO notifications (actor_sid, actor_name, action, page, detail, target_role, target_sid) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [actor_sid or '', actor_name or '', action, page, detail or '',
+                 target_role or '', (target_sid or '').strip().upper()]
             )
             conn.commit()
         finally:
@@ -858,6 +884,7 @@ def _create_notification(actor_sid, actor_name, action, page, detail='', target_
             import threading
             threading.Thread(target=_push_notify,
                              args=(actor_sid or '', target_role or ''),
+                             kwargs={'target_sid': (target_sid or '').strip().upper()},
                              daemon=True).start()
         except Exception:
             pass
@@ -865,18 +892,29 @@ def _create_notification(actor_sid, actor_name, action, page, detail='', target_
         log.error("[_create_notification] FAILED:\n%s", traceback.format_exc())
 
 
-def _push_notify(actor_sid, target_role):
+def _push_notify(actor_sid, target_role, target_sid=''):
     """Send a payloadless Web Push to every subscriber matching the
     notification's target_role (empty = everyone), except the actor. The
     Service Worker then fetches /api/notifications and shows it. Runs in a
-    background thread; HTTP sends happen with no DB lock held."""
+    background thread; HTTP sends happen with no DB lock held.
+
+    `target_sid` mirrors the feed filter: when set, only that user's devices
+    are woken. Sem isso o celular do time inteiro apitaria por uma notificação
+    que só o requester consegue abrir."""
     try:
         from apps.pages import webpush
         if not webpush.is_enabled():
             return
         conn = get_db_connection()
         try:
-            if target_role:
+            if target_sid:
+                # O actor é excluído nos outros ramos porque não precisa ser
+                # avisado do que ele mesmo fez; aqui não: o destinatário é
+                # explícito e pode até ser o próprio actor.
+                rows = conn.execute(
+                    "SELECT endpoint FROM push_subscriptions WHERE sid = ?",
+                    [target_sid]).fetchall()
+            elif target_role:
                 rows = conn.execute(
                     "SELECT endpoint FROM push_subscriptions WHERE role = ? AND sid <> ?",
                     [target_role, actor_sid]).fetchall()
@@ -23577,6 +23615,300 @@ def api_generic_nd_mapping_b3(product):
 
 
 # ==============================================================================
+# SUPPORT CENTER — TICKETS
+# ==============================================================================
+#
+# Quem pode o quê (o storage não valida nada disso — é tudo decidido aqui,
+# onde existe sessão):
+#
+#   ver        → o master vê todos; qualquer outro usuário vê só os próprios.
+#   criar      → qualquer usuário autenticado. Requester, SID e status ('New')
+#                vêm da SESSÃO, nunca do corpo do request.
+#   status     → só o master. O requester é notificado a cada mudança.
+#   due date   → só o master (regra do usuário: o prazo é do time, não de quem abre).
+#   subject/description/priority/tags → o requester enquanto o ticket estiver
+#                aberto, e o master sempre.
+#   apagar     → o requester ou o master.
+#   comentar   → o requester ou o master.
+#
+# Notificações: ticket novo → só o master (target_role='MASTER', que só o master
+# tem). Mudança de status → só o requester (target_sid).
+# ==============================================================================
+
+_TICKETS_PAGE = 'Support'
+_TICKET_OPS_CC = 'brazil.otc.ops@jpmorgan.com'
+
+
+def _tk_session_user():
+    return ((session.get('user_sid') or '').strip().upper(),
+            (session.get('user_name') or '').strip(),
+            (session.get('user_email') or '').strip())
+
+
+def _tk_is_requester(ticket, sid):
+    return (ticket.get('requester_sid') or '').upper() == (sid or '').upper()
+
+
+def _tk_can_view(ticket, sid):
+    return _session_is_master() or _tk_is_requester(ticket, sid)
+
+
+def _tk_public(ticket, sid):
+    """Ticket + os flags de permissão que a tela usa para habilitar controles.
+    Calculados no servidor de propósito: a UI esconde o que o usuário não pode
+    fazer, mas quem recusa de fato é o endpoint."""
+    is_master = _session_is_master()
+    mine = _tk_is_requester(ticket, sid)
+    out = dict(ticket)
+    out['agent_name'] = otc_tickets.AGENT_NAME
+    out['can_edit_status'] = is_master
+    out['can_edit_due'] = is_master
+    out['can_edit_fields'] = is_master or (mine and ticket.get('status') not in otc_tickets.FINAL_STATUSES)
+    out['can_delete'] = is_master or mine
+    out['can_comment'] = is_master or mine
+    out['is_requester'] = mine
+    return out
+
+
+def _tk_visible_tickets(sid):
+    tickets = otc_tickets.list_all()
+    if not _session_is_master():
+        tickets = [t for t in tickets if _tk_is_requester(t, sid)]
+    # Mais recente primeiro: o seq é monotônico, então ordena por ele e não pela
+    # data (que é string e empata quando dois tickets nascem no mesmo segundo).
+    tickets.sort(key=lambda t: t.get('seq') or 0, reverse=True)
+    return tickets
+
+
+def _tk_notify_master(actor_sid, actor_name, ticket):
+    """Ticket novo → sino do master apenas. 'MASTER' não é papel de banco: é o
+    valor que `_set_session` grava em user_role para os SIDs de `_MASTER_SIDS`,
+    então nenhum outro usuário casa com esse target_role."""
+    _create_notification(
+        actor_sid, actor_name, 'New Ticket', _TICKETS_PAGE,
+        '#{} — {}'.format(ticket.get('id') or '', ticket.get('subject') or ''),
+        target_role='MASTER')
+
+
+def _tk_notify_requester(actor_sid, actor_name, ticket, detail):
+    """Atualização → sino do requester apenas. Se quem mexeu foi o próprio
+    requester, não há o que avisar."""
+    rsid = (ticket.get('requester_sid') or '').upper()
+    if not rsid or rsid == (actor_sid or '').upper():
+        return
+    _create_notification(actor_sid, actor_name, 'Ticket Updated', _TICKETS_PAGE,
+                         detail, target_sid=rsid)
+
+
+def _tk_send_closed_email(ticket):
+    """E-mail de encerramento: requester no To, a caixa de OTC Ops em cópia.
+    Best-effort — devolve True ou a mensagem de erro. O ticket JÁ está gravado
+    quando isto roda, então uma falha de SMTP (fora da rede JPM, por exemplo)
+    não pode desfazer o encerramento; ela só é registrada no log."""
+    from email.mime.image import MIMEImage
+    to_addr = (ticket.get('requester_email') or '').strip()
+    if not to_addr:
+        log.warning('[tickets] %s closed without requester e-mail — no notice sent',
+                    ticket.get('id'))
+        return 'requester has no e-mail on file'
+    try:
+        html = render_template(
+            'pages/email-template-ticket-closed.html',
+            ticket=ticket,
+            agent_name=otc_tickets.AGENT_NAME,
+            current_year=datetime.now().year)
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'OTC Tracker — Ticket #{} {}'.format(
+            ticket.get('id') or '', (ticket.get('status') or 'Closed').lower())
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = to_addr
+        msg['Cc'] = _TICKET_OPS_CC
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this notification in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+        _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [to_addr, _TICKET_OPS_CC], msg.as_string())
+        log.info('[tickets] closing notice sent for %s to=%s cc=%s',
+                 ticket.get('id'), to_addr, _TICKET_OPS_CC)
+        return True
+    except Exception as e:
+        log.error('[tickets] closing notice FAILED for %s:\n%s',
+                  ticket.get('id'), traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+@blueprint.route('/api/tickets', methods=['GET'])
+def api_tickets_list():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, _name, _mail = _tk_session_user()
+    tickets = _tk_visible_tickets(sid)
+    return jsonify({
+        'success': True,
+        'tickets': [_tk_public(t, sid) for t in tickets],
+        'counts': otc_tickets.counts(tickets),
+        'is_master': _session_is_master(),
+        'agent_name': otc_tickets.AGENT_NAME,
+        'statuses': otc_tickets.STATUSES,
+        'priorities': otc_tickets.PRIORITIES,
+        'me': {'sid': sid, 'name': session.get('user_name') or '',
+               'email': session.get('user_email') or ''},
+    })
+
+
+@blueprint.route('/api/tickets', methods=['POST'])
+def api_tickets_create():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, name, mail = _tk_session_user()
+    if not sid:
+        return jsonify({'success': False, 'error': 'Session has no SID'}), 400
+    data = request.get_json(silent=True) or {}
+    subject = (data.get('subject') or '').strip()
+    if not subject:
+        return jsonify({'success': False, 'error': 'Subject is required'}), 400
+    description = (data.get('description') or '').strip()
+    if not description:
+        return jsonify({'success': False, 'error': 'Description is required'}), 400
+    tags = data.get('tags')
+    if isinstance(tags, str):
+        tags = [x.strip() for x in tags.split(',')]
+    tags = [x.strip() for x in (tags or []) if str(x).strip()]
+
+    # Requester, SID e status NÃO vêm do corpo: o requester é sempre quem está
+    # logado (regra do usuário) e todo ticket nasce 'New'. Aceitar esses campos
+    # do cliente deixaria qualquer um abrir ticket em nome de outra pessoa.
+    ticket = otc_tickets.create(
+        requester_sid=sid, requester_name=name, requester_email=mail,
+        subject=subject, priority=(data.get('priority') or '').strip(),
+        tags=tags, description=description)
+    log.info('[tickets] %s created by %s (%s)', ticket['id'], name, sid)
+    _tk_notify_master(sid, name, ticket)
+    return jsonify({'success': True, 'ticket': _tk_public(ticket, sid)})
+
+
+@blueprint.route('/api/tickets/<ticket_id>', methods=['GET'])
+def api_tickets_get(ticket_id):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, _name, _mail = _tk_session_user()
+    ticket = otc_tickets.get(ticket_id)
+    if not ticket:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    if not _tk_can_view(ticket, sid):
+        return jsonify({'success': False, 'error': 'Not allowed'}), 403
+    return jsonify({'success': True, 'ticket': _tk_public(ticket, sid),
+                    'statuses': otc_tickets.STATUSES,
+                    'priorities': otc_tickets.PRIORITIES,
+                    'agent_name': otc_tickets.AGENT_NAME})
+
+
+@blueprint.route('/api/tickets/<ticket_id>', methods=['POST'])
+def api_tickets_update(ticket_id):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, name, _mail = _tk_session_user()
+    ticket = otc_tickets.get(ticket_id)
+    if not ticket:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    if not _tk_can_view(ticket, sid):
+        return jsonify({'success': False, 'error': 'Not allowed'}), 403
+
+    is_master = _session_is_master()
+    perms = _tk_public(ticket, sid)
+    data = request.get_json(silent=True) or {}
+    changes = {}
+    for field in ('status', 'due_date'):
+        if field in data:
+            if not is_master:
+                return jsonify({'success': False,
+                                'error': 'Only the master can change the {}'.format(
+                                    'status' if field == 'status' else 'due date')}), 403
+            changes[field] = data[field]
+    for field in ('subject', 'description', 'priority', 'tags'):
+        if field in data:
+            if not perms['can_edit_fields']:
+                return jsonify({'success': False, 'error': 'Not allowed to edit this ticket'}), 403
+            changes[field] = data[field]
+    if not changes:
+        return jsonify({'success': False, 'error': 'Nothing to update'}), 400
+
+    was_final = (ticket.get('status') or '') in otc_tickets.FINAL_STATUSES
+    updated, events = otc_tickets.update(ticket_id, changes, sid, name)
+    if updated is None:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    if not events:
+        return jsonify({'success': True, 'ticket': _tk_public(updated, sid), 'changed': 0})
+
+    log.info('[tickets] %s updated by %s (%s): %s', updated['id'], name, sid,
+             ', '.join(e['field'] for e in events))
+    _tk_notify_requester(sid, name, updated, '#{} — {}'.format(
+        updated['id'], '; '.join(e['event']['title'] for e in events)))
+
+    # E-mail só na TRANSIÇÃO para o status terminal. Sem esse par
+    # was_final/is_final, salvar de novo um ticket já encerrado (mudando a
+    # prioridade, por exemplo) reenviaria o aviso ao requester.
+    mail_result = None
+    is_final = (updated.get('status') or '') in otc_tickets.FINAL_STATUSES
+    if is_final and not was_final:
+        mail_result = _tk_send_closed_email(updated)
+    return jsonify({'success': True, 'ticket': _tk_public(updated, sid),
+                    'changed': len(events),
+                    'email_sent': mail_result is True,
+                    'email_error': None if mail_result in (True, None) else mail_result})
+
+
+@blueprint.route('/api/tickets/<ticket_id>/comment', methods=['POST'])
+def api_tickets_comment(ticket_id):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, name, _mail = _tk_session_user()
+    ticket = otc_tickets.get(ticket_id)
+    if not ticket:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    if not _tk_public(ticket, sid)['can_comment']:
+        return jsonify({'success': False, 'error': 'Not allowed'}), 403
+    text = ((request.get_json(silent=True) or {}).get('text') or '').strip()
+    if not text:
+        return jsonify({'success': False, 'error': 'Comment is empty'}), 400
+    updated = otc_tickets.add_comment(ticket_id, text, sid, name)
+    if updated is None:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    _tk_notify_requester(sid, name, updated,
+                         '#{} — new comment'.format(updated['id']))
+    return jsonify({'success': True, 'ticket': _tk_public(updated, sid)})
+
+
+@blueprint.route('/api/tickets/<ticket_id>', methods=['DELETE'])
+def api_tickets_delete(ticket_id):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    sid, name, _mail = _tk_session_user()
+    ticket = otc_tickets.get(ticket_id)
+    if not ticket:
+        return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+    if not (_session_is_master() or _tk_is_requester(ticket, sid)):
+        return jsonify({'success': False,
+                        'error': 'Only the requester or the master can delete a ticket'}), 403
+    otc_tickets.delete(ticket_id)
+    log.info('[tickets] %s deleted by %s (%s)', ticket.get('id'), name, sid)
+    # O master apaga o ticket de outra pessoa: o requester precisa saber, senão
+    # o item some da lista dele sem explicação.
+    _tk_notify_requester(sid, name, ticket,
+                         '#{} — ticket deleted'.format(ticket.get('id') or ''))
+    return jsonify({'success': True})
+
+
+# ==============================================================================
 # NOTIFICATIONS
 # ==============================================================================
 
@@ -23585,16 +23917,22 @@ def api_get_notifications():
     if not session.get('authenticated'):
         return jsonify({"success": False}), 401
     user_role = session.get('user_role', '')
+    user_sid = (session.get('user_sid') or '').strip().upper()
     conn = get_db_connection()
     try:
+        # target_sid endereça UM usuário e é mais forte que target_role: quando
+        # está preenchido, só aquele SID vê a notificação — nem o master, nem
+        # quem compartilha o papel. É o que mantém as atualizações de ticket
+        # restritas ao requester.
         rows = conn.execute("""
             SELECT id, actor_sid, actor_name, action, page, detail, target_role, created_at
             FROM notifications
             WHERE DATE(created_at) = CURRENT_DATE
+              AND (COALESCE(target_sid, '') = '' OR COALESCE(target_sid, '') = ?)
               AND (target_role = '' OR target_role = ?)
             ORDER BY created_at DESC
             LIMIT 50
-        """, [user_role]).fetchall()
+        """, [user_sid, user_role]).fetchall()
         notifs = []
         for r in rows:
             notifs.append({

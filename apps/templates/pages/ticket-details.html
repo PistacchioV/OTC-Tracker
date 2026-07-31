@@ -3,252 +3,425 @@
 {% block title %}Tickets Details{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+#tkd-page .tkd-label { text-transform: uppercase; font-size: .72rem; font-weight: 700;
+    letter-spacing: .05em; color: var(--ins-secondary-color); margin-bottom: .35rem; }
 
+/* Logo do agente: claro no tema escuro, preto no tema claro. Pendurado em
+   [data-bs-theme] (o atributo do toggle de tema), não nas classes
+   .logo-light/.logo-dark do layout — aquelas reagem também a data-menu-color. */
+#tkd-page .tkd-agent-logo { width: 26px; height: 26px; object-fit: contain; }
+#tkd-page .tkd-agent-logo--dark  { display: none; }
+[data-bs-theme=dark] #tkd-page .tkd-agent-logo--dark  { display: inline-block; }
+[data-bs-theme=dark] #tkd-page .tkd-agent-logo--light { display: none; }
+
+#tkd-page .tkd-desc { white-space: pre-wrap; }
+#tkd-page .tkd-empty { padding: 56px 16px; text-align: center; color: var(--ins-secondary-color); }
+#tkd-page .timeline-content .tkd-evdetail { white-space: pre-wrap; }
+</style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div class="container-fluid" data-content="">
+<div class="container-fluid" data-content="" id="tkd-page">
 
     {% set subtitle='Support' %}
     {% set title='Tickets Details' %}
     {% include 'partials/page-title.html' %}
 
     <div class="row">
-        <div class="col-xxl-8">
-            <div class="card">
+        <div class="col-12">
+            <div class="card d-none" id="tkd-card">
                 <div class="card-header justify-content-between">
-                    <h5 class="mb-0">#SUP-2523 - <span class="text-muted">App freezes when uploading
-                                        files</span></h5>
-                    <span class="badge badge-label text-bg-warning">Pending</span>
+                    <h5 class="mb-0">
+                        <span id="tkd-id"></span> - <span class="text-muted" id="tkd-subject"></span>
+                    </h5>
+                    <span class="badge badge-label" id="tkd-status-badge"></span>
                 </div>
                 <div class="card-body">
                     <!-- Ticket Info -->
                     <div class="row mb-4">
                         <div class="col-md-4">
-                            <h6 class="text-uppercase text-muted">Requested By</h6>
+                            <h6 class="tkd-label" data-lang="tkd-requested">Requested By</h6>
                             <div class="d-flex align-items-center gap-2">
-                                <img alt="Ava Sullivan" class="rounded-circle avatar-sm"
-                                     src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg"/>
-                                <span>Ava Sullivan</span>
+                                <span id="tkd-requester"></span>
+                                <small class="text-muted" id="tkd-requester-sid"></small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <h6 class="text-uppercase text-muted">Assigned Agent</h6>
+                            <h6 class="tkd-label" data-lang="tkd-agent">Assigned Agent</h6>
                             <div class="d-flex align-items-center gap-2">
-                                <img alt="Liam Brooks" class="rounded-circle avatar-sm"
-                                     src="{{ config.ASSETS_ROOT }}/images/users/user-4.jpg"/>
-                                <span>Liam Brooks</span>
+                                <img alt="OTC Tracker" class="tkd-agent-logo tkd-agent-logo--dark"
+                                     src="{{ config.ASSETS_ROOT }}/images/logo-sm.png" />
+                                <img alt="OTC Tracker" class="tkd-agent-logo tkd-agent-logo--light"
+                                     src="{{ config.ASSETS_ROOT }}/images/logo-sm-black.png" />
+                                <span id="tkd-agent">OTC Tracker Team</span>
                             </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="tkd-label" data-lang="tkd-status">Status</h6>
+                            <!-- Só o master vê o select; para os demais fica o texto. -->
+                            <select class="form-select form-select-sm d-none" id="tkd-status-sel"
+                                    style="max-width:200px;"></select>
+                            <p class="mb-0 d-none" id="tkd-status-txt"></p>
                         </div>
                     </div>
                     <!-- Priority & Dates -->
                     <div class="row mb-4">
                         <div class="col-md-4">
-                            <h6 class="text-uppercase text-muted">Priority</h6>
-                            <span class="badge bg-danger">High</span>
+                            <h6 class="tkd-label" data-lang="tkd-priority">Priority</h6>
+                            <select class="form-select form-select-sm d-none" id="tkd-priority-sel"
+                                    style="max-width:200px;"></select>
+                            <p class="mb-0 d-none" id="tkd-priority-txt"></p>
                         </div>
                         <div class="col-md-4">
-                            <h6 class="text-uppercase text-muted">Created On</h6>
-                            <p class="mb-0">05 Aug, 2025 <small class="text-muted">1:20 PM</small></p>
+                            <h6 class="tkd-label" data-lang="tkd-created">Created On</h6>
+                            <p class="mb-0" id="tkd-created"></p>
                         </div>
                         <div class="col-md-4">
-                            <h6 class="text-uppercase text-muted">Due Date</h6>
-                            <p class="mb-0">09 Aug, 2025</p>
+                            <h6 class="tkd-label" data-lang="tkd-due">Due Date</h6>
+                            <!-- Em branco até o master preencher (regra do usuário). -->
+                            <input class="form-control form-control-sm d-none" id="tkd-due-inp"
+                                   type="date" style="max-width:200px;" />
+                            <p class="mb-0 d-none" id="tkd-due-txt"></p>
                         </div>
                     </div>
                     <!-- Description -->
                     <div class="mb-4">
-                        <h6 class="text-uppercase text-muted">Description</h6>
-                        <p class="mb-0">
-                            When trying to upload files through the project form, the application becomes
-                            unresponsive after selecting a file larger than 5MB.
-                            This issue occurs consistently across browsers. Please investigate and apply a
-                            fix.
-                        </p>
+                        <h6 class="tkd-label" data-lang="tkd-description">Description</h6>
+                        <p class="mb-0 tkd-desc" id="tkd-desc-txt"></p>
+                        <textarea class="form-control d-none" id="tkd-desc-inp" rows="5"></textarea>
                     </div>
                     <!-- Tags -->
                     <div class="mb-4">
-                        <h6 class="text-uppercase text-muted">Tags</h6>
-                        <span class="badge text-bg-light me-1">Upload</span>
-                        <span class="badge text-bg-light me-1">Performance</span>
-                        <span class="badge text-bg-light">UI Bug</span>
+                        <h6 class="tkd-label" data-lang="tkd-tags">Tags</h6>
+                        <div id="tkd-tags-txt"></div>
+                        <input class="form-control d-none" id="tkd-tags-inp" type="text"
+                               placeholder="e.g. login, error, report" data-lang-placeholder="tk-f-tags-ph" />
                     </div>
-                    <!-- Comments / Activity -->
-                    <div class="mb-4">
-                        <h6 class="text-uppercase text-muted mb-4">Activity:</h6>
-                        <div class="timeline">
-                            <!-- Event 1 -->
-                            <div class="timeline-item d-flex align-items-stretch">
-                                <div class="timeline-time pe-3 text-muted">Just Now</div>
-                                <div class="timeline-dot bg-success"></div>
-                                <div class="timeline-content ps-3 pb-4">
-                                    <h6 class="mb-1 fs-sm">Ticket Resolved</h6>
-                                    <p class="mb-1 text-muted">Agent closed the ticket after applying a
-                                        patch for the file upload freeze issue.</p>
-                                    <span class="text-primary fw-semibold">By Liam Brooks</span>
-                                </div>
-                            </div>
-                            <!-- Event 2 -->
-                            <div class="timeline-item d-flex align-items-stretch">
-                                <div class="timeline-time pe-3 text-muted">Today, 10:40 AM</div>
-                                <div class="timeline-dot bg-info"></div>
-                                <div class="timeline-content ps-3 pb-4">
-                                    <h6 class="mb-1 fs-sm">Status Changed to "In Progress"</h6>
-                                    <p class="mb-1 text-muted">Ticket was picked up by the assigned agent
-                                        for investigation.</p>
-                                    <span class="text-primary fw-semibold">By Liam Brooks</span>
-                                </div>
-                            </div>
-                            <!-- Event 3 -->
-                            <div class="timeline-item d-flex align-items-stretch">
-                                <div class="timeline-time pe-3 text-muted">Yesterday, 4:15 PM</div>
-                                <div class="timeline-dot bg-warning"></div>
-                                <div class="timeline-content ps-3 pb-4">
-                                    <h6 class="mb-1 fs-sm">User Comment Added</h6>
-                                    <p class="mb-1 text-muted">User emphasized urgency due to impact on
-                                        production file uploads.</p>
-                                    <span class="text-primary fw-semibold">By Ava Sullivan</span>
-                                </div>
-                            </div>
-                            <!-- Event 4 -->
-                            <div class="timeline-item d-flex align-items-stretch">
-                                <div class="timeline-time pe-3 text-muted">02 Aug, 2025 - 3:00 PM</div>
-                                <div class="timeline-dot bg-danger"></div>
-                                <div class="timeline-content ps-3 pb-4">
-                                    <h6 class="mb-1 fs-sm">Ticket Created</h6>
-                                    <p class="mb-1 text-muted">Ticket submitted regarding the app freezing
-                                        on file upload.</p>
-                                    <span class="text-primary fw-semibold">By Ava Sullivan</span>
-                                </div>
-                            </div>
+                    <!-- Save (only shown when the session can change something) -->
+                    <div class="mb-4 d-none" id="tkd-save-wrap">
+                        <button class="btn btn-primary btn-sm" id="tkd-save" type="button">
+                            <i class="ti ti-device-floppy me-1"></i><span data-lang="tkd-save">Save Changes</span>
+                        </button>
+                    </div>
+                    <!-- Comment -->
+                    <div class="mb-4 d-none" id="tkd-comment-wrap">
+                        <h6 class="tkd-label" data-lang="tkd-add-note">Add a Note</h6>
+                        <div class="d-flex gap-2">
+                            <textarea class="form-control" id="tkd-comment" rows="2"
+                                      placeholder="Write an update for this ticket..."
+                                      data-lang-placeholder="tkd-note-ph"></textarea>
+                            <button class="btn btn-outline-primary" id="tkd-comment-btn" type="button">
+                                <i class="ti ti-send-2 fs-xl"></i>
+                            </button>
                         </div>
+                    </div>
+                    <!-- Activity -->
+                    <div class="mb-4">
+                        <h6 class="tkd-label mb-3" data-lang="tkd-activity">Activity</h6>
+                        <div class="timeline" id="tkd-timeline"></div>
                     </div>
                     <!-- Actions -->
                     <div class="d-flex gap-2 justify-content-center">
-                        <a class="btn btn-primary" href="/ticket-create"><i
-                                class="ti ti-pencil me-1"></i>Edit Ticket</a>
-                        <a class="btn btn-danger" href="#"><i class="ti ti-x me-1"></i>Close Ticket</a>
-                        <a class="btn btn-outline-secondary"
-                           href="/tickets-list"><i
-                                class="ti ti-arrow-left me-1"></i>Back to List</a>
+                        <button class="btn btn-danger d-none" id="tkd-delete" type="button">
+                            <i class="ti ti-trash me-1"></i><span data-lang="tk-delete">Delete</span>
+                        </button>
+                        <a class="btn btn-outline-secondary" href="/tickets-list">
+                            <i class="ti ti-arrow-left me-1"></i><span data-lang="tkd-back">Back to List</span>
+                        </a>
                     </div>
                 </div>
             </div>
-        </div> <!-- end col-->
-        <div class="col-xl-4">
-            <div class="card">
-                <div class="card-header">
-                    <h4 class="card-title">Chat</h4>
-                </div> <!-- end card-header-->
-                <div class="card-body py-0" data-simplebar="" id="chat-container" style="height: 380px;">
-                    <!-- Message 1 -->
-                    <div class="d-flex align-items-start gap-2 my-3 chat-item">
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg"/>
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-warning-subtle rounded">
-                                Hey! Are you available for a quick call? 📞
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 08:55 am</div>
-                        </div>
-                    </div>
-                    <!-- Message 2 -->
-                    <div class="d-flex align-items-start gap-2 my-3 text-end chat-item justify-content-end">
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-info-subtle rounded">
-                                Sure, give me 5 minutes. Just wrapping something up.
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 08:57 am</div>
-                        </div>
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg"/>
-                    </div>
-                    <!-- Message 3 -->
-                    <div class="d-flex align-items-start gap-2 my-3 chat-item">
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg"/>
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-warning-subtle rounded">
-                                Perfect. Let me know when you're ready 👍
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 08:58 am</div>
-                        </div>
-                    </div>
-                    <!-- Message 4 -->
-                    <div class="d-flex align-items-start gap-2 my-3 text-end chat-item justify-content-end">
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-info-subtle rounded">
-                                Ready now. Calling you!
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 09:00 am</div>
-                        </div>
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg"/>
-                    </div>
-                    <!-- Message 5 -->
-                    <div class="d-flex align-items-start gap-2 my-3 chat-item">
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg"/>
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-warning-subtle rounded">
-                                Thanks for your time earlier!
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 09:45 am</div>
-                        </div>
-                    </div>
-                    <!-- Message 6 -->
-                    <div class="d-flex align-items-start gap-2 my-3 text-end chat-item justify-content-end">
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-info-subtle rounded">
-                                Of course! It was a productive discussion.
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 09:46 am</div>
-                        </div>
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-2.jpg"/>
-                    </div>
-                    <!-- Message 7 -->
-                    <div class="d-flex align-items-start gap-2 my-3 chat-item">
-                        <img alt="User" class="avatar-md rounded-circle"
-                             src="{{ config.ASSETS_ROOT }}/images/users/user-5.jpg"/>
-                        <div>
-                            <div class="chat-message py-2 px-3 bg-warning-subtle rounded">
-                                I’ll send over the updated files by noon.
-                            </div>
-                            <div class="text-muted fs-xs mt-1"><i class="ti ti-clock"></i> 09:50 am</div>
-                        </div>
-                    </div>
-                </div> <!-- end card-body -->
-                <div class="card-footer bg-body-secondary border-top border-dashed border-bottom-0">
-                    <div class="d-flex gap-2">
-                        <div class="app-search flex-grow-1">
-                            <input class="form-control bg-light-subtle border-light" placeholder="Enter message..."
-                                   type="text"/>
-                            <i class="app-search-icon text-muted" data-lucide="message-square"></i>
-                        </div>
-                        <a class="btn btn-primary btn-icon" href="#!"><i class="ti ti-send-2 fs-xl"></i></a>
-                    </div>
+
+            <!-- Sem ?id= na URL (ou ticket inacessível) a página não tem o que
+                 mostrar — devolve o usuário para a lista em vez de ficar vazia. -->
+            <div class="card d-none" id="tkd-empty-card">
+                <div class="card-body tkd-empty">
+                    <i class="ti ti-ticket-off fs-24 d-block mb-2"></i>
+                    <p class="mb-3" id="tkd-empty-msg" data-lang="tkd-pick">
+                        Pick a ticket from the list to see its details.
+                    </p>
+                    <a class="btn btn-primary btn-sm" href="/tickets-list">
+                        <i class="ti ti-list me-1"></i><span data-lang="tkd-golist">Go to Tickets List</span>
+                    </a>
                 </div>
-            </div> <!-- end card-->
-        </div> <!-- end col-->
+            </div>
+        </div>
     </div>
-    <!-- end row-->
 </div>
 {% endblock page_content %}
 
 {% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const container = document.querySelector('#chat-container');
-        if (container && container.SimpleBar) {
-            container.SimpleBar.getScrollElement().scrollTop = container.SimpleBar.getScrollElement().scrollHeight;
-        } else {
-            // Fallback if not using custom SimpleBar instance
-            const scrollElement = container.querySelector('.simplebar-content-wrapper');
-            if (scrollElement) {
-                scrollElement.scrollTop = scrollElement.scrollHeight;
-            }
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+
+    var _T = {};
+    fetch('/static/data/translations/' +
+          (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').slice(0, 2) + '.json')
+        .then(function (r) { return r.json(); })
+        .then(function (d) { _T = d || {}; })
+        .catch(function () {});
+    function t(k, fb) { return _T[k] || fb; }
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+    function $(id) { return document.getElementById(id); }
+    function show(el, on) { el.classList.toggle('d-none', !on); }
+
+    var STATUS_CLASS = {
+        'New':         'bg-primary-subtle text-primary',
+        'In Progress': 'bg-info-subtle text-info',
+        'Pending':     'bg-warning-subtle text-warning',
+        'Resolved':    'bg-success-subtle text-success',
+        'Closed':      'bg-secondary-subtle text-secondary'
+    };
+    var PRIORITY_CLASS = {
+        'Low': 'text-bg-success', 'Medium': 'text-bg-warning',
+        'High': 'text-bg-danger', 'Urgent': 'text-bg-dark'
+    };
+    var EVENT_DOT = {
+        'created': 'bg-primary', 'status': 'bg-info', 'due_date': 'bg-warning',
+        'comment': 'bg-secondary'
+    };
+
+    var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function fmtDateTime(s) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s || ''));
+        if (!m) { return esc(s || ''); }
+        return m[3] + ' ' + MON[parseInt(m[2], 10) - 1] + ', ' + m[1] +
+               ' <small class="text-muted">' + m[4] + ':' + m[5] + '</small>';
+    }
+    function fmtDate(s) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+        return m ? (m[3] + ' ' + MON[parseInt(m[2], 10) - 1] + ', ' + m[1]) : '';
+    }
+
+    var TICKET = null;
+    var META = { statuses: [], priorities: [] };
+    var ID = new URLSearchParams(window.location.search).get('id') || '';
+
+    function err(e) {
+        Swal.fire({ title: t('swal-err-title', 'Error'), text: String((e && e.message) || e),
+                    icon: 'error', confirmButtonText: t('swal-close', 'Close') });
+    }
+
+    function renderTimeline(events) {
+        if (!events || !events.length) {
+            $('tkd-timeline').innerHTML =
+                '<p class="text-muted mb-0">' + esc(t('tkd-no-activity', 'No activity yet.')) + '</p>';
+            return;
         }
+        $('tkd-timeline').innerHTML = events.map(function (ev) {
+            return '<div class="timeline-item d-flex align-items-stretch">' +
+                '<div class="timeline-time pe-3 text-muted">' + fmtDateTime(ev.at) + '</div>' +
+                '<div class="timeline-dot ' + (EVENT_DOT[ev.kind] || 'bg-success') + '"></div>' +
+                '<div class="timeline-content ps-3 pb-4">' +
+                    '<h6 class="mb-1 fs-sm">' + esc(ev.title) + '</h6>' +
+                    (ev.detail ? '<p class="mb-1 text-muted tkd-evdetail">' + esc(ev.detail) + '</p>' : '') +
+                    (ev.by_name ? '<span class="text-primary fw-semibold">' +
+                        esc(t('tkd-by', 'By') + ' ' + ev.by_name) + '</span>' : '') +
+                '</div></div>';
+        }).join('');
+    }
+
+    function fillSelect(el, values, current) {
+        el.innerHTML = values.map(function (v) {
+            return '<option value="' + esc(v) + '"' + (v === current ? ' selected' : '') + '>' + esc(v) + '</option>';
+        }).join('');
+    }
+
+    function paint() {
+        var tk = TICKET;
+        show($('tkd-card'), true);
+        show($('tkd-empty-card'), false);
+
+        $('tkd-id').textContent = '#' + tk.id;
+        $('tkd-subject').textContent = tk.subject || '';
+        var badge = $('tkd-status-badge');
+        badge.className = 'badge badge-label ' + (STATUS_CLASS[tk.status] || 'bg-secondary-subtle text-secondary');
+        badge.textContent = tk.status || '';
+
+        $('tkd-requester').textContent = tk.requester_name || tk.requester_sid || '';
+        $('tkd-requester-sid').textContent = tk.requester_sid || '';
+        $('tkd-agent').textContent = tk.agent_name || 'OTC Tracker Team';
+        $('tkd-created').innerHTML = fmtDateTime(tk.created_at);
+
+        // Status: select para o master, texto para todo mundo.
+        if (tk.can_edit_status) {
+            fillSelect($('tkd-status-sel'), META.statuses, tk.status);
+            show($('tkd-status-sel'), true); show($('tkd-status-txt'), false);
+        } else {
+            $('tkd-status-txt').textContent = tk.status || '';
+            show($('tkd-status-sel'), false); show($('tkd-status-txt'), true);
+        }
+
+        if (tk.can_edit_fields) {
+            fillSelect($('tkd-priority-sel'), META.priorities, tk.priority);
+            show($('tkd-priority-sel'), true); show($('tkd-priority-txt'), false);
+            $('tkd-desc-inp').value = tk.description || '';
+            show($('tkd-desc-inp'), true); show($('tkd-desc-txt'), false);
+            $('tkd-tags-inp').value = (tk.tags || []).join(', ');
+            show($('tkd-tags-inp'), true); show($('tkd-tags-txt'), false);
+        } else {
+            $('tkd-priority-txt').innerHTML =
+                '<span class="badge ' + (PRIORITY_CLASS[tk.priority] || 'text-bg-secondary') + '">' +
+                esc(tk.priority) + '</span>';
+            show($('tkd-priority-sel'), false); show($('tkd-priority-txt'), true);
+            $('tkd-desc-txt').textContent = tk.description || '';
+            show($('tkd-desc-inp'), false); show($('tkd-desc-txt'), true);
+            $('tkd-tags-txt').innerHTML = (tk.tags || []).length
+                ? tk.tags.map(function (x) { return '<span class="badge text-bg-light me-1">' + esc(x) + '</span>'; }).join('')
+                : '<span class="text-muted">&mdash;</span>';
+            show($('tkd-tags-inp'), false); show($('tkd-tags-txt'), true);
+        }
+
+        if (tk.can_edit_due) {
+            $('tkd-due-inp').value = tk.due_date || '';
+            show($('tkd-due-inp'), true); show($('tkd-due-txt'), false);
+        } else {
+            $('tkd-due-txt').innerHTML = tk.due_date
+                ? esc(fmtDate(tk.due_date))
+                : '<span class="text-muted">&mdash;</span>';
+            show($('tkd-due-inp'), false); show($('tkd-due-txt'), true);
+        }
+
+        show($('tkd-save-wrap'), tk.can_edit_status || tk.can_edit_due || tk.can_edit_fields);
+        show($('tkd-comment-wrap'), !!tk.can_comment);
+        show($('tkd-delete'), !!tk.can_delete);
+
+        renderTimeline(tk.activity || []);
+    }
+
+    function emptyState(msg) {
+        show($('tkd-card'), false);
+        show($('tkd-empty-card'), true);
+        if (msg) { $('tkd-empty-msg').textContent = msg; }
+    }
+
+    function load() {
+        if (!ID) { emptyState(''); return Promise.resolve(); }
+        return fetch('/api/tickets/' + encodeURIComponent(ID))
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (!res.d || !res.d.success) {
+                    emptyState((res.d && res.d.error) || t('tkd-notfound', 'Ticket not found.'));
+                    return;
+                }
+                TICKET = res.d.ticket;
+                META.statuses = res.d.statuses || [];
+                META.priorities = res.d.priorities || [];
+                paint();
+            })
+            .catch(function (e) { emptyState(String(e.message || e)); });
+    }
+
+    // ── Save ─────────────────────────────────────────────────────────────
+    // Só vai no corpo o que a sessão PODE mudar. Mandar um campo proibido faria
+    // o endpoint devolver 403 e a gravação inteira falhar, mesmo a parte legítima.
+    $('tkd-save').addEventListener('click', function () {
+        if (!TICKET) { return; }
+        var body = {};
+        if (TICKET.can_edit_status) { body.status = $('tkd-status-sel').value; }
+        if (TICKET.can_edit_due) { body.due_date = $('tkd-due-inp').value || ''; }
+        if (TICKET.can_edit_fields) {
+            body.priority = $('tkd-priority-sel').value;
+            body.description = $('tkd-desc-inp').value;
+            body.tags = ($('tkd-tags-inp').value || '')
+                .split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+        }
+        var btn = this;
+        btn.disabled = true;
+        fetch('/api/tickets/' + encodeURIComponent(TICKET.id), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) { throw new Error((d && d.error) || 'save failed'); }
+                TICKET = d.ticket;
+                paint();
+                if (!d.changed) {
+                    Swal.fire({ title: t('tkd-nochange', 'Nothing Changed'),
+                                text: t('tkd-nochange-text', 'No field was different from what was already saved.'),
+                                icon: 'info', confirmButtonText: t('swal-close', 'Close') });
+                    return;
+                }
+                var extra = '';
+                if (d.email_sent) {
+                    extra = '<br><small>' +
+                        esc(t('tkd-mail-ok', 'A closing notice was e-mailed to the requester.')) + '</small>';
+                } else if (d.email_error) {
+                    // O ticket JÁ foi salvo; só o e-mail falhou. Dizer isso é o
+                    // que evita alguém acreditar que o requester foi avisado.
+                    extra = '<br><small class="text-danger">' +
+                        esc(t('tkd-mail-fail', 'Saved, but the closing e-mail could not be sent:') +
+                            ' ' + d.email_error) + '</small>';
+                }
+                Swal.fire({ title: t('tkd-saved', 'Ticket Updated'),
+                            html: esc(t('tkd-saved-text', 'The changes were saved.')) + extra,
+                            icon: d.email_error ? 'warning' : 'success',
+                            confirmButtonText: t('swal-close', 'Close') });
+            })
+            .catch(err)
+            .then(function () { btn.disabled = false; });
     });
+
+    // ── Comment ──────────────────────────────────────────────────────────
+    $('tkd-comment-btn').addEventListener('click', function () {
+        if (!TICKET) { return; }
+        var text = ($('tkd-comment').value || '').trim();
+        if (!text) { return; }
+        var btn = this;
+        btn.disabled = true;
+        fetch('/api/tickets/' + encodeURIComponent(TICKET.id) + '/comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) { throw new Error((d && d.error) || 'comment failed'); }
+                $('tkd-comment').value = '';
+                TICKET = d.ticket;
+                paint();
+            })
+            .catch(err)
+            .then(function () { btn.disabled = false; });
+    });
+
+    // ── Delete ───────────────────────────────────────────────────────────
+    $('tkd-delete').addEventListener('click', function () {
+        if (!TICKET) { return; }
+        Swal.fire({
+            title: t('tk-del-title', 'Delete Ticket'),
+            html: t('tk-del-text', 'This will permanently remove ticket') + ' <strong>#' + esc(TICKET.id) + '</strong>.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: t('tk-delete', 'Delete'),
+            cancelButtonText: t('swal-cancel', 'Cancel'),
+            customClass: { confirmButton: 'btn btn-danger', cancelButton: 'btn btn-outline-secondary' },
+            buttonsStyling: false
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            fetch('/api/tickets/' + encodeURIComponent(TICKET.id), { method: 'DELETE' })
+                .then(function (res) { return res.json(); })
+                .then(function (d) {
+                    if (!d || !d.success) { throw new Error((d && d.error) || 'delete failed'); }
+                    window.location.href = '/tickets-list';
+                })
+                .catch(err);
+        });
+    });
+
+    load();
+});
 </script>
 {% endblock extra_javascript %}
