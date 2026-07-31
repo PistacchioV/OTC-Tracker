@@ -214,6 +214,11 @@
 
 #ops-page .ops-cell-inp { border: 1px solid transparent; border-radius: 6px; padding: 1px 5px; font-size: .82rem; width: 100%; min-width: 90px; background: transparent; }
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
+/* Observation (Settlement Summary): a `td` já é centralizada, mas o texto vive
+   dentro de um <input> que ocupa 100% da célula e não herda o text-align do
+   pai. A regra vai na CLASSE, não no ponto de escrita: a célula é reescrita
+   pelo render da tabela e pelo save do próprio campo (ver §153). */
+#ops-page .ops-obs-inp { text-align: center; }
 #ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
 .ops-num { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
