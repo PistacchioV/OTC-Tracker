@@ -15256,7 +15256,9 @@ except Exception:
 #   1. Instrument Type = FXForwardStartNDF → FWD Start — EXCEPT when the
 #      Strike Set Date is today (reference date): the trade will be cancelled
 #      and re-booked as vanilla later, so it must not be imported at all.
-#   2. Otherwise, Publisher ≠ PTAX → Other Publisher.
+#   2. Otherwise, o cadastro decide: a linha do publisher em /mapping ›
+#      Publisher × B3 (NDF) com NOTES = BACEN → Vanilla; qualquer outro NOTES
+#      (e publisher sem linha) → Other Publisher.
 #   3. Everything else → Vanilla.
 # Same new-only persistence rule as the FXO API pull: a poll or re-import
 # never overwrites a deal already in the day file (key Deal+Client).
@@ -15486,22 +15488,34 @@ _MAPPING_DEFS = {
         ),
     },
     # Publisher (feeder) da Athena → códigos B3 do TER das páginas Other
-    # Publisher e FWD Start. FONTE INFO é o campo "Fonte de Informação" do
-    # arquivo (PTAX puro = 0, demais feeders = 1) e, no FWD Start, define o
-    # Boletim (0 → 3, senão 1). TOKENS casa por trecho quando a Athena manda o
-    # publisher composto ('PTAX|USB|WMR|4' → REUTERS - WMR); separe por vírgula
-    # e deixe em branco para casar só pelo nome exato — é o que mantém o PTAX
-    # puro em 0 sem arrastar as variantes. Publisher sem linha: Fonte de
-    # Informação 1 e os dois códigos de consulta em branco.
+    # Publisher e FWD Start.
+    #
+    # COMO A LINHA É ESCOLHIDA (_ndf_publisher_row):
+    #   1. nome exato — PUBLISHER igual ao publisher inteiro;
+    #   2. token — só para linhas COM Match Tokens, porque a Athena manda o
+    #      publisher composto ('PTAX|USB|WMR|4' → REUTERS - WMR).
+    # Deixar Match Tokens EM BRANCO faz a linha casar SÓ pelo texto completo,
+    # sem variação — é o que permite 'PTAX' e 'PTAX|BRR|PTAX' coexistirem como
+    # cadastros independentes.
+    #
+    # FONTE INFO é o campo "Fonte de Informação" do arquivo (PTAX puro = 0,
+    # demais feeders = 1) e, no FWD Start, define o Boletim (0 → 3, senão 1).
+    #
+    # NOTES não é só documentação: **NOTES = BACEN manda a operação para a
+    # página Vanilla**; qualquer outro valor (e publisher sem linha) vai para
+    # Other Publisher. Ver `_ndf_publisher_is_bacen` (§166).
+    #
+    # Publisher sem linha: Fonte de Informação 1, os dois códigos de consulta em
+    # branco e roteamento para Other Publisher.
     'publisher-ndf': {
         'label': 'Publisher × B3 (NDF)',
         'columns': [
             {'key': 'PUBLISHER', 'label': 'Publisher (Athena)'},
-            {'key': 'TOKENS', 'label': 'Match Tokens'},
+            {'key': 'TOKENS', 'label': 'Match Tokens (blank = exact match only)'},
             {'key': 'FONTE INFO', 'label': 'Fonte de Informação', 'type': 'select', 'options': ['1', '0']},
             {'key': 'FONTE CONSULTA', 'label': 'Fonte de Consulta'},
             {'key': 'TELA CONSULTA', 'label': 'Tela ou Função de Consulta'},
-            {'key': 'NOTES', 'label': 'Notes'},
+            {'key': 'NOTES', 'label': 'Notes (BACEN → Vanilla)'},
         ],
         'seed': [
             {'PUBLISHER': 'PTAX', 'TOKENS': '', 'FONTE INFO': '0',
@@ -15929,8 +15943,11 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
                      str(get('INSTRUMENT') or '').strip().upper())
 
     # Routing (order matters: FWD Start wins over the publisher test).
-    # Vanilla é só o publisher "PTAX" puro — variantes (ex.: PTAX USB WMR 4)
-    # são Other Publisher.
+    # Vanilla × Other Publisher sai do CADASTRO, não de literal: a linha do
+    # publisher em /mapping › Publisher × B3 (NDF) com NOTES = BACEN vai para
+    # Vanilla; o resto (e publisher sem linha) vai para Other Publisher. Uma
+    # linha sem Match Tokens casa só pelo texto completo, então 'PTAX' e
+    # 'PTAX|BRR|PTAX' são cadastros distintos e independentes (§166).
     if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
         strike_set = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
         # Fixa hoje: será cancelada e re-bookada como vanilla, então não entra em
@@ -15939,7 +15956,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         # re-booking do outro lado (ver _ndf_rebook_key).
         target = '_fwd-start-fixing' if (strike_set and strike_set == today_dmy) \
             else 'fwd-start'
-    elif publisher and publisher.upper() != 'PTAX':
+    elif not _ndf_publisher_is_bacen(publisher):
         target = 'other-publishers'
     else:
         target = 'vanilla'
@@ -23235,9 +23252,19 @@ def api_generic_nd_bulk_patch_cache(product):
 
 # Athena publisher (feeder) → códigos B3: mapping publisher-ndf, tela Mapping.
 def _ndf_publisher_row(publisher):
-    """Linha do mapping publisher-ndf que casa o publisher: nome exato primeiro,
-    senão por token da coluna TOKENS — a Athena manda o publisher composto
-    (ex. 'PTAX|USB|WMR|4' → REUTERS - WMR). Nada casando → {}."""
+    """Linha do mapping publisher-ndf que casa o publisher.
+
+    Duas passadas, nesta ordem:
+
+    1. **Nome exato** — o PUBLISHER da linha igual ao publisher inteiro. Uma
+       linha **sem** Match Tokens só casa aqui: é o texto completo, sem
+       variação. É o que separa a linha 'PTAX' da 'PTAX|BRR|PTAX' — as duas
+       existem e cada uma vale para o seu publisher exato.
+    2. **Token** — só para linhas COM a coluna TOKENS preenchida, porque a
+       Athena manda o publisher composto ('PTAX|USB|WMR|4' → REUTERS - WMR).
+
+    Nada casando → {}.
+    """
     p = (publisher or '').strip().upper()
     if not p:
         return {}
@@ -23251,6 +23278,28 @@ def _ndf_publisher_row(publisher):
             if tok and tok in p:
                 return r
     return {}
+
+
+# Valor da coluna NOTES que marca o feeder como BACEN — e, com isso, manda a
+# operação para a página Vanilla em vez de Other Publisher.
+_NDF_NOTES_BACEN = 'BACEN'
+
+
+def _ndf_publisher_is_bacen(publisher):
+    """True quando a linha do publisher no mapping tem NOTES = BACEN.
+
+    É o que decide Vanilla × Other Publisher. Antes o teste era o literal
+    `publisher.upper() != 'PTAX'` no roteamento da API, então qualquer variante
+    ('PTAX|BRR|PTAX') caía em Other Publisher mesmo sendo PTAX do BACEN, e não
+    havia como corrigir sem mexer no código. Agora quem decide é o cadastro.
+
+    Publisher vazio conta como BACEN: é o default histórico do import, que
+    tratava ausência de feeder como PTAX puro.
+    """
+    if not (publisher or '').strip():
+        return True
+    notes = str(_ndf_publisher_row(publisher).get('NOTES', '') or '').strip().upper()
+    return notes == _NDF_NOTES_BACEN
 
 
 def _ndf_publisher_codes(publisher):
