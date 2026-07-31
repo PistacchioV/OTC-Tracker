@@ -1,0 +1,36 @@
+# `scripts/tests/` — verificações de regressão
+
+Scripts autocontidos, sem framework. Cada um imprime `ok`/`FAIL` por asserção e sai com
+código **0** (tudo passou) ou **1** (falhou), então servem tanto para rodar na mão quanto
+para encadear.
+
+Rodam de qualquer diretório: a raiz do repo é resolvida a partir do próprio arquivo
+(`scripts/tests/` → `..` → `..`).
+
+```bash
+source .venv311/bin/activate
+python scripts/tests/check_tickets.py
+```
+
+Nenhum deles encosta em dado real: o arquivo de tickets vai para um `tempfile`, o DuckDB é
+recriado num tmp, o Outlook e o SMTP são stubados. Nada sai da máquina.
+
+| script | o que protege | rodar quando mexer em |
+|---|---|---|
+| `check_boxparse.py` | **paridade JS ↔ Python** do parser de booking recap — executa o JS de verdade no JavaScriptCore e compara campo a campo | `otc_boxparse.py` **ou** `static/js/pages/otc-fileupload.js` (§157) |
+| `check_boxsched.py` | varredura agendada do box: dedup `Deal`+`Acronym`, amend preservando o B3 ID, e-mail sem deal não arquivado, roteamento por produto | o bloco de box scan em `routes.py` (§157) |
+| `check_cancel_remove.py` | `_nd_cancel_in_file`: cancelado apaga a linha, **exceto** `Success` com B3 ID, que vira `Canceled` e fica à vista | `_nd_cancel_in_file` ou os pulls da API (§156) |
+| `check_spb_status.py` | Recon Pay/Rec: só linha com coluna A = `Sucesso` entra na recon, **nas duas trilhas** do HistoricoMensagens | `_cli_spb` em `recon_payrec.py` (§160) |
+| `check_tickets.py` | Support Center ponta a ponta: CRUD, as seis regras de permissão, ID sequencial, transição do e-mail de encerramento, JSON corrompido | `otc_tickets.py`, as rotas `/api/tickets*` ou os templates de ticket (§161) |
+| `check_notif_sid.py` | `notifications.target_sid`: a migração numa tabela **sem** a coluna e o isolamento do sino nos três alvos (SID · papel · broadcast) | `_create_notification`, `_push_notify` ou `api_get_notifications` (§161) |
+| `check_b3_pattern.py` | notação `"MY"`/`_` do B3 Code e o padrão `YYMMDD` dos arquivos CETIP — inclui **paridade com as duas cópias JS** e a prova de que os 12 markets PREFIX emitem o mesmo código de antes | `split_b3_pattern`/`build_b3_code`, o seed de `commodities-b3`, `_cetip_rules` ou `_CETIP_BEHAVIOUR` (§164) |
+
+## Dependência externa
+
+`check_boxparse.py` precisa do **JavaScriptCore** (`jsc`), que já vem no macOS em
+`/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc`. Ele existe
+porque `otc_boxparse.py` é a **segunda cópia** de uma regra de negócio que também vive no
+navegador — sem executar os dois lados, uma divergência (arredondamento, data fora de faixa)
+passa em silêncio e só aparece como número errado na tela. Ver §157.
+
+No Windows da equipe esse script não roda; os outros cinco rodam.

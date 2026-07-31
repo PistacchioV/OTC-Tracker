@@ -495,6 +495,8 @@ apps/pages/routes.py                               ← _create_notification em /
 10. **FC toolbar buttons com background sobrescrito** — ao mudar `background-color` de `.fc-button-primary`, sempre adicionar `color: #fff !important` — o Bootstrap theme recalcula a cor e pode escolher texto escuro
 11. **Commit+push com `routes.py`** — o bloco DEV BYPASS (`/dev-login`) nunca vai para o repositório. Usar `scripts/commit-push.sh` ou: backup → remover bloco → commit+push → restaurar backup
 12. **Mensagens de Swal/notificação construídas dinamicamente (contagens, listas, resultados de rotina) NÃO podem vir prontas em texto do backend** — o backend deve retornar apenas dados estruturados (ex.: `processed: [{type,kept,total}]`, `skipped`, `source`) e o **frontend monta o texto com `t('chave','fallback EN')`**, para seguir o idioma da UI. `data-lang` estático não funciona em HTML injetado depois do load; usar o helper `t()` (padrão `_TRANS_CACHE`). O texto padrão/fallback é sempre **inglês**, com as chaves nos 3 JSON (en/br/es). Exemplo real: mensagem do Daily Settlement no Control Panel (`buildDsMessage` em `control-panel.html` + chaves `cp-files-processed-via`, `cp-of`, `cp-lines`, `cp-ignored`, `cp-src-dropzone`, `cp-src-folder`, `cp-nothing`).
+13. **O mapa "página da notificação → URL" tem TRÊS cópias** — `_NOTIF_PAGE_URL` (`routes.py`), `PAGE_URL` em `partials/topbar.html` e `PAGE_URL` em `static/js/sw-push.js`. Ao criar um `page` novo de notificação, atualizar as três; faltar numa delas faz o clique cair no dashboard em silêncio (o sino, o toast e o push clicam por caminhos diferentes). Ver §161.
+14. **`custom-table.js` não enxerga linhas criadas depois do load** — ele fotografa `this.rows` no construtor e auto-inicializa no `DOMContentLoaded`. Numa tabela populada por `fetch` (ou re-renderizada a cada mutação) ele fica com zero linhas, e o `data-table-delete-row` dele apaga só do DOM, sem passar pelo backend. Em página com dados assíncronos, não incluir o script — fazer busca/filtro/ordenação/paginação na própria página. Ver §161.
 
 ---
 
@@ -6939,3 +6941,351 @@ O `devrun.py` (launcher com o bypass `/dev-login`) fica na raiz, **gitignored** 
 
 **O que o guia ainda NÃO cobre:** Daily Settlement e os módulos de Swap em profundidade. Os prints
 dessas telas já estão capturados; falta o texto.
+
+---
+
+## §156 — Operação cancelada na API sai da tabela em vez de virar badge (`d8bc8c2`)
+
+Um registro que volta do `getTrades` com `isCancelled`/`isDead` **não existe mais na origem**. O
+comportamento antigo — marcar como `Canceled` e deixar na tela — convidava alguém a registrar na B3 um
+negócio que já morreu: o deal continuava visível, editável e a um clique de ser aprovado. Agora a
+linha é **apagada** do arquivo do dia.
+
+**A exceção é o deal que JÁ foi registrado na B3** (`Status = Success` **com** `B3_ID` preenchido).
+Esse existe lá fora e cancelá-lo é ação humana na B3, então apagar a linha esconderia a pendência em
+vez de resolvê-la — ele continua virando `Canceled` e à vista. `Success` **sem** `B3_ID` nunca chegou
+a ser registrado e é apagado como os demais.
+
+`_nd_cancel_in_file` passa a devolver **`(removidas, marcadas)`** e os dois pulls (NDF genérico e FXO)
+somam as duas contagens **em separado** — no log, no retorno do endpoint e no breakdown do alerta de
+Import (chave nova `swal-api-removed` nos três idiomas). Sem separar, "veio 0" não distinguiria linha
+apagada de linha mantida.
+
+---
+
+## §157 — Varredura automática do box a cada 30 min (NDF Comm e Opt Comm) (`6dd15a4`)
+
+O box só era varrido quando alguém clicava em **Import com o dropzone vazio**. Um booking recap que
+chegasse fora desse momento ficava parado até alguém abrir a página. Agora um scheduler próprio
+(`BOX_SCAN_POLL_MIN`, default 30) faz a mesma varredura sozinho, para os dois produtos, e arquiva o
+e-mail processado.
+
+### ⚠️ `otc_boxparse.py` é a SEGUNDA cópia de uma regra de negócio
+
+O caminho manual parseia o e-mail **no navegador** (`otc-fileupload.js`), e o servidor não tem DOM. Por
+isso nasceu `apps/pages/otc_boxparse.py`: um porte de `parseEmailHtml` + `buildRow` para Python puro
+(`html.parser.HTMLParser`, sem dependência nova). É a mesma armadilha do espelho JS/servidor do arquivo
+TER (§121).
+
+**O que mantém as duas honestas é `scratchpad/check_boxparse.py`**, que executa o JS de verdade no
+**JavaScriptCore** (`jsc`, já presente no macOS — não há `node` nesta máquina) e compara campo a campo.
+Ele pegou duas divergências reais, ambas já corrigidas:
+
+1. **Arredondamento do `toLocaleString`.** `2.675` → `2.68` no JS; `'{:.2f}'.format` do Python faria
+   `2.67`, porque desempata para par sobre o **binário exato** em vez da representação decimal curta.
+   A equivalência correta é `Decimal(repr(n)).quantize(Decimal('0.01'), ROUND_HALF_UP)`.
+2. **Data fora de faixa.** `new Date(2026, 1, 30)` normaliza para 02/03; o Python levantaria
+   `ValueError`. O helper `_to_date` soma dias sobre o dia 1º para reproduzir isso.
+
+**Mexeu num dos dois lados, rode o `check_boxparse.py`.**
+
+### Decisões do scheduler
+
+- **Dedup por `Deal` + `Acronym`**, a mesma chave do navegador. Deal já conhecido vira `Amend`
+  preservando o `B3_ID` e **limpando o Checker** (amend pede nova aprovação); deal novo entra como `New`.
+- **E-mail cujo parse não achou nenhuma linha NÃO é arquivado** — fica no box com warning no log,
+  porque arquivar esconderia um layout que o parser não soube ler.
+- **`Maker = 'BOX'`**, mesma convenção do pull da Athena (que grava `'API'`). Ninguém humano importou,
+  então a trava de quatro olhos segue válida e qualquer usuário pode aprovar.
+- Os mapas Commodities × B3 saem do **cadastro** (`/mapping`), não de literais duplicados aqui (§131).
+- Persistência sob `_cache_lock` no ciclo **inteiro** ler → alterar → gravar: o `_atomic_write_json`
+  sozinho evita arquivo pela metade, não perda de atualização de outro usuário.
+
+`POST /api/new-deals/box-scan/run` dispara na hora, para conferir o agendamento na instância da equipe
+sem esperar os 30 min. Fora do Windows/Outlook a varredura devolve `unavailable` e o scheduler registra
+em `info`, não como erro.
+
+---
+
+## §158 — Observation do Settlement Summary ficava à esquerda (`db1c6ba`)
+
+A `td` já era centralizada, mas o texto da Observation vive dentro de um `<input>` que ocupa 100% da
+célula e **não herda o `text-align` do pai** — o valor digitado ficava à esquerda enquanto o resto da
+linha estava centrado.
+
+A regra foi para a **classe** `.ops-obs-inp`, não para o ponto de escrita: a célula é reescrita pelo
+render da tabela **e** pelo save do próprio campo, e alinhar em cada um deles volta a desencontrar
+assim que alguém mexer num só (mesma lição da §153).
+
+---
+
+## §159 — Pending Confirmation: novo status "Pending Legal" (`f8bfcf1`)
+
+Entra nos **seis** cards de faixa de Aging, no mapa dos widgets, no select de edição em massa e na
+lista do modal de add/edit.
+
+**A posição não é cosmética.** O `updateWidgets()` casa a linha do DOM com o `TYPE_ORDER` **por
+índice** (`querySelectorAll('.float-end b')` → `TYPE_ORDER[j]`), então a nova linha e a nova entrada do
+array têm de entrar **na mesma posição nos seis cards**. Ficou entre *Pending FO* e *Pending MO*,
+mantendo a ordem alfabética que os cards já seguiam.
+
+> Armadilha da edição: nem todos os cards usam `<span class="text-success">` para o bullet — alguns
+> usam `<span style="color: #99BF00;">`. Um regex preso à classe altera só parte deles e o
+> desalinhamento por índice acontece **em silêncio**. Casar o bullet genericamente
+> (`<span [^>]*><i class="ti ti-point-filled"></i></span>`) e conferir a contagem antes de gravar.
+
+**Nada a mudar no backend**: ele classifica por categoria (`_pc_is_ok_status`), e "Pending Legal" não
+casa com `exception*` nem com os status de OK, então cai em pendente sozinho — conta nos widgets, no
+dashboard de Metrics, no Daily Metric e na Weekly Escalation sem tratamento especial.
+
+---
+
+## §160 — Recon Pay/Rec: só conta como pago o que tem Status 'Sucesso' (`f9af52a`)
+
+O `HistoricoMensagensJPM_*.csv` / `..._MGT_*.csv` é um **LOG de mensagens SPB**: carrega tanto as que
+liquidaram quanto as que falharam ou foram rejeitadas.
+
+`_cli_spb` (`apps/pages/recon_payrec.py`) tem **duas trilhas de captura** e só a segunda olhava a
+coluna A. A trilha do cliente de derivativos (`Descrição Evento` com *Derivativos* / *LMA-COMM-BR*)
+emitia um **Pay** para qualquer linha com a descrição certa, **inclusive as rejeitadas**.
+
+**O efeito não é só inflar o total do lado cliente.** Uma perna sem dinheiro por trás ou casa por valor
+com uma perna JPM legítima — e aí **esconde uma quebra real**, que passa a aparecer como `Settled` —
+ou vira uma pendência que ninguém consegue rastrear até o arquivo de origem.
+
+A checagem subiu para o **topo do laço**, antes de decidir a trilha, e a duplicata da trilha
+interbancária saiu. Vale para os dois arquivos: JPM e MGT caem no mesmo parser (`_classify_source` só
+troca o rótulo do sistema e a Legal Entity).
+
+**Mantida a semântica da comparação que já rodava em produção** — `_norm()` (tira acento, caixa e
+não-alfanuméricos) e teste de **substring**, não igualdade estrita — porque não há amostra dos arquivos
+no repo para confirmar o literal exato da coluna. Assim `'Sucesso '` ou `'Sucesso.'` continuam passando
+como antes. Se algum dia aparecer um status legítimo que não contenha "sucesso" (algo como
+"Efetivada"), é aqui que se ajusta.
+
+> **Impacto operacional:** no dia em que houver mensagem rejeitada, o lado cliente encolhe e operações
+> que apareciam como `Settled` passam a `Pending`. É o comportamento correto, mas muda o número na tela
+> de quem já usa a página — avisar antes de rodar a recon seguinte.
+
+---
+
+## §161 — Support Center: backend dos tickets (`c8185e7`)
+
+As três páginas do Support Center eram **maquete**: linhas de exemplo no HTML, formulário que fazia
+`POST` para `"#"` e nenhum armazenamento.
+
+### Armazenamento — `apps/pages/otc_tickets.py` (módulo novo)
+
+JSON único em `apps/static/data/tickets/tickets.json`, no formato
+`{"seq": N, "tickets": [...]}`. Todo ciclo **ler → alterar → gravar** dentro de um lock e terminando em
+escrita atômica: a escrita atômica sozinha não evita *lost update* (dois requests que leiam a mesma
+versão fariam o segundo apagar a alteração do primeiro — mesma regra do `_cache_lock`).
+
+**O contador do ID sequencial (`#OTC-0001`, `#OTC-0002`, …) vive NO ARQUIVO** e não é derivado do maior
+ID existente. Derivar reaproveitaria o número de um ticket apagado, e dois tickets com o mesmo ID
+quebram o histórico e o link do e-mail de encerramento.
+
+O arquivo entra no **`.gitignore`**: é dado de runtime por instância. Versionar traria os tickets da
+máquina de dev para produção e faria o contador de ID **andar para trás** a cada pull.
+
+### Regras que o SERVIDOR impõe (não só a tela)
+
+`requester`, `SID` e `status` **não são aceitos do corpo do request** — vêm da sessão, e todo ticket
+nasce `New`. Aceitá-los do cliente deixaria qualquer um abrir ticket em nome de outra pessoa (testado
+mandando `{"status":"Closed","requester_sid":"E930179","id":"OTC-9999"}`: os três são ignorados).
+
+| ação | quem pode |
+|---|---|
+| ver | master vê todos; os demais só os próprios |
+| criar | qualquer autenticado |
+| status · due date | **só o master** |
+| subject/description/priority/tags | o requester enquanto aberto; o master sempre |
+| apagar · comentar | o requester ou o master |
+
+> **Decisão não pedida explicitamente, registrada porque é uma escolha:** o master vê todos os tickets,
+> cada usuário vê só os dele. É a leitura coerente com "notificações de ticket novo só para o master" e
+> "apagar só o requester ou o master". Se o time quiser todo mundo vendo tudo, é uma linha em
+> `_tk_visible_tickets`.
+
+### `notifications.target_sid` — coluna nova (MIGRAÇÃO)
+
+`ALTER` idempotente no padrão do `_migrate_schema`. **`target_role` não resolvia o pedido**: as
+atualizações vão só para o requester, e o papel dele (BO/MO/FO/…) é compartilhado com o time inteiro.
+
+- `target_sid` preenchido é **mais forte** que `target_role`: só aquele SID vê — nem o master.
+- Notificação antiga, com `target_sid` NULL, **continua visível para todos** (`COALESCE(...) = ''`).
+- O **Web Push acompanha o mesmo filtro** — senão o celular do time apitaria por uma notificação que só
+  o requester consegue abrir.
+- Ticket novo continua em `target_role='MASTER'`, que já isolava: `'MASTER'` **não é papel de banco**, é
+  o valor que `_set_session` grava para os SIDs de `_MASTER_SIDS`.
+
+Ao adicionar um `page` novo de notificação, lembrar das **três** cópias do mapa página → URL:
+`_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` em `partials/topbar.html` e `PAGE_URL` em
+`static/js/sw-push.js`. Faltar numa delas faz o clique cair no dashboard.
+
+### E-mail de encerramento
+
+Template `pages/email-template-ticket-closed.html`, requester no **To** e
+`brazil.otc.ops@jpmorgan.com` em **Cc**.
+
+**Dispara só na TRANSIÇÃO** para `Resolved`/`Closed`: sem o par `was_final`/`is_final`, salvar de novo
+um ticket já encerrado (mudando a prioridade, por exemplo) reenviaria o aviso. Reabrir limpa o
+`closed_at`, então encerrar outra vez avisa de novo — que é o que o requester espera.
+
+**Falha de SMTP não desfaz o encerramento** — o ticket já está gravado e a tela diz explicitamente que
+o e-mail não saiu. Sem esse aviso alguém acreditaria que o requester foi informado.
+
+### Telas
+
+`ticket-create.html` foi **removida** (e tirada do `sidenav.html` e do `horizontal-nav.html`): o
+formulário virou um **SweetAlert** dentro de `/tickets-list`, com Requester Name e Requester SID
+`readonly` vindos da sessão e Status travado em `New`. Saíram as 11 linhas de exemplo.
+
+- **Assigned Agent** = logo do OTC Tracker + "OTC Tracker Team". O logo troca por **`[data-bs-theme]`**,
+  **não** pelas classes `.logo-light`/`.logo-dark` do layout — aquelas reagem também a
+  `data-menu-color` e apareceriam invertidas em algumas combinações de menu (é a armadilha nº 2 do §8).
+- **Due date nasce em branco** (só o master preenche). Os cards do topo contam de verdade.
+- O card de **chat saiu** do `ticket-details`, que virou largura cheia.
+
+**A lista largou o `custom-table.js`.** Ele fotografa `this.rows` na construção e auto-inicializa no
+`DOMContentLoaded`, então **nunca enxergaria uma tabela vinda de `fetch`**; e a lixeira dele apaga só
+do DOM, o que conflitaria com a regra de quem pode excluir. Busca, filtros, ordenação e paginação são
+próprios da página.
+
+### Verificação
+
+`scratchpad/check_tickets.py` — 93 asserções: CRUD, as seis regras de permissão, forja de
+requester/status/ID pelo corpo, sequência após exclusão, transição do e-mail (envia · não reenvia ·
+reenvia após reabrir), render das páginas e JSON corrompido.
+`scratchpad/check_notif_sid.py` — o `ALTER` numa tabela criada **sem** a coluna e o isolamento do sino
+nos três alvos (SID · papel · broadcast).
+
+---
+
+## §162 — Foto do solicitante no Support Center (`94862cd`)
+
+A coluna *Requested By* mostrava só nome e SID em texto, enquanto a coluna ao lado (*Assigned Agent*)
+já trazia o logo — a linha ficava torta.
+
+**Convenção que o app já tinha, reaproveitada em vez de inventar outra:**
+`/static/images/users/<sid minúsculo>.jpg`, exatamente o que o sino de notificações usa em
+`partials/topbar.html`. Hoje **só o SID do master tem arquivo na pasta** (`e930179.jpg`; os `user-N.jpg`
+eram sobra do template e foram embora com as linhas de exemplo), então o caminho que roda na maioria
+das linhas é o **fallback** — sem o `onerror` a célula ficaria com o ícone de imagem quebrada em quase
+todo ticket. O substituto é um círculo com as iniciais (primeiro e último nome), no mesmo estilo do sino.
+
+**No `ticket-details` o `onerror` é rearmado a cada `paint()`.** Ele se auto-anula ao disparar
+(`this.onerror = null`), então sem rearmar, um ticket sem foto seguido de um com foto deixaria o
+handler morto e o `<img>` quebrado voltaria a aparecer.
+
+O nome vem do **phonebook** e o SID entra **dentro de um atributo `src`**, então os dois passam por
+escape/encode. Verificado com 17 asserções rodando a lógica real no `jsc`, incluindo
+`<img onerror=bad>` no nome e `A1"><script>` no SID, além do caso de SID vazio (não pode imprimir um
+`<small>` órfão).
+
+---
+
+## §163 — `scripts/tests/` — as verificações saíram do scratchpad para o repo
+
+Os harnesses das últimas sessões viviam no scratchpad, fora do versionamento — ou seja, a próxima
+pessoa a mexer nesses arquivos não teria como saber que existiam. Foram para **`scripts/tests/`**, com
+`README.md` mapeando cada script ao que ele protege e a **quando rodá-lo**.
+
+São scripts autocontidos, sem framework: imprimem `ok`/`FAIL` por asserção e saem com 0 ou 1. A raiz do
+repo é resolvida a partir do próprio arquivo (`scripts/tests/` → `..` → `..`), então rodam de qualquer
+diretório e em qualquer máquina — o caminho absoluto do Mac saiu.
+
+| script | protege | rodar ao mexer em |
+|---|---|---|
+| `check_boxparse.py` | paridade **JS ↔ Python** do parser de booking recap (executa o JS no `jsc`) | `otc_boxparse.py` **ou** `otc-fileupload.js` (§157) |
+| `check_boxsched.py` | varredura agendada do box (dedup, amend, arquivamento) | box scan em `routes.py` (§157) |
+| `check_cancel_remove.py` | `_nd_cancel_in_file` (apaga vs. mantém como `Canceled`) | os pulls da API (§156) |
+| `check_spb_status.py` | Recon Pay/Rec: só `Sucesso` entra, nas duas trilhas | `_cli_spb` (§160) |
+| `check_tickets.py` | Support Center ponta a ponta — 93 asserções | `otc_tickets.py`, `/api/tickets*`, templates (§161) |
+| `check_notif_sid.py` | migração e isolamento do `target_sid` | `_create_notification`, `_push_notify`, feed (§161) |
+
+Nenhum encosta em dado real: tickets vão para `tempfile`, o DuckDB é recriado num tmp, Outlook e SMTP
+são stubados. **`check_boxparse.py` depende do `jsc`** (nativo do macOS; não roda no Windows da
+equipe — os outros cinco rodam).
+
+---
+
+## §164 — Cadastro dos arquivos CETIP + notação de padrão no B3 Code (`03bbab3`)
+
+Duas coisas presas no código-fonte viraram cadastro. E uma divergência real apareceu no caminho.
+
+### A lista de arquivos do Save CETIP Files saiu do código
+
+As 15 regras viviam em `_CETIP_RULES`, cada uma com um `match` (substring no nome) e um `date_start`
+(offset do YYMMDD). Agora a **lista** é cadastrada em **/mapping › CETIP Files**, no padrão
+`CETIP21_YYMMDD_DPOSICAO-SWAP` — o `YYMMDD` marca **onde a data está**.
+
+Isso funde dois campos que podiam se desencontrar: o token identificava o arquivo, o `date_start` dizia
+onde ficava a data, e nada garantia que os dois falassem do mesmo nome. Um padrão só dá as duas coisas.
+De quebra, as exclusões `_15H00`/`_18H30` do DMOVIMENTO **deixaram de ser necessárias**: o padrão casa
+o nome inteiro (sem extensão), então a variante de horário já não bate sozinha.
+
+**O que NÃO foi para a tela é comportamento, não de-para.** Como o arquivo vira JSON, os filtros de
+coluna, o `vcp_update` e os anexos de e-mail continuam em **`_CETIP_BEHAVIOUR`**, ligados à linha pela
+coluna **`TYPE`**. ⚠️ **Renomear o `TYPE` na tela desliga esse comportamento** e o arquivo passa a ser
+só copiado e renomeado — sem erro, sem aviso na tela.
+
+**O prefixo literal (`CETIP21_`, `TER_`) NÃO é comparado, só o seu tamanho.** Os nomes de origem nunca
+foram confirmados com a B3 (pendência aberta desde a §27), e o `TER_` do DPOSICAO-TER é inferência a
+partir do `date_start` 4. Exigir o prefixo poderia parar de salvar um arquivo que hoje funciona; quando
+ele diverge do cadastro fica um **aviso no log**, o que dá o diagnóstico sem o risco. Se alguém
+confirmar os nomes reais, apertar isso é uma linha em `_cetip_make_matcher`.
+
+A data do card do Control Panel **já escolhe a pasta do dia** (origem e destino são
+`…\YYYY\mm. Month\dd`); o `YYMMDD` casa qualquer 6 dígitos, como antes. Travar no dia do card faria a
+rotina ignorar um arquivo carimbado com D-1, que é o caso comum.
+
+### Notação de padrão na coluna B3 Code
+
+A coluna passa a guardar o **código inteiro**, não só o prefixo:
+
+```
+"MY"   onde entram a letra do mês e o último dígito do ano do contrato.
+       Entre ASPAS porque um código pode ter M e Y como texto fixo — sem a
+       marca não daria para saber qual é qual.
+_      um ESPAÇO no código emitido. O milho na B3 é 'C ' COM o espaço, e
+       espaço no fim de um campo é invisível na tela e some num trim distraído.
+
+XB"MY" → XBZ7        C_"MY" → 'C Z7'        KO"MY"BNMK → KOZ7BNMK
+```
+
+Padrão **sem aspas** é lido como formato antigo (só o prefixo, mês/ano no fim), o que mantém uma linha
+não migrada funcionando. `_commodities_b3_upgrade` migra **na leitura**, então instância com o arquivo
+editado localmente não precisa de script.
+
+Permitir texto **antes E depois** do mês/ano é o que faltava para o FCPO sair de SPECIAL. Sobrou só o
+**BRT_IPE** como SPECIAL, porque o código dele depende de vanilla × asian — isso é lógica, não de-para.
+
+### ⚠️ As três cópias discordavam sobre o FCPO
+
+| arquivo | emitia |
+|---|---|
+| `otc-fileupload.js` | `KOZ7BNMK` |
+| `deals-processing-table.js` | `.KOZ7BNMK F` |
+| `otc_boxparse.py` | `KOZ7BNMK` |
+
+O **mesmo deal** ganhava um código B3 diferente conforme tivesse entrado pelo upload, pela tabela de
+processamento ou pela varredura do box. Com o cadastro passa a existir **um valor só**: `KO"MY"BNMK`
+(confirmado pelo usuário), que é o que duas das três cópias já emitiam. **Vale conferir se algum FCPO
+foi registrado na B3 com `.KOZ7BNMK F`.**
+
+> Lição repetida: `calculateB3Id` existe em **três** lugares (`otc-fileupload.js`,
+> `deals-processing-table.js`, `otc_boxparse.py`). É a armadilha da §121/§157 outra vez. O
+> `check_b3_pattern.py` agora roda as **duas** cópias JS no `jsc` e compara com a Python.
+
+### Destaque do trecho variável na tabela
+
+`"MY"` (B3 Code) e `YYMMDD` (arquivos CETIP) saem em **âmbar** com fundo levíssimo. Âmbar é a única
+família que não colide com o que a tabela já usa (azul = ação, verde = ok, vermelho = excluir);
+`#a05a00` no claro e `#ffb545` no escuro passam de 4.5:1, e o **fundo** delimita o trecho mesmo para
+quem não distingue a cor — que é o ponto: bater o olho e ver o que muda.
+
+Só aparece em linha **PREFIX**: em `FIXED` o código é literal e um `MY` ali seria texto mesmo.
+
+**Armadilha do escape:** o destaque escapa **por pedaço**, não o valor inteiro. `esc()` no valor todo
+transformaria as aspas em `&quot;` e aí a regex do token não acharia mais nada.
