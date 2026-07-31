@@ -14854,11 +14854,19 @@ def _nd_api_amend(stored, incoming):
 
 
 def _nd_cancel_in_file(fpath, deal_name):
-    """Marca Status='Canceled' nas linhas com esse Deal no arquivo de cache.
-    Retorna quantas linhas mudaram (0 = arquivo/deal inexistente ou já
-    cancelado)."""
+    """Cancelamento vindo da API: **apaga** as linhas desse Deal no arquivo do
+    dia. A operação deixou de existir na origem, então mantê-la na tela é
+    convidar alguém a registrar na B3 um negócio que não existe mais.
+
+    A ÚNICA exceção é o deal que **já foi registrado na B3** (Status Success
+    **com** B3 ID): esse existe lá fora e o cancelamento exige ação humana na
+    B3. Apagar a linha esconderia essa pendência, então ele só vira
+    Status='Canceled' e continua visível (badge escuro). Success sem B3 ID não
+    chegou a ser registrado — é apagado como os demais.
+
+    Retorna (removidas, marcadas_canceled)."""
     if not deal_name or not os.path.isfile(fpath):
-        return 0
+        return 0, 0
     with _cache_lock:
         try:
             with open(fpath, encoding='utf-8') as fh:
@@ -14866,16 +14874,25 @@ def _nd_cancel_in_file(fpath, deal_name):
             if not isinstance(deals, list):
                 deals = [deals]
         except (IOError, json.JSONDecodeError):
-            return 0
-        n = 0
+            return 0, 0
+        kept, removed, marked = [], 0, 0
         for dd in deals:
-            if isinstance(dd, dict) and (dd.get('Deal') or '').strip() == deal_name \
-                    and (dd.get('Status') or '').strip() != 'Canceled':
-                dd['Status'] = 'Canceled'
-                n += 1
-        if n:
-            _atomic_write_json(fpath, deals)
-        return n
+            if not isinstance(dd, dict) or (dd.get('Deal') or '').strip() != deal_name:
+                kept.append(dd)
+                continue
+            status = (dd.get('Status') or '').strip()
+            if status == 'Canceled':                       # já tratado num pull anterior
+                kept.append(dd)
+                continue
+            if status == 'Success' and str(dd.get('B3_ID') or '').strip():
+                dd['Status'] = 'Canceled'                  # registrado na B3 → fica à vista
+                kept.append(dd)
+                marked += 1
+                continue
+            removed += 1                                   # nunca registrado → sai da tabela
+        if removed or marked:
+            _atomic_write_json(fpath, kept)
+        return removed, marked
 
 
 def _fxo_persist_new_deals(deals):
@@ -14984,23 +15001,27 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     records = athena_api.extract_records(payload)
     deals, dead = _fxo_deals_from_api_records(records, sid)
     inserted, amended = _fxo_persist_new_deals(deals)
-    # isCancelled/isDead na API → deal já importado vira Status 'Canceled'
-    # (sai das métricas e dos arquivos gerados).
-    canceled = 0
+    # isCancelled/isDead na API → a linha SAI do arquivo do dia (a operação não
+    # existe mais). Só quem já foi registrado na B3 fica, como 'Canceled'.
+    removed = canceled = 0
     for nm, td in dead:
         try:
             rd = datetime.strptime(td, '%d/%m/%Y') if td else ref_dt
         except ValueError:
             rd = ref_dt
-        canceled += _nd_cancel_in_file(
+        r, c = _nd_cancel_in_file(
             os.path.join(OPT_FXO_CACHE_DIR, rd.strftime('%Y'), rd.strftime('%m'),
                          rd.strftime('%Y%m%d') + '_optfxo.json'), nm)
-    if inserted or amended or canceled:
+        removed += r
+        canceled += c
+    if inserted or amended or removed or canceled:
         bits = []
         if inserted:
             bits.append('{} imported'.format(len(inserted)))
         if amended:
             bits.append('{} amended'.format(len(amended)))
+        if removed:
+            bits.append('{} removed (cancelled)'.format(removed))
         if canceled:
             bits.append('{} canceled'.format(canceled))
         _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
@@ -15009,12 +15030,13 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # Mesma prestação de contas do pull de NDF: "veio 0" tem de dizer se a API
     # devolveu nada ou se os registros foram descartados, e por quê.
     log.info('[opt-fxo] pull ref=%s: %d fetched · %d parseados · importados=%d '
-             'amendados=%d · dead/cancelados na API=%d (marcados=%d)',
+             'amendados=%d · dead/cancelados na API=%d (linhas removidas=%d, '
+             'marcadas Canceled por já terem B3 ID=%d)',
              date, len(records), len(deals), len(inserted), len(amended),
-             len(dead), canceled)
+             len(dead), removed, canceled)
     return {'success': True, 'date': date, 'fetched': len(records),
             'parsed': len(deals), 'imported': len(inserted),
-            'amended': len(amended), 'canceled': canceled,
+            'amended': len(amended), 'canceled': canceled, 'removed': removed,
             'dead': len(dead), 'deals': inserted}
 
 
@@ -15966,8 +15988,10 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
                             'amended': len(amended), 'deals': inserted}
 
     # Cancelamentos: procura o Deal no arquivo do dia (trade date do registro)
-    # dos três produtos — Status vira Canceled e o deal sai das métricas.
-    canceled = 0
+    # dos três produtos. A linha é APAGADA — a operação não existe mais na
+    # origem. Exceção: já registrado na B3 (Success com B3 ID) vira 'Canceled'
+    # e continua visível, porque o cancelamento na B3 é ação humana.
+    removed = canceled = 0
     for nm, td in dead:
         try:
             rd = datetime.strptime(td, '%d/%m/%Y') if td else now
@@ -15975,26 +15999,29 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
             rd = now
         for product in routed:
             cfg = _generic_nd_cfg(product)
-            canceled += _nd_cancel_in_file(
+            r, c = _nd_cancel_in_file(
                 os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
                              rd.strftime('%Y%m%d') + cfg['suffix']), nm)
+            removed += r
+            canceled += c
     # Prestação de contas do pull: sem isso, "veio 0" não diz se a API devolveu
     # nada, se tudo estava cancelado ou se o filtro de interbook comeu os
     # registros — os três somem no mesmo zero da tela.
     log.info('[ndf-api] pull ref=%s: %d fetched · roteados fwd=%d op=%d vanilla=%d · '
-             'importados=%d amendados=%d · dead/cancelados na API=%d (marcados=%d) · '
+             'importados=%d amendados=%d · dead/cancelados na API=%d (linhas removidas=%d, '
+             'marcadas Canceled por já terem B3 ID=%d) · '
              'interbook=%d · strike set na data=%d · re-booking de FWD Start=%d',
              now.strftime('%Y%m%d'), len(records),
              len(routed['fwd-start']), len(routed['other-publishers']), len(routed['vanilla']),
              sum(t['imported'] for t in targets.values()),
              sum(t['amended'] for t in targets.values()),
-             len(dead), canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
+             len(dead), removed, canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,
             'skipped_fwd_rebook': len(rebooks),
             'skipped_fwd_rebook_deals': [d.get('Deal') or '' for d, _f in rebooks],
             'skipped_interbook': skipped_interbook, 'canceled': canceled,
-            'dead': len(dead), 'targets': targets}
+            'removed': removed, 'dead': len(dead), 'targets': targets}
 
 
 @blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])

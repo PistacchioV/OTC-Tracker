@@ -1731,7 +1731,8 @@ $(document).ready(function() {
             function apiBreakdown(res) {
                 var p = [(res.fetched || 0) + ' ' + t('swal-api-fetched', 'fetched')];
                 if (res.dead)     p.push(res.dead + ' ' + t('swal-api-dead', 'cancelled/dead on the API'));
-                if (res.canceled) p.push(res.canceled + ' ' + t('swal-api-canceled', 'marked Canceled here'));
+                if (res.removed)  p.push(res.removed + ' ' + t('swal-api-removed', 'rows removed (cancelled)'));
+                if (res.canceled) p.push(res.canceled + ' ' + t('swal-api-canceled', 'kept as Canceled (already at B3)'));
                 if (res.skipped_interbook)
                     p.push(res.skipped_interbook + ' ' + t('swal-api-interbook', 'interbook'));
                 if (res.skipped_fwd_strike_today)
