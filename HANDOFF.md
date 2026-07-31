@@ -7289,3 +7289,44 @@ Só aparece em linha **PREFIX**: em `FIXED` o código é literal e um `MY` ali s
 
 **Armadilha do escape:** o destaque escapa **por pedaço**, não o valor inteiro. `esc()` no valor todo
 transformaria as aspas em `&quot;` e aí a regex do token não acharia mais nada.
+
+---
+
+## §165 — Accrual/CEM: as abas passam a ser lidas por POSIÇÃO, não por nome
+
+**O sintoma:** a importação por arquivo CEM morria na instância da equipe com
+`ValueError: CEM file is missing the 'Kapital CETIP' sheet (Kapital → LE).`
+
+**A causa:** `_acc_parse_cem_factors` procurava a aba cujo **nome** contivesse `kapital` (normalizado
+sem espaços). O arquivo real chega com essa aba nomeada de outro jeito, então `kap_rows` ficava `None`
+e o `raise` derrubava a importação inteira — não só aquela aba.
+
+**A correção:** as abas são lidas por posição — **1ª = summary** (os fatores), **2ª = Kapital CETIP**
+(col B Kapital → col E LE). A ordem das abas é estável no arquivo que a área gera; o nome não é.
+
+**Sem fallback por nome, de propósito.** Um fallback reintroduziria em silêncio a fragilidade que a
+mudança remove: com as abas reordenadas E uma delas chamada "kapital", o fallback venceria e o
+comportamento ficaria inconsistente entre arquivos.
+
+**Duas coisas que vieram junto:**
+
+- A mensagem de erro agora diz o que o arquivo precisa ter **e o que ele tem**:
+  `CEM file needs at least 2 sheets (1st = summary, 2nd = Kapital CETIP); found 1: 'Resumo'`. A antiga
+  mandava procurar uma aba com um nome que talvez nem devesse existir.
+- Um `log.info` registra **quais** abas foram usadas. Como a escolha agora é posicional, é o log que
+  permite descobrir uma planilha fora de ordem sem abrir o arquivo.
+
+**Modo de falhar:** com as abas invertidas o parser devolve **vazio**, não fator errado — o CETIP da
+aba de Kapital não casa com nada e as linhas aparecem como *Missing Accrual*. É a falha desejada:
+pede correção em vez de gravar um número inventado.
+
+> ⚠️ **Risco conhecido:** o `openpyxl` enxerga **abas ocultas** em `sheetnames`. Uma aba oculta na
+> posição 2 seria lida como a Kapital. O `log.info` novo denuncia isso na primeira importação; se
+> acontecer, filtrar por `ws.sheet_state == 'visible'` em `_acc_read_sheets`.
+
+`_acc_parse_direct_factors` (EDG/HYB) **já** era posicional (`next(iter(sheets.values()))` = 1ª aba),
+então os três parsers de fator agora seguem a mesma regra.
+
+Verificado com `scripts/tests/check_cem_sheets.py` — monta workbooks de verdade com openpyxl e cobre
+os nomes que o código antigo não reconhecia, os nomes antigos ainda funcionando, abas extras depois da
+2ª, a inversão 228/199 preservada, os dois casos de erro (uma aba só e CSV) e a ordem trocada.

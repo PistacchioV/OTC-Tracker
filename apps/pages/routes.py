@@ -12207,21 +12207,28 @@ def _acc_fmap_get(fmap, code):
 
 def _acc_parse_cem_factors(filename, raw_bytes):
     """{cetip -> (parte_factor, contra_factor)} from the CEM workbook.
-    LE comes from the 'Kapital CETIP' sheet (col B Kapital → col E LE). When a CETIP
-    ID carries view 228 it is the bank view → normal (Parte = col I, Contraparte =
-    col J). When it only carries view 199 the factors are inverted (Parte = col J,
-    Contraparte = col I). Duplicated 228/199 → keep the 228 row."""
+
+    As abas são lidas por POSIÇÃO, não por nome: 1ª = summary (os fatores), 2ª =
+    Kapital CETIP (col B Kapital → col E LE). Antes a 2ª era procurada pelo nome
+    conter 'kapital', e o arquivo real chega com a aba nomeada de outro jeito —
+    a importação morria com "CEM file is missing the 'Kapital CETIP' sheet".
+    A ordem das abas é estável no arquivo que a área gera; o nome não é.
+
+    When a CETIP ID carries view 228 it is the bank view → normal (Parte = col I,
+    Contraparte = col J). When it only carries view 199 the factors are inverted
+    (Parte = col J, Contraparte = col I). Duplicated 228/199 → keep the 228 row."""
     sheets = _acc_read_sheets(filename, raw_bytes)
-    kap_rows = main_rows = None
-    for sn, rws in sheets.items():
-        if 'kapital' in re.sub(r'\s+', '', str(sn).lower()):
-            kap_rows = rws
-        elif main_rows is None:
-            main_rows = rws
-    if main_rows is None:
-        main_rows = next(iter(sheets.values()), [])
-    if kap_rows is None:
-        raise ValueError("CEM file is missing the 'Kapital CETIP' sheet (Kapital → LE).")
+    names = list(sheets.keys())
+    if len(names) < 2:
+        raise ValueError(
+            'CEM file needs at least 2 sheets (1st = summary, 2nd = Kapital CETIP); '
+            'found {}: {}.'.format(len(names), ', '.join(repr(n) for n in names) or 'none'))
+    main_rows, kap_rows = sheets[names[0]], sheets[names[1]]
+    # Registra QUAIS abas foram usadas: como a escolha agora é posicional, é o
+    # log que permite descobrir uma planilha fora de ordem (ou uma aba oculta
+    # que tenha entrado no meio) sem abrir o arquivo.
+    log.info('[accrual] CEM %s: summary=%r, Kapital CETIP=%r (de %d abas)',
+             filename, names[0], names[1], len(names))
 
     # Kapital ID (col B) → LE digits (col E). Both sides drop the leading zeros so
     # the lookup is robust to '00123' vs '123' mismatches between the two sheets.
