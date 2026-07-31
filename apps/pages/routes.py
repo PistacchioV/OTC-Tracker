@@ -31,6 +31,9 @@ from flask import (
 from jinja2 import TemplateNotFound
 
 from apps.pages import blueprint
+# Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
+# navegador) — usado pela varredura agendada do box. Sem dependência externa.
+from apps.pages import otc_boxparse
 
 # ==============================================================================
 # LOGGING CONFIG
@@ -18972,6 +18975,302 @@ def api_new_deals_box_scan():
     except Exception as e:
         log.error('[api_new_deals_box_scan] %s', e)
         return jsonify({'error': str(e)}), 500
+
+
+# ==============================================================================
+# BOX SCAN AUTOMÁTICO — varredura agendada do box (NDF Comm e Opt Comm)
+#
+# O botão Import continua existindo e é o caminho manual; este bloco é o mesmo
+# trabalho feito sozinho a cada BOX_SCAN_POLL_MIN minutos, sem ninguém com a
+# página aberta.
+#
+# ⚠️ O caminho manual parseia o e-mail NO NAVEGADOR (otc-fileupload.js). Aqui
+# quem parseia é `otc_boxparse`, um porte da MESMA regra para Python — duas
+# cópias da mesma lógica, com a armadilha que isso implica (HANDOFF §121). O que
+# as mantém honestas é `scratchpad/check_boxparse.py`, que roda o JS de verdade
+# no JavaScriptCore e compara campo a campo. Mexeu num lado, rode-o.
+# ==============================================================================
+
+_BOX_SCAN_POLL_MIN = int(os.getenv('BOX_SCAN_POLL_MIN', '30') or 30)
+_box_scan_scheduler_started = False
+_box_scan_scheduler_lock = threading.Lock()
+
+# Maker sintético: ninguém humano importou. Mesma convenção do pull da Athena
+# (que grava 'API'), e é o que mantém a trava de quatro olhos válida — qualquer
+# usuário pode aprovar um deal que a máquina trouxe.
+_BOX_MAKER_SID = 'BOX'
+
+_BOX_PRODUCTS = {
+    'ndf': {'label': 'NDF Comm', 'layout': 'ndf',
+            'dir': lambda: NDF_COMM_CACHE_DIR, 'suffix': '_ndfcomm.json'},
+    'opt': {'label': 'Opt Comm', 'layout': 'opt',
+            'dir': lambda: CACHE_BASE_DIR, 'suffix': '_optcomm.json'},
+}
+
+
+def _box_refdata_by_accronym():
+    """{accronym → {spn, counterparty, taxId}} — o `loadRefData` do JS: indexa
+    por COMMODITIES ACCRONYM e, quando a chave ainda está livre, por FX CASH
+    ACCRONYM (o primeiro a chegar vence, como no `if (fxAcr && !map[fxAcr])`)."""
+    out = {}
+    try:
+        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+            rows = json.load(fh) or []
+    except Exception:
+        log.warning('[boxscan] RefData.json ilegível:\n%s', traceback.format_exc())
+        return out
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        entry = {'spn': row.get('SPN') or '',
+                 'counterparty': row.get('COUNTERPARTY') or '',
+                 'taxId': row.get('TAX ID') or ''}
+        comm = str(row.get('COMMODITIES ACCRONYM') or '').upper().strip()
+        fx = str(row.get('FX CASH ACCRONYM') or '').upper().strip()
+        if comm:
+            out[comm] = entry
+        if fx and fx not in out:
+            out[fx] = entry
+    return out
+
+
+def _box_subjacente_index():
+    """{código ou ticker → {commodity, fatorConversao}} — o `loadSubjacenteData`
+    do JS, incluindo o merge que prefere o fator de centavos quando o mesmo
+    código aparece com fatores conflitantes (§77.1)."""
+    idx = {}
+    try:
+        fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+        with open(fp, encoding='utf-8') as fh:
+            rows = json.load(fh) or []
+    except Exception:
+        log.warning('[boxscan] Subjacente.json ilegível:\n%s', traceback.format_exc())
+        return idx
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        commodity = row.get('Commodity') or ''
+        fator = otc_boxparse._parse_fator(row.get('Fator Conversao'))
+        for key in (str(row.get('Codigo do Ativo Subjacente') or '').strip(),
+                    str(row.get('Ticker') or '').strip()):
+            if not key:
+                continue
+            prev = idx.get(key)
+            if not prev:
+                idx[key] = {'commodity': commodity, 'fatorConversao': fator}
+                continue
+            if otc_boxparse._is_cents_factor(fator) or (
+                    prev.get('fatorConversao') is None and fator is not None):
+                prev['fatorConversao'] = fator
+            if not prev.get('commodity') and commodity:
+                prev['commodity'] = commodity
+    return idx
+
+
+def _box_commodity_maps():
+    """Mapas Commodities × B3 vindos do CADASTRO (/mapping), não de literais —
+    é a mesma fonte que o JS consome via /api/mappings/commodities-b3 (§131)."""
+    fixed, dynamic, holiday = {}, {}, {}
+    for row in _mapping_rows('commodities-b3'):
+        typ = str(row.get('TYPE') or '').upper()
+        mkt = str(row.get('MARKET') or '').strip().upper()
+        code = str(row.get('B3 CODE') or '')      # sem trim: 'C ' tem espaço no código
+        cal = str(row.get('HOLIDAY CALENDAR') or '').strip()
+        if mkt and cal:
+            holiday[mkt] = cal
+        if not mkt or not code or typ == 'SPECIAL':
+            continue
+        if 'PREFIX' in typ:
+            dynamic[mkt] = code
+        else:
+            fixed[mkt] = code
+    return {'fixed': fixed, 'dynamic': dynamic, 'holiday': holiday}
+
+
+def _box_persist_deals(product, deals):
+    """Grava os deals de um e-mail no arquivo do dia, com a MESMA regra do
+    caminho do navegador: a chave é **Deal + Acronym**; já existente vira
+    'Amend' preservando o B3 ID (uma operação já registrada não perde o número),
+    novo entra como 'New'. Retorna (novos, amendados)."""
+    cfg = _BOX_PRODUCTS[product]
+    new_n = amend_n = 0
+    by_file = {}
+    for d in deals:
+        try:
+            ref = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
+        except (ValueError, TypeError):
+            ref = datetime.now()
+        fpath = os.path.join(cfg['dir'](), ref.strftime('%Y'), ref.strftime('%m'),
+                             ref.strftime('%Y%m%d') + cfg['suffix'])
+        by_file.setdefault(fpath, []).append(d)
+
+    for fpath, items in by_file.items():
+        os.makedirs(os.path.dirname(fpath), exist_ok=True)
+        # ler → alterar → gravar inteiro sob o lock: o _atomic_write_json sozinho
+        # evita arquivo pela metade, não perda de atualização de outro usuário.
+        with _cache_lock:
+            try:
+                with open(fpath, encoding='utf-8') as fh:
+                    existing = json.load(fh)
+                if not isinstance(existing, list):
+                    existing = [existing]
+            except (IOError, json.JSONDecodeError):
+                existing = []
+            idx = {}
+            for i, e in enumerate(existing):
+                if isinstance(e, dict):
+                    idx[((e.get('Deal') or '').strip(),
+                         (e.get('Acronym') or '').strip())] = i
+            for d in items:
+                key = ((d.get('Deal') or '').strip(), (d.get('Acronym') or '').strip())
+                pos = idx.get(key)
+                if pos is None:
+                    existing.append(d)
+                    idx[key] = len(existing) - 1
+                    new_n += 1
+                    continue
+                old = existing[pos]
+                keep_b3 = str(old.get('B3_ID') or '').strip()
+                changed = [k for k, v in d.items()
+                           if k not in ('Status', 'B3_ID', 'Maker', 'Checker')
+                           and str(old.get(k, '') or '').strip() != str(v or '').strip()]
+                if not changed:
+                    continue                       # e-mail repetido: nada a fazer
+                merged = dict(old)
+                merged.update(d)
+                merged['B3_ID'] = keep_b3
+                merged['Status'] = 'Amend'
+                merged['Maker'] = old.get('Maker') or _BOX_MAKER_SID
+                merged['Checker'] = ''             # amend exige nova aprovação
+                merged['AmendChanged'] = sorted(set(old.get('AmendChanged') or []) | set(changed))
+                existing[pos] = merged
+                amend_n += 1
+            _atomic_write_json(fpath, existing)
+    return new_n, amend_n
+
+
+def _box_scan_pull(product):
+    """Uma varredura do box para um produto: lê os e-mails, grava os deals e
+    arquiva só o e-mail cujos deals entraram. Devolve o resumo do que aconteceu.
+
+    Levanta EnvironmentError fora do Windows/Outlook — quem chama decide o tom.
+    """
+    cfg = _BOX_PRODUCTS.get(product)
+    if not cfg:
+        raise ValueError('produto deve ser ndf ou opt (recebido: %r)' % product)
+    from apps.pages.otc_boxscan import scan_new_deals_box, archive_email
+
+    res = scan_new_deals_box(product)
+    emails = res.get('emails') or []
+    cancelled = res.get('cancelled') or []
+    if not emails:
+        return {'emails': 0, 'deals': 0, 'new': 0, 'amended': 0,
+                'archived': 0, 'cancelled': len(cancelled)}
+
+    ref_map = _box_refdata_by_accronym()
+    subj_idx = _box_subjacente_index()
+    maps = _box_commodity_maps()
+
+    total = new_n = amend_n = archived = 0
+    for em in emails:
+        try:
+            deals = otc_boxparse.deals_from_html(
+                em.get('html') or '', ref_map, subj_idx,
+                _BOX_MAKER_SID, cfg['layout'], maps)
+        except Exception:
+            log.warning('[boxscan] %s: falha ao parsear %r:\n%s',
+                        product, em.get('subject'), traceback.format_exc())
+            continue
+        if not deals:
+            # Sem linha de deal: NÃO arquiva. O e-mail fica no box para alguém
+            # olhar — arquivar aqui esconderia um layout que o parser não leu.
+            log.warning('[boxscan] %s: nenhum deal em %r (e-mail mantido no box)',
+                        product, em.get('subject'))
+            continue
+        n, a = _box_persist_deals(product, deals)
+        total += len(deals)
+        new_n += n
+        amend_n += a
+        if em.get('entry_id'):
+            try:
+                archive_email(em['entry_id'])
+                archived += 1
+            except Exception:
+                log.warning('[boxscan] %s: não consegui arquivar %r:\n%s',
+                            product, em.get('subject'), traceback.format_exc())
+    if new_n or amend_n:
+        bits = []
+        if new_n:
+            bits.append('{} imported'.format(new_n))
+        if amend_n:
+            bits.append('{} amended'.format(amend_n))
+        _create_notification(_BOX_MAKER_SID, 'Box Scan', 'New Deals', cfg['label'],
+                             'Outlook box: {} deal(s)'.format(', '.join(bits)))
+    log.info('[boxscan] %s: %d e-mail(s) · %d deal(s) · novos=%d amendados=%d · '
+             'arquivados=%d · cancelamentos apagados do box=%d',
+             product, len(emails), total, new_n, amend_n, archived, len(cancelled))
+    return {'emails': len(emails), 'deals': total, 'new': new_n,
+            'amended': amend_n, 'archived': archived, 'cancelled': len(cancelled)}
+
+
+def _box_scan_scheduler_loop():
+    last_err = {}
+    while True:
+        time.sleep(max(60, _BOX_SCAN_POLL_MIN * 60))
+        for product in _BOX_PRODUCTS:
+            try:
+                _box_scan_pull(product)
+                last_err.pop(product, None)
+            except EnvironmentError as e:
+                # Sem Outlook (host não-Windows): estado esperado, não é falha.
+                if last_err.get(product) != str(e):
+                    log.info('[boxscan] %s indisponível: %s', product, e)
+                last_err[product] = str(e)
+            except Exception as e:                          # noqa: BLE001
+                msg = str(e)
+                if last_err.get(product) != msg:
+                    log.warning('[boxscan] varredura de %s falhou: %s', product, msg)
+                else:
+                    log.debug('[boxscan] varredura de %s falhou de novo: %s', product, msg)
+                last_err[product] = msg
+
+
+def _box_scan_start_scheduler():
+    global _box_scan_scheduler_started
+    with _box_scan_scheduler_lock:
+        if _box_scan_scheduler_started:
+            return
+        _box_scan_scheduler_started = True
+    threading.Thread(target=_box_scan_scheduler_loop,
+                     name='box-scan-scheduler', daemon=True).start()
+    log.info('[boxscan] scheduler do box iniciado (a cada %d min · NDF Comm e Opt Comm)',
+             _BOX_SCAN_POLL_MIN)
+
+
+try:
+    _box_scan_start_scheduler()
+except Exception:                                           # noqa: BLE001
+    log.warning('[boxscan] scheduler não iniciou:\n%s', traceback.format_exc())
+
+
+@blueprint.route('/api/new-deals/box-scan/run', methods=['POST'])
+def api_new_deals_box_scan_run():
+    """Dispara a varredura do box na hora, sem esperar os 30 min. Serve para
+    conferir o agendamento na instância da equipe."""
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    product = (request.get_json(silent=True) or {}).get('product', '')
+    products = [product] if product in _BOX_PRODUCTS else list(_BOX_PRODUCTS)
+    out = {}
+    for p in products:
+        try:
+            out[p] = _box_scan_pull(p)
+        except EnvironmentError as e:
+            out[p] = {'unavailable': True, 'detail': str(e)}
+        except Exception as e:                              # noqa: BLE001
+            log.error('[boxscan] run manual de %s: %s', p, e)
+            out[p] = {'error': str(e)}
+    return jsonify({'ok': True, 'results': out})
 
 
 @blueprint.route('/api/new-deals/box-archive', methods=['POST'])
