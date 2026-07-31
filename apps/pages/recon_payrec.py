@@ -673,10 +673,16 @@ def _cli_spb(rows, cols, mgt=False):
        the leg is always a Pay (sent TED). (Received derivative TEDs come from
        RLDOCREC / _cli_rec.)
     2) OTHER BANKS (Safra, Bradesco, Caterpillar…): interbank settlements that
-       carry NO client info. Keep rows whose status (col A) = 'Sucesso' and whose
-       message code (col F) is LTR0004 (JP paying → Pay) or LTR0005 (JP receiving
-       → Receive). These have no name to join on, so they are flagged (bank=True,
-       tol=_TOL_BANK) to be reconciled against the JPM side by VALUE within R$20.
+       carry NO client info. Keep rows whose message code (col F) is LTR0004
+       (JP paying → Pay) or LTR0005 (JP receiving → Receive). These have no name
+       to join on, so they are flagged (bank=True, tol=_TOL_BANK) to be
+       reconciled against the JPM side by VALUE within R$20.
+
+    BOTH paths require status (col A) = 'Sucesso': the file is a message LOG, so
+    it also carries the messages that failed/were rejected. A non-'Sucesso' row
+    is a payment that never happened — counting it would create a client-side leg
+    with no cash behind it, which then either matches a JPM leg (hiding a genuine
+    break) or shows up as a phantom pending row.
     """
     c_val = _resolve(cols, 'Valor (R$)', 'Valor')
     c_evt = _resolve(cols, 'Descrição Evento', 'Descricao Evento')
@@ -688,6 +694,13 @@ def _cli_spb(rows, cols, mgt=False):
     le = 'MGT' if mgt else 'JPM'
     out = []
     for r in rows:
+        # Só entra na recon o que foi pago DE FATO: col A = 'Sucesso'. Vale para as
+        # duas trilhas (cliente derivativos e interbancário) — antes só a segunda
+        # olhava o status, então uma mensagem de derivativos rejeitada virava um
+        # Pay do cliente que nunca saiu.
+        if 'sucesso' not in _norm(r.get(c_status, '') if c_status else ''):
+            continue
+
         evt = str(r.get(c_evt, '') if c_evt else '')
         en = evt.lower()
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
@@ -704,15 +717,13 @@ def _cli_spb(rows, cols, mgt=False):
                         'pay_receive': 'Pay', 'le': le})
             continue
 
-        # 2) Interbank settlement (other banks) — status 'Sucesso' + LTR code in
-        #    col F decides direction. No client info → used ONLY to confirm a match
-        #    for a JPM bank leg by value (±R$20): a matched LTR settles its JPM leg;
-        #    an LTR with no matching JPM leg is dropped (drop_if_unmatched) and never
-        #    enters the recon as a pending row or in the summary totals.
-        status = _norm(r.get(c_status, '') if c_status else '')
+        # 2) Interbank settlement (other banks) — o LTR da col F decide a direção
+        #    (o status já foi filtrado no topo do laço). No client info → used ONLY
+        #    to confirm a match for a JPM bank leg by value (±R$20): a matched LTR
+        #    settles its JPM leg; an LTR with no matching JPM leg is dropped
+        #    (drop_if_unmatched) and never enters the recon as a pending row or in
+        #    the summary totals.
         ltr = str(r.get(c_ltr, '') if c_ltr else '').strip().upper()
-        if 'sucesso' not in status:
-            continue
         if _LTR_PAY in ltr:
             pr, sign = 'Pay', -1                             # JP paying
         elif _LTR_RECEIVE in ltr:
