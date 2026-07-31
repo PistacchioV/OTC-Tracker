@@ -7330,3 +7330,57 @@ então os três parsers de fator agora seguem a mesma regra.
 Verificado com `scripts/tests/check_cem_sheets.py` — monta workbooks de verdade com openpyxl e cobre
 os nomes que o código antigo não reconhecia, os nomes antigos ainda funcionando, abas extras depois da
 2ª, a inversão 228/199 preservada, os dois casos de erro (uma aba só e CSV) e a ordem trocada.
+
+---
+
+## §166 — Vanilla × Other Publisher sai do cadastro, não do literal `'PTAX'` (`0c94d3c`)
+
+**O sintoma:** o usuário cadastrou a linha `PTAX|BRR|PTAX` em /mapping › Publisher × B3 (NDF) e as
+operações desse feeder continuavam caindo em **Other Publisher** em vez de **Vanilla**.
+
+**A causa:** o roteamento do import da API nem olhava o cadastro — era um literal:
+
+```python
+elif publisher and publisher.upper() != 'PTAX':
+    target = 'other-publishers'
+```
+
+Qualquer coisa diferente da string exata `PTAX` ia para Other Publisher, **inclusive as variantes que
+também são PTAX do BACEN**. Não havia como corrigir pela tela.
+
+**A correção:** quem decide agora é a coluna **NOTES**.
+
+| NOTES | destino |
+|---|---|
+| `BACEN` | **Vanilla** |
+| qualquer outro valor | Other Publisher |
+| publisher sem linha no cadastro | Other Publisher |
+| publisher vazio | **Vanilla** (default histórico do import: sem feeder = PTAX puro) |
+
+A comparação é sobre o texto limpo e sem caixa (`bacen`, `  BACEN  ` valem), mas **não por trecho** —
+`BACEN/PTAX` não conta. É a mesma regra de "sem variações" que vale para o match de publisher.
+
+### O match exato de uma linha sem Match Tokens
+
+`_ndf_publisher_row` faz **duas passadas, nesta ordem**:
+
+1. **nome exato** — `PUBLISHER` igual ao publisher inteiro;
+2. **token** — só para linhas **com** `TOKENS`, porque a Athena manda o publisher composto
+   (`PTAX|USB|WMR|4` → REUTERS - WMR).
+
+Uma linha **sem** Match Tokens só casa na passada 1 (o `split` de string vazia não produz token). É o
+que permite `PTAX` e `PTAX|BRR|PTAX` coexistirem como cadastros **independentes** — nenhum rouba o
+outro. A regra sempre valeu, mas estava implícita; virou docstring e teste.
+
+Os rótulos das colunas passam a anunciar a semântica, para quem abre a tela não achar que `NOTES` é só
+comentário: **"Notes (BACEN → Vanilla)"** e **"Match Tokens (blank = exact match only)"**.
+
+> ⚠️ **O que sustenta a compatibilidade** é a linha `PTAX` estar com `NOTES = BACEN`. Se alguém apagar
+> esse campo, PTAX puro passa a ir para Other Publisher — é a única forma de isso quebrar. Os 10
+> publishers do seed foram comparados contra a fórmula antiga e dão idêntico.
+
+`_ndf_deal_from_api` é o **único** ponto onde um deal é classificado Vanilla × Other Publisher; não há
+segunda cópia dessa decisão no front (o `_pubRow` do JS serve só à Fonte de Informação do TER).
+
+Verificado com `scripts/tests/check_publisher_ndf.py` — 40 asserções, com o cadastro da tela
+reproduzido incluindo a linha nova.
