@@ -17230,11 +17230,12 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
     def _has(key):
         return str(deal.get(key, '') or '').strip() != ''
 
-    qic        = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
-    strike_ccy = (deal.get('StrikeCurrency', '') or '').strip().upper()
-    is_brl     = strike_ccy == 'BRL'
-    # Non-BRL quoted-in-cents prices are normalized /100; BRL never divides.
-    _cents = lambda v: (v / 100.0) if (qic and not is_brl) else v
+    qic = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
+    # Cotado em cents divide por 100 SEMPRE, seja o strike em USD ou em BRL: a
+    # regra é do ativo (Fator Conversão 0,01 no Subjacente) e não da moeda do
+    # deal. Antes o BRL era exceção aqui e não era no Conecta desta mesma
+    # página — o mesmo deal saía com strike diferente nos dois arquivos. §172
+    _cents = lambda v: (v / 100.0) if qic else v
 
     is_call = 'CALL' in instrument
     is_put  = 'PUT' in instrument
@@ -18719,7 +18720,12 @@ def api_ndf_send_conecta():
         settl_date = _date(deal.get('SettlementDate', ''))
         deal_id    = _sh(deal.get('Deal', ''))
         notional   = _sh(deal.get('TotalNotional', ''))
-        strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=(qic and not brl))
+        # Quoted in Cents divide por 100 SEMPRE que o ativo é cotado em cents —
+        # a moeda do strike não entra na conta. A regra é do ativo (Fator
+        # Conversão 0,01 no Subjacente), não do par de moedas, então excetuar o
+        # BRL fazia o mesmo ativo sair com strike 100× diferente conforme a
+        # moeda do deal. §172
+        strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)
 
         # Notional: integer right-justified to 14 chars + '00' = 16 chars total
         try:
