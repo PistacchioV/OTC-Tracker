@@ -15304,6 +15304,10 @@ def _ndf_flat(s):
 #  por mtime — edição vale na requisição seguinte, sem restart do servidor.
 _MAPPINGS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mappings'))
 
+# Legal Entities do fluxo de NDF/FXO. Uma lista só, usada pelos dois mappings que
+# têm a LE como chave (le-accronym e le-spn), para não divergirem.
+_MAP_LE_OPTIONS = ['', 'JPM', 'MGT', 'LAWTON']
+
 # Campos da API getTrades que podem formar o par do filtro interbook. Os nomes
 # são os da API já normalizados (espaço/underscore → espaço, maiúsculas), do
 # jeito que _ndf_api_norm devolve.
@@ -15544,7 +15548,7 @@ _MAPPING_DEFS = {
         'label': 'Legal Entity × Accronym',
         'columns': [
             {'key': 'LE', 'label': 'Legal Entity', 'type': 'select',
-             'options': ['', 'JPM', 'MGT', 'LAWTON'], 'autofill': 'SETTLEMENT LOCATION'},
+             'options': _MAP_LE_OPTIONS, 'autofill': 'SETTLEMENT LOCATION'},
             {'key': 'ACCRONYM', 'label': 'Accronym'},
             {'key': 'SETTLEMENT LOCATION', 'label': 'Settlement Location'},
         ],
@@ -15553,6 +15557,21 @@ _MAPPING_DEFS = {
             {'LE': 'MGT', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'JPMCBB'},
             {'LE': 'LAWTON', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'LAWTON'},
         ],
+    },
+    # SPN de cada Legal Entity — o SPN da NOSSA ponta, que é coisa diferente do
+    # SPN da contraparte (esse vem do Reference Data, pelo accronym: §147/§148).
+    # Existe porque a API manda hoje, no campo SPN, o da Legal Entity e não o da
+    # contraparte; ter o de-para aqui permite reconhecer/preencher o SPN da LE sem
+    # depender do que a API mandar. Nasce VAZIO: não havia de-para no código, e um
+    # SPN inventado no seed sairia num arquivo para a B3 como se fosse cadastro.
+    'le-spn': {
+        'label': 'Legal Entity × SPN',
+        'columns': [
+            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_OPTIONS},
+            {'key': 'SPN', 'label': 'SPN'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
     },
     # Bancos oferecidos no editor de contraparte (Reference Data, duplo clique →
     # contas BANKING/PAY-REC). ID = código COMPE de 3 dígitos; ISPB e TAX ID
