@@ -1440,15 +1440,16 @@ def _attach_email_gradient(container):
 
 @blueprint.app_context_processor
 def _inject_email_grad_url():
-    """Expose `grad_url` (absolute URL to the header gradient image) to every
-    template, so the shared e-mail header partial renders the Outlook gradient
-    without each route having to pass it. Falls back to the cid: reference when
-    there's no request context / SERVER_NAME (e.g. a scheduled send)."""
-    try:
-        return {'grad_url': url_for('static', filename='images/email-header-gradient.png',
-                                    _external=True)}
-    except Exception:
-        return {'grad_url': 'cid:otc_gradient'}
+    """Expose `grad_url` (the header gradient image) to every template, so the
+    shared e-mail header partial renders the Outlook gradient without each route
+    having to pass it.
+
+    It is ALWAYS the inline `cid:` attachment, never an absolute http URL: every
+    sender attaches the image via `_attach_email_gradient()`, and a remote URL is
+    a download Outlook may block, delay or complete only in part — which is what
+    printed a header half gradient / half flat #4f8ae2 (see the CETIP Files Saved
+    e-mail of 03/08/2026). The cid: reference cannot fail halfway."""
+    return {'grad_url': 'cid:otc_gradient'}
 
 
 def render_email_template(code, recipient_name):
@@ -4042,12 +4043,9 @@ def _build_daily_metric_eml(ref, to_list, cc_list, bcc_list):
         prev_m = monthly[-2] if len(monthly) >= 2 else {}
         latest_d = daily[-1] if daily else {}
 
-        # Absolute URL to the header gradient image (Outlook honours <td background="url">).
-        # Falls back to the inline cid: attachment when there's no request/SERVER_NAME.
-        try:
-            grad_url = url_for('static', filename='images/email-header-gradient.png', _external=True)
-        except Exception:
-            grad_url = 'cid:otc_gradient'
+        # Header gradient: always the inline cid: attachment (_attach_email_gradient
+        # below), never a remote URL — see _inject_email_grad_url().
+        grad_url = 'cid:otc_gradient'
 
         html = render_template(
             'pages/email-template-daily-metric.html',

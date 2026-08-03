@@ -8,10 +8,15 @@
      • header_logo_height  — logo px height (optional, default 60)
 
    Requires `grad_url` in context (injected app-wide by the context processor;
-   the daily-metric route also passes it explicitly). Gradient shows via:
+   the daily-metric route also passes it explicitly). It is always the inline
+   `cid:otc_gradient` attachment — never a remote URL, which Outlook can block or
+   download only in part. Gradient shows via:
      • Outlook desktop → VML rect filled with the gradient IMAGE (type=frame).
      • Modern clients  → CSS linear-gradient + <td background> image.
      • Images blocked  → solid #4f8ae2.
+   The rect carries `mso-width-percent:1000` on purpose: with the px width alone
+   Outlook could paint it narrower than the cell and leave a flat #4f8ae2 band on
+   the right of the banner (CETIP Files Saved, 03/08/2026).
    Content sits in a <center> + fixed-width table so it centres in every client.
    ========================================================================== #}
 <tr>
@@ -19,7 +24,7 @@
         style="background:#4f8ae2 url('{{ grad_url }}') no-repeat center center / cover;
                background:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);padding:0;">
         <!--[if gte mso 9]>
-        <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:{{ header_width|default(820) }}px;height:190px;">
+        <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:{{ header_width|default(820) }}px;height:190px;mso-width-percent:1000;">
             <v:fill type="frame" src="{{ grad_url }}" color="#4f8ae2" />
             <v:textbox inset="0,0,0,0">
         <![endif]-->
