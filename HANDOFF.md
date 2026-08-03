@@ -7497,3 +7497,52 @@ bater é a **razão social**, não o accronym.
 Verificado com `scripts/tests/check_ndf_pdf_cpty.py` — 24 asserções, incluindo a **paridade entre o seed
 em `routes.py` e a tupla de fallback em `otc_emails.py`**: editar um e esquecer o outro faz a instância
 sem o arquivo anexar PDF para um conjunto diferente do que a tela mostra.
+
+---
+
+## §170 — `HO"MY"U6` no Underlying Asset: JS velho em cache lendo o cadastro novo
+
+**O sintoma:** um deal de NDF Commodities entrou com **Underlying Asset `HO"MY"U6`** e o badge
+*Missing Index B3*, embora o market `HO_NYMEX` estivesse mapeado como `HO"MY"` em Commodities × B3 e o
+`HOU6` cadastrado no Subjacente. Cadastro certo, tela errada.
+
+**A causa: o token de cache do `<script>`.** O `otc-fileupload.js` era servido com
+`?v=20260728b`, escrito à mão. O §164 (`03bbab3`, 31/07) mudou esse arquivo para a notação `"MY"` e
+**ninguém trocou o token** — nem o `2b168a9`, antes dele. Com a URL igual, o navegador seguiu executando
+o JS **anterior ao §164**:
+
+```js
+function buildDynamicCode(prefix, contract) {   // versão antiga
+    return prefix + p.monthCode + p.yearLast;   // o padrão inteiro vira prefixo literal
+}
+```
+
+`HO"MY"` + `U` + `6` = `HO"MY"U6`. O servidor já servia o cadastro no formato novo; o cliente é que
+tinha ficado para trás. Nada no cadastro estava errado — e é por isso que a conferência campo a campo
+não achava nada.
+
+> ⚠️ **Um `?v=` escrito à mão é uma promessa que alguém vai esquecer.** E quando esquece, o que quebra
+> não é o layout: é o dado, porque a regra de negócio mora nesse JS. `asset_v()` (`routes.py`) devolve o
+> **mtime** do estático, então publicar o arquivo já invalida o cache — não sobra string para bumpar. Os
+> 6 templates que carregam o `otc-fileupload.js` passaram a usá-lo.
+
+**A rede de segurança.** `_nd_fix_underlying_marker` limpa um `"MY"` que tenha sobrado no
+`UnderlyingAsset` nos POSTs de `/api/new-deals/{ndf,opt}-commodities/cache`, e loga um WARNING com o
+deal — é o que identifica a máquina com o JS velho. Como o marcador nunca faz parte de um código B3 de
+verdade, apagá-lo devolve exatamente `HOU6`.
+
+A guarda fica na **gravação**, não na exibição: corrigir só na tela deixaria o arquivo do dia — que é o
+que alimenta o Conecta e o registro na B3 — com o código torto, e aí a tela mentiria sobre o que vai
+para o regulador. Ela também cobre a aba que já estava aberta com o JS velho, que continua postando até
+alguém dar reload.
+
+**O que a correção NÃO faz:** deal já gravado continua errado no arquivo do dia. Reenviar o recap ou
+editar a linha faz o save passar pela guarda e o código sai certo.
+
+Verificado com `scripts/tests/check_b3_pattern.py` (seção 2b) — inclui o caso exato `HO"MY"U6 → HOU6`,
+o marcador em minúsculas e com espaço, e a prova de que um código bom não é tocado.
+
+> Sobrou um caso irmão à espera: `live-position-swap-characteristics.js` está com **dois tokens
+> diferentes** em templates diferentes (`20260705` em 4 páginas, `20260721a` em 3), ou seja, quatro
+> páginas servem uma cópia mais velha do mesmo arquivo. Os outros 22 `?v=` do repo continuam escritos à
+> mão; passar o `asset_v` em todos resolve a classe inteira.
