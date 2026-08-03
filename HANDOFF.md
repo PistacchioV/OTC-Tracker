@@ -7413,3 +7413,87 @@ contagem, no mesmo formato do `Sent to B3`.
 > é a mesma armadilha do `table.rows({search:'none', page:'all'})` descrita no CLAUDE.md: cobre só o que
 > está carregado na tela, não o dia inteiro. Uma contagem de notificação tirada daí conta a tela, não o
 > arquivo.
+
+---
+
+## §168 — E-mail saindo metade gradiente, metade cor sólida (`20e258e`)
+
+**O sintoma:** o "CETIP Files Saved" de 03/08/2026 chegou com a faixa azul do topo pintada só até
+~93% da largura; o resto era um bloco chapado de `#4f8ae2`. Nos outros dias saiu certo, e os **outros
+dois e-mails do mesmo lote** (Sales Support e CEM Latam) — que passam pelo **mesmo** `_send_cetip_email`
+e pelo mesmo template — saíram certos no mesmo dia. HTML idêntico rendendo diferente é o que aponta
+para fora do template.
+
+**As duas causas.** As duas produzem o mesmo desenho, e as duas variam de um envio para o outro:
+
+1. **A imagem vinha por URL remota quando o e-mail sai de uma requisição.** `_inject_email_grad_url`
+   devolvia `url_for(..., _external=True)` sempre que havia contexto de requisição, e só caía no `cid:`
+   quando não havia (envio agendado). O Save CETIP Files é botão do Control Panel, ou seja, **sempre**
+   pegava a URL remota. URL remota é download: o Outlook pode bloquear, atrasar ou concluir pela
+   metade — e meia imagem é meia faixa. O `cid:` já era anexado por `_attach_email_gradient()` em todos
+   os senders, então bastou passar a usá-lo sempre. Mesmo ajuste no draft do Daily Metric, o outro
+   ponto que montava a URL na mão.
+2. **O `v:rect` do VML podia ser pintado mais estreito que a célula.** O que sobra à direita fica com o
+   `color` sólido do `v:fill`, que é exatamente o `#4f8ae2` observado. Só o `width` em px não garante
+   alinhamento com a tabela HTML; **`mso-width-percent:1000`** amarra a pintura à largura real da
+   célula.
+
+> ⚠️ A correção está no **partial compartilhado** `partials/email-gradient-header.html`, então vale para
+> os 15 templates de e-mail — não só o do CETIP. Ao mexer nele, lembre que `grad_url` **nunca** pode
+> voltar a ser URL http: o anexo `cid:` é o que não falha pela metade.
+
+---
+
+## §169 — Dois cadastros novos: Legal Entity × SPN e o PDF do aviso de NDF (`049794d`, `6d2402f`)
+
+Dois mappings novos na tela `/mapping`, pela regra de sempre: nada mapeável fica no código.
+
+### Legal Entity × SPN (`le-spn`)
+
+Colunas **Legal Entity** (dropdown), **SPN** e **Notes**. É o SPN da **nossa** ponta — coisa diferente
+do SPN da contraparte, que continua vindo do Reference Data pelo accronym (§147/§148). Nasce **vazio**:
+não havia de-para hardcoded para semear, e SPN inventado no seed sairia em arquivo para a B3 com cara
+de cadastro real. Mesmo critério do `swap-curves`.
+
+A lista de LEs virou `_MAP_LE_OPTIONS`, compartilhada com o `le-accronym` para as duas não divergirem.
+A **ATACAMA** entrou depois em `_MAP_LE_SPN_OPTIONS` (`_MAP_LE_OPTIONS + ['ATACAMA']`), só no `le-spn`:
+o `le-accronym` segue com as três entidades que de fato têm accronym e settlement location. Se a
+ATACAMA passar a ter accronym, mova o valor para `_MAP_LE_OPTIONS` e apague a lista extra.
+
+> A lista de LEs é **código, não cadastro**: cada entidade nova custa commit + restart, que é justo o
+> atrito que a tela existe para evitar. Se aparecerem mais, o certo é o LE virar texto livre ou puxar as
+> opções das linhas já registradas.
+
+Ninguém consome o `le-spn` ainda — por ora é só o cadastro.
+
+### Settlement PDF (NDF Advice) (`ndf-pdf-cpty`)
+
+O aviso de liquidação de NDF de Moeda leva a Ficha de Liquidação **também em PDF anexo** para algumas
+contrapartes. A lista era a tupla `_NDF_PDF_COUNTERPARTIES` em `otc_emails.py`, herdada da macro
+CommodiXchange — cliente novo exigia mexer no código. Virou cadastro, com o seed carregando **exatamente**
+as 6 contrapartes de antes.
+
+**O consumidor lê o arquivo direto**, não via `_mapping_rows`: `otc_emails.py` não importa `routes.py`
+(seria import circular), então `_ndf_pdf_set()` faz `open` + `json.load` no
+`static/data/mappings/ndf-pdf-cpty.json`, no estilo do `_load_json` que o módulo já usa. Lê a cada aviso
+gerado, então **edição na tela vale na próxima geração, sem restart**.
+
+Duas semânticas que precisavam ficar separadas — e é aqui que se erra:
+
+| estado do cadastro | resultado |
+|---|---|
+| linhas registradas | manda o cadastro |
+| **vazio** (`[]`) | **ninguém leva PDF** — é resposta legítima, e é o que permite desligar o anexo pela tela |
+| arquivo **ausente** ou ilegível | volta à lista histórica |
+
+> ⚠️ Se o vazio caísse na lista histórica, não haveria como tirar o anexo de ninguém pela tela. Se o
+> arquivo ausente caísse em conjunto vazio, o primeiro aviso gerado depois do pull — antes de alguém
+> abrir a tela de mappings, que é o que semeia o arquivo — tiraria o PDF de quem sempre recebeu.
+
+O nome casa pelo **normalizado** (`_ndf_pdf_norm`: sem acento, caixa alta, espaços colapsados, travessão
+vira hífen), então grafia diferente entre a tela e o Reference Data não quebra o match. O que precisa
+bater é a **razão social**, não o accronym.
+
+Verificado com `scripts/tests/check_ndf_pdf_cpty.py` — 24 asserções, incluindo a **paridade entre o seed
+em `routes.py` e a tupla de fallback em `otc_emails.py`**: editar um e esquecer o outro faz a instância
+sem o arquivo anexar PDF para um conjunto diferente do que a tela mostra.
