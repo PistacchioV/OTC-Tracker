@@ -21650,7 +21650,18 @@ def api_conf_ndfcomm_validate():
 
 _CONF_OPT_FAMILY_TEMPLATES = {
     'strike-usd': ('confirmations/opt-comm-strike-usd.html', '/confirmation/opt-comm/strike-usd'),
+    # Strike em BRL: MESMO texto legal do documento em USD (conferido palavra a
+    # palavra contra o OPÇÃO COMMODITY - BRL.doc). O que muda é só o cabeçalho
+    # do Anexo I — "Preço de Exercício i (em R$)", e os subscritos i de Tipo da
+    # Opção / Quantidade / Data de Exercício. A cláusula da USD PTAX continua
+    # valendo, porque ela trata do preço da MERCADORIA cotada em dólar, não do
+    # strike; por isso a coluna de Data de Verificação da PTAX segue única aqui
+    # (diferente do Termo em BRL, que tem a janela inicial/final).
+    'brl':        ('confirmations/opt-comm-strike-brl.html', '/confirmation/opt-comm/strike-brl'),
 }
+
+# Família → variante do PDF (a réplica em reportlab). Sem entrada = 'usd'.
+_CONF_OPT_PDF_VARIANT = {'brl': 'brl'}
 
 
 def _conf_load_optcomm(ref):
@@ -21802,6 +21813,11 @@ def confirmation_optcomm_strike_usd():
     return _conf_opt_generation_page('strike-usd')
 
 
+@blueprint.route('/confirmation/opt-comm/strike-brl')
+def confirmation_optcomm_strike_brl():
+    return _conf_opt_generation_page('brl')
+
+
 @blueprint.route('/api/confirmation/opt-comm/save', methods=['POST'])
 def api_conf_optcomm_save():
     """Salva a confirmação de Opção (Word + PDF + XML) no Electronic Inventory
@@ -21843,7 +21859,7 @@ def api_conf_optcomm_save():
 
     try:
         from apps.pages.confirmation_pdfs import opcao_pdf
-        pdf_bytes = opcao_pdf(conf)
+        pdf_bytes = opcao_pdf(conf, variant=_CONF_OPT_PDF_VARIANT.get(family, 'usd'))
     except ImportError:
         return jsonify({'success': False,
                         'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500

@@ -744,13 +744,41 @@ def termo_pdf(conf, variant='usd'):
     return buf.getvalue()
 
 
+def opcao_anexo_heads(variant='usd'):
+    """As 16 colunas do Anexo I da confirmação de Opção, por variante.
+
+    Fora da `opcao_pdf` para o `scripts/tests/check_conf_optcomm_brl.py` poder
+    comparar esta lista com os `<th>` do template Jinja: são as duas cópias do
+    mesmo cabeçalho, e é justamente entre elas que a divergência passa
+    despercebida (o PDF é o que vai para a contraparte, o HTML é o que a pessoa
+    revisa na tela)."""
+    brl = variant == 'brl'
+    return ['i', 'Nº',
+            'Tipo da Opção' if brl else 'Tipo da Opção[i]',
+            'Forma de Exercício', 'Ticker[i]', 'Bolsa de Valores',
+            'Quantidade[i]' if brl else 'Quantidade',
+            'Data de Verificação da PTAX[i]', 'Comprador[i]', 'Prêmio[i]',
+            'Data de Pagamento do Prêmio[i]',
+            'Preço de Exercício[i] (em R$)' if brl else 'Preço de Exercício[i]',
+            'Data Inicial de Verificação da Mercadoria[i]',
+            'Data Final de Verificação da Mercadoria[i]',
+            'Data de Exercício' if brl else 'Data de Exercício[i]',
+            'Data de Vencimento[i]']
+
+
 def opcao_pdf(conf, variant='usd'):
-    """Bytes do PDF da confirmação de Opção de Commodities (strike em USD).
+    """Bytes do PDF da confirmação de Opção de Commodities.
 
     Mesmo esqueleto do termo_pdf; o texto legal é o do OPÇÃO COMMODITY.doc
     legado (cláusulas de call/put e definições a–p) e o Anexo I tem 16
     colunas (Tipo da Opção, Forma de Exercício, Preço de Exercício, Data de
-    Exercício)."""
+    Exercício).
+
+    `variant`: 'usd' (OPÇÃO COMMODITY.doc) ou 'brl' (OPÇÃO COMMODITY - BRL.doc).
+    Os dois documentos têm o MESMO texto legal — conferido palavra a palavra —, e
+    a diferença inteira está no cabeçalho do Anexo I: o strike sai anunciado em
+    reais e três subscritos `i` mudam de lugar. Por isso aqui não há bifurcação
+    de cláusula nenhuma, só de cabeçalho."""
     S = _styles()
     buf = BytesIO()
     page = landscape(A4)
@@ -1067,13 +1095,7 @@ def opcao_pdf(conf, variant='usd'):
     # ── Anexo I — Tabela de Referência (16 colunas) ──────────────────────────
     st.append(PageBreak())
     st.append(Paragraph('ANEXO I À CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS', S['annex']))
-    heads = ['i', 'Nº', 'Tipo da Opção[i]', 'Forma de Exercício', 'Ticker[i]',
-             'Bolsa de Valores', 'Quantidade', 'Data de Verificação da PTAX[i]',
-             'Comprador[i]', 'Prêmio[i]', 'Data de Pagamento do Prêmio[i]',
-             'Preço de Exercício[i]',
-             'Data Inicial de Verificação da Mercadoria[i]',
-             'Data Final de Verificação da Mercadoria[i]',
-             'Data de Exercício[i]', 'Data de Vencimento[i]']
+    heads = opcao_anexo_heads(variant)
     data = [[Paragraph(_sub(_e(h)), S['th']) for h in heads]]
     for i, r in enumerate(conf.get('rows') or [], start=1):
         data.append([
