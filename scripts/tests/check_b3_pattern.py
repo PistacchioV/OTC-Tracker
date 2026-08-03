@@ -63,6 +63,23 @@ check('mes de 1 letra (May)', B.build_b3_code('SB"MY"', 'May27'), 'SBK7')
 check('ano de 4 digitos usa o ultimo',
       B.build_b3_code('SB"MY"', 'May2027'), 'SBK7')
 
+print('\n== 2b. strip_b3_marker: rede contra consumidor pre-§164 ==')
+# Um cliente com o JS antigo em cache concatena o mes/ano no padrao INTEIRO:
+# 'HO"MY"' + 'U' + '6'. Apagar o marcador devolve o codigo certo.
+check('HO"MY"U6 -> HOU6',   B.strip_b3_marker('HO"MY"U6'),     'HOU6')
+check('XB"MY"Z6 -> XBZ6',   B.strip_b3_marker('XB"MY"Z6'),     'XBZ6')
+check('KO"MY"BNMKZ6',       B.strip_b3_marker('KO"MY"BNMKZ6'), 'KOBNMKZ6')
+check('codigo bom nao muda', B.strip_b3_marker('HOU6'),        'HOU6')
+check('fixo nao muda',      B.strip_b3_marker('PCRUDTB1'),     'PCRUDTB1')
+check('minusculo tambem',   B.strip_b3_marker('HO"my"U6'),     'HOU6')
+check('espaco no marcador', B.strip_b3_marker('HO" MY "U6'),   'HOU6')
+check('vazio',              B.strip_b3_marker(''),             '')
+check('None',               B.strip_b3_marker(None),           '')
+# o que o build_b3_code emite ja esta certo — passar pela rede nao pode mexer
+for pat, ctr in (('XB"MY"', 'Dec26'), ('C_"MY"', 'Dec26'), ('KO"MY"BNMK', 'Dec26')):
+    code = B.build_b3_code(pat, ctr)
+    check('idempotente sobre %r' % code, B.strip_b3_marker(code), code)
+
 print('\n== 3. o upgrade migra o formato antigo ==')
 old = [
     {'TYPE': 'PREFIX', 'MARKET': 'HU_RBOB_NYMEX', 'B3 CODE': 'XB'},

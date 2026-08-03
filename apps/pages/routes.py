@@ -1452,6 +1452,33 @@ def _inject_email_grad_url():
     return {'grad_url': 'cid:otc_gradient'}
 
 
+_STATIC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static'))
+
+
+def _asset_v(rel_path):
+    """Token de cache de um estático: o mtime do arquivo.
+
+    Substitui o `?v=20260728b` escrito à mão, que já falhou em produção: o §164
+    mudou o `otc-fileupload.js` e ninguém trocou a string, então o navegador
+    seguiu servindo o JS ANTERIOR — que lê o cadastro NOVO e trata o padrão
+    `HO"MY"` como prefixo literal. Resultado na tela: Underlying Asset
+    `HO"MY"U6` (§170). Com o mtime, publicar o arquivo já invalida o cache; não
+    há string para alguém esquecer de bumpar.
+
+    Falha (arquivo ausente) devolve '0': pior caso o cache não é invalidado,
+    que é o comportamento de hoje — nunca uma página quebrada.
+    """
+    try:
+        return str(int(os.path.getmtime(os.path.join(_STATIC_DIR, rel_path))))
+    except Exception:
+        return '0'
+
+
+@blueprint.app_context_processor
+def _inject_asset_v():
+    return {'asset_v': _asset_v}
+
+
 def render_email_template(code, recipient_name):
     return render_template(
         'pages/email-verification.html',
@@ -13343,6 +13370,32 @@ def _find_deal_in_cache(deal_name, client_name=None):
     return None, None
 
 
+def _nd_fix_underlying_marker(deal):
+    """Tira do UnderlyingAsset um `"MY"` que tenha sobrado do padrão do cadastro.
+
+    O código chega pronto do navegador. Um cliente com o `otc-fileupload.js`
+    ANTERIOR ao §164 em cache trata o padrão como prefixo literal e concatena o
+    mês/ano no fim — `HO"MY"` vira `HO"MY"U6` em vez de `HOU6`, e o deal entra
+    com um Underlying Asset que não existe no Subjacente ("Missing Index B3").
+    Foi o que aconteceu em 03/08/2026 (§170).
+
+    A guarda fica na GRAVAÇÃO, não na leitura: corrigir só na tela deixaria o
+    arquivo — que é o que alimenta o Conecta e o registro na B3 — com o código
+    torto. O aviso no log é o que identifica a máquina com o JS velho.
+    """
+    if not isinstance(deal, dict):
+        return
+    ua = deal.get('UnderlyingAsset')
+    if not isinstance(ua, str) or '"' not in ua:
+        return
+    fixed = otc_boxparse.strip_b3_marker(ua)
+    if fixed != ua:
+        deal['UnderlyingAsset'] = fixed
+        log.warning('[new-deals] UnderlyingAsset com marcador de padrão: %r → %r '
+                    '(deal=%r · cliente com JS antigo em cache?)',
+                    ua, fixed, deal.get('Deal', ''))
+
+
 @blueprint.route('/api/new-deals/opt-commodities/cache', methods=['POST'])
 def api_save_deal_cache():
     if not session.get('authenticated'):
@@ -13351,6 +13404,7 @@ def api_save_deal_cache():
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"success": False, "message": "No data provided"}), 400
+    _nd_fix_underlying_marker(data)
 
     # Use the deal's TradeDate (dd/mm/yyyy) for the directory; fall back to today
     trade_date_raw = data.get('TradeDate', '')
@@ -18156,6 +18210,7 @@ def api_ndf_save_deal_cache():
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"success": False, "message": "No data provided"}), 400
+    _nd_fix_underlying_marker(data)
 
     trade_date_raw = data.get('TradeDate', '')
     try:

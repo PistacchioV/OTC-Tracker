@@ -280,6 +280,21 @@ def build_b3_code(pattern, contract):
     return head + p[0] + p[1] + tail
 
 
+def strip_b3_marker(code):
+    """Rede de segurança: tira do código emitido um ``"MY"`` que tenha sobrado.
+
+    Um consumidor ANTERIOR ao §164 trata a coluna B3 CODE como prefixo literal e
+    concatena o mês/ano no fim, então o padrão ``HO"MY"`` do cadastro vira
+    ``HO"MY"U6`` em vez de ``HOU6``. O caso real foi um navegador com o
+    ``otc-fileupload.js`` velho em cache (§170). Como o marcador nunca faz parte
+    de um código B3 de verdade, apagá-lo devolve exatamente o código certo.
+
+    Só o Python precisa disto — é a guarda do lado do servidor, onde o dado é
+    gravado; não há espelho no JS.
+    """
+    return _B3_MY_RE.sub('', '' if code is None else str(code))
+
+
 def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix):
     """``calculateB3Id`` do JS. Os dois mapas vêm do cadastro Commodities × B3
     (/mapping) — nada de literal aqui, ver HANDOFF §131."""
