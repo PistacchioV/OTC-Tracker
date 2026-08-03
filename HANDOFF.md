@@ -7596,3 +7596,48 @@ célula a célula contra o Word, PDF × template, e a família ligada de ponta a
 - O Preço de Exercício continua saindo como `Strike × Fator de Conversão`, que é o que o Termo em BRL
   já faz. Se para opção com strike em reais o valor tiver de sair cru, é uma linha em
   `_conf_opt_generation_page`.
+
+---
+
+## §172 — Quoted in Cents deixa de olhar a moeda do strike
+
+**A regra é do ATIVO, não do par de moedas.** `Quoted in Cents` é derivado do **Fator Conversão
+0,01** do Subjacente (`_is_cents_factor`): diz que aquele ativo é *cotado em centavos*, o que é
+propriedade da commodity e não do deal. Excetuar o BRL fazia o mesmo ativo sair com strike **100×
+diferente** conforme a moeda da operação.
+
+**O que se achou na varredura.** A divisão por 100 estava reescrita em **cinco lugares, com três
+regras diferentes**, e os pares estavam **cruzados** — cada produto excetuava o BRL num destino e não
+no outro:
+
+| caminho | antes | agora |
+|---|---|---|
+| NDF Comm → **Conecta** (servidor + navegador) | `qic` **e não BRL** | `qic` |
+| NDF Comm → Intrag | `qic` | `qic` |
+| Opt Comm → Conecta (strike e prêmio/unidade) | `qic` | `qic` |
+| Opt Comm → **Intrag** | `qic` **e não BRL** | `qic` |
+| Confirmações (`_conf_strike_adj`) | Fator do Subjacente; `/100` de fallback | inalterado |
+
+Ou seja, **o mesmo deal saía com strike diferente em dois arquivos da mesma página**. As duas exceções
+foram removidas por decisão do usuário: *"retire a verificação se o strike é em BRL, e considere sempre
+strike × quoted in cents, independente se for USD ou BRL"*.
+
+No Intrag da Opção isso deixou `strike_ccy` e `is_brl` órfãos — apagados. Nas outras duas funções a
+flag de BRL **continua viva**, porque decide outros campos (Data de Fixing da Moeda, o `'S'` do
+arquivo); ela só saiu da conta do strike.
+
+> ⚠️ Deals já gravados não mudam sozinhos, mas os arquivos são **gerados na hora** a partir do day-file:
+> um NDF Comm com strike em BRL sobre ativo cotado em cents, se reenviado ao Conecta, sai **diferente do
+> que saiu antes**. Operação já registrada na B3 pela regra antiga tem de ser conferida antes do reenvio.
+
+Verificado com `scripts/tests/check_quoted_in_cents.py` — 33 asserções. Além dos casos de
+`_is_cents_factor` e do YES/NO/MISSING do parser, ele **varre o código-fonte dos quatro caminhos e das
+duas cópias no navegador atrás de qualquer termo de moeda dentro da regra**: executar os builders
+exigiria escrever arquivo do dia e disparar rota, então a varredura é o que dá para fazer de forma
+honesta. Para não virar vácuo se alguém renomear as variáveis, o teste também exige encontrar no mínimo
+6 aplicações. Ele foi testado ao contrário — com a exceção do BRL reintroduzida de propósito, apontou a
+linha e o caminho.
+
+**Continua em aberto:** `MISSING` (ativo sem cadastro no Subjacente) se comporta como `NO` em todos os
+consumidores, que comparam `== 'YES'`. Um subjacente não cadastrado segue para o Conecta sem divisão e
+sem aviso — pergunta feita ao usuário, ainda sem resposta.
