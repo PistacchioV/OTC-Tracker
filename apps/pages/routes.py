@@ -15621,6 +15621,35 @@ _MAPPING_DEFS = {
             {'MOEDA BASE': 'USD', 'TAXA DE CONVERSAO': 'USD PTAX', 'TIPO': 'Venda'},
         ],
     },
+    # Contrapartes cujo aviso de liquidação de NDF de Moeda leva a Ficha de
+    # Liquidação TAMBÉM em PDF anexo (mesmo conteúdo do cartão branco do e-mail).
+    # Era a tupla _NDF_PDF_COUNTERPARTIES em otc_emails.py, herdada da macro
+    # legada (CommodiXchange): cada cliente novo exigia mexer no código.
+    #
+    # O nome casa pelo NORMALIZADO (sem acento, caixa alta, espaços colapsados,
+    # travessão vira hífen — `_ndf_pdf_norm`), então diferença de grafia entre o
+    # que se digita aqui e o Reference Data não quebra o match. O que precisa
+    # bater é a razão social, não o accronym.
+    #
+    # Cadastro VAZIO significa "ninguém leva PDF" e é respeitado. O consumidor só
+    # volta para a lista histórica quando o arquivo não existe (instância que
+    # ainda não abriu a tela) ou está ilegível — ver `_ndf_pdf_set`.
+    'ndf-pdf-cpty': {
+        'label': 'Settlement PDF (NDF Advice)',
+        'columns': [
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty (RefData name)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'COUNTERPARTY': 'ABB AUTOMACAO LTDA', 'NOTES': ''},
+            {'COUNTERPARTY': 'ABB ELETRIFICACAO LTDA - FILIAL 0003', 'NOTES': ''},
+            {'COUNTERPARTY': 'ABB ELETRIFICACAO LTDA', 'NOTES': ''},
+            {'COUNTERPARTY': 'HITACHI ENERGY BRASIL LTDA', 'NOTES': ''},
+            {'COUNTERPARTY': 'PHINIA DO BRASIL PRODUTOS AUTOMOTIVOS LTDA', 'NOTES': ''},
+            {'COUNTERPARTY': 'VEOLIA WATER TECHNOLOGIES AND SOLUTIONS BRASIL '
+                             'TRATAMENTO DE AGUAS LTDA', 'NOTES': ''},
+        ],
+    },
     # Curvas de swap Athena × B3 — cadastro pronto para os fluxos de swap; nasce
     # vazio porque não havia de-para hardcoded no código.
     'swap-curves': {

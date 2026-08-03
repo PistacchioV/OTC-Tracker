@@ -26,6 +26,7 @@ recriado num tmp, o Outlook e o SMTP são stubados. Nada sai da máquina.
 | `check_b3_pattern.py` | notação `"MY"`/`_` do B3 Code e o padrão `YYMMDD` dos arquivos CETIP — inclui **paridade com as duas cópias JS** e a prova de que os 12 markets PREFIX emitem o mesmo código de antes | `split_b3_pattern`/`build_b3_code`, o seed de `commodities-b3`, `_cetip_rules` ou `_CETIP_BEHAVIOUR` (§164) |
 | `check_cem_sheets.py` | Accrual/CEM: as abas são lidas por **posição** (1ª summary, 2ª Kapital CETIP), a inversão 228/199 e o erro explícito quando falta a 2ª aba | `_acc_parse_cem_factors` ou `_acc_read_sheets` (§165) |
 | `check_publisher_ndf.py` | Publisher × B3: linha **sem Match Tokens casa só pelo texto completo**, `NOTES = BACEN` roteia para Vanilla, e o roteamento antigo (`!= 'PTAX'`) continua valendo com o seed padrão | `_ndf_publisher_row`, `_ndf_publisher_is_bacen` ou o roteamento em `_ndf_deal_from_api` (§166) |
+| `check_ndf_pdf_cpty.py` | Ficha em PDF no aviso de NDF: **seed do mapping == tupla de fallback**, cadastro vazio desliga o anexo, arquivo ausente volta à lista histórica, e o match tolera acento/caixa/travessão | `_ndf_pdf_set`/`_NDF_PDF_COUNTERPARTIES` em `otc_emails.py` ou o seed de `ndf-pdf-cpty` (§169) |
 
 ## Dependência externa
 
@@ -35,4 +36,4 @@ porque `otc_boxparse.py` é a **segunda cópia** de uma regra de negócio que ta
 navegador — sem executar os dois lados, uma divergência (arredondamento, data fora de faixa)
 passa em silêncio e só aparece como número errado na tela. Ver §157.
 
-No Windows da equipe esse script não roda; os outros cinco rodam.
+No Windows da equipe esse script não roda; os outros rodam.

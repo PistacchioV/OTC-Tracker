@@ -746,8 +746,12 @@ def build_ndf_settlement_emails(trades, ref_date=None):
 # ── Ficha de Liquidação em PDF (NDF de Moeda) ─────────────────────────────
 # Para estas contrapartes o aviso de liquidação leva ANEXO um PDF com o mesmo
 # conteúdo do cartão branco do e-mail (logo, data, título, tabela, totais,
-# instrução, aviso TED, dados bancários e assinatura). Lista espelhada da
-# macro legada (CommodiXchange).
+# instrução, aviso TED, dados bancários e assinatura).
+#
+# Quem manda hoje é o cadastro `ndf-pdf-cpty` da tela /mapping. Esta tupla
+# continua aqui como SEMENTE e como socorro: é o que `_ndf_pdf_set` usa enquanto
+# o arquivo do mapping não existe na instância. Os valores são os da macro
+# legada (CommodiXchange) e têm de seguir idênticos aos do seed em routes.py.
 _NDF_PDF_COUNTERPARTIES = (
     'ABB AUTOMACAO LTDA',
     'ABB ELETRIFICACAO LTDA - FILIAL 0003',
@@ -767,7 +771,25 @@ def _ndf_pdf_norm(name):
     return ' '.join(s.upper().split())
 
 
-_NDF_PDF_SET = {_ndf_pdf_norm(n) for n in _NDF_PDF_COUNTERPARTIES}
+def _ndf_pdf_set():
+    """Contrapartes que levam a Ficha em PDF, do cadastro `ndf-pdf-cpty`.
+
+    Lido do disco a cada chamada, de propósito: edição na tela /mapping vale no
+    próximo aviso gerado, sem restart — é o mesmo contrato dos outros mappings.
+
+    Cadastro VAZIO é uma resposta legítima ("ninguém leva PDF") e é respeitada.
+    A lista histórica só volta quando o arquivo NÃO EXISTE ou não abre — o caso
+    da instância em que ninguém abriu a tela de mappings ainda, onde cair para
+    zero contraparte tiraria o anexo de quem sempre recebeu.
+    """
+    try:
+        with open(os.path.join(_DATA_DIR, 'mappings', 'ndf-pdf-cpty.json'),
+                  encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return {_ndf_pdf_norm(n) for n in _NDF_PDF_COUNTERPARTIES}
+    return {_ndf_pdf_norm(r.get('COUNTERPARTY')) for r in rows
+            if isinstance(r, dict) and str(r.get('COUNTERPARTY') or '').strip()}
 
 
 def _ndf_settlement_pdf(ref_date, headers, data_rows, summary_pairs,
@@ -1042,7 +1064,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
 
     # Contrapartes que exigem a Ficha de Liquidação também em PDF anexo (mesmo
     # conteúdo do cartão branco do e-mail). Nome do anexo: "<cpty> - <yyyymmdd>".
-    if _ndf_pdf_norm(contraparte) in _NDF_PDF_SET:
+    if _ndf_pdf_norm(contraparte) in _ndf_pdf_set():
         try:
             ymd = datetime.strptime(ref_date, '%d/%m/%Y').strftime('%Y%m%d')
         except ValueError:
