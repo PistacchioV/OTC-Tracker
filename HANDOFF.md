@@ -7384,3 +7384,32 @@ segunda cópia dessa decisão no front (o `_pubRow` do JS serve só à Fonte de 
 
 Verificado com `scripts/tests/check_publisher_ndf.py` — 40 asserções, com o cadastro da tela
 reproduzido incluindo a linha nova.
+
+---
+
+## §167 — Verificação: o mapping da Intrag **não** dispara notificação no topbar (sem alteração de código)
+
+**A pergunta:** "verifique se tem notificação no topbar para quando é concluído o mapping nas páginas
+de Intrag NDF e Intrag Option". **A resposta: não tem.** Fica registrado aqui para ninguém refazer a
+busca — e porque a ausência é fácil de confundir com "a notificação existe mas não chegou".
+
+**O que foi medido.** Os três endpoints de mapping da Intrag —
+`/api/intrag/ndf/mapping-intrag-id`, `/api/intrag/option/mapping-intrag-id` e
+`/api/intrag/swap/mapping-intrag-id` — chamam `_intrag_run_mapping`, que persiste o `intrag_id`,
+promove a linha para `Success` e devolve os resultados. **Nenhum deles chama `_create_notification`.**
+Com o finder stubado para forçar um mapping bem-sucedido, o sino continuou em zero nos três; o
+controle foi o `B3 Mapped` do New Deals, que nas mesmas condições gerou uma notificação.
+
+Não é esquecimento isolado: a Intrag só notifica nas ações de linha (add/edit/delete/confirm) e no
+envio, nunca no mapping. As páginas dão o retorno pelo próprio SweetAlert de resultado.
+
+**Se um dia for implementar**, o desenho combinado (não executado, aguardando a palavra do usuário) é
+notificar nos três endpoints e **só quando `mapped > 0`** — um mapping que não casou nada não é evento,
+e o CSV da Intrag é reprocessado várias vezes ao dia; notificar em toda tentativa transformaria o sino
+em ruído. Página `Intrag NDF` / `Intrag Option` / `Intrag Swap`, ação `Intrag ID Mapped`, detalhe com a
+contagem, no mesmo formato do `Sent to B3`.
+
+> ⚠️ Ao mexer nesses endpoints, lembre que `_intrag_run_mapping` recebe a lista de deals **do cliente** —
+> é a mesma armadilha do `table.rows({search:'none', page:'all'})` descrita no CLAUDE.md: cobre só o que
+> está carregado na tela, não o dia inteiro. Uma contagem de notificação tirada daí conta a tela, não o
+> arquivo.

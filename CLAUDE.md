@@ -46,10 +46,12 @@ Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies thi
 
 `run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~24.2k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~25.1k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
 
 - `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
 - `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents. **FX Options is the exception and the pattern to follow for new documents**: `opcao_fx_pdf()` builds the PDF from the *rendered document HTML* (the same string that becomes the `.doc`) via `_WordHtmlToFlowables`, so the two outputs cannot drift apart — see HANDOFF §139.
+- `otc_boxparse.py` — parser for the booking-recap e-mail. **It is the second copy of a rule that also lives in the browser** (`static/js/pages/otc-fileupload.js`); the two must agree field by field, and `scripts/tests/check_boxparse.py` is what proves it (HANDOFF §157).
+- `otc_tickets.py` — Support Center JSON store (CRUD, sequential `#OTC-0001` ids, the six permission rules) — HANDOFF §161
 - `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py`
 
 ### Authentication flow
@@ -94,8 +96,19 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
   `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
 
 Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `commodities-b3`,
-`bank-name`, `fxo-conv-rate`, `swap-curves`. See HANDOFF §131–§133 for what each one feeds and the
-traps (e.g. the PTAX row in `publisher-ndf` must stay without a match token). `fxo-conv-rate` feeds
+`bank-name`, `fxo-conv-rate`, `swap-curves`, `cetip-files`. See HANDOFF §131–§133 for what each one
+feeds and the traps. Two of them carry rules that are easy to break from the UI:
+
+- **`publisher-ndf`** — a row with **no Match Tokens matches only the complete text** (that is what lets
+  `PTAX` and `PTAX|BRR|PTAX` be independent registrations), and column **`NOTES = BACEN` is what routes
+  the deal to Vanilla** instead of Other Publisher. Clearing `BACEN` from the `PTAX` row sends plain PTAX
+  to Other Publisher — the single way to break the historical behaviour (HANDOFF §166).
+- **`commodities-b3`** and **`cetip-files`** — the registered text carries a **pattern**, not a literal:
+  `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
+  `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
+  table so it reads apart from the fixed part (HANDOFF §164).
+
+`fxo-conv-rate` feeds
 the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
 Compra) and ships seeded only with USD → USD PTAX / Venda — an unregistered currency raises a panel
 warning instead of printing blanks (HANDOFF §139).
@@ -167,6 +180,7 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
 - **`Docs/` and `docs/` both exist in this repo** (21 tracked files under the capitalised one, 33 under the lowercase one — an artefact of a case-insensitive filesystem). Screenshots live under **lowercase `docs/sop-screenshots/`**, which is what `SOP_PROCESSAMENTO_OTC.md` and `GUIA_DO_USUARIO_OTC_TRACKER.md` reference. Since the on-disk directory is `Docs`, a plain `git add docs/...` records the path **capitalised** and the new files land in a different tree — invisible on macOS, broken images on Linux/Windows. Stage with `git -c core.ignorecase=false add docs/sop-screenshots/` and verify the casing in the index. Both documents are generated from their `.md` (the single source) by `scripts/build_sop_docx.py`, which takes the source file as an optional argument; see HANDOFF §155 for the screenshot-capture traps.
 - **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128.
+- **Regression checks live in `scripts/tests/`** — self-contained scripts, no framework: each prints `ok`/`FAIL` per assertion and exits 0/1, resolves the repo root from its own path, and touches no real data (tickets go to a `tempfile`, the DuckDB is recreated in tmp, Outlook/SMTP are stubbed). [`scripts/tests/README.md`](scripts/tests/README.md) maps each script to the module it protects — run the matching one after touching that module. `check_boxparse.py` is the only one that needs an external binary (macOS `jsc`, to run the browser copy of the parser), so it does not run on the team's Windows box. See HANDOFF §163.
 - **The team instance runs with the reloader off**: after a `git pull` that touched `routes.py` or a template, Flask must be **restarted** or the old code keeps serving. Several "it's not working" reports traced back to this. Mapping table edits made in the UI are the exception — they apply on the next request.
 - **`table.rows({search: 'none', page: 'all'})` is NOT "everything for the day".** It returns every row *loaded*, and the New Deals tables are frequently loaded from a server-side search (`/cache/search`, the filter chips in the top bar). Any action built by scanning the table therefore silently covers only the last search. The B3 return-file mapping was fixed by sending the **Reference Date** and letting the server build the list from the day file (`_generic_nd_mapping_candidates`, HANDOFF §152) — that also means the server persists to deals that are not on screen. The same limitation still applies to Opt FXO / Opt Commodities / NDF Commodities, which have their own mapping endpoints.
 - **Inserting a column into the New Deals NDF pages touches 14 places** (header `<th>`, filter-row `<th>`, `COL_TO_JSON_FIELD`, `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, hidden `columnDefs`, `columnLabels`, mass-edit options, `SF_COLS`, `SF_LABEL_TO_FIELD`, `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`). Stale indexes here have caused silent data corruption twice — see HANDOFF §132. The Maker column is reached through the `MAKER_COL_INDEX` constant; keep it that way.
