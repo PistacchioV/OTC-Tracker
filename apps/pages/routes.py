@@ -15308,6 +15308,11 @@ _MAPPINGS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '
 # têm a LE como chave (le-accronym e le-spn), para não divergirem.
 _MAP_LE_OPTIONS = ['', 'JPM', 'MGT', 'LAWTON']
 
+# A ATACAMA entra só no le-spn: o le-accronym continua com as três entidades que
+# já tinham cadastro de accronym/settlement location. Se ela também passar a ter
+# accronym, o caminho é mover 'ATACAMA' para _MAP_LE_OPTIONS e apagar esta lista.
+_MAP_LE_SPN_OPTIONS = _MAP_LE_OPTIONS + ['ATACAMA']
+
 # Campos da API getTrades que podem formar o par do filtro interbook. Os nomes
 # são os da API já normalizados (espaço/underscore → espaço, maiúsculas), do
 # jeito que _ndf_api_norm devolve.
@@ -15567,7 +15572,7 @@ _MAPPING_DEFS = {
     'le-spn': {
         'label': 'Legal Entity × SPN',
         'columns': [
-            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_OPTIONS},
+            {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_SPN_OPTIONS},
             {'key': 'SPN', 'label': 'SPN'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
