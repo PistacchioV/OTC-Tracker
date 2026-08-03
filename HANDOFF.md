@@ -7546,3 +7546,53 @@ o marcador em minúsculas e com espaço, e a prova de que um código bom não é
 > diferentes** em templates diferentes (`20260705` em 4 páginas, `20260721a` em 3), ou seja, quatro
 > páginas servem uma cópia mais velha do mesmo arquivo. Os outros 22 `?v=` do repo continuam escritos à
 > mão; passar o `asset_v` em todos resolve a classe inteira.
+
+---
+
+## §171 — Confirmação de Opção de Commodities com strike em BRL (família `brl`)
+
+O `OPÇÃO COMMODITY - BRL.doc` chegou como export bruto do Word e virou template. O achado que
+define a implementação inteira veio antes de escrever qualquer código: **os dois documentos, USD e
+BRL, têm exatamente o mesmo texto legal.** Comparação palavra a palavra, sem acento nem pontuação,
+descontando o painel e os valores preenchidos do exemplo — sobraram **4 diferenças**, todas no
+cabeçalho do Anexo I:
+
+| Coluna | USD | BRL |
+|---|---|---|
+| Tipo da Opção | `Tipo da Opção`ᵢ | `Tipo da Opção` |
+| Quantidade | `Quantidade` | `Quantidade`ᵢ |
+| Preço de Exercício | `Preço de Exercício`ᵢ | `Preço de Exercício`ᵢ **(em R$)** |
+| Data de Exercício | `Data de Exercício`ᵢ | `Data de Exercício` |
+
+> A cláusula da **USD PTAX continua no documento em BRL** — ela trata do preço da *Mercadoria*
+> cotada em dólar, não do strike. Por isso a coluna Data de Verificação da PTAX segue **única** aqui,
+> ao contrário do Termo em BRL (§ do `ndf-comm-strike-brl`), que troca a data única pela janela
+> inicial/final. Quem for portar a próxima família não deve assumir que "BRL ⇒ janela de PTAX".
+
+Por isso o template BRL foi **gerado do irmão USD por script**, aplicando só essas quatro trocas (o
+script aborta se qualquer trecho aparecer um número de vezes diferente do esperado — nada de edição no
+escuro). Ele herda painel, `doc_only`, salvamento e validação, e manda `family: 'brl'` no save.
+
+**O que estava só esperando ser ligado:** `_conf_deal_family` já classificava strike BRL/BRR como
+`brl`, e `opcao_pdf` já recebia um parâmetro `variant` que ninguém usava. Faltava a entrada em
+`_CONF_OPT_FAMILY_TEMPLATES`, a rota, e o save passar a variante — os grupos em BRL apareciam na
+lista de confirmações como *indisponíveis*.
+
+> ⚠️ **O cabeçalho tem duas cópias**: o `<th>` do template e a lista da réplica em reportlab. O PDF é
+> o que vai assinado para a contraparte e o HTML é o que a pessoa revisa na tela — divergir aqui não
+> quebra nada, só faz o documento mentir. A lista saiu para `opcao_anexo_heads(variant)` justamente
+> para o teste poder comparar as duas.
+
+Verificado com `scripts/tests/check_conf_optcomm_brl.py` — 21 asserções: as **4 diferenças de palavra
+e nada mais** entre os dois documentos (mexer numa cláusula e esquecer o irmão cai aqui), o cabeçalho
+célula a célula contra o Word, PDF × template, e a família ligada de ponta a ponta.
+
+**Duas decisões em aberto, à espera da palavra do usuário:**
+
+- O Word do BRL escreve `conseqüentemente` (com trema) na cláusula de call e `consequentemente` na de
+  put; o documento em USD não usa trema em nenhuma das duas. Tratado como typo do legado — os dois
+  templates ficaram com a grafia moderna. Se o jurídico exigir a reprodução letra por letra, é uma
+  troca de string.
+- O Preço de Exercício continua saindo como `Strike × Fator de Conversão`, que é o que o Termo em BRL
+  já faz. Se para opção com strike em reais o valor tiver de sair cru, é uma linha em
+  `_conf_opt_generation_page`.
