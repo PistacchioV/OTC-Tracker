@@ -203,12 +203,14 @@
         { key: 'ndf-pdf-cpty',   icon: 'ti-file-type-pdf',   lang: 'map-tab-ndf-pdf-cpty',  label: 'Settlement PDF (NDF Advice)' },
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
         { key: 'cetip-files',    icon: 'ti-file-download',   lang: 'map-tab-cetip-files',   label: 'CETIP Files (Save Routine)' },
+        { key: 'api-links',      icon: 'ti-api',             lang: 'map-tab-api-links',     label: 'API Links' },
     ];
 
     // Colunas cujo valor é um PADRÃO, não um literal: o trecho variável ganha
     // destaque na tabela para dar, de relance, o que é fixo e o que muda.
     //   commodities-b3 › B3 CODE     "MY"   → mês/ano do contrato
     //   cetip-files    › SOURCE/DEST YYMMDD → data do arquivo
+    //   api-links      › URL         YYYYMMDD → data de referência
     // No B3 CODE só vale para linha PREFIX: em FIXED o código é literal e um
     // "MY" ali seria texto mesmo.
     var PATTERN_COLS = {
@@ -217,6 +219,7 @@
                                 return String(row['TYPE'] || '').toUpperCase().indexOf('PREFIX') !== -1;
                             } },
         'cetip-files':    { cols: ['SOURCE', 'DEST'], token: /YYMMDD/ig, show: null },
+        'api-links':      { cols: ['URL'], token: /YYYY[-\/. ]?MM[-\/. ]?DD/ig, show: null },
     };
 
     // Célula de uma coluna-padrão: destaca o trecho variável e come as aspas da

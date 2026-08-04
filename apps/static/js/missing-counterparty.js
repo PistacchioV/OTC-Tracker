@@ -122,9 +122,62 @@ window.MissingCounterparty = (function () {
         if (!sp && !ac) return false;            // no counterparty identifier on the row
         if (sp && this.spnSet[sp]) return false;
         if (ac && this.acrSet[ac]) return false;
-        if (ac && this.leAcrSet && this.leAcrSet[flat(ac)]) return false;   // perna interna
+        // Perna interna: só é dispensada do badge quando a resolução VOLTOU com
+        // alguma coisa (o SPN da entidade). Estar cadastrada no mapping não é, por
+        // si, contraparte resolvida — era isso que deixava a linha de book com
+        // SPN, Client e Tax ID vazios e sem aviso nenhum na tela (§174).
+        if (sp && ac && this.leAcrSet && this.leAcrSet[flat(ac)]) return false;
         return true;
     };
+
+    // ── Filtro "Missing Counterparty" na barra de busca por coluna ────────────
+    // O badge é DOM, não é dado da célula, então o `column().search()` do
+    // DataTables nunca o acha. Estas funções desviam o texto para um filtro
+    // próprio, que decide pela MESMA regra do badge (`isMissing`).
+    //
+    // O termo precisa ter ao menos 9 caracteres ('missing c') para não brigar com
+    // "Missing Index B3", que É dado da célula de Status e continua sendo
+    // procurado pela busca normal.
+    Inst.prototype.matchesTerm = function (v) {
+        v = String(v == null ? '' : v).trim().toLowerCase();
+        if (v.length < 9) return false;
+        var label = String(this.t('badge-missing-cp', 'Missing Counterparty')).toLowerCase();
+        return label.indexOf(v) === 0 || 'missing counterparty'.indexOf(v) === 0;
+    };
+
+    // Colunas em que o badge aparece — são as que respondem ao termo.
+    Inst.prototype.badgeCols = function () {
+        var c = this.cfg.cols || {};
+        return [c.status].concat(c.info || []);
+    };
+
+    Inst.prototype.installSearch = function () {
+        var $ = window.jQuery, self = this;
+        if (this._searchOn || !$ || !$.fn.dataTable || !this.cfg.table) return;
+        this._searchOn = true;
+        var node = this.cfg.table.table().node();
+        $.fn.dataTable.ext.search.push(function (settings, data) {
+            if (!self._filtering || settings.nTable !== node) return true;
+            var c = self.cfg.cols;
+            return self.isMissing(strip(data[c.spn]), strip(data[c.acr]));
+        });
+    };
+
+    // Chamada pelo keyup da barra de filtros. `true` = já tratei, a coluna NÃO
+    // deve receber o texto; `false` = segue a busca normal do DataTables.
+    Inst.prototype.columnSearch = function (colIdx, value) {
+        var want = this.matchesTerm(value) && this.badgeCols().indexOf(colIdx) !== -1;
+        if (!want && !this._filtering) return false;
+        this.installSearch();
+        this._filtering = want;
+        if (!want) return false;                 // saindo do filtro: busca normal
+        var t = this.cfg.table;
+        if (t.column(colIdx).search() !== '') t.column(colIdx).search('');
+        t.draw();
+        return true;
+    };
+
+    Inst.prototype.clearMissingFilter = function () { this._filtering = false; };
 
     Inst.prototype.rowMissing = function (tr) {
         var t = this.cfg.table;

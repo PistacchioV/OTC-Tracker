@@ -70,5 +70,41 @@ print(('  ok  ' if r == (0, 0) else ' FAIL ') + 'deal vazio devolve (0,0) -> %r'
 if r != (0, 0):
     fails.append('deal vazio')
 
+
+# ── Quem a API considera cancelado ────────────────────────────────────────────
+# So o isCancelled. isDead e estado interno da Athena (aquele registro deixou de
+# ser a versao viva do trade) e NAO quer dizer que a operacao sumiu — ate
+# 04/08/2026 os dois flags eram tratados igual e o trade marcado isDead nao era
+# importado. §173
+m = re.search(r'^def _api_rec_is_cancelled\(.*?(?=\n\ndef )', src, re.S | re.M)
+assert m, 'nao achei _api_rec_is_cancelled'
+ns2 = {}
+exec(compile(m.group(0), 'cut', 'exec'), ns2)
+is_cancelled = ns2['_api_rec_is_cancelled']
+
+
+def flag(name, norm, exp):
+    got = is_cancelled(norm)
+    ok = got == exp
+    print(('  ok  ' if ok else ' FAIL ') + name + ('' if ok else '   got=%r exp=%r' % (got, exp)))
+    if not ok:
+        fails.append(name)
+
+
+print('\n-- isCancelled cancela --')
+flag('isCancelled bool',            {'ISCANCELLED': True}, True)
+flag('isCancelled string',          {'ISCANCELLED': 'true'}, True)
+flag('isCancelled TRUE/espacos',    {'ISCANCELLED': ' TRUE '}, True)
+flag('com espaco no nome do campo', {'IS CANCELLED': 'true'}, True)
+flag('isCancelled false',           {'ISCANCELLED': 'false'}, False)
+flag('sem o campo',                 {}, False)
+
+print('\n-- isDead NAO cancela: a operacao continua sendo puxada --')
+flag('isDead bool',                 {'ISDEAD': True}, False)
+flag('isDead string',               {'ISDEAD': 'true'}, False)
+flag('isDead com espaco no nome',   {'IS DEAD': 'true'}, False)
+flag('isDead sem isCancelled',      {'ISDEAD': True, 'ISCANCELLED': False}, False)
+flag('os dois true -> cancelado',   {'ISDEAD': True, 'ISCANCELLED': True}, True)
+
 print('\n%s' % ('TODOS OS CASOS PASSARAM' if not fails else 'FALHAS: %r' % fails))
 sys.exit(1 if fails else 0)

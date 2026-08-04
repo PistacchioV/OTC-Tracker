@@ -1107,7 +1107,7 @@
   "swal-fxo-dup-skip": "No, descartar duplicadas",
   "swal-fxo-api-title": "Importar desde la API Athena",
   "swal-api-fetched": "en la API",
-  "swal-api-dead": "cancelados/muertos en la API",
+  "swal-api-dead": "cancelados en la API",
   "swal-api-removed": "fila(s) eliminada(s) (cancelada en la API)",
   "swal-api-canceled": "mantenidos como Canceled (ya en B3)",
   "swal-api-interbook": "interbook",
@@ -1534,5 +1534,6 @@
   "tkd-nochange-text": "Ningún campo era distinto de lo ya guardado.",
   "tkd-mail-ok": "Se envió por correo un aviso de cierre al solicitante.",
   "tkd-mail-fail": "Guardado, pero no se pudo enviar el correo de cierre:",
-  "map-tab-cetip-files": "Archivos CETIP (Rutina de Guardado)"
+  "map-tab-cetip-files": "Archivos CETIP (Rutina de Guardado)",
+  "map-tab-api-links": "Enlaces de las APIs"
 }

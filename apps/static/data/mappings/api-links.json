@@ -1,0 +1,12 @@
+[
+  {
+    "USE": "New Deals",
+    "URL": "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=NDF&date=YYYYMMDD",
+    "NOTES": "Athena getTrades — o product é definido pela rotina (NDF, FXO, Commodities, Swaps)"
+  },
+  {
+    "USE": "Unwinds",
+    "URL": "",
+    "NOTES": "Preencher com a URL de unwinds quando ela existir"
+  }
+]

@@ -7641,3 +7641,114 @@ linha e o caminho.
 **Continua em aberto:** `MISSING` (ativo sem cadastro no Subjacente) se comporta como `NO` em todos os
 consumidores, que comparam `== 'YES'`. Um subjacente não cadastrado segue para o Conecta sem divisão e
 sem aviso — pergunta feita ao usuário, ainda sem resposta.
+
+## §173 — Link da API vira cadastro (`api-links`) e `isDead` volta a ser importado
+
+Duas mudanças no mesmo pull da Athena, pedidas na mesma conversa.
+
+### 1. O endereço da API sai do código
+
+`BASE_URL + TRADES_ENDPOINT` eram **constantes** em `athena_api.py`: trocar o endpoint (versão nova,
+migração de host, apontar para UAT) exigia mexer no código e **reiniciar o servidor** — que é
+justamente o que a equipe não consegue fazer sozinha na instância. Agora é cadastro em **/mapping ›
+API Links** (`api-links`), uma linha por **USO**:
+
+| USE | seed |
+|---|---|
+| `New Deals` | `…/api/v1/getTrades?product=NDF&date=YYYYMMDD` — exatamente a URL que estava no código |
+| `Unwinds` | **vazia**, de propósito |
+
+**`YYYYMMDD` marca onde entra a Data de Referência**, e é destacado na tabela como o `YYMMDD` dos
+arquivos CETIP (§164). Mas o placeholder **não é o único caminho da data**: `build_url` também
+**reescreve os parâmetros `product` e `date` do query string** com o que a rotina pediu. Isso é
+deliberado — quem sabe qual produto está sendo puxado é o código, e um `product=NDF` esquecido na
+linha traria **trades de NDF para a página de FXO, em silêncio**. O placeholder serve para o caso de a
+data ficar no *caminho* (`…/trades/20260728`), que nenhum parâmetro alcançaria.
+
+A linha de Unwinds nasce **sem URL** porque não existe rotina de unwind ainda: semear um endereço não
+conferido faria a primeira rotina a nascer chamar um endpoint inventado. Sem cadastro, `fetch_unwinds`
+**falha dizendo que falta registro**; o New Deals, esse sim, cai no endereço histórico (arquivo
+ausente, ilegível ou linha com URL em branco). `fetch_unwinds()` já existe e não tem consumidor — está
+lá para a rotina de unwinds nascer lendo o cadastro em vez de uma constante nova.
+
+`athena_api.py` lê o JSON **direto** (mesmo padrão de `_ndf_pdf_set`, §169): importar `routes` dali
+seria circular.
+
+### 2. `isDead` deixa de bloquear a importação
+
+`_api_rec_is_dead` tratava **`isCancelled` e `isDead` como a mesma coisa** — os dois faziam o registro
+não ser importado (e, se já importado, virar `Canceled`/sair do arquivo). Só que `isDead` é **estado
+interno da Athena** (aquele registro deixou de ser a versão viva do trade), e não "a operação não
+existe". A função virou **`_api_rec_is_cancelled`** e olha **só o `isCancelled`**; quem tem `isDead =
+true` é puxado normalmente.
+
+Efeito colateral esperado: **operações que antes sumiam do import agora aparecem** nas páginas de New
+Deals — se alguém estranhar um volume maior depois do deploy, é isto.
+
+A chave `dead` do JSON de retorno dos dois pulls **foi mantida** (é o que as 4 telas leem no resumo do
+import); só o conteúdo mudou. O rótulo que o usuário vê deixou de dizer "cancelados/mortos na API" e
+passou a "cancelados na API", nos três idiomas.
+
+Verificado com `scripts/tests/check_api_links.py` (27 asserções — inclui a prova de que o seed
+reproduz a URL histórica byte a byte e que sem cadastro o Unwinds falha em vez de bater no endpoint do
+New Deals) e com a seção nova de `check_cancel_remove.py` (11 asserções sobre `isCancelled` × `isDead`).
+O primeiro foi testado ao contrário: com o `product` deixando de ser reescrito, oito asserções caem.
+
+## §174 — Perna interna com SPN, Client e Tax ID vazios (e como procurar "Missing Counterparty")
+
+**O sintoma.** Nas páginas de New Deals, as linhas cujo End Counterparty é **nome de book** (o caso
+levantado foi `LM-FWDECOMBRR FXC`) vinham com **SPN, Client e Tax ID em branco — e sem badge nenhum**.
+Pior que o Missing Counterparty: a linha parecia normal.
+
+**Por que.** A busca da contraparte tentava, nesta ordem, o accronym no Reference Data e depois os
+accronyms cadastrados para a Legal Entity no mapping `le-accronym`. Só que **book não tem accronym no
+Reference Data** — a entidade tem (`JPMORGANBM`), o book não. Nenhum dos dois passos casava. E o badge
+não aparecia porque o `missing-counterparty.js` isentava do aviso qualquer accronym cadastrado no
+`le-accronym`: "é perna interna, está tudo bem" — sem checar se a resolução tinha voltado com alguma
+coisa.
+
+**A ordem agora** (`_ndf_ref_by_accronym`), ditada pela mesa:
+
+1. accronym exato do End Counterparty no Reference Data, e o accronym sem o sufixo de entidade;
+2. **sendo perna interna** — o accronym está no `le-accronym` —, a *identidade da entidade*
+   (`_ndf_le_refdata`): **razão social** cadastrada em `le-spn` procurada no Reference Data pelo nome
+   normalizado → accronyms da LE → **SPN** cadastrado em `le-spn` (a linha inteira do Reference Data se
+   o SPN existir lá; só o SPN, se não);
+3. **não sendo**, o **SPN que veio da API** — que passou a trazer o SPN da contraparte, e não mais o da
+   Legal Entity (era a correção pendente citada em §147/§148);
+4. nada casando, os três campos ficam vazios e a tela marca **Missing Counterparty**.
+
+O passo 2 é o que faltava, e ele mora num cadastro novo: o mapping `le-spn` ganhou a coluna **`NAME`
+(Reference Data Name)**, semeada com as razões sociais ditadas pela mesa (JPM = BANCO J.P MORGAN S.A,
+MGT = JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH, LAWTON = LAWTON MULTIMERCADO EXCLUSIVO) mais a
+entidade **ATACAMA**, que entra na lista sem nome. O match é normalizado (`_pc_norm`), então
+`BANCO J.P MORGAN S/A` ≡ `BANCO J.P MORGAN S.A` — a grafia da tela não precisa bater com a do arquivo.
+
+> ⚠️ **MGT e ATACAMA ainda não existem no Reference Data.** Enquanto não existirem, a perna interna
+> delas resolve só pelo SPN cadastrado em `le-spn` e, sem ele, cai em Missing Counterparty. Isso é o
+> comportamento pedido — "vá cadastrar" —, não um bug.
+
+Como o arquivo `le-spn.json` já existe nas instâncias que abriram a tela, o seed sozinho não chegaria
+lá: um `upgrade` (`_le_spn_upgrade`) cria a linha que falta e preenche o nome **só quando a coluna nem
+existe**. Nome apagado pela tela continua apagado — senão o cadastro brigaria com o usuário a cada
+leitura.
+
+**O accronym da API é preservado.** Resolvendo pela identidade da entidade, a coluna Accronym continua
+mostrando `LM-FWDECOMBRR FXC` e não `JPMORGANBM`: trocar apagaria da tela o book que a operação
+realmente tem. Vale nos três lugares — builder do NDF, builder do FXO e o re-enriquecimento dos deals
+já gravados (`_generic_nd_reenrich`, que é o que conserta as linhas que já estão no arquivo do dia, sem
+novo pull).
+
+**O badge deixou de ser complacente.** Perna interna só escapa do "Missing Counterparty" quando a linha
+**tem SPN**. Cadastro no `le-accronym` não é, por si, contraparte resolvida.
+
+**Procurar por Missing Counterparty na barra de filtros.** O badge é DOM — não é dado de célula —, então
+o `column().search()` do DataTables nunca o achava. O `missing-counterparty.js` ganhou um filtro próprio
+(`columnSearch` + um hook em `ext.search`) que decide pela **mesma** função do badge (`isMissing`), e as
+6 páginas passaram a desviar o texto para ele. Detalhe deliberado: o termo só é reconhecido a partir de
+**9 caracteres** (`missing c`) — com menos, `missing` continua caindo na busca normal e achando
+**Missing Index B3**, que *é* dado da célula de Status. O botão Clear Filters zera o filtro.
+
+Verificado com `scripts/tests/check_counterparty_lookup.py` (34 asserções: a ordem inteira, as duas
+armadilhas históricas — Settlement Location não vira LE e perna interna não usa o SPN da API —, o
+upgrade do `le-spn` e a ligação com a tela). A parte de navegador foi exercitada no JavaScriptCore.

@@ -95,9 +95,10 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
 - Optional per-mapping `upgrade` callable converts legacy row formats on read; optional per-column
   `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
 
-Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `commodities-b3`,
-`bank-name`, `fxo-conv-rate`, `swap-curves`, `cetip-files`. See HANDOFF §131–§133 for what each one
-feeds and the traps. Two of them carry rules that are easy to break from the UI:
+Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
+`commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
+`api-links`. See HANDOFF §131–§133 for what each one
+feeds and the traps. Three of them carry rules that are easy to break from the UI:
 
 - **`publisher-ndf`** — a row with **no Match Tokens matches only the complete text** (that is what lets
   `PTAX` and `PTAX|BRR|PTAX` be independent registrations), and column **`NOTES = BACEN` is what routes
@@ -107,6 +108,11 @@ feeds and the traps. Two of them carry rules that are easy to break from the UI:
   `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
   `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
   table so it reads apart from the fixed part (HANDOFF §164).
+- **`api-links`** — the Athena endpoint, one row per **usage** (`New Deals`, `Unwinds`), with `YYYYMMDD`
+  marking the reference date. The `product` and `date` query parameters are **always rewritten by the
+  code**, so a stale `product=NDF` in the row cannot divert the FXO pull; the placeholder exists for a
+  date that lives in the *path*. The `Unwinds` row ships **empty on purpose** — with no URL its consumer
+  fails asking for registration, while `New Deals` falls back to the historical address (HANDOFF §173).
 
 `fxo-conv-rate` feeds
 the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
@@ -171,11 +177,12 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **Local dev on macOS**: use `flask run --port=5005` — port 5000 is taken by the AirPlay Receiver (returns a 403 "AirTunes"). The venv here is Python 3.12 (`.venv311`); `duckdb` and `flask-minify` are required (both in `requirements.txt`).
 - `flask_login`, `flask_wtf`, and `flask_migrate` are in `requirements.txt` but are not actively used in the current codebase; the app manages sessions and DB directly.
 - SMTP delivery uses `mailhost.jpmchase.net` (internal relay, port 25, no auth) — email sending will silently fail outside the JPMorgan network.
-- **Athena `getTrades` API** (`apps/pages/athena_api.py`): imports New Deals for NDF/FXO (manual button + in-app schedulers, NDF every 20 min, FXO hourly). Needs the JPM network — off-network the scheduler fails silently (repeated errors demoted to `debug`). `build_session()` sets `trust_env=False` on purpose: inheriting the corporate proxy is what caused `WinError 10061` on the team's Windows box. Kerberos SSO on Windows needs `requests-negotiate-sspi`, which is **commented out** in `requirements.txt` (Windows-only) — install it on the JPM instance.
-- **The counterparty comes from the End Counterparty accronym, never from the SPN or the Settlement Location.** Two traps, both of which shipped wrong counterparties to production (HANDOFF §147/§148):
-  - the API's **`SPN` carries the Legal Entity's SPN, not the counterparty's** (fix pending on the API team) — so it is not used as a lookup key; the SPN shown on screen comes from Reference Data. When the API is fixed, re-add it as a step between the accronym and the LE (noted in `_ndf_ref_by_accronym`'s docstring);
-  - the **Settlement Location is *our* leg**, not the counterparty's. Feeding it into the counterparty lookup made a client resolve to Banco J.P. Morgan. The `le` argument of `_ndf_ref_by_accronym` must be the entity of the *counterparty's own accronym* (`_ndf_le_from_accronym(end_cp)`), which is `None` unless the counterparty is an internal JPM leg.
-  Nothing matching = empty row + "Missing Counterparty" badge, which is the desired failure: it asks for registration instead of inventing a counterparty.
+- **Athena `getTrades` API** (`apps/pages/athena_api.py`): imports New Deals for NDF/FXO (manual button + in-app schedulers, NDF every 20 min, FXO hourly). Needs the JPM network — off-network the scheduler fails silently (repeated errors demoted to `debug`). `build_session()` sets `trust_env=False` on purpose: inheriting the corporate proxy is what caused `WinError 10061` on the team's Windows box. Kerberos SSO on Windows needs `requests-negotiate-sspi`, which is **commented out** in `requirements.txt` (Windows-only) — install it on the JPM instance. The endpoint itself is no longer a constant: it comes from the `api-links` mapping (above), with `BASE_URL`/`TRADES_ENDPOINT` left as the New Deals fallback. **Only `isCancelled = true` means cancelled** — `isDead` is Athena's internal state and those records *are* imported (`_api_rec_is_cancelled`, HANDOFF §173).
+- **The counterparty comes from the End Counterparty accronym, never from the Settlement Location.** The order in `_ndf_ref_by_accronym` is: accronym (exact, then without the entity suffix) → **if the accronym is an internal leg**, the entity's own identity (`_ndf_le_refdata`: the `le-spn` **Reference Data Name** looked up by normalised name, then the LE's accronyms, then the LE's registered SPN) → **otherwise** the API's SPN → nothing. Three things to keep straight:
+  - the **Settlement Location is *our* leg**, not the counterparty's. Feeding it into the counterparty lookup made a client resolve to Banco J.P. Morgan. The `le` argument of `_ndf_ref_by_accronym` must be the entity of the *counterparty's own accronym* (`_ndf_le_from_accronym(end_cp)`), which is `None` unless the counterparty is an internal JPM leg (HANDOFF §147/§148);
+  - the API's `SPN` used to carry the Legal Entity's SPN; it now carries the counterparty's, so it is the **last** step — and it is never consulted for an internal leg, which would reintroduce the trap above by another route (HANDOFF §174);
+  - an **internal leg is resolved by the entity's legal name**, because a book name (`LM-FWDECOMBRR FXC`) has no accronym in Reference Data — that is what left those rows with empty SPN/Client/Tax ID. The row **keeps the API's accronym** (the book), and the badge only spares an internal leg that came back with an SPN.
+  Nothing matching = empty row + "Missing Counterparty" badge, which is the desired failure: it asks for registration instead of inventing a counterparty. That badge is DOM-only, so the per-column filter boxes route the term `missing c…` (9+ chars, to stay clear of "Missing Index B3") through `missing-counterparty.js` instead of DataTables' own search.
 - **Scheduled jobs run on Brazil time, not the server's.** `_br_now()` (`zoneinfo` `America/Sao_Paulo`, falling back to a fixed `-03:00` when `tzdata` is missing — the Windows case) backs the 19:00/19:30 pending-action email and the 11:30 Pending Confirmation maintenance. `datetime.now()` is the server's local clock and silently fired them at the wrong hour. Because the instance is restarted several times a day, `_ndm_pending_catch_up()` also fires the day's already-passed slots at startup; the on-disk claim file is what keeps that from becoming a repeated e-mail.
 - **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
 - **`Docs/` and `docs/` both exist in this repo** (21 tracked files under the capitalised one, 33 under the lowercase one — an artefact of a case-insensitive filesystem). Screenshots live under **lowercase `docs/sop-screenshots/`**, which is what `SOP_PROCESSAMENTO_OTC.md` and `GUIA_DO_USUARIO_OTC_TRACKER.md` reference. Since the on-disk directory is `Docs`, a plain `git add docs/...` records the path **capitalised** and the new files land in a different tree — invisible on macOS, broken images on Linux/Windows. Stage with `git -c core.ignorecase=false add docs/sop-screenshots/` and verify the casing in the index. Both documents are generated from their `.md` (the single source) by `scripts/build_sop_docx.py`, which takes the source file as an optional argument; see HANDOFF §155 for the screenshot-capture traps.

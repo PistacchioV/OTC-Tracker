@@ -1108,7 +1108,7 @@
   "swal-fxo-dup-skip": "No, skip duplicates",
   "swal-fxo-api-title": "Import from Athena API",
   "swal-api-fetched": "fetched",
-  "swal-api-dead": "cancelled/dead on the API",
+  "swal-api-dead": "cancelled on the API",
   "swal-api-removed": "rows removed (cancelled)",
   "swal-api-canceled": "kept as Canceled (already at B3)",
   "swal-api-interbook": "interbook",
@@ -1535,5 +1535,6 @@
   "tkd-nochange-text": "No field was different from what was already saved.",
   "tkd-mail-ok": "A closing notice was e-mailed to the requester.",
   "tkd-mail-fail": "Saved, but the closing e-mail could not be sent:",
-  "map-tab-cetip-files": "CETIP Files (Save Routine)"
+  "map-tab-cetip-files": "CETIP Files (Save Routine)",
+  "map-tab-api-links": "API Links"
 }

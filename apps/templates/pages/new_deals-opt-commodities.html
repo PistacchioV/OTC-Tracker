@@ -1209,7 +1209,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v=20260730b"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v={{ asset_v('js/missing-counterparty.js') }}"></script>
 
 <script>
 // ============================================================================
@@ -1765,6 +1765,9 @@ $(document).ready(function() {
 
                 input.addEventListener('keyup', function() {
                     var columnIndex = input.closest('th').cellIndex;
+                    // "missing counterparty" não é dado de célula (o badge é DOM):
+                    // quem trata esse termo é o helper compartilhado (§174).
+                    if (window._cpInst && window._cpInst.columnSearch(columnIndex, this.value)) return;
                     if (api.column(columnIndex).search() !== this.value) {
                         api.column(columnIndex).search(this.value).draw();
                     }
@@ -2242,6 +2245,7 @@ $(document).ready(function() {
                         input.value = '';
                     });
                     // Clear DataTables column search state and redraw
+                    if (window._cpInst) window._cpInst.clearMissingFilter();
                     api.columns().search('').draw();
                     // Clear smart filter chips and active filters
                     if (typeof sfActive !== 'undefined') sfActive = [];

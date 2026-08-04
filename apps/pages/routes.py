@@ -14823,9 +14823,8 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
     if spn.endswith('.0'):
         spn = spn[:-2]
     # A contraparte é procurada pelo ACCRONYM DA CONTRAPARTE — o End Counterparty
-    # — e não pelo SPN: hoje a API manda no SPN o da LE, não o da contraparte
-    # (correção pendente no time da API), então ele não serve de chave. O SPN da
-    # API fica só como último recurso, para não perder o que já resolvia por ele.
+    # —, depois pela identidade da entidade quando ele é perna interna, e só então
+    # pelo SPN da API (que passou a trazer o SPN da contraparte, §174).
     #
     # O Settlement Location NÃO entra aqui: ele diz respeito à nossa perna, não à
     # contraparte, então usá-lo para achar a contraparte casaria a linha errada.
@@ -14833,9 +14832,8 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
     # ele existe para perna interna, cujo End Counterparty é nome de book JPM.
     if refmap_acr is None:
         refmap_acr = _fxo_refdata_by_accronym(refmap)
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, _ndf_le_from_accronym(end_cp))
-    if not ref:
-        ref = refmap.get(_norm_spn(spn), {})
+    le_cp = _ndf_le_from_accronym(end_cp)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp, refmap, spn)
     # SPN da tela: o do Reference Data quando a contraparte foi resolvida; o da
     # API só enquanto não há cadastro nenhum a que recorrer.
     spn = str(ref.get('SPN', '') or '').strip() or spn
@@ -14875,7 +14873,12 @@ def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
         # badge "Missing Counterparty" da tela o que consultar: ele só limpa a
         # marcação de perna interna quando há um accronym na célula para procurar
         # no mapping Legal Entity × Accronym.
-        'Acronym':           (ref.get('FX CASH ACCRONYM', '') or '') or end_cp,
+        #
+        # PERNA INTERNA mantém o accronym que veio da API: a contraparte foi
+        # resolvida pela razão social da entidade, e trocar 'LM-FWDECOMBRR FXC'
+        # por 'JPMORGANBM' apagaria da tela o book que a operação realmente tem
+        # (§174).
+        'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp),
         'Client':            ref.get('COUNTERPARTY', '') or '',
         'TaxID':             ref.get('TAX ID', '') or '',
         'TradeType':         trade_type,
@@ -15135,8 +15138,9 @@ def _fxo_persist_new_deals(deals):
 
 def _fxo_deals_from_api_records(records, sid):
     """Athena getTrades records → (deal dicts, cancelados). Cancelados são os
-    registros isCancelled/isDead: (Deal, TradeDate dd/mm/yyyy) para marcar
-    Status='Canceled' no cache quando o deal já tiver sido importado."""
+    registros com isCancelled = true: (Deal, TradeDate dd/mm/yyyy) para marcar
+    Status='Canceled' no cache quando o deal já tiver sido importado. isDead não
+    conta como cancelamento — ver `_api_rec_is_cancelled` (§173)."""
     refmap = _fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap)
     deals, cancelled = [], []
@@ -15148,7 +15152,7 @@ def _fxo_deals_from_api_records(records, sid):
             n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
             if n and n not in norm:
                 norm[n] = v
-        if _api_rec_is_dead(norm):
+        if _api_rec_is_cancelled(norm):
             nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
             if nm:
                 cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
@@ -15195,12 +15199,12 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     date = ref_dt.strftime('%Y%m%d')
     payload = athena_api.fetch_fxo_trades(date)
     records = athena_api.extract_records(payload)
-    deals, dead = _fxo_deals_from_api_records(records, sid)
+    deals, cancelled = _fxo_deals_from_api_records(records, sid)
     inserted, amended = _fxo_persist_new_deals(deals)
-    # isCancelled/isDead na API → a linha SAI do arquivo do dia (a operação não
-    # existe mais). Só quem já foi registrado na B3 fica, como 'Canceled'.
+    # isCancelled na API → a linha SAI do arquivo do dia (a operação não existe
+    # mais). Só quem já foi registrado na B3 fica, como 'Canceled'.
     removed = canceled = 0
-    for nm, td in dead:
+    for nm, td in cancelled:
         try:
             rd = datetime.strptime(td, '%d/%m/%Y') if td else ref_dt
         except ValueError:
@@ -15226,14 +15230,16 @@ def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # Mesma prestação de contas do pull de NDF: "veio 0" tem de dizer se a API
     # devolveu nada ou se os registros foram descartados, e por quê.
     log.info('[opt-fxo] pull ref=%s: %d fetched · %d parseados · importados=%d '
-             'amendados=%d · dead/cancelados na API=%d (linhas removidas=%d, '
+             'amendados=%d · cancelados na API=%d (linhas removidas=%d, '
              'marcadas Canceled por já terem B3 ID=%d)',
              date, len(records), len(deals), len(inserted), len(amended),
-             len(dead), removed, canceled)
+             len(cancelled), removed, canceled)
     return {'success': True, 'date': date, 'fetched': len(records),
             'parsed': len(deals), 'imported': len(inserted),
             'amended': len(amended), 'canceled': canceled, 'removed': removed,
-            'dead': len(dead), 'deals': inserted}
+            # chave 'dead' mantida: é o que as 4 telas leem para o resumo do
+            # import. O conteúdo é só isCancelled desde §173.
+            'dead': len(cancelled), 'deals': inserted}
 
 
 @blueprint.route('/api/new-deals/opt-fxo/import-api', methods=['POST'])
@@ -15335,9 +15341,16 @@ def _ndf_api_get(norm, *names):
     return None
 
 
-def _api_rec_is_dead(norm):
-    """True for records flagged isCancelled / isDead in the API payload."""
-    for k in ('ISCANCELLED', 'IS CANCELLED', 'ISDEAD', 'IS DEAD'):
+def _api_rec_is_cancelled(norm):
+    """True só para os registros com **isCancelled = true** na API.
+
+    `isDead` NÃO entra: até 04/08/2026 os dois flags eram tratados igual e um
+    trade marcado isDead simplesmente não era importado — mas isDead é estado
+    interno da Athena (o registro deixou de ser a versão viva do trade), e não
+    "a operação não existe". Quem cancela uma operação é o isCancelled; o resto
+    tem que ser puxado. §173
+    """
+    for k in ('ISCANCELLED', 'IS CANCELLED'):
         v = norm.get(k)
         if v is True or str(v).strip().lower() == 'true':
             return True
@@ -15395,6 +15408,45 @@ def _interbook_upgrade(rows):
             'BOTH WAYS': 'YES' if cpty else '',
         })
     return out
+
+
+# Razão social de cada Legal Entity no Reference Data (ditada pela mesa). A busca
+# é NORMALIZADA (`_pc_norm`: sem acento, sem pontuação, minúsculas), então
+# 'BANCO J.P MORGAN S/A' e 'BANCO J.P MORGAN S.A' são o mesmo nome — o que está
+# aqui é a grafia do Reference Data. MGT e ATACAMA ainda não têm linha no
+# Reference Data: enquanto não tiverem, a perna interna delas cai no SPN
+# cadastrado e, sem ele, em Missing Counterparty — que é o pedido certo, "vá
+# cadastrar", em vez de uma contraparte inventada.
+_LE_SPN_SEED = (
+    {'LE': 'JPM',     'NAME': 'BANCO J.P MORGAN S.A',                        'SPN': '', 'NOTES': ''},
+    {'LE': 'MGT',     'NAME': 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH', 'SPN': '', 'NOTES': ''},
+    {'LE': 'LAWTON',  'NAME': 'LAWTON MULTIMERCADO EXCLUSIVO',                'SPN': '', 'NOTES': ''},
+    {'LE': 'ATACAMA', 'NAME': '',                                             'SPN': '', 'NOTES': ''},
+)
+
+
+def _le_spn_upgrade(rows):
+    """Garante uma linha por Legal Entity e traz a razão social para os arquivos
+    gravados antes da coluna NAME existir.
+
+    Roda na LEITURA: a instância que já abriu a tela de mapping tem o arquivo em
+    disco e nunca mais receberia o seed. Só preenche o que **não existe** — linha
+    ausente ou coluna ausente. Quem apagou o nome pela tela fica com o nome
+    apagado (a tela grava a chave vazia), senão o cadastro brigaria com o
+    usuário a cada leitura.
+    """
+    seen = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        seen.setdefault(str(r.get('LE') or '').strip().upper(), r)
+    for s in _LE_SPN_SEED:
+        row = seen.get(s['LE'])
+        if row is None:
+            rows.append(dict(s))
+        elif 'NAME' not in row and s['NAME']:
+            row['NAME'] = s['NAME']
+    return rows
 
 
 def _commodities_b3_upgrade(rows):
@@ -15617,20 +15669,31 @@ _MAPPING_DEFS = {
             {'LE': 'LAWTON', 'ACCRONYM': '', 'SETTLEMENT LOCATION': 'LAWTON'},
         ],
     },
-    # SPN de cada Legal Entity — o SPN da NOSSA ponta, que é coisa diferente do
-    # SPN da contraparte (esse vem do Reference Data, pelo accronym: §147/§148).
-    # Existe porque a API manda hoje, no campo SPN, o da Legal Entity e não o da
-    # contraparte; ter o de-para aqui permite reconhecer/preencher o SPN da LE sem
-    # depender do que a API mandar. Nasce VAZIO: não havia de-para no código, e um
-    # SPN inventado no seed sairia num arquivo para a B3 como se fosse cadastro.
+    # Identidade de cada Legal Entity: a RAZÃO SOCIAL como está no Reference Data
+    # e o SPN da NOSSA ponta — coisa diferente do SPN da contraparte, que vem do
+    # Reference Data pelo accronym (§147/§148).
+    #
+    # É por este cadastro que uma **perna interna** ganha SPN, Client e Tax ID:
+    # quando o End Counterparty da API é nome de book (ex. 'LM-FWDECOMBRR FXC'),
+    # o mapping Legal Entity × Accronym diz de qual entidade ele é, e a RAZÃO
+    # SOCIAL daqui acha a linha da entidade no Reference Data. Antes só se tentava
+    # o accronym, e como book não está no Reference Data a linha ficava com os
+    # três campos vazios (§174).
+    #
+    # O SPN continua servindo de última tentativa: sem razão social e sem
+    # accronym, ele preenche ao menos a coluna SPN. As linhas nascem com a razão
+    # social ditada pela mesa e SEM SPN — SPN inventado sairia num arquivo para a
+    # B3 como se fosse cadastro.
     'le-spn': {
         'label': 'Legal Entity × SPN',
         'columns': [
             {'key': 'LE', 'label': 'Legal Entity', 'type': 'select', 'options': _MAP_LE_SPN_OPTIONS},
+            {'key': 'NAME', 'label': 'Reference Data Name'},
             {'key': 'SPN', 'label': 'SPN'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
-        'seed': [],
+        'upgrade': _le_spn_upgrade,
+        'seed': list(_LE_SPN_SEED),
     },
     # Bancos oferecidos no editor de contraparte (Reference Data, duplo clique →
     # contas BANKING/PAY-REC). ID = código COMPE de 3 dígitos; ISPB e TAX ID
@@ -15731,6 +15794,38 @@ _MAPPING_DEFS = {
             {'key': 'EXTRA DEST', 'label': 'Extra Copy Folder'},
         ],
         'seed': _CETIP_FILES_SEED,
+    },
+    # Endereços da API Athena, um por USO. Era a constante BASE_URL +
+    # TRADES_ENDPOINT em athena_api.py: trocar o endpoint (versão nova, migração
+    # de host, apontar para UAT) exigia mexer no código e reiniciar o servidor.
+    #
+    # YYYYMMDD marca onde entra a Data de Referência. Ele NÃO é o único caminho:
+    # `product` e `date` do query string são sempre reescritos com o que a rotina
+    # pediu (`build_url`), porque quem sabe qual produto está sendo puxado é o
+    # código — um `product=NDF` esquecido na linha traria NDF para a página de
+    # FXO sem ninguém ver. O placeholder serve para a data que fica no CAMINHO.
+    #
+    # A linha de Unwinds nasce SEM URL de propósito: não existe rotina de unwind
+    # ainda, e semear um endereço não conferido faria a primeira rotina a nascer
+    # chamar um endpoint inventado. Sem URL, o consumidor falha dizendo que falta
+    # cadastro; o New Deals, esse sim, cai no endereço histórico.
+    'api-links': {
+        'label': 'API Links',
+        'columns': [
+            {'key': 'USE', 'label': 'Usage', 'type': 'select',
+             'options': ['New Deals', 'Unwinds']},
+            {'key': 'URL', 'label': 'URL (YYYYMMDD = reference date)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'USE': 'New Deals',
+             'URL': 'https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
+                    '/api/v1/getTrades?product=NDF&date=YYYYMMDD',
+             'NOTES': 'Athena getTrades — o product é definido pela rotina '
+                      '(NDF, FXO, Commodities, Swaps)'},
+            {'USE': 'Unwinds', 'URL': '',
+             'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
+        ],
     },
 }
 
@@ -15866,27 +15961,89 @@ def _ndf_accronym_variants(acr):
     return out
 
 
-def _ndf_ref_by_accronym(refmap_acr, acr, le=None):
-    """Linha do Reference Data do End Counterparty, nesta ordem: código exato,
-    accronym sem o sufixo da entidade e — só então — qualquer código cadastrado
-    para `le` no mapping le-accronym. {} quando nada casa.
+def _ndf_le_row(le):
+    """Linha do mapping le-spn dessa Legal Entity ({} quando não há)."""
+    l = str(le or '').strip().upper()
+    if not l:
+        return {}
+    for r in _mapping_rows('le-spn'):
+        if str(r.get('LE', '') or '').strip().upper() == l:
+            return r
+    return {}
 
-    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
-    a que sai da Settlement Location, que é a nossa perna: com a location, um
-    cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
 
-    O SPN da API NÃO entra aqui de propósito: ele hoje vem com o SPN da LE, não
-    o da contraparte (correção pendente no time da API). Usá-lo como chave
-    reintroduziria exatamente o erro acima, só que por outro caminho — quando a
-    API for corrigida, ele volta como passo entre o accronym e a LE."""
-    for cand in _ndf_accronym_variants(acr):
-        rec = refmap_acr.get(cand)
+def _refdata_by_name(refmap_spn=None):
+    """Razão social normalizada (`_pc_norm`) → registro do Reference Data. Deriva
+    do índice por SPN quando ele é passado, para não reler o arquivo."""
+    out = {}
+    for rec in (refmap_spn if refmap_spn is not None else _fxo_refdata_by_spn()).values():
+        nm = _pc_norm(rec.get('COUNTERPARTY', ''))
+        if nm and nm not in out:
+            out[nm] = rec
+    return out
+
+
+def _ndf_le_refdata(le, refmap_acr, refmap_spn=None):
+    """Contraparte de uma PERNA INTERNA (o End Counterparty é a própria entidade
+    JPM), nesta ordem:
+
+      1. **razão social** cadastrada para a LE em le-spn, procurada no Reference
+         Data pelo nome normalizado — é o passo que faltava: book interno não tem
+         accronym no Reference Data, então antes disto a linha ficava com SPN,
+         Client e Tax ID vazios (§174);
+      2. accronyms cadastrados para a LE em le-accronym (o que já funcionava);
+      3. **SPN** cadastrado para a LE em le-spn: se ele existir no Reference Data
+         devolve a linha inteira; se não, devolve só o SPN, para a coluna não
+         ficar vazia quando é a única informação registrada.
+
+    {} quando nada casa — e aí a tela marca Missing Counterparty, que é o pedido
+    de cadastro, não uma contraparte inventada."""
+    row = _ndf_le_row(le)
+    name = str(row.get('NAME', '') or '').strip()
+    if name:
+        rec = _refdata_by_name(refmap_spn).get(_pc_norm(name))
         if rec:
             return rec
     for cand in _ndf_le_accronyms(le):
         rec = refmap_acr.get(cand)
         if rec:
             return rec
+    spn = str(row.get('SPN', '') or '').strip()
+    if spn:
+        if refmap_spn is None:
+            refmap_spn = _fxo_refdata_by_spn()
+        return refmap_spn.get(_norm_spn(spn)) or {'SPN': spn}
+    return {}
+
+
+def _ndf_ref_by_accronym(refmap_acr, acr, le=None, refmap_spn=None, api_spn=''):
+    """Linha do Reference Data do End Counterparty, nesta ordem:
+
+      1. código exato e accronym sem o sufixo da entidade;
+      2. sendo perna interna (`le`), a identidade da entidade — razão social,
+         accronyms cadastrados e SPN (ver `_ndf_le_refdata`);
+      3. não sendo, o **SPN que veio da API**.
+
+    {} quando nada casa.
+
+    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
+    a que sai da Settlement Location, que é a nossa perna: com a location, um
+    cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
+
+    O passo 3 é novo (§174): o campo SPN da API passou a trazer o SPN da
+    contraparte — antes vinha o da Legal Entity, e usá-lo como chave era o mesmo
+    erro do parágrafo acima por outro caminho. Ele fica por último de propósito,
+    depois do accronym, que é a chave que a mesa cadastra."""
+    for cand in _ndf_accronym_variants(acr):
+        rec = refmap_acr.get(cand)
+        if rec:
+            return rec
+    if le:
+        return _ndf_le_refdata(le, refmap_acr, refmap_spn)
+    if api_spn:
+        if refmap_spn is None:
+            refmap_spn = _fxo_refdata_by_spn()
+        return refmap_spn.get(_norm_spn(api_spn)) or {}
     return {}
 
 
@@ -15964,13 +16121,13 @@ def _ndf_is_interbook(norm):
     return False
 
 
-def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
+def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     """One Athena NDF getTrades record → (target_product, deal_dict).
     target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
     norm = _ndf_api_norm(rec)
     get = norm.get
 
-    if _api_rec_is_dead(norm):
+    if _api_rec_is_cancelled(norm):
         return None, None
     deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
     if not deal_name:
@@ -16008,13 +16165,17 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
     # Settlement Location BRAZIL → LE JPM → a linha veio com SPN, nome e CNPJ do
     # Banco J.P. Morgan, em silêncio, numa operação que vai para registro.
     #
-    # O SPN da API não é usado: hoje ele traz o SPN da LE e não o da contraparte
-    # (correção pendente no time da API), então serviria só para trocar um erro
-    # por outro. O SPN da tela sai do Reference Data.
+    # Sendo perna interna, o passo 2 é a IDENTIDADE DA ENTIDADE (razão social
+    # cadastrada em le-spn → Reference Data; depois accronyms; depois o SPN da
+    # LE). Não sendo, entra o SPN que veio da API — que passou a trazer o SPN da
+    # contraparte, e não mais o da Legal Entity (§174). Ele fica por último, e
+    # nunca é consultado para perna interna, para não reintroduzir por outro
+    # caminho o erro do parágrafo acima.
     #
     # Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing
     # Counterparty" — que é o erro certo: pede cadastro em vez de inventar.
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp)
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp, refmap_spn,
+                               str(get('SPN') or '').strip())
     spn = str(ref.get('SPN', '') or '').strip()
 
     first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
@@ -16075,7 +16236,8 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy):
         'Month':             month,
         'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
         'SPN':               spn,
-        'Acronym':           (ref.get('FX CASH ACCRONYM', '') or '') or end_cp,
+        # Perna interna mantém o accronym da API (o nome do book), §174.
+        'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp),
         'Client':            ref.get('COUNTERPARTY', '') or '',
         'TaxID':             ref.get('TAX ID', '') or '',
         'FirstFixingDate':   first_fix,
@@ -16270,25 +16432,26 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
     records = athena_api.extract_records(payload)
 
-    refmap_acr = _fxo_refdata_by_accronym()
+    refmap_spn = _fxo_refdata_by_spn()
+    refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
     today_dmy = now.strftime('%d/%m/%Y')
     routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
     fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
-    skipped_interbook, dead = 0, []
+    skipped_interbook, cancelled = 0, []
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy)
+        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn)
         if target == '_fwd-start-fixing':
             fixing_today.append(deal)
             continue
         if target is None:
             norm = _ndf_api_norm(rec)
-            if _api_rec_is_dead(norm):
-                # isCancelled/isDead: se o deal já foi importado, vira Canceled
+            if _api_rec_is_cancelled(norm):
+                # isCancelled: se o deal já foi importado, vira Canceled
                 nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
                 if nm:
-                    dead.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
+                    cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
                 continue
             if _ndf_is_interbook(norm):
                 skipped_interbook += 1
@@ -16327,7 +16490,7 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # origem. Exceção: já registrado na B3 (Success com B3 ID) vira 'Canceled'
     # e continua visível, porque o cancelamento na B3 é ação humana.
     removed = canceled = 0
-    for nm, td in dead:
+    for nm, td in cancelled:
         try:
             rd = datetime.strptime(td, '%d/%m/%Y') if td else now
         except ValueError:
@@ -16343,20 +16506,22 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # nada, se tudo estava cancelado ou se o filtro de interbook comeu os
     # registros — os três somem no mesmo zero da tela.
     log.info('[ndf-api] pull ref=%s: %d fetched · roteados fwd=%d op=%d vanilla=%d · '
-             'importados=%d amendados=%d · dead/cancelados na API=%d (linhas removidas=%d, '
+             'importados=%d amendados=%d · cancelados na API=%d (linhas removidas=%d, '
              'marcadas Canceled por já terem B3 ID=%d) · '
              'interbook=%d · strike set na data=%d · re-booking de FWD Start=%d',
              now.strftime('%Y%m%d'), len(records),
              len(routed['fwd-start']), len(routed['other-publishers']), len(routed['vanilla']),
              sum(t['imported'] for t in targets.values()),
              sum(t['amended'] for t in targets.values()),
-             len(dead), removed, canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
+             len(cancelled), removed, canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
     return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
             'skipped_fwd_strike_today': skipped_fwd_today,
             'skipped_fwd_rebook': len(rebooks),
             'skipped_fwd_rebook_deals': [d.get('Deal') or '' for d, _f in rebooks],
             'skipped_interbook': skipped_interbook, 'canceled': canceled,
-            'removed': removed, 'dead': len(dead), 'targets': targets}
+            # chave 'dead' mantida pelo contrato com as telas — só isCancelled
+            # desde §173.
+            'removed': removed, 'dead': len(cancelled), 'targets': targets}
 
 
 @blueprint.route('/api/new-deals/ndf/import-api', methods=['POST'])
@@ -23117,7 +23282,8 @@ def _generic_nd_reenrich(deals, refmap_cache):
         if not acr:
             continue
         if 'map' not in refmap_cache:
-            refmap_cache['map'] = _fxo_refdata_by_accronym()
+            refmap_cache['spn'] = _fxo_refdata_by_spn()
+            refmap_cache['map'] = _fxo_refdata_by_accronym(refmap_cache['spn'])
         # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
         # LE (é o caso do End Counterparty que é nome de book interno, importado
         # antes de a linha existir). Quando ele identifica, a LE gravada estava
@@ -23130,7 +23296,9 @@ def _generic_nd_reenrich(deals, refmap_cache):
         # mesmo erro de _ndf_deal_from_api, aqui aplicado a quem já está no
         # arquivo.
         le_map = _ndf_le_from_accronym(acr)
-        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le_map)
+        # Sem SPN gravado não há o que passar como último recurso — a linha está
+        # aqui justamente porque o campo veio vazio.
+        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le_map, refmap_cache['spn'])
         if not rec:
             if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
                 deal['LE'] = le_map
@@ -23141,7 +23309,8 @@ def _generic_nd_reenrich(deals, refmap_cache):
         deal['SPN'] = str(rec.get('SPN', '') or '')
         deal['Client'] = rec.get('COUNTERPARTY', '') or ''
         deal['TaxID'] = rec.get('TAX ID', '') or ''
-        ref_acr = str(rec.get('FX CASH ACCRONYM', '') or '').strip()
+        # Perna interna mantém o accronym da API (o nome do book) — §174.
+        ref_acr = '' if le_map else str(rec.get('FX CASH ACCRONYM', '') or '').strip()
         if ref_acr:
             deal['Acronym'] = ref_acr
         changed = True
