@@ -1364,7 +1364,7 @@ function dealJsonToRow(deal) {
     // alterados; aqui viram índices de coluna para o drawCallback pintar as
     // células (mesmo mecanismo do amend por e-mail).
     if (st === 'Amend' && deal.AmendChanged && deal.AmendChanged.length) {
-        var AMEND_FIELD_COLS = { TradeDate: 5, Month: 6, SettlementDate: 7, Acronym: 9, TradeType: 12, UnderlyingAsset: 13, FXHolidaySchedule: 14, TotalNotional: 15, Instrument: 16, Strike: 17, StrikeCurrency: 18, Direction: 19, Premium: 20, PremiumPerUnit: 21, PremiumCCY: 22, SpotDate: 23, FixingStartDate: 24, FixingEndDate: 25, TradingBook: 26, OtherBook: 27 };
+        var AMEND_FIELD_COLS = { SPN: 8, Client: 10, TaxID: 11, TradeDate: 5, Month: 6, SettlementDate: 7, Acronym: 9, TradeType: 12, UnderlyingAsset: 13, FXHolidaySchedule: 14, TotalNotional: 15, Instrument: 16, Strike: 17, StrikeCurrency: 18, Direction: 19, Premium: 20, PremiumPerUnit: 21, PremiumCCY: 22, SpotDate: 23, FixingStartDate: 24, FixingEndDate: 25, TradingBook: 26, OtherBook: 27 };
         if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
         window._OTC_AMEND_CHANGED_COLS[deal.Deal] = deal.AmendChanged
             .map(function (f) { return AMEND_FIELD_COLS[f]; })

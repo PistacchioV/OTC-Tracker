@@ -14948,8 +14948,18 @@ def _fxo_persist_deals(deals):
 # Campos que NUNCA entram na comparação de amend: Status/B3_ID/Maker/Checker
 # são do fluxo da página; SPN/Client/TaxID vêm do RefData (o re-enriquecimento
 # os altera sem a operação ter mudado); AmendChanged é o próprio marcador.
-_ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'SPN', 'Client', 'TaxID',
-                  'AmendChanged'}
+# Campos que o amend da API NÃO toca: são nossos, não da API. Status e B3 ID são
+# do fluxo de registro, Maker/Checker de quem operou, AmendChanged é o próprio
+# registro do amend.
+#
+# SPN, Client e Tax ID **saíram desta lista** (§176). Eles ficavam de fora porque
+# são enriquecimento nosso (Reference Data) e não campo da API — só que isso
+# congelava a contraparte na primeira importação: operação rebookada para outro
+# cliente ficava para sempre com o nome antigo na tela, e a linha que veio sem
+# contraparte nunca ganhava a que passou a resolver. Agora são comparados como
+# qualquer outro campo; o que os protege de derrubar um Success para Amend é
+# `_nd_amend_is_economic`, que olha o ACCRONYM.
+_ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'AmendChanged'}
 
 # Campos que mudam o DADO mas não o NEGÓCIO: a célula é destacada como qualquer
 # outra, mas quem já está Success não volta para a fila por causa deles. Os dois
@@ -15000,6 +15010,18 @@ def _nd_amend_is_economic(field, old, new, stored, incoming):
     """A mudança desse campo justifica derrubar um deal já Success para Amend?"""
     if field in _ND_AMEND_COSMETIC:
         return False
+    if field in ('SPN', 'Client', 'TaxID'):
+        # Os três são DERIVADOS da contraparte, e a contraparte é o accronym
+        # (nunca o SPN nem a settlement location — §147/§148). Com o accronym
+        # igual, mudou a nossa resolução e não o negócio: é o caso de §174, em
+        # que a perna interna passou a achar SPN/Client/Tax ID que antes vinham
+        # vazios. Destaca a célula, mantém o Success. Mudando o accronym, vale a
+        # mesma régua dele: só é econômico se trocou de entidade.
+        acr_old = _nd_amend_flat(stored.get('Acronym')).upper()
+        acr_new = _nd_amend_flat(incoming.get('Acronym')).upper()
+        if acr_old == acr_new:
+            return False
+        return not _nd_amend_same_entity(acr_old, acr_new, stored, incoming)
     if field == 'Acronym':
         # Accronym aparecendo onde a célula estava VAZIA, com o SPN da operação
         # intacto, é enriquecimento nosso que melhorou — a contraparte sempre foi
@@ -15050,6 +15072,49 @@ def _nd_api_amend(stored, incoming):
         prev = stored.get('AmendChanged') or []
         stored['AmendChanged'] = sorted(set(prev) | set(changed))
     return changed
+
+
+def _nd_amend_index(existing):
+    """Índices de um arquivo do dia para o amend da API: por (Deal, Client) e por
+    Deal. O segundo existe porque o Client PODE mudar — ver `_nd_amend_find`."""
+    idx, by_deal = {}, {}
+    for e in existing:
+        if not isinstance(e, dict):
+            continue
+        deal = (e.get('Deal') or '').strip()
+        idx[(deal, (e.get('Client') or '').strip())] = e
+        by_deal.setdefault(deal, []).append(e)
+    return idx, by_deal
+
+
+def _nd_amend_find(st, deal):
+    """Linha já gravada correspondente a este deal da API, ou None.
+
+    A chave normal é **Deal + Client**. Quando o Client muda — a operação foi
+    rebookada para outra contraparte, ou a nossa resolução passou a achar o nome
+    que antes vinha vazio (§174) — essa chave não casa, e o deal entrava como
+    LINHA NOVA: a operação aparecia duas vezes, a antiga com a contraparte velha,
+    e nenhuma das duas marcada como Amend.
+
+    Por isso, sem match pela chave, procura-se **pelo Deal ID**. Só quando ele é
+    único no arquivo: o mesmo Deal pode ter duas pernas gravadas (é o que o
+    cancelamento por Deal já trata), e aí não há como saber qual delas a API está
+    amendando — nesse caso o deal entra como novo, que é o comportamento antigo e
+    deixa a decisão para o operador."""
+    key = ((deal.get('Deal') or '').strip(), (deal.get('Client') or '').strip())
+    row = st['idx'].get(key)
+    if row is not None:
+        return row
+    same = st['by_deal'].get((deal.get('Deal') or '').strip()) or []
+    return same[0] if len(same) == 1 else None
+
+
+def _nd_amend_register(st, deal):
+    """Grava o deal recém-inserido nos dois índices, para o mesmo pull não o
+    inserir de novo (nem pela chave, nem pelo Deal)."""
+    d = (deal.get('Deal') or '').strip()
+    st['idx'][(d, (deal.get('Client') or '').strip())] = deal
+    st['by_deal'].setdefault(d, []).append(deal)
 
 
 def _nd_cancel_in_file(fpath, deal_name):
@@ -15116,17 +15181,17 @@ def _fxo_persist_new_deals(deals):
                         existing = [existing]
                 except (IOError, json.JSONDecodeError):
                     existing = []
-                idx = {((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()): e
-                       for e in existing if isinstance(e, dict)}
-                seen_files[fpath] = {'existing': existing, 'idx': idx, 'dirty': False}
+                idx, by_deal = _nd_amend_index(existing)
+                seen_files[fpath] = {'existing': existing, 'idx': idx,
+                                     'by_deal': by_deal, 'dirty': False}
             st = seen_files[fpath]
-            key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
-            if key in st['idx']:
-                if _nd_api_amend(st['idx'][key], d):
+            row = _nd_amend_find(st, d)
+            if row is not None:
+                if _nd_api_amend(row, d):
                     amended.append(d.get('Deal') or '')
                     st['dirty'] = True
                 continue
-            st['idx'][key] = d                  # dedup within the same pull too
+            _nd_amend_register(st, d)           # dedup within the same pull too
             fresh.append(d)
         for fpath, st in seen_files.items():
             if st['dirty']:
@@ -16335,16 +16400,16 @@ def _generic_nd_persist_new_deals(product, deals):
                         existing = [existing]
                 except (IOError, json.JSONDecodeError):
                     existing = []
-                idx = {((e.get('Deal') or '').strip(), (e.get('Client') or '').strip()): e
-                       for e in existing if isinstance(e, dict)}
-                seen_files[fpath] = {'dir': dir_path, 'existing': existing, 'idx': idx}
+                idx, by_deal = _nd_amend_index(existing)
+                seen_files[fpath] = {'dir': dir_path, 'existing': existing,
+                                     'idx': idx, 'by_deal': by_deal}
             st = seen_files[fpath]
-            key = ((d.get('Deal') or '').strip(), (d.get('Client') or '').strip())
-            if key in st['idx']:
-                if _nd_api_amend(st['idx'][key], d):
+            row = _nd_amend_find(st, d)
+            if row is not None:
+                if _nd_api_amend(row, d):
                     amended.append(d.get('Deal') or '')
                 continue
-            st['idx'][key] = d
+            _nd_amend_register(st, d)
             st['existing'].append(d)
             fresh.append(d)
         for fpath, st in seen_files.items():

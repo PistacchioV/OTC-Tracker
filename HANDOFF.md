@@ -7808,3 +7808,57 @@ que ainda não existem — este é o retrato de hoje, e serve de linha de base p
 `error-404.html`, que renderiza (404, não 500). A suíte de `scripts/tests/` inteira passa. Também
 varri o repositório inteiro atrás de referência remanescente a arquivo apagado — a única era o
 `Docs/layouts.html`, que foi apagado junto.
+
+## §176 — O amend da API passa a acompanhar a contraparte (pelo Deal ID)
+
+A contraparte de um deal congelava na **primeira** importação. Duas travas independentes, e as duas
+tinham de sair:
+
+**1. `SPN`, `Client` e `Tax ID` estavam em `_ND_AMEND_SKIP`.** O amend simplesmente não os comparava.
+A justificativa original era boa — esses três são **enriquecimento nosso** (Reference Data), não campo
+que a API mande — mas o efeito não era: operação rebookada para outra contraparte ficava para sempre
+com o nome antigo na tela, e a linha importada sem contraparte nunca ganhava a que a resolução passou
+a achar.
+
+**2. A chave do arquivo do dia é `(Deal, Client)`.** Se o Client muda, a chave não casa e o deal entra
+como **linha nova**: a operação passa a aparecer **duas vezes** — a velha com a contraparte antiga, a
+nova com a atual —, nenhuma das duas marcada como Amend. Isso é pior que o congelamento, porque
+duplica o que vai para registro.
+
+Agora, sem match pela chave, procura-se **pelo Deal ID** (`_nd_amend_find`) — e **só quando ele é único
+no arquivo**. O mesmo Deal pode ter **duas pernas** gravadas (é o que o cancelamento por Deal já
+trata); nesse caso não há como saber qual delas a API está amendando, e o deal entra como novo, que é
+o comportamento antigo. Adivinhar aqui escreveria a contraparte de uma perna na outra.
+
+### O contrapeso: quem já está Success não volta para a fila à toa
+
+Comparar os três campos, sozinho, teria um efeito colateral feio: no primeiro pull depois de §174 —
+quando a perna interna passou a resolver SPN/Client/Tax ID que vinham vazios — **todo deal interno já
+registrado cairia de Success para Amend**, de uma vez.
+
+A régua é o **accronym**, que é quem identifica a contraparte (nunca o SPN nem a settlement location,
+§147/§148). Em `_nd_amend_is_economic`:
+
+| mudou | accronym | resultado |
+|---|---|---|
+| SPN / Client / Tax ID | **igual** | célula destacada, **Status preservado** — mudou a nossa resolução, não o negócio |
+| SPN / Client / Tax ID | mudou, mesma entidade | idem (mesma régua do `Acronym`) |
+| SPN / Client / Tax ID | mudou de entidade | **Amend** — a ponta do negócio é outra |
+
+### Na tela
+
+`AMEND_FIELD_COLS` não tinha `SPN`, `Client` nem `TaxID` — as três colunas da contraparte não podiam
+sequer ser destacadas. Foram acrescentadas nas quatro páginas alimentadas pela API (Vanilla, Other
+Publisher, FWD Start e Opt FXO), com os índices de cada uma (9/11/12 nos NDFs, 8/10/11 no FXO).
+
+Verificado com `scripts/tests/check_amend_counterparty.py` (34 asserções). Duas valem menção:
+
+- a seção **7 roda o caminho real** — `_generic_nd_persist_new_deals` lendo e gravando um day file, com
+  o diretório do produto desviado para um `tempfile`: importa a linha sem contraparte, reimporta com a
+  contraparte resolvida e prova que o arquivo fica com **uma** linha, com os campos gravados, as três
+  colunas em `AmendChanged` e o `Success` intacto;
+- a seção **6 confere `AMEND_FIELD_COLS` contra `COL_TO_JSON_FIELD` campo a campo, nas quatro páginas**
+  — índice trocado pinta a coluna errada, e é exatamente a classe de erro que já corrompeu dado nesta
+  tela duas vezes (§132). Os índices que já existiam estavam todos certos.
+
+O script foi testado ao contrário: devolvendo os três campos ao `_ND_AMEND_SKIP`, 11 asserções caem.
