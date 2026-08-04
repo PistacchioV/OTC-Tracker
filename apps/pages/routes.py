@@ -15562,6 +15562,29 @@ def _le_spn_upgrade(rows):
     return rows
 
 
+# Valor do campo "Tipo de Cotação" no arquivo de Opção. Era o literal '5' nos
+# dois builders (servidor e navegador); vira o default da coluna QUOTE TYPE OPT.
+_B3_QUOTE_OPT_DEFAULT = '5'
+
+
+def _commodities_b3_quote_defaults(rows):
+    """Preenche as três colunas de cotação com EXATAMENTE o que o código fazia.
+
+    Chamada no seed e no upgrade. Usa `setdefault`: só escreve onde a chave nem
+    existe — linha antiga, gravada antes das colunas. Coluna que a tela gravou
+    vazia continua vazia (e o consumidor cai no mesmo default), senão o cadastro
+    brigaria com quem apagou o valor de propósito.
+    """
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        fixed = str(r.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'
+        r.setdefault('QUOTE TYPE NDF', 'F' if fixed else 'A')
+        r.setdefault('QUOTE TYPE OPT', _B3_QUOTE_OPT_DEFAULT)
+        r.setdefault('INFO SOURCE', '340' if fixed else '358')
+    return rows
+
+
 def _commodities_b3_upgrade(rows):
     """Migra as linhas gravadas antes da notação de padrão (§164).
 
@@ -15591,7 +15614,7 @@ def _commodities_b3_upgrade(rows):
             continue
         # Formato antigo: o mês/ano vinha sempre no fim, e o espaço era literal.
         r['B3 CODE'] = code.replace(' ', '_') + '"MY"'
-    return rows
+    return _commodities_b3_quote_defaults(rows)
 
 
 _MAPPING_DEFS = {
@@ -15671,9 +15694,21 @@ _MAPPING_DEFS = {
     #   XB"MY"     → XBZ7        C_"MY" → 'C Z7'        KO"MY"BNMK → KOZ7BNMK
     #
     # HOLIDAY CALENDAR = calendário de feriados do market. FIXED QUOTE =
-    # underlying de cotação FIXA (Tipo de Cotação 'F' / Fonte 340) — absorveu o
-    # antigo mapping fixed-underlyings, que era todo de escopo commodities; os
-    # PTS* não têm market na Athena e entram só com o código.
+    # underlying de cotação FIXA — absorveu o antigo mapping fixed-underlyings,
+    # que era todo de escopo commodities; os PTS* não têm market na Athena e
+    # entram só com o código.
+    #
+    # TIPO DE COTAÇÃO (§177): eram literais no código — 'F'/'A' conforme o Fixed
+    # Quote no arquivo de Termo, '5' fixo no de Opção — e por isso uma commodity
+    # nova com cotação diferente exigia alteração de código. Agora são cadastro,
+    # e a coluna guarda o **código do layout**, o que vai no arquivo. São duas
+    # colunas porque os DOIS LAYOUTS TÊM DOMÍNIOS DIFERENTES: o de Termo usa
+    # letra, o de Opção usa número, e a mesma commodity é negociada nos dois.
+    # FONTE INFO segue a mesma ideia (era 340/358 pelo Fixed Quote) e existe só
+    # no arquivo de Termo.
+    #
+    # Coluna vazia = comportamento histórico, que é também o que o seed traz
+    # escrito linha a linha: cadastro e código dizem a mesma coisa hoje.
     'commodities-b3': {
         'label': 'Commodities × B3 Code',
         'columns': [
@@ -15682,9 +15717,12 @@ _MAPPING_DEFS = {
             {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
             {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
             {'key': 'FIXED QUOTE', 'label': 'Fixed Quote', 'type': 'select', 'options': ['', 'YES']},
+            {'key': 'QUOTE TYPE NDF', 'label': 'Tipo de Cotação — NDF (blank = F/A)'},
+            {'key': 'QUOTE TYPE OPT', 'label': 'Tipo de Cotação — Opção (blank = 5)'},
+            {'key': 'INFO SOURCE', 'label': 'Fonte de Informação — NDF (blank = 340/358)'},
         ],
         'upgrade': _commodities_b3_upgrade,
-        'seed': (
+        'seed': _commodities_b3_quote_defaults(
             [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': q} for m, c, h, q in (
                 ('MPB_LME', 'LOPBDY', 'LME', ''), ('MCU_LME', 'LOCADY', 'LME', ''),
                 ('MAL_LME', 'LOAHDY', 'LME', ''), ('MZN_LME', 'LOZSDY', 'LME', ''),
@@ -15982,6 +16020,50 @@ def _mapping_rows(key):
         return rows
     except Exception:
         return list(d.get('seed') or [])
+
+
+def _b3_code_matches(pattern, code):
+    """O Ativo Subjacente `code` corresponde a esta linha de Commodities × B3?
+
+    A coluna B3 CODE guarda um LITERAL nas linhas FIXED ('NACX0005') e um PADRÃO
+    nas PREFIX ('HO"MY"', 'C_"MY"', 'KO"MY"BNMK', §164). O padrão casa por
+    prefixo + sufixo, com pelo menos um caractere de mês/ano no meio — senão
+    'HO' casaria com 'HO' pelado, que não é código de contrato nenhum."""
+    from apps.pages.otc_boxparse import split_b3_pattern
+    pat = str(pattern or '').strip()
+    cod = str(code or '').strip().upper()
+    if not pat or not cod:
+        return False
+    if '"' not in pat and '_' not in pat:
+        return pat.upper() == cod
+    head, tail = split_b3_pattern(pat)
+    head, tail = head.upper(), tail.upper()
+    return (cod.startswith(head) and cod.endswith(tail)
+            and len(cod) > len(head) + len(tail))
+
+
+def _b3_quote_cfg(code):
+    """Tipo de Cotação e Fonte de Informação do Ativo Subjacente, do cadastro.
+
+    Eram literais no código — 'F'/'A' e 340/358 conforme o Fixed Quote no
+    arquivo de Termo, '5' fixo no de Opção. Agora saem das colunas do mapping
+    Commodities × B3, e **coluna vazia (ou subjacente sem linha) devolve
+    exatamente o valor histórico**, que é também o que o seed escreve.
+
+    Devolve as três de uma vez porque a linha é a mesma: procurá-la três vezes
+    percorreria o cadastro inteiro a cada campo, para cada deal do arquivo."""
+    row = {}
+    for r in _mapping_rows('commodities-b3'):
+        if _b3_code_matches(r.get('B3 CODE'), code):
+            row = r
+            break
+    fixed = str(row.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'
+    return {
+        'fixed':  fixed,
+        'ndf':    str(row.get('QUOTE TYPE NDF', '') or '').strip() or ('F' if fixed else 'A'),
+        'opt':    str(row.get('QUOTE TYPE OPT', '') or '').strip() or _B3_QUOTE_OPT_DEFAULT,
+        'source': str(row.get('INFO SOURCE', '') or '').strip() or ('340' if fixed else '358'),
+    }
 
 
 def _mapping_ccy_maps():
@@ -18954,12 +19036,6 @@ def api_ndf_send_conecta():
         except Exception:
             return '0' * (int_digits + dec_digits)
 
-    # Cadastro pela tela Mapping: são as linhas de Commodities × B3 com
-    # FIXED QUOTE = YES (fixed underlying é propriedade da commodity).
-    FIXED_UNDERLYINGS = {str(r.get('B3 CODE', '') or '').strip().upper()
-                         for r in _mapping_rows('commodities-b3')
-                         if str(r.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'} - {''}
-
     import json as _json
     lawton_lines = []
     banco_lines  = []
@@ -18983,7 +19059,6 @@ def api_ndf_send_conecta():
         vanilla          = trade_type == 'VANILLA'
         brl              = strike_ccy == 'BRL'
         is_tas           = instrument.startswith('TAS')
-        is_fixed         = underlying in FIXED_UNDERLYINGS
 
         dir_code   = '0' if direction.upper() == 'BUY' else '1'
         fix_start  = _date(deal.get('FixingStartDate', ''))
@@ -19007,8 +19082,11 @@ def api_ndf_send_conecta():
         except Exception:
             qty_str = '0' * 16
 
-        tipo_cotacao = 'F' if is_fixed else 'A'
-        fonte_info   = '340' if is_fixed else '358'
+        # Cadastro (Commodities × B3): coluna vazia devolve o 'F'/'A' e o
+        # 340/358 de sempre — ver `_b3_quote_cfg`. §177
+        _q           = _b3_quote_cfg(underlying)
+        tipo_cotacao = _q['ndf']
+        fonte_info   = _q['source']
 
         fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
         tipo_media = 'N' if fix_single else 'A'
@@ -20058,7 +20136,9 @@ def api_send_conecta():
         f[13] = _num(deal.get('Strike', ''), div100=qic)
         f[14] = '1'
         f[16] = '2'
-        f[17] = '5'
+        # Tipo de Cotação: cadastro (Commodities × B3 › Tipo de Cotação —
+        # Opção). Sem linha, ou coluna vazia, sai o '5' de sempre. §177
+        f[17] = _b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt']
         f[18] = 'S' if brl else ''
         f[19] = fix_start if vanilla else ''
         f[20] = fxconv if (not brl or vanilla) else ''

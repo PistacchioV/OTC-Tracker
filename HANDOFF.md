@@ -7862,3 +7862,60 @@ Verificado com `scripts/tests/check_amend_counterparty.py` (34 asserções). Dua
   tela duas vezes (§132). Os índices que já existiam estavam todos certos.
 
 O script foi testado ao contrário: devolvendo os três campos ao `_ND_AMEND_SKIP`, 11 asserções caem.
+
+## §177 — Tipo de Cotação e Fonte de Informação viram cadastro
+
+Três literais decidiam campos que vão para a B3:
+
+| arquivo | campo | era |
+|---|---|---|
+| Termo (NDF Comm) | Tipo de Cotação | `'F' if is_fixed else 'A'` |
+| Termo (NDF Comm) | Fonte de Informação | `'340' if is_fixed else '358'` |
+| Opção (Opt Comm) | Tipo de Cotação | `'5'`, fixo |
+
+`is_fixed` era só o flag **Fixed Quote** do mapping Commodities × B3 — ou seja, a commodity escolhia
+entre **dois** valores, e qualquer terceiro (uma cotação de fechamento, um ajuste diferente) exigia
+alterar código e **reiniciar o servidor**, que é o que a equipe não faz sozinha na instância.
+
+Agora são três colunas do mesmo mapping: **`QUOTE TYPE NDF`**, **`QUOTE TYPE OPT`** e
+**`INFO SOURCE`**.
+
+**São duas colunas de tipo de cotação porque os dois layouts têm domínios diferentes** — o de Termo usa
+letra (`A`/`F`), o de Opção usa número (`5`) — e a mesma commodity é negociada nos dois. Uma coluna só
+mandaria `A` para o arquivo de Opção. A coluna guarda o **código do layout**, o que literalmente vai no
+arquivo; o nome (AJUSTE, FECHAMENTO…) fica em Notes. Foi decisão da mesa, e é o que evita eu ter de
+adivinhar a tabela nome → código de cada layout.
+
+**Coluna vazia — ou subjacente sem linha nenhuma — devolve exatamente o valor histórico.** É o que
+`_b3_quote_cfg` faz, e é o que o **seed escreve linha a linha**: cadastro e código dizem a mesma coisa
+hoje. O `upgrade` preenche as três colunas nos arquivos já gravados (com `setdefault`, então coluna que
+a tela gravou vazia continua vazia).
+
+### Achar a linha do subjacente não é comparação de igualdade
+
+O deal traz o Ativo Subjacente já montado (`HOZ6`), e a coluna B3 CODE guarda um **padrão** nas linhas
+PREFIX (`HO"MY"`, `C_"MY"`, `KO"MY"BNMK` — §164). `_b3_code_matches` compara literal nas FIXED e
+prefixo + sufixo nas PREFIX, exigindo ao menos um caractere de mês/ano no meio — senão `HO` casaria
+com `HO` pelado. Isso é novo: o `FIXED_UNDERLYINGS` antigo era um `set` de igualdade, e por isso só
+funcionava para as linhas FIXED (todos os fixed-quote são FIXED, então nunca deu problema).
+
+### A regra tem duas cópias, e isso é deliberado
+
+O arquivo Conecta é montado **nos dois lados** — no navegador (o preview do duplo clique e o download)
+e no servidor (o envio) —, então a regra existe em Python e em JS. Para não virar **cinco** cópias (uma
+por página), o lado do navegador é um arquivo compartilhado: **`static/js/b3-quote-config.js`**
+(`B3Quote.load()` / `B3Quote.cfg(underlying)`). Foi exatamente a cópia-por-página que fez as duas
+versões do código B3 divergirem em §164.
+
+Junto saiu a lista literal `_FIXED_UND` que cada uma das quatro páginas de NDF carregava como fallback
+— o helper e o cadastro cobrem o caso.
+
+Verificado com `scripts/tests/check_quote_type.py` (48 asserções): o casamento padrão × código, o
+default histórico em toda combinação (coluna vazia, linha sem cadastro, subjacente inexistente), o seed
+e o upgrade, a ausência dos literais nos seis consumidores e — na seção 5, no JavaScriptCore — a
+**paridade das duas cópias**. Como `check_boxparse.py`, essa seção não roda no Windows da equipe; as
+outras quatro rodam.
+
+> ⚠️ O `commodities-b3.json` versionado **não foi regenerado**: ele tem 31 linhas contra as 30 do seed,
+> ou seja, já carrega edição da equipe. Quem preenche as colunas nele é o `upgrade`, na primeira
+> leitura.

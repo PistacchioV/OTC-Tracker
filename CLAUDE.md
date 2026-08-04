@@ -107,7 +107,13 @@ feeds and the traps. Three of them carry rules that are easy to break from the U
 - **`commodities-b3`** and **`cetip-files`** — the registered text carries a **pattern**, not a literal:
   `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
   `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
-  table so it reads apart from the fixed part (HANDOFF §164).
+  table so it reads apart from the fixed part (HANDOFF §164). `commodities-b3` also carries the
+  **Tipo de Cotação / Fonte de Informação** written into the Conecta files (`QUOTE TYPE NDF`,
+  `QUOTE TYPE OPT`, `INFO SOURCE`): the column holds the **layout code**, and there are two quote-type
+  columns because the Termo and Opção layouts use different domains (letter vs number) for the same
+  commodity. Blank column — or an underlying with no row — returns the historical value
+  (`_b3_quote_cfg`), which is also what the seed writes; the browser copy of the rule is the shared
+  `static/js/b3-quote-config.js`, and `check_quote_type.py` proves the two agree (HANDOFF §177).
 - **`api-links`** — the Athena endpoint, one row per **usage × product** (`New Deals` × NDF/FXO/
   Commodities/Swaps, plus `Unwinds`), with `YYYYMMDD` marking the reference date. Product here is the
   API's `product` parameter, **not the page**: NDF is one product feeding three pages (Vanilla, Other

@@ -1210,6 +1210,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v={{ asset_v('js/missing-counterparty.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/b3-quote-config.js?v={{ asset_v('js/b3-quote-config.js') }}"></script>
 
 <script>
 // ============================================================================
@@ -4361,7 +4362,7 @@ $(document).ready(function() {
         f[13] = _num(deal.Strike || '', qic);
         f[14] = '1';
         f[16] = '2';
-        f[17] = '5';
+        f[17] = B3Quote.cfg(_sh(deal.UnderlyingAsset || '')).opt;
         f[18] = brl ? 'S' : '';
         f[19] = vanilla ? fixStart : '';
         f[20] = (!brl || vanilla) ? fxconv : '';

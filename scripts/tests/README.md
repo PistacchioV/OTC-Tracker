@@ -26,6 +26,7 @@ recriado num tmp, o Outlook e o SMTP são stubados. Nada sai da máquina.
 | `check_b3_pattern.py` | notação `"MY"`/`_` do B3 Code e o padrão `YYMMDD` dos arquivos CETIP — inclui **paridade com as duas cópias JS** e a prova de que os 12 markets PREFIX emitem o mesmo código de antes | `split_b3_pattern`/`build_b3_code`, o seed de `commodities-b3`, `_cetip_rules` ou `_CETIP_BEHAVIOUR` (§164) |
 | `check_cem_sheets.py` | Accrual/CEM: as abas são lidas por **posição** (1ª summary, 2ª Kapital CETIP), a inversão 228/199 e o erro explícito quando falta a 2ª aba | `_acc_parse_cem_factors` ou `_acc_read_sheets` (§165) |
 | `check_publisher_ndf.py` | Publisher × B3: linha **sem Match Tokens casa só pelo texto completo**, `NOTES = BACEN` roteia para Vanilla, e o roteamento antigo (`!= 'PTAX'`) continua valendo com o seed padrão | `_ndf_publisher_row`, `_ndf_publisher_is_bacen` ou o roteamento em `_ndf_deal_from_api` (§166) |
+| `check_quote_type.py` | Tipo de Cotação e Fonte de Informação saem do cadastro (Commodities × B3) e **coluna vazia devolve o valor histórico**; inclui o casamento do subjacente contra o padrão `"MY"` e a **paridade com a cópia do navegador** (`b3-quote-config.js`) | `_b3_quote_cfg`/`_b3_code_matches`, os builders do Conecta ou `static/js/b3-quote-config.js` (§177) |
 | `check_quoted_in_cents.py` | Quoted in Cents: a divisão por 100 **não olha a moeda** do strike — varre os quatro caminhos (Conecta e Intrag × NDF Comm e Opt Comm) mais as duas cópias no navegador atrás de qualquer termo de moeda na regra | `div100=`/`_cents`/`strike_effective` em `routes.py`, o `buildConectaFields` das duas páginas ou `_is_cents_factor` (§172) |
 | `check_conf_optcomm_brl.py` | Confirmação de Opção de Commodities em BRL: os dois documentos (USD × BRL) seguem **idênticos palavra a palavra** fora do cabeçalho do Anexo I, o cabeçalho bate célula a célula com o Word, e o **PDF usa o mesmo cabeçalho do template** | `opt-comm-strike-{usd,brl}.html`, `opcao_anexo_heads`/`opcao_pdf` ou `_CONF_OPT_FAMILY_TEMPLATES` (§171) |
 | `check_amend_counterparty.py` | Amend da API: SPN/Client/Tax ID são comparados e aplicados, o deal é reencontrado **pelo Deal ID** quando o Client muda (sem duplicar a linha) e um `Success` só volta para a fila se a contraparte mudou de entidade. Confere também `AMEND_FIELD_COLS` × `COL_TO_JSON_FIELD` campo a campo | `_nd_api_amend`, `_ND_AMEND_SKIP`, `_nd_amend_find`/`_nd_amend_index` ou os `AMEND_FIELD_COLS` das páginas (§176) |
@@ -35,10 +36,11 @@ recriado num tmp, o Outlook e o SMTP são stubados. Nada sai da máquina.
 
 ## Dependência externa
 
-`check_boxparse.py` precisa do **JavaScriptCore** (`jsc`), que já vem no macOS em
+`check_boxparse.py` e a **seção 5** do `check_quote_type.py` precisam do **JavaScriptCore** (`jsc`), que já vem no macOS em
 `/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc`. Ele existe
 porque `otc_boxparse.py` é a **segunda cópia** de uma regra de negócio que também vive no
 navegador — sem executar os dois lados, uma divergência (arredondamento, data fora de faixa)
 passa em silêncio e só aparece como número errado na tela. Ver §157.
 
-No Windows da equipe esse script não roda; os outros rodam.
+No Windows da equipe o `check_boxparse.py` não roda; o `check_quote_type.py` roda, apenas
+pulando a seção de paridade (ele avisa na saída). Os demais rodam inteiros.

@@ -1149,6 +1149,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v={{ asset_v('js/missing-counterparty.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/b3-quote-config.js?v={{ asset_v('js/b3-quote-config.js') }}"></script>
 
 <script>
 // ============================================================================
@@ -4161,21 +4162,10 @@ $(document).ready(function() {
         return n.toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
     }
 
-    /* Fixed Underlyings: linhas FIXED QUOTE = YES do mapping Commodities × B3;
-       a lista literal é o fallback até o fetch responder (e se ele falhar). */
-    var _FIXED_UND = ['NACX0005', 'PTS005', 'PTS002', 'PTS006', 'PTS003', 'PMTCLAUS'];
-    fetch('/api/mappings/commodities-b3', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-            if (!d || !d.success || !d.rows) return;
-            var codes = d.rows.filter(function (r) {
-                    return String(r['FIXED QUOTE'] || '').trim().toUpperCase() === 'YES';
-                })
-                .map(function (r) { return String(r['B3 CODE'] || '').trim().toUpperCase(); })
-                .filter(function (c) { return !!c; });
-            if (codes.length) _FIXED_UND = codes;
-        })
-        .catch(function () {});
+    /* Tipo de Cotação / Fonte de Informação do subjacente: cadastro
+       Commodities × B3, pelo helper compartilhado (§177). Sem cadastro,
+       `B3Quote.cfg` devolve os mesmos F/A e 340/358 de antes. */
+    B3Quote.load();
 
     /* Publisher (feeder) → Fonte de Informação: mapping Publisher × B3 (NDF) da
        tela Mapping. As linhas literais são fallback até o fetch responder (e se
@@ -4284,10 +4274,9 @@ $(document).ready(function() {
         var brl        = strikeCcy === 'BRL';
         var isTas      = instrument.toUpperCase().indexOf('TAS') === 0;
 
-        var FIXED_UND   = _FIXED_UND;
-        var isFixed     = FIXED_UND.indexOf(underlying) !== -1;
-        var tipoCotacao = isFixed ? 'F' : 'A';
-        var fonteInfo   = isFixed ? '340' : '358';
+        var _q          = B3Quote.cfg(underlying);
+        var tipoCotacao = _q.ndf;
+        var fonteInfo   = _q.source;
 
         // O deal montado pela tabela expõe First/LastFixingDate. FixingStart/EndDate
         // veio junto na cópia do NDF Commodities e nunca existiu aqui: lia undefined,
