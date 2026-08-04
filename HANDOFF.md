@@ -7919,3 +7919,39 @@ outras quatro rodam.
 > ⚠️ O `commodities-b3.json` versionado **não foi regenerado**: ele tem 31 linhas contra as 30 do seed,
 > ou seja, já carrega edição da equipe. Quem preenche as colunas nele é o `upgrade`, na primeira
 > leitura.
+
+## §178 — CO1-2: quantas Datas de Verificação são do segundo futuro
+
+O ticker `CO1-2` (Brent rolling) não sai como código fixo na confirmação: sai como uma **frase** que
+diz, das Datas de Verificação, quais valem o **primeiro** futuro e quais valem o **segundo**. A regra é
+do calendário do Brent:
+
+| última Data de Verificação em | datas do 2º futuro |
+|---|---|
+| **dezembro** | as **duas** últimas (última e penúltima) |
+| qualquer outro mês | só a **última** |
+
+`_conf_co12_text` aplicava a regra de dezembro **o ano inteiro**. Em qualquer outro mês a penúltima
+data saía apontada para o segundo futuro — **um dia a mais de rolagem do que a operação tem**, num
+documento que a contraparte assina.
+
+Quem decide o mês é a **última** Data de Verificação (a Data Final de Verificação de Mercadoria), que é
+o dia em que a rolagem acontece. Uma janela que atravessa a virada do ano — verificações em dezembro
+terminando em janeiro — cai na regra de janeiro, que é o mês do dia que rola. Fica registrado porque é
+a única leitura em que "as datas de verificação são de dezembro" fica ambíguo.
+
+O texto de dezembro **não mudou uma vírgula** (o teste fixa a frase inteira). Fora de dezembro a frase
+passa ao singular: *"…e para a Data de Verificação em 31/08/2026, significa COV6"*.
+
+Os meses dos dois contratos continuam saindo do **settlement** (+1 e +2, com virada de ano), e o corte
+continua andando em **dias úteis ANBIMA** — feriado no dia anterior empurra as duas pontas.
+
+**A confirmação de Opção passou a usar a mesma função.** A regra é do ativo, não do produto, e antes só
+o Termo a tinha; a Opção imprimia o literal `CO1-2`. O documento próprio do CO1-2 em opção (família
+`co1-2`) continua **pendente de template**, então na prática a frase só aparece quando ele existir — mas
+já nasce certa, em vez de a regra ganhar uma terceira cópia.
+
+Verificado com `scripts/tests/check_co12_roll.py` (20 asserções, calendário de feriados stub): a frase
+de dezembro byte a byte, o singular dos demais meses, o recuo por fim de semana e por feriado, os
+futuros vindos do settlement com virada de ano, e o `CO1-2` cru quando falta data. Testado ao
+contrário — voltando a regra para dois dias sempre, 8 asserções caem.

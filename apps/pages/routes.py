@@ -21371,13 +21371,26 @@ def api_ndfcomm_confirmations():
 
 def _conf_co12_text(deal, index):
     """Texto dinâmico do ticker CO1-2 (Brent rolling), portado da macro:
-    mercados CO<letra><dígito do ano> dos dois meses seguintes ao settlement."""
+    mercados CO<letra><dígito do ano> dos dois meses seguintes ao settlement.
+
+    **Quantas Datas de Verificação são do SEGUNDO futuro depende do mês** (§178):
+
+      * dezembro  → as **duas últimas** (última e penúltima);
+      * demais    → só a **última**.
+
+    O código aplicava a regra de dezembro o ano inteiro, então em qualquer outro
+    mês a penúltima data saía apontada para o segundo futuro — um dia a mais de
+    rolagem do que a operação tem.
+
+    Quem decide o mês é a **última** Data de Verificação (a Data Final de
+    Verificação de Mercadoria), que é a data em que a rolagem acontece. Uma
+    janela que atravessa a virada do ano (verificações em dezembro terminando em
+    janeiro) cai na regra do mês de janeiro, que é o mês do dia que rola.
+    """
     settle = _parse_date_any(deal.get('SettlementDate'))
     refd = _parse_date_any(deal.get('FixingEndDate'))
     if not settle or not refd:
         return 'CO1-2'
-    two_before = _conf_prev_biz(refd, 2)
-    one_before = _conf_prev_biz(refd, 1)
 
     def _mkt(offset):
         m = settle.month + offset
@@ -21386,10 +21399,18 @@ def _conf_co12_text(deal, index):
         letter = _CONF_FUT_MONTH_CODE.get(m, '?')
         return 'CO{}{}'.format(letter, str(y)[-1])
 
+    if refd.month == 12:
+        corte = _conf_prev_biz(refd, 2)
+        segundo = ('para as Datas de Verificação em {} e {}, significa {}'
+                   .format(_conf_prev_biz(refd, 1).strftime('%d/%m/%Y'),
+                           refd.strftime('%d/%m/%Y'), _mkt(2)))
+    else:
+        corte = _conf_prev_biz(refd, 1)
+        segundo = ('para a Data de Verificação em {}, significa {}'
+                   .format(refd.strftime('%d/%m/%Y'), _mkt(2)))
+
     return ('Para as Datas de Verificação entre a Data Inicial de Verificação de Mercadoria e '
-            '{} significa {} e para as Datas de Verificação em {} e {}, significa {}'
-            .format(two_before.strftime('%d/%m/%Y'), _mkt(1),
-                    one_before.strftime('%d/%m/%Y'), refd.strftime('%d/%m/%Y'), _mkt(2)))
+            '{} significa {} e {}'.format(corte.strftime('%d/%m/%Y'), _mkt(1), segundo))
 
 
 def _conf_cgd_lookup(first):
@@ -22109,9 +22130,15 @@ def _conf_opt_generation_page(family):
 
     first = picked[0][0]
     rows, warnings = [], []
-    for deal, subj in picked:
+    for i, (deal, subj) in enumerate(picked, start=1):
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         ticker = _CONF_TICKER_MAP.get(ua, ua)
+        # Mesmo texto de rolagem do Termo — a regra do primeiro × segundo futuro
+        # é do ATIVO, não do produto (§178). O documento próprio do CO1-2 em
+        # opção (família 'co1-2') ainda não existe; quando existir, já nasce com
+        # o ticker certo em vez de repetir a regra numa terceira cópia.
+        if ua == 'CO1-2':
+            ticker = _conf_co12_text(deal, i)
         fator = _conf_to_float((subj or {}).get('fator'))
         strike = _conf_to_float(deal.get('Strike'))
         # Preço de Exercício = strike × Fator Conversão (mesma regra da Taxa
