@@ -160,11 +160,13 @@ How it applies here — the codebase already follows the primary defense, and it
 
 ```
 layouts/base.html          ← base HTML skeleton
-  └── layouts/vertical.html or layouts/horizontal.html
-        └── pages/*.html   ← individual page templates
+  └── layouts/vertical.html ← the only layout (sidebar on the left)
+        └── pages/*.html    ← individual page templates
 ```
 
 Partials (sidebar, header, topbar) are included inside the layout files. The `segment` variable passed from routes is used in templates to highlight the active nav item.
+
+`layouts/horizontal.html` and `partials/horizontal-nav.html` were **deleted** (HANDOFF §175): the horizontal menu was the purchased template's demo navigation — it listed ~170 demo pages and was loaded by exactly one demo page. `partials/sidenav.html` is the app's only menu.
 
 ### Adding a new page
 

@@ -7763,3 +7763,48 @@ o `column().search()` do DataTables nunca o achava. O `missing-counterparty.js` 
 Verificado com `scripts/tests/check_counterparty_lookup.py` (34 asserções: a ordem inteira, as duas
 armadilhas históricas — Settlement Location não vira LE e perna interna não usa o SPN da API —, o
 upgrade do `le-spn` e a ligação com a tela). A parte de navegador foi exercitada no JavaScriptCore.
+
+## §175 — Expurgo do tema: 265 arquivos que não faziam nada
+
+O repositório carregava a demonstração inteira do template Bootstrap comprado. Saíram **265 arquivos,
+89,5 mil linhas**, sem uma única mudança de comportamento.
+
+| o quê | quantos |
+|---|---|
+| páginas de demo em `templates/pages/` | 170 |
+| JS de página órfão em `static/js/` (incl. `js/maps/`) | 75 |
+| `partials/horizontal-nav.html` + `layouts/horizontal.html` | 2 |
+| site de documentação do tema em `Docs/` (10 HTML + assets) | 18 |
+
+Famílias apagadas: `ui-*` (28) · `charts-*`/`chartjs-*` (26) · `tables-*` (17) · `ecommerce-*` (11) ·
+`sidebar-*` (11) · `crm-*` (10) · `form-*` (9) · `auth-*` (8) · `email-*` (8) · `misc-*` (8) ·
+`pages-*` (8) · `layouts-*` (5) · `icons-*` (3) · `topbar-*` (3) · `users-*` (3) · `invoice*` (3) ·
+`maps-*` (2) · `api-keys` · `maintenance` · `social-feed`. Mais as **quatro confirmações antigas**
+(`ndf-comm_strike_usd`, `ndf-comm_strike_brl`, `ndf-comm_platts_strike_usd`, `opt-comm_strike_usd`),
+substituídas pelas de `templates/confirmations/`.
+
+**Por que ninguém tinha percebido.** `@blueprint.route('/<template>')` renderiza **qualquer** arquivo em
+`pages/`, então "não tem rota no código" não provava nada — `new_deals-ndf-vanilla.html` também não tem.
+O critério que funcionou foi **alcançabilidade**: raiz = o que é citado por código (`.py`, `.js`,
+`layouts/`, `partials/`), mais o fecho pelos links entre páginas vivas. Duas exclusões deliberadas na
+lista de raízes, e são elas que explicam o resultado:
+
+- **`partials/horizontal-nav.html`** — é o menu de demonstração do tema, com ~170 links, e era
+  carregado por **uma** página: `layouts-horizontal.html`, a demo do próprio layout. Contá-lo como raiz
+  fazia todo o tema parecer vivo. Ele e o `layouts/horizontal.html` foram junto; o menu da aplicação é
+  só o `partials/sidenav.html`.
+- **`static/data/translations/*.json`** — têm chaves herdadas daquele menu (`ui-buttons`, `crm-leads`…).
+  Chave de tradução não é uso. As chaves órfãs ficaram: são inertes e mexer nelas é outro assunto.
+
+**O que ficou de propósito:** os quatro `error-4xx.html` (superfície de erro da aplicação, mesmo os que
+nenhum handler usa hoje), `Docs/SQL_Injection_Prevention_Cheat_Sheet.md` e os dois `.pptx`, e todo o
+SCSS — o CSS compilado é um bundle só, e podar o SCSS por página é outro trabalho.
+
+**Como foi conferido.** Os **72 links do `sidenav.html`** foram batidos um a um, com sessão autenticada,
+antes e depois: **exatamente os mesmos 24 não-200** (as páginas de Unwinds, DCE, Regulatory e `/cgd`,
+que ainda não existem — este é o retrato de hoje, e serve de linha de base para o próximo expurgo).
+`/dashboard`, `/mapping`, `/users-profile`, `/page-access`, `/reference-data` e
+`/pending-confirmation` seguem 200; `/ui-buttons` e `/layouts-horizontal` agora caem no
+`error-404.html`, que renderiza (404, não 500). A suíte de `scripts/tests/` inteira passa. Também
+varri o repositório inteiro atrás de referência remanescente a arquivo apagado — a única era o
+`Docs/layouts.html`, que foi apagado junto.
