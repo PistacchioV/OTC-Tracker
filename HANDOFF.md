@@ -7651,19 +7651,26 @@ Duas mudanças no mesmo pull da Athena, pedidas na mesma conversa.
 `BASE_URL + TRADES_ENDPOINT` eram **constantes** em `athena_api.py`: trocar o endpoint (versão nova,
 migração de host, apontar para UAT) exigia mexer no código e **reiniciar o servidor** — que é
 justamente o que a equipe não consegue fazer sozinha na instância. Agora é cadastro em **/mapping ›
-API Links** (`api-links`), uma linha por **USO**:
+API Links** (`api-links`), uma linha por **USO × PRODUTO**:
 
-| USE | seed |
-|---|---|
-| `New Deals` | `…/api/v1/getTrades?product=NDF&date=YYYYMMDD` — exatamente a URL que estava no código |
-| `Unwinds` | **vazia**, de propósito |
+| USE | PRODUCT | seed |
+|---|---|---|
+| `New Deals` | `NDF` | `…/getTrades?product=NDF&date=YYYYMMDD` — exatamente a URL que estava no código |
+| `New Deals` | `FXO` | idem com `product=FXO` |
+| `New Deals` | `Commodities` · `Swaps` | idem, ainda sem consumidor |
+| `Unwinds` | *(em branco)* | **vazia**, de propósito |
+
+**Produto é o do `product` da API, não a página.** NDF é **um** produto que alimenta **três** páginas —
+Vanilla, Other Publisher e FWD Start —, separadas pelo roteamento do publisher e do Instrument Type
+(§166) e não pelo endereço. Cadastrar uma linha "FWD Start" não faria a operação vir de outro lugar.
+
+**`PRODUCT` em branco é curinga** daquele uso: só entra quando o produto pedido não tem linha própria.
 
 **`YYYYMMDD` marca onde entra a Data de Referência**, e é destacado na tabela como o `YYMMDD` dos
-arquivos CETIP (§164). Mas o placeholder **não é o único caminho da data**: `build_url` também
-**reescreve os parâmetros `product` e `date` do query string** com o que a rotina pediu. Isso é
-deliberado — quem sabe qual produto está sendo puxado é o código, e um `product=NDF` esquecido na
-linha traria **trades de NDF para a página de FXO, em silêncio**. O placeholder serve para o caso de a
-data ficar no *caminho* (`…/trades/20260728`), que nenhum parâmetro alcançaria.
+arquivos CETIP (§164). Ele existe para a data que fica no *caminho* (`…/trades/20260728`), onde
+parâmetro nenhum alcança; o parâmetro `date` é reescrito de todo jeito. Já o **`product` só é reescrito
+na linha curinga** — na linha de um produto o endereço vale como está, porque foi ela que o produto
+escolheu; reescrever seria contrariar o cadastro.
 
 A linha de Unwinds nasce **sem URL** porque não existe rotina de unwind ainda: semear um endereço não
 conferido faria a primeira rotina a nascer chamar um endpoint inventado. Sem cadastro, `fetch_unwinds`
@@ -7689,9 +7696,13 @@ A chave `dead` do JSON de retorno dos dois pulls **foi mantida** (é o que as 4 
 import); só o conteúdo mudou. O rótulo que o usuário vê deixou de dizer "cancelados/mortos na API" e
 passou a "cancelados na API", nos três idiomas.
 
-Verificado com `scripts/tests/check_api_links.py` (27 asserções — inclui a prova de que o seed
-reproduz a URL histórica byte a byte e que sem cadastro o Unwinds falha em vez de bater no endpoint do
-New Deals) e com a seção nova de `check_cancel_remove.py` (11 asserções sobre `isCancelled` × `isDead`).
+A coluna `PRODUCT` nasceu logo depois, no mesmo dia: com uma linha só, o **FXO ficava sem endereço
+cadastrado** — foi o que a mesa notou. Um `upgrade` converte o arquivo gravado antes dela (a linha
+antiga vira a do NDF e os outros produtos entram do seed).
+
+Verificado com `scripts/tests/check_api_links.py` (32 asserções — inclui a prova de que o seed
+reproduz a URL histórica byte a byte, que a linha do produto ganha do curinga e que sem cadastro o
+Unwinds falha em vez de bater no endpoint do New Deals) e com a seção nova de `check_cancel_remove.py` (11 asserções sobre `isCancelled` × `isDead`).
 O primeiro foi testado ao contrário: com o `product` deixando de ser reescrito, oito asserções caem.
 
 ## §174 — Perna interna com SPN, Client e Tax ID vazios (e como procurar "Missing Counterparty")

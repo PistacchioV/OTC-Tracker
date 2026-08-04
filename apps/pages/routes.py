@@ -15410,6 +15410,54 @@ def _interbook_upgrade(rows):
     return out
 
 
+# Produtos que a API Athena atende — são os valores do parâmetro `product` do
+# getTrades, e não as páginas. NDF é UM produto que alimenta TRÊS páginas
+# (Vanilla, Other Publisher e FWD Start): quem separa as três é o roteamento pelo
+# publisher e pelo Instrument Type (§166), não o endereço. Linha com PRODUCT em
+# branco vale para qualquer produto daquele uso.
+_MAP_API_PRODUCTS = ['', 'NDF', 'FXO', 'Commodities', 'Swaps']
+
+_ATHENA_GETTRADES = ('https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
+                     '/api/v1/getTrades?product={}&date=YYYYMMDD')
+
+_API_LINKS_SEED = (
+    {'USE': 'New Deals', 'PRODUCT': 'NDF', 'URL': _ATHENA_GETTRADES.format('NDF'),
+     'NOTES': 'Alimenta Vanilla, Other Publisher e FWD Start — a página sai do roteamento'},
+    {'USE': 'New Deals', 'PRODUCT': 'FXO', 'URL': _ATHENA_GETTRADES.format('FXO'),
+     'NOTES': ''},
+    {'USE': 'New Deals', 'PRODUCT': 'Commodities', 'URL': _ATHENA_GETTRADES.format('Commodities'),
+     'NOTES': 'Sem consumidor: o pull de commodities ainda vem do box'},
+    {'USE': 'New Deals', 'PRODUCT': 'Swaps', 'URL': _ATHENA_GETTRADES.format('Swaps'),
+     'NOTES': 'Sem consumidor ainda'},
+    {'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
+     'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
+)
+
+
+def _api_links_upgrade(rows):
+    """Traz para o formato com PRODUCT os arquivos gravados antes da coluna.
+
+    A linha antiga de New Deals era uma só, com `product=NDF` no endereço e o
+    produto sendo reescrito pela rotina. Ela vira a linha do NDF, e as dos outros
+    produtos entram do seed — senão a instância que já abriu a tela ficaria com o
+    FXO sem endereço cadastrado, que foi exatamente o que a mesa notou faltando.
+    """
+    for r in rows:
+        if isinstance(r, dict) and 'PRODUCT' not in r:
+            r['PRODUCT'] = 'NDF' if _use_key_py(r.get('USE')) == 'newdeals' else ''
+    have = {(_use_key_py(r.get('USE')), str(r.get('PRODUCT') or '').strip().upper())
+            for r in rows if isinstance(r, dict)}
+    for s in _API_LINKS_SEED:
+        if (_use_key_py(s['USE']), s['PRODUCT'].upper()) not in have:
+            rows.append(dict(s))
+    return rows
+
+
+def _use_key_py(value):
+    """Mesma normalização de `athena_api._use_key` ('New Deals' ≡ 'new_deals')."""
+    return re.sub(r'[^a-z]', '', str(value or '').lower())
+
+
 # Razão social de cada Legal Entity no Reference Data (ditada pela mesa). A busca
 # é NORMALIZADA (`_pc_norm`: sem acento, sem pontuação, minúsculas), então
 # 'BANCO J.P MORGAN S/A' e 'BANCO J.P MORGAN S.A' são o mesmo nome — o que está
@@ -15814,18 +15862,13 @@ _MAPPING_DEFS = {
         'columns': [
             {'key': 'USE', 'label': 'Usage', 'type': 'select',
              'options': ['New Deals', 'Unwinds']},
+            {'key': 'PRODUCT', 'label': 'Product (blank = any)', 'type': 'select',
+             'options': _MAP_API_PRODUCTS},
             {'key': 'URL', 'label': 'URL (YYYYMMDD = reference date)'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
-        'seed': [
-            {'USE': 'New Deals',
-             'URL': 'https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
-                    '/api/v1/getTrades?product=NDF&date=YYYYMMDD',
-             'NOTES': 'Athena getTrades — o product é definido pela rotina '
-                      '(NDF, FXO, Commodities, Swaps)'},
-            {'USE': 'Unwinds', 'URL': '',
-             'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
-        ],
+        'upgrade': _api_links_upgrade,
+        'seed': list(_API_LINKS_SEED),
     },
 }
 

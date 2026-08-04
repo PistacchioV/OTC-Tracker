@@ -108,11 +108,14 @@ feeds and the traps. Three of them carry rules that are easy to break from the U
   `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
   `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
   table so it reads apart from the fixed part (HANDOFF §164).
-- **`api-links`** — the Athena endpoint, one row per **usage** (`New Deals`, `Unwinds`), with `YYYYMMDD`
-  marking the reference date. The `product` and `date` query parameters are **always rewritten by the
-  code**, so a stale `product=NDF` in the row cannot divert the FXO pull; the placeholder exists for a
-  date that lives in the *path*. The `Unwinds` row ships **empty on purpose** — with no URL its consumer
-  fails asking for registration, while `New Deals` falls back to the historical address (HANDOFF §173).
+- **`api-links`** — the Athena endpoint, one row per **usage × product** (`New Deals` × NDF/FXO/
+  Commodities/Swaps, plus `Unwinds`), with `YYYYMMDD` marking the reference date. Product here is the
+  API's `product` parameter, **not the page**: NDF is one product feeding three pages (Vanilla, Other
+  Publisher, FWD Start), split by routing and not by address. A blank `PRODUCT` is a wildcard for that
+  usage. `date` is always rewritten; `product` only on the wildcard row — a product-specific row is used
+  as registered, since it was picked *by* product. The `Unwinds` row ships **empty on purpose** — with no
+  URL its consumer fails asking for registration, while `New Deals` falls back to the historical address
+  (HANDOFF §173).
 
 `fxo-conv-rate` feeds
 the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /

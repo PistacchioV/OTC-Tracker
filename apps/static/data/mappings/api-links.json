@@ -1,11 +1,31 @@
 [
   {
     "USE": "New Deals",
+    "PRODUCT": "NDF",
     "URL": "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=NDF&date=YYYYMMDD",
-    "NOTES": "Athena getTrades — o product é definido pela rotina (NDF, FXO, Commodities, Swaps)"
+    "NOTES": "Alimenta Vanilla, Other Publisher e FWD Start — a página sai do roteamento"
+  },
+  {
+    "USE": "New Deals",
+    "PRODUCT": "FXO",
+    "URL": "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=FXO&date=YYYYMMDD",
+    "NOTES": ""
+  },
+  {
+    "USE": "New Deals",
+    "PRODUCT": "Commodities",
+    "URL": "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=Commodities&date=YYYYMMDD",
+    "NOTES": "Sem consumidor: o pull de commodities ainda vem do box"
+  },
+  {
+    "USE": "New Deals",
+    "PRODUCT": "Swaps",
+    "URL": "https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=Swaps&date=YYYYMMDD",
+    "NOTES": "Sem consumidor ainda"
   },
   {
     "USE": "Unwinds",
+    "PRODUCT": "",
     "URL": "",
     "NOTES": "Preencher com a URL de unwinds quando ela existir"
   }

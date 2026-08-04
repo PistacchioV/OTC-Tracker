@@ -1,24 +1,27 @@
 """Links da API viraram cadastro (/mapping › API Links).
 
 O endereco do getTrades era constante em athena_api.py. Agora e uma linha por
-USO — 'New Deals' e 'Unwinds' — com `YYYYMMDD` marcando a data de referencia.
-Duas armadilhas moram aqui:
+USO ('New Deals', 'Unwinds') e PRODUTO (NDF, FXO, Commodities, Swaps), com
+`YYYYMMDD` marcando a data de referencia. Tres armadilhas moram aqui:
 
-  * o seed TEM que reproduzir a URL historica byte a byte, senao o dia em que a
-    tela for aberta pela primeira vez o pull passa a bater noutro endereco;
-  * `product` e `date` sao do CODIGO, nao do cadastro. Um `product=NDF`
-    esquecido na linha traria trades de NDF para a pagina de FXO em silencio —
-    por isso `build_url` reescreve os dois.
+  * o seed do NDF TEM que reproduzir a URL historica byte a byte, senao o dia em
+    que a tela for aberta pela primeira vez o pull passa a bater noutro endereco;
+  * a linha do PRODUTO tem de ganhar da linha curinga (PRODUCT em branco), senao
+    um curinga cadastrado por engano sequestraria todos os produtos;
+  * na linha curinga o `product` e do CODIGO (a rotina sabe o que esta puxando);
+    na linha do produto, nao — ela foi escolhida PELO produto, e reescrever
+    contrariaria o cadastro.
 
 O que este script protege:
 
-  1. Seed == URL historica: montar a URL do seed da exatamente o que
-     `session.get(BASE_URL + TRADES_ENDPOINT, params=...)` produzia.
-  2. `build_url`: placeholder da data (inclusive no caminho), product/date
-     forcados, parametro ausente acrescentado, query alheia preservada.
+  1. Seed == URL historica, e existe linha para CADA produto (o FXO faltando foi
+     o que a mesa notou).
+  2. `build_url`: placeholder da data (inclusive no caminho), date sempre
+     reescrito, product so no curinga, query alheia preservada.
   3. Sem arquivo / linha vazia, o New Deals cai no fallback e o Unwinds FALHA
      dizendo que falta cadastro — nunca chama o endpoint do New Deals.
-  4. O mapping esta ligado na tela: `_MAPPING_DEFS`, o rail e as tres traducoes.
+  4. O upgrade converte o arquivo gravado antes da coluna PRODUCT.
+  5. O mapping esta ligado na tela: `_MAPPING_DEFS`, o rail e as tres traducoes.
 
 Nao encosta em dado real: o arquivo de cadastro vai para um tempfile e a sessao
 HTTP e stub (nada sai da maquina).
@@ -46,20 +49,30 @@ def check(label, got, exp):
         fails.append(label)
 
 
-SEED = {r['USE']: r for r in R._MAPPING_DEFS['api-links']['seed']}
+SEED = {(r['USE'], r['PRODUCT']): r for r in R._MAPPING_DEFS['api-links']['seed']}
 LEGACY = A.BASE_URL + A.TRADES_ENDPOINT + '?product=NDF&date=20260728'
 
-print('\n== 1. o seed reproduz a URL historica ==')
-check('a linha New Deals existe', sorted(SEED), ['New Deals', 'Unwinds'])
-check('seed New Deals -> URL historica',
-      A.build_url(SEED['New Deals']['URL'], product='NDF', date='20260728'), LEGACY)
+print('\n== 1. o seed cobre uso x produto ==')
+check('uma linha por produto do New Deals',
+      sorted(p for u, p in SEED if u == 'New Deals'),
+      ['Commodities', 'FXO', 'NDF', 'Swaps'])
+check('seed NDF -> URL historica',
+      A.build_url(SEED[('New Deals', 'NDF')]['URL'], date='20260728', force_product=False),
+      LEGACY)
 check('a constante de fallback bate com o seed',
       A.build_url(A.DEFAULT_NEW_DEALS_URL, product='NDF', date='20260728'), LEGACY)
-check('o seed do Unwinds nasce SEM URL', SEED['Unwinds']['URL'], '')
+check('o FXO tem endereco proprio',
+      A.build_url(SEED[('New Deals', 'FXO')]['URL'], date='20260728', force_product=False),
+      A.BASE_URL + A.TRADES_ENDPOINT + '?product=FXO&date=20260728')
+check('o seed do Unwinds nasce SEM URL', SEED[('Unwinds', '')]['URL'], '')
 
 print('\n== 2. build_url resolve o que o codigo manda ==')
 BASE = A.BASE_URL + A.TRADES_ENDPOINT
-check('product do cadastro e sobrescrito',
+check('linha do produto: o endereco vale como esta',
+      A.build_url(BASE + '?product=FXO&date=YYYYMMDD', product='FXO', date='20260101',
+                  force_product=False),
+      BASE + '?product=FXO&date=20260101')
+check('linha curinga: product do cadastro e sobrescrito',
       A.build_url(BASE + '?product=NDF&date=YYYYMMDD', product='FXO', date='20260101'),
       BASE + '?product=FXO&date=20260101')
 check('date fora do query string (caminho)',
@@ -126,16 +139,23 @@ try:
         check('sem arquivo, Unwinds falha pedindo cadastro',
               'API Links' in str(exc), True)
 
-    write_rows([{'USE': 'New Deals', 'URL': ''},
-                {'USE': 'Unwinds', 'URL': ''}])
+    write_rows([{'USE': 'New Deals', 'PRODUCT': 'NDF', 'URL': ''},
+                {'USE': 'Unwinds', 'PRODUCT': '', 'URL': ''}])
     check('linha sem URL == sem linha (New Deals)', called('New Deals'), LEGACY)
 
-    write_rows([{'USE': 'new_deals', 'URL': 'https://uat.example/api/v2/getTrades?date=YYYYMMDD'},
-                {'USE': 'Unwinds', 'URL': 'https://uat.example/api/v2/getUnwinds?date=YYYYMMDD'}])
-    check('o cadastro manda no New Deals', called('New Deals', 'FXO', '20260102'),
-          'https://uat.example/api/v2/getTrades?date=20260102&product=FXO')
-    check('o USE casa sem caixa/underscore', called('new deals', 'FXO', '20260102'),
-          'https://uat.example/api/v2/getTrades?date=20260102&product=FXO')
+    # Curinga (PRODUCT em branco) + linha propria do FXO.
+    write_rows([{'USE': 'new_deals', 'PRODUCT': '',
+                 'URL': 'https://uat.example/api/v2/getTrades?date=YYYYMMDD'},
+                {'USE': 'New Deals', 'PRODUCT': 'FXO',
+                 'URL': 'https://uat.example/api/v3/getFxo?date=YYYYMMDD&product=FXO'},
+                {'USE': 'Unwinds', 'PRODUCT': '',
+                 'URL': 'https://uat.example/api/v2/getUnwinds?date=YYYYMMDD'}])
+    check('produto sem linha propria cai no curinga', called('New Deals', 'NDF', '20260102'),
+          'https://uat.example/api/v2/getTrades?date=20260102&product=NDF')
+    check('a linha do produto ganha do curinga', called('New Deals', 'FXO', '20260102'),
+          'https://uat.example/api/v3/getFxo?date=20260102&product=FXO')
+    check('o USE casa sem caixa/underscore', called('new deals', 'NDF', '20260102'),
+          'https://uat.example/api/v2/getTrades?date=20260102&product=NDF')
     check('o Unwinds tem endereco proprio', called('Unwinds', 'NDF', '20260102'),
           'https://uat.example/api/v2/getUnwinds?date=20260102&product=NDF')
 
@@ -147,11 +167,27 @@ finally:
         os.remove(os.path.join(tmp, name))
     os.rmdir(tmp)
 
-print('\n== 4. o mapping esta ligado na tela ==')
+print('\n== 4. upgrade do arquivo sem a coluna PRODUCT ==')
+antigo = [{'USE': 'New Deals', 'URL': LEGACY.replace('20260728', 'YYYYMMDD'), 'NOTES': ''},
+          {'USE': 'Unwinds', 'URL': '', 'NOTES': ''}]
+up = R._api_links_upgrade([dict(r) for r in antigo])
+check('a linha antiga vira a do NDF',
+      [(r['USE'], r['PRODUCT']) for r in up[:2]], [('New Deals', 'NDF'), ('Unwinds', '')])
+check('os produtos que faltavam entram',
+      sorted(r['PRODUCT'] for r in up if r['USE'] == 'New Deals'),
+      ['Commodities', 'FXO', 'NDF', 'Swaps'])
+check('idempotente', len(R._api_links_upgrade(up)), len(up))
+
+print('\n== 5. o mapping esta ligado na tela ==')
 cols = [c['key'] for c in R._MAPPING_DEFS['api-links']['columns']]
-check('colunas', cols, ['USE', 'URL', 'NOTES'])
+check('colunas', cols, ['USE', 'PRODUCT', 'URL', 'NOTES'])
 check('USE e um select com os dois usos',
       R._MAPPING_DEFS['api-links']['columns'][0].get('options'), ['New Deals', 'Unwinds'])
+check('PRODUCT lista os produtos da API',
+      R._MAPPING_DEFS['api-links']['columns'][1].get('options'),
+      ['', 'NDF', 'FXO', 'Commodities', 'Swaps'])
+check('os produtos batem com os do cliente',
+      sorted(p for p in R._MAP_API_PRODUCTS if p), sorted(A.PRODUCTS.values()))
 check('os usos batem com as constantes do cliente',
       [A.USE_NEW_DEALS, A.USE_UNWINDS], ['New Deals', 'Unwinds'])
 tpl = io.open('apps/templates/pages/mapping.html', encoding='utf-8').read()

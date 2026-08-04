@@ -10,10 +10,11 @@ Endpoint (PROD)::
     https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api/api/v1/getTrades?product=NDF&date=20260728
 
 O endereço não é mais constante: ele é **cadastro**, na tela /mapping › API
-Links, uma linha por uso (New Deals e Unwinds), com ``YYYYMMDD`` marcando onde
-entra a data de referência (ver `registered_url`). O ``BASE_URL``/
-``TRADES_ENDPOINT`` abaixo continuam sendo o fallback do New Deals — e o seed do
-cadastro é exatamente eles, então nada muda até alguém editar a linha.
+Links, uma linha por uso (New Deals e Unwinds) **e produto** (NDF, FXO,
+Commodities, Swaps), com ``YYYYMMDD`` marcando onde entra a data de referência
+(ver `registered_url`). O ``BASE_URL``/``TRADES_ENDPOINT`` abaixo continuam sendo
+o fallback do New Deals — e o seed do cadastro é exatamente eles, então nada muda
+até alguém editar a linha.
 
 Authentication is ADFS / IDAnywhere (Kerberos single sign-on); the current
 Windows identity is used, so no credentials are prompted. The SSO handshake
@@ -84,17 +85,21 @@ def is_available():
 # --------------------------------------------------------------------------- #
 # Link da API — cadastro (/mapping › API Links), não constante
 # --------------------------------------------------------------------------- #
-# Uma linha por USO. Hoje há dois: 'New Deals' (o getTrades que alimenta as
-# páginas de New Deals) e 'Unwinds' (ainda sem consumidor no código — a linha
-# nasce VAZIA porque inventar um endereço aqui faria a rotina chamar um endpoint
-# que ninguém conferiu).
+# Uma linha por USO + PRODUTO. Os usos são 'New Deals' (o getTrades que alimenta
+# as páginas de New Deals) e 'Unwinds' (ainda sem consumidor no código — nasce
+# VAZIA porque inventar um endereço faria a rotina chamar um endpoint que ninguém
+# conferiu). Os produtos são os do parâmetro `product` do getTrades, e não as
+# páginas: NDF é UM produto que alimenta TRÊS páginas (Vanilla, Other Publisher e
+# FWD Start), separadas pelo roteamento e não pelo endereço.
 #
-# Na URL, `YYYYMMDD` marca onde entra a data de referência. Não é o único jeito
-# de a data chegar: `product` e `date` do query string são SEMPRE reescritos com
-# o que o código pediu, porque quem sabe qual produto está sendo puxado é a
-# rotina, não o cadastro — um `product=NDF` esquecido na linha traria trades de
-# NDF para a página de FXO, em silêncio. O placeholder existe para o caso de a
-# data estar no CAMINHO (…/trades/20260728) em vez do query string.
+# PRODUCT em branco é curinga daquele uso, e só entra quando o produto pedido não
+# tem linha própria.
+#
+# Na URL, `YYYYMMDD` marca onde entra a data de referência — e serve para a data
+# que fica no CAMINHO (…/trades/20260728), onde parâmetro nenhum alcança; o
+# parâmetro `date` é reescrito de todo jeito. Já o `product` só é reescrito na
+# linha curinga: na linha de um produto, o endereço vale como está, porque foi
+# ela que o produto escolheu.
 #
 # Este módulo lê o JSON direto (mesmo padrão de `_ndf_pdf_set` em otc_emails.py):
 # importar `routes` daqui seria circular. Arquivo ausente/ilegível → fallback nas
@@ -128,22 +133,40 @@ def _api_link_rows():
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
 
-def registered_link(usage):
-    """URL crua cadastrada para o uso (com os placeholders), ou None."""
-    want = _use_key(usage)
+def registered_link(usage, product=None):
+    """(URL crua, produto da linha) do cadastro para esse uso/produto.
+
+    A linha do PRODUTO ganha da linha genérica: uma linha com PRODUCT em branco é
+    o curinga daquele uso, e só entra quando o produto pedido não tem endereço
+    próprio. (None, None) quando não há linha ou a linha está sem URL.
+    """
+    want, want_p = _use_key(usage), _use_key(product)
+    generic = None
     for row in _api_link_rows():
-        if _use_key(row.get("USE")) == want:
-            url = str(row.get("URL") or "").strip()
-            return url or None
-    return None
+        if _use_key(row.get("USE")) != want:
+            continue
+        url = str(row.get("URL") or "").strip()
+        if not url:
+            continue
+        row_p = _use_key(row.get("PRODUCT"))
+        if row_p and row_p == want_p:
+            return url, str(row.get("PRODUCT") or "").strip()
+        if not row_p and generic is None:
+            generic = url
+    return (generic, None) if generic else (None, None)
 
 
-def build_url(template, product=None, date=None):
+def build_url(template, product=None, date=None, force_product=True):
     """Resolve os placeholders do link cadastrado.
 
-    A data substitui `YYYYMMDD` onde ele aparecer (inclusive no caminho), e
-    `product`/`date` do query string são forçados para o valor pedido pelo
-    código — acrescentados quando a URL cadastrada não os tem.
+    A data substitui `YYYYMMDD` onde ele aparecer (inclusive no caminho) e o
+    parâmetro `date` é reescrito com ela — o placeholder existe para a data que
+    fica no caminho, onde parâmetro nenhum alcança.
+
+    `force_product` reescreve também o `product`. Vale para a linha CURINGA (sem
+    produto cadastrado), onde quem sabe o produto é a rotina. Para a linha de um
+    produto específico o endereço vale como está: a linha foi escolhida PELO
+    produto, então mexer nela seria contrariar o cadastro.
     """
     url = str(template or "").strip()
     if not url:
@@ -153,7 +176,8 @@ def build_url(template, product=None, date=None):
 
     parts = urlsplit(url)
     query = parse_qsl(parts.query, keep_blank_values=True)
-    for name, value in (("product", product), ("date", date)):
+    forced = (("product", product), ("date", date)) if force_product else (("date", date),)
+    for name, value in forced:
         if value in (None, ""):
             continue
         value = str(value)
@@ -171,7 +195,8 @@ def build_url(template, product=None, date=None):
 def registered_url(usage, product=None, date=None):
     """URL pronta para chamar, do cadastro. None quando não há linha (ou a linha
     está sem URL) — aí o chamador decide entre o fallback e o erro."""
-    return build_url(registered_link(usage), product=product, date=date)
+    url, row_product = registered_link(usage, product)
+    return build_url(url, product=product, date=date, force_product=not row_product)
 
 
 # --------------------------------------------------------------------------- #
