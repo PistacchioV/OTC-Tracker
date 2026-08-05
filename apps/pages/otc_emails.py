@@ -1339,7 +1339,7 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers)
              _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Termo de Mercadoria) - {} - {}'.format(
+    subject = 'Liquidação de Operação de Derivativo (Termo de Commodities) - {} - {}'.format(
         ref_date, contraparte)
     # Um aviso por commodity precisa se distinguir na caixa de entrada: três
     # assuntos idênticos no mesmo dia são três anexos que ninguém sabe separar.

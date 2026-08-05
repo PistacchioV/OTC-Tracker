@@ -336,8 +336,8 @@ check('Mondelez Pay/Rec = sentido X commodity', len(d), 4)
 # Tres assuntos iguais no mesmo dia seriam tres anexos que ninguem separa.
 check('o assunto distingue a commodity',
       len({x['subject'] for x in d}), 2)   # 2 commodities x 2 sentidos, mesmo assunto por commodity
-check('o assunto diz Termo de Mercadoria',
-      d[0]['subject'].startswith('Liquidação de Operação de Derivativo (Termo de Mercadoria)'), True)
+check('o assunto diz Termo de Commodities',
+      d[0]['subject'].startswith('Liquidação de Operação de Derivativo (Termo de Commodities)'), True)
 
 print('\n== 11. cadastros da quebra e do PDF ==')
 SRC1 = read('apps/pages/routes.py')

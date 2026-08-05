@@ -8956,3 +8956,20 @@ Toolbar do **Live Position NDF** ganhou o mesmo respiro do §190/§194.
 Verificação: seção 12 do `check_ndf_advice.py` — a linha que vem pelo omnibus resolvendo pelo CNPJ, a que
 **não** vem mantendo o nome da posição, o Trade Level herdando o mesmo nome, e a comparação por dígitos
 nos dois lados. Conferido também contra o `RefData.json` real (438 CNPJs indexados).
+
+---
+
+## §198 — Assunto do aviso de NDF Commodities
+
+`(Termo de Mercadoria)` → **`(Termo de Commodities)`** no assunto do aviso:
+
+```
+Liquidação de Operação de Derivativo (Termo de Commodities) - dd/mm/yyyy - Contraparte
+```
+
+Os dois sufixos continuam: a **commodity** quando o aviso tem uma só, e ` x JPMORGAN CHASE` quando a
+entidade legal é a MGT.
+
+Só o assunto mudou — o corpo, o PDF e a quebra seguem iguais. A prosa do §194/§196 continua chamando o
+produto de "Termo de Mercadoria" porque é o nome do instrumento; o que o cliente lê no assunto é o texto
+acima.
