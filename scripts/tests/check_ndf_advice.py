@@ -143,6 +143,7 @@ try:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
     items = R._ndfadv_collect(REF)
     trade = R._ops_ndfc_trade_rows(REF.date())
+    email_rows = R._ndfadv_email_rows(REF)
 finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
     shutil.rmtree(tmp, ignore_errors=True)
@@ -217,9 +218,7 @@ for hook in ('id="swapchar-page"', 'id="swapchar-table"'):
 check('uma largura por coluna',
       len(re.findall(r'#swapchar-table th:nth-child\((\d+)\)', HTML)),
       len(R._NDFADV_COLUMNS) + 2)
-# O Print Advice ainda nao existe para NDF Commodities — botao que 404 e pior
-# que botao ausente.
-check('sem botao de aviso ainda', 'swPrintAdvice' in HTML, False)
+check('o Print Advice esta na pagina', 'swPrintAdvice' in HTML, True)
 
 OTM = read('apps/templates/pages/otm-settlements.html')
 check('a toolbar do OTM ganhou respiro',
@@ -267,6 +266,89 @@ check('cliente comum NAO e isento', R._ndfc_ir_exempt('AMG BRASIL S.A.'), False)
 check('o aviso usa _ndfc_ir', '_ndfc_ir(apurado, cliente)' in SRC0, True)
 adv_ir = by_b3['C1']['ir']
 check('o mesmo IR nas duas telas', R._ops_fmt_amt(adv_ir), t['tax_income'])
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 9. o aviso impresso ==')
+from apps.pages import otc_emails                          # noqa: E402
+
+HD = R._ndfadv_email_headers()
+check('o aviso comeca no B3 ID', HD[0], 'B3 ID')
+# Contraparte e o destinatario; Settlement Net e o criterio de quebra. Nenhum
+# dos dois e conteudo do documento que o cliente recebe.
+check('Contraparte fica de fora', 'Contraparte' in HD, False)
+check('Settlement Net fica de fora', 'Settlement Net' in HD, False)
+check('as demais colunas seguem', HD[1:4],
+      ['Nº da Confirmação', 'Data de Início da Operação', 'Ativo Subjacente'])
+
+ecell = lambda b3id, col: [r for r in email_rows if r['b3_id'] == b3id][0]['cells'][HD.index(col)]
+# Valores em BR, negativo com o simbolo DENTRO dos parenteses.
+check('negativo em BR', ecell('C1', 'Resultado Apurado (R$)'), '(R$ 2.028.144,04)')
+check('IR em BR', ecell('C1', 'IR 0,005% (R$)'), 'R$ 101,41')
+check('positivo em BR', ecell('C3', 'Resultado Apurado (R$)'), 'R$ 2.036.775,45')
+# A tela segue em US: o aviso formata a partir do NUMERO, nao do texto da tela.
+check('a tela nao mudou', cell('C1', 'Resultado Apurado (R$)'), '-2,028,144.04')
+
+print('\n== 10. a quebra dos avisos ==')
+otc_emails._build_cpdetails_index = lambda: {}
+otc_emails._contacts_emails = lambda cp, kw: []
+
+
+def drafts_for(net_type, split, rows_in):
+    for r in rows_in:
+        r['net_type'] = net_type
+    return otc_emails.build_ndfc_settlement_emails(
+        rows_in, HD, '05/08/2026', split_commodity=lambda n: split)
+
+
+def mk(cpty, commodity, liquido):
+    return {'counterparty': cpty, 'legal': 'BANCO J.P. MORGAN S.A.', 'spn': '9', 'taxid': '',
+            'commodity': commodity, 'apurado': liquido, 'ir': 0.0, 'liquido': liquido,
+            'cells': ['X'] * len(HD)}
+
+
+# Total Net: um aviso, mesmo com duas commodities e sinais opostos.
+d = drafts_for('Total Net', False, [mk('AMG', 'ALUMINIO(A)', 100.0), mk('AMG', 'CAFE(C)', -50.0)])
+check('Total Net = um aviso so', len(d), 1)
+# Pay/Rec: um por SENTIDO.
+d = drafts_for('Pay/Rec', False, [mk('AMG', 'ALUMINIO(A)', 100.0), mk('AMG', 'CAFE(C)', -50.0)])
+check('Pay/Rec = um por sentido', len(d), 2)
+# No Net: um por trade.
+d = drafts_for('No Net', False, [mk('AMG', 'ALUMINIO(A)', 100.0), mk('AMG', 'CAFE(C)', -50.0)])
+check('No Net = um por trade', len(d), 2)
+
+# A quebra por commodity so vale para quem esta no cadastro. Fora dele, aluminio
+# e cafe saem na MESMA tabela.
+d = drafts_for('Total Net', True, [mk('MONDELEZ BRASIL LTDA', 'ALUMINIO(A)', 100.0),
+                                   mk('MONDELEZ BRASIL LTDA', 'CAFE(C)', 50.0)])
+check('Mondelez Total Net = um por commodity', len(d), 2)
+# E a quebra por commodity e a ULTIMA: um Pay/Rec do Mondelez sai por sentido E
+# por commodity — quatro avisos, nao dois.
+d = drafts_for('Pay/Rec', True, [mk('MONDELEZ BRASIL LTDA', 'ALUMINIO(A)', 100.0),
+                                 mk('MONDELEZ BRASIL LTDA', 'ALUMINIO(A)', -10.0),
+                                 mk('MONDELEZ BRASIL LTDA', 'CAFE(C)', 50.0),
+                                 mk('MONDELEZ BRASIL LTDA', 'CAFE(C)', -5.0)])
+check('Mondelez Pay/Rec = sentido X commodity', len(d), 4)
+# Tres assuntos iguais no mesmo dia seriam tres anexos que ninguem separa.
+check('o assunto distingue a commodity',
+      len({x['subject'] for x in d}), 2)   # 2 commodities x 2 sentidos, mesmo assunto por commodity
+check('o assunto diz Termo de Mercadoria',
+      d[0]['subject'].startswith('Liquidação de Operação de Derivativo (Termo de Mercadoria)'), True)
+
+print('\n== 11. cadastros da quebra e do PDF ==')
+SRC1 = read('apps/pages/routes.py')
+check('cadastro da quebra registrado', "'ndfc-advice-split': {" in SRC1, True)
+check('aba no /mapping',
+      "key: 'ndfc-advice-split'" in read('apps/templates/pages/mapping.html'), True)
+check('Mondelez esta no seed', R._ndfc_split_by_commodity('MONDELEZ BRASIL NORTE NORDESTE LTDA'), True)
+check('cliente comum nao quebra', R._ndfc_split_by_commodity('AMG BRASIL S.A.'), False)
+# A Ficha em PDF usa o MESMO gerador e o MESMO cadastro do aviso de NDF de moeda.
+EM = read('apps/pages/otc_emails.py')
+body = EM.split('def _ndfc_settlement_email(', 1)[1].split('\n# ─', 1)[0]
+check('o PDF e o mesmo do NDF de moeda', '_ndf_settlement_pdf(' in body, True)
+check('e o mesmo cadastro de quem recebe', '_ndf_pdf_set()' in body, True)
+check('a pagina tem o botao Print Advice', 'id="swPrintAdvice"' in HTML, True)
+check('o endpoint existe',
+      "@blueprint.route('/api/other-products-ndf-settlement-advice/emails'" in SRC1, True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -1573,5 +1573,6 @@
   "ops-ted-nossi": "SSI not found for:",
   "ops-sub-fx": "FX",
   "ops-sub-comm": "Commodities",
-  "map-tab-ndfc-ir": "NDF Commodities IR — Exempt"
+  "map-tab-ndfc-ir": "NDF Commodities IR — Exempt",
+  "map-tab-ndfc-split": "NDF Commodities Advice — Split by Commodity"
 }

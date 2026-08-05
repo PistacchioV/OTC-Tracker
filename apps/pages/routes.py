@@ -7587,6 +7587,22 @@ def _ndfc_ir_exempt(client):
     return False
 
 
+def _ndfc_split_by_commodity(client):
+    """A contraparte recebe um aviso POR COMMODITY? Cadastro `ndfc-advice-split`.
+
+    Fora da lista, um aviso pode trazer alumínio e café na mesma tabela."""
+    cn = _fcst_norm(client).strip()
+    if not cn:
+        return False
+    for row in _mapping_rows('ndfc-advice-split'):
+        pat = _fcst_norm(row.get('CLIENT', '')).strip()
+        if not pat:
+            continue
+        if cn.startswith(pat) if 'starts' in _fcst_norm(row.get('MATCH', '')) else cn == pat:
+            return True
+    return False
+
+
 def _ndfc_ir(apurado, client):
     """IR de 0,005% do Termo de Mercadoria: só quando o BANCO paga (apurado < 0)
     e a contraparte não é isenta. Arredondado a 2 casas, como a planilha."""
@@ -7717,6 +7733,85 @@ def _ndfadv_collect(ref):
             'b3': sum(b3_vals) if b3_vals else None,
         })
     return out
+
+
+# O aviso impresso começa em "B3 ID": Contraparte é o destinatário e
+# Settlement Net é o critério de quebra — nenhum dos dois é conteúdo do
+# documento que o cliente recebe.
+_NDFADV_EMAIL_FROM = 1
+_NDFADV_EMAIL_DROP = ('Settlement Net',)
+
+
+def _ndfadv_email_headers():
+    return [c for c in _NDFADV_COLUMNS[_NDFADV_EMAIL_FROM:] if c not in _NDFADV_EMAIL_DROP]
+
+
+def _ndfadv_email_rows(ref):
+    """Linhas do aviso impresso: as mesmas da tela, sem Contraparte e sem
+    Settlement Net, e com os valores em BR (`R$ #.##0,00`, negativo entre
+    parênteses). Formatadas a partir do NÚMERO, não do texto da tela — o
+    caminho inverso erraria no primeiro valor com separador ambíguo."""
+    from apps.pages import otc_emails
+    keep = [i for i, c in enumerate(_NDFADV_COLUMNS)
+            if i >= _NDFADV_EMAIL_FROM and c not in _NDFADV_EMAIL_DROP]
+    money_at = {_NDFADV_COLUMNS.index(c) for c in
+                ('Resultado Apurado (R$)', 'IR 0,005% (R$)', 'Resultado Líquido (R$)')}
+    num_by_col = {_NDFADV_COLUMNS.index('Resultado Apurado (R$)'): 'apurado',
+                  _NDFADV_COLUMNS.index('IR 0,005% (R$)'): 'ir',
+                  _NDFADV_COLUMNS.index('Resultado Líquido (R$)'): 'liquido'}
+    out = []
+    for r in _ndfadv_collect(ref):
+        cells = []
+        for i in keep:
+            if i in money_at:
+                v = r.get(num_by_col[i])
+                cells.append(otc_emails._brl(v) if v is not None else '')
+            else:
+                cells.append(r['cells'][i])
+        out.append(dict(r, cells=cells))
+    return out
+
+
+@blueprint.route('/api/other-products-ndf-settlement-advice/emails', methods=['POST'])
+def api_ndf_settlement_advice_emails():
+    """Print Advice do Termo de Mercadoria: rascunhos .eml da data, quebrados por
+    net type e — para quem está no cadastro `ndfc-advice-split` — por commodity."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    from apps.pages import otc_emails
+    try:
+        rows = _ndfadv_email_rows(ref)
+    except Exception:
+        log.error('[ndf-advice] falha montando as linhas do aviso:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+    drafts = otc_emails.build_ndfc_settlement_emails(
+        rows, _ndfadv_email_headers(), ref.strftime('%d/%m/%Y'),
+        split_commodity=_ndfc_split_by_commodity)
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts),
+                        'counterparties': cp_count, 'files': files})
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_NDF_Commodities'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
+    return resp
 
 
 @blueprint.route('/other-products-ndf-settlement-advice')
@@ -17586,6 +17681,24 @@ _MAPPING_DEFS = {
             {'CLIENT': 'BANCO', 'MATCH': 'Starts with', 'NOTES': 'instituições financeiras'},
             {'CLIENT': 'JPMORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
             {'CLIENT': 'J.P. MORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
+        ],
+    },
+    'ndfc-advice-split': {
+        'label': 'NDF Commodities Advice — Split by Commodity',
+        'columns': [
+            {'key': 'CLIENT', 'label': 'Client'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select',
+             'options': ['Exact', 'Starts with']},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        # Contrapartes que recebem UM AVISO POR COMMODITY. Fora desta lista, um
+        # aviso pode trazer alumínio e café na mesma tabela.
+        # 'MONDELEZ' com Starts with cobre as duas entidades (Brasil e Brasil
+        # Norte Nordeste) — que já são contrapartes distintas no Reference Data,
+        # então a quebra entre elas acontece sozinha.
+        'seed': [
+            {'CLIENT': 'MONDELEZ', 'MATCH': 'Starts with',
+             'NOTES': 'um aviso por commodity'},
         ],
     },
     'swap-funcionalidade': {

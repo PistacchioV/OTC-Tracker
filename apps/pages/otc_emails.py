@@ -1211,6 +1211,166 @@ def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd,
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# AVISO DE LIQUIDAÇÃO — NDF COMMODITIES (Termo de Mercadoria)
+# ──────────────────────────────────────────────────────────────────────────
+#  Mesmo documento do aviso de NDF de moeda: mesma casca, mesma tabela, mesmo
+#  painel de totais, mesma regra de instrução/dados bancários pelo sinal do
+#  resultado, e o MESMO anexo em PDF (`_ndf_settlement_pdf`), para as duas
+#  fichas não divergirem. O que muda são as colunas e o assunto.
+#
+#  A QUEBRA em avisos, que é o ponto delicado:
+#    · net type Total Net → um aviso;
+#    · Pay/Rec           → um por SENTIDO do resultado líquido;
+#    · No Net            → um por trade;
+#    · e, para as contrapartes marcadas no cadastro `ndfc-advice-split`
+#      (Mondelez), cada um dos acima ainda quebra POR COMMODITY.
+def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=None):
+    """Avisos de liquidação de Termo de Mercadoria.
+
+    `rows`: dicts de `routes._ndfadv_email_rows` — cells (já em BR, na ordem de
+    `headers`), counterparty, legal, spn, taxid, net_type, commodity, liquido.
+    `split_commodity`: callable(nome) → bool; None = ninguém quebra por commodity.
+    """
+    cpd = _build_cpdetails_index()
+    ref_date = ref_date or _today_br()
+    split_commodity = split_commodity or (lambda _n: False)
+
+    groups = {}
+    for r in rows:
+        name = str(r.get('counterparty', '') or '').strip()
+        if not name or _is_lawton(name) or _is_jpmorgan(name):
+            continue
+        groups.setdefault((name, _ndf_legal_class(r.get('legal'))), []).append(r)
+
+    drafts = []
+    for (name, le), items in sorted(groups.items()):
+        nt = str(items[0].get('net_type', '') or 'Total Net')
+        if nt == 'No Net':
+            batches = [[t] for t in items]
+        elif nt == 'Pay/Rec':
+            recv = [t for t in items if float(t.get('liquido') or 0.0) >= 0]
+            pay = [t for t in items if float(t.get('liquido') or 0.0) < 0]
+            batches = [b for b in (recv, pay) if b]
+        else:
+            batches = [items]
+        if split_commodity(name):
+            # A quebra por commodity é a ÚLTIMA: ela subdivide o que o net type
+            # já separou, então um Pay/Rec do Mondelez sai por sentido E por
+            # commodity, que foi o pedido.
+            split = []
+            for b in batches:
+                per = {}
+                for t in b:
+                    per.setdefault(str(t.get('commodity', '') or ''), []).append(t)
+                split.extend([per[k] for k in sorted(per)])
+            batches = split
+        for batch in batches:
+            drafts.append(_ndfc_settlement_email(batch, name, le, ref_date, cpd, headers))
+    return drafts
+
+
+def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers):
+    apurado = sum(float(t.get('apurado') or 0.0) for t in items)
+    ir = sum(float(t.get('ir') or 0.0) for t in items)
+    final = sum(float(t.get('liquido') or 0.0) for t in items)
+    cp = cpd.get(_norm_spn(items[0].get('spn')), {})
+    taxid = items[0].get('taxid', '')
+    to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
+
+    data_rows = [t.get('cells') or [] for t in items]
+    table = _email_data_table(headers, data_rows)
+    summary_pairs = [
+        ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
+        ('IR (0,005%)',       'R$ ' + _br(ir),               False),
+        ('Resultado Final',   'R$ ' + _br_currency(final),   True),
+    ]
+    summary = _email_summary(summary_pairs)
+
+    _JPM_BANK_KV = [
+        ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
+        ('Nº e nome da agência', '0011'),
+        ('Conta-corrente nº', '5116003'),
+        ('CNPJ/MF nº', '33.172.537/0001-98'),
+    ] if le_class != 'MGT' else [
+        ('Nome e nº do banco', 'JPMORGAN CHASE BANK (BRASIL) - 488'),
+        ('Nº e nome da agência', '0001'),
+        ('Conta-corrente nº', '985181643'),
+        ('CNPJ/MF nº', '46.518.205/0001-64'),
+    ]
+    notice_text = ''
+    if final < 0:
+        instr_text = ('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
+                      'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
+                      'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
+                      'Financeira e/ou confirmados por ligação telefônica:')
+        bank_name, agency, account = _first_bank(cp, 'PAY')
+        bank_title = 'Dados para pagamento'
+        bank_pairs = [
+            ('Nome e nº do banco', bank_name or '—'),
+            ('Nº e nome da agência', agency or '—'),
+            ('Conta-corrente nº', account or '—'),
+            ('CNPJ/MF nº', _fmt_cnpj(taxid)),
+        ]
+    else:
+        instr_text = ('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
+                      'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
+                      'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
+                      'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
+                      'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        if final > 0:
+            notice_text = ('Não são aceitas transferências via PIX. As transferências devem ser '
+                           'realizadas exclusivamente por meio de TED.')
+        bank_title = 'Dados bancários'
+        bank_pairs = list(_JPM_BANK_KV)
+    instr = _ep(instr_text) if instr_text else ''
+    notice = _email_notice(notice_text) if notice_text else ''
+    bank = _email_kv(bank_title, bank_pairs)
+
+    def _gap(h):
+        return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
+
+    body_html = (
+        table + _gap(18) + summary +
+        ((_gap(16) + instr) if instr else '') +
+        ((_gap(2) + notice + _gap(12)) if notice else _gap(6)) + bank + _gap(16) +
+        _ep('A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
+            'Confirmação de Operação de Derivativo em referência.', muted=True))
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
+    html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
+
+    subject = 'Liquidação de Operação de Derivativo (Termo de Mercadoria) - {} - {}'.format(
+        ref_date, contraparte)
+    # Um aviso por commodity precisa se distinguir na caixa de entrada: três
+    # assuntos idênticos no mesmo dia são três anexos que ninguém sabe separar.
+    commodities = {str(t.get('commodity', '') or '') for t in items}
+    if len(commodities) == 1 and commodities != {''}:
+        subject += ' - ' + commodities.pop()
+    if le_class == 'MGT':
+        subject += ' x JPMORGAN CHASE'
+
+    draft = {'subject': subject, 'html': html, 'cc': 'Liquidação', 'to': to_emails,
+             'counterparty': contraparte}
+
+    # Ficha em PDF: MESMO gerador do aviso de NDF de moeda e MESMO cadastro de
+    # quem recebe (`ndf-pdf-cpty`) — "vale para aqui também".
+    if _ndf_pdf_norm(contraparte) in _ndf_pdf_set():
+        try:
+            ymd = datetime.strptime(ref_date, '%d/%m/%Y').strftime('%Y%m%d')
+        except ValueError:
+            ymd = datetime.now().strftime('%Y%m%d')
+        pdf = _ndf_settlement_pdf(
+            ref_date=ref_date, headers=headers, data_rows=data_rows,
+            summary_pairs=summary_pairs, instr_text=instr_text, notice_text=notice_text,
+            bank_title=bank_title, bank_pairs=bank_pairs)
+        if pdf:
+            draft['attachments'] = [{
+                'filename': _safe_filename('{} - {}'.format(contraparte, ymd)) + '.pdf',
+                'mime': 'application/pdf', 'data': pdf}]
+    return draft
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # ECONOMIC AFFIRMATION (D0 trade date, against Financial Institutions)
 # ──────────────────────────────────────────────────────────────────────────
 def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):

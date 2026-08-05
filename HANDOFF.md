@@ -8877,3 +8877,45 @@ tela, sem tocar em código.
 
 Verificação: seções 7 e 8 do `check_ndf_advice.py`, incluindo a linha que **não** bate (Check + a diferença
 à mostra) e a prova de que o IR do aviso e o do Trade Level são o mesmo número.
+
+---
+
+## §196 — Print Advice do Termo de Mercadoria (e a quebra dos avisos)
+
+O botão entrou na página de NDF Settlement Advice. O documento é o **mesmo** do aviso de NDF de moeda —
+mesma casca, mesma tabela, mesmo painel de totais, mesma regra de instrução/dados bancários pelo sinal do
+resultado — e o **mesmo anexo em PDF** (`_ndf_settlement_pdf`), com o **mesmo cadastro de quem recebe**
+(`ndf-pdf-cpty`). Reaproveitado, não recopiado: duas fichas de liquidação com layouts que derivam é o
+tipo de divergência que só aparece na mesa do cliente.
+
+Colunas do aviso: da tela, **de `B3 ID` em diante, sem `Settlement Net`**. Contraparte é o destinatário e
+Settlement Net é o critério de quebra — nenhum dos dois é conteúdo do documento. Valores em BR
+(`(R$ 2.028.144,04)`), formatados a partir do **número**, não do texto da tela (que segue em US).
+
+Assunto: `Liquidação de Operação de Derivativo (Termo de Mercadoria) - dd/mm/yyyy - Contraparte`, com a
+**commodity no fim quando o aviso tem uma só** — três assuntos idênticos no mesmo dia seriam três anexos
+que ninguém sabe separar.
+
+### A quebra, que é o ponto delicado
+
+Na ordem em que roda:
+
+1. **contraparte × entidade legal** — entidades diferentes nunca netam juntas;
+2. **net type**: `Total Net` → um aviso; `Pay/Rec` → um por **sentido** do resultado líquido; `No Net` →
+   um por trade;
+3. **commodity**, e só para quem está no cadastro **`ndfc-advice-split`** (semeado com `MONDELEZ`,
+   *Starts with*).
+
+A ordem importa: a quebra por commodity é a **última**, então um `Pay/Rec` do Mondelez sai por sentido
+**e** por commodity — quatro avisos, não dois. O teste fixa exatamente esse caso.
+
+`MONDELEZ` com *Starts with* cobre as duas entidades (Brasil e Brasil Norte Nordeste), que já são
+contrapartes distintas no Reference Data — **a quebra entre elas acontece sozinha**, sem regra especial.
+Fora do cadastro, um aviso pode trazer alumínio e café na mesma tabela.
+
+### Verificação
+
+Seções 9 a 11 do `check_ndf_advice.py`: as colunas do aviso, os valores em BR, os quatro cenários de
+quebra (Total Net · Pay/Rec · No Net · Mondelez com sentido × commodity), o assunto, e a prova de que o
+PDF sai do mesmo gerador e do mesmo cadastro do aviso de moeda. Além do teste, um aviso completo foi
+montado de verdade: PDF de 9 KB anexado e o logo no corpo.

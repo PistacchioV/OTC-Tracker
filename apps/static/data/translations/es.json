@@ -1572,5 +1572,6 @@
   "ops-ted-nossi": "SSI no encontrado para:",
   "ops-sub-fx": "Cambio",
   "ops-sub-comm": "Commodities",
-  "map-tab-ndfc-ir": "IR NDF Commodities — Exentos"
+  "map-tab-ndfc-ir": "IR NDF Commodities — Exentos",
+  "map-tab-ndfc-split": "Aviso NDF Commodities — División por Commodity"
 }
