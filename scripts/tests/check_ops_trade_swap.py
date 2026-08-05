@@ -100,6 +100,11 @@ write_json(os.path.join(ds, '2026', '07', '27', 'operations-b3_20260727.json'), 
     # A1 chega DUAS vezes (juros + amortizacao) -> uma linha so, Settlement B3 = 150
     opb3('A1', 'PAGAMENTO DE DIF. DE JUROS', '100,00'),
     opb3('A1', 'PAGAMENTO DE DIF. AMORTIZACAO', '50,00'),
+    # MESMO titulo com um evento FORA do cadastro: nao pode entrar no Settlement
+    # B3 do A1 (nem no card), senao o total nao e explicado por linha nenhuma
+    opb3('A1', 'RESGATE', '999,00'),
+    # ... nem uma linha do mesmo titulo que nem swap e
+    opb3('A1', 'PAGAMENTO DE DIF. DE JUROS', '888,00', tipo_tit='TER'),
     # RESGATE nao e liquidacao de diferencial -> nao entra
     opb3('B2', 'RESGATE', '999,00'),
     # premio sem contraparte no Athena -> linha aparece, mas sem Internal ID
@@ -164,7 +169,7 @@ check('A1 · Counterparty vem do Athena', a.get('counterparty'), 'SUZANO SA')
 check('A1 · Product', a.get('product'), 'SWAP')
 check('A1 · Type = VCP (uma ponta basta)', a.get('type'), 'VCP')
 check('A1 · Settlement = soma do OTM', a.get('settlement'), '150.00')
-check('A1 · Settlement B3 soma AS DUAS linhas', a.get('settlement_b3'), '150.00')
+check('A1 · Settlement B3 soma so os eventos CADASTRADOS', a.get('settlement_b3'), '150.00')
 check('A1 · Difference zerada', a.get('difference'), '0.00')
 check('A1 · status OK quando bate', a.get('status'), 'OK')
 # 926 dias -> 15% (a linha do aviso na planilha do usuario) -> 150 x 15%
@@ -178,6 +183,13 @@ check('C3 · Difference vazia (nao inventa zero)', c.get('difference'), '')
 check('C3 · status Check', c.get('status'), 'Check')
 check('C3 · Type = Calculado quando nao ha VCP', c.get('type'), 'Calculado')
 check('C3 · Counterparty cai no nome simplificado', c.get('counterparty'), 'SEM ATHENA')
+
+# O card de Swap le `_b3_n` — a MESMA celula da tabela. Se o card divergir da
+# tela, e aqui que aparece: 150 (A1) + 77 (C3), sem o RESGATE de 999 nem o TER
+# de 888 que compartilham o Titulo A1.
+rec = R._ops_recon(rows)['swap']
+check('card de Swap · valor B3 = o que a tabela mostra', rec['b3_value'], '227.00')
+check('card de Swap · contagem B3 = linhas da tabela', rec['b3_count'], 2)
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 2. o SEED da tabela de IR, contra a formula da planilha ==')

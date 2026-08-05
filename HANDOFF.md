@@ -9005,3 +9005,41 @@ Seção 15 do `check_ops_summary.py`: a prova de que o TED e a tela chamam a **m
 `_ops_trade_rows` inclui as duas famílias, e que a coluna Product é condicional e vem depois de
 Counterparty. Além do teste, um dia com um swap e um termo foi montado e o e-mail saiu com as **duas**
 contrapartes e os produtos `SWAP` e `TERMO` na tabela.
+
+---
+
+## §200 — O Settlement B3 do swap somava eventos que a tabela não mostra
+
+O card de Swap do Other Products Summary fechava num valor que **nenhuma linha da tela explicava**, e o
+Trade Level trazia o mesmo número errado na coluna Settlement B3 — os dois porque leem a mesma célula
+(`_b3_n`), que é justamente o que se quis ao montar os cards a partir das linhas já prontas (§182).
+
+A causa está em `_ops_swap_settling`. O `by_titulo` — {Título → linhas} — era preenchido **antes** dos dois
+filtros:
+
+```python
+by_titulo.setdefault(titulo.upper(), []).append(rec)   # ← antes de tudo
+if 'swap' not in _fcst_norm(rec.get('Tipo Título', '')):
+    continue
+if _ops_norm_event(rec.get('Tipo Operação', '')) not in wanted:
+    continue
+```
+
+Então o Settlement B3 somava **toda** linha com aquele Título: os eventos fora do cadastro `swap-b3-events`
+(um RESGATE, por exemplo) e até linhas de outro Tipo Título que compartilhem o número. O universo da tela
+era um; o do valor, outro.
+
+O `append` passou para **depois** dos dois filtros. O comentário do módulo dos cards já afirmava que "o lado
+B3 do card de Swap cobre só os Tipos Operação registrados em `swap-b3-events`" — agora é verdade. E vale a
+consequência boa: registrar mais um evento na tabela do `/mapping` faz a tabela **e** o card crescerem
+juntos.
+
+Um efeito colateral limpou uma redundância: o `_swadv_collect` refiltrava `by_titulo` por `wanted` para
+decidir o assunto "Pagamento de Prêmio". Não precisa mais — e refiltrar deixaria parecendo que a coleção
+ainda traz eventos de fora.
+
+### Verificação
+
+`check_ops_trade_swap.py`: o fixture ganhou, **no mesmo Título A1** que já liquida, um `RESGATE` de 999 e
+uma linha `TER` de 888. Settlement B3 do A1 continua `150.00`, e o card (`_ops_recon`) fecha em `227.00`
+com contagem 2 — exatamente a soma das duas linhas visíveis.

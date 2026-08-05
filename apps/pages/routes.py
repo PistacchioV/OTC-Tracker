@@ -5538,8 +5538,12 @@ def _ops_swap_settling(opb3):
     O mesmo swap chega uma vez por Tipo Operação (amortização, juros, prêmio) e
     viraria linhas repetidas na tela.
 
-    `by_titulo` = {Título → TODAS as linhas daquele título}, inclusive as que o
-    filtro descartou — o Settlement B3 concilia o caixa do dia, não o evento.
+    `by_titulo` = {Título → as linhas daquele título}, sujeitas AOS MESMOS dois
+    filtros: só os Tipos Operação registrados em `swap-b3-events` entram. É delas
+    que sai o Settlement B3 do Trade Level e, por consequência, o lado B3 do card
+    de Swap. Somar todas as linhas do Título (que é o que se fazia até aqui)
+    trazia para o valor eventos que a tabela não mostra — o card fechava num
+    número que nenhuma linha da tela explicava.
 
     É a definição do universo de swaps liquidando, e vale para as duas telas
     (Trade Level e Settlement Advice). Duplicá-la deixaria uma tela mostrando um
@@ -5550,11 +5554,11 @@ def _ops_swap_settling(opb3):
         titulo = str(rec.get('Título', '') or '').strip()
         if not titulo:
             continue
-        by_titulo.setdefault(titulo.upper(), []).append(rec)
         if 'swap' not in _fcst_norm(rec.get('Tipo Título', '')):
             continue
         if _ops_norm_event(rec.get('Tipo Operação', '')) not in wanted:
             continue
+        by_titulo.setdefault(titulo.upper(), []).append(rec)
         if titulo.upper() in seen:
             continue
         seen.add(titulo.upper())
@@ -5626,10 +5630,13 @@ def _ops_swap_trade_rows(settle_ref):
         stype = 'VCP' if vcp else 'Calculado'
 
         settlement = otm_by_trade.get(internal_id.strip().upper()) if internal_id else None
-        # Settlement B3: soma de TODAS as linhas do Título. A visão do Operations
-        # B3 já vem filtrada para um lado (banco ou MGT), então não há par
-        # simétrico se anulando — se aparecer, a soma dá zero e é sinal de que o
-        # arquivo veio com as duas pontas.
+        # Settlement B3: soma das linhas do Título que ENTRAM no universo — os
+        # Tipos Operação registrados em `swap-b3-events`. O mesmo Título costuma
+        # trazer outros eventos no arquivo; somá-los dava um total que nenhuma
+        # linha da tela explicava, e o card de Swap herdava a diferença.
+        # A visão do Operations B3 já vem filtrada para um lado (banco ou MGT),
+        # então não há par simétrico se anulando — se aparecer, a soma dá zero e
+        # é sinal de que o arquivo veio com as duas pontas.
         vals = [_conf_to_float(r.get('Valor')) for r in by_titulo.get(key, [])]
         vals = [v for v in vals if v is not None]
         settlement_b3 = sum(vals) if vals else None
@@ -7269,7 +7276,6 @@ def _swadv_collect(ref):
     titulos, by_titulo = _ops_swap_settling(opb3)
     if not titulos:
         return []
-    wanted = _ops_swap_event_set()
     tipo_maps = _opb3_tipo_maps(ref)
     terms = _ops_swap_pos_terms(ref)
 
@@ -7325,8 +7331,9 @@ def _swadv_collect(ref):
         # swap que paga prêmio e diferencial no mesmo dia é liquidação comum —
         # chamar o conjunto de "Pagamento de Prêmio" no assunto esconderia o
         # diferencial que também está na tabela.
+        # `by_titulo` já vem só com os eventos registrados — não refiltrar aqui,
+        # senão fica parecendo que a coleção traz eventos de fora.
         evs = {_ops_norm_event(r.get('Tipo Operação', '')) for r in by_titulo.get(key, [])}
-        evs = {e for e in evs if e in wanted}
         ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
         out.append({
             'cells': [
