@@ -8003,3 +8003,30 @@ morto no código. Testado ao contrário: voltando o toggle a escrever um atribut
 `footer-scripts.html`. A versão dos três foi subida para `20260804a` no mesmo commit — sem isso o
 navegador serviria a cópia antiga e a correção só apareceria depois de um Ctrl+F5. **Quem mexer nesses
 arquivos tem de subir o `?v=` junto**, senão a equipe testa a versão velha e reporta que não funcionou.
+
+## §180 — Pay/Rec: um botão de ação só, a dropzone decide a fonte
+
+A toolbar tinha **dois** botões de execução — `Import from folder` e `Run` — e o operador escolhia a
+fonte pelo botão. Sobrou o **Run**, e quem decide agora é a dropzone:
+
+| dropzone | o que o Run faz | `mode` no POST |
+|---|---|---|
+| com arquivo(s) anexado(s) | roda com **esses** arquivos | `manual` |
+| vazia | varre a pasta de insumos (o antigo Import) | `auto` |
+
+A regra **já existia no servidor** e não mudou: `_gather_sources` (`recon_payrec.py`) usa os anexos só
+com `mode == 'manual' and files`, e qualquer outro caso cai em `_INPUT_BASE`. Ou seja, são **duas
+cópias** da mesma decisão — o navegador escolhendo o `mode` e o servidor escolhendo a fonte. Mandar o
+`mode` certo daqui não é redundância: é o que mantém as duas dizendo a mesma coisa, e é o que decide se
+o `clearDzFiles()` pós-run faz sentido (limpar a dropzone depois de uma rodada que nem usou os anexos
+apagaria o trabalho do operador).
+
+Com dois botões dava para ver qual caminho seria tomado; com um só, não — então o `title` do Run é
+reescrito a cada mudança da dropzone (*"Rodar com os arquivos da pasta Pay/Rec"* × *"Rodar com o(s)
+arquivo(s) anexado(s)"*), e o texto do estado vazio passou a dizer as duas coisas. A chave i18n
+`pr-import` foi removida dos três arquivos de tradução junto com o botão, em vez de virar chave órfã.
+
+Verificado com `scripts/tests/check_payrec_run.py` (22 asserções). A seção 1 é funcional de verdade —
+chama `_gather_sources` com `_INPUT_BASE` apontando para um tempfile e prova que `manual` sem anexo, e
+com `files=None`, lê a pasta; as demais fixam que sobrou um botão de ação, que nenhum call site passa
+modo fixo e que a chave i18n não ficou órfã. O `?v=` do JS da página subiu para `20260805a` (§179).

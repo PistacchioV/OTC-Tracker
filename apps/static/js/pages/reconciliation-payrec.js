@@ -1,9 +1,10 @@
 /**
  * Pay/Rec Reconciliation
- * Dropzone HOLDS the input files (nothing runs on drop) until the user clicks
- * "Run reconciliation". Alternatively "Import from folder" processes the files
- * already sitting in the network Pay_Rec folder. "End process" e-mails the final
- * situation of the day to OTC Ops (Danilo + Renato in copy).
+ * UM botão de ação: "Run". A dropzone SEGURA os arquivos (nada roda ao soltar) e
+ * é ela que decide o que o Run faz — com arquivos anexados, roda com eles; sem
+ * nenhum, varre a pasta de rede Pay_Rec, que era o antigo "Import from folder".
+ * "End process" envia a situação final do dia por e-mail para a OTC Ops
+ * (Danilo + Renato em cópia).
  */
 (function () {
   'use strict';
@@ -23,7 +24,9 @@
           pendMsg: 'There are pending settlements. Do you want to justify the pending items or run the reconciliation again?',
           justify: 'Justify pending', runAgain: 'Run again', justified: 'Justified',
           commentPh: 'Enter justification…', commentReq: 'Please enter a justification comment.',
-          justifyFail: 'Could not save the justification.' },
+          justifyFail: 'Could not save the justification.',
+          runFolder: 'Run with the files from the Pay/Rec folder',
+          runFiles: 'Run with the attached file(s)' },
     br: { running: 'Processando…', sending: 'Enviando…', run: 'Rodar reconciliação', end: 'Encerrar processo',
           noFiles: 'Sem arquivos', noFilesMsg: 'Anexe os arquivos no dropzone ou verifique se a pasta Pay/Rec tem os arquivos de insumo desta data.',
           failTitle: 'Reconciliação falhou', netErr: 'Erro de rede.', done: 'Reconciliação concluída',
@@ -34,7 +37,9 @@
           pendMsg: 'Existem liquidações pendentes. Deseja justificar as pendências ou rodar a reconciliação novamente?',
           justify: 'Justificar pendências', runAgain: 'Rodar novamente', justified: 'Justificado',
           commentPh: 'Digite a justificativa…', commentReq: 'Informe um comentário de justificativa.',
-          justifyFail: 'Não foi possível salvar a justificativa.' },
+          justifyFail: 'Não foi possível salvar a justificativa.',
+          runFolder: 'Rodar com os arquivos da pasta Pay/Rec',
+          runFiles: 'Rodar com o(s) arquivo(s) anexado(s)' },
     es: { running: 'Procesando…', sending: 'Enviando…', run: 'Ejecutar reconciliación', end: 'Finalizar proceso',
           noFiles: 'Sin archivos', noFilesMsg: 'Adjunte los archivos en el dropzone o verifique que la carpeta Pay/Rec tenga los archivos de esta fecha.',
           failTitle: 'La reconciliación falló', netErr: 'Error de red.', done: 'Reconciliación completada',
@@ -45,7 +50,9 @@
           pendMsg: 'Hay liquidaciones pendientes. ¿Desea justificar las pendencias o ejecutar la reconciliación nuevamente?',
           justify: 'Justificar pendientes', runAgain: 'Ejecutar de nuevo', justified: 'Justificado',
           commentPh: 'Ingrese la justificación…', commentReq: 'Ingrese un comentario de justificación.',
-          justifyFail: 'No se pudo guardar la justificación.' },
+          justifyFail: 'No se pudo guardar la justificación.',
+          runFolder: 'Ejecutar con los archivos de la carpeta Pay/Rec',
+          runFiles: 'Ejecutar con el/los archivo(s) adjunto(s)' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -192,11 +199,21 @@
     return page.getAttribute('data-ref-date') || '';
   }
 
-  // ── Run: dropzone files (manual) OR folder scan (auto) ──────────────────────
-  function run(mode, btn) {
+  // ── Run: um botão só ────────────────────────────────────────────────────────
+  // Com arquivos na dropzone, roda com ELES; sem nenhum, varre a pasta de
+  // insumos — que era o que o botão "Import from folder" fazia. Quem decide é a
+  // dropzone, não mais o usuário escolhendo entre dois botões.
+  //
+  // O servidor repete a MESMA regra (`_gather_sources` em recon_payrec.py:
+  // `if mode == 'manual' and files:` … senão a pasta), então um `manual` sem
+  // arquivo cairia na pasta de qualquer jeito. Mandar o modo certo daqui é o que
+  // mantém as duas cópias dizendo a mesma coisa — e é o que decide se o
+  // `clearDzFiles()` abaixo tem sentido.
+  function run(btn) {
+    var manual = dzFiles.length > 0;
     busy(btn, true, 'running');
     var opts;
-    if (mode === 'manual' && dzFiles.length) {
+    if (manual) {
       var fd = new FormData();
       fd.append('mode', 'manual');
       fd.append('recon_date', refDate());
@@ -211,7 +228,7 @@
       .then(function (res) {
         var b = res.body || {};
         if (res.ok && b.success !== false && !b.error && !b.not_found) {
-          if (mode === 'manual') clearDzFiles();   // uploads are now saved in the folder — clear the dropzone
+          if (manual) clearDzFiles();   // uploads are now saved in the folder — clear the dropzone
           resetJustify();
           render(b);
           setText('prMeta', (b.meta || '') + (b.recon_date_fmt ? ('  ·  ' + b.recon_date_fmt) : ''));
@@ -373,6 +390,13 @@
   var dzFiles = [];
   var dzRenderChips = function () {};        // set by wireDropzone; used to redraw the chips
   function clearDzFiles() { dzFiles.length = 0; dzRenderChips(); }
+
+  // Com dois botões dava para ver qual caminho seria tomado; com um só, não —
+  // então o Run diz no tooltip o que vai fazer, e isso acompanha a dropzone.
+  function syncRunHint() {
+    var btn = document.getElementById('prRunBtn');
+    if (btn) btn.title = t(dzFiles.length ? 'runFiles' : 'runFolder');
+  }
   function wireDropzone() {
     var drop = document.getElementById('prDrop');
     var input = document.getElementById('prFiles');
@@ -385,6 +409,7 @@
       listEl.querySelectorAll('.pr-dz-x').forEach(function (x) {
         x.addEventListener('click', function (e) { e.stopPropagation(); dzFiles.splice(+this.dataset.i, 1); renderChips(); });
       });
+      syncRunHint();
     }
     drop.addEventListener('click', function (e) { if (e.target.closest('.pr-dz-x')) return; input.click(); });
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
@@ -453,11 +478,10 @@
     try { wireDatePicker(); } catch (e) {}
     try { wireJustifyActions(); } catch (e) {}
     var runBtn = document.getElementById('prRunBtn');
-    var impBtn = document.getElementById('prImportBtn');
     var endBtn = document.getElementById('prEndBtn');
-    if (runBtn) runBtn.addEventListener('click', function () { run('manual', runBtn); });
-    if (impBtn) impBtn.addEventListener('click', function () { run('auto', impBtn); });
+    if (runBtn) runBtn.addEventListener('click', function () { run(runBtn); });
     if (endBtn) endBtn.addEventListener('click', function () { endProcess(endBtn); });
+    syncRunHint();
     try { loadLast(); } catch (e) {}
   });
 })();
