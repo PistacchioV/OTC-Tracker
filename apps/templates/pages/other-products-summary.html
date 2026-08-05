@@ -225,27 +225,37 @@
                     <div class="table-responsive">
                         <table id="ops-summary-table" class="table table-hover align-middle w-100">
                             <thead>
+                                <!-- Mesmas colunas do Settlement Summary do NDF
+                                     (Counterparty…Observation), mais LOB e
+                                     Product, que separam o que lá era uma linha
+                                     por contraparte. A ordem vem em par com o
+                                     `rowMaker` do JS e com `_OPSSUM_COLS` no
+                                     backend: as três listas são posicionais. -->
                                 <tr>
                                     <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
                                     <th data-lang="ops-col-actions">Actions</th>
                                     <th data-lang="ops-col-status">Status</th>
                                     <th data-lang="ops-col-counterparty">Counterparty</th>
+                                    <th data-lang="ops-col-lob">LOB</th>
                                     <th data-lang="ops-col-product">Product</th>
                                     <th data-lang="ops-col-receive">Receive</th>
                                     <th data-lang="ops-col-pay">Pay</th>
                                     <th data-lang="ops-col-settlement-net">Settlement Net</th>
-                                    <th data-lang="ops-col-internal-account">Internal Account</th>
+                                    <th data-lang="ops-col-direction">Direction</th>
+                                    <th data-lang="ops-col-account">Account</th>
                                     <th data-lang="ops-col-obs">Observation</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
                                     <th><input type="text" placeholder="Status"></th>
                                     <th><input type="text" placeholder="Counterparty"></th>
+                                    <th><input type="text" placeholder="LOB"></th>
                                     <th><input type="text" placeholder="Product"></th>
                                     <th><input type="text" placeholder="Receive"></th>
                                     <th><input type="text" placeholder="Pay"></th>
                                     <th><input type="text" placeholder="Settlement Net"></th>
-                                    <th><input type="text" placeholder="Internal Account"></th>
+                                    <th><input type="text" placeholder="Direction"></th>
+                                    <th><input type="text" placeholder="Account"></th>
                                     <th><input type="text" placeholder="Observation"></th>
                                 </tr>
                             </thead>
@@ -378,6 +388,12 @@ document.addEventListener('DOMContentLoaded', function () {
             '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
     }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
+    // 'BCO: 341 | AG: 0910 | CC: 967' com os rótulos em negrito (os valores são
+    // dígitos, então marcar depois do esc() é seguro). Igual ao NDF Summary.
+    function accountHtml(v) { return esc(v).replace(/(BCO:|AG:|CC:)/g, '<strong>$1</strong>'); }
+    function decodeHtml(s) {
+        var el = document.createElement('textarea'); el.innerHTML = String(s || ''); return el.value;
+    }
 
     // Build a blank data row (array) for a table given its data-column count.
     function blankRow(dataCols, numericIdx) {
@@ -464,7 +480,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return dt;
     }
 
-    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
+    var dtSummary = initTable('ops-summary-table', 9);   // 9 data cols (Counterparty…Observation)
     var dtTrade   = initTable('ops-trade-table', 10, 50); // 10 data cols (LOB…Difference); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
@@ -490,15 +506,25 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Reference date → (re)load from the settlement batch endpoint ──────────
+    var currentYmd = '{{ today }}';
     function loadDate(ymd) {
+        currentYmd = ymd || currentYmd;
         fetch('/api/other-products-summary/data?date=' + encodeURIComponent(ymd))
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) return;
                 dtSummary.clear(); dtTrade.clear();
+                // Linha DERIVADA (mesma razão do Trade Level): texto puro, não
+                // <input>. A EXCEÇÃO é a Observação, que é o único campo que a
+                // pessoa escreve — e ele persiste no overlay do dia, então
+                // sobrevive ao reload. A ORDEM tem de bater com os <th>.
                 (j.summary || []).forEach(function (r) {
+                    var obsVal = esc(r.obs || '').replace(/"/g, '&quot;');
                     dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
-                        inp(r.counterparty), inp(r.product), inp(r.receive), inp(r.pay), inp(r.settlement_net), inp(r.internal_account), inp(r.obs)]);
+                        esc(r.counterparty), esc(r.lob), esc(r.product),
+                        esc(r.receive), esc(r.pay), esc(r.net_type), esc(r.direction),
+                        accountHtml(r.account),
+                        '<input type="text" class="ops-cell-inp ops-obs-inp" value="' + obsVal + '">']);
                 });
                 // Linha DERIVADA: texto puro, não <input>. Ela é recalculada das
                 // cinco fontes a cada troca de data, então um valor digitado aqui
@@ -515,6 +541,34 @@ document.addEventListener('DOMContentLoaded', function () {
                 dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
             }).catch(function () {});
     }
+
+    // ── Observação do Settlement Summary → overlay do dia ────────────────────
+    //  Só as linhas DERIVADAS salvam: a chave é contraparte × LOB × produto, e a
+    //  linha manual do Add row tem <input> na célula de contraparte, sem nome
+    //  que o overlay possa chavear.
+    $('#ops-summary-table tbody').on('change', '.ops-obs-inp', function () {
+        var $inp = $(this);
+        var d = dtSummary.row($inp.closest('tr')).data();
+        if (!d || /<input/i.test(d[3] || '')) return;
+        var name = decodeHtml(d[3]).trim();
+        if (!name) return;
+        // Mantém o dado da linha em sincronia com o digitado — sem isso um
+        // sort/filtro redesenharia a célula com o valor antigo.
+        d[11] = '<input type="text" class="ops-cell-inp ops-obs-inp" value="' +
+                esc($inp.val()).replace(/"/g, '&quot;') + '">';
+        fetch('/api/other-products-summary/observation', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparty: name,
+                                   lob: decodeHtml(d[4]), product: decodeHtml(d[5]),
+                                   text: $inp.val() })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              // Feedback discreto: borda azul = salvo, vermelha = falhou.
+              $inp.css('border-color', res && res.ok ? 'var(--ops-blue)' : '#dc3545');
+              setTimeout(function () { $inp.css('border-color', ''); }, 1200);
+          })
+          .catch(function () { $inp.css('border-color', '#dc3545'); });
+    });
 
     // Expose the batch loader so the reference-date picker (own <script> below)
     // can trigger a reload.

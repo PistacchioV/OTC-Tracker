@@ -5565,7 +5565,14 @@ def _ops_swap_trade_rows(settle_ref):
         diff = None if (settlement is None or settlement_b3 is None) else settlement - settlement_b3
         out.append({
             'status': 'OK' if (diff is not None and abs(diff) < 0.01) else 'Check',
-            'lob': _opb3_tipo_for(rec, tipo_maps),
+            # LOB = o TOKEN (EDG · CEM · CEMHYB), não o Código Identificador
+            # inteiro que a coluna Type do Operations B3 carrega
+            # ('CEM-2026-3184'). É o mesmo vocabulário do Settlement Summary
+            # logo acima e do Accrual/Forecast — duas colunas chamadas LOB na
+            # mesma página falando línguas diferentes seria o defeito.
+            # Sem token reconhecido a célula fica VAZIA (regra do _fcst_lob):
+            # pede cadastro em vez de chutar uma LOB.
+            'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
             'counterparty': counterparty,
             'internal_id': internal_id,
             'id_b3': titulo,
@@ -5575,6 +5582,13 @@ def _ops_swap_trade_rows(settle_ref):
             'settlement_b3': _ops_fmt_amt(settlement_b3),
             'tax_income': _ops_fmt_amt(tax),
             'difference': _ops_fmt_amt(diff),
+            # Números CRUS para o Settlement Summary somar. Ele parte destas
+            # mesmas linhas, não de uma segunda leitura dos arquivos: reler
+            # deixaria as duas tabelas da página livres para se contradizerem.
+            # Reformatar o texto de volta para float seria pior ainda — perde o
+            # branco de "não deu para calcular", que vira 0 na soma.
+            '_settle_n': settlement,
+            '_tax_n': tax,
         })
     return out
 
@@ -5583,6 +5597,101 @@ def _ops_fmt_amt(v):
     """#,##0.00 — None vira '' (célula vazia = 'não deu para calcular'), que é
     diferente de 0,00 ('calculei e deu zero')."""
     return '' if v is None else '{:,.2f}'.format(v)
+
+
+# ── Other Products › Summary › Settlement Summary ────────────────────────────
+#  Porte do Settlement Summary do NDF. As regras de Receive/Pay, Settlement Net,
+#  Direction, Account e Observation são as MESMAS e vêm das MESMAS funções
+#  (`_ndfsum_net_type`, `_ndfsum_account_fmt`, `_ndfsum_obs_auto`) — recopiá-las
+#  aqui criaria a segunda cópia de uma regra de dinheiro, que é exatamente o
+#  jeito de as duas páginas divergirem sem ninguém perceber.
+#
+#  A única diferença: no NDF a linha é a CONTRAPARTE; aqui é
+#  **contraparte × LOB × produto**, porque a página cobre vários produtos e as
+#  colunas Product e LOB existem justamente para separá-los. Consequência a
+#  entender: um cliente Total Net com swap e opção sai em DUAS linhas — o net é
+#  por produto, não por cliente, que é o recorte do aviso de liquidação.
+_OPSSUM_COLS = ('counterparty', 'lob', 'product', 'receive', 'pay', 'net_type',
+                'direction', 'account', 'obs')
+
+
+def _opssum_meta_path(ref):
+    """Overlay do dia — a ÚNICA coisa que esta tabela persiste (a observação
+    digitada). Fica ao lado dos JSONs do batch de liquidação, na pasta da data."""
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
+                        'other-products-summary_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _opssum_meta_load(ref):
+    path = _opssum_meta_path(ref)
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return path, (data if isinstance(data, dict) else {})
+    except Exception:
+        return path, {}
+
+
+def _opssum_key(cpty, lob, product):
+    """Chave do overlay: contraparte × LOB × produto, normalizada (caixa, acento
+    e espaço — `_fcst_norm` cuida dos dois primeiros, o `\\s+` colapsa o espaço
+    duplo) para a observação não se perder quando o nome vier grafado diferente
+    no dia seguinte."""
+    return '|'.join(re.sub(r'\s+', ' ', _fcst_norm(p)).strip() for p in (cpty, lob, product))
+
+
+def _opssum_rows(trade_rows, ref):
+    """Linhas do Settlement Summary, netadas a partir das linhas JÁ MONTADAS do
+    Trade Level (`_settle_n`/`_tax_n`). Linha sem contraparte ou sem valor fica
+    de fora: não há o que liquidar, e entrar com zero inventaria um aviso."""
+    spn_by_name = _ndfsum_refdata_spn()
+    cpd = _cpd_load()
+    _, meta = _opssum_meta_load(ref)
+    groups, order = {}, []
+    for r in trade_rows:
+        s = r.get('_settle_n')
+        cpty = str(r.get('counterparty', '') or '').strip()
+        if not cpty or s is None:
+            continue
+        key = (cpty, str(r.get('lob', '') or ''), str(r.get('product', '') or ''))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append((s, abs(r.get('_tax_n') or 0.0)))
+
+    out = []
+    for key in sorted(order, key=lambda k: (_fcst_norm(k[0]), k[2], k[1])):
+        cpty, lob, product = key
+        ref_rec = spn_by_name.get(_fcst_norm(cpty), {})
+        spn = ref_rec.get('spn', '')
+        rec_cpd = _cpd_find(cpd, spn) if spn else None
+        net_type = _ndfsum_net_type(rec_cpd)
+        # Caixa por trade já líquido de IR: o imposto retido sempre ENCOLHE o
+        # valor que se movimenta, qualquer que seja o sinal (regra do NDF).
+        vals = [(s - t if s >= 0 else s + t) for s, t in groups[key]]
+        recv = sum(v for v in vals if v > 0)
+        pay = sum(v for v in vals if v < 0)
+        total = recv + pay
+        if net_type == 'Total Net':
+            recv, pay = (total, 0.0) if total >= 0 else (0.0, total)
+        direction = 'RECEIVE' if total >= 0 else 'PAY'
+        banking = _bank_norm((rec_cpd or {}).get('BANKING'))
+        entry = meta.get(_opssum_key(cpty, lob, product)) or {}
+        out.append({
+            'status': 'New',
+            'counterparty': cpty,
+            'lob': lob,
+            'product': product,
+            'receive': '{:,.2f}'.format(recv) if recv else '',
+            'pay': '{:,.2f}'.format(pay) if pay else '',
+            'net_type': net_type,
+            'direction': direction,
+            'account': _ndfsum_account_fmt(banking, direction),
+            # Observação digitada prevalece; sem ela, a classificação automática
+            # Internal/External das contas default do cliente.
+            'obs': entry.get('obs') or _ndfsum_obs_auto(banking),
+        })
+    return out
 
 
 @blueprint.route('/other-products-summary')
@@ -5612,10 +5721,58 @@ def api_ops_data():
         # malformada não pode derrubar os widgets, que vêm de outro lugar.
         log.error("[ops-trade] falha montando as linhas de swap:\n%s", traceback.format_exc())
         trade = []
+    try:
+        summary = _opssum_rows(trade, datetime(settle_ref.year, settle_ref.month, settle_ref.day))
+    except Exception:
+        # O Settlement Summary depende do Reference Data (SPN → net type → conta);
+        # um cadastro malformado não pode levar junto o Trade Level nem os widgets.
+        log.error("[ops-summary] falha montando o settlement summary:\n%s", traceback.format_exc())
+        summary = []
+    for r in trade:                    # chaves internas (_settle_n/_tax_n) não vão para a tela
+        for k in [k for k in r if k.startswith('_')]:
+            r.pop(k)
     return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
-                    'summary': [], 'trade': trade})
+                    'summary': summary, 'trade': trade})
+
+
+@blueprint.route('/api/other-products-summary/observation', methods=['POST'])
+def api_ops_summary_observation():
+    """Observação livre por linha do Settlement Summary — mesmo overlay diário do
+    NDF, mas chaveado por contraparte × LOB × produto, que é a identidade da
+    linha aqui. Texto vazio limpa a observação (volta a automática)."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    name = str(payload.get('counterparty', '') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
+    key = _opssum_key(name, str(payload.get('lob', '') or ''), str(payload.get('product', '') or ''))
+    text = str(payload.get('text', '') or '').strip()
+    try:
+        path, meta = _opssum_meta_load(ref)
+        entry = meta.get(key) or {}
+        if text:
+            entry['obs'] = text
+        else:
+            entry.pop('obs', None)
+        if entry:
+            meta[key] = entry
+        else:
+            meta.pop(key, None)        # entrada vazia não fica ocupando o overlay
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        return jsonify({'ok': True})
+    except Exception as e:
+        log.error('[ops-summary] observation save failed:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
 
 
 # ── Live Position › Swap › Characteristics ───────────────────────────────────

@@ -1539,5 +1539,7 @@
   "map-tab-api-links": "Links das APIs",
   "map-tab-swap-b3-events": "Eventos de Liquidação de Swap (B3)",
   "map-tab-swap-ir-client": "IR de Swap — Exceções por Cliente",
-  "map-tab-swap-ir-term": "IR de Swap — Faixas de Prazo"
+  "map-tab-swap-ir-term": "IR de Swap — Faixas de Prazo",
+  "ops-col-direction": "Direção",
+  "ops-col-account": "Conta"
 }

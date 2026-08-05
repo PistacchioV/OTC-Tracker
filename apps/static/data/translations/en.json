@@ -1539,5 +1539,7 @@
   "map-tab-api-links": "API Links",
   "map-tab-swap-b3-events": "Swap Settlement Events (B3)",
   "map-tab-swap-ir-client": "Swap IR — Client Exceptions",
-  "map-tab-swap-ir-term": "Swap IR — Term Brackets"
+  "map-tab-swap-ir-term": "Swap IR — Term Brackets",
+  "ops-col-direction": "Direction",
+  "ops-col-account": "Account"
 }

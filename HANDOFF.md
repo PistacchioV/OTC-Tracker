@@ -8162,3 +8162,92 @@ dia com as cinco fontes deve ser conferido contra a planilha.
 
 Falta ainda (partes seguintes): Option, NDF Commodities e COE no Trade Level, o Settlement Summary
 (continua `[]`) e a página **Settlement Advice**, que segue como link morto no sidenav.
+
+> O Settlement Summary saiu do `[]` no §183. A coluna LOB do Trade Level também mudou lá: passou a
+> mostrar o **token** (`CEM`), não o Código Identificador inteiro (`CEM-2026-3184`).
+
+---
+
+## §183 — Other Products Summary › Settlement Summary: o porte do NDF
+
+A tabela de cima da página existia com cabeçalho e `dtSummary`, mas o endpoint devolvia `'summary': []`
+literal — nada nunca a alimentou. Agora ela é o **porte do Settlement Summary do NDF**.
+
+### O que foi portado, e por que não foi copiado
+
+Receive, Pay, Settlement Net, Direction, Account e Observation saem das **mesmas funções** que a página de
+NDF usa — `_ndfsum_net_type`, `_ndfsum_account_fmt`, `_ndfsum_obs_auto`, `_ndfsum_refdata_spn`. Recopiar
+a regra aqui criaria a segunda cópia de um cálculo de dinheiro, e duas cópias divergem em silêncio: o
+número continua aparecendo na tela, só deixa de ser o mesmo número das duas páginas. A seção 9 do teste
+prende isso lendo o corpo de `_opssum_rows`.
+
+As regras, na ordem em que rodam:
+
+1. **Net type** vem do Reference Data: nome da contraparte → SPN (`RefData.json`) → registro do
+   CounterpartyDetails → `NET.value` aprovado. Sem cadastro, **Total Net** — o mesmo default seguro da
+   recon, não "sem netting".
+2. **Caixa por trade líquido de IR**: `settlement − tax` quando positivo, `settlement + tax` quando
+   negativo. O imposto retido sempre **encolhe** o que se movimenta, seja qual for o sinal.
+3. `receive` = Σ positivos, `pay` = Σ negativos. **Total Net** colapsa os dois na ponta do resultado
+   final; **Pay/Rec** mantém as duas.
+4. **Direction** é a visão do BANCO (`RECEIVE` se o total ≥ 0).
+5. **Account** cruza: os defaults do Reference Data são a visão da CONTRAPARTE, então banco `PAY` →
+   `DEFAULT_RECEIVE` do cliente e banco `RECEIVE` → `DEFAULT_PAY`. Inverter isso imprime a conta errada
+   num aviso de pagamento — e o formato `BCO: 341 | AG: 0910 | CC: 967` continua parecendo certo.
+6. **Observation**: a digitada vence; sem ela, a classificação automática Internal/External (banco 376 /
+   JPMorgan = interno) das contas default.
+
+### A única diferença deliberada: a linha não é a contraparte
+
+No NDF a linha é a **contraparte**. Aqui é **contraparte × LOB × produto**, porque a página cobre vários
+produtos e as colunas Product e LOB existem justamente para separá-los. Consequência a entender antes de
+estranhar o número: um cliente **Total Net** com swap e opção sai em **duas linhas** — o net é por
+produto, não por cliente, que é o recorte do aviso de liquidação.
+
+Ordem das colunas: `Status · Counterparty · LOB · Product · Receive · Pay · Settlement Net · Direction ·
+Account · Observation`. O `<th>` chama a coluna de "Settlement Net", o payload chama o campo de
+`net_type` — é o **tipo** de net, não um valor; nomes diferentes de propósito.
+
+### A fonte é o Trade Level, não uma segunda leitura
+
+`_opssum_rows` soma as linhas **já montadas** por `_ops_swap_trade_rows`, pelos campos privados
+`_settle_n`/`_tax_n` (números crus, removidos do payload antes do `jsonify`). Reler os arquivos deixaria
+as duas tabelas da mesma página livres para se contradizerem; e reconverter o texto formatado para float
+seria pior — perde o branco de "não deu para calcular", que viraria zero na soma. Linha sem contraparte
+ou sem settlement **não entra**: não há o que liquidar, e entrar com zero inventaria um aviso.
+
+Enquanto só o SWAP alimenta o Trade Level, só o SWAP aparece aqui. Option, NDF Commodities e COE entram
+sozinhas assim que as respectivas linhas do Trade Level existirem — não há nada a mexer nesta tabela.
+
+### LOB passou a ser o token
+
+`'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or ''`. A coluna Type do Operations B3 carrega o Código
+Identificador inteiro (`CEM-2026-3184`); a LOB é o **token** dentro dele (`EDG` · `CEM` · `CEMHYB`), que é
+o vocabulário do Accrual e do Forecast. Duas colunas chamadas LOB na mesma página falando línguas
+diferentes seria o defeito. Identificador sem token reconhecido deixa a célula **vazia** (regra do
+`_fcst_lob`): pede cadastro em vez de rotular a linha com uma LOB inventada.
+
+`COMM` ainda não sai daqui — swap não tem LOB de commodities. Ela virá com os produtos de commodities.
+E `CEMHYB` fica como valor próprio, não colapsa em `CEM`: os híbridos são LOB separada no resto do
+sistema, e juntá-los aqui os esconderia.
+
+### O que a tabela persiste
+
+Só a observação digitada, num overlay do dia ao lado dos JSONs do batch
+(`other-products-summary_YYYYMMDD.json`), chaveado por contraparte × LOB × produto **normalizado** (caixa,
+acento e espaço duplo) — sem isso a observação se perderia no dia em que o nome viesse grafado diferente.
+Endpoint `POST /api/other-products-summary/observation`; texto vazio limpa e a linha volta à observação
+automática. O resto da linha é derivado e renderiza como **texto**, não `<input>`: seria recalculado no
+próximo load e o valor digitado sumiria sem aviso.
+
+### Verificação
+
+`scripts/tests/check_ops_summary.py` (38 asserções, 9 seções). RefData e CounterpartyDetails são stubs em
+memória — o teste não depende do cadastro real nem o suja. Validado reintroduzindo três defeitos: o sinal
+do IR trocado (`s + t` quando positivo), o cruzamento da conta invertido e a LOB voltando a ser o
+identificador — os três falham. Além do teste, o endpoint foi chamado de verdade pelo `test_client` com
+um OTM sintético e devolveu a linha netada (`SUZANO SA · CEM · SWAP · PAY · -1.000,00`).
+
+**Limite honesto**: `Account` e `Observation` saem vazias enquanto a contraparte não estiver no
+`RefData.json` **com** registro no CounterpartyDetails — foi o caso nesta máquina. A cadeia
+nome → SPN → net type → conta ainda não foi exercida contra o cadastro de produção.
