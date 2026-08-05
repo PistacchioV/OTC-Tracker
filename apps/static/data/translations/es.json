@@ -1569,5 +1569,7 @@
   "ops-ted-none-title": "Sin TEDs",
   "ops-ted-none": "Nada que liberar para esta fecha.",
   "ops-ted-ok-title": "Liberación de TED enviada",
-  "ops-ted-nossi": "SSI no encontrado para:"
+  "ops-ted-nossi": "SSI no encontrado para:",
+  "ops-sub-fx": "Cambio",
+  "ops-sub-comm": "Commodities"
 }

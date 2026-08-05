@@ -5227,7 +5227,10 @@ def _ops_settlement_counts(settle_ref, pos_ref):
     sub-event, reading each family's OWN latest position JSON. Missing files /
     no data → zeros (graceful, and logged so a silent zero is diagnosable)."""
     fams = {'swap':   {'total': 0, 'flow': 0, 'premium': 0, 'maturity': 0},
-            'option': {'total': 0, 'maturity': 0, 'premium': 0},
+            # `fx` e `comm` separam Opção de taxa de câmbio de Opção de
+            # commodities: são mesas e conferências diferentes, e o card somado
+            # não dizia de quem era o número.
+            'option': {'total': 0, 'maturity': 0, 'premium': 0, 'fx': 0, 'comm': 0},
             'ndf':    {'total': 0, 'maturity': 0},
             'coe':    {'total': 0}}
     # A tipo-2 swap is a bullet contract: its single settlement is on its own
@@ -5270,6 +5273,15 @@ def _ops_settlement_counts(settle_ref, pos_ref):
         cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
         cw_allowed = cw[1] if cw else None
         id_key = _fcst_resolve_key(keys, _ID_TOKENS)   # contract join key (swap)
+        # Classe do ativo subjacente — só a posição de OPÇÃO precisa, para
+        # separar câmbio de commodities dentro do mesmo card.
+        classe_key = (_fcst_resolve_key(keys, ['classe do ativo subjacente',
+                                               'classe do ativo', 'classe'])
+                      if src['key'] == 'opc' else None)
+        # Comparação por TOKEN, não igualdade: o arquivo de opção escreve
+        # 'TAXA DE CAMBIO' (singular) e o de NDF escreve 'TAXAS DE CAMBIO'.
+        # Igualdade exata deixaria o balde de FX permanentemente em zero — e um
+        # zero não parece defeito, parece "não teve opção de câmbio hoje".
         for row in rows:
             if cw_key is not None:
                 cwv = str(row.get(cw_key, '') or '').strip()
@@ -5284,15 +5296,27 @@ def _ops_settlement_counts(settle_ref, pos_ref):
             # maturity payment (already counted via swap_pos), not a Flow.
             if src['key'] == 'swap_flx' and cid and cid in swap_mat_ids:
                 continue
+            # A classe vale para as DUAS datas da opção (vencimento e prêmio):
+            # a quebra é do contrato, não do evento.
+            def _bump_class():
+                if not classe_key:
+                    return
+                cl = _fcst_norm(str(row.get(classe_key, '') or ''))
+                if 'cambio' in cl:
+                    fams['option']['fx'] += 1
+                elif 'commodit' in cl:
+                    fams['option']['comm'] += 1
             if date_key and _fcst_parse_date(row.get(date_key, '')) == settle_ref:
                 fams[fam]['total'] += 1
                 fams[fam][primary_sub] += 1
+                _bump_class()
                 if src['key'] == 'swap_pos' and cid:
                     swap_mat_ids.add(cid)
             if date2_key and _fcst_parse_date(row.get(date2_key, '')) == settle_ref:
                 fams[fam]['total'] += 1
                 if fam == 'option':
                     fams[fam]['premium'] += 1
+                    _bump_class()
 
     # NDF Commodities — reuse the Settlement Forecast (index.html) computation
     # VERBATIM so the two cards can never disagree: same TER file, same "Data de

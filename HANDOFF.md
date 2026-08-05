@@ -8743,3 +8743,25 @@ Seção 11 nova no `check_swap_advice.py` (o default do template preservado, e n
 no cabeçalho ou no corpo) e três asserções novas na seção 15 do `check_ops_summary.py`, que **abre o HTML
 do e-mail montado de verdade** e confere o cabeçalho, a frase do corpo e que a palavra `NDF` não aparece
 em lugar nenhum do aviso de Swap. Suíte inteira verde.
+
+---
+
+## §193 — Card de Option: Câmbio × Commodities
+
+O card de Option somava opção de **taxa de câmbio** com opção de **commodities**. São mesas e
+conferências diferentes, e o número somado não dizia de quem era. Agora o card traz as duas quebras
+(`FX` e `Commodities`) ao lado de Maturity e Premium.
+
+**A armadilha, que já estava pronta para me pegar**: o arquivo de posição de **opção** escreve
+`TAXA DE CAMBIO` (**singular**); o de NDF escreve `TAXAS DE CAMBIO`. A primeira versão comparava por
+igualdade contra a grafia do NDF e deixaria o balde de FX **permanentemente em zero** — e zero ali não
+parece defeito, parece "não teve opção de câmbio hoje". A comparação passou a ser por **token**
+(`'cambio' in`, `'commodit' in`), e o teste fixa as duas grafias.
+
+A classe que não é nenhuma das duas (`ACOES`) continua no **total** do card: a quebra não pode fazer o
+card perder operação.
+
+A quebra vale para as **duas datas** da opção (vencimento e prêmio) — a classe é do contrato, não do
+evento.
+
+Verificação: seção 16 do `check_ops_summary.py`.

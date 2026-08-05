@@ -286,6 +286,8 @@
                 <div class="ops-widget__subs">
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-option-maturity">0</span></div>
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-premium">Premium</span><span class="ops-sub-val" id="ops-w-option-premium">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-fx">FX</span><span class="ops-sub-val" id="ops-w-option-fx">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-comm">Commodities</span><span class="ops-sub-val" id="ops-w-option-comm">0</span></div>
                 </div>
                 <div class="ops-recon-grid">
                     <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
@@ -704,6 +706,9 @@ document.addEventListener('DOMContentLoaded', function () {
         $('#ops-w-swap-premium').text(s.premium || 0);   $('#ops-w-swap-maturity').text(s.maturity || 0);
         $('#ops-w-option-maturity').text(o.maturity || 0);
         $('#ops-w-option-premium').text(o.premium || 0);
+        // FX e Commodities dentro de Option: mesas e conferências diferentes,
+        // e o número somado não dizia de quem era.
+        $('#ops-w-option-fx').text(o.fx || 0);           $('#ops-w-option-comm').text(o.comm || 0);
         $('#ops-w-ndf-maturity').text(n.maturity || 0);
         $('#ops-w-coe-total').text(c.total || 0);
     }

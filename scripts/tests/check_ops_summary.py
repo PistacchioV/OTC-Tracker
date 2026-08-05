@@ -582,5 +582,34 @@ check('e chama o endpoint', "'/api/other-products-summary/ted-email'" in HTML, T
 # Swal e usado no retorno — sem o plugin carregado o clique quebraria em silencio.
 check('a pagina carrega o sweetalert', 'sweetalert2.min.js' in HTML, True)
 
+print('\n== 16. o card de Option separa Cambio de Commodities ==')
+# A armadilha aqui e a GRAFIA: o arquivo de posicao de OPCAO escreve
+# "TAXA DE CAMBIO" (singular) e o de NDF escreve "TAXAS DE CAMBIO". Comparar por
+# igualdade deixaria o balde de FX permanentemente em zero — e zero nao parece
+# defeito, parece "nao teve opcao de cambio hoje".
+tmp = tempfile.mkdtemp(prefix='ops-optcls-')
+_b3_root = R.B3_JSON_ROOT
+try:
+    R.B3_JSON_ROOT = tmp
+    dref = R._prev_anbima_bizday(datetime(2026, 8, 5)).strftime('%y%m%d')
+    src = [s for s in R._FORECAST_SOURCES if s['key'] == 'opc'][0]
+    base = {'Data de Vencimento': '20260805'}
+    write_json(os.path.join(tmp, 'Option', R._b3_date_subpath(dref), src['file'](dref)),
+               [dict(base, **{'Classe do Ativo Subjacente': 'TAXA DE CAMBIO'}),
+                dict(base, **{'Classe do Ativo Subjacente': 'TAXAS DE CAMBIO'}),
+                dict(base, **{'Classe do Ativo Subjacente': 'COMMODITIES'}),
+                dict(base, **{'Classe do Ativo Subjacente': 'ACOES'})])
+    w = R._ops_settlement_counts(date(2026, 8, 5), None)['option']
+    check('as DUAS grafias de cambio contam', w['fx'], 2)
+    check('commodities conta', w['comm'], 1)
+    # Acoes nao e nenhum dos dois, mas continua no total: o card nao pode perder
+    # operacao so porque a classe nao entrou numa das duas quebras.
+    check('o total nao perde a classe de fora', w['total'], 4)
+finally:
+    R.B3_JSON_ROOT = _b3_root
+    shutil.rmtree(tmp, ignore_errors=True)
+check('a tela mostra as duas quebras',
+      ('id="ops-w-option-fx"' in HTML) and ('id="ops-w-option-comm"' in HTML), True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
