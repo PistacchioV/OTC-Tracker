@@ -5705,7 +5705,10 @@ def _ops_recon(trade_rows):
     fams = ('swap', 'option', 'ndf', 'coe')
     acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
            for k in fams + ('total',)}
-    by_product = {'SWAP': 'swap', 'OPTION': 'option', 'NDF COMMODITIES': 'ndf', 'COE': 'coe'}
+    by_product = {'SWAP': 'swap', 'OPTION': 'option', 'COE': 'coe',
+                  # O Trade Level chama o Termo de Mercadoria de TERMO; o card se
+                  # chama NDF Commodities. Mesma família.
+                  'TERMO': 'ndf', 'NDF COMMODITIES': 'ndf'}
     seen = set()
     for r in trade_rows:
         fam = by_product.get(str(r.get('product', '') or '').strip().upper())
@@ -5733,6 +5736,42 @@ def _ops_recon(trade_rows):
                         and abs(a['b3_value'] - a['int_value']) <= _OPS_RECON_TOL),
             'na': na,
         }
+    return out
+
+
+def _ops_ndfc_trade_rows(settle_ref):
+    """Linhas de NDF COMMODITIES do Trade Level.
+
+    Saem das MESMAS linhas do Settlement Advice de NDF (`_ndfadv_collect`), e não
+    de uma segunda leitura: a tabela e o aviso têm de mostrar o mesmo valor para
+    o mesmo contrato. O que muda é só o recorte das colunas.
+
+    Produto **TERMO**, LOB **COMMODITIES**, Type = a commodity do subjacente,
+    Internal ID = o identificador do Athena (Nº da Confirmação) e B3 ID = o
+    Título do Operations B3.
+    """
+    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
+    out = []
+    for r in _ndfadv_collect(ref_dt):
+        internal, b3 = r.get('apurado'), r.get('b3')
+        diff = None if (internal is None or b3 is None) else internal - b3
+        out.append({
+            'status': 'OK' if (diff is not None and abs(diff) < 0.01) else 'Check',
+            'lob': 'COMMODITIES',
+            'counterparty': r.get('counterparty', ''),
+            'internal_id': r.get('internal_id', ''),
+            'id_b3': r.get('b3_id', ''),
+            'product': 'TERMO',
+            'type': r.get('commodity', ''),
+            'settlement': _ops_fmt_amt(internal),
+            'settlement_b3': _ops_fmt_amt(b3),
+            'tax_income': _ops_fmt_amt(r.get('ir')),
+            'difference': _ops_fmt_amt(diff),
+            '_settle_n': internal,
+            '_tax_n': r.get('ir'),
+            '_b3_n': b3,
+            '_legal': r.get('legal', ''),
+        })
     return out
 
 
@@ -5976,6 +6015,13 @@ def api_ops_data():
         # malformada não pode derrubar os widgets, que vêm de outro lugar.
         log.error("[ops-trade] falha montando as linhas de swap:\n%s", traceback.format_exc())
         trade = []
+    try:
+        # Uma família de cada vez, em try próprio: uma fonte malformada de NDF
+        # não pode apagar as linhas de swap que já foram montadas.
+        trade += _ops_ndfc_trade_rows(settle_ref)
+    except Exception:
+        log.error("[ops-trade] falha montando as linhas de NDF commodities:\n%s",
+                  traceback.format_exc())
     try:
         summary = _opssum_rows(trade, datetime(settle_ref.year, settle_ref.month, settle_ref.day))
     except Exception:
@@ -7523,6 +7569,32 @@ def _subjacente_map():
     return _SUBJ_CACHE['map']
 
 
+def _ndfc_ir_exempt(client):
+    """A contraparte é isenta do IR de 0,005%? Cadastro `ndfc-ir-exempt`.
+
+    A MESMA lista serve o Settlement Advice e o Trade Level: são o mesmo imposto
+    sobre a mesma operação, e duas listas divergiriam sem erro nenhum — uma tela
+    reteria e a outra não."""
+    cn = _fcst_norm(client).strip()
+    if not cn:
+        return False
+    for row in _mapping_rows('ndfc-ir-exempt'):
+        pat = _fcst_norm(row.get('CLIENT', '')).strip()
+        if not pat:
+            continue
+        if cn.startswith(pat) if 'starts' in _fcst_norm(row.get('MATCH', '')) else cn == pat:
+            return True
+    return False
+
+
+def _ndfc_ir(apurado, client):
+    """IR de 0,005% do Termo de Mercadoria: só quando o BANCO paga (apurado < 0)
+    e a contraparte não é isenta. Arredondado a 2 casas, como a planilha."""
+    if apurado is None or apurado >= 0 or _ndfc_ir_exempt(client):
+        return 0.0
+    return round(abs(apurado) * _NDFADV_IR_RATE, 2)
+
+
 def _ndfadv_media_label(date_str):
     """'Média Fev/2027' a partir de uma data de verificação. Só o mês e o ano: a
     cotação da asiática é a média do período, não a de um dia."""
@@ -7606,12 +7678,7 @@ def _ndfadv_collect(ref):
             cot = _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
 
         apurado = otm_by_suffix.get(conf.rsplit('-', 1)[-1].upper()) if conf else None
-        # IR: 0,005% sobre o valor quando o BANCO paga (apurado < 0); LAWTON é
-        # isenta. Porte da fórmula da planilha, arredondando a 2 casas como ela.
-        if apurado is None or apurado >= 0 or _fcst_norm(cliente).startswith('lawton'):
-            ir = 0.0
-        else:
-            ir = round(abs(apurado) * _NDFADV_IR_RATE, 2)
+        ir = _ndfc_ir(apurado, cliente)
         # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
         liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
 
@@ -7619,6 +7686,11 @@ def _ndfadv_collect(ref):
         spn = ref_rec.get('spn', '')
         net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
 
+        # Settlement B3: soma de TODAS as linhas daquele Título no Operations B3
+        # (o caixa do dia), mesma regra do Trade Level de swap.
+        b3_vals = [_conf_to_float(r.get('Valor')) for r in opb3
+                   if str(r.get('Título', '') or '').strip().upper() == titulo.upper()]
+        b3_vals = [v for v in b3_vals if v is not None]
         out.append({
             'cells': [
                 cliente,
@@ -7640,7 +7712,9 @@ def _ndfadv_collect(ref):
             'taxid': ref_rec.get('taxid', ''),
             'net_type': net_type,
             'commodity': _subjacente_commodity(_lcell(lrow, 'Codigo do Ativo Subjacente')),
+            'b3_id': titulo, 'internal_id': conf,
             'apurado': apurado, 'ir': ir, 'liquido': liq,
+            'b3': sum(b3_vals) if b3_vals else None,
         })
     return out
 
@@ -17492,6 +17566,26 @@ _MAPPING_DEFS = {
             {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '975', 'Nome Curva': 'ZLOTY/POLONIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
             {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '720', 'Nome Curva': 'PESO COLOMBIANO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
             {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C00', 'Nome Curva': 'VCP', 'Nome Categoria': 'VCP'},
+        ],
+    },
+    'ndfc-ir-exempt': {
+        'label': 'NDF Commodities IR — Exempt Clients',
+        'columns': [
+            {'key': 'CLIENT', 'label': 'Client'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select',
+             'options': ['Exact', 'Starts with']},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        # Quem NÃO paga o IR de 0,005% do Termo de Mercadoria: instituições
+        # financeiras e as pernas internas. A fórmula da planilha só trazia
+        # LAWTON — as demais entraram porque foram pedidas por nome; qualquer
+        # outra se registra por aqui, sem tocar em código.
+        'seed': [
+            {'CLIENT': 'LAWTON', 'MATCH': 'Starts with', 'NOTES': 'fórmula da planilha'},
+            {'CLIENT': 'ATACAMA', 'MATCH': 'Starts with', 'NOTES': ''},
+            {'CLIENT': 'BANCO', 'MATCH': 'Starts with', 'NOTES': 'instituições financeiras'},
+            {'CLIENT': 'JPMORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
+            {'CLIENT': 'J.P. MORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
         ],
     },
     'swap-funcionalidade': {

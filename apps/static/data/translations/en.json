@@ -1572,5 +1572,6 @@
   "ops-ted-ok-title": "TED release sent",
   "ops-ted-nossi": "SSI not found for:",
   "ops-sub-fx": "FX",
-  "ops-sub-comm": "Commodities"
+  "ops-sub-comm": "Commodities",
+  "map-tab-ndfc-ir": "NDF Commodities IR — Exempt"
 }

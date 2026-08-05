@@ -75,9 +75,9 @@ R._cpd_load = lambda: [{'SPN': '9', 'COUNTERPARTY': 'AMG BRASIL S.A.',
 REF = datetime(2026, 8, 5)
 
 
-def opb3(titulo, tipo_op='RESGATE', tipo_tit='TER', cpty='CLI'):
+def opb3(titulo, tipo_op='RESGATE', tipo_tit='TER', cpty='CLI', valor='1,00'):
     return {'Conta': '73760.00-9', 'Tipo Operação': tipo_op, 'Título': titulo,
-            'Tipo Título': tipo_tit, 'Valor': '1,00', 'Data Liquidação': '05/08/2026',
+            'Tipo Título': tipo_tit, 'Valor': valor, 'Data Liquidação': '05/08/2026',
             'Contraparte (Nome Simpl.)': cpty}
 
 
@@ -106,9 +106,11 @@ ds, b3 = os.path.join(tmp, 'ds'), os.path.join(tmp, 'b3')
 day = os.path.join(ds, '2026', '08', '05')
 
 write_json(os.path.join(day, 'operations-b3_20260805.json'), [
-    opb3('C1'),                                   # entra — banco pagando
-    opb3('C2'),                                   # entra — LAWTON, tambem pagando
-    opb3('C3'),                                   # entra — banco recebendo
+    # O Valor do Operations B3 e o lado B3 do Trade Level: C1 bate com o interno
+    # (Difference zero), C3 NAO bate — e a linha que tem de sair como Check.
+    opb3('C1', valor='-2028144,04'),              # entra — banco pagando
+    opb3('C2', valor='-500000,00'),               # entra — LAWTON, tambem pagando
+    opb3('C3', valor='2000000,00'),               # entra — e DIVERGE do interno
     opb3('X3', tipo_op='PAGAMENTO DE PREMIO'),    # nao e Resgate
     opb3('X4', tipo_tit='OPC'),                   # nao e TER
     opb3('F5'),                                   # TER Resgate, mas Type = cambio
@@ -140,6 +142,7 @@ _ds_root, _b3_root = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
 try:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
     items = R._ndfadv_collect(REF)
+    trade = R._ops_ndfc_trade_rows(REF.date())
 finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
     shutil.rmtree(tmp, ignore_errors=True)
@@ -221,6 +224,49 @@ check('sem botao de aviso ainda', 'swPrintAdvice' in HTML, False)
 OTM = read('apps/templates/pages/otm-settlements.html')
 check('a toolbar do OTM ganhou respiro',
       '#otm-page .card-body > .d-flex.justify-content-between' in OTM, True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 7. as linhas no Trade Level ==')
+# Saem das MESMAS linhas do aviso: a tabela e o documento do cliente nao podem
+# mostrar valores diferentes para o mesmo contrato.
+by_t = {r['id_b3']: r for r in trade}
+check('uma linha por contrato', sorted(by_t), ['C1', 'C2', 'C3'])
+t = by_t['C1']
+check('produto', t['product'], 'TERMO')
+check('LOB', t['lob'], 'COMMODITIES')
+check('type e a commodity do subjacente', t['type'], 'ALUMINIO(OAHDY)')
+# Internal ID = identificador do Athena; B3 ID = Titulo do Operations B3. Trocar
+# os dois deixa a linha "preenchida" e impossivel de casar com qualquer sistema.
+check('internal id e o do Athena', t['internal_id'], 'DBH-1NR000')
+check('b3 id e o do Operations B3', t['id_b3'], 'C1')
+check('settlement e o INTERNO (OTM)', t['settlement'], '-2,028,144.04')
+check('settlement B3 e o do Operations B3', t['settlement_b3'], '-2,028,144.04')
+check('tax income e o IR de 0,005%', t['tax_income'], '101.41')
+check('difference zerada', t['difference'], '0.00')
+check('status OK quando bate', t['status'], 'OK')
+# E quando NAO bate, a linha acusa: 2.036.775,45 interno x 2.000.000,00 no B3.
+check('divergencia vira Check', by_t['C3']['status'], 'Check')
+check('e a diferenca aparece', by_t['C3']['difference'], '36,775.45')
+
+# O card de NDF Commodities acende: o Trade Level chama de TERMO e o card se
+# chama NDF Commodities — a mesma familia tem de ser reconhecida.
+rec = R._ops_recon(trade)['ndf']
+check('o card de NDF deixa de ser n/a', rec['na'], False)
+check('e conta as tres linhas', rec['b3_count'], 3)
+
+print('\n== 8. a isencao de IR e UM cadastro para as duas telas ==')
+SRC0 = read('apps/pages/routes.py')
+check('cadastro registrado', "'ndfc-ir-exempt': {" in SRC0, True)
+check('aba no /mapping', "key: 'ndfc-ir-exempt'" in read('apps/templates/pages/mapping.html'), True)
+check('LAWTON isenta', R._ndfc_ir_exempt('LAWTON MULTIMERCADO EXCLUSIVO'), True)
+check('ATACAMA isenta', R._ndfc_ir_exempt('ATACAMA FIC FIM'), True)
+check('banco isento', R._ndfc_ir_exempt('BANCO DO BRASIL S.A.'), True)
+check('cliente comum NAO e isento', R._ndfc_ir_exempt('AMG BRASIL S.A.'), False)
+# As duas telas chamam a MESMA funcao — duas listas divergiriam sem erro nenhum,
+# uma tela retendo e a outra nao.
+check('o aviso usa _ndfc_ir', '_ndfc_ir(apurado, cliente)' in SRC0, True)
+adv_ir = by_b3['C1']['ir']
+check('o mesmo IR nas duas telas', R._ops_fmt_amt(adv_ir), t['tax_income'])
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

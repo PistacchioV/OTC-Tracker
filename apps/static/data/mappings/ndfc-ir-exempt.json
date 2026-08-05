@@ -1,0 +1,27 @@
+[
+  {
+    "CLIENT": "LAWTON",
+    "MATCH": "Starts with",
+    "NOTES": "fórmula da planilha"
+  },
+  {
+    "CLIENT": "ATACAMA",
+    "MATCH": "Starts with",
+    "NOTES": ""
+  },
+  {
+    "CLIENT": "BANCO",
+    "MATCH": "Starts with",
+    "NOTES": "instituições financeiras"
+  },
+  {
+    "CLIENT": "JPMORGAN",
+    "MATCH": "Starts with",
+    "NOTES": "perna interna"
+  },
+  {
+    "CLIENT": "J.P. MORGAN",
+    "MATCH": "Starts with",
+    "NOTES": "perna interna"
+  }
+]

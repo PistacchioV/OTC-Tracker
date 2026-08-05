@@ -8828,3 +8828,52 @@ três origens: template, DataTables Buttons e JS).
 
 Verificação: `scripts/tests/check_ndf_advice.py` (6 seções) — as quatro fontes num tempfile, incluindo o
 registro de posição com o bloco asiático no índice posicional certo.
+
+---
+
+## §195 — NDF Commodities no Trade Level (e o IR que virou cadastro)
+
+As linhas de **Termo de Mercadoria** entraram no Trade Level do Other Products Summary, e com elas o card
+de **NDF Commodities** saiu do `n/a` e passou a reconciliar.
+
+### Saem do MESMO lugar do aviso
+
+`_ops_ndfc_trade_rows` parte de `_ndfadv_collect` — as mesmas linhas do Settlement Advice de NDF. A tabela
+e o documento que o cliente recebe não podem mostrar valores diferentes para o mesmo contrato; o que muda
+entre as duas é só o recorte das colunas.
+
+| coluna | valor |
+|---|---|
+| Product | `TERMO` |
+| LOB | `COMMODITIES` |
+| Type | a **commodity** do subjacente (`ALUMINIO(OAHDY)`) |
+| Internal ID | o identificador do **Athena** (o Nº da Confirmação) |
+| B3 ID | o **Título** do Operations B3 |
+| Settlement | o **interno** (soma do OTM pelo sufixo) |
+| Settlement B3 | o `Valor` do Operations B3 daquele Título |
+| Tax Income | o IR de 0,005% |
+
+Trocar Internal ID por B3 ID deixa a linha "preenchida" e impossível de casar com qualquer sistema — o
+teste fixa os dois.
+
+O card: o Trade Level chama de `TERMO` e o card se chama `NDF Commodities`. **A mesma família precisa ser
+reconhecida pelos dois nomes**, senão a linha aparece na tabela e o card continua zerado.
+
+Cada família é montada em `try` próprio: uma fonte malformada de NDF não pode apagar as linhas de swap
+que já foram montadas.
+
+### O IR de 0,005% virou cadastro — e é UM só para as duas telas
+
+Novo mapping **`ndfc-ir-exempt`** (`CLIENT` · `MATCH` Exact/Starts with · `NOTES`): quem **não** paga o IR
+do Termo de Mercadoria. `_ndfc_ir(apurado, cliente)` é chamada tanto pelo Settlement Advice quanto pelo
+Trade Level — são o mesmo imposto sobre a mesma operação, e duas listas divergiriam sem erro nenhum, uma
+tela retendo e a outra não.
+
+**Mudança em relação à fórmula da planilha, de propósito**: a fórmula isentava só `LAWTON`. O seed traz
+`LAWTON`, `ATACAMA`, `BANCO` e as duas grafias de `JPMORGAN`/`J.P. MORGAN`, porque foram pedidas por nome
+("instituição financeira, como lawton, atacama, bancos e etc"). Isso **muda o IR impresso** para essas
+contrapartes em relação à planilha antiga — vale conferir no primeiro dia. Qualquer outra se registra pela
+tela, sem tocar em código.
+
+Verificação: seções 7 e 8 do `check_ndf_advice.py`, incluindo a linha que **não** bate (Check + a diferença
+à mostra) e a prova de que o IR do aviso e o do Trade Level são o mesmo número.
