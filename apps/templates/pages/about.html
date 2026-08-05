@@ -843,8 +843,7 @@
                             <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-calendar-clock"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-fwd-title">NDF Forward Start</div>
                             <p class="ab-feat__desc" data-lang="about-feat-fwd-desc">
-                                Operações de NDF com início futuro (Forward Start), com importação, coluna de Accronym,
-                                autocomplete de contraparte por Accronym/SPN e envio ao Conecta B3.
+                                Operações de NDF com início futuro (Forward Start), com importação, coluna de Accronym, preenchimento automático do cliente, as colunas de Strike e Strike Set Offset vindas da API e geração da confirmação de cliente.
                             </p>
                             <a href="/new_deals-ndf-fwdstart" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
@@ -890,6 +889,45 @@
                             </p>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-file-dollar"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-ndfvanilla-title">NDF Vanilla</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ndfvanilla-desc">
+                                Operações de NDF vanilla (PTAX), com importação, validação, edição em massa e o mesmo ciclo de aprovação e envio ao Conecta das demais páginas de New Deals.
+                            </p>
+                            <a href="/new_deals-ndf-vanilla" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-radar"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-ndmonitor-title">Deals Monitor</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ndmonitor-desc">
+                                Visão por produto × status das operações importadas na data, com o histórico dia a dia e o e-mail automático de pendências às 19:00 e 19:30 (horário de Brasília).
+                            </p>
+                            <a href="/new-deals-monitor" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-file-check"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-conf-title">Confirmações de Cliente</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-conf-desc">
+                                Geração do documento de confirmação por contraparte × ativo — Word, PDF e XML gravados no Electronic Inventory —, com painel de edição, ciclo New → Generated → Success e checklist de validação. Cobre NDF Commodities, Opções de Commodities, Opção de Câmbio e Termo de Moeda a termo (FWD Start).
+                            </p>
+                            <a href="/new_deals-ndf-commodities" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="ab-cap-group ab-rv" data-lang="about-cap-dailysettle">Daily Settlement</div>
                 <div class="row g-3 ab-sg mb-2">
@@ -912,8 +950,7 @@
                             <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-cash"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-opssum-title">Other Products Summary</div>
                             <p class="ab-feat__desc" data-lang="about-feat-opssum-desc">
-                                Batch de liquidação por data: cards de contagem (NDF Commodities, Swap Flow/Maturity/Premium,
-                                Options, COE) a partir dos arquivos de posição da B3, com tabelas editáveis e exportação.
+                                Batch de liquidação por data: cards de contagem e valor conciliando B3 contra o lado interno, Trade Level com o IR por operação e as diferenças, o net por contraparte (Receive/Pay/Settlement Net, conta e observação) e o e-mail de liberação de TED — tudo lendo as mesmas linhas derivadas, então card e tabela não têm como discordar.
                             </p>
                             <a href="/other-products-summary" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
@@ -978,6 +1015,45 @@
                             </a>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-mail-forward"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-swadv-title">Settlement Advice — Swap</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-swadv-desc">
+                                Aviso de liquidação de swap por contraparte: indexadores das duas pernas, prazo, IR pela tabela regressiva e resultado líquido, com impressão dos avisos em PDF e o status New → Generated → Sent compartilhado com o Settlement Summary.
+                            </p>
+                            <a href="/other-products-swap-settlement-advice" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-receipt"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-ndfadv-title">Settlement Advice — Termo de Commodities</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ndfadv-desc">
+                                Aviso de liquidação do termo de mercadoria: ativo subjacente, PTAX e cotação da data de fixing, IR de 0,005% por cadastro de isenção e quebra dos avisos por tipo de net e, quando registrado, por commodity.
+                            </p>
+                            <a href="/other-products-ndf-settlement-advice" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-message-forward"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-msg-title">Mensageria B3</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-msg-desc">
+                                Geração das mensagens de liquidação bilateral a partir do Operations B3, uma por tipo × contraparte, com batimento contra o valor interno ("Favor considerar") e os vencimentos de swap agrupados num aviso só.
+                            </p>
+                            <a href="/operations-b3" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="ab-cap-group ab-rv" data-lang="about-cap-liveposition">Live Position</div>
                 <div class="row g-3 ab-sg mb-2">
@@ -1017,6 +1093,32 @@
                                 Live Option position with settlement/status widgets and per-column filtering.
                             </p>
                             <a href="/live-position-option" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-success-subtle text-success"><i class="ti ti-cash-banknote"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-lpcash-title">Swap — Cashflow</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-lpcash-desc">
+                                Fluxos de caixa dos swaps em custódia (DFLUXO), com filtro por coluna e exportação.
+                            </p>
+                            <a href="/live-position-swap-cashflow" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-coins"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-lpprem-title">Swap — Premium</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-lpprem-desc">
+                                Agenda de prêmios dos swaps (DAGENDAPREMIOS), fonte do batimento interno dos avisos de prêmio.
+                            </p>
+                            <a href="/live-position-swap-premium" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
                                 <i class="ti ti-arrow-right"></i>
                             </a>
@@ -1089,9 +1191,7 @@
                             <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-arrows-exchange"></i></div>
                             <div class="ab-feat__title" data-lang="about-feat-payrec-title">Reconciliation Pay/Rec</div>
                             <p class="ab-feat__desc" data-lang="about-feat-payrec-desc">
-                                Reconciles JPM/MGT payments and receipts against bank statements and SPB actuals, per
-                                counterparty Net Type, with break justification, dated carry-forward and an
-                                end-of-process e-mail.
+                                Concilia pagamentos e recebimentos JPM/MGT contra os extratos e os efetivados do SPB, pelo tipo de net de cada contraparte, carregando as pendências do dia anterior e descontando o IR regressivo do swap para que o lado interno bruto encontre o valor líquido que de fato saiu da conta.
                             </p>
                             <a href="/reconciliation-payrec" class="ab-feat__link">
                                 <span data-lang="about-access">Acessar</span>
@@ -1200,6 +1300,45 @@
                             </a>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-primary-subtle text-primary"><i class="ti ti-folders"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-ei-title">Electronic Inventory</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-ei-desc">
+                                Árvore de documentos por contraparte no share da área: upload manual, navegação por ano/mês/dia e destino automático das confirmações geradas.
+                            </p>
+                            <a href="/electronic-inventory" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-info-subtle text-info"><i class="ti ti-lifebuoy"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-tickets-title">Support Center</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-tickets-desc">
+                                Chamados internos com numeração sequencial (#OTC-0001), anexos, comentários e as regras de permissão por perfil — quem abre, quem atende e quem enxerga.
+                            </p>
+                            <a href="/tickets-list" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-secondary-subtle text-secondary"><i class="ti ti-chart-histogram"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-metrics-title">Metrics</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-metrics-desc">
+                                Indicadores das confirmações pendentes por faixa de atraso e por tipo, para acompanhamento gerencial.
+                            </p>
+                            <a href="/metrics-pending-confirmation" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="ab-cap-group ab-rv" data-lang="data-base-title">Data Base</div>
                 <div class="row g-3 ab-sg mb-2">
@@ -1231,6 +1370,19 @@
                             </a>
                         </div>
                     </div>
+                    <div class="col-xl-4 col-md-6 ab-rv">
+                        <div class="ab-feat">
+                            <div class="ab-feat__icon bg-warning-subtle text-warning"><i class="ti ti-table-options"></i></div>
+                            <div class="ab-feat__title" data-lang="about-feat-mapping-title">Mapping</div>
+                            <p class="ab-feat__desc" data-lang="about-feat-mapping-desc">
+                                As tabelas de-para do sistema num só lugar — 22 cadastros, de moedas e publishers a eventos da B3, isenções de IR e endereços de API. Editar aqui vale já na próxima requisição, sem restart e sem tocar em código.
+                            </p>
+                            <a href="/mapping" class="ab-feat__link">
+                                <span data-lang="about-access">Acessar</span>
+                                <i class="ti ti-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 </div>
             </div>
@@ -1245,7 +1397,7 @@
                     <span class="ab-sl" data-lang="about-flow-label">Fluxo Operacional</span>
                     <h2 class="ab-st" data-lang="about-flow-title">Como funciona</h2>
                 </div>
-                <div class="d-flex flex-column flex-md-row align-items-center justify-content-center">
+                <div class="d-flex flex-column flex-md-row flex-wrap align-items-center justify-content-center">
                     <!-- Step 1 -->
                     <div class="ab-step ab-rv" style="transition-delay:0ms">
                         <div class="ab-step__num">1</div>
@@ -1289,6 +1441,30 @@
                         <div class="ab-step__title" data-lang="about-step4-title">Mapeamento</div>
                         <p class="ab-step__desc" data-lang="about-step4-desc">
                             Vinculação do B3 ID ao registro interno, completando a rastreabilidade.
+                        </p>
+                    </div>
+                    <div class="d-none d-md-flex align-items-center ab-step-arrow px-1">
+                        <i class="ti ti-chevron-right"></i>
+                    </div>
+                    <!-- Step 5 -->
+                    <div class="ab-step ab-rv" style="transition-delay:320ms">
+                        <div class="ab-step__num">5</div>
+                        <i class="ti ti-file-check ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step5-title">Confirmação</div>
+                        <p class="ab-step__desc" data-lang="about-step5-desc">
+                            Documento por contraparte — Word, PDF e XML — validado por checklist e arquivado.
+                        </p>
+                    </div>
+                    <div class="d-none d-md-flex align-items-center ab-step-arrow px-1">
+                        <i class="ti ti-chevron-right"></i>
+                    </div>
+                    <!-- Step 6 -->
+                    <div class="ab-step ab-rv" style="transition-delay:400ms">
+                        <div class="ab-step__num">6</div>
+                        <i class="ti ti-cash-banknote ab-step__icon"></i>
+                        <div class="ab-step__title" data-lang="about-step6-title">Liquidação</div>
+                        <p class="ab-step__desc" data-lang="about-step6-desc">
+                            Avisos ao cliente, liberação de TED e conciliação do que saiu da conta.
                         </p>
                     </div>
                 </div>

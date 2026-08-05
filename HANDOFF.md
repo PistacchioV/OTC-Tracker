@@ -9284,3 +9284,44 @@ uma entrada por linha JPM, casada ou não —, então "sumiu do Pending Payment"
 conciliou. A coluna K chega em **`yyyy-mm-dd`** (confirmado); o parser cobre ISO, `dd/mm/aaaa`,
 `dd/mm/aa`, `mm/dd/aaaa`, `aaaammdd` e o datetime cru do Excel, e os dois primeiros estão travados no
 teste — um formato não reconhecido vira "sem data" e a linha fica bruta, sem erro nenhum.
+
+---
+
+## §206 — About atualizada, e um teste para ela não envelhecer de novo
+
+A About descrevia o sistema de meses atrás. Ela não quebra quando fica velha — só passa a **mentir**, e é
+a única descrição do produto que alguém de fora lê.
+
+### O que entrou
+
+**12 cartas novas**, cada uma no seu grupo do menu:
+
+* *New Deals* — NDF Vanilla, Deals Monitor e **Confirmações de Cliente** (o documento por contraparte ×
+  ativo, Word + PDF + XML no Inventory, com painel, ciclo e checklist — cobrindo NDF Commodities, Opções
+  de Commodities, FXO e o Termo de Moeda a termo);
+* *Daily Settlement* — **Settlement Advice de Swap**, **Settlement Advice de Termo de Commodities** e
+  **Mensageria B3**;
+* *Live Position* — Swap Cashflow e Swap Premium;
+* *Apps* — Electronic Inventory, Support Center e Metrics;
+* *Data Base* — **Mapping**, com o ponto que importa: 22 cadastros, e editar vale na próxima requisição,
+  sem restart e sem tocar em código.
+
+**Três descrições que tinham ficado para trás** foram reescritas: NDF Forward Start (colunas Strike e
+Strike Set Offset, geração de confirmação), Other Products Summary (cards de conciliação, Trade Level,
+TED) e Pay/Rec (o IR regressivo do swap).
+
+O **fluxo "Como funciona" parava no mapeamento** — que era o fim do ciclo quando foi escrito. Ganhou dois
+passos, Confirmação e Liquidação, e a linha passou a `flex-wrap` para os seis caberem.
+
+Tudo com `data-lang` e tradução nos **três** idiomas. No caminho apareceu um órfão antigo: a chave
+`page-access` do menu nunca teve tradução — o item aparecia em inglês no ES e no BR.
+
+### Verificação
+
+`scripts/tests/check_about_page.py` (novo, 6 seções), que **renderiza a página pelo endpoint** e prende as
+quatro formas de ela apodrecer em silêncio: carta apontando para 404, ícone que não existe no pacote
+Tabler (já aconteceu — `ti-currency-exchange`), chave `data-lang` sem tradução (o texto do HTML sobrevive
+em pt-BR, então o EN e o ES saem em português e ninguém reclama) e **feature sem carta**.
+
+Esta última é a única que exige manutenção: a lista `MUST` enumera as páginas que a About tem de citar.
+Página nova no menu que for para valer entra lá também — ou o teste falha e lembra.
