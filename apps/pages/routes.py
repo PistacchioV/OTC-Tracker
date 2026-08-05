@@ -18388,6 +18388,11 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
         deal['StrikeSetDate']   = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
         deal['StrikeSetOffset'] = str(_ndf_api_get(norm, 'STRIKE OFFSET', 'STRIKEOFFSET',
                                                    'STRIKE SET OFFSET') or '').strip()
+        # Strike da API, na MESMA convenção do Rate (já invertido para moeda
+        # fraca, acima): BRL por unidade da moeda base. É ele que converte o
+        # notional no XML da confirmação, então divergir do Rate faria a coluna
+        # da tela e o valor do arquivo contarem histórias diferentes.
+        deal['Strike'] = ('{:,.8f}'.format(strike_v) if strike_v is not None else '')
         deal['Rate'] = ''       # FWD Start: strike is only set on the strike set date
     return target, deal
 
@@ -23599,8 +23604,32 @@ def _conf_strike_adj(deal, subj):
     return strike
 
 
+def _conf_fx_legs(deal, subj):
+    """(valorEstrangeiro, valor em BRL) de uma perna de NDF de MOEDA.
+
+    No termo de MERCADORIA o notional é uma QUANTIDADE e o strike um preço, então
+    `quantidade × preço` é o valor da perna. No termo de MOEDA isso não vale: o
+    notional já é um VALOR — em uma das duas moedas — e o strike é a taxa de
+    câmbio entre elas. Aplicar a fórmula da mercadoria aqui multiplicaria
+    dólares pela taxa e chamaria o resultado, que está em reais, de "valor
+    estrangeiro".
+
+    Por isso o strike converte, e o sentido depende de em que moeda o notional
+    veio: cotado em BRL, o strike leva à moeda base (divide); cotado na moeda
+    base, ele leva ao real (multiplica). Sem strike não há conversão possível e
+    a perna fica de fora, com aviso — é o caso do forward start ainda não
+    fixado."""
+    qty = _conf_to_float(str(deal.get('Notional') or '').replace('-', ''))
+    strike = _conf_to_float(deal.get('Strike'))
+    if qty is None or not strike:
+        return None
+    if _conf_ccy_is_brl(str(deal.get('QuantityCurrency') or '')):
+        return qty / strike, qty
+    return qty, qty * strike
+
+
 def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
-                  ccy_field='StrikeCurrency', warn_no_spot=True):
+                  ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
 
     valor            = Σ notional × strike ajustado × Spot FXRate
@@ -23627,7 +23656,9 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
         if 'MONDELEZ' in str(first.get('Client') or '').upper():
             numero = numero + '_' + merc_tag
 
-    ccy = str(first.get(ccy_field) or '').strip().upper()
+    # `ccy` explícito ganha do campo: no termo de moeda a moeda do XML é a Moeda
+    # Base do grupo, que é derivada do par (não há um campo do deal com ela).
+    ccy = str(ccy or first.get(ccy_field) or '').strip().upper()
     # Strike em Reais não tem perna estrangeira: moedaEstrangeira e
     # valorEstrangeiro saem VAZIOS (preenchê-los com 790/valor em BRL declararia
     # uma operação em moeda estrangeira que não existe).
@@ -23641,21 +23672,32 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     valor_estr = 0.0
     venc = None
     for deal, subj in picked:
-        qty = _conf_to_float(str(deal.get('TotalNotional') or '').replace('-', ''))
-        strike_adj = _conf_strike_adj(deal, subj)
-        if qty is None or strike_adj is None:
-            warnings.append('Operação {}: notional/strike não numérico — fora dos valores do XML.'
-                            .format(deal.get('Deal')))
-            continue
-        leg = qty * strike_adj
-        valor_estr += leg
-        spot = _conf_to_float(deal.get('SpotFXRate'))
-        if spot is None:
-            spot = 1.0
-            if warn_no_spot and ccy not in ('BRL', 'BRR'):
-                warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao estrangeiro.'
+        # `legs_fn` troca a aritmética da perna (o termo de moeda não é
+        # quantidade × preço, ver _conf_fx_legs); sem ele vale a da mercadoria.
+        if legs_fn:
+            legs = legs_fn(deal, subj)
+            if legs is None:
+                warnings.append('Operação {}: sem notional/strike numérico — fora dos valores '
+                                'do XML.'.format(deal.get('Deal')))
+                continue
+            valor_estr += legs[0]
+            valor += legs[1]
+        else:
+            qty = _conf_to_float(str(deal.get('TotalNotional') or '').replace('-', ''))
+            strike_adj = _conf_strike_adj(deal, subj)
+            if qty is None or strike_adj is None:
+                warnings.append('Operação {}: notional/strike não numérico — fora dos valores do XML.'
                                 .format(deal.get('Deal')))
-        valor += leg * spot
+                continue
+            leg = qty * strike_adj
+            valor_estr += leg
+            spot = _conf_to_float(deal.get('SpotFXRate'))
+            if spot is None:
+                spot = 1.0
+                if warn_no_spot and ccy not in ('BRL', 'BRR'):
+                    warnings.append('Operação {}: sem Spot FXRate — valor em BRL ficou igual ao '
+                                    'estrangeiro.'.format(deal.get('Deal')))
+            valor += leg * spot
         sd = _parse_date_any(deal.get('SettlementDate'))
         if sd and (venc is None or sd > venc):
             venc = sd
@@ -25048,9 +25090,12 @@ def api_conf_fwdstart_save():
         xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
         picked = _conf_pick_fwdstart(ref, acr, merc, family)
         if picked:
+            # A moeda do XML é a Moeda Base (a estrangeira do par), a mesma que
+            # dá nome ao grupo — não a Quantity Currency, que pode ser o BRL.
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
                 picked, merc, ref, tipo='Termo', prefixo='NDF_FwdStart',
-                ccy_field='QuantityCurrency', warn_no_spot=False)
+                ccy_field='QuantityCurrency', warn_no_spot=False,
+                legs_fn=_conf_fx_legs, ccy=merc)
             xcand, xn = candidate, 0
             while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1

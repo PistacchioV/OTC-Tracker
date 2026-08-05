@@ -9191,3 +9191,50 @@ aparece no painel ao salvar.
 
 `scripts/tests/check_fwdstart_conf.py` (8 seções), renderizando o documento de verdade pelo endpoint e
 lendo as células do Anexo I pelo `data-k`.
+
+---
+
+## §204 — Coluna Strike no NDF FWD Start, e o XML convertendo pelo strike
+
+### A coluna
+
+`Strike` entrou **entre Strike Set Offset e Instrument** (índice 17), vinda da API. É a inserção que a
+CLAUDE.md marca como perigosa (§132): tudo com índice ≥ 17 subiu um, e as listas **posicionais** têm de
+subir juntas, senão a tela grava o valor de uma coluna no campo de outra sem erro nenhum.
+
+Os lugares tocados: CSS `nth-child`, `<th>` do cabeçalho, `<th>` da linha de filtros, `COL_TO_JSON_FIELD`,
+`AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, `columnDefs` (os `targets` do Is BRR Fixed e do par
+Rate+Maker), `columnLabels` (mais a guarda `index + 2 === 26` do Rate), as opções da edição em massa,
+`SF_COLS`, `SF_LABEL_TO_FIELD`, `extractRowDeal`, `rowDataToNdfDeal`, o preenchimento e o
+`arBuildDeal` do modal de nova linha (com o campo `#ar-strike`), e o `rowMaker`, que foi de `d[30]` para
+`d[31]`.
+
+O `Strike` da API é gravado na **mesma convenção do Rate** — já invertido para moeda fraca. Divergir do
+Rate faria a coluna da tela e o valor do arquivo contarem histórias diferentes.
+
+### O XML: a fórmula da mercadoria não serve para moeda
+
+O `_conf_ndf_xml` calculava `valorEstrangeiro = Σ notional × strike`. Isso vale para o termo de
+**mercadoria**, onde o notional é uma QUANTIDADE e o strike um PREÇO. No termo de **moeda** não: o
+notional já é um VALOR — em uma das duas moedas — e o strike é a taxa entre elas. A fórmula antiga
+multiplicaria dólares pela taxa e chamaria o resultado, que está em reais, de "valor estrangeiro". O
+arquivo sairia, e sairia errado.
+
+Entrou um `legs_fn` opcional no builder, e o **`_conf_fx_legs`** para o NDF de moeda:
+
+| Notional cotado em | valorEstrangeiro | valor (BRL) |
+|---|---|---|
+| moeda base | o próprio notional | notional × strike |
+| BRL | notional ÷ strike | o próprio notional |
+
+Sem strike a perna fica de fora **com aviso** — que era o caso do forward start antes desta coluna
+existir (§203 registrava isso como limitação; deixa de ser).
+
+A moeda do XML passa a ser a **Moeda Base do grupo** (parâmetro `ccy` explícito), não a Quantity
+Currency, que pode ser o próprio BRL.
+
+### Verificação
+
+Seção 9 do `check_fwdstart_conf.py`: as três listas posicionais com 32 colunas e o `Strike` no índice 17
+nas três, o Maker em 31, o `dtCol` do smart filter, a conversão nos **dois** sentidos de cotação, e a
+prova de que a fórmula da mercadoria continua intacta para quem não passa `legs_fn`.

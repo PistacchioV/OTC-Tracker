@@ -414,34 +414,37 @@
   #deals-processing-table td:nth-child(17) { min-width: 130px; width: 130px;  } /* Strike Set Offset */
 
   #deals-processing-table th:nth-child(18),
-  #deals-processing-table td:nth-child(18) { min-width: 110px; width: 110px;  } /* Intrument */
+  #deals-processing-table td:nth-child(18) { min-width: 110px; width: 110px;  } /* Strike */
 
   #deals-processing-table th:nth-child(19),
-  #deals-processing-table td:nth-child(19) { min-width: 95px;  width: 95px;   } /* Trade Type */
+  #deals-processing-table td:nth-child(19) { min-width: 110px; width: 110px;  } /* Intrument */
 
   #deals-processing-table th:nth-child(20),
-  #deals-processing-table td:nth-child(20) { min-width: 85px;  width: 85px;   } /* Direction */
+  #deals-processing-table td:nth-child(20) { min-width: 95px;  width: 95px;   } /* Trade Type */
 
   #deals-processing-table th:nth-child(21),
-  #deals-processing-table td:nth-child(21) { min-width: 100px; width: 100px;  } /* FX Pair */
+  #deals-processing-table td:nth-child(21) { min-width: 85px;  width: 85px;   } /* Direction */
 
   #deals-processing-table th:nth-child(22),
-  #deals-processing-table td:nth-child(22) { min-width: 140px; width: 140px;  } /* Quantity Currency */
+  #deals-processing-table td:nth-child(22) { min-width: 100px; width: 100px;  } /* FX Pair */
 
   #deals-processing-table th:nth-child(23),
-  #deals-processing-table td:nth-child(23) { min-width: 130px; width: 130px;  } /* Publisher */
+  #deals-processing-table td:nth-child(23) { min-width: 140px; width: 140px;  } /* Quantity Currency */
 
   #deals-processing-table th:nth-child(24),
-  #deals-processing-table td:nth-child(24) { min-width: 130px; width: 130px;  } /* Notional */
+  #deals-processing-table td:nth-child(24) { min-width: 130px; width: 130px;  } /* Publisher */
 
   #deals-processing-table th:nth-child(25),
-  #deals-processing-table td:nth-child(25) { min-width: 110px; width: 110px;  } /* Rate */
+  #deals-processing-table td:nth-child(25) { min-width: 130px; width: 130px;  } /* Notional */
 
   #deals-processing-table th:nth-child(26),
-  #deals-processing-table td:nth-child(26) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
+  #deals-processing-table td:nth-child(26) { min-width: 110px; width: 110px;  } /* Rate */
 
   #deals-processing-table th:nth-child(27),
-  #deals-processing-table td:nth-child(27) { min-width: 120px; width: 120px;  } /* TradingBook */
+  #deals-processing-table td:nth-child(27) { min-width: 120px; width: 120px;  } /* Is BRR Fixed? */
+
+  #deals-processing-table th:nth-child(28),
+  #deals-processing-table td:nth-child(28) { min-width: 120px; width: 120px;  } /* TradingBook */
 
   /* Todas as células da tabela devem ter nowrap */
   #deals-processing-table td {
@@ -899,6 +902,7 @@
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-last-fix">Last Fixing Date</th>
                                     <th data-table-sort="" data-format="date-dmy" data-lang="nd-col-strike-set-date">Strike Set Date</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-strike-set-offset">Strike Set Offset</th>
+                                    <th data-table-sort="" data-format="num-8dp" data-lang="nd-col-strike">Strike</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-instrument">Intrument</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-trade-type">Trade Type</th>
                                     <th data-table-sort="" data-format="text" data-lang="nd-col-direction">Direction</th>
@@ -934,6 +938,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Last Fixing Date" data-lang-placeholder="col-last-fix"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Set Date" data-lang-placeholder="col-strike-set-date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Set Offset" data-lang-placeholder="col-strike-set-offset"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike" data-lang-placeholder="col-strike"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrument" data-lang-placeholder="col-instrument"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Type" data-lang-placeholder="col-trade-type"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Direction" data-lang-placeholder="col-direction"></th>
@@ -1037,6 +1042,10 @@
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Strike Set Offset</label>
             <input type="text" class="form-control form-control-sm" id="ar-strikesetoffset">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-1">Strike</label>
+            <input type="text" class="form-control form-control-sm" id="ar-strike">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Intrument</label>
@@ -1279,14 +1288,15 @@ var COL_TO_JSON_FIELD = {
     10: 'Acronym',         11: 'Client',
     12: 'TaxID',           13: 'FirstFixingDate',
     14: 'LastFixingDate',  15: 'StrikeSetDate',
-    16: 'StrikeSetOffset', 17: 'Instrument',
-    18: 'TradeType',       19: 'Direction',
-    20: 'FXPair',          21: 'QuantityCurrency',
-    22: 'OtherQuantityCurrency', 23: 'Publisher',
-    24: 'Notional',        25: 'Rate',
-    26: 'IsBRRFixed',      27: 'TradingBook',
-    28: 'OtherBook',       29: 'SettlementLocation',
-    30: 'Maker'
+    16: 'StrikeSetOffset', 17: 'Strike',
+    18: 'Instrument',      19: 'TradeType',
+    20: 'Direction',       21: 'FXPair',
+    22: 'QuantityCurrency', 23: 'OtherQuantityCurrency',
+    24: 'Publisher',       25: 'Notional',
+    26: 'Rate',            27: 'IsBRRFixed',
+    28: 'TradingBook',     29: 'OtherBook',
+    30: 'SettlementLocation',
+    31: 'Maker'
 };
 
 // Reconstruct a DataTable row array (35 elements) from a plain JSON deal object
@@ -1319,7 +1329,7 @@ function dealJsonToRow(deal) {
     // alterados; aqui viram índices de coluna para o drawCallback pintar as
     // células (mesmo mecanismo do amend por e-mail).
     if (st === 'Amend' && deal.AmendChanged && deal.AmendChanged.length) {
-        var AMEND_FIELD_COLS = { SPN: 9, Client: 11, TaxID: 12, LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, StrikeSetDate: 15, StrikeSetOffset: 16, Instrument: 17, TradeType: 18, Direction: 19, FXPair: 20, QuantityCurrency: 21, OtherQuantityCurrency: 22, Publisher: 23, Notional: 24, Rate: 25, IsBRRFixed: 26, TradingBook: 27, OtherBook: 28, SettlementLocation: 29 };
+        var AMEND_FIELD_COLS = { SPN: 9, Client: 11, TaxID: 12, LE: 3, TradeDate: 6, Month: 7, SettlementDate: 8, Acronym: 10, FirstFixingDate: 13, LastFixingDate: 14, StrikeSetDate: 15, StrikeSetOffset: 16, Strike: 17, Instrument: 18, TradeType: 19, Direction: 20, FXPair: 21, QuantityCurrency: 22, OtherQuantityCurrency: 23, Publisher: 24, Notional: 25, Rate: 26, IsBRRFixed: 27, TradingBook: 28, OtherBook: 29, SettlementLocation: 30 };
         if (!window._OTC_AMEND_CHANGED_COLS) window._OTC_AMEND_CHANGED_COLS = {};
         window._OTC_AMEND_CHANGED_COLS[deal.Deal] = deal.AmendChanged
             .map(function (f) { return AMEND_FIELD_COLS[f]; })
@@ -1352,6 +1362,7 @@ function dealJsonToRow(deal) {
         deal.LastFixingDate    || '',
         deal.StrikeSetDate     || '',
         deal.StrikeSetOffset   || '',
+        deal.Strike            || '',
         deal.Instrument        || '',
         deal.TradeType         || '',
         deal.Direction         || '',
@@ -1436,7 +1447,7 @@ $(document).ready(function() {
                 // Is BRR Fixed? — YES/NO como badge (mesmo estilo do Quoted in
                 // Cents das páginas de commodities). Só no display: o DATA da
                 // célula segue "YES"/"NO" cru para filtros, export e edição.
-                targets: 26,
+                targets: 27,
                 render: function (data, type) {
                     if (type !== 'display') return data;
                     var v = String(data == null ? '' : data).replace(/<[^>]*>/g, '').trim().toUpperCase();
@@ -1447,7 +1458,7 @@ $(document).ready(function() {
             },
             {
                 visible: false,
-                targets: [25, 30]   // Rate (not applicable to FWD Start) + Maker SID
+                targets: [26, 31]   // Rate (not applicable to FWD Start) + Maker SID
             }
         ],
         dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
@@ -1612,20 +1623,21 @@ $(document).ready(function() {
                 'nd-col-last-fix',          // col 14
                 'nd-col-strike-set-date',   // col 15
                 'nd-col-strike-set-offset', // col 16
-                'nd-col-instrument',        // col 17
-                'nd-col-trade-type',        // col 18
-                'nd-col-direction',         // col 19
-                'nd-col-fx-pair',           // col 20
-                'nd-col-qty-ccy',           // col 21
-                'nd-col-other-qty-ccy',     // col 22
-                'nd-col-publisher',         // col 23
-                'nd-col-notional'           // col 24
-                // col 25 Rate — hidden, not in scroll head
-                ,'nd-col-is-brr-fixed',     // col 26
-                'nd-col-trading-book',      // col 27
-                'nd-col-other-book',        // col 28
-                'nd-col-settle-loc'         // col 29
-                // col 30 — Maker (hidden, no label)
+                'nd-col-strike',            // col 17
+                'nd-col-instrument',        // col 18
+                'nd-col-trade-type',        // col 19
+                'nd-col-direction',         // col 20
+                'nd-col-fx-pair',           // col 21
+                'nd-col-qty-ccy',           // col 22
+                'nd-col-other-qty-ccy',     // col 23
+                'nd-col-publisher',         // col 24
+                'nd-col-notional'           // col 25
+                // col 26 Rate — hidden, not in scroll head
+                ,'nd-col-is-brr-fixed',     // col 27
+                'nd-col-trading-book',      // col 28
+                'nd-col-other-book',        // col 29
+                'nd-col-settle-loc'         // col 30
+                // col 31 — Maker (hidden, no label)
             ];
             var container = api.table().container();
             // DT2.x uses .dt-scroll-head; DT1.x used .dataTables_scrollHead
@@ -2147,7 +2159,7 @@ $(document).ready(function() {
                 "Status", "LE", "Deal", "B3 ID", "Trade Date", "Month",
                 "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
                 "First Fixing Date", "Last Fixing Date", "Strike Set Date", "Strike Set Offset",
-                "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
+                "Strike", "Intrument", "Trade Type", "Direction", "FX Pair", "Quantity Currency",
                 "Other Quantity Currency",
                 "Publisher", "Notional", "Rate", "Is BRR Fixed?", "TradingBook",
                 "Other Book", "Settlement Location"
@@ -2159,7 +2171,7 @@ $(document).ready(function() {
                 dropdown.className = 'dropdown';
 
                 var menuItems = columnLabels.map(function(label, index) {
-                    if (index + 2 === 25) return '';   // Rate — permanently hidden on FWD Start
+                    if (index + 2 === 26) return '';   // Rate — permanently hidden on FWD Start
                     return '<li class="dropdown-item">' +
                         '<div class="form-check">' +
                         '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" ' +
@@ -2233,19 +2245,20 @@ $(document).ready(function() {
                     '<option value="14">Last Fixing Date</option>' +
                     '<option value="15">Strike Set Date</option>' +
                     '<option value="16">Strike Set Offset</option>' +
-                    '<option value="17">Intrument</option>' +
-                    '<option value="18">Trade Type</option>' +
-                    '<option value="19">Direction</option>' +
-                    '<option value="20">FX Pair</option>' +
-                    '<option value="21">Quantity Currency</option>' +
-                    '<option value="22">Other Quantity Currency</option>' +
-                    '<option value="23">Publisher</option>' +
-                    '<option value="24">Notional</option>' +
-                    '<option value="25">Rate</option>' +
-                    '<option value="26">Is BRR Fixed?</option>' +
-                    '<option value="27">TradingBook</option>' +
-                    '<option value="28">Other Book</option>' +
-                    '<option value="29">Settlement Location</option>';
+                    '<option value="17">Strike</option>' +
+                    '<option value="18">Intrument</option>' +
+                    '<option value="19">Trade Type</option>' +
+                    '<option value="20">Direction</option>' +
+                    '<option value="21">FX Pair</option>' +
+                    '<option value="22">Quantity Currency</option>' +
+                    '<option value="23">Other Quantity Currency</option>' +
+                    '<option value="24">Publisher</option>' +
+                    '<option value="25">Notional</option>' +
+                    '<option value="26">Rate</option>' +
+                    '<option value="27">Is BRR Fixed?</option>' +
+                    '<option value="28">TradingBook</option>' +
+                    '<option value="29">Other Book</option>' +
+                    '<option value="30">Settlement Location</option>';
 
                 // Botão Send
                 var confirmBtn = document.createElement('button');
@@ -2308,16 +2321,17 @@ $(document).ready(function() {
         { label: 'Client',            type: 'text',   dtCol: 11 },
         { label: 'Tax ID',            type: 'text',   dtCol: 12 },
         { label: 'Strike Set Offset', type: 'text',   dtCol: 16 },
-        { label: 'Intrument',         type: 'text',   dtCol: 17 },
-        { label: 'Trade Type',        type: 'text',   dtCol: 18 },
-        { label: 'Direction',         type: 'text',   dtCol: 19 },
-        { label: 'FX Pair',           type: 'text',   dtCol: 20 },
-        { label: 'Quantity Currency', type: 'text',   dtCol: 21 },
-        { label: 'Publisher',         type: 'text',   dtCol: 23 },
-        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 26 },
-        { label: 'TradingBook',       type: 'text',   dtCol: 27 },
-        { label: 'Other Book',        type: 'text',   dtCol: 28 },
-        { label: 'Settlement Location', type: 'text', dtCol: 29 },
+        { label: 'Strike',            type: 'number', dtCol: 17 },
+        { label: 'Intrument',         type: 'text',   dtCol: 18 },
+        { label: 'Trade Type',        type: 'text',   dtCol: 19 },
+        { label: 'Direction',         type: 'text',   dtCol: 20 },
+        { label: 'FX Pair',           type: 'text',   dtCol: 21 },
+        { label: 'Quantity Currency', type: 'text',   dtCol: 22 },
+        { label: 'Publisher',         type: 'text',   dtCol: 24 },
+        { label: 'Is BRR Fixed?',     type: 'text',   dtCol: 27 },
+        { label: 'TradingBook',       type: 'text',   dtCol: 28 },
+        { label: 'Other Book',        type: 'text',   dtCol: 29 },
+        { label: 'Settlement Location', type: 'text', dtCol: 30 },
         // date columns
         { label: 'Trade Date',        type: 'date',   dtCol: 6  },
         { label: 'Settlement Date',   type: 'date',   dtCol: 8  },
@@ -2325,8 +2339,8 @@ $(document).ready(function() {
         { label: 'Last Fixing Date',  type: 'date',   dtCol: 14 },
         { label: 'Strike Set Date',   type: 'date',   dtCol: 15 },
         // number columns
-        { label: 'Notional',          type: 'number', dtCol: 24 },
-        { label: 'Rate',              type: 'number', dtCol: 25 }
+        { label: 'Notional',          type: 'number', dtCol: 25 },
+        { label: 'Rate',              type: 'number', dtCol: 26 }
     ];
 
     var sfActive = [];      // [{col, value}]
@@ -2492,6 +2506,7 @@ $(document).ready(function() {
         'Client':            'Client',
         'Tax ID':            'TaxID',
         'Strike Set Offset': 'StrikeSetOffset',
+        'Strike': 'Strike',
         'Intrument':         'Instrument',
         'Trade Type':        'TradeType',
         'Direction':         'Direction',
@@ -2957,7 +2972,7 @@ $(document).ready(function() {
 
             // Read status from data array — avoids null-node issue for off-page rows
             var rowStatus = _sh(d[STATUS_COL_INDEX]);
-            var rowMaker  = d[30] || '';
+            var rowMaker  = d[31] || '';
 
             console.log('[NDF-DEALS SEND] rowId:', rowId, '| status:', rowStatus, '| maker:', rowMaker, '| CURRENT_USER_SID:', CURRENT_USER_SID);
             if ((rowStatus === 'Approved' || rowStatus === 'Error') && rowMaker !== CURRENT_USER_SID) {
@@ -3566,18 +3581,19 @@ $(document).ready(function() {
             LastFixingDate:   _sh(d[14]),
             StrikeSetDate:    _sh(d[15]),
             StrikeSetOffset:  _sh(d[16]),
-            Instrument:       _sh(d[17]),
-            TradeType:        _sh(d[18]),
-            Direction:        _sh(d[19]),
-            FXPair:           _sh(d[20]),
-            QuantityCurrency: _sh(d[21]),
-            OtherQuantityCurrency: _sh(d[22]),
-            Publisher:        _sh(d[23]),
-            Notional:         _sh(d[24]),
-            Rate:             _sh(d[25]),
-            IsBRRFixed:       _sh(d[26]),
-            OtherBook:        _sh(d[28]),
-            SettlementLocation: _sh(d[29])
+            Strike:           _sh(d[17]),
+            Instrument:       _sh(d[18]),
+            TradeType:        _sh(d[19]),
+            Direction:        _sh(d[20]),
+            FXPair:           _sh(d[21]),
+            QuantityCurrency: _sh(d[22]),
+            OtherQuantityCurrency: _sh(d[23]),
+            Publisher:        _sh(d[24]),
+            Notional:         _sh(d[25]),
+            Rate:             _sh(d[26]),
+            IsBRRFixed:       _sh(d[27]),
+            OtherBook:        _sh(d[29]),
+            SettlementLocation: _sh(d[30])
         };
     }
 
@@ -3600,20 +3616,21 @@ $(document).ready(function() {
             LastFixingDate:   _sh(d[14]),
             StrikeSetDate:    _sh(d[15]),
             StrikeSetOffset:  _sh(d[16]),
-            Instrument:       _sh(d[17]),
-            TradeType:        _sh(d[18]),
-            Direction:        _sh(d[19]),
-            FXPair:           _sh(d[20]),
-            QuantityCurrency: _sh(d[21]),
-            OtherQuantityCurrency: _sh(d[22]),
-            Publisher:        _sh(d[23]),
-            Notional:         _sh(d[24]),
-            Rate:             _sh(d[25]),
-            IsBRRFixed:       _sh(d[26]),
-            TradingBook:      _sh(d[27]),
-            OtherBook:        _sh(d[28]),
-            SettlementLocation: _sh(d[29]),
-            Maker:            d[30] || '',
+            Strike:           _sh(d[17]),
+            Instrument:       _sh(d[18]),
+            TradeType:        _sh(d[19]),
+            Direction:        _sh(d[20]),
+            FXPair:           _sh(d[21]),
+            QuantityCurrency: _sh(d[22]),
+            OtherQuantityCurrency: _sh(d[23]),
+            Publisher:        _sh(d[24]),
+            Notional:         _sh(d[25]),
+            Rate:             _sh(d[26]),
+            IsBRRFixed:       _sh(d[27]),
+            TradingBook:      _sh(d[28]),
+            OtherBook:        _sh(d[29]),
+            SettlementLocation: _sh(d[30]),
+            Maker:            d[31] || '',
             Checker:          ''
         };
         if (overrides) {
@@ -4764,17 +4781,18 @@ $(document).ready(function() {
             $('#ar-lastfix').val(dmy2isoLocal(_sh(d[14])));
             $('#ar-strikesetdate').val(dmy2isoLocal(_sh(d[15])));
             $('#ar-strikesetoffset').val(_sh(d[16]));
-            $('#ar-instrument').val(_sh(d[17]) || 'Swap');
-            $('#ar-tradetype').val(_sh(d[18]));
-            $('#ar-direction').val(_sh(d[19]));
-            $('#ar-fxpair').val(_sh(d[20]));
-            $('#ar-qtyccy').val(_sh(d[21]));
-            $('#ar-otherqtyccy').val(_sh(d[22]));
-            $('#ar-publisher').val(_sh(d[23]));
-            $('#ar-notional').val(_sh(d[24]));
-            $('#ar-rate').val(_sh(d[25]));
-            $('#ar-isbrrfixed').val(_sh(d[26]));
-            $('#ar-tradingbook').val(_sh(d[27]));
+            $('#ar-strike').val(_sh(d[17]));
+            $('#ar-instrument').val(_sh(d[18]) || 'Swap');
+            $('#ar-tradetype').val(_sh(d[19]));
+            $('#ar-direction').val(_sh(d[20]));
+            $('#ar-fxpair').val(_sh(d[21]));
+            $('#ar-qtyccy').val(_sh(d[22]));
+            $('#ar-otherqtyccy').val(_sh(d[23]));
+            $('#ar-publisher').val(_sh(d[24]));
+            $('#ar-notional').val(_sh(d[25]));
+            $('#ar-rate').val(_sh(d[26]));
+            $('#ar-isbrrfixed').val(_sh(d[27]));
+            $('#ar-tradingbook').val(_sh(d[28]));
             bootstrap.Modal.getOrCreateInstance(arModalEl).show();
         };
 
@@ -4849,6 +4867,7 @@ $(document).ready(function() {
                 LastFixingDate:   isoToDmy($('#ar-lastfix').val()),
                 StrikeSetDate:    isoToDmy($('#ar-strikesetdate').val()),
                 StrikeSetOffset:  $('#ar-strikesetoffset').val().trim(),
+                Strike:           $('#ar-strike').val().trim(),
                 Instrument:       $('#ar-instrument').val().trim() || 'Swap',
                 TradeType:        $('#ar-tradetype').val() || '',
                 Direction:        $('#ar-direction').val() || '',

@@ -186,5 +186,53 @@ _g6, h6 = run([dict(DEAL), dict(DEAL, Deal='D2', B3_ID='B2')])
 check('com 2 operacoes, cabecalho vazio',
       dict(re.findall(r'id="out_(\w+)">([^<]*)<', h6)).get('num_conf'), '')
 
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 9. a coluna Strike e o XML ==')
+# Inserir coluna nas paginas de NDF e o defeito que ja corrompeu dado duas vezes
+# (§132): os indices ficam desencontrados entre as listas POSICIONAIS e a tela
+# passa a gravar o valor de uma coluna no campo de outra, sem erro nenhum.
+PAGE = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages',
+                            'new_deals-ndf-fwdstart.html'), encoding='utf-8').read()
+head = PAGE.split('<thead', 1)[1].split('</thead>', 1)[0]
+rows_th = re.split(r'<tr[^>]*>', head)[1:]
+check('cabecalho e linha de filtros com o MESMO numero de colunas',
+      [r.count('<th') for r in rows_th], [32, 32])
+arr = PAGE.split('return _escRow([', 1)[1].split('], {0:1', 1)[0]
+arr = [l.strip() for l in arr.split('\n') if l.strip()]
+check('e o array do dealJsonToRow tambem', len(arr), 32)
+check('Strike na posicao 17 do array', arr[17].startswith('deal.Strike'), True)
+labels = re.findall(r'data-lang="(nd-col-[\w-]+)"', rows_th[0])
+# O checkbox (col 0) nao tem data-lang, entao labels[i] e a coluna i+1.
+check('Strike na posicao 17 do cabecalho', labels[16], 'nd-col-strike')
+check("COL_TO_JSON_FIELD[17] = 'Strike'", "17: 'Strike'" in PAGE, True)
+check('AMEND_FIELD_COLS acompanha', 'Strike: 17, Instrument: 18' in PAGE, True)
+check('o Maker foi de 30 para 31', 'var rowMaker  = d[31]' in PAGE, True)
+check('e o COL_TO_JSON_FIELD concorda', "31: 'Maker'" in PAGE, True)
+# O smart filter le a coluna pelo dtCol; ficar em 16 leria o Strike Set Offset.
+check('smart filter aponta para 17', "{ label: 'Strike',            type: 'number', dtCol: 17 }" in PAGE, True)
+
+# ── o XML: o strike converte o notional ────────────────────────────────────
+# O termo de MERCADORIA é quantidade × preço; o de MOEDA não. Aplicar a fórmula
+# da mercadoria aqui multiplicaria dólares pela taxa e chamaria reais de "valor
+# estrangeiro" — o arquivo sai, e sai errado.
+legs = R._conf_fx_legs({'Notional': '198,723,470.91', 'Strike': '5.43210000',
+                        'QuantityCurrency': 'USD'}, None)
+check('notional na moeda base: estrangeiro = o proprio notional', round(legs[0], 2), 198723470.91)
+check('   e o valor em BRL sai do strike', round(legs[1], 2), 1079485766.33)
+legs = R._conf_fx_legs({'Notional': '1,000,000.00', 'Strike': '5.00000000',
+                        'QuantityCurrency': 'BRL'}, None)
+check('notional em BRL: o strike DIVIDE para chegar a moeda base', round(legs[0], 2), 200000.00)
+check('   e o valor em BRL e o proprio notional', round(legs[1], 2), 1000000.00)
+check('sem strike nao ha conversao (fwd start nao fixado)',
+      R._conf_fx_legs({'Notional': '100', 'Strike': ''}, None), None)
+# E a fórmula da mercadoria continua intacta para quem sempre a usou.
+src_xml = src.split('def _conf_ndf_xml')[1].split('\ndef ', 1)[0]
+check('a fórmula da mercadoria sobrevive sem legs_fn',
+      'strike_adj = _conf_strike_adj(deal, subj)' in src_xml, True)
+check('e a confirmacao do FWD Start passa a de moeda',
+      'legs_fn=_conf_fx_legs' in src, True)
+# A moeda do XML é a Moeda Base do grupo, não a Quantity Currency (que pode ser BRL).
+check('e manda a Moeda Base explicita', 'ccy=merc)' in src, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
