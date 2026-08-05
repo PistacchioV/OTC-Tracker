@@ -25547,6 +25547,41 @@ _NDM_PENDING_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR,
 _NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
 
 
+def _ndm_pending_status():
+    """{last, next} do aviso automático, para a tela do Control Panel.
+
+    `last` é o desfecho gravado no último disparo ('enviado', 'empty', ou a
+    mensagem do erro); `next` é o próximo horário calculado da MESMA forma que o
+    scheduler calcula. Sem isto a única evidência de que a rotina rodou é uma
+    linha de log no servidor, que ninguém lê — e "não está funcionando" fica sem
+    resposta."""
+    last = {}
+    try:
+        with open(_NDM_PENDING_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            last = d
+    except Exception:                                       # noqa: BLE001
+        last = {}
+    now = _br_now()
+    times = _ndm_pending_times()
+    nxt = None
+    for hh, mm in times:
+        cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if cand > now:
+            nxt = cand
+            break
+    if nxt is None:
+        hh, mm = times[0]
+        nxt = (now + timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return {
+        'times': ['{:02d}:{:02d}'.format(h, m) for h, m in times],
+        'next': nxt.strftime('%d/%m/%Y %H:%M'),
+        'now_br': now.strftime('%d/%m/%Y %H:%M'),
+        'last': last,
+    }
+
+
 def _load_ndm_pending_recipients():
     """TO/CC do aviso, do card Deals Monitor do Control Panel. Sem nada salvo
     vale o default da mesa — assim a rotina já funciona no pull, antes de
@@ -25618,7 +25653,8 @@ def api_cp_deals_monitor_recipients():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if request.method == 'GET':
-        return jsonify({'success': True, **_load_ndm_pending_recipients()})
+        return jsonify({'success': True, **_load_ndm_pending_recipients(),
+                        **_ndm_pending_status()})
     payload = request.get_json(silent=True) or {}
     try:
         _save_ndm_pending_recipients((payload.get('to') or '').strip(),
@@ -25662,6 +25698,9 @@ def api_cp_deals_monitor_run():
 _ndm_pending_scheduler_started = False
 _ndm_pending_scheduler_lock = threading.Lock()
 _NDM_PENDING_SENT_FILE = os.path.join(_DAILY_METRIC_DIR, 'deals_monitor_pending_sent.json')
+# Desfecho do último disparo — é o que a tela mostra para responder se o aviso
+# das 19h saiu, não saiu, ou não tinha o que mandar.
+_NDM_PENDING_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'deals_monitor_pending_status.json')
 
 
 def _ndm_pending_claim_slot(slot):
@@ -25709,15 +25748,62 @@ def _ndm_pending_times():
     return sorted(set(out)) or [(19, 0), (19, 30)]
 
 
+def _ndm_pending_release_slot(slot):
+    """Devolve um slot reivindicado, para que ele possa ser tentado de novo.
+
+    Existe porque a reserva é feita ANTES do envio (é o que impede dois
+    processos de mandarem o mesmo aviso). Se o envio falha — SMTP fora do ar,
+    rede caindo, o que for — e o slot fica reservado, o aviso daquele horário
+    está perdido para sempre: nem o próximo restart o recupera, porque o
+    catch-up também consulta esta lista. Uma falha transitória virava um dia sem
+    aviso, sem nada na tela para explicar."""
+    with _cache_lock:
+        try:
+            with open(_NDM_PENDING_SENT_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot not in sent:
+            return
+        try:
+            _atomic_write_json(_NDM_PENDING_SENT_FILE, [s for s in sent if s != slot])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[deals-monitor] não consegui devolver o slot %s:\n%s',
+                        slot, traceback.format_exc())
+
+
+def _ndm_pending_status_write(slot, result, when):
+    """Grava o desfecho do último disparo, para a tela poder responder "o aviso
+    das 19h saiu?". O log do servidor tinha a resposta e ninguém o lê."""
+    try:
+        os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+        _atomic_write_json(_NDM_PENDING_STATUS_FILE, {
+            'slot': slot, 'result': result,
+            'at': when.strftime('%d/%m/%Y %H:%M:%S'),
+        })
+    except Exception:                                       # noqa: BLE001
+        log.warning('[deals-monitor] não consegui gravar o status do disparo:\n%s',
+                    traceback.format_exc())
+
+
 def _ndm_pending_disparar(slot, fired):
     """Manda o aviso de um slot, se ninguém já mandou. True quando o slot era
-    deste processo (reivindicado agora)."""
+    deste processo (reivindicado agora).
+
+    Sem destinatário e com falha de envio o slot é DEVOLVIDO: nos dois casos o
+    aviso não saiu, e queimar o horário faria o problema desaparecer da fila em
+    vez de ser tentado de novo. 'empty' (nada pendente) é desfecho legítimo e
+    mantém a reserva — não há o que reenviar."""
     if not _ndm_pending_claim_slot(slot):
         return False
     rec = _load_ndm_pending_recipients()
     to_list, cc_list = _parse_emails(rec['to']), _parse_emails(rec['cc'])
     if not (to_list or cc_list):
         log.warning('[deals-monitor] sem destinatário configurado — aviso pulado')
+        _ndm_pending_status_write(slot, 'sem destinatário configurado', fired)
+        _ndm_pending_release_slot(slot)
         return True
     res = _send_ndm_pending_email(fired, to_list, cc_list)
     # O resultado vai para o log SEMPRE: quando o aviso não chega, a primeira
@@ -25725,6 +25811,9 @@ def _ndm_pending_disparar(slot, fired):
     # sem esta linha não dava para saber.
     log.info('[deals-monitor] aviso de %s (BRT): %s', slot,
              'enviado' if res is True else res)
+    _ndm_pending_status_write(slot, 'enviado' if res is True else str(res), fired)
+    if res is not True and res != 'empty':
+        _ndm_pending_release_slot(slot)
     return True
 
 
@@ -25753,9 +25842,14 @@ def _ndm_pending_catch_up(times):
 
 def _ndm_pending_scheduler_loop():
     times = _ndm_pending_times()
-    _ndm_pending_catch_up(times)
     while True:
         try:
+            # O catch-up roda a CADA volta, não só no start. Ele só dispara
+            # slots de hoje que já passaram e que ninguém reivindicou — então
+            # num dia normal não faz nada, e é ele que RETENTA o horário cujo
+            # envio falhou e foi devolvido. Sem isto, uma queda de SMTP às 19h00
+            # custava o aviso do dia inteiro.
+            _ndm_pending_catch_up(times)
             now = _br_now()
             # Próximo horário de hoje que ainda não passou; se todos passaram,
             # o primeiro de amanhã.

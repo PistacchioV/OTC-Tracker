@@ -9325,3 +9325,48 @@ em pt-BR, então o EN e o ES saem em português e ninguém reclama) e **feature 
 
 Esta última é a única que exige manutenção: a lista `MUST` enumera as páginas que a About tem de citar.
 Página nova no menu que for para valer entra lá também — ou o teste falha e lembra.
+
+---
+
+## §207 — O aviso das 19h queimava o horário quando o envio falhava
+
+Relato: "os e-mails de Pending Action do Deals Monitor não estão funcionando nos horários estipulados".
+
+O agendamento em si estava certo — simulando um dia inteiro com relógio controlado, os disparos das 19h00
+e 19h30 saem na hora e o catch-up recupera os slots quando a instância sobe depois do horário. **O defeito
+estava no caminho do envio.**
+
+### A causa
+
+A reserva do slot é feita **antes** do envio — é o que impede dois processos de mandarem o mesmo aviso. Só
+que, se o envio falhasse, o slot ficava reservado assim mesmo. E como o catch-up consulta a **mesma**
+lista, o aviso daquele horário estava perdido para sempre: nem o restart o trazia de volta. **Uma queda de
+SMTP de um minuto custava o aviso do dia inteiro**, sem nada em lugar nenhum para explicar.
+
+O mesmo valia para o caso de destinatário em branco: o horário passava, o slot era queimado, e cadastrar o
+destinatário depois não trazia o aviso daquele dia.
+
+### O conserto
+
+`_ndm_pending_release_slot` **devolve** o slot quando o aviso não saiu, e o `_ndm_pending_catch_up` passou
+a rodar **a cada volta do laço**, não só no start — ele só dispara slots de hoje que já passaram e que
+ninguém reivindicou, então num dia normal não faz nada, e é ele que retenta o horário devolvido.
+
+`empty` (nada pendente) **mantém** a reserva: é desfecho legítimo, e retentar seria perseguir o dia inteiro
+um e-mail que não tem o que dizer.
+
+### E o que faltava para saber
+
+A única evidência de que a rotina rodou era uma linha de log no servidor, que ninguém lê — por isso "não
+está funcionando" não tinha resposta. Agora cada disparo grava o desfecho (`enviado`, `empty`, ou a
+mensagem do erro) e o card **Deals Monitor** do Control Panel mostra, ao lado dos destinatários que já são
+editados ali: **último disparo com o resultado** (verde saiu · azul rodou sem pendência · vermelho falhou)
+e **o próximo horário**, com a hora atual em Brasília ao lado — que é o que responde a outra metade da
+pergunta, se o relógio do servidor está onde se pensa.
+
+### Verificação
+
+`scripts/tests/check_ndm_pending_sched.py` (novo, 7 seções), com relógio, SMTP e destinatários stubados: o
+dia normal sem repetição, o restart às 20h recuperando os dois slots, o SMTP caindo e o horário sendo
+retentado **sem duplicar**, o destinatário cadastrado depois ainda recebendo o aviso do dia, o `empty`
+mantendo a reserva, e o status publicado pelo endpoint que a tela consome.

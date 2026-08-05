@@ -566,6 +566,11 @@
                         <input type="text" id="cp-dm2-cc" class="form-control form-control-sm"
                                placeholder="optional — separate with ;">
                     </div>
+                    <!-- Desfecho do último disparo automático. Sem isto a única
+                         evidência de que a rotina rodou é uma linha de log no
+                         servidor, e "não está funcionando" fica sem resposta. -->
+                    <div id="cp-dm2-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
                             <i class="ti ti-mail"></i><span data-lang="cp-dm2-meta">Daily 19:00 &amp; 19:30 → e-mail</span>
@@ -996,11 +1001,52 @@ document.addEventListener('click', function (e) {
     if (!toEl || !ccEl || !runBtn) return;
     var REC_URL = '/api/control-panel/deals-monitor/recipients';
     var RUN_URL = '/api/control-panel/deals-monitor/run';
+    var stEl = document.getElementById('cp-dm2-status');
 
-    fetch(REC_URL, { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (d) { if (!d || !d.success) return; toEl.value = d.to || ''; ccEl.value = d.cc || ''; })
-        .catch(function () {});
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    // Verde = saiu; azul = rodou e nao havia pendencia (desfecho legitimo, nao
+    // falha); vermelho = tentou e nao conseguiu — e nesse caso o horario e
+    // devolvido, entao o proprio scheduler tenta de novo.
+    function renderStatus(d) {
+        if (!stEl) return;
+        var last = d.last || {};
+        var bits = [];
+        if (last.result) {
+            var ok = last.result === 'enviado';
+            var empty = last.result === 'empty';
+            var cls = ok ? 'text-success' : (empty ? 'text-info' : 'text-danger');
+            var icon = ok ? 'ti-mail-check' : (empty ? 'ti-mail-off' : 'ti-alert-triangle');
+            var txt = ok ? t('cp-dm2-sent', 'sent')
+                         : (empty ? t('cp-dm2-empty', 'ran \u2014 nothing pending') : esc(last.result));
+            bits.push('<span class="' + cls + '"><i class="ti ' + icon + ' me-1"></i>' +
+                      esc(last.slot || '') + ' \u00b7 ' + txt + '</span>');
+        } else {
+            bits.push('<span class="text-muted">' +
+                      esc(t('cp-dm2-never', 'no automatic run recorded yet')) + '</span>');
+        }
+        if (d.next) {
+            bits.push('<span class="text-muted"><i class="ti ti-clock me-1"></i>' +
+                      esc(t('cp-dm2-next', 'next')) + ' ' + esc(d.next) + ' \u00b7 ' +
+                      esc(t('cp-dm2-nowbr', 'now in Brazil')) + ' ' + esc(d.now_br || '') + '</span>');
+        }
+        stEl.innerHTML = bits.join('<br>');
+        stEl.classList.remove('d-none');
+    }
+
+    function loadRecipients() {
+        return fetch(REC_URL, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                toEl.value = d.to || ''; ccEl.value = d.cc || '';
+                renderStatus(d);
+            })
+            .catch(function () {});
+    }
+    loadRecipients();
 
     function saveRecipients() {
         return fetch(REC_URL, {
@@ -1040,6 +1086,7 @@ document.addEventListener('click', function (e) {
             runBtn.disabled = false;
             if (label) label.textContent = orig;
             if (icon) icon.className = origIcon || 'ti ti-player-play';
+            loadRecipients();
         });
     });
 })();

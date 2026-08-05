@@ -1602,5 +1602,10 @@
   "about-step5-desc": "Documento por contraparte — Word, PDF e XML — validado por checklist e arquivado.",
   "about-step6-title": "Liquidação",
   "about-step6-desc": "Avisos ao cliente, liberação de TED e conciliação do que saiu da conta.",
-  "page-access": "Acesso às Páginas"
+  "page-access": "Acesso às Páginas",
+  "cp-dm2-sent": "enviado",
+  "cp-dm2-empty": "rodou — nada pendente",
+  "cp-dm2-never": "nenhum disparo automático registrado ainda",
+  "cp-dm2-next": "próximo",
+  "cp-dm2-nowbr": "agora no Brasil"
 }

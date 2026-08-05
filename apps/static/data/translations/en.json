@@ -1602,5 +1602,10 @@
   "about-step5-desc": "Per-counterparty document — Word, PDF and XML — validated by checklist and filed.",
   "about-step6-title": "Settlement",
   "about-step6-desc": "Client notices, TED release and reconciliation of what actually left the account.",
-  "page-access": "Page Access"
+  "page-access": "Page Access",
+  "cp-dm2-sent": "sent",
+  "cp-dm2-empty": "ran — nothing pending",
+  "cp-dm2-never": "no automatic run recorded yet",
+  "cp-dm2-next": "next",
+  "cp-dm2-nowbr": "now in Brazil"
 }
