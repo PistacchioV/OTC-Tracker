@@ -830,7 +830,11 @@ class LayoutCustomizer {
         } else if (width <= 1140 && !['offcanvas'].includes(size)) {
             this.changeLeftbarSize(size === 'on-hover' ? 'condensed' : 'condensed', false);
         } else {
-            this.changeLeftbarSize(size);
+            // save = false: `size` JÁ é o tamanho guardado, então persistir aqui
+            // não acrescenta nada — só regrava o config inteiro (tema incluso) a
+            // cada resize da janela, e era por aí que um tema trocado por fora
+            // desta instância voltava ao valor antigo.
+            this.changeLeftbarSize(size, false);
         }
     }
 
@@ -1105,7 +1109,12 @@ class I18nManager {
 //
 document.addEventListener('DOMContentLoaded', function (e) {
     new App().init();
-    new LayoutCustomizer().init();
+    // Exposto de propósito: o toggle de tema do topbar (visual-refresh.js) troca
+    // o tema por AQUI, e não escrevendo os atributos na mão. Assim os três
+    // atributos (bs-theme / menu-color / topbar-color) andam juntos e a cópia de
+    // config que esta instância persiste não fica defasada.
+    window.layoutCustomizer = new LayoutCustomizer();
+    window.layoutCustomizer.init();
     new Plugins().init();
     window.otcI18n = new I18nManager();
     window.otcI18n.init();

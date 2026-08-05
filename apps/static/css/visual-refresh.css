@@ -866,6 +866,20 @@ body.vr-nav-pinned .vr-pin-btn {
   opacity: 0.75;
 }
 
+/* Troca de tema: suprime as transições por um frame.
+   Claro↔escuro reavalia fundo, borda e texto de praticamente todo elemento da
+   página, e boa parte deles tem `transition` de cor — cards, linhas de tabela,
+   botões, itens do menu. Sem isto, a troca dispara centenas de animações
+   simultâneas e a página engasga. A classe é posta e retirada pelo próprio
+   toggle (visual-refresh.js), então a supressão dura ~60ms e não afeta as
+   transições normais de hover/navegação. */
+html.vr-theme-switching,
+html.vr-theme-switching *,
+html.vr-theme-switching *::before,
+html.vr-theme-switching *::after {
+  transition: none !important;
+}
+
 /* Toggle de tema — pill segmentado (sol | lua) com destaque deslizante */
 .vr-theme {
   position: relative;

@@ -175,22 +175,71 @@
   }
 
   // ── Theme toggle (sol/lua) — usa a persistência nativa do app ──────────────
+  //
+  // O tema NÃO é um atributo só. São três, e cada um pinta uma parte diferente:
+  //
+  //   data-bs-theme    → o corpo da página (e o fundo da sidebar, via
+  //                      visual-refresh.css)
+  //   data-menu-color  → o tema da SIDEBAR (scss/config/_theme-*.scss) e qual
+  //                      logo dela aparece (structure/_layout.scss)
+  //   data-topbar-color→ o tema do TOPBAR e qual logo dele aparece
+  //                      (structure/_topbar.scss)
+  //
+  // Este botão trocava só o primeiro. O resultado era a sidebar e o logo do
+  // topbar presos no visual anterior até a próxima navegação — porque quem
+  // realinha os três é o config.js, e ele só roda no load da página. Daí a
+  // impressão de que "só dá em algumas páginas": clicar num item FOLHA do menu
+  // navega e conserta sozinho; clicar num item com ramificação só abre o
+  // submenu (o drill-down não recarrega nada), então o estado quebrado fica à
+  // vista.
   function initThemeToggle() {
     var btn = document.getElementById("vr-theme-btn");
     if (!btn) return;
     var KEY = "__OTCTRACKER_CONFIG__";
+    var htmlEl = document.documentElement;
+
     function setTheme(t) {
-      document.documentElement.setAttribute("data-bs-theme", t);
+      // Caminho preferido: o LayoutCustomizer do tema (app.js). Além dos três
+      // atributos ele mantém coerente o config EM MEMÓRIA dele — e isso importa:
+      // `setSwitchFromConfig()` regrava o localStorage a partir dessa cópia, que
+      // é tirada no load. Trocando o tema por fora, o primeiro resize da janela
+      // persistia o tema ANTIGO de volta e ele "voltava sozinho" na próxima
+      // página.
+      var lc = window.layoutCustomizer;
+      if (lc && typeof lc.changeTheme === "function") {
+        lc.changeTheme(t);
+        return;
+      }
+      htmlEl.setAttribute("data-bs-theme", t);
+      htmlEl.setAttribute("data-menu-color", t);
+      htmlEl.setAttribute("data-topbar-color", t);
       try {
         var c = JSON.parse(localStorage.getItem(KEY) || "null") || window.config || {};
         c.theme = t;
+        c.menu = c.menu || {};
+        c.menu.color = t;
+        c.topbar = c.topbar || {};
+        c.topbar.color = t;
         localStorage.setItem(KEY, JSON.stringify(c));
-        if (window.config) window.config.theme = t;
+        if (window.config) {
+          window.config.theme = t;
+          if (window.config.menu) window.config.menu.color = t;
+          if (window.config.topbar) window.config.topbar.color = t;
+        }
       } catch (e) {}
     }
+
     btn.addEventListener("click", function () {
-      var cur = document.documentElement.getAttribute("data-bs-theme");
+      var cur = htmlEl.getAttribute("data-bs-theme");
+      // Trocar o tema reavalia a cor de fundo/borda/texto de quase todo elemento
+      // da página, e boa parte deles tem `transition` de cor: sem suprimir as
+      // transições por um frame, a troca anima centenas de elementos de uma vez
+      // e a página engasga. Ver a regra .vr-theme-switching no visual-refresh.css.
+      htmlEl.classList.add("vr-theme-switching");
       setTheme(cur === "dark" ? "light" : "dark");
+      window.setTimeout(function () {
+        htmlEl.classList.remove("vr-theme-switching");
+      }, 60);
     });
   }
 

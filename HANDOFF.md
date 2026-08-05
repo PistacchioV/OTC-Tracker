@@ -7955,3 +7955,51 @@ Verificado com `scripts/tests/check_co12_roll.py` (20 asserções, calendário d
 de dezembro byte a byte, o singular dos demais meses, o recuo por fim de semana e por feriado, os
 futuros vindos do settlement com virada de ano, e o `CO1-2` cru quando falta data. Testado ao
 contrário — voltando a regra para dois dias sempre, 8 asserções caem.
+
+## §179 — Tema claro/escuro: o toggle trocava 1 dos 3 atributos
+
+Sintoma: com o menu **fixado (pin)**, trocar de escuro para claro deixava a **sidebar no escuro** e o
+**logo do topbar** no logo do tema anterior — e a troca "travava" por um instante. Reportado como
+acontecendo em páginas que são **subitem de um ramo** (`Live Position > NDF`) e não nas diretas.
+
+O tema não é um atributo, são **três**, e cada um pinta uma parte:
+
+| atributo | pinta | onde a regra mora |
+|---|---|---|
+| `data-bs-theme` | o corpo da página (e o fundo da sidebar) | `visual-refresh.css` |
+| `data-menu-color` | o tema da **sidebar** e qual logo dela aparece | `scss/config/_theme-*.scss`, `structure/_layout.scss` |
+| `data-topbar-color` | o tema do **topbar** e qual logo dele aparece | `structure/_topbar.scss` |
+
+`initThemeToggle` (`visual-refresh.js`) escrevia **só `data-bs-theme`**. Quem realinha os três é o
+`config.js` (`config.topbar.color = config.menu.color = config.theme`), e ele **só roda no load da
+página**. Daí a assimetria que parecia de página: clicar num item **folha** do menu navega e conserta
+sozinho; clicar num item **com ramificação** só abre o submenu — o drill-down (§ sidenav-drilldown)
+não recarrega nada —, então o estado quebrado fica à vista. O `pin` entra só porque mantém a sidebar
+visível o tempo todo.
+
+Três correções:
+
+1. **o toggle troca os três**, delegando ao `LayoutCustomizer.changeTheme` do `app.js` (que já fazia
+   certo) — `window.layoutCustomizer` passou a ser exposto no `DOMContentLoaded` justamente para isso.
+   O caminho de fallback (instância ainda não pronta) escreve os três atributos e persiste
+   `theme`/`menu.color`/`topbar.color`.
+2. **o resize não regrava mais o config inteiro.** `_adjustLayout` chamava `changeLeftbarSize(size)`
+   com `save = true`, e `setSwitchFromConfig()` persiste a cópia de config que a instância tirou **no
+   load**. Trocar o tema por fora dessa instância e depois redimensionar a janela gravava o tema
+   **antigo** de volta — ele "voltava sozinho" na página seguinte. O ramo em questão só restaura o
+   tamanho **já guardado**, então persistir ali não acrescentava nada.
+3. **as travadas**: claro↔escuro reavalia fundo/borda/texto de quase todo elemento, e boa parte tem
+   `transition` de cor — a troca disparava centenas de animações simultâneas. O toggle agora põe
+   `html.vr-theme-switching` por ~60 ms, e a regra em `visual-refresh.css` zera `transition` enquanto
+   ela existe.
+
+Verificado com `scripts/tests/check_theme_toggle.py` (22 asserções): os três atributos nos dois
+caminhos do toggle, a delegação ao `LayoutCustomizer`, nenhum ramo do resize persistindo, a classe de
+supressão conferida **dos dois lados** (JS e CSS) e a prova de que o CSS compilado realmente depende de
+`data-menu-color`/`data-topbar-color` — se um dia não depender, o teste avisa em vez de deixar zelo
+morto no código. Testado ao contrário: voltando o toggle a escrever um atributo só, 3 asserções caem.
+
+**Cache do navegador**: os três arquivos são estáticos e entram com `?v=` em `head-css.html` /
+`footer-scripts.html`. A versão dos três foi subida para `20260804a` no mesmo commit — sem isso o
+navegador serviria a cópia antiga e a correção só apareceria depois de um Ctrl+F5. **Quem mexer nesses
+arquivos tem de subir o `?v=` junto**, senão a equipe testa a versão velha e reporta que não funcionou.
