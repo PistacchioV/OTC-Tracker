@@ -1556,5 +1556,14 @@
   "map-tab-swap-index": "Swap Index — Código B3",
   "map-tab-swap-func": "Swap — Funcionalidade",
   "map-tab-swap-amort": "Swap — Tipo de Amortização",
-  "map-tab-swap-codes": "Swap — Sinal e Sim/Não"
+  "map-tab-swap-codes": "Swap — Sinal e Sim/Não",
+  "ops-sub-cashflow": "Cashflow",
+  "ops-sub-total": "Total",
+  "ops-w-total": "Total",
+  "ops-r-ops": "Ops",
+  "ops-r-value": "Valor",
+  "ops-r-internal": "Interno",
+  "ops-r-ok": "OK",
+  "ops-r-check": "Verificar",
+  "ops-r-na": "n/d"
 }

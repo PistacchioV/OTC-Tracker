@@ -199,7 +199,9 @@
         { key: 'le-accronym',    icon: 'ti-id-badge-2',      lang: 'map-tab-le-accronym',   label: 'Legal Entity × Accronym' },
         { key: 'le-spn',         icon: 'ti-id',              lang: 'map-tab-le-spn',        label: 'Legal Entity × SPN' },
         { key: 'bank-name',      icon: 'ti-building-bank',   lang: 'map-tab-bank-name',     label: 'Bank Name' },
-        { key: 'fxo-conv-rate',  icon: 'ti-currency-exchange', lang: 'map-tab-fxo-conv-rate', label: 'FXO Conversion Rate' },
+        // ti-currency-exchange NÃO existe no Tabler empacotado (vendors.min.css) — era
+        // por isso que esta era a única aba sem ícone. ti-transfer existe.
+        { key: 'fxo-conv-rate',  icon: 'ti-transfer',         lang: 'map-tab-fxo-conv-rate', label: 'FXO Conversion Rate' },
         { key: 'ndf-pdf-cpty',   icon: 'ti-file-type-pdf',   lang: 'map-tab-ndf-pdf-cpty',  label: 'Settlement PDF (NDF Advice)' },
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
         { key: 'cetip-files',    icon: 'ti-file-download',   lang: 'map-tab-cetip-files',   label: 'CETIP Files (Save Routine)' },

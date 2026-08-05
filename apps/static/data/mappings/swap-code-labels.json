@@ -1,0 +1,22 @@
+[
+  {
+    "FIELD": "Sinal Taxa",
+    "CODE": "0",
+    "LABEL": "+"
+  },
+  {
+    "FIELD": "Sinal Taxa",
+    "CODE": "1",
+    "LABEL": "-"
+  },
+  {
+    "FIELD": "Sim/Não",
+    "CODE": "0",
+    "LABEL": "Sim"
+  },
+  {
+    "FIELD": "Sim/Não",
+    "CODE": "1",
+    "LABEL": "Não"
+  }
+]

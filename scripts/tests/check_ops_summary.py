@@ -401,5 +401,59 @@ finally:
     R.OTM_JSON_ROOT = _ds_root
     shutil.rmtree(tmp, ignore_errors=True)
 
+print('\n== 13. cards de reconciliacao B3 x Interno ==')
+
+
+def tr(product, b3, internal):
+    return {'product': product, '_b3_n': b3, '_settle_n': internal}
+
+
+rec = R._ops_recon([tr('SWAP', 100.0, 100.0), tr('SWAP', 50.0, 50.0)])
+check('bate quando contagem e valor concordam', rec['swap']['matched'], True)
+check('contagem do lado B3', rec['swap']['b3_count'], 2)
+check('valor do lado interno', rec['swap']['int_value'], '150.00')
+# So o valor nao basta: duas operacoes que se anulam dariam zero dos dois lados e
+# passariam por conciliadas mesmo faltando uma linha de um dos lados.
+rec = R._ops_recon([tr('SWAP', 100.0, 100.0), tr('SWAP', 50.0, None)])
+check('valor igual mas contagem diferente NAO bate', rec['swap']['matched'], False)
+rec = R._ops_recon([tr('SWAP', 100.0, 90.0)])
+check('contagem igual mas valor diferente NAO bate', rec['swap']['matched'], False)
+check('a diferenca sai assinada', rec['swap']['diff_value'], '(10.00)')
+
+# Familia sem linha no Trade Level = `na`: nao ha divergencia, ha conta que ainda
+# nao e feita. Pintar de ambar leria como erro de dado.
+rec = R._ops_recon([tr('SWAP', 1.0, 1.0)])
+check('swap tem lado interno', rec['swap']['na'], False)
+for fam in ('option', 'ndf', 'coe'):
+    check('%s ainda e n/a' % fam, rec[fam]['na'], True)
+check('o Total nunca e n/a', rec['total']['na'], False)
+rec = R._ops_recon([tr('SWAP', 10.0, 10.0), tr('OPTION', 5.0, 5.0)])
+check('o Total soma as familias', (rec['total']['b3_count'], rec['total']['b3_value']),
+      (2, '15.00'))
+check('produto desconhecido nao entra', R._ops_recon([tr('XPTO', 9.0, 9.0)])['total']['b3_count'], 0)
+
+check('o endpoint publica o recon', "'recon': recon" in SRC, True)
+check('a pagina consome o recon', 'setRecon(j.recon)' in HTML, True)
+for cat in ('swap', 'option', 'ndf', 'coe', 'total'):
+    check('card data-cat="%s"' % cat, ('data-cat="%s"' % cat) in HTML, True)
+for hook in ('data-recon-b3c', 'data-recon-b3v', 'data-recon-intc', 'data-recon-intv', 'data-recon-badge'):
+    check('gancho %s' % hook, hook in HTML, True)
+check('Flow virou Cashflow', 'ops-sub-cashflow' in HTML and 'ops-sub-flow' not in HTML, True)
+# A luz de fundo e a MESMA do NDF Summary, com o anel como variavel: box-shadow
+# nao se soma entre regras, e sem a variavel a luz apagaria o anel (§181).
+for rule in ('--ops-ring', '.ops-recon.is-ok', '.ops-recon.is-check', 'ops-recon--total'):
+    check('a luz/o total: %s' % rule, rule in HTML, True)
+check('o estado n/a existe no JS', "'ops-r-na'" in HTML, True)
+
+print('\n== 14. todo icone de aba do /mapping existe no Tabler ==')
+# Uma aba com um nome de icone que nao existe no pacote nao da erro nenhum: fica
+# so o espaco em branco, e ninguem nota ate alguem reparar. Foi o caso do
+# FXO Conversion Rate (ti-currency-exchange nao existe no vendors.min.css).
+MAPHTML = read('apps/templates/pages/mapping.html')
+VENDORS = io.open('apps/static/css/vendors.min.css', encoding='utf-8', errors='ignore').read()
+icons = re.findall(r"icon:\s*'(ti-[a-z0-9-]+)'", MAPHTML)
+check('ha abas com icone declarado', len(icons) > 10, True)
+check('nenhum icone inexistente', [i for i in icons if ('.%s:' % i) not in VENDORS], [])
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

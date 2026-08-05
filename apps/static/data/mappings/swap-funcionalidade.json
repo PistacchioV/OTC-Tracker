@@ -1,0 +1,42 @@
+[
+  {
+    "CODE": "0",
+    "LABEL": "SEM FUNCIONALIDADE"
+  },
+  {
+    "CODE": "1",
+    "LABEL": "KNOCK IN"
+  },
+  {
+    "CODE": "2",
+    "LABEL": "KNOCK OUT"
+  },
+  {
+    "CODE": "3",
+    "LABEL": "KNOCK INOUT"
+  },
+  {
+    "CODE": "4",
+    "LABEL": "SWAPTION"
+  },
+  {
+    "CODE": "5",
+    "LABEL": "COMPOUND"
+  },
+  {
+    "CODE": "6",
+    "LABEL": "OPCAO ARREPENDIMENTO"
+  },
+  {
+    "CODE": "7",
+    "LABEL": "KNOCK IN COM OPCAO"
+  },
+  {
+    "CODE": "8",
+    "LABEL": "KNOCK OUT COM OPCAO"
+  },
+  {
+    "CODE": "9",
+    "LABEL": "SWAP COM PRÊMIO"
+  }
+]

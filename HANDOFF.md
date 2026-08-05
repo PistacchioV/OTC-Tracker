@@ -8576,3 +8576,55 @@ Seções 8 e 9 novas em `check_swap_advice.py`: os quatro cadastros registrados 
 dicionário de tradução sobrando no código**, o `swap-index` apontando para o arquivo original, e cada
 tradução conferida valor a valor contra o que estava hardcoded. Suíte inteira verde; as quatro páginas
 afetadas respondem 200 e `/api/mappings/swap-index` devolve as 77 linhas.
+
+---
+
+## §189 — Cards de reconciliação no Other Products Summary (e três acertos)
+
+### Os cards viram reconciliação B3 × Interno
+
+Porte dos cards do NDF Summary: cada família (Swap · Option · NDF Commodities · COE) passa a mostrar
+**Ops e Valor dos dois lados**, com o badge e a **luz de fundo** por estado, mais um **card de Total**
+somando as quatro. `Flow` virou `Cashflow` no card de Swap.
+
+**De onde saem os dois lados — e por que isso importa.** Os números vêm das linhas **já montadas do Trade
+Level** (`_b3_n` e `_settle_n`), não de uma segunda varredura do Operations B3. Um card de reconciliação
+só vale alguma coisa se contar exatamente o que a tabela logo abaixo mostra; relendo os arquivos, ele
+traria linhas que a tabela não mostra e os dois se contradiriam na mesma tela.
+
+Consequência a entender: **o lado B3 do card de Swap cobre só os Tipos Operação registrados em
+`swap-b3-events`** — é o universo do Trade Level. Registrar mais um evento lá faz o card e a tabela
+crescerem **juntos**, que é o ponto. Se hoje falta o RESGATE (vencimento) no card, é porque ele não está
+cadastrado como evento de liquidação.
+
+**Três estados, não dois.** `OK` (contagem *e* valor batem), `Check` (divergência, luz âmbar) e **`n/a`**
+— traço cinza, sem luz — para as famílias que ainda não têm lado interno (Option, NDF Commodities, COE).
+Não há divergência ali; há conta que ainda não é feita, e pintar de âmbar leria como erro de dado. As três
+acendem sozinhas quando as suas linhas do Trade Level existirem.
+
+Bater exige **contagem e valor**: só o valor deixaria passar duas operações que se anulam.
+
+Os sub-contadores antigos (Cashflow/Maturity/Premium) continuam, vindos dos arquivos de **posição** — eles
+respondem outra pergunta ("o que vence hoje") e por isso **não** devem ser somados com a reconciliação.
+
+### Os três acertos
+
+**Ícone do FXO Conversion Rate.** Era a única aba do /mapping sem ícone porque `ti-currency-exchange`
+**não existe** no Tabler empacotado (`vendors.min.css`) — nome de ícone inexistente não dá erro nenhum,
+só deixa o espaço em branco. Trocado por `ti-transfer`. A seção 14 do `check_ops_summary.py` agora confere
+**todos** os 19 ícones de aba contra o CSS, para isso não voltar em silêncio.
+
+**JSONs dos cadastros novos.** `swap-funcionalidade`, `swap-amortizacao` e `swap-code-labels` são semeados
+na primeira leitura em `apps/static/data/mappings/` e foram versionados. O `swap-index` **não tem arquivo
+próprio**: ele aponta para `apps/static/data/SwapIndex.json` (§188), que já era versionado.
+
+**Toolbar do Settlement Advice.** O Columns e o Export são injetados pelo JS depois do render e vêm com
+margem zerada, então a fila de botões encostava no cabeçalho da tabela e nos cantos do card. Padding na
+barra + `row-gap` para a quebra em tela estreita.
+
+### Verificação
+
+Seções 13 e 14 novas no `check_ops_summary.py`: a regra de bater (contagem *e* valor, com o caso "valor
+igual, contagem diferente" explicitamente reprovado), o `n/a` por família, a soma do Total, os cinco cards
+com os seus ganchos, `Flow` → `Cashflow`, a luz com o anel como variável (§181), e a auditoria dos ícones.
+Suíte inteira verde; as quatro páginas afetadas respondem 200.

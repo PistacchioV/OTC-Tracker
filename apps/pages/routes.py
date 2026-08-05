@@ -5650,7 +5650,63 @@ def _ops_swap_trade_rows(settle_ref):
             # branco de "não deu para calcular", que vira 0 na soma.
             '_settle_n': settlement,
             '_tax_n': tax,
+            '_b3_n': settlement_b3,
         })
+    return out
+
+
+# ── Other Products › Summary: cards de reconciliação B3 × Interno ────────────
+#  Porte dos cards do NDF Summary. A regra que faz um card de reconciliação valer
+#  alguma coisa: ele conta EXATAMENTE o que a tabela de baixo mostra. Por isso os
+#  dois lados saem das linhas já montadas do Trade Level (`_b3_n` e `_settle_n`),
+#  e não de uma segunda varredura do Operations B3 — que traria linhas que a
+#  tabela não mostra e deixaria o card e a tabela discordando na tela.
+#
+#  Consequência a entender: o lado B3 do card de Swap cobre só os Tipos Operação
+#  registrados em `swap-b3-events` (é o universo do Trade Level). Registrar mais
+#  um evento lá faz o card e a tabela crescerem JUNTOS — que é o ponto.
+#
+#  Família sem Trade Level ainda (Option, NDF Commodities, COE) volta `na: True`:
+#  a tela mostra um traço em vez de um "Check" âmbar, porque não há divergência —
+#  há conta que ainda não é feita. Pintar de âmbar leria como erro de dado.
+_OPS_RECON_TOL = 0.01
+
+
+def _ops_recon(trade_rows):
+    """{família → {b3_count, b3_value, int_count, int_value, diff_value, matched,
+    na}} + 'total'. Hoje só SWAP tem lado interno; as demais famílias entram
+    marcadas como `na` até as suas linhas do Trade Level existirem."""
+    fams = ('swap', 'option', 'ndf', 'coe')
+    acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
+           for k in fams + ('total',)}
+    by_product = {'SWAP': 'swap', 'OPTION': 'option', 'NDF COMMODITIES': 'ndf', 'COE': 'coe'}
+    seen = set()
+    for r in trade_rows:
+        fam = by_product.get(str(r.get('product', '') or '').strip().upper())
+        if not fam:
+            continue
+        seen.add(fam)
+        b3, internal = r.get('_b3_n'), r.get('_settle_n')
+        for k in (fam, 'total'):
+            if b3 is not None:
+                acc[k]['b3_count'] += 1
+                acc[k]['b3_value'] += b3
+            if internal is not None:
+                acc[k]['int_count'] += 1
+                acc[k]['int_value'] += internal
+    out = {}
+    for k, a in acc.items():
+        na = (k != 'total') and (k not in seen)
+        out[k] = {
+            'b3_count': a['b3_count'], 'b3_value': _ndfsum_money(a['b3_value']),
+            'int_count': a['int_count'], 'int_value': _ndfsum_money(a['int_value']),
+            'diff_value': _ndfsum_money(a['int_value'] - a['b3_value']),
+            # Bate quando a CONTAGEM e o VALOR concordam. Só o valor não basta:
+            # duas operações que se anulam dariam zero e passariam por conciliadas.
+            'matched': (a['b3_count'] == a['int_count']
+                        and abs(a['b3_value'] - a['int_value']) <= _OPS_RECON_TOL),
+            'na': na,
+        }
     return out
 
 
@@ -5868,6 +5924,11 @@ def api_ops_data():
         # um cadastro malformado não pode levar junto o Trade Level nem os widgets.
         log.error("[ops-summary] falha montando o settlement summary:\n%s", traceback.format_exc())
         summary = []
+    try:
+        recon = _ops_recon(trade)
+    except Exception:
+        log.error("[ops-recon] falha montando os cards:\n%s", traceback.format_exc())
+        recon = {}
     for r in trade:                    # chaves internas (_settle_n/_tax_n) não vão para a tela
         for k in [k for k in r if k.startswith('_')]:
             r.pop(k)
@@ -5879,7 +5940,8 @@ def api_ops_data():
     return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
-                    'sources': sources, 'summary': summary, 'trade': trade})
+                    'sources': sources, 'recon': recon,
+                    'summary': summary, 'trade': trade})
 
 
 @blueprint.route('/api/other-products-summary/mark-sent', methods=['POST'])

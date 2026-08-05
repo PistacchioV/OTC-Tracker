@@ -52,7 +52,10 @@
     border-radius: 14px;
     padding: 1rem 1.1rem;
     background: var(--ins-secondary-bg, #fff);
-    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out);
+    /* border-color entra na transição junto com a sombra: a luz de fundo por
+       estado troca as duas, e sem isso a borda salta enquanto o halo suaviza. */
+    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out),
+                border-color 220ms var(--ops-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
     .ops-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
@@ -80,6 +83,7 @@
     .ops-widgets .col:nth-child(2) { animation-delay: 55ms; }
     .ops-widgets .col:nth-child(3) { animation-delay: 110ms; }
     .ops-widgets .col:nth-child(4) { animation-delay: 165ms; }
+    .ops-widgets .col:nth-child(5) { animation-delay: 220ms; }
 }
 @media (prefers-reduced-motion: reduce) { .ops-widget:hover { transform: none; } }
 
@@ -137,6 +141,96 @@
 #ops-page .ops-cell-inp:focus { outline: none; border-color: var(--ops-blue); background: var(--ins-secondary-bg,#fff); }
 #ops-page .ops-status-sel { border: 1px solid var(--ops-hairline); border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; }
 .ops-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Cards de reconciliação (B3 × Interno) — porte do NDF Summary ───────────
+   Mesmas classes e mesmos valores, de propósito: as duas telas mostram a mesma
+   ideia e um usuário que aprendeu a ler uma tem de conseguir ler a outra. */
+.ops-recon .ops-widget__head { margin-bottom: .7rem; }
+.ops-recon-badge {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+    padding: .16rem .5rem; border-radius: 999px; white-space: nowrap;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
+}
+.ops-recon-badge.is-ok    { background: rgba(34,197,94,.16);  color: #16a34a; }
+.ops-recon-badge.is-check { background: rgba(245,158,11,.18); color: #b45309; }
+.ops-recon-grid {
+    border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
+    display: grid; row-gap: .18rem;
+}
+/* Colunas FIXAS (não auto): cabeçalho e linhas são grids separados, então com
+   colunas automáticas os rótulos OPS/VALUE saem de cima dos seus números. */
+.ops-recon-hdr, .ops-recon-row {
+    display: grid; grid-template-columns: 1fr 2.75rem 7rem; column-gap: .6rem; align-items: baseline;
+}
+.ops-recon-hdr {
+    font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ins-secondary-color, #8a8a8f); padding-bottom: .1rem;
+}
+.ops-recon-hdr span:nth-child(2), .ops-recon-hdr span:nth-child(3) { text-align: right; }
+.ops-recon-row { font-size: .8rem; padding: .1rem 0; }
+.ops-recon-row .ops-recon-side { font-weight: 600; color: var(--ins-secondary-color, #6e6e73); }
+.ops-recon-row [data-recon-b3c], .ops-recon-row [data-recon-intc] {
+    font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ins-body-color);
+}
+.ops-recon-row .ops-num { font-weight: 700; color: var(--ins-body-color); }
+/* O anel entra como VARIÁVEL porque ele e a luz de fundo dividem a mesma
+   propriedade: box-shadow NÃO se soma entre regras — a última declaração vence a
+   lista inteira, e sem a variável a luz apagaria o anel (§181). */
+.ops-recon              { --ops-ring: 0 0 0 0 rgba(0, 0, 0, 0); }
+.ops-recon.is-unmatched { --ops-ring: inset 0 0 0 1px rgba(245, 158, 11, .5); }
+
+.ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+.ops-recon--total .ops-widget__title,
+.ops-recon--total .ops-widget__value,
+.ops-recon--total .ops-recon-row,
+.ops-recon--total .ops-recon-row .ops-recon-side,
+.ops-recon--total .ops-recon-row [data-recon-b3c],
+.ops-recon--total .ops-recon-row [data-recon-intc],
+.ops-recon--total .ops-recon-row .ops-num { color: #fff; }
+.ops-recon--total .ops-recon-hdr { color: rgba(255,255,255,.75); }
+.ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
+.ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
+.ops-recon--total .ops-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px rgba(245, 158, 11, .9); }
+
+/* Luz de fundo por estado (§181): verde bateu, âmbar verificar. O tema CLARO
+   pesa mais que o escuro — no claro o halo compete com o fundo branco. */
+.ops-recon.is-ok    { --ops-glow:  22, 163,  74; }
+.ops-recon.is-check { --ops-glow: 245, 158,  11; }
+.ops-recon.is-ok,
+.ops-recon.is-check {
+    border-color: rgba(var(--ops-glow), .42);
+    box-shadow: var(--ops-ring),
+                0 2px 6px  rgba(var(--ops-glow), .20),
+                0 10px 24px rgba(var(--ops-glow), .34),
+                0 22px 50px rgba(var(--ops-glow), .22);
+}
+[data-bs-theme=dark] .ops-recon.is-ok,
+[data-bs-theme=dark] .ops-recon.is-check {
+    border-color: rgba(var(--ops-glow), .36);
+    box-shadow: var(--ops-ring),
+                0 2px 6px  rgba(var(--ops-glow), .15),
+                0 10px 24px rgba(var(--ops-glow), .25),
+                0 22px 50px rgba(var(--ops-glow), .16);
+}
+@media (hover: hover) and (pointer: fine) {
+    .ops-recon.is-ok:hover, .ops-recon.is-check:hover {
+        border-color: rgba(var(--ops-glow), .52);
+        box-shadow: var(--ops-ring),
+                    0 4px 10px rgba(var(--ops-glow), .24),
+                    0 18px 38px rgba(var(--ops-glow), .38),
+                    0 34px 70px rgba(var(--ops-glow), .24);
+    }
+    [data-bs-theme=dark] .ops-recon.is-ok:hover,
+    [data-bs-theme=dark] .ops-recon.is-check:hover {
+        border-color: rgba(var(--ops-glow), .44);
+        box-shadow: var(--ops-ring),
+                    0 4px 10px rgba(var(--ops-glow), .18),
+                    0 18px 38px rgba(var(--ops-glow), .28),
+                    0 34px 70px rgba(var(--ops-glow), .18);
+    }
+}
 </style>
 {% endblock extra_css %}
 
@@ -161,55 +255,90 @@
     </div>
 
     <!-- Widgets: Swap / Option / NDF / COE -->
-    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2 ops-widgets">
+    <div class="row row-cols-xxl-5 row-cols-md-2 row-cols-1 g-2 ops-widgets">
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="swap">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-warning-subtle text-warning"><i class="ti ti-arrows-exchange-2"></i></span>
                     <h3 class="ops-widget__title" data-lang="ops-w-swap">Swap</h3>
-                    <span class="ops-widget__value" id="ops-w-swap-total">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-widget__subs">
-                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-flow">Flow</span><span class="ops-sub-val" id="ops-w-swap-flow">0</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-cashflow">Cashflow</span><span class="ops-sub-val" id="ops-w-swap-flow">0</span></div>
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-swap-maturity">0</span></div>
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-warning"></i><span data-lang="ops-sub-premium">Premium</span><span class="ops-sub-val" id="ops-w-swap-premium">0</span></div>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ops-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="option">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-success-subtle text-success"><i class="ti ti-chart-candle"></i></span>
                     <h3 class="ops-widget__title" data-lang="ops-w-option">Option</h3>
-                    <span class="ops-widget__value" id="ops-w-option-total">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-widget__subs">
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-option-maturity">0</span></div>
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-success"></i><span data-lang="ops-sub-premium">Premium</span><span class="ops-sub-val" id="ops-w-option-premium">0</span></div>
                 </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ops-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
+                </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget">
+            <div class="ops-widget ops-recon" data-cat="ndf">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-primary-subtle text-primary"><i class="ti ti-exchange"></i></span>
                     <h3 class="ops-widget__title" data-lang="ops-w-ndf">NDF Commodities</h3>
-                    <span class="ops-widget__value" id="ops-w-ndf-total">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-widget__subs">
                     <div class="ops-widget__sub"><i class="ti ti-point-filled text-primary"></i><span data-lang="ops-sub-maturity">Maturity</span><span class="ops-sub-val" id="ops-w-ndf-maturity">0</span></div>
                 </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ops-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
+                </div>
             </div>
         </div>
         <div class="col">
-            <div class="ops-widget ops-widget--soon">
+            <div class="ops-widget ops-recon" data-cat="coe">
                 <div class="ops-widget__head">
                     <span class="ops-widget__icon bg-info-subtle text-info"><i class="ti ti-certificate"></i></span>
                     <h3 class="ops-widget__title" data-lang="ops-w-coe">COE</h3>
-                    <span class="ops-widget__value" id="ops-w-coe-total">0</span>
+                    <span class="ops-recon-badge" data-recon-badge></span>
                 </div>
                 <div class="ops-widget__subs">
-                    <div class="ops-widget__sub"><i class="ti ti-clock"></i><span data-lang="ops-soon">Coming soon</span></div>
+                    <div class="ops-widget__sub"><i class="ti ti-point-filled text-info"></i><span data-lang="ops-sub-total">Total</span><span class="ops-sub-val" id="ops-w-coe-total">0</span></div>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ops-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
+                </div>
+            </div>
+        </div>
+        <!-- Total: soma das quatro famílias. Card escuro, como o do NDF Summary. -->
+        <div class="col">
+            <div class="ops-widget ops-recon ops-recon--total" data-cat="total">
+                <div class="ops-widget__head">
+                    <span class="ops-widget__icon"><i class="ti ti-sum"></i></span>
+                    <h3 class="ops-widget__title" data-lang="ops-w-total">Total</h3>
+                    <span class="ops-recon-badge" data-recon-badge></span>
+                </div>
+                <div class="ops-recon-grid">
+                    <div class="ops-recon-hdr"><span></span><span data-lang="ops-r-ops">Ops</span><span data-lang="ops-r-value">Value</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side">B3</span><span data-recon-b3c>0</span><span class="ops-num" data-recon-b3v>0.00</span></div>
+                    <div class="ops-recon-row"><span class="ops-recon-side" data-lang="ops-r-internal">Internal</span><span data-recon-intc>0</span><span class="ops-num" data-recon-intv>0.00</span></div>
                 </div>
             </div>
         </div>
@@ -562,12 +691,48 @@ document.addEventListener('DOMContentLoaded', function () {
     //    JSON sources as the Settlement Forecast) ──────────────────────────────
     function setWidgets(w) {
         w = w || {}; var s = w.swap || {}, o = w.option || {}, n = w.ndf || {}, c = w.coe || {};
-        $('#ops-w-swap-total').text(s.total || 0);       $('#ops-w-swap-flow').text(s.flow || 0);
+        // Os sub-contadores continuam vindo dos arquivos de POSIÇÃO e respondem
+        // outra pergunta ("o que vence hoje"); a reconciliação abaixo vem do
+        // Trade Level e responde "o que liquidou e bateu". As duas convivem no
+        // mesmo card de propósito — e por isso não devem ser somadas entre si.
+        $('#ops-w-swap-flow').text(s.flow || 0);
         $('#ops-w-swap-premium').text(s.premium || 0);   $('#ops-w-swap-maturity').text(s.maturity || 0);
-        $('#ops-w-option-total').text(o.total || 0);     $('#ops-w-option-maturity').text(o.maturity || 0);
+        $('#ops-w-option-maturity').text(o.maturity || 0);
         $('#ops-w-option-premium').text(o.premium || 0);
-        $('#ops-w-ndf-total').text(n.total || 0);        $('#ops-w-ndf-maturity').text(n.maturity || 0);
+        $('#ops-w-ndf-maturity').text(n.maturity || 0);
         $('#ops-w-coe-total').text(c.total || 0);
+    }
+
+    // ── Cards de reconciliação: B3 × Interno, por família + Total ────────────
+    //  Três estados, não dois:
+    //    OK      — contagem E valor batem
+    //    Check   — há divergência (luz âmbar)
+    //    —       — a família ainda não tem lado interno (Option, NDF Comm, COE).
+    //              Traço CINZA, sem luz: não há divergência, há conta que ainda
+    //              não é feita. Pintar de âmbar leria como erro de dado.
+    function setRecon(recon) {
+        recon = recon || {};
+        document.querySelectorAll('.ops-recon').forEach(function (card) {
+            var r = recon[card.dataset.cat] || {};
+            card.querySelector('[data-recon-b3c]').textContent = r.b3_count != null ? r.b3_count : 0;
+            card.querySelector('[data-recon-b3v]').textContent = r.b3_value || '0.00';
+            card.querySelector('[data-recon-intc]').textContent = r.int_count != null ? r.int_count : 0;
+            card.querySelector('[data-recon-intv]').textContent = r.int_value || '0.00';
+            var badge = card.querySelector('[data-recon-badge]');
+            var na = !!r.na;
+            var ok = !na && !!r.matched;
+            badge.className = 'ops-recon-badge' + (na ? '' : (ok ? ' is-ok' : ' is-check'));
+            badge.innerHTML = na
+                ? '<i class="ti ti-minus"></i>' + t('ops-r-na', 'n/a')
+                : (ok ? '<i class="ti ti-check"></i>' + t('ops-r-ok', 'OK')
+                      : '<i class="ti ti-alert-triangle"></i>' + t('ops-r-check', 'Check'));
+            card.classList.toggle('is-unmatched', !na && !ok);
+            // A luz sai do MESMO estado que escreve o badge, no mesmo ponto:
+            // qualquer outra fonte deixaria halo e texto contando histórias
+            // diferentes na primeira vez que a regra mudasse (§181).
+            card.classList.toggle('is-ok', !na && ok);
+            card.classList.toggle('is-check', !na && !ok);
+        });
     }
 
     // ── Reference date → (re)load from the settlement batch endpoint ──────────
@@ -603,7 +768,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         esc(r.product), esc(r.type), esc(r.settlement), esc(r.settlement_b3),
                         esc(r.tax_income), diffCell(r)]);
                 });
-                dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
+                dtSummary.draw(false); dtTrade.draw(false);
+                setWidgets(j.widgets); setRecon(j.recon);
                 setSources(j.sources, j.date);
             }).catch(function () {});
     }

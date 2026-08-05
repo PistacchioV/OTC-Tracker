@@ -1,0 +1,18 @@
+[
+  {
+    "CODE": "0",
+    "LABEL": "Sobre Valor Base Original"
+  },
+  {
+    "CODE": "1",
+    "LABEL": "Sobre Valor Base Remanescente"
+  },
+  {
+    "CODE": "3",
+    "LABEL": "Na Data de Vencimento"
+  },
+  {
+    "CODE": "4",
+    "LABEL": "Sem Troca de Amortização"
+  }
+]

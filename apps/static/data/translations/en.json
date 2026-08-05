@@ -1556,5 +1556,14 @@
   "map-tab-swap-index": "Swap Index — B3 Code",
   "map-tab-swap-func": "Swap — Funcionalidade",
   "map-tab-swap-amort": "Swap — Amortisation Type",
-  "map-tab-swap-codes": "Swap — Sign & Yes/No"
+  "map-tab-swap-codes": "Swap — Sign & Yes/No",
+  "ops-sub-cashflow": "Cashflow",
+  "ops-sub-total": "Total",
+  "ops-w-total": "Total",
+  "ops-r-ops": "Ops",
+  "ops-r-value": "Value",
+  "ops-r-internal": "Internal",
+  "ops-r-ok": "OK",
+  "ops-r-check": "Check",
+  "ops-r-na": "n/a"
 }
