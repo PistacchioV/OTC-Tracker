@@ -5328,11 +5328,20 @@ _OPS_TRADE_COLS = ('lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'ty
                    'settlement', 'settlement_b3', 'tax_income', 'difference')
 
 
+def _ops_norm_event(v):
+    """Tipo Operação normalizado para comparação: `_fcst_norm` cuida de caixa e
+    acento, e o `\\s+` colapsa o espaço. Os arquivos da B3 vêm com padding e
+    espaço duplo entre palavras; sem o colapso, `PAGAMENTO DE  DIF. DE JUROS`
+    simplesmente não casa com a linha cadastrada — e o swap some da tela sem
+    nenhum sinal de que houve comparação."""
+    return re.sub(r'\s+', ' ', _fcst_norm(v)).strip()
+
+
 def _ops_swap_event_set():
     """Tipos de Operação (normalizados) que marcam um swap liquidando. Cadastro
     `swap-b3-events`; cadastro vazio = nenhum swap entra (é o pedido explícito de
     quem esvaziou a tabela, não um estado a contornar)."""
-    return {_fcst_norm(r.get('TIPO OPERACAO', '')).strip()
+    return {_ops_norm_event(r.get('TIPO OPERACAO', ''))
             for r in _mapping_rows('swap-b3-events')
             if str(r.get('TIPO OPERACAO', '') or '').strip()}
 
@@ -5487,7 +5496,7 @@ def _ops_swap_settling(opb3):
         by_titulo.setdefault(titulo.upper(), []).append(rec)
         if 'swap' not in _fcst_norm(rec.get('Tipo Título', '')):
             continue
-        if _fcst_norm(rec.get('Tipo Operação', '')).strip() not in wanted:
+        if _ops_norm_event(rec.get('Tipo Operação', '')) not in wanted:
             continue
         if titulo.upper() in seen:
             continue
@@ -5761,7 +5770,26 @@ def _ops_batch_status(ref):
             last_batch = probe.strftime('%Y-%m-%d')
             break
         probe -= timedelta(days=1)
-    return {'missing': missing, 'blocking': required_missing, 'last_batch': last_batch}
+
+    # Arquivo presente e mesmo assim zero linhas: a pergunta deixa de ser "que
+    # arquivo falta" e passa a ser "por que nenhuma linha passou". As duas únicas
+    # respostas possíveis são o Tipo Título e o Tipo Operação, então o
+    # diagnóstico devolve os NÚMEROS de cada peneira e os valores que estão no
+    # arquivo — é o que permite cadastrar a variação em vez de abrir um chamado.
+    events = None
+    if not required_missing:
+        _jp, opb3 = _opb3_load(ref)
+        rows = opb3 or []
+        swap_rows = [r for r in rows if 'swap' in _fcst_norm(r.get('Tipo Título', ''))]
+        matched, _bt = _ops_swap_settling(rows)
+        if swap_rows and not matched:
+            found = sorted({str(r.get('Tipo Operação', '') or '').strip()
+                            for r in swap_rows if str(r.get('Tipo Operação', '') or '').strip()})
+            events = {'rows': len(rows), 'swap_rows': len(swap_rows), 'found': found}
+        elif not swap_rows and rows:
+            events = {'rows': len(rows), 'swap_rows': 0, 'found': []}
+    return {'missing': missing, 'blocking': required_missing,
+            'last_batch': last_batch, 'events': events}
 
 
 @blueprint.route('/other-products-summary')

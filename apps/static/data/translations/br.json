@@ -1545,5 +1545,11 @@
   "ops-src-none": "Sem batch de liquidação em",
   "ops-src-missing": "Faltam:",
   "ops-src-partial": "Batch parcial — as colunas derivadas ficam em branco. Faltam:",
-  "ops-src-goto": "Ir para o último dia com batch"
+  "ops-src-goto": "Ir para o último dia com batch",
+  "ops-ev-none": "O Operations B3 tem",
+  "ops-ev-swaprows": "linha(s) de SWAP, nenhuma com Tipo Operação cadastrado.",
+  "ops-ev-found": "No arquivo:",
+  "ops-ev-register": "Cadastre a variação em Mapping › Swap B3 Events.",
+  "ops-ev-noswap": "O Operations B3 não tem linha de SWAP nesta data.",
+  "ops-ev-rows": "linha(s) no arquivo"
 }

@@ -574,20 +574,43 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!row) return;
         src = src || {};
         var missing = src.missing || [];
-        if (!missing.length) { row.classList.add('d-none'); return; }
+        var ev = src.events;
+        if (!missing.length && !ev) { row.classList.add('d-none'); return; }
         var alertEl = document.getElementById('ops-src-alert');
         var goto = document.getElementById('ops-src-goto');
-        var blocking = !!src.blocking;
+        // O arquivo estar lá e mesmo assim não sair linha nenhuma é MAIS grave
+        // que uma fonte auxiliar faltando: a tabela fica vazia, não incompleta.
+        var blocking = !!src.blocking || !!ev;
         alertEl.className = 'alert mb-0 d-flex align-items-start gap-2 ' +
                             (blocking ? 'alert-warning' : 'alert-info');
         document.getElementById('ops-src-icon').className =
             'ti mt-1 ' + (blocking ? 'ti-alert-triangle' : 'ti-info-circle');
-        document.getElementById('ops-src-msg').innerHTML = blocking
-            ? '<strong>' + esc(t('ops-src-none', 'No settlement batch for')) + ' ' + esc(fmtBr(ymd)) +
-              '.</strong> ' + esc(t('ops-src-missing', 'Missing:')) + ' ' + esc(missing.join(' · ')) + '.'
-            : esc(t('ops-src-partial', 'Partial batch — derived columns stay blank. Missing:')) +
-              ' ' + esc(missing.join(' · ')) + '.';
-        if (blocking && src.last_batch) {
+        var msg;
+        if (src.blocking) {
+            msg = '<strong>' + esc(t('ops-src-none', 'No settlement batch for')) + ' ' + esc(fmtBr(ymd)) +
+                  '.</strong> ' + esc(t('ops-src-missing', 'Missing:')) + ' ' + esc(missing.join(' · ')) + '.';
+        } else if (ev) {
+            // Duas peneiras, duas mensagens: ou o arquivo não tem linha de SWAP,
+            // ou tem e o Tipo Operação delas não está cadastrado. A segunda
+            // lista os valores do arquivo — é o que se copia para o /mapping.
+            msg = ev.swap_rows
+                ? '<strong>' + esc(t('ops-ev-none', 'Operations B3 has')) + ' ' + ev.swap_rows + ' ' +
+                  esc(t('ops-ev-swaprows', 'SWAP row(s), none with a registered Tipo Operação.')) +
+                  '</strong><br>' + esc(t('ops-ev-found', 'In the file:')) + ' <code>' +
+                  ev.found.map(esc).join('</code> · <code>') + '</code>. ' +
+                  esc(t('ops-ev-register', 'Register the variation in Mapping › Swap B3 Events.'))
+                : '<strong>' + esc(t('ops-ev-noswap', 'Operations B3 has no SWAP rows for this date.')) +
+                  '</strong> (' + ev.rows + ' ' + esc(t('ops-ev-rows', 'row(s) in the file')) + ')';
+            if (missing.length) {
+                msg += '<br><span class="text-muted">' +
+                       esc(t('ops-src-missing', 'Missing:')) + ' ' + esc(missing.join(' · ')) + '.</span>';
+            }
+        } else {
+            msg = esc(t('ops-src-partial', 'Partial batch — derived columns stay blank. Missing:')) +
+                  ' ' + esc(missing.join(' · ')) + '.';
+        }
+        document.getElementById('ops-src-msg').innerHTML = msg;
+        if (src.blocking && src.last_batch) {
             goto.textContent = t('ops-src-goto', 'Go to the last day with a batch') +
                                ' (' + fmtBr(src.last_batch) + ')';
             goto.classList.remove('d-none');

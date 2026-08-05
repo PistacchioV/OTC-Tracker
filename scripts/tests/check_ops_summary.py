@@ -298,6 +298,62 @@ finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
     shutil.rmtree(tmp, ignore_errors=True)
 
+print('\n== 11. arquivo presente e tabela vazia: o diagnostico responde ==')
+# O caso que trouxe o relato: as quatro fontes do dia estao la, e mesmo assim
+# nenhuma linha aparece. A pergunta deixa de ser "que arquivo falta" — e sem
+# resposta na tela nao ha o que fazer alem de abrir chamado.
+def ob(titulo, op, tipo_tit='SWAP'):
+    return {'Conta': '73760.00-9', 'Tipo Operação': op, 'Título': titulo,
+            'Tipo Título': tipo_tit, 'Valor': '1,00', 'Data Liquidação': '05/08/2026',
+            'Contraparte (Nome Simpl.)': 'X'}
+
+
+REF8 = datetime(2026, 8, 5)
+
+
+def diag(opb3_rows):
+    tmp = tempfile.mkdtemp(prefix='ops-diag-')
+    _r, _b = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
+    try:
+        R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, os.path.join(tmp, 'b3')
+        day = os.path.join(tmp, '2026', '08', '05')
+        write_json(os.path.join(day, 'operations-b3_20260805.json'), opb3_rows)
+        for k in ('br-onshore-settlements', 'eventos-swap-jpm', 'otm-settlement'):
+            write_json(os.path.join(day, '%s_20260805.json' % k), [])
+        return R._ops_batch_status(REF8), R._ops_swap_trade_rows(REF8.date())
+    finally:
+        R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _r, _b
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+st, rows = diag([ob('A1', 'RESGATE'), ob('A1', 'RESGATE ANTECIPADO'),
+                 ob('T1', 'PAGAMENTO DE PREMIO', 'TER')])
+check('nenhuma linha passa', len(rows), 0)
+check('conta as linhas de SWAP', (st['events'] or {}).get('swap_rows'), 2)
+check('lista os Tipo Operacao do ARQUIVO',
+      (st['events'] or {}).get('found'), ['RESGATE', 'RESGATE ANTECIPADO'])
+check('o TER nao entra na contagem de SWAP', (st['events'] or {}).get('rows'), 3)
+
+st, _ = diag([ob('T1', 'PAGAMENTO DE PREMIO', 'TER')])
+check('arquivo sem SWAP nenhum e dito com todas as letras',
+      (st['events'] or {}).get('swap_rows'), 0)
+
+st, rows = diag([ob('A1', 'PAGAMENTO DE DIF. DE JUROS')])
+check('com Tipo Operacao cadastrado, a linha sai', len(rows), 1)
+check('e o diagnostico se cala', st['events'], None)
+
+# Espaco duplo: os arquivos da B3 vem com padding, e sem colapsar o espaco a
+# linha cadastrada nao casa — o swap sumiria da tela sem sinal nenhum.
+check('espaco duplo casa com a linha cadastrada',
+      R._ops_norm_event('PAGAMENTO DE  DIF.  DE JUROS'),
+      R._ops_norm_event('PAGAMENTO DE DIF. DE JUROS'))
+st, rows = diag([ob('A1', ' PAGAMENTO DE  DIF. DE JUROS ')])
+check('e a linha passa de verdade', len(rows), 1)
+
+check('a pagina consome o diagnostico de eventos', 'src.events' in HTML, True)
+check('a mensagem lista os valores do arquivo', 'ev.found' in HTML, True)
+check('e diz onde cadastrar', 'ops-ev-register' in HTML, True)
+
 check('o endpoint publica o diagnostico', "'sources': sources" in SRC, True)
 check('a pagina consome o diagnostico', 'setSources(j.sources' in HTML, True)
 for hook in ('id="ops-src-row"', 'id="ops-src-msg"', 'id="ops-src-goto"'):

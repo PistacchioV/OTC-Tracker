@@ -8365,10 +8365,61 @@ Usar a mesma cor nos dois faria "faltou tudo" parecer "faltou um detalhe" — o 
 
 ### Verificação
 
-Seção 10 do `scripts/tests/check_ops_summary.py` (52 asserções no total): o diretório vazio (bloqueante,
+Seção 10 do `scripts/tests/check_ops_summary.py` (64 asserções no total): o diretório vazio (bloqueante,
 sem dia a sugerir), o batch presente com auxiliares faltando (informativo) e a busca do último dia com
 batch. Mais o cabeamento: o endpoint publica `sources`, o JS chama `setSources`, e os três ganchos da faixa
 existem no HTML.
 
 **Vale para as outras telas do batch.** Toda página que lê o batch por data tem o mesmo silêncio possível.
 Aqui ele foi fechado; nas irmãs, não.
+
+---
+
+## §186 — Other Products Summary: arquivo presente, tabela vazia
+
+Sequência do §185. Com o batch **todo importado** para o dia (as quatro fontes na pasta, a faixa de
+diagnóstico sem nada a reclamar, Swap Athena e Swap Events mostrando as duas operações do dia), o Trade
+Level e o Settlement Summary continuavam vazios. A faixa do §185 não ajudava: ela só sabia responder
+"qual arquivo falta", e não faltava nenhum.
+
+### O funil tem duas peneiras, e nenhuma delas aparecia
+
+`_ops_swap_settling` descarta uma linha do Operations B3 por **dois** motivos: `Tipo Título` sem `SWAP`, ou
+`Tipo Operação` fora do cadastro `swap-b3-events`. As duas descartam **em silêncio** — a linha some, a
+tabela fica vazia e nada distingue "não tem swap hoje" de "tem swap, mas o texto do evento não está
+cadastrado".
+
+Agora `_ops_batch_status` responde isso quando o arquivo existe e nenhuma linha passou:
+
+```
+{'rows': 26, 'swap_rows': 2, 'found': ['RESGATE', 'RESGATE ANTECIPADO']}
+```
+
+e a faixa vira uma frase acionável: *"O Operations B3 tem 2 linha(s) de SWAP, nenhuma com Tipo Operação
+cadastrado. No arquivo: `RESGATE` · `RESGATE ANTECIPADO`. Cadastre a variação em Mapping › Swap B3
+Events."* Quando não há linha de SWAP nenhuma, o texto é outro — são problemas diferentes.
+
+Esse aviso é **âmbar**, como a ausência de batch: arquivo presente com tabela vazia deixa a tela tão vazia
+quanto arquivo ausente, e pintá-lo de azul (o tom de "batch parcial") diria que é um detalhe.
+
+**Por que não sair cadastrando as variações**: o cadastro é o desenho (`_MAPPING_DEFS`, regra de ouro do
+CLAUDE.md). Chutar `RESGATE` como evento de liquidação de swap misturaria vencimento com diferencial nas
+contas. A tela agora mostra o texto exato do arquivo; quem conhece o significado registra.
+
+### O espaço duplo, que já estava armado
+
+`_ops_norm_event` substituiu o `_fcst_norm(...).strip()` da comparação: `_fcst_norm` cuida de caixa e
+acento mas **não colapsa espaço**, e arquivos da B3 vêm com padding. `PAGAMENTO DE  DIF. DE JUROS` (dois
+espaços) não casava com a linha cadastrada — o swap sumia sem nenhum sinal. Aplica-se aos **dois** lados
+(arquivo e cadastro), então o seed segue casando igual.
+
+Não sabemos se era essa a causa no dia do relato — o arquivo não estava disponível aqui. É uma armadilha
+real fechada de qualquer forma, e barata.
+
+### Verificação
+
+Seções 10 e 11 do `check_ops_summary.py` (64 asserções no total). A 11 monta o cenário do relato —
+Operations B3 com linhas de SWAP em `RESGATE`/`RESGATE ANTECIPADO` e as auxiliares presentes — e confere
+que zero linhas saem, que o diagnóstico conta as linhas de SWAP e lista os valores **do arquivo**, que um
+TER com o mesmo Tipo Operação não entra na conta, que com o evento cadastrado a linha sai e o diagnóstico
+se cala, e que o espaço duplo passa a casar.

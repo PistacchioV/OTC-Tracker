@@ -1544,5 +1544,11 @@
   "ops-src-none": "Sin lote de liquidación en",
   "ops-src-missing": "Faltan:",
   "ops-src-partial": "Lote parcial — las columnas derivadas quedan en blanco. Faltan:",
-  "ops-src-goto": "Ir al último día con lote"
+  "ops-src-goto": "Ir al último día con lote",
+  "ops-ev-none": "Operations B3 tiene",
+  "ops-ev-swaprows": "línea(s) de SWAP, ninguna con Tipo Operação registrado.",
+  "ops-ev-found": "En el archivo:",
+  "ops-ev-register": "Registre la variación en Mapping › Swap B3 Events.",
+  "ops-ev-noswap": "Operations B3 no tiene líneas de SWAP en esta fecha.",
+  "ops-ev-rows": "línea(s) en el archivo"
 }
