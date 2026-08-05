@@ -79,6 +79,29 @@
     .otm-add-modal.fade .modal-dialog { transition: opacity 150ms ease; transform: none; }
 }
 
+/* ── Toolbar acima da tabela ────────────────────────────────────────────────
+   Columns e Export são injetados pelo JS DEPOIS do render e o botão do
+   DataTables Buttons vem com margem zerada, então a fila encostava no cabeçalho
+   da tabela. Padding embaixo + altura igual para os botões das três origens
+   (template, DataTables Buttons e JS). */
+#otm-page .card-body > .d-flex.justify-content-between {
+    padding: .35rem .25rem 1.15rem;
+    row-gap: .6rem;
+    column-gap: .5rem;
+}
+#otm-page .columnToggleWrapper,
+#otm-page .otmExportWrapper { display: inline-flex; align-items: center; }
+#otm-page .columnToggleWrapper .btn,
+#otm-page .otmExportWrapper .btn,
+#otm-page .otmExportWrapper .dt-button,
+#otm-page .otmExportWrapper .dt-buttons { margin: 0 !important; }
+#otm-page .card-body > .d-flex .btn,
+#otm-page .card-body > .d-flex .dt-button {
+    padding: .34rem .7rem; line-height: 1.35; white-space: nowrap;
+}
+#otm-page .card-body > .d-flex .form-select-sm { padding-top: .28rem; padding-bottom: .28rem; }
+#otm-page .card-body > .table-responsive { padding-top: .15rem; }
+
 /* ── Table ──────────────────────────────────────────────────────────────── */
 #otm-table thead th {
     white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;

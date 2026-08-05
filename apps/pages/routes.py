@@ -7448,6 +7448,235 @@ def api_swap_settlement_advice_emails():
     return resp
 
 
+# ── Other Products › NDF › Settlement Advice (commodities) ───────────────────
+#  A planilha de aviso do TERMO DE MERCADORIA, montada na tela. Universo:
+#  Operations B3 com **Tipo Operação = RESGATE**, **Tipo Título = TER** e a coluna
+#  derivada **Type = COMMODITIES** (que para TER é a Classe do Ativo Subjacente da
+#  posição) — é o resgate do termo de commodity, e só ele.
+#
+#  De onde vem cada coluna:
+#
+#    Contraparte .......... Live Position NDF (Nome da Contraparte)
+#    B3 ID ................ Título do Operations B3
+#    Nº da Confirmação .... posição NDF: Código Identificador do contrato
+#    Data de Início ....... posição NDF: Data de Emissao
+#    Ativo Subjacente ..... código do subjacente → `Subjacente.json` → COMMODITY(CÓD)
+#    Ptax ................. posição NDF: Data de Fixing da Moeda
+#    Cotação Mercadoria ... posição NDF: Data de Fixing do Ativo Subjacente; vazia
+#                           numa operação ASIÁTICA, vira "Média Fev/2027" a partir
+#                           do mês/ano da 1ª data de verificação
+#    Quantidade ........... posição NDF: Valor Base no registro
+#    Resultado Apurado .... INTERNO: soma do OTM Settlements pelos Trade Ids cujo
+#                           sufixo (depois do hífen) bate com o do Nº da Confirmação
+#    IR 0,005% ............ só quando o banco PAGA (apurado < 0) e a contraparte
+#                           não é LAWTON — porte da fórmula da planilha
+#    Resultado Líquido .... o IR sempre ENCOLHE o caixa (mesma regra do aviso FX)
+#    Settlement Net ....... net type do Reference Data
+_NDFADV_COLUMNS = ['Contraparte', 'B3 ID', 'Nº da Confirmação', 'Data de Início da Operação',
+                   'Ativo Subjacente', 'Ptax', 'Cotação Mercadoria', 'Quantidade da Operação',
+                   'Resultado Apurado (R$)', 'IR 0,005% (R$)', 'Resultado Líquido (R$)',
+                   'Settlement Net']
+_NDFADV_IR_RATE = 0.00005                      # 0,005%
+_NDFADV_MESES = ('Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez')
+
+
+def _subjacente_commodity(code):
+    """`Codigo do Ativo Subjacente` → 'COMMODITY(CÓDIGO)', pelo cadastro de
+    Subjacente do B3 Index Results. Código sem commodity registrada volta só o
+    código: melhor mostrar o que veio do arquivo do que inventar um nome."""
+    code = str(code or '').strip()
+    if not code:
+        return ''
+    name = (_subjacente_map() or {}).get(code.upper(), '')
+    return '{}({})'.format(name.strip().upper(), code) if name else code
+
+
+_SUBJ_CACHE = {'mtime': None, 'map': {}}
+
+
+def _subjacente_map():
+    """{código(upper) → Commodity} do Subjacente.json, cacheado por mtime.
+
+    O arquivo tem ~7.800 linhas e repete o mesmo código em várias (uma por Tipo
+    IF: OPC, COE, TER…). A primeira com Commodity preenchida vence — as demais
+    trazem o MESMO nome, e uma linha sem Commodity não pode apagar a que tem."""
+    path = os.path.join(_B3_DATA_DIR, 'Subjacente.json')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _SUBJ_CACHE['mtime'] != mt:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        m = {}
+        for rec in data:
+            code = str(rec.get('Codigo do Ativo Subjacente', '') or '').strip().upper()
+            comm = str(rec.get('Commodity', '') or '').strip()
+            if code and comm and code not in m:
+                m[code] = comm
+        _SUBJ_CACHE['mtime'] = mt
+        _SUBJ_CACHE['map'] = m
+    return _SUBJ_CACHE['map']
+
+
+def _ndfadv_media_label(date_str):
+    """'Média Fev/2027' a partir de uma data de verificação. Só o mês e o ano: a
+    cotação da asiática é a média do período, não a de um dia."""
+    d = _fcst_parse_date(date_str)
+    if not d:
+        return ''
+    return 'Média {}/{}'.format(_NDFADV_MESES[d.month - 1], d.year)
+
+
+def _ndfadv_otm_by_suffix(ref):
+    """{sufixo do Trade Id → Σ Amount} do OTM Settlements do dia.
+
+    O Trade Id do OTM e o Nº da Confirmação carregam o MESMO identificador depois
+    do hífen; o prefixo difere entre os sistemas. Por isso o join é pelo sufixo —
+    e a soma é necessária porque um trade aparece em várias linhas de fluxo."""
+    _jp, otm = _otm_load(ref)
+    out = {}
+    for rec in (otm or []):
+        tid = str(rec.get('Trade Id', '') or '').strip().upper()
+        if not tid:
+            continue
+        suf = tid.rsplit('-', 1)[-1]
+        amt = _conf_to_float(rec.get('Amount'))
+        if suf and amt is not None:
+            out[suf] = out.get(suf, 0.0) + amt
+    return out
+
+
+def _ndfadv_collect(ref):
+    """Linhas do NDF Settlement Advice (commodities) para a data `ref`."""
+    _jp, opb3 = _opb3_load(ref)
+    if not opb3:
+        return []
+    tipo_maps = _opb3_tipo_maps(ref)
+
+    titulos, seen = [], set()
+    for rec in opb3:
+        titulo = str(rec.get('Título', '') or '').strip()
+        if not titulo or titulo.upper() in seen:
+            continue
+        if _fcst_norm(rec.get('Tipo Operação', '')).strip() != 'resgate':
+            continue
+        if 'ter' not in _fcst_norm(rec.get('Tipo Título', '')):
+            continue
+        if 'commodit' not in _fcst_norm(_opb3_tipo_for(rec, tipo_maps)):
+            continue
+        seen.add(titulo.upper())
+        titulos.append((titulo, rec))
+    if not titulos:
+        return []
+
+    # Posição NDF pela TELA do Live Position: as datas já vêm dd/mm/yyyy e as
+    # colunas de média asiática já vêm resolvidas do bloco posicional.
+    lp = _lpndf_collect(ref)
+    li = {c: i for i, c in enumerate(lp.get('columns') or [])}
+    by_contract = {}
+    for row in lp.get('rows') or []:
+        k = str(row[li['Contrato']] if 'Contrato' in li else '').strip().upper()
+        if k:
+            by_contract.setdefault(k, row)
+
+    otm_by_suffix = _ndfadv_otm_by_suffix(ref)
+    spn_by_name = _ndfsum_refdata_spn()
+    cpd = _cpd_load()
+
+    def _lcell(row, name):
+        i = li.get(name)
+        return '' if (row is None or i is None or i >= len(row)) else str(row[i] or '').strip()
+
+    out = []
+    for titulo, rec in titulos:
+        lrow = by_contract.get(titulo.upper())
+        cliente = (_lcell(lrow, 'Nome da Contraparte')
+                   or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
+        conf = _lcell(lrow, 'Codigo Identificador')
+
+        # Cotação Mercadoria: a data única do fixing do subjacente; vazia (o caso
+        # da asiática), o mês/ano da 1ª data de verificação.
+        cot = _lcell(lrow, 'Data de Fixing do Ativo Subjacente')
+        if not cot:
+            cot = _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
+
+        apurado = otm_by_suffix.get(conf.rsplit('-', 1)[-1].upper()) if conf else None
+        # IR: 0,005% sobre o valor quando o BANCO paga (apurado < 0); LAWTON é
+        # isenta. Porte da fórmula da planilha, arredondando a 2 casas como ela.
+        if apurado is None or apurado >= 0 or _fcst_norm(cliente).startswith('lawton'):
+            ir = 0.0
+        else:
+            ir = round(abs(apurado) * _NDFADV_IR_RATE, 2)
+        # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
+        liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
+
+        ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        spn = ref_rec.get('spn', '')
+        net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
+
+        out.append({
+            'cells': [
+                cliente,
+                titulo,
+                conf,
+                _lcell(lrow, 'Data de Emissao'),
+                _subjacente_commodity(_lcell(lrow, 'Codigo do Ativo Subjacente')),
+                _lcell(lrow, 'Data de Fixing da Moeda'),
+                cot,
+                _lcell(lrow, 'Valor Base no registro'),
+                _ops_fmt_amt(apurado),
+                _ops_fmt_amt(ir),
+                _ops_fmt_amt(liq),
+                net_type,
+            ],
+            'counterparty': cliente,
+            'legal': _lcell(lrow, 'Nome da Parte'),
+            'spn': spn,
+            'taxid': ref_rec.get('taxid', ''),
+            'net_type': net_type,
+            'commodity': _subjacente_commodity(_lcell(lrow, 'Codigo do Ativo Subjacente')),
+            'apurado': apurado, 'ir': ir, 'liquido': liq,
+        })
+    return out
+
+
+@blueprint.route('/other-products-ndf-settlement-advice')
+def other_products_ndf_settlement_advice():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-ndf-settlement-advice.html',
+                           segment='other-products-ndf-settlement-advice',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-ndf-settlement-advice/data')
+def api_ndf_settlement_advice_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    try:
+        items = _ndfadv_collect(ref)
+    except Exception:
+        log.error('[ndf-advice] falha montando o aviso:\n%s', traceback.format_exc())
+        items = []
+    items.sort(key=lambda r: (str(r['counterparty']).strip() == '',
+                              _fcst_norm(str(r['counterparty']))))
+    return jsonify({'success': True, 'columns': _NDFADV_COLUMNS,
+                    'rows': [r['cells'] for r in items],
+                    'widgets': {'total': len(items)},
+                    'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+
+
 # ── Other Products › Swap › Kapital Hybrids (BANCO_UPCOMING_PAYMENTS.csv) ─────
 #  Comma-delimited upcoming-payments file. On import (_swaphyb_extract) only rows
 #  whose Settlement Date = today are kept (the file has two Settlement Date

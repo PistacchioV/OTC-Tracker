@@ -8765,3 +8765,66 @@ A quebra vale para as **duas datas** da opção (vencimento e prêmio) — a cla
 evento.
 
 Verificação: seção 16 do `check_ops_summary.py`.
+
+---
+
+## §194 — Other Products › NDF › Settlement Advice (Termo de Mercadoria)
+
+Página nova, no mesmo visualizador genérico das irmãs (`data-api` + `swapchar-page`/`swapchar-table`).
+Menu: **Daily Settlement › Other Products › NDF › Settlement Advice**.
+
+### O universo: três peneiras
+
+Operations B3 com **Tipo Operação = RESGATE**, **Tipo Título = TER** e a coluna derivada
+**Type = COMMODITIES** (que para TER é a *Classe do Ativo Subjacente* da posição). Errar qualquer uma das
+três traz para o aviso do cliente operação que não é dele — uma opção, um termo de câmbio. O teste passa
+uma linha de cada tipo errado e prova que nenhuma entra.
+
+### As colunas
+
+`Contraparte · B3 ID · Nº da Confirmação · Data de Início da Operação · Ativo Subjacente · Ptax ·
+Cotação Mercadoria · Quantidade da Operação · Resultado Apurado (R$) · IR 0,005% (R$) ·
+Resultado Líquido (R$) · Settlement Net`
+
+Duas decisões sobre a lista pedida: **Contraparte entrou no início e não se repete no fim** (a mesma
+informação duas vezes na mesma linha), e **Athena ID saiu** porque é o mesmo valor do Nº da Confirmação.
+
+Três regras que valem registrar:
+
+- **Ativo Subjacente** — o código do subjacente da posição NDF passa pelo `Subjacente.json` (a aba
+  Subjacente do B3 Index Results) e vira `COMMODITY(CÓDIGO)`, ex.: `ALUMINIO(OAHDY)`. O arquivo tem ~7.800
+  linhas e **repete o mesmo código** uma vez por Tipo IF (OPC, COE, TER…): a primeira com Commodity
+  preenchida vence, e uma linha sem Commodity não pode apagar a que tem. Código sem commodity registrada
+  volta só o código — melhor mostrar o que veio do arquivo do que inventar um nome.
+- **Cotação Mercadoria** — a Data de Fixing do Ativo Subjacente. Vazia (o caso da **asiática**), vira o
+  mês/ano da 1ª data de verificação escrito por extenso: `Média Fev/2027`. As datas de verificação são um
+  bloco **posicional** no arquivo da B3 (a 1ª é o índice 100), e é por isso que a página lê a posição
+  através de `_lpndf_collect` — que já resolve esse bloco — em vez de abrir o arquivo direto.
+- **Ptax** — a Data de Fixing da **Moeda** (não a do ativo).
+
+### O join que não é óbvio: OTM pelo sufixo
+
+O **Resultado Apurado é o valor INTERNO**, do OTM Settlements. O `Trade Id` do OTM e o Nº da Confirmação
+carregam o **mesmo identificador depois do hífen** e prefixos diferentes antes (`OTM-1NR000` ×
+`DBH-1NR000`). Comparar a string inteira não casa nada e a coluna sai vazia — o join é pelo **sufixo**, e
+soma, porque um trade aparece em várias linhas de fluxo.
+
+### O IR
+
+Porte da fórmula da planilha: **0,005% sobre o valor, e só quando o banco PAGA** (apurado < 0);
+**LAWTON é isenta**; arredondado a 2 casas. E o IR **encolhe** o líquido — mesma regra sinal-consciente do
+aviso de FX: `-2.028.144,04` com `101,41` de IR fecha em `-2.028.042,63`.
+
+### Ainda não
+
+O **Print Advice** desta página não existe (botão removido do template copiado — botão que dá 404 é pior
+que botão ausente), e as linhas de NDF Commodities ainda não aparecem no Trade Level. São os dois próximos
+passos.
+
+### Junto
+
+Toolbar do **OTM Settlements** ganhou o mesmo respiro do §190 (padding + altura igual para os botões das
+três origens: template, DataTables Buttons e JS).
+
+Verificação: `scripts/tests/check_ndf_advice.py` (6 seções) — as quatro fontes num tempfile, incluindo o
+registro de posição com o bloco asiático no índice posicional certo.
