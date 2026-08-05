@@ -202,6 +202,56 @@ def _rec_col(cols, name, idx):
     return cols[idx] if 0 <= idx < len(cols) else None
 
 
+def _parse_dmy(v):
+    """Data de uma célula do arquivo (texto dd/mm/aaaa, ISO, ou datetime do
+    Excel) — None quando não dá para ler."""
+    if v is None or v == '':
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if hasattr(v, 'year') and hasattr(v, 'month'):        # date do openpyxl
+        return v
+    s = str(v).strip()
+    if not s:
+        return None
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d/%m/%y', '%m/%d/%Y', '%Y%m%d'):
+        try:
+            return datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _swap_ir_rate(cpty, trade_date, ref_date):
+    """Alíquota de IR do swap (fração) para um pagamento a `cpty`, ou 0.0.
+
+    Reaproveita `_ops_swap_ir_rate` do `routes` — a MESMA tabela regressiva
+    (`swap-ir-term`) e a MESMA lista de isenções (`swap-ir-client`) que o Trade
+    Level e o Settlement Advice de Swap usam. Uma segunda cópia da regra aqui
+    faria o Pay/Rec conciliar contra uma alíquota e as outras telas imprimirem
+    outra, para o mesmo swap no mesmo dia.
+
+    É a lista de isenções que responde "a contraparte é banco?": os bancos e as
+    entidades JPM estão lá cadastrados com 0%, então banco novo entra pela tela
+    /mapping em vez de por um `if` aqui.
+
+    O import é tardio de propósito: o `routes` importa este módulo, e importá-lo
+    no topo fecharia o ciclo. `cpty_receives=True` porque só chamamos isto no
+    lado do PAGAMENTO — quem recebe é a contraparte. Sem data de trade não há
+    faixa de prazo, e aí a alíquota é 0: descontar por chute é pior que deixar o
+    bruto e a linha acusar diferença.
+    """
+    if not trade_date or not ref_date:
+        return 0.0
+    try:
+        from apps.pages.routes import _ops_swap_ir_rate
+    except Exception:
+        _LOG.warning('[payrec] tabela de IR do swap indisponível — valor fica bruto')
+        return 0.0
+    rate = _ops_swap_ir_rate(cpty, (ref_date - trade_date).days, True)
+    return float(rate or 0.0)
+
+
 def _norm_cpty(name):
     """Collapse the multi-desk counterparty variants to their canonical name."""
     u = str(name or '').upper()
@@ -475,9 +525,18 @@ def _jpm_settlement(rows, cols, net_map=None):
     return out
 
 
-def _jpm_cashflows(rows, cols, net_map=None):
-    """cashflows → COMM TER / COMM OPT / SWAP, reduced per the client's net type."""
+def _jpm_cashflows(rows, cols, net_map=None, ref_date=None):
+    """cashflows → COMM TER / COMM OPT / SWAP, reduced per the client's net type.
+
+    `ref_date` (a date) é a data da conciliação e serve ao IR do SWAP: o prazo
+    da tabela regressiva conta do Trade Date até ela. Usar `hoje` faria uma
+    reexecução de um dia antigo cair noutra faixa e mudar um número já
+    conferido."""
     c_trade = _resolve(cols, 'Trade Id')
+    # Trade Date = coluna K do arquivo. Resolve pelo nome quando o cabeçalho o
+    # traz e cai na POSIÇÃO quando não — é o que o `_rec_col` faz, e o arquivo
+    # chega com nomes que variam entre extrações.
+    c_tdate = _rec_col(cols, 'Trade Date', 10)
     c_amt = _resolve(cols, 'Amount')
     c_cpty = _resolve(cols, 'Cpty Name')
     c_event = _resolve(cols, 'Cashflow Event')
@@ -497,6 +556,7 @@ def _jpm_cashflows(rows, cols, net_map=None):
             'cpty': _norm_cpty(r.get(c_cpty, '') if c_cpty else ''),
             'amount': _num(r.get(c_amt, '') if c_amt else 0),
             'asset': str(r.get(c_asset, '') if c_asset else '').strip().upper(),
+            'tdate': _parse_dmy(r.get(c_tdate, '') if c_tdate else ''),
         })
     # COMM TER when a Trade Id has MORE THAN ONE leg (term structure) so both
     # legs share the product and net together; a singleton is COMM OPT.
@@ -524,6 +584,7 @@ def _jpm_cashflows(rows, cols, net_map=None):
     # that cancel out within a trade); every other product keeps its individual legs.
     groups = {}
     comm_ter = {}                                              # cpty → {trade_id → net}
+    swap = {}                                                  # cpty → {trade_id → [net, tdate]}
     for rec in recs:
         cl = rec['cpty'].lower()
         if 'bco j.p' in cl or 'banco j.p' in cl:               # Filter[112] (JPM's own leg)
@@ -531,6 +592,15 @@ def _jpm_cashflows(rows, cols, net_map=None):
         if rec['prod'] == 'COMM TER':
             per_trade = comm_ter.setdefault(rec['cpty'], {})
             per_trade[rec['trade']] = per_trade.get(rec['trade'], 0.0) + rec['amount']
+        elif rec['prod'] == 'SWAP':
+            # Mesmo tratamento do COMM TER: o IR incide sobre o PAGAMENTO, e o
+            # pagamento é o net do trade. Aplicar perna a perna tributaria
+            # valores que se anulam dentro do próprio trade.
+            per_trade = swap.setdefault(rec['cpty'], {})
+            cur = per_trade.setdefault(rec['trade'], [0.0, None])
+            cur[0] += rec['amount']
+            if cur[1] is None:
+                cur[1] = rec['tdate']
         else:
             groups.setdefault((rec['cpty'], rec['prod']), []).append(rec['amount'])
     # Fold each COMM TER trade-net into its group. The 0.005% IR is withheld on a
@@ -545,6 +615,20 @@ def _jpm_cashflows(rows, cols, net_map=None):
             (tnet * _COMM_TER_FEE if (not exempt and tnet < 0) else tnet)
             for tnet in trades.values()
         ]
+    # SWAP: o lado interno chega BRUTO e o histórico de mensagens traz o valor
+    # LÍQUIDO — o que sai da conta. Sem descontar o IR as duas pontas nunca
+    # batem, e a linha fica pendente todo dia por uma diferença que é imposto.
+    # Só no PAGAMENTO (net negativo): num recebimento não há retenção nossa.
+    # A alíquota é regressiva pelo prazo do trade e vem do cadastro, que também
+    # é quem zera para banco e para as entidades JPM.
+    for cpty, trades in swap.items():
+        legs = []
+        for tnet, tdate in trades.values():
+            if tnet < 0:
+                legs.append(tnet * (1.0 - _swap_ir_rate(cpty, tdate, ref_date)))
+            else:
+                legs.append(tnet)
+        groups[(cpty, 'SWAP')] = legs
     out = []
     for (cpty, prod), values in groups.items():
         out += _emit_records(prod, cpty, values, _net_type_for(net_map, cpty))
@@ -1178,7 +1262,7 @@ def run_payrec(recon_date, files=None, mode='auto'):
         if bucket == 'settlement':
             jpm += _jpm_settlement(rows, cols, net_map)
         elif bucket == 'jpm_cash':
-            jpm += _jpm_cashflows(rows, cols, net_map)
+            jpm += _jpm_cashflows(rows, cols, net_map, ref_date=_parse_dmy(recon_date))
         elif bucket == 'jpm_fxo':
             jpm += _jpm_fxo(rows, cols, net_map)
         elif bucket == 'sdconta_int':

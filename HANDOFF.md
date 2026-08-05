@@ -9238,3 +9238,41 @@ Currency, que pode ser o próprio BRL.
 Seção 9 do `check_fwdstart_conf.py`: as três listas posicionais com 32 colunas e o `Strike` no índice 17
 nas três, o Maker em 31, o `dtCol` do smart filter, a conversão nos **dois** sentidos de cotação, e a
 prova de que a fórmula da mercadoria continua intacta para quem não passa `legs_fn`.
+
+---
+
+## §205 — Pay/Rec: o SWAP conciliava bruto contra líquido
+
+A linha de SWAP ficava **pendente todo dia** por uma diferença que era imposto. O lado interno
+(`cashflows`) traz o valor **bruto**; o histórico de mensagens traz o que de fato saiu da conta, que é o
+**líquido**. O caso reportado: `-55.462,81` interno contra `-47.143,38` do cliente — exatamente **15%**.
+
+Agora, quando o net do trade é um **pagamento** (negativo), o valor interno é descontado do IR antes de
+conciliar. Quatro decisões que valem registrar:
+
+**A alíquota vem do `_ops_swap_ir_rate`, do `routes`.** É a MESMA tabela regressiva (`swap-ir-term`) e a
+MESMA lista de isenções (`swap-ir-client`) que o Trade Level e o Settlement Advice de Swap usam. Uma
+segunda cópia aqui faria o Pay/Rec conciliar contra uma alíquota e as outras telas imprimirem outra, para
+o mesmo swap no mesmo dia. O import é **tardio** de propósito — o `routes` importa este módulo, e
+importá-lo no topo fecharia o ciclo.
+
+**"É banco?" quem responde é o cadastro.** Os bancos e as entidades JPM estão registrados em
+`swap-ir-client` com 0%, então banco novo entra pela tela `/mapping` em vez de por um `if` no código.
+
+**O IR incide sobre o NET do trade, não perna a perna** — mesmo tratamento que o COMM TER já tinha, e
+pela mesma razão: tributar perna a perna cobraria imposto de valores que se anulam dentro do próprio
+trade.
+
+**O prazo conta até a data da CONCILIAÇÃO**, não até `hoje`. Reexecutar um dia antigo tem de devolver o
+mesmo número que já foi conferido; com `hoje` o trade mudaria de faixa e o valor mudaria sozinho.
+
+O **Trade Date é a coluna K** do arquivo, lida por `_rec_col` — nome do cabeçalho quando ele existe,
+posição quando não. **Sem data a linha fica bruta**, de propósito: sem prazo não há faixa, e descontar
+por chute é pior que deixar a linha acusar a diferença.
+
+### Verificação
+
+Seção 6 do `check_payrec_run.py`: o caso reportado ao centavo, a regressividade (uma alíquota fixa
+passaria no primeiro teste e erraria em todo trade novo), o banco isento, o recebimento intacto, o net do
+trade, a data da conciliação mandando, o COMM TER inalterado, e a prova estrutural de que **não há tabela
+de faixas recopiada** neste módulo.
