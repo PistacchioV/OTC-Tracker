@@ -104,7 +104,7 @@ print('\n== 6. o IR regressivo do SWAP no lado interno ==')
 # descontar o IR a linha fica pendente todos os dias por uma diferenca que e
 # imposto — foi o caso reportado: -55.462,81 interno contra -47.143,38 do
 # cliente, exatamente 15%.
-from datetime import date as _date                            # noqa: E402
+from datetime import date as _date, datetime                  # noqa: E402
 
 CF_COLS = ['Trade Id', 'Amount', 'Cpty Name', 'Cashflow Event', 'Asset Class',
            'Owner Legal Entity', 'x1', 'x2', 'x3', 'x4', 'Trade Date']
@@ -124,6 +124,23 @@ def swap_val(rows, ref=REF):
 
 check('o caso reportado: 15% sobre o bruto',
       swap_val([cf('T1', -55462.81, 'SUZANO SA', '01/01/2023')]), -47143.39)
+# A coluna K chega em ISO (confirmado pelo usuario); o Excel tambem manda
+# datetime cru. Um formato que o parser nao entenda vira "sem data" e a linha
+# fica BRUTA — nao levanta erro, so nao concilia.
+check('a coluna K em yyyy-mm-dd',
+      swap_val([cf('T1', -55462.81, 'SUZANO SA', '2023-01-01')]), -47143.39)
+check('e datetime cru do Excel',
+      swap_val([cf('T1', -55462.81, 'SUZANO SA', datetime(2023, 1, 1))]), -47143.39)
+# O ponto do conserto: as duas pontas passam a falar o MESMO valor, entao a linha
+# sai de Pending Payment (duas orfas) e vira UMA linha conciliada.
+_jpm = RP._jpm_cashflows([cf('T1', -55462.81, 'SUZANO SA', '2023-01-01')],
+                         CF_COLS, None, ref_date=REF)
+_cli = [{'value': -47143.38, 'client': 'SUZANO SA', 'sistema': 'SPB - conta externa',
+         'snumconta': '1', 'product': 'SWAP', 'pay_receive': 'Pay', 'le': 'JPM'}]
+_det, _sum = RP._reconcile(_jpm, _cli)
+_pay, _rec, _settled = RP._split_tables(_det)
+check('nao sobra pendencia', len(_pay), 0)
+check('e a linha aparece em Settled', len(_settled), 1)
 # A tabela e REGRESSIVA: prazo curto paga mais. Uma aliquota fixa passaria no
 # teste acima e erraria em todo trade novo.
 check('prazo curto paga 22,5%',

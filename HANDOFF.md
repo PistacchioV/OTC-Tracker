@@ -9276,3 +9276,11 @@ Seção 6 do `check_payrec_run.py`: o caso reportado ao centavo, a regressividad
 passaria no primeiro teste e erraria em todo trade novo), o banco isento, o recebimento intacto, o net do
 trade, a data da conciliação mandando, o COMM TER inalterado, e a prova estrutural de que **não há tabela
 de faixas recopiada** neste módulo.
+
+**Adendo ao §205** — a linha "sumindo" do Pay/Rec é o conserto funcionando: antes havia **duas órfãs**
+(o interno bruto sem par e o TED líquido do cliente sem par); agora as duas pontas falam o mesmo valor e
+viram **uma linha em Settled**. Nenhuma linha JPM desaparece do resultado — o `_reconcile` sempre emite
+uma entrada por linha JPM, casada ou não —, então "sumiu do Pending Payment" só pode significar
+conciliou. A coluna K chega em **`yyyy-mm-dd`** (confirmado); o parser cobre ISO, `dd/mm/aaaa`,
+`dd/mm/aa`, `mm/dd/aaaa`, `aaaammdd` e o datetime cru do Excel, e os dois primeiros estão travados no
+teste — um formato não reconhecido vira "sem data" e a linha fica bruta, sem erro nenhum.
