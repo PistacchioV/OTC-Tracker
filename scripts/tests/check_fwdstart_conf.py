@@ -1,0 +1,190 @@
+"""Confirmacao de NDF FWD START (Termo de Moeda com inicio a termo).
+
+O documento e um contrato assinado: uma celula errada no Anexo I nao levanta
+erro nenhum, sai bonita e vai para a contraparte. O que este teste prende:
+
+  1. as TRES colunas que so existem neste documento.
+     Pontos de Termo = Strike Set Offset e Data de Verificacao da Taxa Forward =
+     Strike Set Date. Trocar as duas e o defeito silencioso obvio: as duas saem
+     preenchidas, e a Taxa Forward que a clausula 4.2.l.2 manda calcular
+     (cambio da Data de Verificacao + Pontos) fica errada. Data Efetiva = Trade
+     Date.
+
+  2. o No = B3 ID, nao o Deal. O numero da B3 so existe DEPOIS do registro; sem
+     ele a coluna sai VAZIA e a tela avisa, em vez de imprimir o codigo interno
+     que a contraparte nao reconhece.
+
+  3. a Taxa Forward "Nao Aplicavel". No forward start ela nao existe na
+     contratacao (o import zera o Rate) — e e esse "Nao Aplicavel" que liga a
+     clausula 4.2.l.2. Imprimir 0,00 desligaria a clausula.
+
+  4. a janela de verificacao. First Fixing vazio ou igual ao Last = janela de UM
+     dia, Data Inicial "Nao Aplicavel" (clausula 4.2.j). First != Last imprime
+     as duas. Repetir a mesma data nas duas colunas diria que ha uma media a
+     apurar onde ha uma cotacao so.
+
+  5. a Moeda Base sendo a moeda ESTRANGEIRA. A Moeda Cotada e fixa em BRL
+     (clausula 3.d); ler sempre a Quantity Currency faria um deal cotado em BRL
+     sair com BRL nas duas pontas.
+
+  6. o EIXO da segregacao sendo o mesmo na tela e na geracao. A tela lista
+     contraparte x moeda base; se a geracao usasse outro eixo, o link abriria
+     404 num grupo que a tela mostrou.
+
+  7. o documento e o PDF saindo do MESMO HTML (o padrao do FXO, §139) — uma
+     segunda transcricao do texto do Word e como os dois arquivos divergem.
+
+Nao encosta em dado real: o day-file vai para um tempfile, o CGD/Inventory/
+FepWeb sao stubs e as raizes do modulo voltam no finally.
+"""
+import io
+import json
+import os
+import re
+import shutil
+import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
+
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
+
+from apps.pages import routes as R                        # noqa: E402
+
+fails = []
+
+
+def check(label, got, exp):
+    ok = got == exp
+    print(('  ok  ' if ok else ' FAIL ') + label + ('' if ok else '\n        got=%r\n        exp=%r' % (got, exp)))
+    if not ok:
+        fails.append(label)
+
+
+DEAL = {
+    'Status': 'Success', 'Deal': 'D1', 'B3_ID': '26G04736337', 'LE': 'JPM',
+    'TradeDate': '29/06/2026', 'SettlementDate': '28/08/2026', 'SPN': '1',
+    'Acronym': 'SUZANO', 'Client': 'SUZANO SA', 'TaxID': '16404287000155',
+    'FirstFixingDate': '27/08/2026', 'LastFixingDate': '27/08/2026',
+    'StrikeSetDate': '30/07/2026', 'StrikeSetOffset': '0,0337',
+    'Direction': 'SELL', 'QuantityCurrency': 'USD', 'OtherQuantityCurrency': 'BRL',
+    'Notional': '198,723,470.91', 'Rate': '',
+}
+
+
+def run(deals, path='/api/new-deals/ndf-fwdstart/confirmations?date=2026-08-05'):
+    """Monta o dia e devolve (grupos, html_do_documento_do_1o_grupo)."""
+    from apps import create_app
+    from apps.config import DebugConfig
+    cfg = R._GENERIC_ND_PRODUCTS['fwd-start']
+    real = (cfg['dir'], R._conf_cgd_lookup)
+    tmp = tempfile.mkdtemp(prefix='fwdconf-')
+    try:
+        cfg['dir'] = tmp
+        d = os.path.join(tmp, '2026', '08')
+        os.makedirs(d)
+        with io.open(os.path.join(d, '20260805_ndffwdstart.json'), 'w', encoding='utf-8') as fh:
+            json.dump(deals, fh, ensure_ascii=False)
+        R._conf_cgd_lookup = lambda first: '28 de Maio de 2008'
+        app = create_app(DebugConfig)
+        cl = app.test_client()
+        with cl.session_transaction() as s:
+            s['authenticated'] = True
+            s['user_sid'] = 'T000000'
+            s['user_name'] = 'T'
+            s['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
+        groups = (cl.get(path).get_json() or {}).get('groups') or []
+        html = ''
+        if groups and groups[0].get('url'):
+            html = cl.get(groups[0]['url']).data.decode('utf-8')
+        return groups, html
+    finally:
+        cfg['dir'], R._conf_cgd_lookup = real
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def cells(html):
+    """{chave -> texto} das celulas do Anexo I do documento renderizado."""
+    return dict(re.findall(r'data-k="(\w+)">([^<]*)<', html))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('== 1. as tres colunas proprias do forward start ==')
+groups, html = run([dict(DEAL)])
+c = cells(html)
+check('Pontos de Termo = Strike Set Offset', c.get('pontosTermo'), '0,0337')
+check('Data de Verif. da Taxa Forward = Strike Set Date', c.get('dtVerifFwd'), '30/07/2026')
+check('Data Efetiva = Trade Date', c.get('dtEfetiva'), '29/06/2026')
+# As duas primeiras nao podem ser a mesma coisa: uma e um PRECO, a outra e uma DATA.
+check('e as duas nao sao o mesmo campo', c.get('pontosTermo') == c.get('dtVerifFwd'), False)
+
+print('\n== 2. o No e o B3 ID ==')
+check('No = B3 ID', c.get('num'), '26G04736337')
+check('e nao o Deal interno', c.get('num') == DEAL['Deal'], False)
+_g, h2 = run([dict(DEAL, B3_ID='')])
+check('sem registro, a coluna sai VAZIA', cells(h2).get('num'), '')
+check('e o painel avisa', 'sem B3 ID' in h2, True)
+
+print('\n== 3. a Taxa Forward do forward start ==')
+check('sem Rate, "Nao Aplicavel"', c.get('taxaFwd'), 'Não Aplicável')
+_g, h3 = run([dict(DEAL, Rate='5.4321')])
+check('com Rate, e o Rate', cells(h3).get('taxaFwd'), '5,43210000')
+
+print('\n== 4. a janela de verificacao ==')
+check('First == Last -> Inicial "Nao Aplicavel"', c.get('dtIni'), 'Não Aplicável')
+check('e a Final e o Last Fixing', c.get('dtFim'), '27/08/2026')
+_g, h4 = run([dict(DEAL, FirstFixingDate='')])
+check('First vazio -> tambem "Nao Aplicavel"', cells(h4).get('dtIni'), 'Não Aplicável')
+_g, h5 = run([dict(DEAL, FirstFixingDate='20/08/2026')])
+check('First != Last -> imprime as DUAS', cells(h5).get('dtIni'), '20/08/2026')
+check('   com a Final intacta', cells(h5).get('dtFim'), '27/08/2026')
+
+print('\n== 5. a Moeda Base e a moeda ESTRANGEIRA ==')
+check('USD/BRL -> USD', c.get('moedaBase'), 'USD')
+check('BRL/EUR -> EUR (a cotada e sempre BRL)',
+      R._conf_fwdstart_moeda({'QuantityCurrency': 'BRL', 'OtherQuantityCurrency': 'EUR'}), 'EUR')
+check('sem a outra ponta, sobra a que ha',
+      R._conf_fwdstart_moeda({'QuantityCurrency': 'BRL', 'OtherQuantityCurrency': ''}), 'BRL')
+# Taxa de Conversao vem do cadastro `fxo-conv-rate`, o mesmo do FXO — nao ha
+# uma segunda tabela de moedas para manter.
+check('Taxa de Conversao do cadastro', c.get('taxaConv'), 'USD PTAX')
+check('e o Tipo junto', c.get('tipoTaxaConv'), 'Venda')
+
+print('\n== 6. o eixo da segregacao ==')
+check('um grupo por contraparte x moeda base',
+      [(g['acronym'], g['mercadoria'], g['family']) for g in groups],
+      [('SUZANO', 'USD', 'strike-me')])
+# Duas moedas da MESMA contraparte = dois documentos (o Anexo II define a moeda).
+g2, _h = run([dict(DEAL), dict(DEAL, Deal='D2', B3_ID='B2', QuantityCurrency='EUR')])
+check('moedas diferentes = grupos diferentes',
+      sorted(g['mercadoria'] for g in g2), ['EUR', 'USD'])
+# O link que a tela publica tem de abrir: mesmo eixo dos dois lados.
+check('o link do grupo abre o documento (nao 404)', bool(html) and 'ANEXO' in html, True)
+
+print('\n== 7. o PDF sai do MESMO HTML do .doc ==')
+src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+blk = src.split('def api_conf_fwdstart_save')[1].split('def api_conf_fwdstart_pdf')[0]
+check('o save renderiza o doc com doc_only', 'doc_only=True' in blk, True)
+check('e passa ESSE html para o PDF', 'word_html_pdf(doc_html)' in blk, True)
+pdfs = io.open(os.path.join(ROOT, 'apps', 'pages', 'confirmation_pdfs.py'), encoding='utf-8').read()
+check('word_html_pdf existe uma vez', pdfs.count('def word_html_pdf'), 1)
+check('e o opcao_fx_pdf delega (nao ha duas implementacoes)',
+      'return word_html_pdf(doc_html)' in pdfs, True)
+
+print('\n== 8. o documento tem as lacunas preenchidas ==')
+outs = dict(re.findall(r'id="out_(\w+)">([^<]*)<', html))
+check('Parte B', outs.get('parteb_nome'), 'SUZANO SA')
+check('CNPJ formatado', outs.get('parteb_cnpj'), '16.404.287/0001-55')
+check('Data de Negociacao', outs.get('data_neg'), '29/06/2026')
+check('Data por extenso (assinatura)', outs.get('data_extenso'), '29 de Junho de 2026')
+check('CGD do Reference Data', outs.get('cgd_date'), '28 de Maio de 2008')
+# No do cabecalho: com UMA operacao e o B3 ID dela; com varias nao ha numero que
+# represente o documento, e o da primeira seria o de uma das operacoes contidas.
+check('No do cabecalho com 1 operacao', outs.get('num_conf'), '26G04736337')
+_g6, h6 = run([dict(DEAL), dict(DEAL, Deal='D2', B3_ID='B2')])
+check('com 2 operacoes, cabecalho vazio',
+      dict(re.findall(r'id="out_(\w+)">([^<]*)<', h6)).get('num_conf'), '')
+
+print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
+sys.exit(1 if fails else 0)

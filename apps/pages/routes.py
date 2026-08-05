@@ -23232,10 +23232,16 @@ def _conf_state_save(ref, state, product='ndf-comm'):
         _atomic_write_json(fp, state)
 
 
-def _conf_segregate(deals, family_fn):
+def _conf_segregate(deals, family_fn, merc_fn=None):
     """Segregação das confirmações da data: um grupo por contraparte ×
     mercadoria × família de template (pontas internas fora, Canceled fora).
-    Retorna (groups, status_counter, total_considerado)."""
+    Retorna (groups, status_counter, total_considerado).
+
+    `merc_fn(deal)` troca o eixo do meio para produtos que não têm mercadoria:
+    no NDF de moeda ele devolve a Moeda Base. Sem ele vale a regra histórica
+    (Commodities → Subjacente → Underlying Asset). O eixo TEM de ser o mesmo
+    aqui e no `_conf_pick_eligible`, senão a tela lista um grupo que a geração
+    não encontra."""
     subj_map = _conf_subjacente_map()
     groups, statuses, total = {}, Counter(), 0
     for deal in deals:
@@ -23247,7 +23253,8 @@ def _conf_segregate(deals, family_fn):
             continue                        # pontas banco/lawton não confirmam
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         subj = subj_map.get(ua)
-        merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+        merc = (str(merc_fn(deal) or '').strip().upper() if merc_fn else
+                str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper())
         fam = family_fn(deal, subj)
         acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         key = (acr, merc, fam)
@@ -23393,7 +23400,7 @@ def _conf_sort_key_venc(item):
     return (1, datetime.max.date()) if d is None else (0, d)
 
 
-def _conf_pick_eligible(deals, acr, merc, family, family_fn):
+def _conf_pick_eligible(deals, acr, merc, family, family_fn, merc_fn=None):
     """Deals elegíveis (status Success, pontas internas fora) de um grupo
     contraparte × mercadoria × família → [(deal, subj)], **ordenados por Data de
     Vencimento**: é assim que as linhas saem no Anexo I das confirmações e é
@@ -23409,7 +23416,8 @@ def _conf_pick_eligible(deals, acr, merc, family, family_fn):
             continue
         ua = str(deal.get('UnderlyingAsset') or '').strip()
         subj = subj_map.get(ua)
-        d_merc = str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper()
+        d_merc = (str(merc_fn(deal) or '').strip().upper() if merc_fn else
+                  str(deal.get('Commodities') or (subj or {}).get('mercadoria') or ua or '').strip().upper())
         d_acr = str(deal.get('Acronym') or '').strip() or client or '(sem contraparte)'
         if d_acr != acr or d_merc != merc:
             continue
@@ -24747,6 +24755,410 @@ def api_conf_optfxo_validate():
     acr, merc = (key.split('|') + ['', ''])[:2]
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'Opt FXO', '{} · {}'.format(acr, merc))
+    return jsonify({'success': True, 'status': 'Success'})
+
+# ==============================================================================
+# CONFIRMAÇÕES — NDF FWD START (Termo de Moeda com início a termo)
+# Porte do fluxo de FXO. As diferenças que importam:
+#   • o eixo do meio da segregação é a MOEDA BASE (o termo de moeda não tem
+#     mercadoria) — daí o `merc_fn` do `_conf_segregate`;
+#   • a Taxa Forward NÃO existe na contratação: no forward start ela só é fixada
+#     na Strike Set Date, e o documento a declara "Não Aplicável" para que a
+#     cláusula 4.2.l.2 a calcule como câmbio da Data de Verificação + Pontos de
+#     Termo. Por isso `Rate` chega vazio do import (§ _ndf_api_*) e Pontos de
+#     Termo é o Strike Set Offset;
+#   • o Nº do Anexo I é o B3 ID — o número que a B3 devolve DEPOIS do registro,
+#     não o Deal interno. Sem registro a coluna sai vazia, que é o pedido de
+#     "registra primeiro" em vez de um número que a contraparte não reconhece.
+# ==============================================================================
+
+_CONF_FWDSTART_FAMILY_TEMPLATES = {
+    'strike-me': ('confirmations/ndf-fwdstart-strike-me.html',
+                  '/confirmation/ndf-fwdstart/strike-me'),
+}
+
+
+def _conf_load_ndffwdstart(ref):
+    """Deals do day-file de NDF FWD Start da reference date."""
+    cfg = _GENERIC_ND_PRODUCTS['fwd-start']
+    fname = ref.strftime('%Y%m%d') + cfg['suffix']
+    fp = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'), fname)
+    if not os.path.isfile(fp):
+        return []
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+    except Exception:
+        log.warning('[conf] cannot read %s', fp)
+        return []
+
+
+def _conf_fwdstart_family(deal, subj):
+    """Uma família só: o documento do termo de moeda a termo é único."""
+    return 'strike-me'
+
+
+def _conf_fwdstart_moeda(deal):
+    """Moeda Base da operação — a moeda ESTRANGEIRA do par.
+
+    A Moeda Cotada do documento é fixa em BRL (cláusula 3.d), então a Moeda Base
+    é o outro lado: a Quantity Currency quando ela não é o real, senão a Other
+    Quantity Currency. Ler sempre a Quantity Currency faria a confirmação de um
+    deal cotado em BRL sair com "Moeda Base: BRL" — a moeda cotada nas duas
+    colunas, e o Valor Base deixando de ser o montante em moeda estrangeira que
+    a cláusula 4.2.m define."""
+    qty = str(deal.get('QuantityCurrency') or '').strip().upper()
+    other = str(deal.get('OtherQuantityCurrency') or '').strip().upper()
+    if qty and qty != 'BRL':
+        return qty
+    return other or qty
+
+
+def _conf_fwdstart_groups(ref):
+    return _conf_segregate(_conf_load_ndffwdstart(ref), _conf_fwdstart_family,
+                           merc_fn=_conf_fwdstart_moeda)
+
+
+def _conf_pick_fwdstart(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_ndffwdstart(ref), acr, merc, family,
+                               _conf_fwdstart_family, merc_fn=_conf_fwdstart_moeda)
+
+
+@blueprint.route('/api/new-deals/ndf-fwdstart/confirmations')
+def api_ndffwdstart_confirmations():
+    """Grupos de confirmação de NDF FWD Start da reference date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    groups, _statuses, _total = _conf_fwdstart_groups(ref)
+    state = _conf_state_load(ref, 'ndf-fwdstart')
+    out = []
+    for g in groups:
+        available = g['family'] in _CONF_FWDSTART_FAMILY_TEMPLATES
+        entry = state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        status = entry.get('status') or 'New'
+        qs = ('date=' + ref.strftime('%Y-%m-%d')
+              + '&acronym=' + quote(g['acronym'])
+              + '&mercadoria=' + quote(g['mercadoria']))
+        url = _CONF_FWDSTART_FAMILY_TEMPLATES[g['family']][1] + '?' + qs if available else None
+        validate_url = ('/confirmation/ndf-fwdstart/validate?' + qs + '&family=' + quote(g['family'])) \
+            if status in ('Generated', 'Success') else None
+        out.append({
+            'acronym': g['acronym'], 'client': g['client'],
+            'mercadoria': g['mercadoria'], 'family': g['family'],
+            'count': g['count'], 'eligible': g['eligible'],
+            'available': available, 'url': url,
+            'status': status, 'validate_url': validate_url,
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
+
+
+def _conf_fwdstart_rows(picked, warnings):
+    """Linhas do Anexo I a partir dos deals escolhidos.
+
+    As três colunas que só existem neste documento:
+      * **Pontos de Termo** = Strike Set Offset — os pontos que se somam ao
+        câmbio da Data de Verificação para formar a Taxa Forward;
+      * **Data de Verificação da Taxa Forward** = Strike Set Date, o dia em que
+        esse câmbio é lido;
+      * **Data Efetiva** = Trade Date.
+
+    A janela de verificação segue o cadastro: First Fixing vazio ou igual ao
+    Last Fixing é uma janela de UM dia, e aí a Data Inicial sai "Não Aplicável"
+    (cláusula 4.2.j). Imprimir a mesma data nas duas colunas diria que há uma
+    média a apurar onde há uma cotação só."""
+    rows, sem_taxa, sem_b3 = [], set(), 0
+    for deal, _subj in picked:
+        moeda = _conf_fwdstart_moeda(deal)
+        direction = str(deal.get('Direction') or '').strip().upper()
+        taxa, tipo_taxa = _conf_fxo_conv_rate(moeda)
+        if not taxa:
+            sem_taxa.add(moeda or '(sem moeda)')
+        b3 = str(deal.get('B3_ID') or '').strip()
+        if not b3:
+            sem_b3 += 1
+        d_ini = _parse_date_any(deal.get('FirstFixingDate'))
+        d_fim = _parse_date_any(deal.get('LastFixingDate'))
+        # Taxa Forward: o forward start não tem taxa na contratação (o import
+        # zera o Rate). Quando existir, é ela que vale — a cláusula 4.2.l.1.
+        taxa_fwd = _conf_fmt_num(deal.get('Rate'), dec=8) if str(deal.get('Rate') or '').strip() \
+            else 'Não Aplicável'
+        rows.append({
+            'num':           b3,
+            'comprador':     'Parte B' if direction.startswith('S') else 'Parte A',
+            'moedaBase':     moeda,
+            # O termo de moeda a termo não paga prêmio; as três colunas existem
+            # no documento e saem declaradas, não em branco.
+            'premio':        'Não Aplicável',
+            'devedorPremio': 'Não Aplicável',
+            'dtPremio':      'Não Aplicável',
+            'taxaConv':      taxa,
+            'tipoTaxaConv':  tipo_taxa,
+            'dtEfetiva':     _conf_fmt_date(deal.get('TradeDate')),
+            'dtVerifFwd':    _conf_fmt_date(deal.get('StrikeSetDate')),
+            'pontosTermo':   str(deal.get('StrikeSetOffset') or '').strip(),
+            'taxaFwd':       taxa_fwd,
+            'valorBase':     _conf_fmt_num(str(deal.get('Notional') or '').replace('-', ''), dec=2),
+            'dtIni':         'Não Aplicável' if (not d_ini or d_ini == d_fim)
+                             else _conf_fmt_date(deal.get('FirstFixingDate')),
+            'dtFim':         _conf_fmt_date(deal.get('LastFixingDate')),
+            'dtVenc':        _conf_fmt_date(deal.get('SettlementDate')),
+        })
+    if sem_taxa:
+        warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping FXO Conversion Rate) '
+                        '— preencha as colunas no painel.'.format(', '.join(sorted(sem_taxa))))
+    if sem_b3:
+        warnings.append('{} operação(ões) sem B3 ID — a coluna Nº do Anexo I sai vazia. '
+                        'Faça o mapeamento do retorno da B3 antes de gerar a confirmação.'
+                        .format(sem_b3))
+    return rows
+
+
+@blueprint.route('/confirmation/ndf-fwdstart/strike-me')
+def confirmation_fwdstart_strike_me():
+    """Confirmação de NDF FWD Start pré-preenchida para um grupo
+    contraparte × moeda base da reference date."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    family = 'strike-me'
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    picked = _conf_pick_fwdstart(ref, acr, merc, family)
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+
+    first = picked[0][0]
+    warnings = []
+    rows = _conf_fwdstart_rows(picked, warnings)
+
+    cgd_txt = _conf_cgd_lookup(first)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+
+    trade_date = first.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        # Nº do cabeçalho: o B3 ID quando o grupo tem UMA operação — com várias
+        # não há um número que represente o documento, e chutar o da primeira
+        # daria à confirmação o número de uma das operações que ela contém.
+        'num_conf':     rows[0]['num'] if len(rows) == 1 else '',
+        'cgd_date':     cgd_txt,
+        'parteb_nome':  str(first.get('Client') or '').strip(),
+        'parteb_cnpj':  _conf_fmt_cnpj(first.get('TaxID')),
+        'data_neg':     _conf_fmt_date(trade_date),
+        'data_extenso': _conf_date_extenso(trade_date),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'rows':         rows,
+        'warnings':     warnings,
+    }
+    return render_template(_CONF_FWDSTART_FAMILY_TEMPLATES[family][0], conf=conf)
+
+
+@blueprint.route('/api/confirmation/ndf-fwdstart/save', methods=['POST'])
+def api_conf_fwdstart_save():
+    """Salva a confirmação de NDF FWD Start (Word + PDF + XML) no Electronic
+    Inventory e grava o numeroContrato na coluna FepWeb ID."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'strike-me').strip()
+    if family not in _CONF_FWDSTART_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
+    if not rows:
+        return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
+
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'num_conf':     str(fields.get('num_conf') or '').strip(),
+        'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
+        'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
+        'data_neg':     str(fields.get('data_neg') or '').strip(),
+        'data_extenso': str(fields.get('data_extenso') or '').strip(),
+        'acronym':      acr,
+        'mercadoria':   merc,
+        'rows':         rows,
+        'warnings':     [],
+    }
+
+    # O documento sai PRIMEIRO e o PDF sai DELE — mesma regra do FXO (§139): uma
+    # segunda transcrição do texto do Word é a forma conhecida de os dois
+    # arquivos divergirem sem ninguém notar.
+    doc_html = render_template(_CONF_FWDSTART_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+    try:
+        from apps.pages.confirmation_pdfs import word_html_pdf
+        pdf_bytes = word_html_pdf(doc_html)
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
+    client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), 'NDF FWD Start')
+    if len(rows) == 1 and str(rows[0].get('num') or '').strip():
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
+            acr, merc, str(rows[0]['num']).strip())
+    else:
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS - {}'.format(
+            acr, merc, ref.strftime('%Y%m%d'))
+    base = _ei_sanitize(base)
+
+    try:
+        os.makedirs(_ei_long_path(dir_path), exist_ok=True)
+        candidate, n = base, 0
+        while os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                os.path.exists(_ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(_ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(_ei_long_path(pdf_path), 'wb') as fh:
+            fh.write(pdf_bytes)
+
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        picked = _conf_pick_fwdstart(ref, acr, merc, family)
+        if picked:
+            numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
+                picked, merc, ref, tipo='Termo', prefixo='NDF_FwdStart',
+                ccy_field='QuantityCurrency', warn_no_spot=False)
+            xcand, xn = candidate, 0
+            while os.path.exists(_ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+                xn += 1
+                xcand = '{} ({})'.format(candidate, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(_ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            fep_updated = _conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+                                              numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
+    except Exception as exc:
+        log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    ref_state = _parse_date_any(payload.get('date')) or ref
+    with _cache_lock:
+        state = _conf_state_load(ref_state, 'ndf-fwdstart')
+        state[_conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _conf_state_save(ref_state, state, 'ndf-fwdstart')
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Saved', 'NDF FWD Start',
+                         '{} · {} ({} op{})'.format(acr, merc, len(rows),
+                                                    '' if len(rows) == 1 else 's'))
+    validate_url = ('/confirmation/ndf-fwdstart/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
+                    + '&family=' + quote(family))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato,
+                    'fepweb_updated': fep_updated,
+                    'warnings': xml_warns,
+                    'validate_url': validate_url})
+
+
+@blueprint.route('/api/confirmation/ndf-fwdstart/pdf')
+def api_conf_fwdstart_pdf():
+    """Preview inline do PDF salvo da confirmação de NDF FWD Start."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'ndf-fwdstart')
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+
+@blueprint.route('/confirmation/ndf-fwdstart/validate')
+def confirmation_fwdstart_validate():
+    """Janela de validação da confirmação de NDF FWD Start (checklist + preview)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _conf_state_entry_or_404(request.args, 'ndf-fwdstart')
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'strike-me').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + quote(acr)
+          + '&mercadoria=' + quote(merc) + '&family=' + quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/ndf-fwdstart',
+                           pdf_url='/api/confirmation/ndf-fwdstart/pdf?' + qs)
+
+
+@blueprint.route('/api/confirmation/ndf-fwdstart/validate', methods=['POST'])
+def api_conf_fwdstart_validate():
+    """Marca a confirmação de NDF FWD Start como Success após o checklist."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _conf_state_entry_or_404(payload, 'ndf-fwdstart')
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _cache_lock:
+        state = _conf_state_load(ref, 'ndf-fwdstart')
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _conf_state_save(ref, state, 'ndf-fwdstart')
+    acr, merc = (key.split('|') + ['', ''])[:2]
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Validated', 'NDF FWD Start', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
 
 

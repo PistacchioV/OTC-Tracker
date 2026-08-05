@@ -1346,15 +1346,19 @@ class _WordHtmlToFlowables(HTMLParser):
             self.flow.append(tbl)
 
 
-def opcao_fx_pdf(conf, variant='vanilla', doc_html=None):
-    """Bytes do PDF da confirmação de Opção de Câmbio (FXO).
+def word_html_pdf(doc_html):
+    """Bytes do PDF de uma confirmação, a partir do HTML do documento JÁ
+    RENDERIZADO — o mesmo string que vira o `.doc`.
 
-    `doc_html` é o documento já renderizado (o mesmo HTML que vira o .doc) —
-    é dele que sai TODO o texto, para não existir uma segunda transcrição do
-    documento do Word. `variant` ('vanilla' | 'asian') só escolhe o template
-    quando o chamador não manda o HTML pronto, e serve de rótulo do arquivo."""
+    É o padrão desde a Opção de Câmbio (§139) e vale para qualquer documento do
+    Word exportado: o texto sai UMA vez, do template, em vez de existir uma
+    segunda transcrição em Python que passa a divergir na primeira revisão do
+    jurídico que ninguém replica dos dois lados.
+
+    Por isso a função não recebe `conf` nem sabe de que produto é a confirmação:
+    tudo que ela precisa está no HTML."""
     if not doc_html:
-        raise ValueError('opcao_fx_pdf: doc_html é obrigatório (HTML do documento renderizado)')
+        raise ValueError('word_html_pdf: doc_html é obrigatório (HTML do documento renderizado)')
     S = _styles()
     S['centered'] = ParagraphStyle('centered', parent=S['body'], alignment=1)
     S['doctitle'] = ParagraphStyle('doctitle', parent=S['body'], fontName='Times-Bold',
@@ -1377,3 +1381,14 @@ def opcao_fx_pdf(conf, variant='vanilla', doc_html=None):
     parser._flush()
     doc.build(parser.flow or [Paragraph('', S['body'])])
     return buf.getvalue()
+
+
+def opcao_fx_pdf(conf, variant='vanilla', doc_html=None):
+    """Bytes do PDF da confirmação de Opção de Câmbio (FXO).
+
+    Assinatura mantida pelos chamadores existentes; o trabalho é o do
+    `word_html_pdf` — `conf` e `variant` nunca influenciaram o resultado, já que
+    todo o conteúdo vem do HTML renderizado."""
+    if not doc_html:
+        raise ValueError('opcao_fx_pdf: doc_html é obrigatório (HTML do documento renderizado)')
+    return word_html_pdf(doc_html)

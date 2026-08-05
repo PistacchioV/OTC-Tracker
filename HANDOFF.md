@@ -9121,3 +9121,73 @@ termo — e prova que saem três e-mails, que o de vencimento tem as duas linhas
 lados internos chegam. A seção 7 fura o `except` dos mapas (que devolve `{}` em falha e faria um erro de
 wiring passar por "dia sem dados") e confirma que eles recebem um `date`, não o `datetime` cru — o
 `settle_ref - op_dt` do Trade Level levanta `TypeError` com datetime.
+
+---
+
+## §203 — Confirmação de NDF FWD Start
+
+Porte do fluxo de confirmação do FXO para o **Termo de Moeda com início a termo**: segregação por
+grupo, documento pré-preenchido com painel de edição, `.doc` + `.pdf` + `.xml` no Electronic Inventory,
+ciclo `New → Generated → Success` com checklist. O que é novo — e o que quebra em silêncio:
+
+### As três colunas do forward start
+
+| Coluna do Anexo I | Campo do cadastro |
+|---|---|
+| **Pontos de Termo** | `Strike Set Offset` |
+| **Data de Verificação da Taxa Forward** | `Strike Set Date` |
+| **Data Efetiva** | `Trade Date` |
+
+As duas primeiras são o par que faz a cláusula **4.2.l.2** funcionar: a Taxa Forward não existe na
+contratação e é calculada como *câmbio apurado na Data de Verificação + Pontos de Termo*. Trocar as
+duas de lugar não levanta erro — as duas células saem preenchidas e o cliente calcula outra taxa.
+
+### A Taxa Forward é "Não Aplicável" de propósito
+
+O import já zera o `Rate` do FWD Start (a taxa só é fixada na Strike Set Date). O documento declara
+**"Não Aplicável"**, e é exatamente esse texto que a cláusula 4.2.l.2 procura para calcular a taxa.
+Imprimir `0,00` desligaria a cláusula. Quando o `Rate` existir, é ele que sai.
+
+### O Nº é o B3 ID
+
+O `Nº` do Anexo I é o **B3 ID** — o número que a B3 devolve **depois** do registro —, não o Deal
+interno. Sem registro a coluna sai **vazia** e o painel avisa: é o pedido de "mapeia o retorno da B3
+primeiro" em vez de um código que a contraparte não reconhece. O `Nº` do cabeçalho segue a mesma regra
+e só é preenchido quando o grupo tem **uma** operação; com várias não há número que represente o
+documento, e o da primeira seria o de uma das operações contidas.
+
+### A janela de verificação
+
+`First Fixing` vazio ou igual ao `Last Fixing` é uma janela de **um dia**: a Data Inicial sai "Não
+Aplicável" (cláusula 4.2.j) e só a Final é impressa. Diferentes, imprime as duas. Repetir a mesma data
+nas duas colunas diria que há uma média a apurar onde há uma cotação só.
+
+### O eixo da segregação
+
+O termo de moeda não tem mercadoria, então o eixo do meio é a **Moeda Base** — a moeda **estrangeira**
+do par, já que a Moeda Cotada é fixa em BRL (cláusula 3.d). Ler sempre a `Quantity Currency` faria um
+deal cotado em BRL sair com BRL nas duas pontas e o Valor Base deixaria de ser o montante que a
+cláusula 4.2.m define.
+
+Isso entrou como um parâmetro **`merc_fn`** no `_conf_segregate` **e** no `_conf_pick_eligible`, não
+como uma segunda função de segregação: o eixo tem de ser o mesmo nos dois, senão a tela lista um grupo
+cujo link abre 404. A Taxa de Conversão e o Tipo saem do cadastro **`fxo-conv-rate`**, o mesmo do FXO —
+não há uma segunda tabela de moedas para manter.
+
+### O PDF
+
+`confirmation_pdfs.word_html_pdf(doc_html)` é o gerador genérico: recebe o HTML do documento **já
+renderizado** (o mesmo string que vira o `.doc`) e não sabe de que produto é a confirmação. O
+`opcao_fx_pdf` passou a delegar para ele — a implementação que existia sempre foi genérica, só tinha
+nome de FXO. É o padrão do §139: o texto do Word sai **uma** vez, do template.
+
+### Limitação conhecida
+
+O XML sai com um aviso: sem `Rate` não há `notional × strike` para somar, então `valor` fica zerado. É
+consequência do produto (a taxa só existe na Strike Set Date), não um defeito de leitura — o aviso
+aparece no painel ao salvar.
+
+### Verificação
+
+`scripts/tests/check_fwdstart_conf.py` (8 seções), renderizando o documento de verdade pelo endpoint e
+lendo as células do Anexo I pelo `data-k`.
