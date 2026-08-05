@@ -8,7 +8,9 @@
     <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
     <![endif]-->
 </head>
-{# One block per legal entity: counterparty | TED value | destination account. #}
+{# One block per legal entity: counterparty | product | TED value | destination
+   account. `r.product` é opcional — o aviso de NDF não manda produto (é tudo
+   NDF), e a coluna some sozinha quando nenhuma linha do bloco tem produto. #}
 {% macro ted_block(title, rows) -%}
     <tr>
         <td style="padding:14px 30px 4px;">
@@ -18,6 +20,9 @@
                 <thead>
                     <tr>
                         <th style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;">Counterparty</th>
+                        {% if rows | selectattr('product') | first %}
+                        <th style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">Product</th>
+                        {% endif %}
                         <th style="background:#2c3e63;color:#fff;text-align:right;padding:7px 10px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">Valor (R$)</th>
                         <th style="background:#2c3e63;color:#fff;text-align:left;padding:7px 10px;border:1px solid #ffffff;font-weight:700;white-space:nowrap;">Conta (BCO / AG / CC)</th>
                     </tr>
@@ -26,6 +31,9 @@
                     {% for r in rows %}
                     <tr bgcolor="{{ '#ffffff' if loop.index0 % 2 == 0 else '#f5f7fa' }}">
                         <td style="padding:6px 10px;border:1px solid #e6e9ee;font-weight:600;color:#1a1a2e;">{{ r.counterparty }}</td>
+                        {% if rows | selectattr('product') | first %}
+                        <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ r.product }}</td>
+                        {% endif %}
                         <td style="padding:6px 10px;border:1px solid #e6e9ee;text-align:right;color:#1a1a2e;white-space:nowrap;">{{ r.value }}</td>
                         <td style="padding:6px 10px;border:1px solid #e6e9ee;color:#444;white-space:nowrap;">{{ r.account }}</td>
                     </tr>

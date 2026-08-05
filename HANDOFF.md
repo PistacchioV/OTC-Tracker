@@ -8973,3 +8973,35 @@ entidade legal é a MGT.
 Só o assunto mudou — o corpo, o PDF e a quebra seguem iguais. A prosa do §194/§196 continua chamando o
 produto de "Termo de Mercadoria" porque é o nome do instrumento; o que o cliente lê no assunto é o texto
 acima.
+
+---
+
+## §199 — O e-mail de TED pedia só o swap (e ganhou a coluna Product)
+
+Bug de verdade, e do tipo que não acusa: quando o **NDF Commodities** entrou no Trade Level (§195), o
+e-mail de TED continuou pedindo **só as TEDs de swap**. A causa é a de sempre — o endpoint **reconstruía a
+lista de trades por conta própria** (`_opssum_rows(_ops_swap_trade_rows(...))`) em vez de usar a mesma que
+a tela usa. A TED da contraparte de commodities simplesmente não era pedida: sem erro, sem linha a menos
+visível, só um pagamento que não sai.
+
+A correção não foi acrescentar a chamada que faltava — foi tirar a decisão do endpoint.
+**`_ops_trade_rows(settle_ref)`** é agora o único lugar que sabe quais famílias existem (hoje SWAP e NDF
+Commodities), e a tela, os cards de reconciliação e o e-mail de TED chamam essa função. Uma família nova
+entra ali e aparece nos três de uma vez. Cada família segue em `try` próprio: uma fonte malformada não
+apaga as linhas que as outras já montaram.
+
+### A coluna Product
+
+Entrou na tabela do e-mail, **depois de Counterparty**, porque agora um mesmo pedido de TED mistura swap e
+termo de commodities e o time precisa saber de qual é cada linha.
+
+Ela é **condicional**: só aparece se alguma linha do bloco trouxer produto. O e-mail de TED do NDF (a
+página de NDF Summary) não manda produto — é tudo NDF — e não podia ganhar uma coluna vazia. O mesmo
+template serve os dois.
+
+### Verificação
+
+Seção 15 do `check_ops_summary.py`: a prova de que o TED e a tela chamam a **mesma** função, que
+`_ops_trade_rows` inclui as duas famílias, e que a coluna Product é condicional e vem depois de
+Counterparty. Além do teste, um dia com um swap e um termo foi montado e o e-mail saiu com as **duas**
+contrapartes e os produtos `SWAP` e `TERMO` na tabela.

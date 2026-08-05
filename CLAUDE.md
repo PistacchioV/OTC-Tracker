@@ -46,7 +46,7 @@ Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies thi
 
 `run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~25.1k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~27.5k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
 
 - `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
 - `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents. **FX Options is the exception and the pattern to follow for new documents**: `opcao_fx_pdf()` builds the PDF from the *rendered document HTML* (the same string that becomes the `.doc`) via `_WordHtmlToFlowables`, so the two outputs cannot drift apart — see HANDOFF §139.
@@ -94,11 +94,18 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
   degrades to the previous behaviour.
 - Optional per-mapping `upgrade` callable converts legacy row formats on read; optional per-column
   `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
+- Optional per-mapping **`file`** points the registry at an EXISTING JSON instead of
+  `mappings/<key>.json`. `swap-index` uses it to edit the very same `SwapIndex.json` the B3 Index Results
+  page edits — one file, two editors, no chance of the two diverging. When you do that, declare the
+  file's own extra columns (`STATUS`/`MAKER`/`CHECKER`) too: the `/mapping` POST rewrites the whole file
+  and would drop anything not declared (HANDOFF §188).
 
-Current mappings: `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
+Current mappings (22): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
 `commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
-`api-links`. See HANDOFF §131–§133 for what each one
-feeds and the traps. Three of them carry rules that are easy to break from the UI:
+`api-links`, `swap-b3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
+`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`.
+See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197 for the rest. Some carry rules that
+are easy to break from the UI:
 
 - **`publisher-ndf`** — a row with **no Match Tokens matches only the complete text** (that is what lets
   `PTAX` and `PTAX|BRR|PTAX` be independent registrations), and column **`NOTES = BACEN` is what routes
@@ -122,6 +129,23 @@ feeds and the traps. Three of them carry rules that are easy to break from the U
   as registered, since it was picked *by* product. The `Unwinds` row ships **empty on purpose** — with no
   URL its consumer fails asking for registration, while `New Deals` falls back to the historical address
   (HANDOFF §173).
+
+- **`swap-index`** — the B3 curve code → curve name (`C00` → `VCP`). It points at the **same
+  `SwapIndex.json`** the B3 Index Results page edits (see the `file` note above), and every code→text
+  translation of the Swap module now goes through a registry: `swap-funcionalidade`, `swap-amortizacao`
+  and `swap-code-labels` (Sinal Taxa and Sim/Não). Live Position **Termo and Opção have no de-para at
+  all** — only number/date formatting — so there is nothing to register there (HANDOFF §188).
+- **`ndfc-ir-exempt`** — who does NOT pay the 0,005% IR of the commodity forward. The **same list serves
+  the Settlement Advice and the Trade Level**: same tax, same trade, and two lists would diverge with one
+  screen withholding and the other not. The seed goes **beyond the spreadsheet formula** (which exempted
+  only LAWTON) because ATACAMA / BANCO / JPMorgan were asked for by name (HANDOFF §195).
+- **`ndfc-advice-split`** — counterparties that get **one notice per commodity** (seeded with `MONDELEZ`).
+  The split runs **after** the net-type split, so a Pay/Rec Mondelez comes out per direction *and* per
+  commodity (HANDOFF §196).
+- **`b3-omnibus-account`** — B3 accounts that do **not** identify the client (`73760.10-2`). On such a
+  row the name coming from B3 is the omnibus holder's; the client is resolved by **CNPJ** against
+  `RefData.json`. Both comparisons (CNPJ and account) are **digits-only** — the sides store them with
+  different punctuation, and a string compare silently matches nothing (HANDOFF §197).
 
 `fxo-conv-rate` feeds
 the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
@@ -199,6 +223,22 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **`Docs/` and `docs/` both exist in this repo** (21 tracked files under the capitalised one, 33 under the lowercase one — an artefact of a case-insensitive filesystem). Screenshots live under **lowercase `docs/sop-screenshots/`**, which is what `SOP_PROCESSAMENTO_OTC.md` and `GUIA_DO_USUARIO_OTC_TRACKER.md` reference. Since the on-disk directory is `Docs`, a plain `git add docs/...` records the path **capitalised** and the new files land in a different tree — invisible on macOS, broken images on Linux/Windows. Stage with `git -c core.ignorecase=false add docs/sop-screenshots/` and verify the casing in the index. Both documents are generated from their `.md` (the single source) by `scripts/build_sop_docx.py`, which takes the source file as an optional argument; see HANDOFF §155 for the screenshot-capture traps.
 - **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128.
 - **Regression checks live in `scripts/tests/`** — self-contained scripts, no framework: each prints `ok`/`FAIL` per assertion and exits 0/1, resolves the repo root from its own path, and touches no real data (tickets go to a `tempfile`, the DuckDB is recreated in tmp, Outlook/SMTP are stubbed). [`scripts/tests/README.md`](scripts/tests/README.md) maps each script to the module it protects — run the matching one after touching that module. `check_boxparse.py` is the only one that needs an external binary (macOS `jsc`, to run the browser copy of the parser), so it does not run on the team's Windows box. See HANDOFF §163.
+- **One JS file drives FIVE pages.** `static/js/pages/live-position-swap-characteristics.js` is a generic
+  `{columns, rows}` viewer chosen by the page's `data-api`: Live Position Swap Characteristics, Other
+  Products Swap (Athena · Events · VCP) and the two Settlement Advice pages (Swap and NDF Commodities).
+  Its contract is the ids **`swapchar-page`** and **`swapchar-table`** plus `data-api` — renaming either
+  leaves the page **blank with no console error**. Anything page-specific (the Print Advice button) goes
+  in the page's own `<script>`, and anything added to the shared file must be **additive**: the per-row
+  `statuses` array and `window.scLoad` are opt-in, so the pages that send nothing behave exactly as before
+  (HANDOFF §184/§190).
+- **Other Products settlement family.** The Settlement Summary, the Trade Level and both Settlement
+  Advice pages read the SAME derived rows — the card counts what the table shows, and the notice prints
+  what the table shows. **`_ops_trade_rows(settle_ref)` is the single place that knows which product
+  families exist** (today SWAP + NDF Commodities); the page, the reconciliation cards and the TED e-mail
+  all call it. The TED endpoint used to rebuild the list itself and silently stopped asking for the
+  commodities TEDs the day NDF was added (HANDOFF §199). The notice status (`New → Generated → Sent`) lives once, in the day overlay
+  `other-products-summary_YYYYMMDD.json`, keyed by **counterparty × LOB × product**, and both screens read
+  that same key (HANDOFF §183/§189/§190).
 - **The team instance runs with the reloader off**: after a `git pull` that touched `routes.py` or a template, Flask must be **restarted** or the old code keeps serving. Several "it's not working" reports traced back to this. Mapping table edits made in the UI are the exception — they apply on the next request.
 - **`table.rows({search: 'none', page: 'all'})` is NOT "everything for the day".** It returns every row *loaded*, and the New Deals tables are frequently loaded from a server-side search (`/cache/search`, the filter chips in the top bar). Any action built by scanning the table therefore silently covers only the last search. The B3 return-file mapping was fixed by sending the **Reference Date** and letting the server build the list from the day file (`_generic_nd_mapping_candidates`, HANDOFF §152) — that also means the server persists to deals that are not on screen. The same limitation still applies to Opt FXO / Opt Commodities / NDF Commodities, which have their own mapping endpoints.
 - **Inserting a column into the New Deals NDF pages touches 14 places** (header `<th>`, filter-row `<th>`, `COL_TO_JSON_FIELD`, `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, hidden `columnDefs`, `columnLabels`, mass-edit options, `SF_COLS`, `SF_LABEL_TO_FIELD`, `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`). Stale indexes here have caused silent data corruption twice — see HANDOFF §132. The Maker column is reached through the `MAKER_COL_INDEX` constant; keep it that way.

@@ -582,6 +582,25 @@ check('e chama o endpoint', "'/api/other-products-summary/ted-email'" in HTML, T
 # Swal e usado no retorno — sem o plugin carregado o clique quebraria em silencio.
 check('a pagina carrega o sweetalert', 'sweetalert2.min.js' in HTML, True)
 
+# O TED tem de cobrir TODAS as familias do Trade Level. Quando o NDF Commodities
+# entrou, o e-mail continuou montando so o swap porque reconstruia a lista por
+# conta propria — e a TED da contraparte de commodities simplesmente nao era
+# pedida, sem erro nenhum. Agora ha UM lugar que sabe quais familias existem.
+check('o TED usa a lista COMPLETA', '_ops_trade_rows(' in body, True)
+check('e nao remonta so o swap', '_ops_swap_trade_rows(' in body, False)
+api_body = SRC.split('def api_ops_data(', 1)[1].split('\n@blueprint', 1)[0]
+check('a tela usa a MESMA lista', '_ops_trade_rows(' in api_body, True)
+fam = SRC.split('def _ops_trade_rows(', 1)[1].split('\ndef ', 1)[0]
+for f in ('_ops_swap_trade_rows', '_ops_ndfc_trade_rows'):
+    check('a lista inclui %s' % f, f in fam, True)
+# A coluna Product entra depois de Counterparty, e some quando nenhuma linha tem
+# produto — o aviso de TED do NDF nao manda produto e nao pode ganhar coluna vazia.
+TED_TPL = read('apps/templates/pages/email-template-ted-release.html')
+check('a tabela tem a coluna Product', '>Product</th>' in TED_TPL, True)
+check('e ela e condicional', "selectattr('product')" in TED_TPL, True)
+check('Product vem depois de Counterparty',
+      TED_TPL.index('>Counterparty</th>') < TED_TPL.index('>Product</th>'), True)
+
 print('\n== 16. o card de Option separa Cambio de Commodities ==')
 # A armadilha aqui e a GRAFIA: o arquivo de posicao de OPCAO escreve
 # "TAXA DE CAMBIO" (singular) e o de NDF escreve "TAXAS DE CAMBIO". Comparar por

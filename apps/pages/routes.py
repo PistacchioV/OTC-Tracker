@@ -5775,6 +5775,30 @@ def _ops_ndfc_trade_rows(settle_ref):
     return out
 
 
+def _ops_trade_rows(settle_ref):
+    """TODAS as linhas do Trade Level da data — hoje SWAP + NDF Commodities.
+
+    É o único lugar que sabe quais famílias existem. A tela, os cards de
+    reconciliação e o e-mail de TED chamam esta função; quando o Trade Level
+    ganhou o NDF Commodities, o e-mail de TED continuou montando só o swap porque
+    reconstruía a lista por conta própria — e a TED da contraparte de commodities
+    simplesmente não era pedida, sem erro nenhum. Uma família nova entra aqui e
+    aparece nos três de uma vez.
+
+    Cada família em `try` próprio: uma fonte malformada não pode apagar as linhas
+    que as outras já montaram.
+    """
+    rows = []
+    for label, fn in (('swap', _ops_swap_trade_rows),
+                      ('NDF commodities', _ops_ndfc_trade_rows)):
+        try:
+            rows += fn(settle_ref)
+        except Exception:
+            log.error("[ops-trade] falha montando as linhas de %s:\n%s",
+                      label, traceback.format_exc())
+    return rows
+
+
 def _ops_fmt_amt(v):
     """#,##0.00 — None vira '' (célula vazia = 'não deu para calcular'), que é
     diferente de 0,00 ('calculei e deu zero')."""
@@ -6008,20 +6032,7 @@ def api_ops_data():
     except ValueError:
         settle_ref = datetime.now().date()
     pos_ref = _forecast_latest_ref()          # cards read the LATEST available position JSON
-    try:
-        trade = _ops_swap_trade_rows(settle_ref)
-    except Exception:
-        # O Trade Level é uma leitura derivada de cinco arquivos; uma fonte
-        # malformada não pode derrubar os widgets, que vêm de outro lugar.
-        log.error("[ops-trade] falha montando as linhas de swap:\n%s", traceback.format_exc())
-        trade = []
-    try:
-        # Uma família de cada vez, em try próprio: uma fonte malformada de NDF
-        # não pode apagar as linhas de swap que já foram montadas.
-        trade += _ops_ndfc_trade_rows(settle_ref)
-    except Exception:
-        log.error("[ops-trade] falha montando as linhas de NDF commodities:\n%s",
-                  traceback.format_exc())
+    trade = _ops_trade_rows(settle_ref)
     try:
         summary = _opssum_rows(trade, datetime(settle_ref.year, settle_ref.month, settle_ref.day))
     except Exception:
@@ -6085,7 +6096,7 @@ def api_ops_summary_ted_email():
     # aqui criaria a segunda cópia da regra de netting, e o e-mail poderia pedir
     # uma TED de valor diferente do que a tela mostra.
     try:
-        rows = _opssum_rows(_ops_swap_trade_rows(ref.date()),
+        rows = _opssum_rows(_ops_trade_rows(ref.date()),
                             datetime(ref.year, ref.month, ref.day))
     except Exception:
         log.error('[ops-ted] falha montando as linhas:\n%s', traceback.format_exc())
@@ -6105,6 +6116,7 @@ def api_ops_summary_ted_email():
             continue                         # conta no Banco JPM → transferência interna
         blocks[otc_emails._ndf_legal_class(r.get('legal'))].append({
             'counterparty': name,
+            'product': r.get('product', ''),
             'value': otc_emails._brl(abs(pay)),
             'account': acct or '—'})
 
