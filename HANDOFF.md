@@ -8251,3 +8251,77 @@ um OTM sintético e devolveu a linha netada (`SUZANO SA · CEM · SWAP · PAY ·
 **Limite honesto**: `Account` e `Observation` saem vazias enquanto a contraparte não estiver no
 `RefData.json` **com** registro no CounterpartyDetails — foi o caso nesta máquina. A cadeia
 nome → SPN → net type → conta ainda não foi exercida contra o cadastro de produção.
+
+---
+
+## §184 — Other Products › Swap › Settlement Advice: a página existe
+
+O link estava no sidenav desde sempre apontando para `#other-products-swap-settlement-advice` — uma
+**âncora morta**: sem rota, sem template, sem endpoint. Clicar não fazia nada. Agora é uma página de
+verdade, e a âncora saiu do menu.
+
+### É o visualizador genérico, não uma página nova
+
+Mesma máquina das irmãs de Swap (Athena · Events · VCP): `live-position-swap-characteristics.js`, escolhido
+pelo atributo `data-api` do template. Vêm de graça o date picker, o smart filter por coluna, o show/hide de
+colunas, o export (Copy/CSV/Excel/Print) e a linha de filtros. O backend só devolve
+`{columns, rows, widgets, ref_date_fmt}`.
+
+**Armadilha do reuso**: o JS procura por `id="swapchar-page"` e `id="swapchar-table"`. Renomear qualquer um
+dos dois deixa a página **em branco sem erro no console** — o teste prende os três nomes.
+
+### As colunas e de onde saem
+
+`Cliente · LOB · Número de Contrato · Data Operação · Vencimento · Prazo · Valor Base Original ·
+Ativo Banco · Curva Banco · Ativo Cliente · Curva Cliente · Resultado Bruto · Alíquota IR · Valor IR ·
+Valor Líquido` — a lista da planilha, com LOB na posição 2.
+
+| coluna | fonte |
+|---|---|
+| Cliente | Athena (`CounterParty`); sem casamento, o Nome Simplificado do B3 |
+| LOB | token do Código Identificador da posição (§183) |
+| Número de Contrato | `Título` do Operations B3 |
+| Data Operação | posição: **Data operação termo**, e só se vazia a Data início |
+| Vencimento · Prazo | posição (Data vencimento) e a diferença em dias |
+| Valor Base Original · Ativo Banco · Ativo Cliente | Eventos (`Valor Base`, `PARTE / Indexador`, `CONTRAPARTE / Indexador`) |
+| Curva Banco · Curva Cliente · Resultado Bruto | Athena (`Owner curve`, `Counterparty curve`, `BRL Net Amount`) |
+| Alíquota IR · Valor IR | `_ops_swap_ir_rate` — a **mesma** tabela do Trade Level |
+| Valor Líquido | bruto menos o IR, que sempre **encolhe** o caixa |
+
+Os três valores em dinheiro saem do **mesmo registro do Athena** (o arquivo é literalmente o
+`BrazilOnshoreSettlementsWarningFile`, o aviso de liquidação), então a linha fecha sozinha: as duas curvas e
+o resultado vêm da mesma fonte. Ativo e Valor Base vêm dos eventos porque o Athena não os traz.
+
+### O universo agora tem UMA implementação
+
+"Quais swaps liquidam hoje" (Tipo Título = SWAP, Tipo Operação registrado em `swap-b3-events`, dedup por
+Título) saiu de dentro de `_ops_swap_trade_rows` e virou **`_ops_swap_settling(opb3)`**, usada pelas duas
+telas. Duplicar a regra deixaria o Trade Level mostrando um swap que o aviso não mostra — e ninguém veria
+erro nenhum. O teste confere que existe **uma** `def _ops_swap_settling` e que as duas funções a chamam.
+
+### A data que mais importa
+
+**Data Operação é a do trade, não a do início.** Um forward start tem `Data operação termo` preenchida e
+`Data início` bem depois; usar a de início encurta o prazo e **sobe** a alíquota — retém IR a mais do
+cliente, num documento que ele recebe. O teste fixa isso com um forward start de 926 dias (15%) e um swap
+sem termo de 35 dias (22,5%).
+
+**Branco não é zero.** Sem prazo na posição não dá para escolher a faixa; a alíquota, o Valor IR e o Valor
+Líquido saem vazios — pedido de conferência, não afirmação de isenção.
+
+### Verificação
+
+`scripts/tests/check_swap_advice.py` (39 asserções, 6 seções): as quatro fontes num tempfile, incluindo o
+registro de posição no formato **posicional real de 146 campos**, e `_swadv_rows` chamada de verdade. Além
+do teste, a rota (200) e o endpoint foram exercidos pelo `test_client`.
+
+**Limites honestos**, os dois que precisam de conferência contra a planilha real no primeiro dia:
+
+1. `Resultado Bruto` é o `BRL Net Amount` do Athena. Se a planilha calcula Curva Cliente − Curva Banco e as
+   duas contas divergirem, é aqui que aparece.
+2. Quando a coluna `Direction` do Athena vem **vazia**, a direção cai no **sinal** do Resultado Bruto
+   (negativo = o banco paga), assumindo a mesma convenção do settlement. O vocabulário real de `Direction`
+   ainda não foi visto.
+
+Falta ainda: o botão que **gera** o aviso (a página hoje só mostra), e a Settlement Advice de **Option**,
+que segue como âncora morta no sidenav.

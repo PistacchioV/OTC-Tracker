@@ -5464,20 +5464,23 @@ def _ops_cpty_receives(direction, settlement):
     return settlement < 0
 
 
-def _ops_swap_trade_rows(settle_ref):
-    """Linhas de SWAP do Trade Level para a data de liquidação `settle_ref`."""
-    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
-    _jp, opb3 = _opb3_load(ref_dt)
-    if not opb3:
-        return []
-    wanted = _ops_swap_event_set()
+def _ops_swap_settling(opb3):
+    """(titulos, by_titulo) do Operations B3: quais SWAPs liquidam no dia.
 
-    # 1) Swaps do dia: Tipo Título = SWAP e Tipo Operação registrado. O dedup é
-    #    por Título e preserva a ordem de chegada — o mesmo swap traz amortização
-    #    e juros em linhas separadas e viraria duas linhas iguais na tela.
-    titulos, seen = [], set()
-    by_titulo = {}
-    for rec in opb3:
+    `titulos` = [(Título, linha), …] com **UMA entrada por swap**, na ordem de
+    chegada: Tipo Título = SWAP e Tipo Operação registrado em `swap-b3-events`.
+    O mesmo swap chega uma vez por Tipo Operação (amortização, juros, prêmio) e
+    viraria linhas repetidas na tela.
+
+    `by_titulo` = {Título → TODAS as linhas daquele título}, inclusive as que o
+    filtro descartou — o Settlement B3 concilia o caixa do dia, não o evento.
+
+    É a definição do universo de swaps liquidando, e vale para as duas telas
+    (Trade Level e Settlement Advice). Duplicá-la deixaria uma tela mostrando um
+    swap que a outra não mostra, sem erro em lugar nenhum."""
+    wanted = _ops_swap_event_set()
+    titulos, seen, by_titulo = [], set(), {}
+    for rec in (opb3 or []):
         titulo = str(rec.get('Título', '') or '').strip()
         if not titulo:
             continue
@@ -5490,10 +5493,20 @@ def _ops_swap_trade_rows(settle_ref):
             continue
         seen.add(titulo.upper())
         titulos.append((titulo, rec))
+    return titulos, by_titulo
+
+
+def _ops_swap_trade_rows(settle_ref):
+    """Linhas de SWAP do Trade Level para a data de liquidação `settle_ref`."""
+    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
+    _jp, opb3 = _opb3_load(ref_dt)
+    if not opb3:
+        return []
+    titulos, by_titulo = _ops_swap_settling(opb3)
     if not titulos:
         return []
 
-    # 2) Fontes auxiliares — lidas UMA vez cada, não por linha.
+    # Fontes auxiliares — lidas UMA vez cada, não por linha.
     tipo_maps = _opb3_tipo_maps(ref_dt)                       # Título → identificador (LOB)
     terms = _ops_swap_pos_terms(ref_dt)                       # Contrato → (dt op, dt venc)
 
@@ -6750,6 +6763,149 @@ def api_swap_athena_data():
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
+
+
+# ── Other Products › Swap › Settlement Advice ────────────────────────────────
+#  A planilha de aviso de liquidação, montada na tela. Uma linha por swap que
+#  liquida na data — MESMO universo do Trade Level (`_ops_swap_settling`), para
+#  as duas telas nunca discordarem sobre o que liquidou.
+#
+#  De onde vem cada coluna, que é o que importa aqui:
+#
+#    Cliente ............ Athena (CounterParty); sem casamento, o Nome
+#                         Simplificado do B3 — mesma regra do Trade Level, e pela
+#                         mesma razão: 'INTRAGMGTFDO' é apelido de conta e não
+#                         casaria com o cadastro de IR.
+#    LOB ................ token do Código Identificador da posição (EDG/CEM/…)
+#    Número de Contrato . Título do Operations B3
+#    Data Operação ...... posição: **Data operação termo** e, só se vazia, Data
+#                         início. É o que faz um forward start pagar IR pelo
+#                         prazo desde o TRADE (§182).
+#    Vencimento/Prazo ... posição (Data vencimento) e a diferença em dias
+#    Valor Base Original  Eventos (Valor Base)
+#    Ativo Banco/Cliente  Eventos (PARTE / Indexador · CONTRAPARTE / Indexador)
+#    Curva Banco/Cliente  Athena (Owner curve · Counterparty curve)
+#    Resultado Bruto .... Athena (BRL Net Amount)
+#    Alíquota/Valor IR .. `_ops_swap_ir_rate` — a MESMA tabela do Trade Level
+#    Valor Líquido ...... bruto menos o IR, que sempre ENCOLHE o caixa
+#
+#  Os três valores em dinheiro saem do MESMO registro do Athena (o arquivo de
+#  aviso de liquidação), então a linha fecha: as duas curvas e o resultado são a
+#  mesma fonte. Ativo e Valor Base vêm dos eventos porque o Athena não os traz.
+_SWADV_COLUMNS = ['Cliente', 'LOB', 'Número de Contrato', 'Data Operação', 'Vencimento',
+                  'Prazo', 'Valor Base Original', 'Ativo Banco', 'Curva Banco',
+                  'Ativo Cliente', 'Curva Cliente', 'Resultado Bruto', 'Alíquota IR',
+                  'Valor IR', 'Valor Líquido']
+
+
+def _swadv_pct(rate):
+    """Alíquota em texto ('22.50%'), ou '' quando não deu para afirmar. Vazio ≠
+    0%: 0% é isenção conferida, vazio é pedido de conferência."""
+    return '' if rate is None else '{:,.2f}%'.format(rate * 100.0)
+
+
+def _swadv_rows(ref):
+    """Linhas do Settlement Advice de SWAP para a data `ref` (datetime)."""
+    _jp, opb3 = _opb3_load(ref)
+    titulos, _by_titulo = _ops_swap_settling(opb3)
+    if not titulos:
+        return []
+    tipo_maps = _opb3_tipo_maps(ref)
+    terms = _ops_swap_pos_terms(ref)
+
+    athena = _ds_display_collect(ref, 'br-onshore-settlements', _ATHENA_COLUMNS,
+                                 _ATHENA_VALUE_COLS)
+    ai = {c: i for i, c in enumerate(athena.get('columns') or [])}
+    by_cetip = {}
+    for row in athena.get('rows') or []:
+        cet = str(row[ai['CETIP ID']] if 'CETIP ID' in ai else '').strip().upper()
+        if cet:
+            by_cetip.setdefault(cet, row)
+
+    events = _ds_display_collect(ref, 'eventos-swap-jpm', _EVENTS_COLUMNS)
+    ei = {c: i for i, c in enumerate(events.get('columns') or [])}
+    by_contract = {}
+    for row in events.get('rows') or []:
+        k = str(row[ei['Código do Contrato']] if 'Código do Contrato' in ei else '').strip().upper()
+        if k:
+            by_contract.setdefault(k, row)
+
+    def _cell(row, idx_map, name):
+        i = idx_map.get(name)
+        return '' if (row is None or i is None or i >= len(row)) else str(row[i] or '').strip()
+
+    def _dt(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    out = []
+    for titulo, rec in titulos:
+        key = titulo.upper()
+        arow = by_cetip.get(key)
+        erow = by_contract.get(key)
+        cliente = (_cell(arow, ai, 'CounterParty')
+                   or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
+        op_dt, venc_dt = terms.get(_fcst_norm_contract(titulo).upper(), (None, None))
+        prazo = (venc_dt - op_dt).days if (op_dt and venc_dt) else None
+
+        bruto_txt = _cell(arow, ai, 'BRL Net Amount')
+        bruto = _mtm_parse_num(bruto_txt) if bruto_txt else None
+        # A direção vem do texto do Athena (é o que a fórmula da planilha lê); o
+        # sinal do Resultado Bruto só entra quando o texto falta, e assume a
+        # mesma convenção do settlement — negativo é o banco pagando.
+        rate = _ops_swap_ir_rate(cliente, prazo,
+                                 _ops_cpty_receives(_cell(arow, ai, 'Direction'), bruto))
+        ir = None if (rate is None or bruto is None) else abs(bruto) * rate
+        # O IR retido sempre ENCOLHE o que se movimenta, seja qual for o sinal.
+        liq = None if (bruto is None or ir is None) else (bruto - ir if bruto >= 0 else bruto + ir)
+
+        out.append([
+            cliente,
+            _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
+            titulo,
+            _dt(op_dt),
+            _dt(venc_dt),
+            '' if prazo is None else str(prazo),
+            _cell(erow, ei, 'Valor Base'),
+            _cell(erow, ei, 'PARTE / Indexador'),
+            _cell(arow, ai, 'Owner curve'),
+            _cell(erow, ei, 'CONTRAPARTE / Indexador'),
+            _cell(arow, ai, 'Counterparty curve'),
+            bruto_txt,
+            _swadv_pct(rate),
+            _ops_fmt_amt(ir),
+            _ops_fmt_amt(liq),
+        ])
+    return out
+
+
+@blueprint.route('/other-products-swap-settlement-advice')
+def other_products_swap_settlement_advice():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-swap-settlement-advice.html',
+                           segment='other-products-swap-settlement-advice',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-swap-settlement-advice/data')
+def api_swap_settlement_advice_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    try:
+        rows = _swadv_rows(ref)
+    except Exception:
+        log.error('[swap-advice] falha montando o aviso:\n%s', traceback.format_exc())
+        rows = []
+    rows.sort(key=lambda r: (str(r[0]).strip() == '', _fcst_norm(str(r[0]))))   # Cliente A→Z
+    return jsonify({'success': True, 'columns': _SWADV_COLUMNS, 'rows': rows,
+                    'widgets': {'total': len(rows)},
+                    'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
 
 
 # ── Other Products › Swap › Kapital Hybrids (BANCO_UPCOMING_PAYMENTS.csv) ─────
