@@ -8517,3 +8517,62 @@ Além dos testes: as duas páginas respondem 200 e os dois endpoints foram exerc
 **Limite honesto**: o Print Advice gera para **todas** as linhas da data. O endpoint aceita uma lista
 `contracts` para gerar só algumas, mas o botão ainda não a envia — o visualizador genérico não expõe a
 DataTable, e ler os checkboxes do DOM só enxergaria a página corrente da paginação (a armadilha do §152).
+
+---
+
+## §188 — As traduções de código do Swap saem do cadastro (e dois bugs do aviso)
+
+### Os dois bugs primeiro
+
+**Valor Base Original saía vazia no aviso.** Ela vinha do arquivo de **eventos**
+(`eventos-swap-jpm`), por um join a mais que podia falhar sem sinal. Passou a sair da **posição**
+(`Valor base`, índice 14) — o mesmo arquivo que já é lido para as datas e os indexadores. Uma fonte a
+menos é um join a menos para falhar em silêncio, e o arquivo de eventos deixou de ser lido no aviso.
+
+**Indexador Banco/Cliente não resolvia o VCP.** `_swadv_indexador` comparava o `Código índice` **cru** com
+`'VCP'` — e o VCP é `C00`. Nunca casava. Agora o código passa **primeiro** pela tradução do Swap Index (a
+mesma que a tela do Live Position › Swap usa) e só então se testa se deu VCP.
+
+### As traduções viraram cadastro
+
+Regra de ouro do CLAUDE.md: de-para não mora no código. As tabelas do Swap eram dicts em `routes.py`.
+Agora:
+
+| cadastro | traduz | vinha de |
+|---|---|---|
+| `swap-index` | Código de Referência Externa → Nome da Curva (`C00` → `VCP`) | `SwapIndex.json` |
+| `swap-funcionalidade` | Funcionalidade (0–9) | `_SWAPCHAR_FUNC_MAP` |
+| `swap-amortizacao` | Tipo de Amortização (0/1/3/4) | `_SWAPCHAR_AMORT_MAP` |
+| `swap-code-labels` | Sinal Taxa (+/−) e Sim/Não | literais em duas funções |
+
+**O `swap-index` aponta para o PRÓPRIO `SwapIndex.json`**, via a chave `file` do `_MAPPING_DEFS` — não
+para uma cópia. As duas telas (a aba Swap Index do B3 Index Results e o /mapping) editam **o mesmo
+arquivo**, então não existe a versão de uma e a versão da outra. As colunas são as chaves do próprio
+arquivo, **inclusive STATUS/MAKER/CHECKER**, declaradas de propósito: o POST do /mapping reescreve o
+arquivo inteiro e as apagaria.
+
+Os seeds reproduzem exatamente o que estava hardcoded — a migração não pode mudar a tela sem ninguém
+pedir. `_swapchar_code_map` normaliza o código para o inteiro sem zeros à esquerda, que é como os arquivos
+da B3 variam (`0`, `00`, `000`): registrar as três formas seria pedir erro.
+
+**Live Position Termo e Opção**: auditadas, **não têm de-para**. O que elas fazem é formatação — data
+para dd/mm/yyyy, número para `#,##0.00`, taxa, 8 casas, máscara de CPF/CNPJ. Não há o que registrar lá, e
+inventar um cadastro para formatação de número seria cadastro morto. Toda a tradução de código do módulo
+está no Swap, e agora está no /mapping.
+
+### Difference com ✓/✗
+
+A coluna Difference do Trade Level ganhou o ícone ao lado do número, igual ao do NDF. O ícone sai do
+**mesmo `status`** que pinta o badge da linha — duas fontes contariam histórias diferentes na primeira vez
+que a tolerância mudasse. Diferença **vazia** ("não deu para calcular") ainda mostra ✗: é pedido de
+conferência.
+
+Isso mexeu na última coluna do `rowMaker`, que é uma das três listas posicionais do §182 — a seção 4 do
+`check_ops_trade_swap.py` foi ajustada para reconhecer `diffCell(r)` como a célula de `difference`.
+
+### Verificação
+
+Seções 8 e 9 novas em `check_swap_advice.py`: os quatro cadastros registrados e com aba, **nenhum
+dicionário de tradução sobrando no código**, o `swap-index` apontando para o arquivo original, e cada
+tradução conferida valor a valor contra o que estava hardcoded. Suíte inteira verde; as quatro páginas
+afetadas respondem 200 e `/api/mappings/swap-index` devolve as 77 linhas.

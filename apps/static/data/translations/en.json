@@ -1552,5 +1552,9 @@
   "ops-ev-register": "Register the variation in Mapping › Swap B3 Events.",
   "ops-ev-noswap": "Operations B3 has no SWAP rows for this date.",
   "ops-ev-rows": "row(s) in the file",
-  "sw-print-advice": "Print Advice"
+  "sw-print-advice": "Print Advice",
+  "map-tab-swap-index": "Swap Index — B3 Code",
+  "map-tab-swap-func": "Swap — Funcionalidade",
+  "map-tab-swap-amort": "Swap — Amortisation Type",
+  "map-tab-swap-codes": "Swap — Sign & Yes/No"
 }

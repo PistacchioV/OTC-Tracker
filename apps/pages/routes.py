@@ -5349,14 +5349,19 @@ def _ops_swap_event_set():
 def _swadv_indexador(cod, nome):
     """Indexador de uma perna do swap, para o aviso de liquidação.
 
-    O `Código índice` já É o nome do indexador na maioria dos casos (CDI, PRE,
-    IPCA). A exceção é **VCP** — variação cambial —, que não diz qual moeda: aí o
+    O `Código índice` da posição é um CÓDIGO (`C00`, `PRE`, `DI1`), não o nome —
+    por isso ele passa **primeiro** pelo cadastro `swap-index`, o mesmo que a
+    tela do Live Position › Swap usa para mostrar a curva em vez do código.
+    Comparar o código cru com 'VCP' nunca casava: o VCP é `C00`.
+
+    Traduzido, é o nome do indexador na maioria dos casos (CDI, PRE, IPCA). A
+    exceção é **VCP** — variação cambial —, que não diz qual moeda: aí o
     indexador de verdade está no `Nome Tipo/Classe` da mesma perna, e vai em
     CAIXA ALTA. Imprimir 'VCP' no aviso do cliente não informa nada."""
-    cod = str(cod or '').strip()
-    if _fcst_norm(cod) == 'vcp':
+    nome_curva = _swapindex_name(cod)
+    if _fcst_norm(nome_curva) == 'vcp':
         return str(nome or '').strip().upper()
-    return cod
+    return nome_curva
 
 
 def _ops_swap_pos_terms(ref):
@@ -5411,12 +5416,13 @@ def _ops_swap_pos_terms(ref):
     for r in rows:
         vals = list(r.values())
         full = len(vals) >= 120
-        idx_banco = idx_cliente = ''
+        idx_banco = idx_cliente = base = ''
         if full:
             contrato = vals[2]
             d_ini, d_venc, d_termo = vals[11], vals[12], vals[25]
             idx_banco = _swadv_indexador(vals[40], vals[69])
             idx_cliente = _swadv_indexador(vals[50], vals[74])
+            base = vals[14]                              # 'Valor base' (coluna O)
         else:
             contrato = r.get(k_contr, '') if k_contr else ''
             d_ini = r.get(k_ini, '') if k_ini else ''
@@ -5427,7 +5433,8 @@ def _ops_swap_pos_terms(ref):
             continue
         op = _fcst_parse_date(str(d_termo or '')) or _fcst_parse_date(str(d_ini or ''))
         out.setdefault(c, {'op': op, 'venc': _fcst_parse_date(str(d_venc or '')),
-                           'idx_banco': idx_banco, 'idx_cliente': idx_cliente})
+                           'idx_banco': idx_banco, 'idx_cliente': idx_cliente,
+                           'valor_base': base})
     return out
 
 
@@ -5995,11 +6002,7 @@ _SWAPCHAR_LABELS = [
 
 # Funcionalidade code → clean label (no underscores/parentheses; OPCAO_ARREPEND →
 # "OPCAO ARREPENDIMENTO"). Keyed by the integer code as a string ('0'..'9').
-_SWAPCHAR_FUNC_MAP = {
-    '0': 'SEM FUNCIONALIDADE', '1': 'KNOCK IN', '2': 'KNOCK OUT', '3': 'KNOCK INOUT',
-    '4': 'SWAPTION', '5': 'COMPOUND', '6': 'OPCAO ARREPENDIMENTO', '7': 'KNOCK IN COM OPCAO',
-    '8': 'KNOCK OUT COM OPCAO', '9': 'SWAP COM PRÊMIO',
-}
+# Funcionalidade: código → texto. Cadastro `swap-funcionalidade` (/mapping).
 # Header tokens (normalised) that mark a numeric/value column → format #,##0.00.
 _SWAPCHAR_VALUE_TOKENS = ('valor', 'saldo', 'percentual', 'pu inicial', 'pu atual', 'taxa',
                           'lim. inferior', 'lim. superior', 'limite inferior', 'limite superior',
@@ -6046,6 +6049,23 @@ def _swapchar_coltype(label):
 _SWAPCHAR_TYPES = [_swapchar_coltype(l) for l in _SWAPCHAR_LABELS]
 
 
+def _swapchar_code_map(key, field=None):
+    """{code → texto} de um cadastro de tradução (`swap-funcionalidade`,
+    `swap-amortizacao`, `swap-code-labels`). O código é normalizado para o
+    inteiro sem zeros à esquerda, que é como os arquivos da B3 variam ('0', '00',
+    '000') — registrar as três formas seria pedir erro."""
+    out = {}
+    for r in _mapping_rows(key):
+        if field is not None and _fcst_norm(r.get('FIELD', '')).strip() != _fcst_norm(field):
+            continue
+        code = str(r.get('CODE', '') or '').strip()
+        digits = ''.join(ch for ch in code if ch.isdigit())
+        if digits == '':
+            continue
+        out[str(int(digits))] = str(r.get('LABEL', '') or '')
+    return out
+
+
 def _swapchar_func_text(v):
     """Map a Funcionalidade cell to its clean label (strip underscores/parentheses)."""
     s = str(v or '').strip()
@@ -6054,21 +6074,18 @@ def _swapchar_func_text(v):
     digits = ''.join(ch for ch in s if ch.isdigit())
     if digits:
         code = str(int(digits))
-        if code in _SWAPCHAR_FUNC_MAP:
-            return _SWAPCHAR_FUNC_MAP[code]
+        m = _swapchar_code_map('swap-funcionalidade')
+        if code in m:
+            return m[code]
     t = ' '.join(s.replace('(', ' ').replace(')', ' ').replace('_', ' ').split())
     if 'ARREPEND' in t.upper():
         return 'OPCAO ARREPENDIMENTO'
     return t
 
 
-# Tipo de amortização code → text (image mapping; parentheses dropped, text kept).
-_SWAPCHAR_AMORT_MAP = {
-    '0': 'Sobre Valor Base Original',
-    '1': 'Sobre Valor Base Remanescente',
-    '3': 'Na Data de Vencimento',
-    '4': 'Sem Troca de Amortização',
-}
+# Tipo de amortização: código → texto. Cadastro `swap-amortizacao` (/mapping).
+# As DUAS páginas que traduzem esse código — Characteristics e Swap Flow — leem
+# daqui, para não existir a versão de uma e a versão da outra.
 
 
 def _swapchar_amort_text(v):
@@ -6082,8 +6099,9 @@ def _swapchar_amort_text(v):
     digits = ''.join(ch for ch in s if ch.isdigit())
     if digits:
         code = str(int(digits))
-        if code in _SWAPCHAR_AMORT_MAP:
-            return _SWAPCHAR_AMORT_MAP[code]
+        m = _swapchar_code_map('swap-amortizacao')
+        if code in m:
+            return m[code]
     return s
 
 
@@ -6127,8 +6145,9 @@ def _lp_fmt_cnpj(v):
 
 
 def _lp_bool_ptbr(raw):
-    """Swap flag → PT-BR: 01/1.00 → 'Não', 00/0.00 → 'Sim', '' → ''.
-    (Yes, 01=Não / 00=Sim by the business spec.) Unknown values pass through."""
+    """Flag de swap → texto. Cadastro `swap-code-labels`, campo `Sim/Não`
+    (00 → Sim, 01 → Não — sim, nessa ordem, é a especificação). Valor fora do
+    cadastro passa direto."""
     s = str(raw or '').strip()
     if not s:
         return ''
@@ -6138,17 +6157,13 @@ def _lp_bool_ptbr(raw):
         s = s[:-2]
     if s.isdigit():
         s = str(int(s))
-    if s == '1':
-        return 'Não'
-    if s == '0':
-        return 'Sim'
-    return raw
+    return _swapchar_code_map('swap-code-labels', 'Sim/Não').get(s, raw)
 
 
 def _lp_amort_label(raw):
     """Swap Flow "Tipo Amortização" code → label. Uses the SAME nomenclature as the
     Live Position Swap Characteristics "Tipo de amortização" column
-    (_SWAPCHAR_AMORT_MAP), so both pages read identically."""
+    (cadastro `swap-amortizacao`), so both pages read identically."""
     s = str(raw or '').strip()
     if not s:
         return ''
@@ -6160,38 +6175,28 @@ def _lp_amort_label(raw):
     digits = ''.join(ch for ch in s if ch.isdigit())
     if digits:
         code = str(int(digits))
-        if code in _SWAPCHAR_AMORT_MAP:
-            return _SWAPCHAR_AMORT_MAP[code]
+        m = _swapchar_code_map('swap-amortizacao')
+        if code in m:
+            return m[code]
     return raw
 
 
-# Swap Index (B3 Index Results tab) — Codigo Referencia Externa → Nome Curva.
-_SWAPINDEX_CACHE = {'mtime': None, 'map': {}}
-
-
+# Swap Index — Código de Referência Externa → Nome da Curva. Saiu do
+# `SwapIndex.json` (a aba Swap Index do B3 Index Results) e virou o cadastro
+# `swap-index` do /mapping — apontado para o MESMO arquivo (`file` no
+# _MAPPING_DEFS), não para uma cópia. As duas telas editam o mesmo SwapIndex.json,
+# então não existe a versão de uma e a versão da outra; a única diferença é que
+# agora a leitura cacheia por mtime, como todos os outros cadastros.
 def _swapindex_lookup():
-    """Cached {code(upper) → Nome Curva} from SwapIndex.json (reloads on mtime change)."""
-    path = os.path.join(_B3_DATA_DIR, 'SwapIndex.json')
-    try:
-        mt = os.path.getmtime(path)
-    except OSError:
-        return {}
-    if _SWAPINDEX_CACHE['mtime'] != mt:
-        try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            data = []
-        m = {}
-        for rec in data:
-            code = str(rec.get('Codigo Referencia Externa', '') or '').strip().upper()
-            name = str(rec.get('Nome Curva', '') or '').strip()
-            if code:
-                m[code] = name
-                m.setdefault(code.lstrip('0') or '0', name)   # tolerant to leading zeros
-        _SWAPINDEX_CACHE['mtime'] = mt
-        _SWAPINDEX_CACHE['map'] = m
-    return _SWAPINDEX_CACHE['map']
+    """{code(upper) → Nome Curva} do cadastro `swap-index`."""
+    m = {}
+    for rec in _mapping_rows('swap-index'):
+        code = str(rec.get('Codigo Referencia Externa', '') or '').strip().upper()
+        name = str(rec.get('Nome Curva', '') or '').strip()
+        if code:
+            m[code] = name
+            m.setdefault(code.lstrip('0') or '0', name)   # tolerante a zeros à esquerda
+    return m
 
 
 def _swapindex_name(code):
@@ -6203,15 +6208,12 @@ def _swapindex_name(code):
 
 
 def _swapchar_sinal_text(v):
-    """Sinal Taxa code → sign: 00 → +, 01 → - (tolerant to '0'/'1')."""
+    """Sinal Taxa: código → sinal. Cadastro `swap-code-labels`, campo
+    `Sinal Taxa` (00 → +, 01 → -), tolerante a '0'/'1'."""
     s = str(v or '').strip()
     digits = ''.join(ch for ch in s if ch.isdigit())
     if digits != '':
-        code = int(digits)
-        if code == 0:
-            return '+'
-        if code == 1:
-            return '-'
+        return _swapchar_code_map('swap-code-labels', 'Sinal Taxa').get(str(int(digits)), s)
     return s
 
 
@@ -6939,8 +6941,9 @@ def api_swap_athena_data():
 #                         início. É o que faz um forward start pagar IR pelo
 #                         prazo desde o TRADE (§182).
 #    Vencimento/Prazo ... posição (Data vencimento) e a diferença em dias
-#    Valor Base Original  Eventos (Valor Base)
-#    Ativo Banco/Cliente  Eventos (PARTE / Indexador · CONTRAPARTE / Indexador)
+#    Valor Base Original  posição (Valor base)
+#    Indexador Bco/Client posição: Código índice traduzido pelo cadastro
+#                         `swap-index`; se der VCP, o Nome Tipo/Classe da perna
 #    Curva Banco/Cliente  Athena (Owner curve · Counterparty curve)
 #    Resultado Bruto .... Athena (BRL Net Amount)
 #    Alíquota/Valor IR .. `_ops_swap_ir_rate` — a MESMA tabela do Trade Level
@@ -6990,14 +6993,9 @@ def _swadv_collect(ref):
         if cet:
             by_cetip.setdefault(cet, row)
 
-    events = _ds_display_collect(ref, 'eventos-swap-jpm', _EVENTS_COLUMNS)
-    ei = {c: i for i, c in enumerate(events.get('columns') or [])}
-    by_contract = {}
-    for row in events.get('rows') or []:
-        k = str(row[ei['Código do Contrato']] if 'Código do Contrato' in ei else '').strip().upper()
-        if k:
-            by_contract.setdefault(k, row)
-
+    # O arquivo de EVENTOS deixou de ser lido aqui: Valor Base e os indexadores
+    # passaram a sair da posição, que já é lida para as datas. Uma fonte a menos
+    # é um join a menos para falhar em silêncio.
     def _cell(row, idx_map, name):
         i = idx_map.get(name)
         return '' if (row is None or i is None or i >= len(row)) else str(row[i] or '').strip()
@@ -7012,7 +7010,6 @@ def _swadv_collect(ref):
     for titulo, rec in titulos:
         key = titulo.upper()
         arow = by_cetip.get(key)
-        erow = by_contract.get(key)
         pos = terms.get(_fcst_norm_contract(titulo).upper()) or {}
         cliente = (_cell(arow, ai, 'CounterParty')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
@@ -7050,7 +7047,7 @@ def _swadv_collect(ref):
                 _dt(op_dt),
                 _dt(venc_dt),
                 '' if prazo is None else '{:,}'.format(prazo).replace(',', '.'),
-                _cell(erow, ei, 'Valor Base'),
+                _swapchar_fmt_value(pos.get('valor_base', '')),
                 pos.get('idx_banco', ''),
                 _cell(arow, ai, 'Owner curve'),
                 pos.get('idx_cliente', ''),
@@ -7069,7 +7066,7 @@ def _swadv_collect(ref):
             # Crus para o aviso: ele imprime em BR (R$ 1.234,56), e a tela em US.
             # Reformatar o texto de uma para a outra erraria no primeiro valor
             # com separador ambíguo — do número não há como errar.
-            'valor_base': _mtm_parse_num(_cell(erow, ei, 'Valor Base')),
+            'valor_base': _mtm_parse_num(pos.get('valor_base', '')),
             'curva_banco': _mtm_parse_num(_cell(arow, ai, 'Owner curve')),
             'curva_cliente': _mtm_parse_num(_cell(arow, ai, 'Counterparty curve')),
         })
@@ -16919,6 +16916,150 @@ _MAPPING_DEFS = {
             {'UP TO DAYS': '360', 'RATE': '20'},
             {'UP TO DAYS': '720', 'RATE': '17.5'},
             {'UP TO DAYS': '',    'RATE': '15'},
+        ],
+    },
+    'swap-index': {
+        'label': 'Swap Index — B3 Code',
+        # MESMO arquivo da aba Swap Index do B3 Index Results — não uma cópia.
+        # `file` aponta o cadastro para lá, então as duas telas editam o mesmo
+        # SwapIndex.json e não há como divergirem. As colunas são as chaves do
+        # próprio arquivo (inclusive STATUS/MAKER/CHECKER, declaradas para que um
+        # POST do /mapping, que reescreve o arquivo inteiro, não as apague).
+        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static',
+                                              'data', 'SwapIndex.json')),
+        'columns': [
+            {'key': 'Codigo Referencia Externa', 'label': 'B3 Code'},
+            {'key': 'Nome Curva', 'label': 'Curve Name'},
+            {'key': 'Nome Categoria', 'label': 'Category'},
+            {'key': 'STATUS', 'label': 'Status'},
+            {'key': 'MAKER', 'label': 'Maker'},
+            {'key': 'CHECKER', 'label': 'Checker'},
+        ],
+        'seed': [
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'ACO', 'Nome Curva': 'ACOES', 'Nome Categoria': 'ACOES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'COM', 'Nome Curva': 'COMMODITIES', 'Nome Categoria': 'COMMODITIES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C04', 'Nome Curva': 'OURO Ajuste', 'Nome Categoria': 'COMMODITIES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'IBL', 'Nome Curva': 'IBOVESPA LIQUIDACAO', 'Nome Categoria': 'INDICES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'IBC', 'Nome Curva': 'IBOVESPA LIQUIDACAO CONTINUO', 'Nome Categoria': 'INDICES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'IBO', 'Nome Curva': 'IBOVESPA FECHAMENTO', 'Nome Categoria': 'INDICES'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C19', 'Nome Curva': 'IPCA', 'Nome Categoria': 'INDICES DE PRECOS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C09', 'Nome Curva': 'IGP-M', 'Nome Categoria': 'INDICES DE PRECOS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C10', 'Nome Curva': 'IGP-DI', 'Nome Categoria': 'INDICES DE PRECOS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C16', 'Nome Curva': 'INPC', 'Nome Categoria': 'INDICES DE PRECOS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C21', 'Nome Curva': 'IPCA-NC', 'Nome Categoria': 'INDICES DE PRECOS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C23', 'Nome Curva': 'TJLP', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C52', 'Nome Curva': 'DI 360D', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C20', 'Nome Curva': 'TR', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C60', 'Nome Curva': 'PREFIXADO 360D', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C66', 'Nome Curva': 'PRE LINEAR 360D', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C99', 'Nome Curva': 'PREFIXADO 252D', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C03', 'Nome Curva': 'DI', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C01', 'Nome Curva': 'SELIC', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C65', 'Nome Curva': 'PREFIXADO 365D', 'Nome Categoria': 'JUROS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'T12', 'Nome Curva': 'TSFR12M', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'T06', 'Nome Curva': 'TSFR6M', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'SFR', 'Nome Curva': 'SOFR', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'T03', 'Nome Curva': 'TSFR3M', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'T01', 'Nome Curva': 'TSFR1M', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C29', 'Nome Curva': 'TJMI', 'Nome Categoria': 'JUROS INTERNACIONAIS'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '425', 'Nome Curva': 'FRANCO SUICO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '796', 'Nome Curva': 'RENMINBI HONG KON', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '930', 'Nome Curva': 'WON/COREIA SUL', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '642', 'Nome Curva': 'NOVA LIRA/TURQUIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '450', 'Nome Curva': 'GUARANI/PARAGUAI', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '745', 'Nome Curva': 'PESO/URUGUAIO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '820', 'Nome Curva': 'RIAL/ARAB SAUDITA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '165', 'Nome Curva': 'DOLAR CANADENSE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'USD', 'Nome Curva': 'DOLAR COMERCIAL EXPONENCIAL', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '100', 'Nome Curva': 'DINAR/KWAIT', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '055', 'Nome Curva': 'COROA DINAM/DINAM', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '660', 'Nome Curva': 'NOVO-SOL', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '795', 'Nome Curva': 'IUAN RENMIMBI/CHI', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '785', 'Nome Curva': 'RANDE/AFRICA SUL', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '860', 'Nome Curva': 'RUPIA/INDIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'CHF', 'Nome Curva': 'FRANCO SUICO BCE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '129', 'Nome Curva': 'EURO WMR', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '706', 'Nome Curva': 'PESO ARGENTINO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '470', 'Nome Curva': 'IENE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '540', 'Nome Curva': 'LIBRA ESTERLINA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '245', 'Nome Curva': 'DOLAR/NOVA ZELAND', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '145', 'Nome Curva': 'DIRHAM/EMIR.ARABE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '137', 'Nome Curva': 'FRANCO SUICO WMR', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '150', 'Nome Curva': 'DOLAR AUSTRALIANO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '070', 'Nome Curva': 'COROA SUECA/SUECI', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '978', 'Nome Curva': 'EURO/COM.EUROPEIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '640', 'Nome Curva': 'NOVO DOLAR/TAIWAN', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '828', 'Nome Curva': 'RINGGIT/MALASIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '800', 'Nome Curva': 'RIAL/CATAR', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '026', 'Nome Curva': 'BOLIVAR FORTE/VEN', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '345', 'Nome Curva': 'FORINT/HUNGRIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '471', 'Nome Curva': 'IENE WMR REAIS', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '220', 'Nome Curva': 'DOLAR DOS EUA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '741', 'Nome Curva': 'PESO MEXICANO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'EUR', 'Nome Curva': 'EURO BCE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '205', 'Nome Curva': 'DOLAR/HONG-KONG', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '015', 'Nome Curva': 'BATH/TAILANDIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '075', 'Nome Curva': 'COROA TCHECA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '735', 'Nome Curva': 'PESO/FILIPINAS', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '506', 'Nome Curva': 'NOVO LEU/ROMENIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'U30', 'Nome Curva': 'DOLAR DOS EUA 30/360', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '715', 'Nome Curva': 'PESO CHILENO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '195', 'Nome Curva': 'DOLAR/CINGAPURA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '830', 'Nome Curva': 'RUBLO/RUSSIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '260', 'Nome Curva': 'DONGUE/VIETNAN', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '030', 'Nome Curva': 'BOLIVIANO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '065', 'Nome Curva': 'COROA NORUE/NORUE', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '865', 'Nome Curva': 'RUPIA/INDONESIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '975', 'Nome Curva': 'ZLOTY/POLONIA', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': '720', 'Nome Curva': 'PESO COLOMBIANO', 'Nome Categoria': 'TAXAS DE CAMBIO'},
+            {'STATUS': 'ACTIVE', 'Codigo Referencia Externa': 'C00', 'Nome Curva': 'VCP', 'Nome Categoria': 'VCP'},
+        ],
+    },
+    'swap-funcionalidade': {
+        'label': 'Swap — Funcionalidade',
+        'columns': [
+            {'key': 'CODE', 'label': 'B3 Code'},
+            {'key': 'LABEL', 'label': 'Text'},
+        ],
+        'seed': [
+            {'CODE': '0', 'LABEL': 'SEM FUNCIONALIDADE'},
+            {'CODE': '1', 'LABEL': 'KNOCK IN'},
+            {'CODE': '2', 'LABEL': 'KNOCK OUT'},
+            {'CODE': '3', 'LABEL': 'KNOCK INOUT'},
+            {'CODE': '4', 'LABEL': 'SWAPTION'},
+            {'CODE': '5', 'LABEL': 'COMPOUND'},
+            {'CODE': '6', 'LABEL': 'OPCAO ARREPENDIMENTO'},
+            {'CODE': '7', 'LABEL': 'KNOCK IN COM OPCAO'},
+            {'CODE': '8', 'LABEL': 'KNOCK OUT COM OPCAO'},
+            {'CODE': '9', 'LABEL': 'SWAP COM PR\u00caMIO'},
+        ],
+    },
+    'swap-amortizacao': {
+        'label': 'Swap — Tipo de Amortiza\u00e7\u00e3o',
+        'columns': [
+            {'key': 'CODE', 'label': 'B3 Code'},
+            {'key': 'LABEL', 'label': 'Text'},
+        ],
+        'seed': [
+            {'CODE': '0', 'LABEL': 'Sobre Valor Base Original'},
+            {'CODE': '1', 'LABEL': 'Sobre Valor Base Remanescente'},
+            {'CODE': '3', 'LABEL': 'Na Data de Vencimento'},
+            {'CODE': '4', 'LABEL': 'Sem Troca de Amortiza\u00e7\u00e3o'},
+        ],
+    },
+    'swap-code-labels': {
+        'label': 'Swap — Sinal e Sim/N\u00e3o',
+        'columns': [
+            {'key': 'FIELD', 'label': 'Field', 'type': 'select',
+             'options': ['Sinal Taxa', 'Sim/N\u00e3o']},
+            {'key': 'CODE', 'label': 'B3 Code'},
+            {'key': 'LABEL', 'label': 'Text'},
+        ],
+        'seed': [
+            {'FIELD': 'Sinal Taxa', 'CODE': '0', 'LABEL': '+'},
+            {'FIELD': 'Sinal Taxa', 'CODE': '1', 'LABEL': '-'},
+            {'FIELD': 'Sim/N\u00e3o', 'CODE': '0', 'LABEL': 'Sim'},
+            {'FIELD': 'Sim/N\u00e3o', 'CODE': '1', 'LABEL': 'N\u00e3o'},
         ],
     },
 }

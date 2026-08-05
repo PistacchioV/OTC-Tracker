@@ -210,7 +210,10 @@ trade = HTML.split('id="ops-trade-table"', 1)[1].split('</thead>', 1)[0]
 ths = re.findall(r'<th data-lang="ops-col-([a-z0-9-]+)"', trade)
 from_html = [t.replace('-', '_') for t in ths if t not in ('actions', 'status')]
 js = HTML.split('(j.trade || []).forEach', 1)[1].split('});', 1)[0]
-from_js = re.findall(r'esc\(r\.(\w+)\)', js)
+# A ultima celula NAO e um esc(): a Difference passa pelo diffCell, que junta o
+# numero com o icone ✓/✗ (§188). Ela conta como coluna do mesmo jeito.
+from_js = re.findall(r'esc\(r\.(\w+)\)|(diffCell)\(r\)', js)
+from_js = ['difference' if b else a for a, b in from_js]
 SRC = read('apps/pages/routes.py')
 m = re.search(r'_OPS_TRADE_COLS = \((.*?)\)\n', SRC, re.S)
 from_py = re.findall(r"'(\w+)'", m.group(1)) if m else []

@@ -94,7 +94,7 @@ def ev(contrato, base, ativo_banco, ativo_cliente):
     return r
 
 
-def pos_rec(contrato, ident, ini, venc, termo, cod1='', cod2='', nome1='', nome2=''):
+def pos_rec(contrato, ident, ini, venc, termo, cod1='', cod2='', nome1='', nome2='', base=''):
     """Posicao no formato REAL: 146 campos posicionais (2=Contrato, 11=Data
     inicio, 12=Data vencimento, 25=Data operacao termo). As duas pernas do swap
     ficam em 40/50 (Codigo indice) e 69/74 (Nome Tipo/Classe) — 1a e 2a de cada
@@ -104,6 +104,7 @@ def pos_rec(contrato, ident, ini, venc, termo, cod1='', cod2='', nome1='', nome2
     tambem entram, porque a LOB e resolvida POR NOME."""
     vals = [''] * 146
     vals[2], vals[4], vals[11], vals[12], vals[25] = contrato, ident, ini, venc, termo
+    vals[14] = base                       # 'Valor base' (coluna O)
     vals[30] = 'CLASSE DO TERMO'          # a armadilha: NAO pode virar indexador
     vals[40], vals[50], vals[69], vals[74] = cod1, cod2, nome1, nome2
     names = ['f%03d' % i for i in range(146)]
@@ -138,9 +139,9 @@ write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
                         '73760_{}_DPOSICAO-SWAP.json'.format(DREF)), [
     # forward start: TEM Data operacao termo -> 22/01/2024..05/08/2026 = 926 dias
     pos_rec('A1', 'CEM-2026-3184', '20240301', '20260805', '20240122',
-            'PRE', 'VCP', 'x', 'DOLAR DOS EUA'),
+            'PRE', 'C00', 'x', 'DOLAR DOS EUA', '1000000.00'),
     # sem termo -> cai na Data inicio: 01/07/2026..05/08/2026 = 35 dias
-    pos_rec('N2', 'EDG-2026-0001', '20260701', '20260805', '', 'VCP', 'PRE', 'EURO', 'y'),
+    pos_rec('N2', 'EDG-2026-0001', '20260701', '20260805', '', 'C00', 'PRE', 'EURO', 'y', '1000.00'),
     # sem data nenhuma -> sem prazo
     pos_rec('S5', 'CEM-2026-9999', '', '', ''),
     pos_rec('S6', 'CEM-2026-8888', '20260701', '20260805', ''),
@@ -179,13 +180,20 @@ for fn in ('_ops_swap_trade_rows', '_swadv_collect'):
 print('\n== 2. a linha completa, coluna a coluna ==')
 check('Cliente vem do Athena', cell('A1', 'Cliente'), 'SUZANO SA')
 check('LOB e o token do identificador', cell('A1', 'LOB'), 'CEM')
-check('Valor Base Original vem dos eventos', cell('A1', 'Valor Base Original'), '1,000,000.00')
-# Codigo indice <> VCP -> o proprio codigo e o indexador.
-check('Indexador Banco = o Codigo indice', cell('A1', 'Indexador Banco'), 'PRE')
-# Codigo indice = VCP -> VCP nao diz a moeda; o indexador esta no Nome
+# Valor Base sai da POSICAO (indice 14), nao mais do arquivo de eventos: uma
+# fonte a menos e um join a menos para falhar em silencio — e foi o que deixou a
+# coluna vazia no primeiro aviso gerado.
+check('Valor Base Original vem da posicao', cell('A1', 'Valor Base Original'), '1,000,000.00')
+# O Codigo indice da posicao e um CODIGO (C00, PRE): ele passa PRIMEIRO pelo
+# cadastro `swap-index` — o mesmo que a tela do Live Position usa. Comparar o
+# codigo cru com 'VCP' nunca casava, porque o VCP e o C00.
+check('Indexador Banco = o nome da curva', cell('A1', 'Indexador Banco'), 'PRE')
+check('C00 vira VCP no cadastro', R._swapindex_name('C00'), 'VCP')
+# Traduzido como VCP -> VCP nao diz a moeda; o indexador esta no Nome
 # Tipo/Classe da MESMA perna, em CAIXA ALTA.
 check('Indexador Cliente resolve o VCP', cell('A1', 'Indexador Cliente'), 'DOLAR DOS EUA')
 check('e o do N2 usa a 2a perna', cell('N2', 'Indexador Cliente'), 'PRE')
+check('e a 1a perna do N2 tambem resolve', cell('N2', 'Indexador Banco'), 'EURO')
 check('Curva Banco vem do Athena', cell('A1', 'Curva Banco'), '1,000,000.00')
 check('Curva Cliente vem do Athena', cell('A1', 'Curva Cliente'), '1,310,217.20')
 check('Resultado Bruto vem do Athena', cell('A1', 'Resultado Bruto'), '310,217.20')
@@ -301,6 +309,48 @@ check('e ele chama o endpoint',
       "'/api/other-products-swap-settlement-advice/emails'" in HTML, True)
 check('o endpoint existe',
       "@blueprint.route('/api/other-products-swap-settlement-advice/emails'" in SRC, True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 8. as traducoes de codigo saem do CADASTRO ==')
+# Regra de ouro do CLAUDE.md: de-para nao mora no codigo. Estas quatro tabelas
+# viviam como dicts em routes.py (ou num arquivo lido por fora) e agora sao
+# cadastros do /mapping. O que se prende aqui e o COMPORTAMENTO IDENTICO ao de
+# antes — o seed tem de reproduzir o que estava hardcoded, senao a migracao
+# muda a tela sem ninguem pedir.
+for key in ('swap-index', 'swap-funcionalidade', 'swap-amortizacao', 'swap-code-labels'):
+    check('%s registrado em _MAPPING_DEFS' % key, ("'%s': {" % key) in SRC, True)
+    check('%s na aba do /mapping' % key,
+          ("key: '%s'" % key) in read('apps/templates/pages/mapping.html'), True)
+check('nenhum dicionario de traducao sobrou no codigo',
+      ('_SWAPCHAR_FUNC_MAP' in SRC) or ('_SWAPCHAR_AMORT_MAP' in SRC), False)
+
+# O Swap Index aponta para o MESMO arquivo da aba do B3 Index Results — nao para
+# uma copia. Duas copias divergiriam na primeira edicao, e a divergencia apareceria
+# como um codigo cru na tela, sem erro nenhum.
+check('o cadastro usa o proprio SwapIndex.json',
+      R._mapping_path('swap-index').endswith(os.path.join('static', 'data', 'SwapIndex.json')), True)
+check('C00 -> VCP', R._swapindex_name('C00'), 'VCP')
+check('codigo desconhecido passa direto', R._swapindex_name('ZZZ'), 'ZZZ')
+
+check('Funcionalidade 9', R._swapchar_func_text('9'), 'SWAP COM PRÊMIO')
+check('Funcionalidade 0', R._swapchar_func_text('0'), 'SEM FUNCIONALIDADE')
+check('Amortizacao 3', R._swapchar_amort_text('3'), 'Na Data de Vencimento')
+check('Amortizacao 4', R._swapchar_amort_text('4'), 'Sem Troca de Amortização')
+check('Sinal 00 -> +', R._swapchar_sinal_text('00'), '+')
+check('Sinal 01 -> -', R._swapchar_sinal_text('01'), '-')
+# 01 = Nao e 00 = Sim: e a especificacao, por mais que pareca invertido.
+check('Flag 01 -> Nao', R._lp_bool_ptbr('01'), 'Não')
+check('Flag 00 -> Sim', R._lp_bool_ptbr('00'), 'Sim')
+
+print('\n== 9. a Difference do Trade Level tem o ✓/✗ ==')
+OPS = read('apps/templates/pages/other-products-summary.html')
+check('a celula da Difference passa pelo diffCell', 'diffCell(r)' in OPS, True)
+# O icone sai do MESMO status que pinta o badge — duas fontes contariam
+# historias diferentes na primeira vez que a tolerancia mudasse.
+check('o icone sai do status', "r.status === 'OK'" in OPS, True)
+for cls in ('ti ti-check text-success', 'ti ti-x text-danger'):
+    check('mesma marca do NDF: %s' % cls,
+          (cls in OPS) and (cls in read('apps/templates/pages/ndf-summary.html')), True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

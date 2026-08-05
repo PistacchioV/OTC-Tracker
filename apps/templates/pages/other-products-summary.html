@@ -436,6 +436,16 @@ document.addEventListener('DOMContentLoaded', function () {
     function statusBadge(status) {
         return status === 'OK' ? pill('OK', 'text-bg-success') : pill('Check', 'text-bg-danger');
     }
+    // Difference com o ✓/✗ ao lado do número, igual ao Trade Level do NDF: o
+    // ícone sai do MESMO status que pinta o badge, senão os dois contariam
+    // histórias diferentes na primeira vez que a tolerância mudasse. Diferença
+    // vazia ("não deu para calcular") ainda mostra o ✗ — é o pedido de conferência.
+    function diffCell(r) {
+        var icon = (r.status === 'OK')
+            ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
+            : '<i class="ti ti-x text-danger fs-5 align-middle"></i>';
+        return (r.difference ? esc(r.difference) + ' ' : '') + icon;
+    }
     // Settlement Summary: New → Generated → Sent.
     function statusPill(status) {
         if (status === 'Sent')      return pill('Sent', 'text-bg-primary');
@@ -591,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusBadge(r.status || 'Check'),
                         esc(r.lob), esc(r.counterparty), esc(r.internal_id), esc(r.id_b3),
                         esc(r.product), esc(r.type), esc(r.settlement), esc(r.settlement_b3),
-                        esc(r.tax_income), esc(r.difference)]);
+                        esc(r.tax_income), diffCell(r)]);
                 });
                 dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
                 setSources(j.sources, j.date);
