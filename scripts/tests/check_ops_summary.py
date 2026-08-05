@@ -455,5 +455,120 @@ icons = re.findall(r"icon:\s*'(ti-[a-z0-9-]+)'", MAPHTML)
 check('ha abas com icone declarado', len(icons) > 10, True)
 check('nenhum icone inexistente', [i for i in icons if ('.%s:' % i) not in VENDORS], [])
 
+print('\n== 15. o botao TEDs ==')
+# O e-mail pede transferencia de dinheiro para fora do banco. As tres regras de
+# quem entra sao o que separa "pedido correto" de "TED para quem nao devia":
+#   1. Pay preenchido (ha o que transferir)
+#   2. conta FORA do BCO 376 (376 e o proprio Banco JPM -> transferencia interna)
+#   3. contraparte que nao seja Lawton nem JPMorgan
+# O SMTP e stubado: nada sai da maquina.
+import smtplib as _smtplib                                  # noqa: E402
+
+_ted_sent = {}
+
+
+class _FakeSMTP(object):
+    def __init__(self, *a, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def sendmail(self, frm, to, msg):
+        _ted_sent['to'] = to
+        _ted_sent['msg'] = msg
+
+
+def _acc(i, bank):
+    return {'id': i, 'bank': bank, 'agency': '0910', 'account': '967',
+            'status': 'Active', 'maker': 'T', 'checker': 'T'}
+
+
+def ted_run(cpty, bank, valor='-1000,00', legal='Bco J.P. Morgan S.A.'):
+    """Monta um dia com UM swap pagando e chama o endpoint de TED de verdade."""
+    from apps import create_app
+    from apps.config import DebugConfig
+    from datetime import timezone, timedelta
+    _ted_sent.clear()
+    real = (R.smtplib.SMTP, R._cpd_load, R._ndfsum_refdata_spn, R._ted_ssi_attachment,
+            R.OTM_JSON_ROOT, R.B3_JSON_ROOT)
+    R.smtplib.SMTP = _FakeSMTP
+    R._cpd_load = lambda: [{'SPN': '1', 'COUNTERPARTY': cpty,
+                            'NET': {'value': 'Total Net', 'status': 'Active'},
+                            'BANKING': {'ACCOUNTS': [_acc('r1', bank)],
+                                        'DEFAULT_RECEIVE': {'current': 'r1'}}}]
+    R._ndfsum_refdata_spn = lambda: {R._fcst_norm(cpty): {'spn': '1', 'taxid': '1'}}
+    R._ted_ssi_attachment = lambda n: None
+    tmp = tempfile.mkdtemp(prefix='ops-ted-')
+    try:
+        b3d = os.path.join(tmp, 'b3')
+        day = os.path.join(tmp, '2026', '08', '05')
+        write_json(os.path.join(day, 'operations-b3_20260805.json'), [
+            {'Conta': '73760.00-9', 'Tipo Operação': 'PAGAMENTO DE DIF. DE JUROS',
+             'Título': 'A1', 'Tipo Título': 'SWAP', 'Valor': valor,
+             'Data Liquidação': '05/08/2026', 'Contraparte (Nome Simpl.)': 'CLI'}])
+        write_json(os.path.join(day, 'br-onshore-settlements_20260805.json'), [
+            {'CETIP ID': 'A1', 'Kapital ID': 'K1', 'Owner Legal Entity': legal,
+             'CounterParty': cpty, 'SPN': '1', 'Owner curve': '', 'Counterparty curve': '',
+             'BRL Net Amount': '', 'Direction': 'Counterparty receives'}])
+        write_json(os.path.join(day, 'otm-settlement_20260805.json'),
+                   [{'Trade Id': 'K1', 'Amount': valor.replace('.', '').replace(',', '.'),
+                     'Currency': 'BRL'}])
+        pos = R._prev_anbima_bizday(datetime(2026, 8, 5)).strftime('%y%m%d')
+        v = [''] * 146
+        v[2], v[4] = 'A1', 'CEM-2026-1'
+        rec = dict(zip(['f%03d' % i for i in range(146)], v))
+        rec.update({'Contrato': 'A1', 'Código Identificador': 'CEM-2026-1'})
+        write_json(os.path.join(b3d, 'Swap', R._b3_date_subpath(pos),
+                                '73760_%s_DPOSICAO-SWAP.json' % pos), [rec])
+        R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, b3d
+        app = create_app(DebugConfig)
+        cl = app.test_client()
+        with cl.session_transaction() as s:
+            s['authenticated'] = True
+            s['user_sid'] = 'T000000'
+            s['user_name'] = 'T'
+            s['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
+        return cl.post('/api/other-products-summary/ted-email',
+                       json={'date': '2026-08-05'}).get_json()
+    finally:
+        (R.smtplib.SMTP, R._cpd_load, R._ndfsum_refdata_spn, R._ted_ssi_attachment,
+         R.OTM_JSON_ROOT, R.B3_JSON_ROOT) = real
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+res = ted_run('SUZANO SA', '341')
+check('conta fora do 376 entra', res.get('count'), 1)
+check('avisa o SSI que faltou', res.get('missing_ssi'), ['SUZANO SA'])
+check('vai para OTC Ops + Settlements', _ted_sent.get('to'), R._TED_EMAIL_TO)
+from email import header as _hdr, message_from_string                    # noqa: E402
+subj = str(_hdr.make_header(_hdr.decode_header(message_from_string(_ted_sent['msg'])['Subject'])))
+check('o assunto pedido', subj, "Liberar TED's - Swap/Opção/Commodities - 05/08/2026")
+
+# 376 = Banco J.P. Morgan: e transferencia interna, NAO se pede TED.
+check('conta no BCO 376 nao entra', ted_run('SUZANO SA', '376').get('count'), 0)
+# Sem Pay nao ha o que transferir (settlement positivo = o banco RECEBE).
+check('sem Pay nao entra', ted_run('SUZANO SA', '341', valor='1000,00').get('count'), 0)
+# Perna interna nao recebe TED.
+check('JPMorgan nao entra', ted_run('BANCO J.P. MORGAN S.A.', '341').get('count'), 0)
+check('Lawton nao entra',
+      ted_run('LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO CREDITO PRIVADO',
+              '341').get('count'), 0)
+
+# O e-mail parte das MESMAS linhas do Settlement Summary: recalcular o net aqui
+# criaria a segunda copia da regra, e o pedido de TED poderia sair com valor
+# diferente do que a tela mostra.
+body = SRC.split('def api_ops_summary_ted_email(', 1)[1].split('\n@blueprint', 1)[0]
+check('o TED reusa _opssum_rows', '_opssum_rows(' in body, True)
+check('e os mesmos destinatarios do NDF', '_TED_EMAIL_TO' in body, True)
+check('e o mesmo template de e-mail', 'email-template-ted-release.html' in body, True)
+check('o botao existe na tela', 'id="opsTeds"' in HTML, True)
+check('e chama o endpoint', "'/api/other-products-summary/ted-email'" in HTML, True)
+# Swal e usado no retorno — sem o plugin carregado o clique quebraria em silencio.
+check('a pagina carrega o sweetalert', 'sweetalert2.min.js' in HTML, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

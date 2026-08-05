@@ -8678,3 +8678,44 @@ outra LOB que **não** é arrastada junto, o viewer caindo no badge de sempre qu
 três cores idênticas às do NDF. Além do teste, o ciclo foi percorrido ponta a ponta pelo `test_client`
 (New → Print Advice → Generated nas duas → Confirm → Sent nas duas), e as cinco páginas do visualizador
 compartilhado respondem 200.
+
+---
+
+## §191 — Botão TEDs no Other Products Summary
+
+Porte do TED do NDF Summary: **mesma regra de quem entra, mesmo template de e-mail, mesmos destinatários**
+(`_TED_EMAIL_TO` — OTC Ops + Settlements), mesmo anexo de SSI por contraparte (arquivo mais novo do
+Electronic Inventory). O que muda é **só o assunto**:
+
+```
+Liberar TED's - Swap/Opção/Commodities - dd/mm/yyyy
+```
+
+### Quem entra — as três regras que separam "pedido correto" de "TED para quem não devia"
+
+1. **Pay preenchido** — há o que transferir. Settlement positivo é o banco *recebendo*: não é TED.
+2. **Conta fora do BCO 376** — 376 é o próprio Banco J.P. Morgan; ali é transferência interna, não TED.
+   A conta é a mesma da coluna **Account** da tela (default de recebimento do cliente).
+3. **Contraparte que não seja Lawton nem JPMorgan** — perna interna não recebe TED.
+
+Dois blocos no e-mail por entidade legal (BANCO / MGT), como no NDF. Para isso a linha do Settlement
+Summary passou a carregar a **entidade legal** (primeira não vazia do grupo), que vem do Athena pela linha
+do Trade Level.
+
+### O ponto de projeto
+
+O endpoint **reusa `_opssum_rows`** — as mesmas linhas que a tela mostra. Recalcular o net aqui criaria a
+segunda cópia da regra de netting, e o pedido de TED poderia sair com um valor diferente do que está na
+tela. Como é dinheiro saindo do banco, essa é a divergência que não pode existir.
+
+O SSI que falta **não impede o envio**, mas aparece no retorno: é a contraparte cujo anexo o time vai ter
+de buscar na mão.
+
+A página passou a carregar o SweetAlert (CSS + JS) — o retorno do botão usa `Swal.fire`, e sem o plugin o
+clique falharia em silêncio.
+
+### Verificação
+
+Seção 15 do `check_ops_summary.py`: as três regras conferidas uma a uma chamando o **endpoint de verdade**
+com SMTP stubado (nada sai da máquina), o assunto comparado byte a byte, os destinatários iguais aos do
+NDF, e a prova de que o TED reusa `_opssum_rows` em vez de recalcular. Suíte inteira verde.

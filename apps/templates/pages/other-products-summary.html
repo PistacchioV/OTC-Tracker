@@ -5,6 +5,7 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ── Apple/Emil tokens ─────────────────────────────────────── */
 #ops-page {
@@ -378,6 +379,9 @@
                             </select>
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
                         </div>
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsTeds">
+                            <i class="ti ti-cash me-1"></i><span data-lang="ops-teds">TEDs</span>
+                        </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <button type="button" class="btn btn-sm btn-light ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
@@ -531,6 +535,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Minimal i18n (falls back to the data-lang English text already in the DOM).
@@ -890,6 +895,48 @@ document.addEventListener('DOMContentLoaded', function () {
               d[2] = statusPill('Sent');
               rowApi.data(d).draw(false);
           }).catch(function () {});
+    });
+
+    // ── TEDs: pedido de liberação para OTC Ops + Settlements ────────────────
+    //  Entra a linha com Pay preenchido e conta fora do BCO 376 (376 é o próprio
+    //  Banco JPM → transferência interna, não é TED). Mesmo e-mail e mesmos
+    //  destinatários do NDF Summary; muda só o assunto.
+    var tedBtn = document.getElementById('opsTeds');
+    if (tedBtn) tedBtn.addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + t('ops-teds', 'TEDs');
+        fetch('/api/other-products-summary/ted-email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res && res.ok && (res.count || 0) === 0) {
+                  Swal.fire({ icon: 'info', title: t('ops-ted-none-title', 'No TEDs'),
+                              text: res.message || t('ops-ted-none', 'Nothing to release for this date.'),
+                              confirmButtonColor: '#0066cc' });
+              } else if (res && res.ok) {
+                  // SSI ausente não impede o envio, mas TEM de aparecer: é a
+                  // contraparte cujo anexo o time vai ter de buscar na mão.
+                  var extra = (res.missing_ssi && res.missing_ssi.length)
+                      ? '<br><span class="text-warning">' + t('ops-ted-nossi', 'SSI not found for:') + ' ' +
+                        res.missing_ssi.map(esc).join(', ') + '</span>' : '';
+                  Swal.fire({ icon: 'success', title: t('ops-ted-ok-title', 'TED release sent'),
+                              html: res.count + ' TED(s) · ' + (res.attached || 0) + ' SSI attachment(s).' + extra,
+                              confirmButtonColor: '#0066cc' });
+              } else {
+                  Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                              text: (res && res.error) || t('ops-gen-fail', 'Request failed.'),
+                              confirmButtonColor: '#dc3545' });
+              }
+          })
+          .catch(function () {
+              Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                          text: t('ops-gen-fail', 'Request failed.'), confirmButtonColor: '#dc3545' });
+          })
+          .finally(function () { btn.disabled = false; btn.innerHTML = orig; });
     });
 
     // Expose the batch loader so the reference-date picker (own <script> below)

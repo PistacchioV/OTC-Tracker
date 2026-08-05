@@ -1565,5 +1565,10 @@
   "ops-r-internal": "Internal",
   "ops-r-ok": "OK",
   "ops-r-check": "Check",
-  "ops-r-na": "n/a"
+  "ops-r-na": "n/a",
+  "ops-teds": "TEDs",
+  "ops-ted-none-title": "No TEDs",
+  "ops-ted-none": "Nothing to release for this date.",
+  "ops-ted-ok-title": "TED release sent",
+  "ops-ted-nossi": "SSI not found for:"
 }

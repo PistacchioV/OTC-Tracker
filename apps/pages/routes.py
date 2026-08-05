@@ -5651,6 +5651,8 @@ def _ops_swap_trade_rows(settle_ref):
             '_settle_n': settlement,
             '_tax_n': tax,
             '_b3_n': settlement_b3,
+            # Entidade legal: o e-mail de TED separa BANCO e MGT em dois blocos.
+            '_legal': _cell(arow, ai, 'Owner Legal Entity') if arow else '',
         })
     return out
 
@@ -5805,7 +5807,7 @@ def _opssum_rows(trade_rows, ref):
         if key not in groups:
             groups[key] = []
             order.append(key)
-        groups[key].append((s, abs(r.get('_tax_n') or 0.0)))
+        groups[key].append((s, abs(r.get('_tax_n') or 0.0), str(r.get('_legal', '') or '')))
 
     out = []
     for key in sorted(order, key=lambda k: (_fcst_norm(k[0]), k[2], k[1])):
@@ -5816,7 +5818,7 @@ def _opssum_rows(trade_rows, ref):
         net_type = _ndfsum_net_type(rec_cpd)
         # Caixa por trade já líquido de IR: o imposto retido sempre ENCOLHE o
         # valor que se movimenta, qualquer que seja o sinal (regra do NDF).
-        vals = [(s - t if s >= 0 else s + t) for s, t in groups[key]]
+        vals = [(s - t if s >= 0 else s + t) for s, t, _le in groups[key]]
         recv = sum(v for v in vals if v > 0)
         pay = sum(v for v in vals if v < 0)
         total = recv + pay
@@ -5836,6 +5838,9 @@ def _opssum_rows(trade_rows, ref):
             'pay': '{:,.2f}'.format(pay) if pay else '',
             'net_type': net_type,
             'direction': direction,
+            # Primeira entidade legal não vazia do grupo — é o bloco (BANCO × MGT)
+            # em que a linha entra no e-mail de liberação de TED.
+            'legal': next((le for _s, _t, le in groups[key] if le), ''),
             'account': _ndfsum_account_fmt(banking, direction),
             # Observação digitada prevalece; sem ela, a classificação automática
             # Internal/External das contas default do cliente.
@@ -5972,6 +5977,117 @@ def api_ops_data():
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
                     'sources': sources, 'recon': recon,
                     'summary': summary, 'trade': trade})
+
+
+@blueprint.route('/api/other-products-summary/ted-email', methods=['POST'])
+def api_ops_summary_ted_email():
+    """Botão TEDs: envia o pedido de liberação de TED para OTC Ops + Settlements.
+
+    Porte do TED do NDF Summary — MESMA regra de quem entra, MESMO template de
+    e-mail, MESMOS destinatários. A linha entra quando o **Pay** está preenchido
+    **e** a conta default de pagamento do cliente NÃO é do Banco J.P. Morgan
+    (BCO 376 → transferência interna, não é TED). Dois blocos por entidade legal
+    (BANCO / MGT), e o SSI de cada contraparte (arquivo mais novo do Electronic
+    Inventory) vai anexado.
+
+    O que muda é só o assunto: aqui o e-mail cobre Swap/Opção/Commodities.
+    """
+    from email.mime.image import MIMEImage
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from apps.pages import otc_emails
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    # Universo = as MESMAS linhas do Settlement Summary da tela. Recalcular o net
+    # aqui criaria a segunda cópia da regra de netting, e o e-mail poderia pedir
+    # uma TED de valor diferente do que a tela mostra.
+    try:
+        rows = _opssum_rows(_ops_swap_trade_rows(ref.date()),
+                            datetime(ref.year, ref.month, ref.day))
+    except Exception:
+        log.error('[ops-ted] falha montando as linhas:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+
+    blocks = {'JPM': [], 'MGT': []}
+    for r in rows:
+        name = str(r.get('counterparty', '') or '').strip()
+        if not name or otc_emails._is_lawton(name) or otc_emails._is_jpmorgan(name):
+            continue
+        pay = _mtm_parse_num(r.get('pay', ''))
+        if not pay:                          # coluna Pay vazia → não há o que transferir
+            continue
+        acct = r.get('account', '')
+        m = re.match(r'BCO:\s*(\d+)', acct or '')
+        if (m.group(1).lstrip('0') if m else '') == '376':
+            continue                         # conta no Banco JPM → transferência interna
+        blocks[otc_emails._ndf_legal_class(r.get('legal'))].append({
+            'counterparty': name,
+            'value': otc_emails._brl(abs(pay)),
+            'account': acct or '—'})
+
+    rows_all = blocks['JPM'] + blocks['MGT']
+    ref_fmt = ref.strftime('%d/%m/%Y')
+    if not rows_all:
+        return jsonify({'ok': True, 'count': 0,
+                        'message': 'Nenhuma TED a liberar para {} (sem Pay ou contas no BCO 376).'
+                        .format(ref_fmt)})
+
+    attach, missing_ssi = [], []
+    for name in sorted({r['counterparty'] for r in rows_all}, key=_fcst_norm):
+        p = _ted_ssi_attachment(name)
+        (attach.append(p) if p else missing_ssi.append(name))
+
+    html = render_template('pages/email-template-ted-release.html',
+                           ref_date_fmt=ref_fmt,
+                           banco_rows=blocks['JPM'], mgt_rows=blocks['MGT'],
+                           missing_ssi=missing_ssi,
+                           current_year=datetime.now().year)
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = "Liberar TED's - Swap/Opção/Commodities - {}".format(ref_fmt)
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = ', '.join(_TED_EMAIL_TO)
+        related = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Liberação de TED — please view in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        related.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            related.attach(limg)
+        _attach_email_gradient(related)
+        msg.attach(related)
+        for p in attach:
+            with open(p, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', 'attachment',
+                            filename=os.path.basename(p))
+            msg.attach(part)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, _TED_EMAIL_TO, msg.as_string())
+    except Exception as e:
+        log.error('[ops-ted] e-mail FAILED:\n%s', traceback.format_exc())
+        return jsonify({'ok': False,
+                        'error': 'E-mail failed: {}: {}'.format(type(e).__name__, e)}), 500
+
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'TED Release Sent', 'Other Products Summary',
+                         '{} TED(s) — {}'.format(len(rows_all), ref.strftime('%Y-%m-%d')))
+    return jsonify({'ok': True, 'count': len(rows_all),
+                    'attached': len(attach), 'missing_ssi': missing_ssi})
 
 
 @blueprint.route('/api/other-products-summary/mark-sent', methods=['POST'])

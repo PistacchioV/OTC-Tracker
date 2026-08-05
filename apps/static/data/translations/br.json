@@ -1565,5 +1565,10 @@
   "ops-r-internal": "Interno",
   "ops-r-ok": "OK",
   "ops-r-check": "Verificar",
-  "ops-r-na": "n/d"
+  "ops-r-na": "n/d",
+  "ops-teds": "TEDs",
+  "ops-ted-none-title": "Sem TEDs",
+  "ops-ted-none": "Nada a liberar para esta data.",
+  "ops-ted-ok-title": "Liberação de TED enviada",
+  "ops-ted-nossi": "SSI não encontrado para:"
 }
