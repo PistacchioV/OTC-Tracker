@@ -1,0 +1,22 @@
+[
+  {
+    "CLIENT": "JPMORGAN CHASE BANK, N.A",
+    "MATCH": "Exact",
+    "RATE": "0"
+  },
+  {
+    "CLIENT": "LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO CREDITO PRIVADO",
+    "MATCH": "Exact",
+    "RATE": "0"
+  },
+  {
+    "CLIENT": "BANCO",
+    "MATCH": "Starts with",
+    "RATE": "0"
+  },
+  {
+    "CLIENT": "J.P. MORGAN OVERSEAS CAPITAL LLC",
+    "MATCH": "Exact",
+    "RATE": "10"
+  }
+]

@@ -285,31 +285,38 @@
                     <div class="table-responsive">
                         <table id="ops-trade-table" class="table table-hover align-middle w-100">
                             <thead>
+                                <!-- ORDEM PEDIDA (§182). Ela vem em par com o
+                                     `rowMaker` do JS mais abaixo e com a ordem de
+                                     `_OPS_TRADE_COLS` no backend: as três listas
+                                     são posicionais e mexer numa só desloca a
+                                     tabela inteira em silêncio. -->
                                 <tr>
                                     <th style="width:36px"><input type="checkbox" class="form-check-input ops-cb-all"></th>
                                     <th data-lang="ops-col-actions">Actions</th>
                                     <th data-lang="ops-col-status">Status</th>
+                                    <th data-lang="ops-col-lob">LOB</th>
                                     <th data-lang="ops-col-counterparty">Counterparty</th>
                                     <th data-lang="ops-col-internal-id">Internal ID</th>
+                                    <th data-lang="ops-col-id-b3">B3 ID</th>
                                     <th data-lang="ops-col-product">Product</th>
                                     <th data-lang="ops-col-type">Type</th>
                                     <th data-lang="ops-col-settlement">Settlement</th>
-                                    <th data-lang="ops-col-tax-income">Tax Income</th>
-                                    <th data-lang="ops-col-id-b3">ID B3</th>
                                     <th data-lang="ops-col-settlement-b3">Settlement B3</th>
+                                    <th data-lang="ops-col-tax-income">Tax Income</th>
                                     <th data-lang="ops-col-difference">Difference</th>
                                 </tr>
                                 <tr class="ops-filter">
                                     <th></th><th></th>
                                     <th><input type="text" placeholder="Status"></th>
+                                    <th><input type="text" placeholder="LOB"></th>
                                     <th><input type="text" placeholder="Counterparty"></th>
                                     <th><input type="text" placeholder="Internal ID"></th>
+                                    <th><input type="text" placeholder="B3 ID"></th>
                                     <th><input type="text" placeholder="Product"></th>
                                     <th><input type="text" placeholder="Type"></th>
                                     <th><input type="text" placeholder="Settlement"></th>
-                                    <th><input type="text" placeholder="Tax Income"></th>
-                                    <th><input type="text" placeholder="ID B3"></th>
                                     <th><input type="text" placeholder="Settlement B3"></th>
+                                    <th><input type="text" placeholder="Tax Income"></th>
                                     <th><input type="text" placeholder="Difference"></th>
                                 </tr>
                             </thead>
@@ -457,8 +464,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return dt;
     }
 
-    var dtSummary = initTable('ops-summary-table', 7);  // 7 data cols (Counterparty…Observação)
-    var dtTrade   = initTable('ops-trade-table', 9, 50); // 9 data cols (Counterparty…Difference); default 50/page
+    var dtSummary = initTable('ops-summary-table', 7);   // 7 data cols (Counterparty…Observação)
+    var dtTrade   = initTable('ops-trade-table', 10, 50); // 10 data cols (LOB…Difference); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).
@@ -493,9 +500,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
                         inp(r.counterparty), inp(r.product), inp(r.receive), inp(r.pay), inp(r.settlement_net), inp(r.internal_account), inp(r.obs)]);
                 });
+                // Linha DERIVADA: texto puro, não <input>. Ela é recalculada das
+                // cinco fontes a cada troca de data, então um valor digitado aqui
+                // sumiria sem aviso no próximo load — e como texto ela ainda
+                // ordena e filtra pela coluna. As linhas do Add row seguem
+                // editáveis; são manuais e não têm de onde ser recalculadas.
+                // A ORDEM abaixo tem de bater com os <th> lá em cima.
                 (j.trade || []).forEach(function (r) {
                     dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
-                        inp(r.counterparty), inp(r.internal_id), inp(r.product), inp(r.type), inp(r.settlement), inp(r.tax_income), inp(r.id_b3), inp(r.settlement_b3), inp(r.difference)]);
+                        esc(r.lob), esc(r.counterparty), esc(r.internal_id), esc(r.id_b3),
+                        esc(r.product), esc(r.type), esc(r.settlement), esc(r.settlement_b3),
+                        esc(r.tax_income), esc(r.difference)]);
                 });
                 dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
             }).catch(function () {});

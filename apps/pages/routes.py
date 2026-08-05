@@ -5306,6 +5306,285 @@ def _ops_settlement_counts(settle_ref, pos_ref):
     return fams
 
 
+# ── Other Products › Summary › Trade Level: SWAP ─────────────────────────────
+#  Uma linha por SWAP liquidando na data, montada a partir de CINCO fontes que
+#  não se conhecem — o join é todo por código, e cada perna tem a sua chave:
+#
+#    Operations B3 ──Título──> B3 ID, LOB (coluna derivada Type), Settlement B3
+#          │
+#          └─Título = CETIP ID─> Swap Athena ──> Internal ID (Kapital ID),
+#                                                Counterparty, Direction
+#          │                          │
+#          │                          └─Kapital ID = Trade Id─> OTM Settlements
+#          │                                                    ──> Settlement
+#          ├─Título = Código do Contrato─> Swap Events ──> Type (VCP × Calculado)
+#          └─Título = Contrato──────────> Posição SWAP ──> prazo (para o IR)
+#
+#  O MESMO swap aparece no Operations B3 uma vez por Tipo Operação (amortização,
+#  juros, prêmio). A linha é UMA só por Título — daí o dedup — mas o Settlement
+#  B3 soma TODAS as linhas daquele Título, inclusive as que o filtro descartou:
+#  o que se concilia é o caixa do dia, não o evento.
+_OPS_TRADE_COLS = ('lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'type',
+                   'settlement', 'settlement_b3', 'tax_income', 'difference')
+
+
+def _ops_swap_event_set():
+    """Tipos de Operação (normalizados) que marcam um swap liquidando. Cadastro
+    `swap-b3-events`; cadastro vazio = nenhum swap entra (é o pedido explícito de
+    quem esvaziou a tabela, não um estado a contornar)."""
+    return {_fcst_norm(r.get('TIPO OPERACAO', '')).strip()
+            for r in _mapping_rows('swap-b3-events')
+            if str(r.get('TIPO OPERACAO', '') or '').strip()}
+
+
+def _ops_swap_pos_terms(ref):
+    """{Contrato → (data_operacao, data_vencimento)} da posição DPOSICAO-SWAP mais
+    recente até D-1 ANBIMA de `ref` (mesmo walk-back de 10 pregões do Operations
+    B3).
+
+    A data de operação é a do XLOOKUP da planilha: **Data operação termo** e, só
+    quando ela vem vazia, **Data início**. É o que faz um forward start pagar IR
+    pelo prazo desde o TRADE, não desde o início do swap — usar a data de início
+    encurtaria o prazo e subiria a alíquota.
+
+    Índices posicionais de `_SWAPCHAR_LABELS` (2=Contrato, 11=Data início,
+    12=Data vencimento, 25=Data operação termo) — batem coluna a coluna com o
+    C/L/M/Z da planilha. O arquivo real tem 146 campos com nomes repetidos, então
+    ler por nome perderia metade; o `len(vals) >= 120` é o mesmo teste que
+    `_swap_contract_cpty_map` usa para distinguir o arquivo real do mock esparso.
+    """
+    probe = _prev_anbima_bizday(ref)
+    rows = None
+    for _ in range(10):
+        dref = probe.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                         '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+        if os.path.isfile(p):
+            try:
+                with open(p, encoding='utf-8') as fh:
+                    rows = json.load(fh) or []
+            except Exception:
+                log.warning("[ops-trade] posição SWAP ilegível (%s):\n%s", p, traceback.format_exc())
+                rows = []
+            break
+        probe = _prev_anbima_bizday(probe)
+    out = {}
+    if not rows:
+        return out
+    keys = list(rows[0].keys())
+    k_contr = _fcst_resolve_key([k for k in keys if _fcst_norm(k) != 'tipo de contrato'],
+                                ['contrato'])
+    k_ini = _fcst_resolve_key(keys, ['data inicio', 'data início'])
+    k_venc = _fcst_resolve_key(keys, ['data vencimento', 'data de vencimento'])
+    k_termo = _fcst_resolve_key(keys, ['data operacao termo', 'data operação termo'])
+    for r in rows:
+        vals = list(r.values())
+        full = len(vals) >= 120
+        if full:
+            contrato = vals[2]
+            d_ini, d_venc, d_termo = vals[11], vals[12], vals[25]
+        else:
+            contrato = r.get(k_contr, '') if k_contr else ''
+            d_ini = r.get(k_ini, '') if k_ini else ''
+            d_venc = r.get(k_venc, '') if k_venc else ''
+            d_termo = r.get(k_termo, '') if k_termo else ''
+        c = _fcst_norm_contract(contrato).upper()
+        if not c:
+            continue
+        op = _fcst_parse_date(str(d_termo or '')) or _fcst_parse_date(str(d_ini or ''))
+        out.setdefault(c, (op, _fcst_parse_date(str(d_venc or ''))))
+    return out
+
+
+def _ops_swap_ir_rate(client, prazo_days, cpty_receives):
+    """Alíquota de IR do swap em FRAÇÃO (0.15 = 15%), ou None quando não dá para
+    afirmar. Porte da fórmula da planilha, na mesma ordem:
+
+      1. exceção por cliente (`swap-ir-client`) — bancos e as duas entidades JPM;
+      2. fora das exceções, só há IR quando **quem recebe é a contraparte**;
+      3. tabela regressiva por prazo (`swap-ir-term`).
+
+    None ≠ 0%: sem prazo na posição não há como escolher a faixa, e imprimir 0%
+    ali seria afirmar isenção que ninguém verificou. A célula fica vazia, que é o
+    pedido de conferência.
+
+    A planilha tem um vão em 721 (`E12>721` deixa o prazo 721 exato sem resposta,
+    devolvendo FALSE). A tabela por faixas fecha isso: acima da última faixa
+    registrada vale a linha sem limite.
+    """
+    cn = _fcst_norm(client).strip()
+    if not cn:
+        return None
+    for row in _mapping_rows('swap-ir-client'):
+        pat = _fcst_norm(row.get('CLIENT', '')).strip()
+        if not pat:
+            continue
+        hit = cn.startswith(pat) if 'starts' in _fcst_norm(row.get('MATCH', '')) else cn == pat
+        if hit:
+            r = _conf_to_float(row.get('RATE'))
+            return None if r is None else r / 100.0
+    if cpty_receives is None:      # direção desconhecida ≠ "não é ela que recebe"
+        return None
+    if not cpty_receives:
+        return 0.0
+    if prazo_days is None:
+        return None
+    brackets, catch_all = [], None
+    for row in _mapping_rows('swap-ir-term'):
+        rate = _conf_to_float(row.get('RATE'))
+        if rate is None:
+            continue
+        upto = _conf_to_float(row.get('UP TO DAYS'))
+        if upto is None:
+            catch_all = rate / 100.0
+        else:
+            brackets.append((upto, rate / 100.0))
+    for upto, rate in sorted(brackets):
+        if prazo_days <= upto:
+            return rate
+    return catch_all
+
+
+def _ops_cpty_receives(direction, settlement):
+    """Quem recebe é a contraparte?
+
+    Preferimos o texto: a coluna Direction do Athena é a que a planilha lê em
+    `O12="Counterparty receives"`. Quando ela vem vazia (ou com um vocabulário
+    que não conhecemos) sobra o SINAL do settlement — negativo é o banco pagando,
+    logo é a contraparte recebendo, que é a convenção do Resultado Bruto entre
+    parênteses no aviso. Sem texto e sem valor, None: não dá para afirmar, e o
+    IR sai em branco em vez de sair zero."""
+    d = _fcst_norm(direction)
+    if 'counterparty' in d and 'receiv' in d:
+        return True
+    if d and 'receiv' in d:            # 'Owner receives'/'JPM receives' → não é ela
+        return False
+    if settlement is None:
+        return None
+    return settlement < 0
+
+
+def _ops_swap_trade_rows(settle_ref):
+    """Linhas de SWAP do Trade Level para a data de liquidação `settle_ref`."""
+    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
+    _jp, opb3 = _opb3_load(ref_dt)
+    if not opb3:
+        return []
+    wanted = _ops_swap_event_set()
+
+    # 1) Swaps do dia: Tipo Título = SWAP e Tipo Operação registrado. O dedup é
+    #    por Título e preserva a ordem de chegada — o mesmo swap traz amortização
+    #    e juros em linhas separadas e viraria duas linhas iguais na tela.
+    titulos, seen = [], set()
+    by_titulo = {}
+    for rec in opb3:
+        titulo = str(rec.get('Título', '') or '').strip()
+        if not titulo:
+            continue
+        by_titulo.setdefault(titulo.upper(), []).append(rec)
+        if 'swap' not in _fcst_norm(rec.get('Tipo Título', '')):
+            continue
+        if _fcst_norm(rec.get('Tipo Operação', '')).strip() not in wanted:
+            continue
+        if titulo.upper() in seen:
+            continue
+        seen.add(titulo.upper())
+        titulos.append((titulo, rec))
+    if not titulos:
+        return []
+
+    # 2) Fontes auxiliares — lidas UMA vez cada, não por linha.
+    tipo_maps = _opb3_tipo_maps(ref_dt)                       # Título → identificador (LOB)
+    terms = _ops_swap_pos_terms(ref_dt)                       # Contrato → (dt op, dt venc)
+
+    athena = _ds_display_collect(ref_dt, 'br-onshore-settlements', _ATHENA_COLUMNS,
+                                 _ATHENA_VALUE_COLS)
+    ai = {c: i for i, c in enumerate(athena.get('columns') or [])}
+    by_cetip = {}
+    for row in athena.get('rows') or []:
+        cet = str(row[ai['CETIP ID']] if 'CETIP ID' in ai else '').strip().upper()
+        if cet:
+            by_cetip.setdefault(cet, row)
+
+    events = _ds_display_collect(ref_dt, 'eventos-swap-jpm', _EVENTS_COLUMNS)
+    ei = {c: i for i, c in enumerate(events.get('columns') or [])}
+    by_contract = {}
+    for row in events.get('rows') or []:
+        k = str(row[ei['Código do Contrato']] if 'Código do Contrato' in ei else '').strip().upper()
+        if k:
+            by_contract.setdefault(k, []).append(row)
+
+    _ojp, otm = _otm_load(ref_dt)
+    otm_by_trade = {}
+    for rec in (otm or []):
+        tid = str(rec.get('Trade Id', '') or '').strip().upper()
+        amt = _conf_to_float(rec.get('Amount'))
+        if tid and amt is not None:
+            otm_by_trade[tid] = otm_by_trade.get(tid, 0.0) + amt
+
+    def _cell(row, idx_map, name):
+        i = idx_map.get(name)
+        return '' if i is None or i >= len(row) else str(row[i] or '').strip()
+
+    out = []
+    for titulo, rec in titulos:
+        key = titulo.upper()
+        arow = by_cetip.get(key)
+        internal_id = _cell(arow, ai, 'Kapital ID') if arow else ''
+        # Counterparty: o nome do Athena é a razão social que o cadastro de IR
+        # espera; o Nome Simplificado do B3 ('INTRAGMGTFDO') é um apelido de conta
+        # e nunca casaria com "BANCO ..." nem com as entidades JPM. Ele fica só
+        # como último recurso, para a linha não sair anônima.
+        counterparty = (_cell(arow, ai, 'CounterParty') if arow else '') or \
+                       str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip()
+
+        # Type: VCP quando QUALQUER uma das duas pontas do evento indexa em VCP.
+        vcp = False
+        for erow in by_contract.get(key, []):
+            for col in ('PARTE / Indexador', 'CONTRAPARTE / Indexador'):
+                if 'vcp' in _fcst_norm(_cell(erow, ei, col)):
+                    vcp = True
+        stype = 'VCP' if vcp else 'Calculado'
+
+        settlement = otm_by_trade.get(internal_id.strip().upper()) if internal_id else None
+        # Settlement B3: soma de TODAS as linhas do Título. A visão do Operations
+        # B3 já vem filtrada para um lado (banco ou MGT), então não há par
+        # simétrico se anulando — se aparecer, a soma dá zero e é sinal de que o
+        # arquivo veio com as duas pontas.
+        vals = [_conf_to_float(r.get('Valor')) for r in by_titulo.get(key, [])]
+        vals = [v for v in vals if v is not None]
+        settlement_b3 = sum(vals) if vals else None
+
+        op_dt, venc_dt = terms.get(_fcst_norm_contract(titulo).upper(), (None, None))
+        prazo = (venc_dt - op_dt).days if (op_dt and venc_dt) else None
+        rate = _ops_swap_ir_rate(counterparty, prazo,
+                                 _ops_cpty_receives(_cell(arow, ai, 'Direction') if arow else '',
+                                                    settlement))
+        tax = None if (rate is None or settlement is None) else abs(settlement) * rate
+
+        diff = None if (settlement is None or settlement_b3 is None) else settlement - settlement_b3
+        out.append({
+            'status': 'OK' if (diff is not None and abs(diff) < 0.01) else 'Check',
+            'lob': _opb3_tipo_for(rec, tipo_maps),
+            'counterparty': counterparty,
+            'internal_id': internal_id,
+            'id_b3': titulo,
+            'product': 'SWAP',
+            'type': stype,
+            'settlement': _ops_fmt_amt(settlement),
+            'settlement_b3': _ops_fmt_amt(settlement_b3),
+            'tax_income': _ops_fmt_amt(tax),
+            'difference': _ops_fmt_amt(diff),
+        })
+    return out
+
+
+def _ops_fmt_amt(v):
+    """#,##0.00 — None vira '' (célula vazia = 'não deu para calcular'), que é
+    diferente de 0,00 ('calculei e deu zero')."""
+    return '' if v is None else '{:,.2f}'.format(v)
+
+
 @blueprint.route('/other-products-summary')
 def other_products_summary():
     if not session.get('authenticated'):
@@ -5326,10 +5605,17 @@ def api_ops_data():
     except ValueError:
         settle_ref = datetime.now().date()
     pos_ref = _forecast_latest_ref()          # cards read the LATEST available position JSON
+    try:
+        trade = _ops_swap_trade_rows(settle_ref)
+    except Exception:
+        # O Trade Level é uma leitura derivada de cinco arquivos; uma fonte
+        # malformada não pode derrubar os widgets, que vêm de outro lugar.
+        log.error("[ops-trade] falha montando as linhas de swap:\n%s", traceback.format_exc())
+        trade = []
     return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
-                    'summary': [], 'trade': []})
+                    'summary': [], 'trade': trade})
 
 
 # ── Live Position › Swap › Characteristics ───────────────────────────────────
@@ -15972,6 +16258,62 @@ _MAPPING_DEFS = {
         ],
         'upgrade': _api_links_upgrade,
         'seed': list(_API_LINKS_SEED),
+    },
+    # Quais Tipo Operação do Operations B3 significam "swap liquidando hoje" — é
+    # a lista que o Trade Level do Other Products Summary varre para achar os
+    # swaps do dia. RESGATE e RESGATE ANTECIPADO ficam de fora de propósito: são
+    # vencimento/antecipação, não pagamento de diferencial.
+    #
+    # O casamento é sem acento e sem caixa, então 'AMORTIZAÇÃO' com cedilha no
+    # arquivo casa com a linha registrada sem ele.
+    'swap-b3-events': {
+        'label': 'Swap Settlement Events (B3)',
+        'columns': [
+            {'key': 'TIPO OPERACAO', 'label': 'Tipo Operação (Operations B3)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO', 'NOTES': ''},
+            {'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS', 'NOTES': ''},
+            {'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'NOTES': ''},
+        ],
+    },
+    # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
+    # do IF encadeado da planilha de avisos — bancos e as duas entidades JPM.
+    # 'Starts with' existe por causa do LEFT(A12;5)="BANCO", que isenta qualquer
+    # razão social começada em BANCO sem listá-las uma a uma.
+    'swap-ir-client': {
+        'label': 'Swap IR — Client Exceptions',
+        'columns': [
+            {'key': 'CLIENT', 'label': 'Client (Counterparty)'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select',
+             'options': ['Exact', 'Starts with']},
+            {'key': 'RATE', 'label': 'Rate %'},
+        ],
+        'seed': [
+            {'CLIENT': 'JPMORGAN CHASE BANK, N.A', 'MATCH': 'Exact', 'RATE': '0'},
+            {'CLIENT': 'LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO '
+                       'CREDITO PRIVADO', 'MATCH': 'Exact', 'RATE': '0'},
+            {'CLIENT': 'BANCO', 'MATCH': 'Starts with', 'RATE': '0'},
+            {'CLIENT': 'J.P. MORGAN OVERSEAS CAPITAL LLC', 'MATCH': 'Exact', 'RATE': '10'},
+        ],
+    },
+    # IR do swap, parte 2: a tabela regressiva por PRAZO, aplicada só quando quem
+    # recebe é a contraparte. A linha com UP TO DAYS vazio é o "acima de tudo" —
+    # e é ela que fecha o vão da planilha, onde `IF(E12>721;15%)` deixava o prazo
+    # 721 exato sem resposta (a fórmula devolvia FALSE).
+    'swap-ir-term': {
+        'label': 'Swap IR — Term Brackets',
+        'columns': [
+            {'key': 'UP TO DAYS', 'label': 'Up to (days · blank = above all)'},
+            {'key': 'RATE', 'label': 'Rate %'},
+        ],
+        'seed': [
+            {'UP TO DAYS': '180', 'RATE': '22.5'},
+            {'UP TO DAYS': '360', 'RATE': '20'},
+            {'UP TO DAYS': '720', 'RATE': '17.5'},
+            {'UP TO DAYS': '',    'RATE': '15'},
+        ],
     },
 }
 

@@ -1174,6 +1174,7 @@
   "ops-del": "Excluir",
   "ops-col-actions": "Ações",
   "ops-col-status": "Status",
+  "ops-col-lob": "LOB",
   "ops-col-counterparty": "Contraparte",
   "ops-col-receive": "Receber",
   "ops-col-pay": "Pagar",
@@ -1535,5 +1536,8 @@
   "tkd-mail-ok": "Um aviso de encerramento foi enviado por e-mail ao solicitante.",
   "tkd-mail-fail": "Salvo, mas o e-mail de encerramento não pôde ser enviado:",
   "map-tab-cetip-files": "Arquivos CETIP (Rotina de Save)",
-  "map-tab-api-links": "Links das APIs"
+  "map-tab-api-links": "Links das APIs",
+  "map-tab-swap-b3-events": "Eventos de Liquidação de Swap (B3)",
+  "map-tab-swap-ir-client": "IR de Swap — Exceções por Cliente",
+  "map-tab-swap-ir-term": "IR de Swap — Faixas de Prazo"
 }

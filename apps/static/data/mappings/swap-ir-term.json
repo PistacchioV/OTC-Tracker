@@ -1,0 +1,18 @@
+[
+  {
+    "UP TO DAYS": "180",
+    "RATE": "22.5"
+  },
+  {
+    "UP TO DAYS": "360",
+    "RATE": "20"
+  },
+  {
+    "UP TO DAYS": "720",
+    "RATE": "17.5"
+  },
+  {
+    "UP TO DAYS": "",
+    "RATE": "15"
+  }
+]

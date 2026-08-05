@@ -8072,3 +8072,93 @@ Verificado com `scripts/tests/check_summary_glow.py` (21 asserções), que prend
 armadilhas: o nome das classes nos dois lados, a ordem do `:hover` contra `.ops-widget:hover` e a
 comparação camada a camada claro > escuro. CSS e JS moram no template, então **não há `?v=` para subir**
 — mas a instância da equipe roda com o reloader desligado e cacheia templates: precisa de **restart**.
+
+## §182 — Other Products Summary › Trade Level: a linha de SWAP
+
+O Trade Level nascia vazio (`'trade': []` no `api_ops_data`). Agora ele monta uma linha por **swap
+liquidando na data**, e a ordem das colunas passou a ser a pedida, com **LOB** nova:
+
+`Status · LOB · Counterparty · Internal ID · B3 ID · Product · Type · Settlement · Settlement B3 ·
+Tax Income · Difference`
+
+### O join
+
+A linha nasce de **cinco arquivos que não se conhecem**; tudo é join por código, e cada seta é um lugar
+onde o número sai errado sem ninguém perceber (ele aparece, só não é o certo):
+
+| campo | de onde vem | chave |
+|---|---|---|
+| **B3 ID** | Operations B3 › `Título` | — |
+| **LOB** | Operations B3 › coluna derivada `Type` (= Código Identificador da posição) | Título |
+| **Settlement B3** | Σ `Valor` do Operations B3 | Título |
+| **Internal ID** | Swap Athena › `Kapital ID` | Título = `CETIP ID` |
+| **Counterparty** | Swap Athena › `CounterParty` | Título = `CETIP ID` |
+| **Settlement** | Σ `Amount` do OTM Settlements | Internal ID = `Trade Id` |
+| **Type** | Swap Events › `PARTE / Indexador` e `CONTRAPARTE / Indexador` | Título = `Código do Contrato` |
+| **Tax Income** | calculado (ver abaixo) | — |
+
+**Quais linhas são swap liquidando**: `Tipo Título = SWAP` **e** `Tipo Operação` registrado em
+`swap-b3-events` (as três variações de PAGAMENTO DE DIF./PRÊMIO). `RESGATE` e `RESGATE ANTECIPADO`
+ficam de fora de propósito — são vencimento, não pagamento de diferencial.
+
+**Dedup**: o mesmo swap chega ao Operations B3 **uma vez por Tipo Operação** (amortização, juros,
+prêmio). A linha é UMA por Título — mas o **Settlement B3 soma todas as linhas daquele Título**,
+inclusive as que o filtro descartou: o que se concilia é o caixa do dia, não o evento.
+
+**Type**: `VCP` quando **qualquer uma** das duas pontas do evento indexa em VCP; senão `Calculado`.
+
+**Counterparty**: o nome vem do **Athena**, não do Operations B3. O `Nome Simplificado` do B3
+(`INTRAGMGTFDO`) é apelido de conta e nunca casaria com "BANCO …" nem com as entidades JPM no cadastro
+de IR — ele fica só como último recurso, para a linha não sair anônima.
+
+### O IR
+
+Porte da fórmula da planilha de avisos, na mesma ordem: exceção por cliente → só há IR quando **quem
+recebe é a contraparte** → tabela regressiva por prazo. Dois pontos que não são transcrição:
+
+- **O prazo é do TRADE.** `Data operação termo` da posição DPOSICAO-SWAP e, só quando ela vem vazia,
+  `Data início` — que é exatamente o `XLOOKUP` em Z:Z com fallback para L:L. Num forward start, usar a
+  data de início encurtaria o prazo e **subiria** a alíquota.
+- **A planilha tem um vão em 721.** `IF(E12>721;15%)` deixa o prazo 721 exato sem resposta (devolve
+  FALSE). A tabela por faixas fecha isso: acima da última faixa registrada vale a linha sem limite.
+
+Célula **vazia ≠ 0,00**: sem prazo, sem cliente ou sem direção o IR sai em branco, que é pedido de
+conferência. Imprimir 0% ali seria afirmar isenção que ninguém verificou.
+
+**`_ops_cpty_receives` é a única inferência do conjunto** e está marcada como tal: preferimos o texto da
+coluna `Direction` do Athena (é o que a planilha lê em `O12="Counterparty receives"`); sem texto
+conhecido, sobra o **sinal** do settlement — negativo é o banco pagando, logo a contraparte recebendo,
+que é a convenção do Resultado Bruto entre parênteses no aviso. Quando o arquivo real do Athena estiver
+disponível, **conferir o vocabulário de `Direction`** e, se for outro, é aqui que se ajusta.
+
+### Cadastros novos (nada de de-para no código)
+
+Três abas novas no `/mapping`, seeds reproduzindo exatamente o que estava na fórmula:
+`swap-b3-events` (os Tipo Operação que contam), `swap-ir-client` (as exceções — `Starts with` existe por
+causa do `LEFT(A12;5)="BANCO"`) e `swap-ir-term` (as faixas).
+
+### A ordem das colunas vive em TRÊS listas posicionais
+
+Os `<th>` do template, o `rowMaker` do JS e `_OPS_TRADE_COLS` no backend. Mexer numa só desloca a tabela
+inteira **sem erro nenhum no console** — é o mesmo tipo de armadilha do §132 (New Deals NDF). A seção 4
+do `check_ops_trade_swap.py` compara as três.
+
+Linha derivada renderiza como **texto**, não `<input>`: ela é recalculada a cada troca de data, então um
+valor digitado sumiria sem aviso no próximo load. As linhas do Add row seguem editáveis.
+
+### Verificação e limites
+
+`scripts/tests/check_ops_trade_swap.py` (53 asserções). A seção 1 monta **as cinco fontes** num tempfile
+e chama `_ops_swap_trade_rows` de verdade, conferindo campo a campo — inclui o swap que chega duas vezes,
+o RESGATE que não pode entrar, o TER com o mesmo Tipo Operação, o swap sem contraparte no Athena e o
+registro de posição no formato **posicional real de 146 campos**. Os cadastros são lidos **do seed**, não
+do arquivo: quem editar a tabela de IR pela tela não faz o teste falhar, e o seed fica fixado contra a
+fórmula. Validado reintroduzindo o dedup removido, o vão do 721 e uma troca de colunas no cabeçalho.
+
+**Limite honesto**: nesta máquina só existe o JSON do Operations B3; Athena, Events e OTM não têm arquivo
+local. O join está provado pelo teste sintético e pela chamada real do endpoint (que devolve as duas
+linhas de swap do dia 27/07 com LOB e Type corretos), **não** por um dia de produção completo. O primeiro
+dia com as cinco fontes deve ser conferido contra a planilha.
+
+Falta ainda (partes seguintes): Option, NDF Commodities e COE no Trade Level, o Settlement Summary
+(continua `[]`) e a página **Settlement Advice**, que segue como link morto no sidenav.

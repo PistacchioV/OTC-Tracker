@@ -1174,6 +1174,7 @@
   "ops-del": "Delete",
   "ops-col-actions": "Actions",
   "ops-col-status": "Status",
+  "ops-col-lob": "LOB",
   "ops-col-counterparty": "Counterparty",
   "ops-col-receive": "Receive",
   "ops-col-pay": "Pay",
@@ -1185,7 +1186,7 @@
   "ops-col-type": "Type",
   "ops-col-settlement": "Settlement",
   "ops-col-tax-income": "Tax Income",
-  "ops-col-id-b3": "ID B3",
+  "ops-col-id-b3": "B3 ID",
   "ops-col-settlement-b3": "Settlement B3",
   "ops-col-difference": "Difference",
   "ops-empty": "No rows for this date yet — add one or pick another date.",
@@ -1535,5 +1536,8 @@
   "tkd-mail-ok": "A closing notice was e-mailed to the requester.",
   "tkd-mail-fail": "Saved, but the closing e-mail could not be sent:",
   "map-tab-cetip-files": "CETIP Files (Save Routine)",
-  "map-tab-api-links": "API Links"
+  "map-tab-api-links": "API Links",
+  "map-tab-swap-b3-events": "Swap Settlement Events (B3)",
+  "map-tab-swap-ir-client": "Swap IR — Client Exceptions",
+  "map-tab-swap-ir-term": "Swap IR — Term Brackets"
 }
