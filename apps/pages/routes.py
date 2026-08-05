@@ -5530,6 +5530,18 @@ def _ops_cpty_receives(direction, settlement):
     return settlement < 0
 
 
+# Tolerância de conciliação do Other Products, em BRL. Vale para as DUAS leituras
+# da mesma diferença: o status OK/Check de cada linha do Trade Level e o
+# `matched` (a luz) dos cards de reconciliação. Números iguais têm de acender a
+# mesma cor nos dois lugares — com duas tolerâncias, uma linha sairia verde
+# embaixo de um card âmbar e ninguém saberia em qual acreditar.
+#
+# 20,00 é o pedido do time: abaixo disso é arredondamento de curva entre o B3 e o
+# interno, não divergência a investigar. Fica aqui, longe do card, porque quem lê
+# a linha do Trade Level precisa achar o número.
+_OPS_RECON_TOL = 20.0
+
+
 def _ops_swap_settling(opb3):
     """(titulos, by_titulo) do Operations B3: quais SWAPs liquidam no dia.
 
@@ -5656,7 +5668,7 @@ def _ops_swap_trade_rows(settle_ref):
 
         diff = None if (settlement is None or settlement_b3 is None) else settlement - settlement_b3
         out.append({
-            'status': 'OK' if (diff is not None and abs(diff) < 0.01) else 'Check',
+            'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             # LOB = o TOKEN (EDG · CEM · CEMHYB), não o Código Identificador
             # inteiro que a coluna Type do Operations B3 carrega
             # ('CEM-2026-3184'). É o mesmo vocabulário do Settlement Summary
@@ -5702,7 +5714,6 @@ def _ops_swap_trade_rows(settle_ref):
 #  Família sem Trade Level ainda (Option, NDF Commodities, COE) volta `na: True`:
 #  a tela mostra um traço em vez de um "Check" âmbar, porque não há divergência —
 #  há conta que ainda não é feita. Pintar de âmbar leria como erro de dado.
-_OPS_RECON_TOL = 0.01
 
 
 def _ops_recon(trade_rows):
@@ -5763,7 +5774,7 @@ def _ops_ndfc_trade_rows(settle_ref):
         internal, b3 = r.get('apurado'), r.get('b3')
         diff = None if (internal is None or b3 is None) else internal - b3
         out.append({
-            'status': 'OK' if (diff is not None and abs(diff) < 0.01) else 'Check',
+            'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
             'lob': 'COMMODITIES',
             'counterparty': r.get('counterparty', ''),
             'internal_id': r.get('internal_id', ''),

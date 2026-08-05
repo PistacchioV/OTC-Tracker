@@ -9043,3 +9043,27 @@ ainda traz eventos de fora.
 `check_ops_trade_swap.py`: o fixture ganhou, **no mesmo Título A1** que já liquida, um `RESGATE` de 999 e
 uma linha `TER` de 888. Settlement B3 do A1 continua `150.00`, e o card (`_ops_recon`) fecha em `227.00`
 com contagem 2 — exatamente a soma das duas linhas visíveis.
+
+---
+
+## §201 — Tolerância de conciliação do Other Products: 20 BRL
+
+A diferença B3 × Interno passa a ser considerada conciliada **até 20,00 BRL** (limite fechado). Abaixo
+disso é arredondamento de curva entre os dois lados, não divergência a investigar — o pedido é do time.
+
+O que importa aqui não é o número, é que ele é **um só**. A mesma diferença é lida em dois lugares: o
+status **OK/Check** de cada linha do Trade Level e o **`matched`** (a luz âmbar/verde) dos cards de
+reconciliação. Eles estavam separados — os cards já liam `_OPS_RECON_TOL`, mas as duas famílias do Trade
+Level (swap e NDF commodities) comparavam com o literal `abs(diff) < 0.01` cada uma. Com duas tolerâncias
+diferentes, uma linha sairia verde embaixo de um card âmbar e não haveria em qual acreditar.
+
+`_OPS_RECON_TOL = 20.0` subiu para antes de `_ops_swap_trade_rows` (quem lê a linha precisa achar o
+número) e as três comparações passaram a usá-lo, todas com `<=`. O `diffCell` do navegador — o X e o
+check da coluna Difference — deriva do `status` que o servidor mandou, então não há cópia da regra no
+front-end para divergir.
+
+### Verificação
+
+Seção 13 do `check_ops_summary.py`: o valor da constante, o limite fechado (20,00 exatos batem, 20,01
+não), e a prova estrutural de que **não sobrou nenhum literal** — `abs(diff) < 0.01` não existe mais em
+`routes.py` e as duas famílias usam a constante.

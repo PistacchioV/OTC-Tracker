@@ -416,9 +416,28 @@ check('valor do lado interno', rec['swap']['int_value'], '150.00')
 # passariam por conciliadas mesmo faltando uma linha de um dos lados.
 rec = R._ops_recon([tr('SWAP', 100.0, 100.0), tr('SWAP', 50.0, None)])
 check('valor igual mas contagem diferente NAO bate', rec['swap']['matched'], False)
-rec = R._ops_recon([tr('SWAP', 100.0, 90.0)])
+rec = R._ops_recon([tr('SWAP', 100.0, 70.0)])
 check('contagem igual mas valor diferente NAO bate', rec['swap']['matched'], False)
-check('a diferenca sai assinada', rec['swap']['diff_value'], '(10.00)')
+check('a diferenca sai assinada', rec['swap']['diff_value'], '(30.00)')
+
+# ── A tolerancia de 20 BRL ────────────────────────────────────────────────────
+# Ela vale para as DUAS leituras da mesma diferenca: a luz do card e o status
+# OK/Check da linha do Trade Level. Se as duas se separarem, uma linha sai verde
+# embaixo de um card ambar e ninguem sabe em qual acreditar. Por isso o teste
+# olha o CONSTANTE, e nao um numero copiado aqui.
+check('a tolerancia e de 20 BRL', R._OPS_RECON_TOL, 20.0)
+check('20,00 exatos ainda batem (limite fechado)',
+      R._ops_recon([tr('SWAP', 100.0, 120.0)])['swap']['matched'], True)
+check('19,99 bate', R._ops_recon([tr('SWAP', 100.0, 80.01)])['swap']['matched'], True)
+check('20,01 NAO bate', R._ops_recon([tr('SWAP', 100.0, 120.01)])['swap']['matched'], False)
+# O mesmo numero, lido pela linha: o status vem do server (o diffCell do
+# navegador so traduz para o X/check), entao basta provar que a formula da linha
+# usa a mesma constante em vez de um literal.
+src = open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+check('nenhuma linha do Trade Level compara com literal',
+      "abs(diff) < 0.01" in src, False)
+check('as duas familias usam a constante',
+      src.count("abs(diff) <= _OPS_RECON_TOL"), 2)
 
 # Familia sem linha no Trade Level = `na`: nao ha divergencia, ha conta que ainda
 # nao e feita. Pintar de ambar leria como erro de dado.
