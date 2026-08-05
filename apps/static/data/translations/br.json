@@ -1574,5 +1574,6 @@
   "ops-sub-fx": "Câmbio",
   "ops-sub-comm": "Commodities",
   "map-tab-ndfc-ir": "IR NDF Commodities — Isentos",
-  "map-tab-ndfc-split": "Aviso NDF Commodities — Quebra por Commodity"
+  "map-tab-ndfc-split": "Aviso NDF Commodities — Quebra por Commodity",
+  "map-tab-b3-omnibus": "Contas Omnibus B3"
 }

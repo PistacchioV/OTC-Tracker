@@ -8919,3 +8919,40 @@ Seções 9 a 11 do `check_ndf_advice.py`: as colunas do aviso, os valores em BR,
 quebra (Total Net · Pay/Rec · No Net · Mondelez com sentido × commodity), o assunto, e a prova de que o
 PDF sai do mesmo gerador e do mesmo cadastro do aviso de moeda. Além do teste, um aviso completo foi
 montado de verdade: PDF de 9 KB anexado e o logo no corpo.
+
+---
+
+## §197 — Conta omnibus: quem é o cliente sai do CNPJ
+
+Numa linha do Operations B3 cuja **Conta Contraparte é a conta guarda-chuva** (`73760.10-2`), o nome que
+vem da B3 é o do **titular do omnibus**, não o do cliente. Usar esse nome manda o aviso de liquidação para
+o cliente errado — e a linha *parece certa*: nome preenchido, valores preenchidos, nada de errado na tela.
+
+A regra agora é: conta omnibus → pega o **CPF/CNPJ da Contraparte** da posição NDF e procura o nome no
+`RefData.json` **pelo CNPJ**. Fora do omnibus, o nome da posição continua valendo; e sem CNPJ ou sem
+cadastro, cai na cascata de antes (nome da posição → Nome Simplificado do B3).
+
+Vale para as **duas telas**: o Settlement Advice e o Trade Level, que herda a contraparte já resolvida —
+as duas não podem discordar de quem é a contraparte da mesma operação.
+
+### Duas comparações por dígitos, e por quê
+
+- **O CNPJ**: o RefData guarda mascarado (`45.985.371/0001-08`) e a posição da B3 guarda só números.
+  Comparar as strings não casaria nada, e a coluna sairia com o nome do omnibus — sem erro.
+- **A conta**: aparece ora `73760.10-2`, ora com outra pontuação. Mesma razão.
+
+O índice do RefData é `{CNPJ → COUNTERPARTY}`, primeiro registro vence (há mais linhas do que CNPJs
+distintos), cacheado por mtime.
+
+### A conta virou cadastro
+
+`b3-omnibus-account` (`ACCOUNT` · `NOTES`), semeado com `73760.10-2`. Uma conta a mais amanhã se registra
+pela tela — nenhuma conta da B3 devia estar escrita em código.
+
+### Junto
+
+Toolbar do **Live Position NDF** ganhou o mesmo respiro do §190/§194.
+
+Verificação: seção 12 do `check_ndf_advice.py` — a linha que vem pelo omnibus resolvendo pelo CNPJ, a que
+**não** vem mantendo o nome da posição, o Trade Level herdando o mesmo nome, e a comparação por dígitos
+nos dois lados. Conferido também contra o `RefData.json` real (438 CNPJs indexados).

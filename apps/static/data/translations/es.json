@@ -1573,5 +1573,6 @@
   "ops-sub-fx": "Cambio",
   "ops-sub-comm": "Commodities",
   "map-tab-ndfc-ir": "IR NDF Commodities — Exentos",
-  "map-tab-ndfc-split": "Aviso NDF Commodities — División por Commodity"
+  "map-tab-ndfc-split": "Aviso NDF Commodities — División por Commodity",
+  "map-tab-b3-omnibus": "Cuentas Ómnibus B3"
 }

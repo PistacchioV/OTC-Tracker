@@ -69,19 +69,21 @@ def write_json(path, data):
 # real e recarregaria por cima de um cache preenchido na mao.
 R._subjacente_map = lambda: {'OAHDY': 'ALUMINIO', 'CAFX': 'CAFE'}
 R._ndfsum_refdata_spn = lambda: {R._fcst_norm('AMG BRASIL S.A.'): {'spn': '9', 'taxid': '1'}}
+R._refdata_by_taxid = lambda: {'45985371000108': 'AMG BRASIL S.A.'}
 R._cpd_load = lambda: [{'SPN': '9', 'COUNTERPARTY': 'AMG BRASIL S.A.',
                         'NET': {'value': 'Pay/Rec', 'status': 'Active'}}]
 
 REF = datetime(2026, 8, 5)
 
 
-def opb3(titulo, tipo_op='RESGATE', tipo_tit='TER', cpty='CLI', valor='1,00'):
+def opb3(titulo, tipo_op='RESGATE', tipo_tit='TER', cpty='CLI', valor='1,00', conta=''):
     return {'Conta': '73760.00-9', 'Tipo Operação': tipo_op, 'Título': titulo,
             'Tipo Título': tipo_tit, 'Valor': valor, 'Data Liquidação': '05/08/2026',
-            'Contraparte (Nome Simpl.)': cpty}
+            'Contraparte (Nome Simpl.)': cpty, 'Conta Contraparte': conta}
 
 
-def ter(contrato, classe, cpty, conf, emissao, subj, fix_moeda, fix_ativo, qtd, asian=''):
+def ter(contrato, classe, cpty, conf, emissao, subj, fix_moeda, fix_ativo, qtd, asian='',
+        cnpj=''):
     """Registro da posicao NDF no formato que `_lpndf_collect` le.
 
     As datas de media asiatica sao um bloco POSICIONAL: a 1a e a chave de indice
@@ -94,7 +96,8 @@ def ter(contrato, classe, cpty, conf, emissao, subj, fix_moeda, fix_ativo, qtd, 
                 'Data de Emissao': emissao, 'Codigo do Ativo Subjacente': subj,
                 'Data de Fixing da Moeda': fix_moeda,
                 'Data de Fixing do Ativo Subjacente': fix_ativo,
-                'Valor Base no registro': qtd, 'Nome da Parte': 'BANCO J.P. MORGAN S.A.'})
+                'Valor Base no registro': qtd, 'Nome da Parte': 'BANCO J.P. MORGAN S.A.',
+                'CPF/CNPJ da Contraparte': cnpj})
     while len(rec) < 100:
         rec['_pad%03d' % len(rec)] = ''
     rec['_asian1'] = asian
@@ -108,7 +111,9 @@ day = os.path.join(ds, '2026', '08', '05')
 write_json(os.path.join(day, 'operations-b3_20260805.json'), [
     # O Valor do Operations B3 e o lado B3 do Trade Level: C1 bate com o interno
     # (Difference zero), C3 NAO bate — e a linha que tem de sair como Check.
-    opb3('C1', valor='-2028144,04'),              # entra — banco pagando
+    # C1 vem pela conta OMNIBUS: o nome da posicao e do titular do guarda-chuva
+    # e o cliente de verdade sai do CNPJ.
+    opb3('C1', valor='-2028144,04', conta='73760.10-2'),
     opb3('C2', valor='-500000,00'),               # entra — LAWTON, tambem pagando
     opb3('C3', valor='2000000,00'),               # entra — e DIVERGE do interno
     opb3('X3', tipo_op='PAGAMENTO DE PREMIO'),    # nao e Resgate
@@ -126,8 +131,8 @@ write_json(os.path.join(day, 'otm-settlement_20260805.json'), [
 POS = R._prev_anbima_bizday(REF).strftime('%y%m%d')
 write_json(os.path.join(b3, 'NDF', R._b3_date_subpath(POS),
                         '73760_{}_DPOSICAO-TER.json'.format(POS)), [
-    ter('C1', 'COMMODITIES', 'AMG BRASIL S.A.', 'DBH-1NR000', '20250603',
-        'OAHDY', '20260803', '20260804', '702'),
+    ter('C1', 'COMMODITIES', 'TITULAR DO OMNIBUS', 'DBH-1NR000', '20250603',
+        'OAHDY', '20260803', '20260804', '702', cnpj='45985371000108'),
     # Asiatica: SEM data unica de fixing do ativo -> mes/ano da 1a verificacao
     ter('C2', 'COMMODITIES', 'LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO '
         'CREDITO PRIVADO', 'DBH-1NR00R', '20250603', 'CAFX', '20260803', '', '702',
@@ -349,6 +354,35 @@ check('e o mesmo cadastro de quem recebe', '_ndf_pdf_set()' in body, True)
 check('a pagina tem o botao Print Advice', 'id="swPrintAdvice"' in HTML, True)
 check('o endpoint existe',
       "@blueprint.route('/api/other-products-ndf-settlement-advice/emails'" in SRC1, True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 12. conta OMNIBUS: o cliente sai do CNPJ ==')
+# Na conta guarda-chuva o nome que vem da B3 e o do TITULAR do omnibus, nao o do
+# cliente. Mandar o aviso de liquidacao por esse nome e mandar para o cliente
+# errado — e a linha "parece certa", com nome e valores preenchidos.
+check('C1 veio pela conta omnibus -> nome do CNPJ',
+      cell('C1', 'Contraparte'), 'AMG BRASIL S.A.')
+# Fora do omnibus, o nome da posicao continua valendo.
+check('C2 nao e omnibus -> nome da posicao',
+      cell('C2', 'Contraparte').startswith('LAWTON'), True)
+# E o Trade Level herda o mesmo nome: as duas telas nao podem discordar de quem
+# e a contraparte da mesma operacao.
+check('o Trade Level herda o cliente resolvido',
+      by_t['C1']['counterparty'], 'AMG BRASIL S.A.')
+
+SRC2 = read('apps/pages/routes.py')
+check('cadastro de omnibus registrado', "'b3-omnibus-account': {" in SRC2, True)
+check('aba no /mapping',
+      "key: 'b3-omnibus-account'" in read('apps/templates/pages/mapping.html'), True)
+# A conta aparece ora 73760.10-2, ora com outra pontuacao: a comparacao e por
+# digitos, senao o omnibus deixa de ser reconhecido em silencio.
+check('73760.10-2 e omnibus', R._b3_is_omnibus('73760.10-2'), True)
+check('e a comparacao ignora a pontuacao', R._b3_is_omnibus('7376010 2'), True)
+check('outra conta nao e omnibus', R._b3_is_omnibus('73760.00-9'), False)
+check('conta vazia nao e omnibus', R._b3_is_omnibus(''), False)
+check('a toolbar do Live Position NDF ganhou respiro',
+      '#live-position-ndf-page .card-body > .d-flex.justify-content-between'
+      in read('apps/templates/pages/live-position-ndf.html'), True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

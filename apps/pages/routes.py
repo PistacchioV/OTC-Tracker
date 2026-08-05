@@ -7587,6 +7587,50 @@ def _ndfc_ir_exempt(client):
     return False
 
 
+_REFDATA_TAXID_CACHE = {'mtime': None, 'map': {}}
+
+
+def _refdata_by_taxid():
+    """{CNPJ só dígitos → COUNTERPARTY} do RefData.json, cacheado por mtime.
+
+    Comparação por DÍGITOS: o RefData guarda mascarado (45.985.371/0001-08) e a
+    posição da B3 guarda só números. Comparar as strings não casaria nada."""
+    path = os.path.join(_B3_DATA_DIR, 'RefData.json')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _REFDATA_TAXID_CACHE['mtime'] != mt:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        m = {}
+        for rec in (data if isinstance(data, list) else []):
+            digits = ''.join(ch for ch in str(rec.get('TAX ID', '') or '') if ch.isdigit())
+            name = str(rec.get('COUNTERPARTY', '') or '').strip()
+            if digits and name and digits not in m:
+                m[digits] = name
+        _REFDATA_TAXID_CACHE['mtime'] = mt
+        _REFDATA_TAXID_CACHE['map'] = m
+    return _REFDATA_TAXID_CACHE['map']
+
+
+def _b3_is_omnibus(account):
+    """A Conta Contraparte é uma conta guarda-chuva? Cadastro
+    `b3-omnibus-account`. Comparação por dígitos: a conta aparece ora
+    `73760.10-2`, ora `7376010 2`."""
+    d = ''.join(ch for ch in str(account or '') if ch.isdigit())
+    if not d:
+        return False
+    for row in _mapping_rows('b3-omnibus-account'):
+        rd = ''.join(ch for ch in str(row.get('ACCOUNT', '') or '') if ch.isdigit())
+        if rd and rd == d:
+            return True
+    return False
+
+
 def _ndfc_split_by_commodity(client):
     """A contraparte recebe um aviso POR COMMODITY? Cadastro `ndfc-advice-split`.
 
@@ -7683,7 +7727,16 @@ def _ndfadv_collect(ref):
     out = []
     for titulo, rec in titulos:
         lrow = by_contract.get(titulo.upper())
-        cliente = (_lcell(lrow, 'Nome da Contraparte')
+        # Contraparte: numa conta OMNIBUS o nome que vem da B3 é o do titular do
+        # guarda-chuva, não o do cliente — quem é o cliente sai do CNPJ da
+        # posição, procurado no RefData. Fora do omnibus, o nome da posição vale.
+        # Errar isso manda o aviso de liquidação para o cliente errado.
+        cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ da Contraparte') if ch.isdigit())
+        cliente = ''
+        if _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
+            cliente = _refdata_by_taxid().get(cnpj, '')
+        cliente = (cliente
+                   or _lcell(lrow, 'Nome da Contraparte')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
         conf = _lcell(lrow, 'Codigo Identificador')
 
@@ -17681,6 +17734,19 @@ _MAPPING_DEFS = {
             {'CLIENT': 'BANCO', 'MATCH': 'Starts with', 'NOTES': 'instituições financeiras'},
             {'CLIENT': 'JPMORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
             {'CLIENT': 'J.P. MORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
+        ],
+    },
+    'b3-omnibus-account': {
+        'label': 'B3 Omnibus Accounts',
+        'columns': [
+            {'key': 'ACCOUNT', 'label': 'B3 Account'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        # Conta da B3 que NÃO identifica o cliente: é a conta guarda-chuva. Numa
+        # linha do Operations B3 com essa Conta Contraparte, o nome que vem da B3
+        # é o do titular do omnibus — quem é o cliente sai do CNPJ.
+        'seed': [
+            {'ACCOUNT': '73760.10-2', 'NOTES': 'omnibus — identificar o cliente pelo CNPJ'},
         ],
     },
     'ndfc-advice-split': {

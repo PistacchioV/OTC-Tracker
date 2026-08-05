@@ -198,6 +198,29 @@
 [data-bs-theme="dark"] .dt-button-collection .dt-button,
 [data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
 .dt-button-collection .dt-button:hover, .dt-button-collection .dropdown-item:hover { background: rgba(13,110,253,.08) !important; color: #0d6efd !important; }
+
+/* ── Toolbar acima da tabela ────────────────────────────────────────────────
+   Columns e Export são injetados pelo JS DEPOIS do render e o botão do
+   DataTables Buttons vem com margem zerada, então a fila encostava no cabeçalho
+   da tabela. Padding embaixo + altura igual para os botões das três origens
+   (template, DataTables Buttons e JS). */
+#live-position-ndf-page .card-body > .d-flex.justify-content-between {
+    padding: .35rem .25rem 1.15rem;
+    row-gap: .6rem;
+    column-gap: .5rem;
+}
+#live-position-ndf-page .columnToggleWrapper,
+#live-position-ndf-page .lnExportWrapper { display: inline-flex; align-items: center; }
+#live-position-ndf-page .columnToggleWrapper .btn,
+#live-position-ndf-page .lnExportWrapper .btn,
+#live-position-ndf-page .lnExportWrapper .dt-button,
+#live-position-ndf-page .lnExportWrapper .dt-buttons { margin: 0 !important; }
+#live-position-ndf-page .card-body > .d-flex .btn,
+#live-position-ndf-page .card-body > .d-flex .dt-button {
+    padding: .34rem .7rem; line-height: 1.35; white-space: nowrap;
+}
+#live-position-ndf-page .card-body > .d-flex .form-select-sm { padding-top: .28rem; padding-bottom: .28rem; }
+#live-position-ndf-page .card-body > .table-responsive { padding-top: .15rem; }
 </style>
 {% endblock extra_css %}
 
