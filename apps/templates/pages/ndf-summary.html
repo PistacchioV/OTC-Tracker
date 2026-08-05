@@ -55,7 +55,10 @@
     border-radius: 14px;
     padding: 1rem 1.1rem;
     background: var(--ins-secondary-bg, #fff);
-    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out);
+    /* border-color entra na transição junto com a sombra: a luz de fundo por
+       estado troca as duas, e sem isso a borda saltava enquanto o halo suavizava. */
+    transition: transform 220ms var(--ops-ease-out), box-shadow 220ms var(--ops-ease-out),
+                border-color 220ms var(--ops-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
     .ops-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
@@ -111,8 +114,11 @@
 }
 .ops-recon-row .ops-num { font-weight: 700; color: var(--ins-body-color); }
 /* Unmatched card gets a subtle amber ring — functional (scan the row of cards
-   and the odd one out pops), not decorative. */
-.ops-recon.is-unmatched { box-shadow: inset 0 0 0 1px rgba(245,158,11,.5); }
+   and the odd one out pops), not decorative. O anel entra como VARIÁVEL porque
+   ele e a luz de fundo (mais abaixo) dividem a mesma propriedade: box-shadow não
+   se soma entre regras, a última declaração vence a lista inteira. */
+.ops-recon               { --ops-ring: 0 0 0 0 rgba(0, 0, 0, 0); }   /* sem anel */
+.ops-recon.is-unmatched  { --ops-ring: inset 0 0 0 1px rgba(245, 158, 11, .5); }
 
 /* Total card: dark gradient, so recon text/hairline go light. */
 .ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
@@ -125,7 +131,60 @@
 .ops-recon--total .ops-recon-hdr { color: rgba(255,255,255,.75); }
 .ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
 .ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
-.ops-recon--total.is-unmatched { box-shadow: inset 0 0 0 2px rgba(245,158,11,.9); }
+.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px rgba(245, 158, 11, .9); }
+
+/* ── Luz de fundo por estado ────────────────────────────────────────────────
+   Mesma receita do New Deals Monitor: sombra em CAMADAS (contato + média +
+   halo largo), não um contorno chapado — o card parece flutuar sobre uma luz
+   verde (bateu) ou âmbar (verificar). A cor sai de `--ops-glow` ("r, g, b"),
+   escrita pelas duas classes de estado, então a receita fica num lugar só e o
+   mesmo `box-shadow` serve aos dois casos.
+   As classes vêm do JS junto com o badge — sem elas (antes do /data responder)
+   o card fica neutro de propósito: luz verde em card sem número é mentira.
+   O verde é o do badge (#16a34a) e não o #1a8a4a do gradiente da marca: sobre
+   fundo BRANCO o escuro vira um cinza-esverdeado que quase não se lê.
+   Este bloco é o padrão do tema CLARO e vale mais alto do que o escuro logo
+   abaixo — no branco a luz colorida se dissolve, no escuro ela já contrasta
+   sozinha e passar do ponto vira brilho de néon. */
+.ops-recon.is-ok    { --ops-glow:  22, 163,  74; }
+.ops-recon.is-check { --ops-glow: 245, 158,  11; }
+.ops-recon.is-ok,
+.ops-recon.is-check {
+    border-color: rgba(var(--ops-glow), .42);
+    box-shadow: var(--ops-ring),
+                0 2px 6px  rgba(var(--ops-glow), .20),
+                0 10px 24px rgba(var(--ops-glow), .34),
+                0 22px 50px rgba(var(--ops-glow), .22);
+}
+[data-bs-theme=dark] .ops-recon.is-ok,
+[data-bs-theme=dark] .ops-recon.is-check {
+    border-color: rgba(var(--ops-glow), .36);
+    box-shadow: var(--ops-ring),
+                0 2px 6px  rgba(var(--ops-glow), .15),
+                0 10px 24px rgba(var(--ops-glow), .25),
+                0 22px 50px rgba(var(--ops-glow), .16);
+}
+/* Hover: o card já sobe 3px — a luz acompanha, mais espalhada e mais funda.
+   Precisa vir DEPOIS de `.ops-widget:hover`, que troca o box-shadow inteiro
+   por um cinza e apagaria a cor. */
+@media (hover: hover) and (pointer: fine) {
+    .ops-recon.is-ok:hover,
+    .ops-recon.is-check:hover {
+        border-color: rgba(var(--ops-glow), .52);
+        box-shadow: var(--ops-ring),
+                    0 4px 10px rgba(var(--ops-glow), .24),
+                    0 18px 38px rgba(var(--ops-glow), .38),
+                    0 34px 70px rgba(var(--ops-glow), .24);
+    }
+    [data-bs-theme=dark] .ops-recon.is-ok:hover,
+    [data-bs-theme=dark] .ops-recon.is-check:hover {
+        border-color: rgba(var(--ops-glow), .44);
+        box-shadow: var(--ops-ring),
+                    0 4px 10px rgba(var(--ops-glow), .18),
+                    0 18px 38px rgba(var(--ops-glow), .28),
+                    0 34px 70px rgba(var(--ops-glow), .18);
+    }
+}
 
 /* Staggered widget entrance */
 @keyframes opsWidgetIn { to { opacity: 1; transform: translateY(0); } }
@@ -617,6 +676,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? '<i class="ti ti-check"></i>' + t('ndf-r-ok', 'OK')
                 : '<i class="ti ti-alert-triangle"></i>' + t('ndf-r-check', 'Check');
             card.classList.toggle('is-unmatched', !ok);
+            // A luz de fundo do card sai do MESMO `ok` que escreve o badge, no
+            // mesmo ponto: qualquer outra fonte deixaria halo e texto contando
+            // histórias diferentes na primeira vez que a regra mudasse.
+            card.classList.toggle('is-ok', ok);
+            card.classList.toggle('is-check', !ok);
         });
     }
 

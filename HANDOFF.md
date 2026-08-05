@@ -8030,3 +8030,45 @@ Verificado com `scripts/tests/check_payrec_run.py` (22 asserções). A seção 1
 chama `_gather_sources` com `_INPUT_BASE` apontando para um tempfile e prova que `manual` sem anexo, e
 com `files=None`, lê a pasta; as demais fixam que sobrou um botão de ação, que nenhum call site passa
 modo fixo e que a chave i18n não ficou órfã. O `?v=` do JS da página subiu para `20260805a` (§179).
+
+## §181 — NDF Summary: os cards de reconciliação ganham a luz de fundo do Monitor
+
+Os quatro cards do topo (Vanilla · Other Publisher · T+0 · Total) já diziam `OK`/`Check` num badge, mas
+o card em si era neutro: só o discrepante levava um anel âmbar fino por dentro. Agora o **card inteiro
+flutua sobre uma luz colorida** — verde quando B3 e Interno batem, âmbar quando não batem — que é a
+mesma receita do `ndm-card--prog` do New Deals Monitor: sombra em **camadas** (contato + média +
+halo largo), não um contorno chapado. É isso que faz o card parecer iluminado por baixo em vez de
+contornado.
+
+A cor sai de `--ops-glow` (`"r, g, b"`), escrita pelas classes de estado, e a receita do `box-shadow`
+existe **uma vez só** servindo aos dois casos:
+
+| estado | classe no card | `--ops-glow` |
+|---|---|---|
+| B3 = Interno | `is-ok` | `22, 163, 74` (#16a34a) |
+| divergente | `is-check` (+ `is-unmatched`) | `245, 158, 11` (#f59e0b) |
+
+Três armadilhas, todas silenciosas (nenhuma dá erro no console):
+
+- **`box-shadow` não se soma entre regras** — a última declaração vence a lista inteira. O anel âmbar
+  do card divergente, que antes era um `box-shadow` próprio, teria apagado o halo; virou a variável
+  `--ops-ring` (default: um `0 0 0 0` transparente) e entra como **primeiro item** da mesma lista, o
+  que também o mantém desenhado por cima. O card Total tem seu anel mais grosso pela mesma variável.
+- **A ordem do `:hover`.** `.ops-widget:hover` troca o `box-shadow` por um cinza genérico; a regra
+  colorida de hover **tem de vir depois** dela no arquivo, senão o halo some justamente ao passar o
+  mouse — o jeito mais fácil de não perceber.
+- **O claro pesa mais que o escuro**, ao contrário do resto da página. Luz colorida sobre fundo branco
+  se dissolve; sobre fundo escuro ela já contrasta sozinha e passar do ponto vira néon. Por isso as
+  três camadas do tema claro (`.20 / .34 / .22`) são maiores que as do `[data-bs-theme=dark]`
+  (`.15 / .25 / .16`) — e o verde é o **#16a34a do badge**, não o #1a8a4a do gradiente da marca, que no
+  branco lê como cinza-esverdeado.
+
+As classes vêm do JS no **mesmo ponto** que escreve o badge, do mesmo `ok`: qualquer outra fonte
+deixaria halo e texto contando histórias diferentes na primeira vez que a regra de conciliação mudasse.
+Sem classe nenhuma (antes do `/api/ndf-summary/data` responder) o card fica neutro de propósito — luz
+verde em card ainda sem número é mentira.
+
+Verificado com `scripts/tests/check_summary_glow.py` (21 asserções), que prende exatamente as três
+armadilhas: o nome das classes nos dois lados, a ordem do `:hover` contra `.ops-widget:hover` e a
+comparação camada a camada claro > escuro. CSS e JS moram no template, então **não há `?v=` para subir**
+— mas a instância da equipe roda com o reloader desligado e cacheia templates: precisa de **restart**.
