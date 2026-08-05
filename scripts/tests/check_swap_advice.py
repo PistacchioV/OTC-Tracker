@@ -352,5 +352,59 @@ for cls in ('ti ti-check text-success', 'ti ti-x text-danger'):
     check('mesma marca do NDF: %s' % cls,
           (cls in OPS) and (cls in read('apps/templates/pages/ndf-summary.html')), True)
 
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 10. o status New -> Generated -> Sent, nas DUAS telas ==')
+# O aviso e um so: se cada tela contasse o seu proprio estado, uma diria
+# "Generated" e a outra "New" para o mesmo documento. Por isso as duas leem a
+# MESMA chave do MESMO overlay do dia (contraparte x LOB x produto).
+R.session = {'user_sid': 'T000000'}          # _opssum_set_status carimba quem gravou
+tmp = tempfile.mkdtemp(prefix='swadv-st-')
+_ds_root = R.OTM_JSON_ROOT
+try:
+    R.OTM_JSON_ROOT = tmp
+    _p, meta = R._opssum_meta_load(REF)
+    check('sem overlay, nasce New', R._opssum_status(meta, 'SUZANO SA', 'CEM', 'SWAP'), 'New')
+
+    R._opssum_set_status(REF, [('SUZANO SA', 'CEM', 'SWAP')], 'Generated')
+    _p, meta = R._opssum_meta_load(REF)
+    check('gerou o aviso -> Generated', R._opssum_status(meta, 'SUZANO SA', 'CEM', 'SWAP'), 'Generated')
+    # A tela do Settlement Summary le do mesmo lugar.
+    check('o Settlement Summary enxerga o mesmo estado',
+          R._opssum_rows([{'counterparty': 'SUZANO SA', 'lob': 'CEM', 'product': 'SWAP',
+                           '_settle_n': 10.0, '_tax_n': None}], REF)[0]['status'],
+          'Generated')
+
+    R._opssum_set_status(REF, [('SUZANO SA', 'CEM', 'SWAP')], 'Sent')
+    _p, meta = R._opssum_meta_load(REF)
+    check('confirmou -> Sent', R._opssum_status(meta, 'SUZANO SA', 'CEM', 'SWAP'), 'Sent')
+    # Chave normalizada: grafia diferente no dia seguinte nao perde o estado.
+    check('a chave e normalizada', R._opssum_status(meta, 'suzano  sa', 'cem', 'swap'), 'Sent')
+    # Outra LOB da mesma contraparte e OUTRA linha de aviso.
+    check('outra LOB segue New', R._opssum_status(meta, 'SUZANO SA', 'EDG', 'SWAP'), 'New')
+finally:
+    R.OTM_JSON_ROOT = _ds_root
+    shutil.rmtree(tmp, ignore_errors=True)
+
+check('o endpoint do advice manda os statuses', "'statuses': statuses" in SRC, True)
+check('o Print Advice grava Generated', "'Generated')" in SRC, True)
+check('e o Confirm grava Sent', "'Sent')" in SRC, True)
+
+# O visualizador e COMPARTILHADO por cinco paginas: o status por linha entrou
+# como opcional, e quem nao manda `statuses` tem de continuar com o badge fixo.
+JS = read('apps/static/js/pages/live-position-swap-characteristics.js')
+check('o viewer aceita statuses', 'buildTable(d.columns, d.rows, d.statuses)' in JS, True)
+check('e cai no badge de sempre sem eles', '|| statusBadge' in JS, True)
+for st, cls in (('Sent', 'text-bg-primary'), ('Generated', 'text-bg-success'), ('New', 'text-bg-info')):
+    check('%s na cor do NDF' % st, ("%s:%s'%s'" % (st, ' ' * (10 - len(st)), cls)) in JS
+          or ("%s: '%s'" % (st, cls)) in JS or ("%s:      '%s'" % (st, cls)) in JS, True)
+check('a pagina recarrega depois de gerar', 'window.scLoad' in HTML, True)
+
+print('\n== 11. a toolbar tem respiro ==')
+# Columns e Export sao injetados pelo JS depois do render e vem com margem
+# zerada; sem estas regras a fila encosta no cabecalho da tabela.
+check('padding na barra', '.card-body > .d-flex.justify-content-between' in HTML, True)
+check('altura igual para todos os botoes', '.card-body > .d-flex .dt-button' in HTML, True)
+check('respiro antes da tabela', '.card-body > .table-responsive' in HTML, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

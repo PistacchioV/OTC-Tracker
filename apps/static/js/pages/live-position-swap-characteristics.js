@@ -64,12 +64,17 @@
       .then(function (d) {
         if (!d || !d.success) return;
         renderWidgets(d.widgets, d.ref_date_fmt);
-        buildTable(d.columns, d.rows);
+        buildTable(d.columns, d.rows, d.statuses);
         var asof = document.getElementById('sc-total-asof');
         if (asof) asof.textContent = d.ref_date_fmt || '—';
       })
       .catch(function () {});
   }
+
+  // Exposto para a página recarregar a tabela depois de uma ação própria (o
+  // Print Advice do Settlement Advice muda o status das linhas). Só isso: o
+  // resto do visualizador segue fechado.
+  window.scLoad = load;
 
   function setVal(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 
@@ -90,7 +95,23 @@
   }
 
   // ── Table ─────────────────────────────────────────────────────────────────
-  function buildTable(columns, rows) {
+  // Status por LINHA (opcional). O payload pode mandar `statuses`, um array
+  // paralelo a `rows`; quem não manda — Athena, Events, VCP, Characteristics —
+  // segue com o badge fixo de sempre. Aditivo de propósito: este JS é
+  // compartilhado por cinco páginas e não pode mudar de comportamento para as
+  // que não pediram nada.
+  var STATUS_PILL = {
+    Sent:      'text-bg-primary',
+    Generated: 'text-bg-success',
+    New:       'text-bg-info',
+  };
+  function statusCell(st) {
+    var cls = STATUS_PILL[st];
+    if (!cls) return null;
+    return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + esc(st) + '</span>';
+  }
+
+  function buildTable(columns, rows, statuses) {
     COLS = columns.map(function (label, i) { return { label: label, idx: i }; });
 
     // Header: title row (checkbox, status, columns) + per-column filter row.
@@ -109,8 +130,9 @@
     document.querySelector('#swapchar-table thead').innerHTML = titleRow + filterRow;
 
     var statusBadge = '<span class="badge bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
-    var data = rows.map(function (r) {
-      return ['<input type="checkbox" class="form-check-input sc-row-check">', statusBadge].concat(
+    var data = rows.map(function (r, i) {
+      var st = (statuses && statuses[i] && statusCell(statuses[i])) || statusBadge;
+      return ['<input type="checkbox" class="form-check-input sc-row-check">', st].concat(
         r.map(function (v) { return esc(v); })
       );
     });

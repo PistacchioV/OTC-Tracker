@@ -102,17 +102,32 @@
 }
 
 /* ── Toolbar acima da tabela ────────────────────────────────────────────────
-   O Columns e o Export são injetados pelo JS DEPOIS do render, e o botão do
-   DataTables Buttons traz margem própria zerada — sem estas duas regras a fila
-   de botões encosta no cabeçalho da tabela e nos cantos do card, que é o
-   "comido" que aparece na tela. `row-gap` cuida da quebra em telas estreitas. */
+   O Columns e o Export são injetados pelo JS DEPOIS do render e o botão do
+   DataTables Buttons traz margem própria zerada, então a fila de botões
+   encostava no cabeçalho da tabela e nos cantos do card. Além do respiro
+   embaixo (que separa dos <th>), os botões precisam de altura própria: com
+   `line-height:1.2` e sem padding vertical eles ficam com a cara de "comidos". */
 #swapchar-page .card-body > .d-flex.justify-content-between {
-    padding: .25rem .1rem .75rem;
-    row-gap: .5rem;
+    padding: .35rem .25rem 1.15rem;
+    row-gap: .6rem;
+    column-gap: .5rem;
 }
+#swapchar-page .columnToggleWrapper,
+#swapchar-page .scExportWrapper { display: inline-flex; align-items: center; }
 #swapchar-page .columnToggleWrapper .btn,
 #swapchar-page .scExportWrapper .btn,
-#swapchar-page .scExportWrapper .dt-buttons { margin: 0; }
+#swapchar-page .scExportWrapper .dt-button,
+#swapchar-page .scExportWrapper .dt-buttons { margin: 0 !important; }
+/* Todos os botões da barra com a MESMA altura e o mesmo respiro interno —
+   Show/entries, Columns, Export, Clear filters e Print Advice vêm de origens
+   diferentes (template, DataTables Buttons e JS), cada uma com o seu default. */
+#swapchar-page .card-body > .d-flex .btn,
+#swapchar-page .card-body > .d-flex .dt-button {
+    padding: .34rem .7rem; line-height: 1.35; white-space: nowrap;
+}
+#swapchar-page .card-body > .d-flex .form-select-sm { padding-top: .28rem; padding-bottom: .28rem; }
+/* E respiro entre a barra e a tabela, para os <th> não colarem nos botões. */
+#swapchar-page .card-body > .table-responsive { padding-top: .15rem; }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
 #swapchar-table thead th {
@@ -353,6 +368,10 @@
         return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
     }
 
+    // Depois de gerar, a tabela recarrega: o status das linhas passou a Generated
+    // no servidor, e deixar a tela mostrando New seria mentira até o próximo F5.
+    function reload() { if (window.scLoad) window.scLoad(currentYmd()); }
+
     btn.addEventListener('click', function () {
         if (btn.disabled) return;
         var orig = btn.innerHTML;
@@ -374,12 +393,14 @@
                         saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename);
                     });
                     alertBox('success', 'Print Advice', j.count + ' aviso(s) gerado(s).');
+                    reload();
                 });
             }
             var n = r.headers.get('X-Draft-Count') || '';
             return r.blob().then(function (b) {
                 saveBlob(b, 'Avisos_Liquidacao_Swap.zip');
                 alertBox('success', 'Print Advice', n + ' aviso(s) gerado(s).');
+                reload();
             });
         }).catch(function () {
             alertBox('error', 'Print Advice', 'Falha na geração.');

@@ -8628,3 +8628,53 @@ Seções 13 e 14 novas no `check_ops_summary.py`: a regra de bater (contagem *e*
 igual, contagem diferente" explicitamente reprovado), o `n/a` por família, a soma do Total, os cinco cards
 com os seus ganchos, `Flow` → `Cashflow`, a luz com o anel como variável (§181), e a auditoria dos ícones.
 Suíte inteira verde; as quatro páginas afetadas respondem 200.
+
+---
+
+## §190 — O status do aviso de Swap é um só, nas duas telas
+
+Antes: o Settlement Advice mostrava um badge **fixo** (herdado do visualizador genérico, que o usa para
+"custódia") e o Settlement Summary tinha o seu próprio New/Sent. Dois estados para o mesmo aviso.
+
+Agora o ciclo é **New → Generated → Sent**, guardado uma vez só no overlay do dia
+(`other-products-summary_YYYYMMDD.json`) e lido pelas duas telas pela **mesma chave**: contraparte × LOB ×
+produto (`_opssum_key`).
+
+- **New** — nasce assim, sem entrada no overlay.
+- **Generated** — o **Print Advice** grava, para cada linha que de fato virou rascunho. Contraparte
+  pulada pelo `build_swap_settlement_emails` (Lawton, JPMorgan) **não** é marcada: o estado tem de refletir
+  o que saiu, não o que se tentou.
+- **Sent** — o botão **Confirm** (✓) do Settlement Summary.
+
+O Settlement Advice é por contrato e o Summary é por linha de aviso; o contrato **herda** o estado da
+linha a que pertence, e é por isso que a chave inclui a LOB — que a linha do aviso já carrega. Duas LOBs
+da mesma contraparte são dois avisos e caminham separadas.
+
+Escrita centralizada em `_opssum_set_status` / leitura em `_opssum_status`: os três pontos que mexem em
+estado (Print Advice, Confirm, montagem das linhas) passam pelos mesmos dois helpers.
+
+**O Confirm fica só no Settlement Summary.** O Settlement Advice não tem coluna de ações — é a tela de
+conferência do documento, e o controle do fluxo vive no Summary, como no NDF. O que a tela de advice ganha
+é a **visibilidade**: dá para ver por contrato o que já foi gerado.
+
+### O visualizador genérico ganhou status por linha — de forma aditiva
+
+`live-position-swap-characteristics.js` serve **cinco** páginas. O payload agora pode trazer `statuses`,
+um array paralelo a `rows`; quem não manda (Athena, Events, VCP, Characteristics) continua com o badge
+fixo de antes. Também expõe `window.scLoad` — só isso — para a página recarregar a tabela depois do Print
+Advice, senão a tela seguiria mostrando `New` até o próximo F5.
+
+### Toolbar
+
+Segunda passada no respiro: além do padding embaixo (que separa dos `<th>`), os botões ganharam **altura
+própria**. Show/entries, Columns, Export, Clear filters e Print Advice vêm de três origens diferentes
+(template, DataTables Buttons e JS), cada uma com o seu default — sem padronizar a altura e a margem, a
+fila fica com a cara de "comida".
+
+### Verificação
+
+Seções 10 e 11 novas no `check_swap_advice.py`: o ciclo inteiro nas duas telas, a chave normalizada, a
+outra LOB que **não** é arrastada junto, o viewer caindo no badge de sempre quando não há `statuses`, e as
+três cores idênticas às do NDF. Além do teste, o ciclo foi percorrido ponta a ponta pelo `test_client`
+(New → Print Advice → Generated nas duas → Confirm → Sent nas duas), e as cinco páginas do visualizador
+compartilhado respondem 200.

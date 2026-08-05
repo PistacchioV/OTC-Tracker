@@ -5757,6 +5757,37 @@ def _opssum_key(cpty, lob, product):
     return '|'.join(re.sub(r'\s+', ' ', _fcst_norm(p)).strip() for p in (cpty, lob, product))
 
 
+def _opssum_status(meta, cpty, lob, product):
+    """Status da linha no overlay do dia: New → Generated → Sent.
+
+    A MESMA chave das duas telas (contraparte × LOB × produto). O Settlement
+    Advice mostra o status do contrato pela linha do Settlement Summary a que ele
+    pertence — é o mesmo aviso, e duas contagens de estado para o mesmo aviso
+    seria o defeito."""
+    return (meta.get(_opssum_key(cpty, lob, product)) or {}).get('status') or 'New'
+
+
+def _opssum_set_status(ref, triples, status):
+    """Grava `status` para cada (contraparte, LOB, produto) no overlay do dia."""
+    path, meta = _opssum_meta_load(ref)
+    sid = session.get('user_sid', '')
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    n = 0
+    for cpty, lob, product in triples:
+        key = _opssum_key(cpty, lob, product)
+        if not key.strip('|'):
+            continue
+        entry = meta.get(key) or {}
+        entry.update({'status': status, 'maker': sid, 'at': now})
+        meta[key] = entry
+        n += 1
+    if n:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(meta, fh, ensure_ascii=False, indent=2)
+    return n
+
+
 def _opssum_rows(trade_rows, ref):
     """Linhas do Settlement Summary, netadas a partir das linhas JÁ MONTADAS do
     Trade Level (`_settle_n`/`_tax_n`). Linha sem contraparte ou sem valor fica
@@ -5795,10 +5826,9 @@ def _opssum_rows(trade_rows, ref):
         banking = _bank_norm((rec_cpd or {}).get('BANKING'))
         entry = meta.get(_opssum_key(cpty, lob, product)) or {}
         out.append({
-            # New → Sent pelo botão Confirm. `Generated` só existirá quando esta
-            # página ganhar geração de aviso; até lá ela nunca é escrita, e é por
-            # isso que o Confirm salta direto para Sent.
-            'status': entry.get('status') or 'New',
+            # New → Generated (Print Advice do Settlement Advice) → Sent (botão
+            # Confirm). O mesmo overlay serve as duas telas.
+            'status': _opssum_status(meta, cpty, lob, product),
             'counterparty': cpty,
             'lob': lob,
             'product': product,
@@ -5960,16 +5990,9 @@ def api_ops_summary_mark_sent():
     name = str(payload.get('counterparty', '') or '').strip()
     if not name:
         return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
-    key = _opssum_key(name, str(payload.get('lob', '') or ''), str(payload.get('product', '') or ''))
     try:
-        path, meta = _opssum_meta_load(ref)
-        entry = meta.get(key) or {}
-        entry.update({'status': 'Sent', 'maker': session.get('user_sid', ''),
-                      'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-        meta[key] = entry
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        _opssum_set_status(ref, [(name, str(payload.get('lob', '') or ''),
+                                  str(payload.get('product', '') or ''))], 'Sent')
         return jsonify({'ok': True})
     except Exception as e:
         log.error('[ops-summary] mark-sent failed:\n%s', traceback.format_exc())
@@ -7120,6 +7143,7 @@ def _swadv_collect(ref):
                 _ops_fmt_amt(liq),
             ],
             'counterparty': cliente,
+            'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
             'legal': _cell(arow, ai, 'Owner Legal Entity'),
             'spn': ref_rec.get('spn', '') or _cell(arow, ai, 'SPN'),
             'taxid': ref_rec.get('taxid', ''),
@@ -7190,13 +7214,19 @@ def api_swap_settlement_advice_data():
     except ValueError:
         ref = datetime.now()
     try:
-        rows = _swadv_rows(ref)
+        items = _swadv_collect(ref)
     except Exception:
         log.error('[swap-advice] falha montando o aviso:\n%s', traceback.format_exc())
-        rows = []
-    rows.sort(key=lambda r: (str(r[0]).strip() == '', _fcst_norm(str(r[0]))))   # Cliente A→Z
-    return jsonify({'success': True, 'columns': _SWADV_COLUMNS, 'rows': rows,
-                    'widgets': {'total': len(rows)},
+        items = []
+    items.sort(key=lambda r: (str(r['counterparty']).strip() == '',
+                              _fcst_norm(str(r['counterparty']))))          # Cliente A→Z
+    # Status por linha, do MESMO overlay do Settlement Summary: o contrato herda
+    # o estado da linha de aviso a que pertence (contraparte × LOB × produto).
+    _p, meta = _opssum_meta_load(ref)
+    statuses = [_opssum_status(meta, r['counterparty'], r.get('lob', ''), 'SWAP') for r in items]
+    return jsonify({'success': True, 'columns': _SWADV_COLUMNS,
+                    'rows': [r['cells'] for r in items], 'statuses': statuses,
+                    'widgets': {'total': len(items)},
                     'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
 
@@ -7242,6 +7272,18 @@ def api_swap_settlement_advice_emails():
     if not drafts:
         return jsonify({'ok': True, 'count': 0})
     cp_count = len({d.get('counterparty', '') for d in drafts})
+
+    # Status → Generated para as linhas que de fato viraram aviso. Best-effort DE
+    # PROPÓSITO: os rascunhos já foram produzidos, então uma falha aqui é logada
+    # mas não transforma uma geração bem-sucedida em erro na tela.
+    try:
+        done = {_fcst_norm(d.get('counterparty', '')) for d in drafts}
+        _opssum_set_status(ref, [(r['counterparty'], r.get('lob', ''), 'SWAP')
+                                 for r in rows
+                                 if _fcst_norm(r.get('counterparty', '')) in done], 'Generated')
+    except Exception:
+        log.error('[swap-advice] generated-status save failed:\n%s', traceback.format_exc())
+
     if len(drafts) <= 2:
         files, seen = [], {}
         for d in drafts:
