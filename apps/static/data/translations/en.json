@@ -1551,5 +1551,6 @@
   "ops-ev-found": "In the file:",
   "ops-ev-register": "Register the variation in Mapping › Swap B3 Events.",
   "ops-ev-noswap": "Operations B3 has no SWAP rows for this date.",
-  "ops-ev-rows": "row(s) in the file"
+  "ops-ev-rows": "row(s) in the file",
+  "sw-print-advice": "Print Advice"
 }

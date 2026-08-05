@@ -94,12 +94,18 @@ def ev(contrato, base, ativo_banco, ativo_cliente):
     return r
 
 
-def pos_rec(contrato, ident, ini, venc, termo):
+def pos_rec(contrato, ident, ini, venc, termo, cod1='', cod2='', nome1='', nome2=''):
     """Posicao no formato REAL: 146 campos posicionais (2=Contrato, 11=Data
-    inicio, 12=Data vencimento, 25=Data operacao termo). Os nomes de Contrato e
-    Codigo Identificador tambem entram, porque a LOB e resolvida POR NOME."""
+    inicio, 12=Data vencimento, 25=Data operacao termo). As duas pernas do swap
+    ficam em 40/50 (Codigo indice) e 69/74 (Nome Tipo/Classe) — 1a e 2a de cada
+    uma NA TELA do Live Position. No arquivo cru ha um 'Nome Tipo/Classe' antes
+    (indice 30) que e do bloco do Termo: peg8a-lo pela ordem do arquivo daria a
+    classe errada sem erro nenhum. Os nomes de Contrato e Codigo Identificador
+    tambem entram, porque a LOB e resolvida POR NOME."""
     vals = [''] * 146
     vals[2], vals[4], vals[11], vals[12], vals[25] = contrato, ident, ini, venc, termo
+    vals[30] = 'CLASSE DO TERMO'          # a armadilha: NAO pode virar indexador
+    vals[40], vals[50], vals[69], vals[74] = cod1, cod2, nome1, nome2
     names = ['f%03d' % i for i in range(146)]
     names[2], names[4] = 'Contrato', 'Código Identificador'
     return dict(zip(names, vals))
@@ -131,9 +137,10 @@ write_json(os.path.join(day, 'eventos-swap-jpm_20260727.json'), [
 write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
                         '73760_{}_DPOSICAO-SWAP.json'.format(DREF)), [
     # forward start: TEM Data operacao termo -> 22/01/2024..05/08/2026 = 926 dias
-    pos_rec('A1', 'CEM-2026-3184', '20240301', '20260805', '20240122'),
+    pos_rec('A1', 'CEM-2026-3184', '20240301', '20260805', '20240122',
+            'PRE', 'VCP', 'x', 'DOLAR DOS EUA'),
     # sem termo -> cai na Data inicio: 01/07/2026..05/08/2026 = 35 dias
-    pos_rec('N2', 'EDG-2026-0001', '20260701', '20260805', ''),
+    pos_rec('N2', 'EDG-2026-0001', '20260701', '20260805', '', 'VCP', 'PRE', 'EURO', 'y'),
     # sem data nenhuma -> sem prazo
     pos_rec('S5', 'CEM-2026-9999', '', '', ''),
     pos_rec('S6', 'CEM-2026-8888', '20260701', '20260805', ''),
@@ -144,6 +151,7 @@ try:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
     rows = R._swadv_rows(REF)
     trade = R._ops_swap_trade_rows(REF.date())
+    email_rows = R._swadv_email_rows(REF)
 finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
     shutil.rmtree(tmp, ignore_errors=True)
@@ -164,7 +172,7 @@ check('as duas telas veem os mesmos contratos',
       sorted(by_contract), sorted(r['id_b3'] for r in trade))
 SRC = read('apps/pages/routes.py')
 check('a regra do universo tem UMA implementacao', SRC.count('def _ops_swap_settling'), 1)
-for fn in ('_ops_swap_trade_rows', '_swadv_rows'):
+for fn in ('_ops_swap_trade_rows', '_swadv_collect'):
     body = SRC.split('def %s(' % fn, 1)[1].split('\ndef ', 1)[0]
     check('%s usa _ops_swap_settling' % fn, '_ops_swap_settling(' in body, True)
 
@@ -172,12 +180,18 @@ print('\n== 2. a linha completa, coluna a coluna ==')
 check('Cliente vem do Athena', cell('A1', 'Cliente'), 'SUZANO SA')
 check('LOB e o token do identificador', cell('A1', 'LOB'), 'CEM')
 check('Valor Base Original vem dos eventos', cell('A1', 'Valor Base Original'), '1,000,000.00')
-check('Ativo Banco vem dos eventos', cell('A1', 'Ativo Banco'), 'PRE')
-check('Ativo Cliente vem dos eventos', cell('A1', 'Ativo Cliente'), 'CDI')
+# Codigo indice <> VCP -> o proprio codigo e o indexador.
+check('Indexador Banco = o Codigo indice', cell('A1', 'Indexador Banco'), 'PRE')
+# Codigo indice = VCP -> VCP nao diz a moeda; o indexador esta no Nome
+# Tipo/Classe da MESMA perna, em CAIXA ALTA.
+check('Indexador Cliente resolve o VCP', cell('A1', 'Indexador Cliente'), 'DOLAR DOS EUA')
+check('e o do N2 usa a 2a perna', cell('N2', 'Indexador Cliente'), 'PRE')
 check('Curva Banco vem do Athena', cell('A1', 'Curva Banco'), '1,000,000.00')
 check('Curva Cliente vem do Athena', cell('A1', 'Curva Cliente'), '1,310,217.20')
 check('Resultado Bruto vem do Athena', cell('A1', 'Resultado Bruto'), '310,217.20')
-check('Vencimento vem da posicao', cell('A1', 'Vencimento'), '05/08/2026')
+# Vencimento do aviso = a data da LIQUIDACAO (a parcela paga hoje), nao o
+# vencimento do swap — que na posicao e 05/08/2026 para este contrato.
+check('Vencimento e a data de liquidacao', cell('A1', 'Vencimento'), '27/07/2026')
 # Sem casamento no Athena a linha ainda sai — com o nome simplificado do B3.
 check('sem Athena, cai no nome simplificado do B3', cell('S6', 'Cliente'), 'CLIENTE B3')
 check('sem Athena, sem Resultado Bruto', cell('S6', 'Resultado Bruto'), '')
@@ -185,10 +199,12 @@ check('sem Athena, sem Resultado Bruto', cell('S6', 'Resultado Bruto'), '')
 print('\n== 3. a Data de Operacao e a do TRADE, nao a do inicio ==')
 # A1 e forward start: a data e 22/01/2024 (operacao termo), NAO 01/03/2024.
 check('forward start usa a Data operacao termo', cell('A1', 'Data Operação'), '22/01/2024')
-check('prazo desde o TRADE', cell('A1', 'Prazo'), '926')
+# 22/01/2024 -> 27/07/2026 = 917 dias, e o Prazo e a diferenca entre as DUAS
+# datas impressas: o cliente confere a conta do aviso e ela tem de fechar.
+check('prazo do TRADE ate a liquidacao', cell('A1', 'Prazo'), '917')
 # N2 nao tem termo: cai na Data inicio.
 check('sem termo, cai na Data inicio', cell('N2', 'Data Operação'), '01/07/2026')
-check('prazo curto', cell('N2', 'Prazo'), '35')
+check('prazo curto', cell('N2', 'Prazo'), '26')
 
 print('\n== 4. o IR e o liquido ==')
 # 926 dias -> 15% (a faixa acima de 720 da tabela). 310.217,20 x 15% = 46.532,58
@@ -227,6 +243,64 @@ for hook in ('id="swapchar-page"', 'id="swapchar-table"'):
 check('uma largura por coluna',
       len(re.findall(r'#swapchar-table th:nth-child\((\d+)\)', HTML)),
       len(R._SWADV_COLUMNS) + 2)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 7. o aviso impresso ==')
+from apps.pages import otc_emails                          # noqa: E402
+
+by_ct = {r['cells'][0]: r for r in email_rows}
+HD = R._swadv_email_headers(False)
+HD_P = R._swadv_email_headers(True)
+check('o aviso comeca em Numero de Contrato', HD[0], 'Número de Contrato')
+check('Cliente e LOB ficam de fora', ('Cliente' in HD or 'LOB' in HD), False)
+check('no aviso de premio a coluna Vencimento muda de nome',
+      HD_P[HD.index('Vencimento')], 'Pagamento de Prêmio')
+check('e so ela muda', [h for h in HD_P if h not in HD], ['Pagamento de Prêmio'])
+
+# Valores em BR: R$ #.##0,00, e o negativo com o simbolo DENTRO dos parenteses.
+ecell = lambda ct, col: by_ct[ct]['cells'][HD.index(col)]
+check('positivo em BR', ecell('A1', 'Valor Base Original'), 'R$ 1.000.000,00')
+check('negativo entre parenteses', ecell('N2', 'Resultado Bruto'), '(R$ 1.000,00)')
+check('prazo no formato #.##0', ecell('A1', 'Prazo'), '917')
+check('aliquota em BR', ecell('A1', 'Alíquota IR'), '15,00%')
+# A tela segue em US: as duas formatacoes convivem de proposito, e o aviso
+# formata a partir do NUMERO — reformatar o texto de uma para a outra erraria no
+# primeiro valor com separador ambiguo.
+check('a tela nao mudou de formato', cell('A1', 'Valor Base Original'), '1,000,000.00')
+
+# A1 tem juros + amortizacao -> liquidacao comum. Os outros tres sao
+# PAGAMENTO DE PREMIO puro. Um swap que paga premio E diferencial no mesmo dia
+# NAO e premio: chamar o conjunto assim no assunto esconderia o diferencial que
+# tambem esta na tabela.
+check('premio so quando TODOS os eventos do titulo sao premio',
+      {r['cells'][0]: r['premium'] for r in email_rows},
+      {'A1': False, 'N2': True, 'S5': True, 'S6': True})
+
+drafts = otc_emails.build_swap_settlement_emails(email_rows, HD, HD_P, '27/07/2026')
+subs = sorted(d['subject'] for d in drafts)
+# SUZANO normal (A1) + SUZANO premio (N2, S5) + CLIENTE B3 premio (S6).
+check('um aviso por contraparte x entidade x premio', len(drafts), 3)
+check('assunto normal',
+      [s for s in subs if not s.startswith('(')],
+      ['Liquidação de Operação de Derivativo (Swap) - 27/07/2026 - SUZANO SA'])
+check('assunto de premio',
+      [s for s in subs if s.startswith('(')],
+      ['(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Swap) - '
+       '27/07/2026 - CLIENTE B3',
+       '(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Swap) - '
+       '27/07/2026 - SUZANO SA'])
+# O documento tem de trazer o cabecalho certo em cada versao.
+html_p = [d['html'] for d in drafts if d['subject'].startswith('(')][0]
+html_n = [d['html'] for d in drafts if not d['subject'].startswith('(')][0]
+check('o aviso de premio traz a coluna renomeada', 'Pagamento de Prêmio' in html_p, True)
+check('e o normal nao', 'Pagamento de Prêmio' in html_n, False)
+check('o normal traz Vencimento', 'Vencimento' in html_n, True)
+
+check('a pagina tem o botao Print Advice', 'id="swPrintAdvice"' in HTML, True)
+check('e ele chama o endpoint',
+      "'/api/other-products-swap-settlement-advice/emails'" in HTML, True)
+check('o endpoint existe',
+      "@blueprint.route('/api/other-products-swap-settlement-advice/emails'" in SRC, True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

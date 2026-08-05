@@ -275,6 +275,9 @@
                     <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
                         <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
                     </button>
+                    <button class="btn btn-sm btn-primary bg-gradient" type="button" id="swPrintAdvice">
+                        <i class="ti ti-printer me-1"></i><span data-lang="sw-print-advice">Print Advice</span>
+                    </button>
                 </div>
                 <div class="text-muted fs-xs">
                     <span data-lang="sc-showing">Showing</span> <span id="sc-count">0</span> <span>rows</span>
@@ -304,4 +307,71 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+<!-- Print Advice em script PRÓPRIO: o visualizador genérico é compartilhado com
+     Athena/Events/VCP e não pode ganhar um botão que só existe aqui. -->
+<script>
+(function () {
+    var btn = document.getElementById('swPrintAdvice');
+    if (!btn) return;
+    var page = document.getElementById('swapchar-page');
+
+    function b64ToBlob(b64, mime) {
+        var bin = atob(b64), bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new Blob([bytes], { type: mime || 'application/octet-stream' });
+    }
+    function saveBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
+    function alertBox(icon, title, text) {
+        if (window.Swal) Swal.fire({ icon: icon, title: title, text: text });
+        else alert(title + (text ? '\n' + text : ''));
+    }
+    // A data vem do MESMO campo que a tabela usa. Ler o dd/mm/yyyy da tela em vez
+    // de guardar um estado próprio evita o clássico: trocar a data, gerar, e o
+    // aviso sair do dia anterior.
+    function currentYmd() {
+        var v = (document.getElementById('sc-date') || {}).value || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
+    }
+
+    btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Print Advice';
+        function done() { btn.disabled = false; btn.innerHTML = orig; }
+        fetch('/api/other-products-swap-settlement-advice/emails', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd() })
+        }).then(function (r) {
+            // Até 2 avisos voltam como JSON com os .eml em base64; 3+ vêm como
+            // um .zip binário. O content-type é o que separa os dois caminhos.
+            var ct = r.headers.get('Content-Type') || '';
+            if (ct.indexOf('application/json') >= 0) {
+                return r.json().then(function (j) {
+                    if (!j.ok) { alertBox('error', 'Print Advice', j.error || 'Falhou'); return; }
+                    if (!j.count) { alertBox('info', 'Print Advice', 'Nenhum aviso a gerar para esta data.'); return; }
+                    (j.files || []).forEach(function (f) {
+                        saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename);
+                    });
+                    alertBox('success', 'Print Advice', j.count + ' aviso(s) gerado(s).');
+                });
+            }
+            var n = r.headers.get('X-Draft-Count') || '';
+            return r.blob().then(function (b) {
+                saveBlob(b, 'Avisos_Liquidacao_Swap.zip');
+                alertBox('success', 'Print Advice', n + ' aviso(s) gerado(s).');
+            });
+        }).catch(function () {
+            alertBox('error', 'Print Advice', 'Falha na geração.');
+        }).then(done, done);
+    });
+})();
+</script>
 {% endblock extra_javascript %}

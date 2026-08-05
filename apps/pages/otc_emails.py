@@ -1085,6 +1085,132 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# AVISO DE LIQUIDAÇÃO — SWAP (Other Products › Swap › Settlement Advice)
+# ──────────────────────────────────────────────────────────────────────────
+#  Mesmo documento do aviso de NDF — mesma casca, mesma tabela, mesmo painel de
+#  totais, mesma regra de instrução/dados bancários pelo sinal do resultado. O
+#  que muda é a TABELA, que são as colunas da tela de Settlement Advice de Swap,
+#  e o assunto.
+#
+#  As colunas chegam prontas de `routes._swadv_email_rows` (já em BR): esta
+#  função não sabe a ordem delas nem precisa saber — reconstruí-la aqui criaria a
+#  segunda cópia da ordem das colunas, que é justamente o que já deu problema no
+#  Trade Level.
+def build_swap_settlement_emails(rows, headers, headers_premium, ref_date=None):
+    """Avisos de liquidação de SWAP.
+
+    `rows`: dicts de `routes._swadv_email_rows` — cells (já formatadas, na ordem
+    de `headers`), counterparty, legal, spn, taxid, premium, bruto/ir/liquido.
+
+    Um aviso por (contraparte × entidade legal × prêmio). Entidades legais
+    diferentes nunca netam juntas e levam assuntos diferentes — é a regra do
+    aviso de NDF. O prêmio separa por um motivo próprio: ele muda o assunto E o
+    nome de uma coluna, então misturar os dois num documento só imprimiria uma
+    das duas versões para as duas coisas.
+    """
+    cpd = _build_cpdetails_index()
+    ref_date = ref_date or _today_br()
+
+    groups = {}
+    for r in rows:
+        name = str(r.get('counterparty', '') or '').strip()
+        if not name or _is_lawton(name) or _is_jpmorgan(name):
+            continue
+        groups.setdefault((name, _ndf_legal_class(r.get('legal')), bool(r.get('premium'))),
+                          []).append(r)
+
+    drafts = []
+    for (name, le, premium), items in sorted(groups.items()):
+        drafts.append(_swap_settlement_email(
+            items, name, le, premium, ref_date, cpd,
+            headers_premium if premium else headers))
+    return drafts
+
+
+def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd, headers):
+    bruto = sum(float(t.get('bruto') or 0.0) for t in items)
+    ir = sum(float(t.get('ir') or 0.0) for t in items)
+    final = sum(float(t.get('liquido') or 0.0) for t in items)
+    cp = cpd.get(_norm_spn(items[0].get('spn')), {})
+    taxid = items[0].get('taxid', '')
+    to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
+
+    table = _email_data_table(headers, [t.get('cells') or [] for t in items])
+    summary_pairs = [
+        ('Resultado Bruto',  'R$ ' + _br_currency(bruto), False),
+        ('IR',               'R$ ' + _br(ir),             False),
+        ('Resultado Final',  'R$ ' + _br_currency(final), True),
+    ]
+    summary = _email_summary(summary_pairs)
+
+    # Instrução e dados bancários: MESMA regra do aviso de NDF (o sinal do
+    # resultado final decide quem transfere), reaproveitada verbatim para os dois
+    # documentos não divergirem em instrução de pagamento.
+    _JPM_BANK_KV = [
+        ('Nome e nº do banco', 'BANCO JP MORGAN S/A - 376'),
+        ('Nº e nome da agência', '0011'),
+        ('Conta-corrente nº', '5116003'),
+        ('CNPJ/MF nº', '33.172.537/0001-98'),
+    ] if le_class != 'MGT' else [
+        ('Nome e nº do banco', 'JPMORGAN CHASE BANK (BRASIL) - 488'),
+        ('Nº e nome da agência', '0001'),
+        ('Conta-corrente nº', '985181643'),
+        ('CNPJ/MF nº', '46.518.205/0001-64'),
+    ]
+    notice_text = ''
+    if final < 0:
+        instr_text = ('Conforme entendimentos mantidos, informamos que providenciaremos nesta data a '
+                      'transferência financeira do montante correspondente ao Resultado Final Apurado em vosso favor, '
+                      'conforme os dados a seguir, transmitidos por meio da Autorização Permanente para Liquidação '
+                      'Financeira e/ou confirmados por ligação telefônica:')
+        bank_name, agency, account = _first_bank(cp, 'PAY')   # JPM paga → dados de PAY
+        bank_title = 'Dados para pagamento'
+        bank_pairs = [
+            ('Nome e nº do banco', bank_name or '—'),
+            ('Nº e nome da agência', agency or '—'),
+            ('Conta-corrente nº', account or '—'),
+            ('CNPJ/MF nº', _fmt_cnpj(taxid)),
+        ]
+    else:
+        instr_text = ('Sendo assim, informamos que debitaremos os valores descritos acima da conta corrente do '
+                      'Cliente junto ao Banco J.P.Morgan S.A., mediante confirmação de saldo e nos moldes da '
+                      'autorização de débito encaminhada pelos Srs. Caso não tenham encaminhado autorização de débito, '
+                      'solicitamos que o montante correspondente ao Resultado Final Apurado acima seja transferido em '
+                      'favor do Banco J.P Morgan S.A. nesta data, conforme os dados a seguir:') if final > 0 else ''
+        if final > 0:
+            notice_text = ('Não são aceitas transferências via PIX. As transferências devem ser '
+                           'realizadas exclusivamente por meio de TED.')
+        bank_title = 'Dados bancários'
+        bank_pairs = list(_JPM_BANK_KV)
+    instr = _ep(instr_text) if instr_text else ''
+    notice = _email_notice(notice_text) if notice_text else ''
+    bank = _email_kv(bank_title, bank_pairs)
+
+    def _gap(h):
+        return '<div style="height:' + str(h) + 'px;line-height:' + str(h) + 'px;font-size:0;">&nbsp;</div>'
+
+    body_html = (
+        table + _gap(18) + summary +
+        ((_gap(16) + instr) if instr else '') +
+        ((_gap(2) + notice + _gap(12)) if notice else _gap(6)) + bank + _gap(16) +
+        _ep('A presente Ficha de Liquidação é parte integrante e inseparável do Contrato e/ou da '
+            'Confirmação de Operação de Derivativo em referência.', muted=True))
+
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
+    html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
+
+    subject = 'Liquidação de Operação de Derivativo (Swap) - {} - {}'.format(ref_date, contraparte)
+    if premium:
+        subject = '(Pagamento de Prêmio) ' + subject
+    if le_class == 'MGT':
+        subject += ' x JPMORGAN CHASE'
+
+    return {'subject': subject, 'html': html, 'cc': 'Liquidação', 'to': to_emails,
+            'counterparty': contraparte}
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # ECONOMIC AFFIRMATION (D0 trade date, against Financial Institutions)
 # ──────────────────────────────────────────────────────────────────────────
 def build_economic_affirmation_emails(deals, asset_label='Termo de Mercadoria'):

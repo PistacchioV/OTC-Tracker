@@ -8423,3 +8423,97 @@ Operations B3 com linhas de SWAP em `RESGATE`/`RESGATE ANTECIPADO` e as auxiliar
 que zero linhas saem, que o diagnóstico conta as linhas de SWAP e lista os valores **do arquivo**, que um
 TER com o mesmo Tipo Operação não entra na conta, que com o evento cadastrado a linha sai e o diagnóstico
 se cala, e que o espaço duplo passa a casar.
+
+---
+
+## §187 — Settlement Advice de Swap: indexadores, Print Advice, e o Prazo que mudou
+
+Quatro pedidos numa tacada. O que exige atenção depois não são os três primeiros — é o quarto, que mexeu
+numa conta de imposto.
+
+### 1. Indexador Banco / Indexador Cliente (era "Ativo")
+
+Fonte trocada: saía do arquivo de **eventos** (`PARTE / Indexador`), passa a sair da **posição**
+DPOSICAO-SWAP, com uma regra:
+
+- `Código índice` da perna ≠ **VCP** → o próprio código é o indexador (`CDI`, `PRE`, `IPCA`).
+- `Código índice` = **VCP** → VCP é "variação cambial" e não diz **qual moeda**. O indexador de verdade
+  está no `Nome Tipo/Classe` da mesma perna, e vai em **CAIXA ALTA**. Imprimir "VCP" no aviso do cliente
+  não informa nada.
+
+Os índices posicionais: `Código índice` em **40** (banco) e **50** (cliente); `Nome Tipo/Classe` em **69**
+e **74**. São a 1ª e a 2ª de cada uma **na tela** do Live Position › Swap — e é essa a leitura certa,
+porque **no arquivo cru existe um `Nome Tipo/Classe` antes, no índice 30**, que pertence ao bloco do Termo
+e a perna nenhuma. Pegá-lo "porque é o primeiro" daria a classe errada sem erro em lugar nenhum. O teste
+preenche o índice 30 com `CLASSE DO TERMO` justamente para prender isso.
+
+`_ops_swap_pos_terms` passou a devolver um **dict** (`op`, `venc`, `idx_banco`, `idx_cliente`) em vez da
+tupla — os dois consumidores foram junto. Fora do caminho posicional (mock esparso) os indexadores saem
+vazios: com nomes repetidos não há como dizer qual é a 1ª e qual é a 2ª.
+
+### 2. Vencimento = a data da liquidação  ⚠️ e o Prazo mudou junto
+
+A coluna Vencimento passa a ser a **data de liquidação** (a referência da tela), não o vencimento do swap.
+E o **Prazo é a diferença entre as duas datas impressas** — senão o cliente confere a conta do aviso e ela
+não fecha.
+
+**Consequência que precisa ser conferida**: o Prazo alimenta a faixa de IR. Antes era `vencimento − trade`;
+agora é `liquidação − trade`. Para um diferencial no meio da vida do swap isso **encurta** o prazo e pode
+**subir** a alíquota. É a leitura que faz sentido — o imposto incide sobre o pagamento que sai hoje, e o
+período que conta é o decorrido até ele —, mas é uma mudança de conta de imposto e vale bater contra a
+planilha no primeiro dia.
+
+A mudança foi aplicada **também no Trade Level** (`_ops_swap_trade_rows`), de propósito: as duas telas têm
+de imprimir a mesma alíquota para o mesmo swap no mesmo dia.
+
+### 3. Print Advice
+
+Botão na toolbar da página → `POST /api/other-products-swap-settlement-advice/emails` →
+`otc_emails.build_swap_settlement_emails`. **Mesmo documento do aviso de NDF** (mesma casca, mesma tabela,
+mesmo painel de totais, mesma regra de instrução/dados bancários pelo sinal do resultado, reaproveitada
+verbatim para os dois não divergirem em instrução de pagamento). O que muda é a tabela e o assunto.
+
+- **Colunas**: as da tela **a partir de `Número de Contrato`**. Cliente e LOB ficam de fora — são o
+  destinatário e o agrupamento, não conteúdo do documento.
+- **Valores em BR**: `R$ 1.234,56`, negativo com o símbolo **dentro** dos parênteses (`(R$ 48.273,88)`) —
+  é o `_brl` que o aviso de NDF já usa. Prazo em `#.##0`. **A tela segue em US**: as duas formatações
+  convivem de propósito, e o aviso formata a partir do **número**, não do texto da tela — reformatar de
+  uma para a outra erraria no primeiro valor com separador ambíguo.
+- **Agrupamento**: um aviso por contraparte × entidade legal × prêmio.
+- **Entrega**: até 2 avisos vão como `.eml` em base64 (abrem direto no Outlook); 3+ num `.zip`. Igual ao
+  NDF.
+
+`otc_emails` **não conhece a ordem das colunas** — ela chega pronta de `_swadv_email_rows`. Reconstruí-la
+lá criaria a segunda cópia da ordem das colunas, que é o defeito que o §182 já tinha custado caro.
+
+### 4. Prêmio: assunto e nome de coluna
+
+Quando o evento é **Pagamento de Prêmio**:
+
+- assunto: `(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Swap) - dd/mm/yyyy - Contraparte`;
+- a coluna `Vencimento` vira **`Pagamento de Prêmio`** — não é vencimento de nada, é a parcela do dia.
+
+**Regra do "é prêmio"**: quando **todos** os eventos registrados daquele Título são prêmio. Um swap que
+paga prêmio *e* diferencial no mesmo dia é liquidação comum — chamar o conjunto de "Pagamento de Prêmio"
+no assunto esconderia o diferencial que também está na tabela.
+
+### 5. Actions e Status iguais aos do NDF Summary
+
+Trade Level e Settlement Summary do Other Products passaram a usar os mesmos botões e badges: `.ops-row-act`
+(quadrado arredondado de tamanho **travado** por min/max — sem isso uma regra do tema deixa Confirm e
+Delete de tamanhos diferentes), pill `OK`/`Check` no Trade Level e `New`/`Generated`/`Sent` no Settlement
+Summary, nas mesmas cores. O `<select>` continua, mas só na **linha manual** do Add row, onde o estado é de
+quem digitou e não do cálculo.
+
+O **Confirm** ficou funcional: `POST /api/other-products-summary/mark-sent` grava `Sent` no mesmo overlay
+do dia que já guardava a observação. Ele salta direto de New para Sent porque `Generated` só existirá
+quando esta página ganhar geração de aviso. Botão que não confirma nada seria só um botão bonito.
+
+### Verificação
+
+`check_swap_advice.py` (seção 7 nova) e `check_ops_summary.py` (seção 12 nova) — suíte inteira verde.
+Além dos testes: as duas páginas respondem 200 e os dois endpoints foram exercidos pelo `test_client`.
+
+**Limite honesto**: o Print Advice gera para **todas** as linhas da data. O endpoint aceita uma lista
+`contracts` para gerar só algumas, mas o botão ainda não a envia — o visualizador genérico não expõe a
+DataTable, e ler os checkboxes do DOM só enxergaria a página corrente da paginação (a armadilha do §152).

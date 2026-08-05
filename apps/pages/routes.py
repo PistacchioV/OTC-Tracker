@@ -5346,10 +5346,23 @@ def _ops_swap_event_set():
             if str(r.get('TIPO OPERACAO', '') or '').strip()}
 
 
+def _swadv_indexador(cod, nome):
+    """Indexador de uma perna do swap, para o aviso de liquidação.
+
+    O `Código índice` já É o nome do indexador na maioria dos casos (CDI, PRE,
+    IPCA). A exceção é **VCP** — variação cambial —, que não diz qual moeda: aí o
+    indexador de verdade está no `Nome Tipo/Classe` da mesma perna, e vai em
+    CAIXA ALTA. Imprimir 'VCP' no aviso do cliente não informa nada."""
+    cod = str(cod or '').strip()
+    if _fcst_norm(cod) == 'vcp':
+        return str(nome or '').strip().upper()
+    return cod
+
+
 def _ops_swap_pos_terms(ref):
-    """{Contrato → (data_operacao, data_vencimento)} da posição DPOSICAO-SWAP mais
-    recente até D-1 ANBIMA de `ref` (mesmo walk-back de 10 pregões do Operations
-    B3).
+    """{Contrato → {'op', 'venc', 'idx_banco', 'idx_cliente'}} da posição
+    DPOSICAO-SWAP mais recente até D-1 ANBIMA de `ref` (mesmo walk-back de 10
+    pregões do Operations B3).
 
     A data de operação é a do XLOOKUP da planilha: **Data operação termo** e, só
     quando ela vem vazia, **Data início**. É o que faz um forward start pagar IR
@@ -5358,9 +5371,18 @@ def _ops_swap_pos_terms(ref):
 
     Índices posicionais de `_SWAPCHAR_LABELS` (2=Contrato, 11=Data início,
     12=Data vencimento, 25=Data operação termo) — batem coluna a coluna com o
-    C/L/M/Z da planilha. O arquivo real tem 146 campos com nomes repetidos, então
-    ler por nome perderia metade; o `len(vals) >= 120` é o mesmo teste que
+    C/L/M/Z da planilha. Os indexadores saem das DUAS pernas simétricas do
+    arquivo: `Código índice` em **40** (banco) e **50** (cliente), `Nome
+    Tipo/Classe` em **69** e **74**. São exatamente a 1ª e a 2ª de cada uma na
+    tela do Live Position › Swap; no arquivo cru há um `Nome Tipo/Classe` ANTES
+    (índice 30), que é do bloco do Termo e não de perna nenhuma — pegá-lo pela
+    ordem do arquivo daria a classe errada sem erro nenhum.
+
+    O arquivo real tem 146 campos com nomes repetidos, então ler por nome
+    perderia metade; o `len(vals) >= 120` é o mesmo teste que
     `_swap_contract_cpty_map` usa para distinguir o arquivo real do mock esparso.
+    Fora do caminho posicional os indexadores saem vazios — nomes repetidos não
+    permitem dizer qual é a 1ª e qual é a 2ª.
     """
     probe = _prev_anbima_bizday(ref)
     rows = None
@@ -5389,9 +5411,12 @@ def _ops_swap_pos_terms(ref):
     for r in rows:
         vals = list(r.values())
         full = len(vals) >= 120
+        idx_banco = idx_cliente = ''
         if full:
             contrato = vals[2]
             d_ini, d_venc, d_termo = vals[11], vals[12], vals[25]
+            idx_banco = _swadv_indexador(vals[40], vals[69])
+            idx_cliente = _swadv_indexador(vals[50], vals[74])
         else:
             contrato = r.get(k_contr, '') if k_contr else ''
             d_ini = r.get(k_ini, '') if k_ini else ''
@@ -5401,7 +5426,8 @@ def _ops_swap_pos_terms(ref):
         if not c:
             continue
         op = _fcst_parse_date(str(d_termo or '')) or _fcst_parse_date(str(d_ini or ''))
-        out.setdefault(c, (op, _fcst_parse_date(str(d_venc or ''))))
+        out.setdefault(c, {'op': op, 'venc': _fcst_parse_date(str(d_venc or '')),
+                           'idx_banco': idx_banco, 'idx_cliente': idx_cliente})
     return out
 
 
@@ -5577,8 +5603,14 @@ def _ops_swap_trade_rows(settle_ref):
         vals = [v for v in vals if v is not None]
         settlement_b3 = sum(vals) if vals else None
 
-        op_dt, venc_dt = terms.get(_fcst_norm_contract(titulo).upper(), (None, None))
-        prazo = (venc_dt - op_dt).days if (op_dt and venc_dt) else None
+        # Prazo do IR = do TRADE até ESTA liquidação, não até o vencimento do
+        # swap: o imposto incide sobre o pagamento que está saindo hoje, e o
+        # período que conta é o decorrido até ele. Usar o vencimento alongaria o
+        # prazo de um diferencial no meio da vida do swap e BAIXARIA a alíquota.
+        # É a mesma conta do Settlement Advice — as duas telas têm de imprimir a
+        # mesma alíquota para o mesmo swap no mesmo dia.
+        op_dt = (terms.get(_fcst_norm_contract(titulo).upper()) or {}).get('op')
+        prazo = (settle_ref - op_dt).days if op_dt else None
         rate = _ops_swap_ir_rate(counterparty, prazo,
                                  _ops_cpty_receives(_cell(arow, ai, 'Direction') if arow else '',
                                                     settlement))
@@ -5700,7 +5732,10 @@ def _opssum_rows(trade_rows, ref):
         banking = _bank_norm((rec_cpd or {}).get('BANKING'))
         entry = meta.get(_opssum_key(cpty, lob, product)) or {}
         out.append({
-            'status': 'New',
+            # New → Sent pelo botão Confirm. `Generated` só existirá quando esta
+            # página ganhar geração de aviso; até lá ela nunca é escrita, e é por
+            # isso que o Confirm salta direto para Sent.
+            'status': entry.get('status') or 'New',
             'counterparty': cpty,
             'lob': lob,
             'product': product,
@@ -5838,6 +5873,38 @@ def api_ops_data():
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
                     'sources': sources, 'summary': summary, 'trade': trade})
+
+
+@blueprint.route('/api/other-products-summary/mark-sent', methods=['POST'])
+def api_ops_summary_mark_sent():
+    """Confirm do Settlement Summary: marca a linha como Sent no overlay do dia
+    (mesmo arquivo da observação). Idempotente — reconfirmar não muda nada além
+    de quem confirmou e quando."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    name = str(payload.get('counterparty', '') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'No counterparty provided'}), 400
+    key = _opssum_key(name, str(payload.get('lob', '') or ''), str(payload.get('product', '') or ''))
+    try:
+        path, meta = _opssum_meta_load(ref)
+        entry = meta.get(key) or {}
+        entry.update({'status': 'Sent', 'maker': session.get('user_sid', ''),
+                      'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        meta[key] = entry
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        return jsonify({'ok': True})
+    except Exception as e:
+        log.error('[ops-summary] mark-sent failed:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
 
 
 @blueprint.route('/api/other-products-summary/observation', methods=['POST'])
@@ -6883,9 +6950,16 @@ def api_swap_athena_data():
 #  aviso de liquidação), então a linha fecha: as duas curvas e o resultado são a
 #  mesma fonte. Ativo e Valor Base vêm dos eventos porque o Athena não os traz.
 _SWADV_COLUMNS = ['Cliente', 'LOB', 'Número de Contrato', 'Data Operação', 'Vencimento',
-                  'Prazo', 'Valor Base Original', 'Ativo Banco', 'Curva Banco',
-                  'Ativo Cliente', 'Curva Cliente', 'Resultado Bruto', 'Alíquota IR',
+                  'Prazo', 'Valor Base Original', 'Indexador Banco', 'Curva Banco',
+                  'Indexador Cliente', 'Curva Cliente', 'Resultado Bruto', 'Alíquota IR',
                   'Valor IR', 'Valor Líquido']
+# O aviso impresso começa em "Número de Contrato": Cliente e LOB são o
+# DESTINATÁRIO e o agrupamento, não conteúdo do documento que ele recebe.
+_SWADV_EMAIL_FROM = 2
+# Coluna que muda de nome quando o evento é prêmio (o pagamento não é vencimento
+# de nada — é a parcela de prêmio do dia).
+_SWADV_VENC_COL = 4
+_SWADV_PREMIO_LABEL = 'Pagamento de Prêmio'
 
 
 def _swadv_pct(rate):
@@ -6894,12 +6968,16 @@ def _swadv_pct(rate):
     return '' if rate is None else '{:,.2f}%'.format(rate * 100.0)
 
 
-def _swadv_rows(ref):
-    """Linhas do Settlement Advice de SWAP para a data `ref` (datetime)."""
+def _swadv_collect(ref):
+    """Linhas do Settlement Advice de SWAP para a data `ref` (datetime), com os
+    números crus e os dados do destinatário ao lado das células — a tela usa as
+    células, o aviso impresso usa o resto. Uma coleta só para os dois, para o que
+    o cliente recebe não poder divergir do que a tela mostra."""
     _jp, opb3 = _opb3_load(ref)
-    titulos, _by_titulo = _ops_swap_settling(opb3)
+    titulos, by_titulo = _ops_swap_settling(opb3)
     if not titulos:
         return []
+    wanted = _ops_swap_event_set()
     tipo_maps = _opb3_tipo_maps(ref)
     terms = _ops_swap_pos_terms(ref)
 
@@ -6927,15 +7005,24 @@ def _swadv_rows(ref):
     def _dt(d):
         return d.strftime('%d/%m/%Y') if d else ''
 
+    spn_by_name = _ndfsum_refdata_spn()
+    premio = _ops_norm_event('PAGAMENTO DE PREMIO')
+
     out = []
     for titulo, rec in titulos:
         key = titulo.upper()
         arow = by_cetip.get(key)
         erow = by_contract.get(key)
+        pos = terms.get(_fcst_norm_contract(titulo).upper()) or {}
         cliente = (_cell(arow, ai, 'CounterParty')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
-        op_dt, venc_dt = terms.get(_fcst_norm_contract(titulo).upper(), (None, None))
-        prazo = (venc_dt - op_dt).days if (op_dt and venc_dt) else None
+        op_dt = pos.get('op')
+        # Vencimento do aviso = a data da LIQUIDAÇÃO. É esta parcela que está
+        # sendo paga hoje; o vencimento do swap só interessa quando os dois
+        # coincidem. E o Prazo é a diferença entre as duas datas impressas, senão
+        # o cliente confere a conta do aviso e ela não fecha.
+        venc_dt = ref.date()
+        prazo = (venc_dt - op_dt).days if op_dt else None
 
         bruto_txt = _cell(arow, ai, 'BRL Net Amount')
         bruto = _mtm_parse_num(bruto_txt) if bruto_txt else None
@@ -6948,24 +7035,81 @@ def _swadv_rows(ref):
         # O IR retido sempre ENCOLHE o que se movimenta, seja qual for o sinal.
         liq = None if (bruto is None or ir is None) else (bruto - ir if bruto >= 0 else bruto + ir)
 
-        out.append([
-            cliente,
-            _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
-            titulo,
-            _dt(op_dt),
-            _dt(venc_dt),
-            '' if prazo is None else str(prazo),
-            _cell(erow, ei, 'Valor Base'),
-            _cell(erow, ei, 'PARTE / Indexador'),
-            _cell(arow, ai, 'Owner curve'),
-            _cell(erow, ei, 'CONTRAPARTE / Indexador'),
-            _cell(arow, ai, 'Counterparty curve'),
-            bruto_txt,
-            _swadv_pct(rate),
-            _ops_fmt_amt(ir),
-            _ops_fmt_amt(liq),
-        ])
+        # Prêmio quando TODOS os eventos registrados do Título são prêmio. Um
+        # swap que paga prêmio e diferencial no mesmo dia é liquidação comum —
+        # chamar o conjunto de "Pagamento de Prêmio" no assunto esconderia o
+        # diferencial que também está na tabela.
+        evs = {_ops_norm_event(r.get('Tipo Operação', '')) for r in by_titulo.get(key, [])}
+        evs = {e for e in evs if e in wanted}
+        ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        out.append({
+            'cells': [
+                cliente,
+                _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
+                titulo,
+                _dt(op_dt),
+                _dt(venc_dt),
+                '' if prazo is None else '{:,}'.format(prazo).replace(',', '.'),
+                _cell(erow, ei, 'Valor Base'),
+                pos.get('idx_banco', ''),
+                _cell(arow, ai, 'Owner curve'),
+                pos.get('idx_cliente', ''),
+                _cell(arow, ai, 'Counterparty curve'),
+                bruto_txt,
+                _swadv_pct(rate),
+                _ops_fmt_amt(ir),
+                _ops_fmt_amt(liq),
+            ],
+            'counterparty': cliente,
+            'legal': _cell(arow, ai, 'Owner Legal Entity'),
+            'spn': ref_rec.get('spn', '') or _cell(arow, ai, 'SPN'),
+            'taxid': ref_rec.get('taxid', ''),
+            'premium': bool(evs) and evs == {premio},
+            'bruto': bruto, 'ir': ir, 'liquido': liq, 'rate': rate,
+            # Crus para o aviso: ele imprime em BR (R$ 1.234,56), e a tela em US.
+            # Reformatar o texto de uma para a outra erraria no primeiro valor
+            # com separador ambíguo — do número não há como errar.
+            'valor_base': _mtm_parse_num(_cell(erow, ei, 'Valor Base')),
+            'curva_banco': _mtm_parse_num(_cell(arow, ai, 'Owner curve')),
+            'curva_cliente': _mtm_parse_num(_cell(arow, ai, 'Counterparty curve')),
+        })
     return out
+
+
+def _swadv_email_rows(ref):
+    """Linhas do aviso impresso: as mesmas do Settlement Advice, da coluna
+    `Número de Contrato` em diante e com os valores em BR (`R$ #.##0,00`, o
+    negativo entre parênteses). Cliente e LOB ficam de fora — são o destinatário
+    e o agrupamento, não conteúdo do documento."""
+    from apps.pages import otc_emails
+
+    def money(v):
+        return otc_emails._brl(v) if v is not None else ''
+
+    out = []
+    for r in _swadv_collect(ref):
+        c = r['cells']
+        out.append(dict(r, cells=[
+            c[2],                                   # Número de Contrato
+            c[3],                                   # Data Operação
+            c[4],                                   # Vencimento (ou Pagamento de Prêmio)
+            c[5],                                   # Prazo (#.##0)
+            money(r['valor_base']),
+            c[7],                                   # Indexador Banco
+            money(r['curva_banco']),
+            c[9],                                   # Indexador Cliente
+            money(r['curva_cliente']),
+            money(r['bruto']),
+            '' if r['rate'] is None else otc_emails._br(r['rate'] * 100.0) + '%',
+            money(r['ir']),
+            money(r['liquido']),
+        ]))
+    return out
+
+
+def _swadv_rows(ref):
+    """Só as células, na ordem de `_SWADV_COLUMNS` — o que a tela consome."""
+    return [r['cells'] for r in _swadv_collect(ref)]
 
 
 @blueprint.route('/other-products-swap-settlement-advice')
@@ -6996,6 +7140,65 @@ def api_swap_settlement_advice_data():
                     'widgets': {'total': len(rows)},
                     'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+
+
+def _swadv_email_headers(premium):
+    """Cabeçalho da tabela do aviso: as colunas da tela a partir de `Número de
+    Contrato`. No aviso de prêmio a coluna `Vencimento` vira `Pagamento de
+    Prêmio` — não é vencimento de nada, é a parcela do dia."""
+    cols = list(_SWADV_COLUMNS)
+    if premium:
+        cols[_SWADV_VENC_COL] = _SWADV_PREMIO_LABEL
+    return cols[_SWADV_EMAIL_FROM:]
+
+
+@blueprint.route('/api/other-products-swap-settlement-advice/emails', methods=['POST'])
+def api_swap_settlement_advice_emails():
+    """Print Advice: gera os avisos de liquidação de SWAP (rascunhos .eml) da
+    data. Mesma entrega do aviso de NDF — até 2 vão como .eml em base64 (abrem
+    direto no Outlook), 3+ vão num .zip."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    from apps.pages import otc_emails
+    try:
+        rows = _swadv_email_rows(ref)
+    except Exception:
+        log.error('[swap-advice] falha montando as linhas do aviso:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+    # Seleção da tela (checkbox por linha): sem a chave, gera tudo — com ela
+    # vazia, não gera nada, que é o pedido explícito de quem não marcou ninguém.
+    sel = payload.get('contracts')
+    if isinstance(sel, list):
+        wanted = {str(x).strip().upper() for x in sel if str(x).strip()}
+        rows = [r for r in rows if str(r['cells'][0]).strip().upper() in wanted]
+    drafts = otc_emails.build_swap_settlement_emails(
+        rows, _swadv_email_headers(False), _swadv_email_headers(True),
+        ref.strftime('%d/%m/%Y'))
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts),
+                        'counterparties': cp_count, 'files': files})
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_Swap'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
+    return resp
 
 
 # ── Other Products › Swap › Kapital Hybrids (BANCO_UPCOMING_PAYMENTS.csv) ─────

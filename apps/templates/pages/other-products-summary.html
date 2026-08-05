@@ -96,17 +96,34 @@
 @media (hover: hover) and (pointer: fine) {
     .ops-toolbar .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0,0,0,.14); filter: brightness(1.03); }
 }
+/* Standard row-action button — MESMO bloco do NDF Summary: quadrado arredondado
+   de tamanho travado, para Delete e Confirm terem exatamente o mesmo formato
+   qualquer que seja o ícone. Ação nova nesta página reusa .ops-row-act. */
+#ops-page .ops-row-act {
+    /* min/max travam o tamanho: nenhuma regra do tema (min-width de .btn etc.)
+       pode deixar um botão de ação maior que o outro. */
+    width: 32px; height: 32px;
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    padding: 0; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    border-radius: 10px !important;   /* quadrado arredondado — NÃO um círculo */
+}
+#ops-page .ops-row-act > i { font-size: 1rem; }
+#ops-page .btn { transition: transform 120ms var(--ops-ease-out), box-shadow 140ms ease; }
+#ops-page .btn:active { transform: scale(0.97); }
 /* Row action + status control feedback */
-#ops-page .ops-row-del, #ops-page .ops-status-sel {
+#ops-page .ops-row-del, #ops-page .ops-row-confirm, #ops-page .ops-status-sel {
     transition: transform 140ms var(--ops-ease-out), box-shadow 140ms ease, border-color 140ms ease;
 }
-#ops-page .ops-row-del:active { transform: scale(0.9); }
 @media (hover: hover) and (pointer: fine) {
     #ops-page .ops-row-del:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+    #ops-page .ops-row-confirm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(25,135,84,.38); }
 }
 @media (prefers-reduced-motion: reduce) {
     .ops-toolbar .btn:hover, .ops-toolbar .btn:active,
-    #ops-page .ops-row-del:hover, #ops-page .ops-row-del:active { transform: none; }
+    #ops-page .ops-row-del:hover, #ops-page .ops-row-confirm:hover,
+    #ops-page .btn:active { transform: none; }
 }
 
 #ops-page table.dataTable thead th { white-space: nowrap; text-align: center; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
@@ -399,9 +416,31 @@ document.addEventListener('DOMContentLoaded', function () {
         var opts = STATUSES.map(function (s) { return '<option' + (s === v ? ' selected' : '') + '>' + s + '</option>'; }).join('');
         return '<select class="form-select form-select-sm ops-status-sel">' + opts + '</select>';
     }
+    // Mesmos botões e badges do NDF Summary. As linhas DERIVADAS mostram o
+    // estado como badge/pill (não é escolha de quem lê — vem do cálculo); a
+    // linha manual do Add row segue com o <select>, porque aí o estado é dela.
     function actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a href="#" class="btn btn-danger btn-sm rounded-circle ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
+    // A linha do Settlement Summary também carrega o Confirm (→ Sent).
+    function summaryActionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a href="#" class="btn btn-success btn-sm ops-row-act ops-row-confirm" title="Confirm (mark as Sent)"><i class="ti ti-check"></i></a>' +
+            '<a href="#" class="btn btn-danger btn-sm ops-row-act ops-row-del" title="Delete"><i class="ti ti-trash"></i></a></div>';
+    }
+    function pill(text, cls) {
+        return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + text + '</span>';
+    }
+    // Trade Level: o status é o resultado da conferência, OK ou Check.
+    function statusBadge(status) {
+        return status === 'OK' ? pill('OK', 'text-bg-success') : pill('Check', 'text-bg-danger');
+    }
+    // Settlement Summary: New → Generated → Sent.
+    function statusPill(status) {
+        if (status === 'Sent')      return pill('Sent', 'text-bg-primary');
+        if (status === 'Generated') return pill('Generated', 'text-bg-success');
+        return pill('New', 'text-bg-info');
     }
     function inp(v) { return '<input type="text" class="ops-cell-inp" value="' + esc(v) + '">'; }
     // 'BCO: 341 | AG: 0910 | CC: 967' com os rótulos em negrito (os valores são
@@ -536,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // sobrevive ao reload. A ORDEM tem de bater com os <th>.
                 (j.summary || []).forEach(function (r) {
                     var obsVal = esc(r.obs || '').replace(/"/g, '&quot;');
-                    dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
+                    dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', summaryActionsCell(), statusPill(r.status || 'New'),
                         esc(r.counterparty), esc(r.lob), esc(r.product),
                         esc(r.receive), esc(r.pay), esc(r.net_type), esc(r.direction),
                         accountHtml(r.account),
@@ -549,7 +588,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // editáveis; são manuais e não têm de onde ser recalculadas.
                 // A ORDEM abaixo tem de bater com os <th> lá em cima.
                 (j.trade || []).forEach(function (r) {
-                    dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusCell(r.status || 'New'),
+                    dtTrade.row.add(['<input type="checkbox" class="form-check-input ops-cb">', actionsCell(), statusBadge(r.status || 'Check'),
                         esc(r.lob), esc(r.counterparty), esc(r.internal_id), esc(r.id_b3),
                         esc(r.product), esc(r.type), esc(r.settlement), esc(r.settlement_b3),
                         esc(r.tax_income), esc(r.difference)]);
@@ -651,6 +690,30 @@ document.addEventListener('DOMContentLoaded', function () {
               setTimeout(function () { $inp.css('border-color', ''); }, 1200);
           })
           .catch(function () { $inp.css('border-color', '#dc3545'); });
+    });
+
+    // ── Confirm (→ Sent) ────────────────────────────────────────────────────
+    //  Só a linha DERIVADA confirma: a chave é contraparte × LOB × produto, e a
+    //  linha manual do Add row tem <input> na célula de contraparte.
+    $('#ops-summary-table tbody').on('click', '.ops-row-confirm', function (e) {
+        e.preventDefault();
+        var rowApi = dtSummary.row($(this).closest('tr'));
+        var d = rowApi.data();
+        if (!d || /<input/i.test(d[3] || '')) return;
+        var name = decodeHtml(d[3]).trim();
+        if (!name) return;
+        fetch('/api/other-products-summary/mark-sent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd, counterparty: name,
+                                   lob: decodeHtml(d[4]), product: decodeHtml(d[5]) })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (!res || !res.ok) return;
+              // Pinta a célula na hora, sem recarregar: um reload aqui perderia
+              // a observação que a pessoa acabou de digitar e ainda não salvou.
+              d[2] = statusPill('Sent');
+              rowApi.data(d).draw(false);
+          }).catch(function () {});
     });
 
     // Expose the batch loader so the reference-date picker (own <script> below)

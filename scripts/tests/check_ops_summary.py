@@ -363,5 +363,43 @@ for hook in ('id="ops-src-row"', 'id="ops-src-msg"', 'id="ops-src-goto"'):
 check('bloqueante e informativo tem cores diferentes',
       'alert-warning' in HTML and 'alert-info' in HTML, True)
 
+print('\n== 12. Actions e Status iguais aos do NDF Summary ==')
+NDF = read('apps/templates/pages/ndf-summary.html')
+# As duas paginas mostram a MESMA coisa; se uma usa <select> e a outra badge, a
+# pessoa le dois vocabularios para o mesmo estado. Aqui a comparacao e literal:
+# os mesmos seletores, as mesmas classes de badge.
+for cls in ('ops-row-act', 'ops-row-del', 'ops-row-confirm'):
+    check('a classe %s existe nas duas' % cls, (cls in HTML) and (cls in NDF), True)
+# O botao de acao e um quadrado arredondado de tamanho TRAVADO — sem os
+# min/max uma regra do tema deixa Confirm e Delete de tamanhos diferentes.
+for prop in ('min-width: 32px', 'max-width: 32px', 'border-radius: 10px !important'):
+    check('o botao de acao trava "%s"' % prop, prop in HTML, True)
+check('Trade Level usa badge, nao <select>', 'statusBadge(r.status' in HTML, True)
+check('Settlement Summary usa a pill New/Generated/Sent', 'statusPill(r.status' in HTML, True)
+for state, cls in (('Sent', 'text-bg-primary'), ('Generated', 'text-bg-success'), ('New', 'text-bg-info')):
+    check('%s na mesma cor do NDF' % state,
+          ("pill('%s', '%s')" % (state, cls)) in HTML
+          and ("pill('%s', '%s')" % (state, cls)) in NDF, True)
+# O <select> segue existindo — para a linha MANUAL do Add row, onde o estado e
+# de quem digitou e nao do calculo.
+check('a linha manual mantem o <select>', 'statusCell(' in HTML, True)
+# Confirm que nao confirma nada seria so um botao bonito.
+check('o Confirm tem endpoint', "@blueprint.route('/api/other-products-summary/mark-sent'" in SRC, True)
+check('e o JS o chama', "'/api/other-products-summary/mark-sent'" in HTML, True)
+
+tmp = tempfile.mkdtemp(prefix='ops-sent-')
+_ds_root = R.OTM_JSON_ROOT
+try:
+    R.OTM_JSON_ROOT = tmp
+    path = R._opssum_meta_path(REF)
+    write_json(path, {R._opssum_key('SUZANO SA', 'CEM', 'SWAP'): {'status': 'Sent'}})
+    got = R._opssum_rows([trow('SUZANO SA', 'CEM', 'SWAP', 1000.0)], REF)[0]
+    check('o status confirmado sobrevive ao reload', got['status'], 'Sent')
+    check('sem overlay, a linha nasce New',
+          R._opssum_rows([trow('SUZANO SA', 'EDG', 'SWAP', 1.0)], REF)[0]['status'], 'New')
+finally:
+    R.OTM_JSON_ROOT = _ds_root
+    shutil.rmtree(tmp, ignore_errors=True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

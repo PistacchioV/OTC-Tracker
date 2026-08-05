@@ -1550,5 +1550,6 @@
   "ops-ev-found": "En el archivo:",
   "ops-ev-register": "Registre la variación en Mapping › Swap B3 Events.",
   "ops-ev-noswap": "Operations B3 no tiene líneas de SWAP en esta fecha.",
-  "ops-ev-rows": "línea(s) en el archivo"
+  "ops-ev-rows": "línea(s) en el archivo",
+  "sw-print-advice": "Generar Avisos"
 }
