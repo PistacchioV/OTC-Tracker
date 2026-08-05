@@ -9067,3 +9067,57 @@ front-end para divergir.
 Seção 13 do `check_ops_summary.py`: o valor da constante, o limite fechado (20,00 exatos batem, 20,01
 não), e a prova estrutural de que **não sobrou nenhum literal** — `abs(diff) < 0.01` não existe mais em
 `routes.py` e as duas famílias usam a constante.
+
+---
+
+## §202 — Mensageria: "Vencimento Swap", os diferenciais num e-mail só, e o "Favor considerar" que faltava
+
+Três pedidos que são o mesmo pedido, e por isso saíram juntos.
+
+### O assunto e o agrupamento são a MESMA decisão
+
+O assunto de swap passa a ser **`Vencimento Swap - Liquidação Banco x <Contraparte> - dd/mm/aaaa`** (o
+resto do padrão intacto), e **amortização e juros contra a mesma contraparte saem num e-mail só**, com o
+total somado.
+
+Esses dois não podem se separar: se o assunto dissesse "vencimento" e o agrupamento continuasse quebrando
+por `Tipo Operação`, a contraparte receberia **dois e-mails com o mesmo assunto** e valores parciais — pior
+que o estado anterior, em que ao menos os assuntos os distinguiam. Por isso existe **uma** função,
+`otc_emails.opb3_msg_is_swap_venc(tipo_titulo, tipo_operacao)`, e o `routes` a importa em vez de ter a sua
+cópia.
+
+A regra dela é **"é SWAP e não é prêmio"**, não uma lista dos dois eventos de hoje: um diferencial novo que
+a B3 mande amanhã entra sozinho, e o prêmio (que já tinha assunto e fonte próprios) segue de fora.
+
+Nada se perde ao juntar: **a tabela do e-mail continua mostrando cada linha com o seu `Tipo Operação`**. O
+que se ganha é o total a acatar — e o batimento abaixo.
+
+### O "Favor considerar" para swap e para termo de commodities
+
+A frase já existia (`>= R$ 0,01` de divergência entre o lado interno e o da B3), mas só tinha fonte interna
+para **TER de moeda** (Cockpit) e **prêmio de swap** (DAGENDAPREMIOS). Vencimento de swap e termo de
+**commodity** saíam sempre sem ela — o que é indistinguível de "bateu".
+
+As duas fontes novas saem do **Trade Level do Other Products Summary**, que é a mesma tela que mostra o
+Settlement: `_opb3_internal_swap_map` (linhas de swap) e `_opb3_internal_ndfc_map` (NDF commodities), ambas
+sobre `_opb3_internal_trade_map(rows)` = `{B3 ID → Σ _settle_n}`. Se o "Favor considerar" do e-mail e o
+Settlement da tela discordassem, não haveria como saber qual dos dois seguir.
+
+No TER a escolha é por contrato, não por configuração: **moeda primeiro, e o que ela não conhece é
+commodity**. O contrato está numa das duas fontes, nunca nas duas — somar as duas duplicaria.
+
+**Por que o agrupamento é pré-requisito do batimento:** os mapas trazem o total do **contrato**. Se o
+e-mail não juntasse amortização e juros antes de comparar, cada metade (100 e 50) seria confrontada com o
+total (150) e as **duas** acusariam uma divergência que é só a outra metade.
+
+Contrato que não casa em mapa nenhum continua sem a frase, de propósito: um valor inventado é pior que a
+ausência dele.
+
+### Verificação
+
+`scripts/tests/check_opb3_mensageria.py` (novo, 7 seções). Além dos assuntos e da frase, ele chama o
+**endpoint de verdade** com um dia sintético — A1 chegando por amortização e por juros, A2 de prêmio, C1 de
+termo — e prova que saem três e-mails, que o de vencimento tem as duas linhas e total 150, e que os dois
+lados internos chegam. A seção 7 fura o `except` dos mapas (que devolve `{}` em falha e faria um erro de
+wiring passar por "dia sem dados") e confirma que eles recebem um `date`, não o `datetime` cru — o
+`settle_ref - op_dt` do Trade Level levanta `TypeError` com datetime.

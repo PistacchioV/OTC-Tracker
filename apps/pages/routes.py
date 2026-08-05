@@ -11106,6 +11106,52 @@ def _opb3_internal_swapprem_map(ref):
     return out
 
 
+def _opb3_internal_trade_map(rows):
+    """B3 ID (upper) → Σ SETTLEMENT interno, a partir de linhas do Trade Level do
+    Other Products Summary.
+
+    Mesma ideia do `_opb3_internal_ter_map` para o NDF de moeda: o lado JP do
+    batimento é a coluna SETTLEMENT que a tela já mostra, não uma segunda leitura
+    dos arquivos. Se o "Favor considerar" do e-mail e o Settlement do Trade Level
+    discordarem, não há como saber qual dos dois o time deve seguir."""
+    out = {}
+    for r in rows or []:
+        b3 = str(r.get('id_b3', '') or '').strip().upper()
+        v = r.get('_settle_n')
+        if b3 and v is not None:
+            out[b3] = out.get(b3, 0.0) + v
+    return out
+
+
+def _opb3_internal_swap_map(ref):
+    """B3 ID → SETTLEMENT interno do SWAP (linhas de swap do Trade Level).
+
+    Cobre os vencimentos (diferencial de amortização e de juros); o prêmio segue
+    com a agenda de prêmios, que é a fonte dele. O valor é o do CONTRATO, não o
+    do evento — por isso a mensageria junta amortização e juros da mesma
+    contraparte antes de comparar: separados, cada e-mail acusaria uma
+    divergência que é só a outra metade do mesmo pagamento."""
+    try:
+        return _opb3_internal_trade_map(_ops_swap_trade_rows(ref.date()))
+    except Exception:
+        log.error('[opb3-msg] mapa interno de swap falhou:\n%s', traceback.format_exc())
+        return {}
+
+
+def _opb3_internal_ndfc_map(ref):
+    """B3 ID → SETTLEMENT interno do TERMO DE COMMODITIES.
+
+    O `_opb3_internal_ter_map` cobre o NDF de MOEDA (vem do Cockpit); a
+    commodity não passa por lá e ficava sem lado interno — o e-mail saía sempre
+    sem o "Favor considerar", que é indistinguível de "bateu"."""
+    try:
+        return _opb3_internal_trade_map(_ops_ndfc_trade_rows(ref.date()))
+    except Exception:
+        log.error('[opb3-msg] mapa interno de termo de commodities falhou:\n%s',
+                  traceback.format_exc())
+        return {}
+
+
 @blueprint.route('/api/operations-b3/mensageria', methods=['POST'])
 def api_opb3_mensageria():
     if not session.get('authenticated'):
@@ -11155,7 +11201,16 @@ def api_opb3_mensageria():
         tipo = _opb3_tipo_for(rec, tipo_maps)
         conta_cp = str(rec.get('Conta Contraparte', '') or '').strip()
         tipo_op = str(rec.get('Tipo Operação', '') or '').strip()
-        gkey = (tipo, conta_cp, _fcst_norm(tipo_op))
+        # Um e-mail por Tipo Operação, MENOS os vencimentos de swap: amortização
+        # e juros contra a mesma contraparte são o mesmo pagamento partido em dois
+        # eventos pela B3, e o time acata um valor só. A tabela do e-mail continua
+        # mostrando cada linha com o seu Tipo Operação, então nada se perde ao
+        # juntar — o que se ganha é o total a acatar e um batimento interno que
+        # compara contrato contra contrato.
+        ev = ('vencimento swap'
+              if otc_emails.opb3_msg_is_swap_venc(rec.get('Tipo Título', ''), tipo_op)
+              else _fcst_norm(tipo_op))
+        gkey = (tipo, conta_cp, ev)
         groups.setdefault(gkey, {'tipo': tipo, 'conta_cp': conta_cp, 'tipo_op': tipo_op,
                                  'recs': []})['recs'].append(rec)
 
@@ -11168,6 +11223,8 @@ def api_opb3_mensageria():
     # Batimentos internos (carregados uma vez, usados por grupo conforme o caso).
     ter_map = _opb3_internal_ter_map(ref)
     prem_map = _opb3_internal_swapprem_map(ref)
+    swap_map = _opb3_internal_swap_map(ref)
+    ndfc_map = _opb3_internal_ndfc_map(ref)
 
     ref_fmt = ref.strftime('%d/%m/%Y')
     drafts, missing, used = [], set(), []
@@ -11178,18 +11235,26 @@ def api_opb3_mensageria():
         cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
         total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
-        # Lado interno: TER → SETTLEMENT do card Trade Level do NDF Summary, pela
-        # ótica da conta que assina a mensagem; SWAP prêmio → DAGENDAPREMIOS. A
-        # soma é por B3 ID DISTINTO: o mapa já traz o total do contrato, então
-        # iterar linha a linha contaria o mesmo contrato duas vezes quando o grupo
-        # tem mais de uma operação sobre ele. Nenhum id casando = sem fonte para
-        # comparar e o e-mail sai sem "Favor considerar".
+        # Lado interno: TER de MOEDA → SETTLEMENT do card Trade Level do NDF
+        # Summary, pela ótica da conta que assina a mensagem; TER de COMMODITY →
+        # o Trade Level do Other Products (o Cockpit não tem a commodity); SWAP
+        # prêmio → DAGENDAPREMIOS; SWAP vencimento → o Trade Level do Other
+        # Products. A soma é por B3 ID DISTINTO: os mapas já trazem o total do
+        # contrato, então iterar linha a linha contaria o mesmo contrato duas
+        # vezes quando o grupo tem mais de uma operação sobre ele. Nenhum id
+        # casando = sem fonte para comparar e o e-mail sai sem "Favor considerar"
+        # — que é o certo: um valor inventado seria pior que a ausência dele.
         ids = {str(r.get('Título', '') or '').strip().upper() for r in recs} - {''}
         casa = _acc_digits(recs[0].get('Conta', ''))
         if 'ter' in titn:
-            vals = [_opb3_internal_leg(ter_map, i, casa) for i in ids]
+            # Moeda primeiro; o que ela não conhece é commodity. O contrato está
+            # numa das duas fontes, nunca nas duas — somar as duas duplicaria.
+            vals = [(_opb3_internal_leg(ter_map, i, casa)
+                     if i in ter_map else ndfc_map.get(i)) for i in ids]
         elif 'swap' in titn and opn == 'pagamento de premio':
             vals = [prem_map.get(i) for i in ids]
+        elif otc_emails.opb3_msg_is_swap_venc(recs[0].get('Tipo Título', ''), g['tipo_op']):
+            vals = [swap_map.get(i) for i in ids]
         else:
             vals = []
         vals = [v for v in vals if v is not None]

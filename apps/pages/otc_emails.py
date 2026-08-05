@@ -1678,6 +1678,24 @@ def _msg_flow_phrase(total, cpty):
     return 'Banco paga {} R$ {}'.format(cpty, _br(abs(total)))
 
 
+def opb3_msg_is_swap_venc(tipo_titulo, tipo_operacao):
+    """O evento de SWAP é um VENCIMENTO (pagamento de diferencial)?
+
+    Verdade para tudo que é SWAP e não é prêmio — hoje `PAGAMENTO DE DIF.
+    AMORTIZACAO` e `PAGAMENTO DE DIF. DE JUROS`, e qualquer diferencial que a B3
+    passe a mandar amanhã cai junto sem precisar de manutenção.
+
+    Ela decide DUAS coisas que não podem se separar: o assunto ("Vencimento
+    Swap") e o agrupamento (amortização e juros da mesma contraparte saem num
+    e-mail só). Se o assunto dissesse "vencimento" e o agrupamento continuasse
+    por Tipo Operação, a contraparte receberia dois e-mails com o mesmo assunto e
+    valores parciais — e a única forma de isso não acontecer é os dois lados
+    lerem esta função. Por isso ela mora aqui e o `routes` a importa, em vez de
+    cada lado ter a sua cópia."""
+    return (_fcst_norm_local(tipo_titulo).startswith('swap')
+            and _fcst_norm_local(tipo_operacao) != 'pagamento de premio')
+
+
 def build_opb3_mensageria_email(group):
     """One Mensageria draft. `group`:
       tipo, tipo_titulo, tipo_operacao, cpty (nome p/ subject/frases),
@@ -1696,6 +1714,11 @@ def build_opb3_mensageria_email(group):
     opn = _fcst_norm_local(tipo_op)
     if opn == 'pagamento de premio':
         base = 'Prêmio ' + tit_label
+    elif opb3_msg_is_swap_venc(group.get('tipo_titulo'), tipo_op):
+        # O grupo já vem com amortização e juros juntos: nomear o assunto pelo
+        # Tipo Operação da primeira linha ("Pagamento De Dif. Amortizacao Swap")
+        # descreveria metade do que o e-mail cobra.
+        base = 'Vencimento Swap'
     elif opn == 'resgate' and tit == 'ter':
         # Nomenclatura da macro atual: resgate de TER é "Vencimento de Termo"
         base = 'Vencimento de Termo'
