@@ -548,6 +548,18 @@ from email import header as _hdr, message_from_string                    # noqa:
 subj = str(_hdr.make_header(_hdr.decode_header(message_from_string(_ted_sent['msg'])['Subject'])))
 check('o assunto pedido', subj, "Liberar TED's - Swap/Opção/Commodities - 05/08/2026")
 
+# O rotulo do produto aparece em TRES lugares — assunto, cabecalho ao lado do
+# logo e a frase do corpo. Sairam todos da MESMA constante; antes o template
+# tinha "NDF" fixo nos dois ultimos e o aviso de swap saia dizendo NDF.
+_msg = message_from_string(_ted_sent['msg'])
+_html = ''
+for _part in _msg.walk():
+    if _part.get_content_type() == 'text/html':
+        _html = _part.get_payload(decode=True).decode('utf-8')
+check('o cabecalho ao lado do logo', 'Liberação de TED — Swap/Opção/Commodities' in _html, True)
+check('a frase do corpo', 'liquidações de Swap/Opção/Commodities' in _html, True)
+check('NAO sobrou NDF no aviso de swap', 'NDF' in _html, False)
+
 # 376 = Banco J.P. Morgan: e transferencia interna, NAO se pede TED.
 check('conta no BCO 376 nao entra', ted_run('SUZANO SA', '376').get('count'), 0)
 # Sem Pay nao ha o que transferir (settlement positivo = o banco RECEBE).

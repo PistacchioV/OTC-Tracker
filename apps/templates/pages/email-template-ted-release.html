@@ -51,7 +51,11 @@
                               box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
 
                     <!-- ── Header ─────────────────────────────────── -->
-                    {% set header_title = 'Liberação de TED — NDF' %}
+                    {# `product_label` vem do endpoint (NDF, Swap/Opção/Commodities, …).
+                       Default = NDF para o aviso antigo seguir idêntico se alguém chamar
+                       o template sem passar nada. #}
+                    {% set product_label = product_label|default('NDF') %}
+                    {% set header_title = 'Liberação de TED — ' ~ product_label %}
                     {% set header_subtitle = 'Reference Date &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
                     {% set header_logo_height = 72 %}
                     {% set header_width = 680 %}
@@ -62,7 +66,7 @@
                         <td style="padding:26px 30px 4px;">
                             <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 8px;">Prezados,</p>
                             <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
-                                Solicitamos a liberação das TEDs abaixo, referentes às liquidações de NDF
+                                Solicitamos a liberação das TEDs abaixo, referentes às liquidações de {{ product_label }}
                                 de <strong>{{ ref_date_fmt }}</strong>. As SSIs das contrapartes seguem anexas.
                             </p>
                         </td>

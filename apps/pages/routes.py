@@ -5979,6 +5979,12 @@ def api_ops_data():
                     'summary': summary, 'trade': trade})
 
 
+# Rótulo do produto no e-mail de TED. UMA constante para o assunto, o cabeçalho
+# ao lado do logo e a frase do corpo — três lugares que já nasceram divergindo no
+# aviso de NDF (o assunto dizia NDF e o corpo também, mas nada obrigava).
+_OPS_TED_LABEL = 'Swap/Opção/Commodities'
+
+
 @blueprint.route('/api/other-products-summary/ted-email', methods=['POST'])
 def api_ops_summary_ted_email():
     """Botão TEDs: envia o pedido de liberação de TED para OTC Ops + Settlements.
@@ -6045,13 +6051,13 @@ def api_ops_summary_ted_email():
         (attach.append(p) if p else missing_ssi.append(name))
 
     html = render_template('pages/email-template-ted-release.html',
-                           ref_date_fmt=ref_fmt,
+                           ref_date_fmt=ref_fmt, product_label=_OPS_TED_LABEL,
                            banco_rows=blocks['JPM'], mgt_rows=blocks['MGT'],
                            missing_ssi=missing_ssi,
                            current_year=datetime.now().year)
     try:
         msg = MIMEMultipart('mixed')
-        msg['Subject'] = "Liberar TED's - Swap/Opção/Commodities - {}".format(ref_fmt)
+        msg['Subject'] = "Liberar TED's - {} - {}".format(_OPS_TED_LABEL, ref_fmt)
         msg['From'] = SHARED_MAILBOX
         msg['To'] = ', '.join(_TED_EMAIL_TO)
         related = MIMEMultipart('related')
@@ -11762,7 +11768,7 @@ def api_ndf_summary_ted_email():
         (attach.append(p) if p else missing_ssi.append(name))
 
     html = render_template('pages/email-template-ted-release.html',
-                           ref_date_fmt=ref_fmt,
+                           ref_date_fmt=ref_fmt, product_label='NDF',
                            banco_rows=blocks['JPM'], mgt_rows=blocks['MGT'],
                            missing_ssi=missing_ssi,
                            current_year=datetime.now().year)

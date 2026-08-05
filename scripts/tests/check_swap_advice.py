@@ -399,7 +399,20 @@ for st, cls in (('Sent', 'text-bg-primary'), ('Generated', 'text-bg-success'), (
           or ("%s: '%s'" % (st, cls)) in JS or ("%s:      '%s'" % (st, cls)) in JS, True)
 check('a pagina recarrega depois de gerar', 'window.scLoad' in HTML, True)
 
-print('\n== 11. a toolbar tem respiro ==')
+print('\n== 11. o template de TED continua NDF por default ==')
+# O rotulo do produto virou parametro do template. Sem passar nada, ele TEM de
+# render o texto de antes — senao o aviso de NDF muda sem ninguem ter pedido.
+TED_TPL = read('apps/templates/pages/email-template-ted-release.html')
+check('default NDF no template', "product_label|default('NDF')" in TED_TPL, True)
+check('o cabecalho usa o parametro', "'Liberação de TED — ' ~ product_label" in TED_TPL, True)
+check('o corpo usa o parametro', 'liquidações de {{ product_label }}' in TED_TPL, True)
+# O 'NDF' so pode aparecer como DEFAULT (e no comentario que o explica) — nunca
+# mais escrito direto no cabecalho ou na frase do corpo.
+check('nao sobrou NDF fixo no cabecalho', 'TED — NDF' in TED_TPL, False)
+check('nao sobrou NDF fixo no corpo', 'liquidações de NDF' in TED_TPL, False)
+check('o endpoint do NDF passa o rotulo', "product_label='NDF'" in SRC, True)
+
+print('\n== 12. a toolbar tem respiro ==')
 # Columns e Export sao injetados pelo JS depois do render e vem com margem
 # zerada; sem estas regras a fila encosta no cabecalho da tabela.
 check('padding na barra', '.card-body > .d-flex.justify-content-between' in HTML, True)

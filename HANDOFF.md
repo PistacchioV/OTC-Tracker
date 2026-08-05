@@ -8719,3 +8719,27 @@ clique falharia em silêncio.
 Seção 15 do `check_ops_summary.py`: as três regras conferidas uma a uma chamando o **endpoint de verdade**
 com SMTP stubado (nada sai da máquina), o assunto comparado byte a byte, os destinatários iguais aos do
 NDF, e a prova de que o TED reusa `_opssum_rows` em vez de recalcular. Suíte inteira verde.
+
+---
+
+## §192 — O rótulo do produto no e-mail de TED era fixo em "NDF"
+
+O assunto do TED de Swap saiu certo no §191, mas o **corpo do e-mail não**: o template
+`email-template-ted-release.html` tinha `NDF` **escrito direto** em dois lugares — o título ao lado do
+logo (`Liberação de TED — NDF`) e a frase da abertura (`…referentes às liquidações de NDF de …`). O aviso
+de Swap chegava com o assunto de Swap e o corpo dizendo NDF.
+
+Agora o rótulo é um parâmetro (`product_label`), com **default `'NDF'`** — sem passar nada o template
+renderiza byte a byte o que renderizava antes, então o aviso de NDF não muda. Os dois endpoints passam o
+seu: o de NDF passa `'NDF'` explicitamente, e o de Other Products passa `_OPS_TED_LABEL`.
+
+`_OPS_TED_LABEL = 'Swap/Opção/Commodities'` é **uma constante para os três lugares** — assunto, cabeçalho
+e corpo. Era exatamente aí que estava o defeito: três textos independentes, e nada obrigando os três a
+concordarem.
+
+### Verificação
+
+Seção 11 nova no `check_swap_advice.py` (o default do template preservado, e nenhum `NDF` fixo sobrando
+no cabeçalho ou no corpo) e três asserções novas na seção 15 do `check_ops_summary.py`, que **abre o HTML
+do e-mail montado de verdade** e confere o cabeçalho, a frase do corpo e que a palavra `NDF` não aparece
+em lugar nenhum do aviso de Swap. Suíte inteira verde.
