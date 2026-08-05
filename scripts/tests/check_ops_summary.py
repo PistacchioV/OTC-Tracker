@@ -270,5 +270,42 @@ check('a observacao tem endpoint para persistir',
       "@blueprint.route('/api/other-products-summary/observation'" in SRC, True)
 check('o JS salva a observacao', "'/api/other-products-summary/observation'" in HTML, True)
 
+print('\n== 10. a tela DIZ por que esta vazia ==')
+# Os widgets leem a posicao mais recente (com walk-back), as tabelas leem o batch
+# da data. Sem esta faixa, um dia sem importacao deixa a pagina se contradizendo
+# em silencio: card com numero, tabela vazia, nenhuma palavra sobre o motivo.
+tmp = tempfile.mkdtemp(prefix='ops-src-')
+_ds_root, _b3_root = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
+try:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, os.path.join(tmp, 'b3')
+    st = R._ops_batch_status(REF)
+    check('sem nada, o Operations B3 aparece como faltando', 'Operations B3' in st['missing'], True)
+    check('sem o Operations B3 o aviso e BLOQUEANTE', st['blocking'], True)
+    check('sem posicao, ela tambem e apontada', 'Posição SWAP (B3)' in st['missing'], True)
+    check('sem batch nenhum, nao ha dia para sugerir', st['last_batch'], None)
+
+    # Batch da data presente + um dia anterior com batch: deixa de ser bloqueante.
+    write_json(os.path.join(tmp, '2026', '07', '27', 'operations-b3_20260727.json'), [])
+    write_json(os.path.join(tmp, '2026', '07', '20', 'operations-b3_20260720.json'), [])
+    st = R._ops_batch_status(REF)
+    check('com o Operations B3, o aviso e so informativo', st['blocking'], False)
+    check('o indispensavel sai da lista', 'Operations B3' in st['missing'], False)
+    check('as auxiliares seguem apontadas',
+          sorted(x for x in st['missing'] if 'SWAP' not in x),
+          ['OTM Settlements', 'Swap Athena', 'Swap Events'])
+    check('sugere o ultimo dia com batch', st['last_batch'], '2026-07-20')
+finally:
+    R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
+    shutil.rmtree(tmp, ignore_errors=True)
+
+check('o endpoint publica o diagnostico', "'sources': sources" in SRC, True)
+check('a pagina consome o diagnostico', 'setSources(j.sources' in HTML, True)
+for hook in ('id="ops-src-row"', 'id="ops-src-msg"', 'id="ops-src-goto"'):
+    check('a faixa existe no HTML: %s' % hook, hook in HTML, True)
+# Bloqueante e informativo TEM de se distinguir na tela: mesma cor para os dois
+# faria "faltou tudo" parecer "faltou um detalhe".
+check('bloqueante e informativo tem cores diferentes',
+      'alert-warning' in HTML and 'alert-info' in HTML, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -5707,6 +5707,63 @@ def _opssum_rows(trade_rows, ref):
     return out
 
 
+# ── Other Products › Summary: por que a tabela está vazia ────────────────────
+#  Os widgets leem a posição MAIS RECENTE (com walk-back de pregões); as duas
+#  tabelas leem o batch DA DATA escolhida, sem walk-back — a data de liquidação é
+#  uma data real, e mostrar o movimento de outro dia sob o rótulo de hoje seria
+#  pior do que mostrar nada.
+#
+#  A consequência é uma tela que se contradiz em silêncio: o card diz "2 swaps
+#  liquidando" e as duas tabelas ficam vazias, sem uma palavra sobre o motivo. Foi
+#  exatamente assim que a página pareceu quebrada. Este bloco transforma o vazio
+#  numa frase — QUAL arquivo falta e qual foi o último dia com batch.
+_OPS_SOURCES = (
+    # (json_key, rótulo, é indispensável?)
+    ('operations-b3',          'Operations B3',   True),    # sem ele, zero linhas SEMPRE
+    ('otm-settlement',         'OTM Settlements',  False),  # Settlement (e todo o Settlement Summary)
+    ('br-onshore-settlements', 'Swap Athena',      False),  # Internal ID, Counterparty, IR
+    ('eventos-swap-jpm',       'Swap Events',      False),  # Type (VCP × Calculado)
+)
+
+
+def _ops_pos_swap_found(ref):
+    """A posição DPOSICAO-SWAP existe para `ref` (mesmo walk-back de 10 pregões
+    que `_ops_swap_pos_terms` usa)? Ela é quem dá prazo, LOB e, por tabela, o IR."""
+    probe = _prev_anbima_bizday(ref)
+    for _ in range(10):
+        dref = probe.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
+                         '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+        if os.path.isfile(p):
+            return True
+        probe = _prev_anbima_bizday(probe)
+    return False
+
+
+def _ops_batch_status(ref):
+    """Diagnóstico das fontes do dia: o que falta e onde tem batch.
+
+    `last_batch` procura para trás o dia mais recente com Operations B3 (60 dias
+    corridos, teto arbitrário mas suficiente para um mês de férias) — sem essa
+    dica a pessoa fica trocando data às cegas até acertar."""
+    missing, required_missing = [], False
+    for key, label, required in _OPS_SOURCES:
+        if not os.path.isfile(_ds_display_json_path(ref, key)):
+            missing.append(label)
+            required_missing = required_missing or required
+    if not _ops_pos_swap_found(ref):
+        missing.append('Posição SWAP (B3)')
+
+    last_batch = None
+    probe = ref - timedelta(days=1)
+    for _ in range(60):
+        if os.path.isfile(_ds_display_json_path(probe, 'operations-b3')):
+            last_batch = probe.strftime('%Y-%m-%d')
+            break
+        probe -= timedelta(days=1)
+    return {'missing': missing, 'blocking': required_missing, 'last_batch': last_batch}
+
+
 @blueprint.route('/other-products-summary')
 def other_products_summary():
     if not session.get('authenticated'):
@@ -5744,10 +5801,15 @@ def api_ops_data():
     for r in trade:                    # chaves internas (_settle_n/_tax_n) não vão para a tela
         for k in [k for k in r if k.startswith('_')]:
             r.pop(k)
+    try:
+        sources = _ops_batch_status(datetime(settle_ref.year, settle_ref.month, settle_ref.day))
+    except Exception:
+        log.error("[ops-summary] falha no diagnóstico das fontes:\n%s", traceback.format_exc())
+        sources = {'missing': [], 'blocking': False, 'last_batch': None}
     return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
                     'widgets': _ops_settlement_counts(settle_ref, pos_ref),
-                    'summary': summary, 'trade': trade})
+                    'sources': sources, 'summary': summary, 'trade': trade})
 
 
 @blueprint.route('/api/other-products-summary/observation', methods=['POST'])

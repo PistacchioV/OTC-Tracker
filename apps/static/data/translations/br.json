@@ -1541,5 +1541,9 @@
   "map-tab-swap-ir-client": "IR de Swap — Exceções por Cliente",
   "map-tab-swap-ir-term": "IR de Swap — Faixas de Prazo",
   "ops-col-direction": "Direção",
-  "ops-col-account": "Conta"
+  "ops-col-account": "Conta",
+  "ops-src-none": "Sem batch de liquidação em",
+  "ops-src-missing": "Faltam:",
+  "ops-src-partial": "Batch parcial — as colunas derivadas ficam em branco. Faltam:",
+  "ops-src-goto": "Ir para o último dia com batch"
 }

@@ -8325,3 +8325,50 @@ do teste, a rota (200) e o endpoint foram exercidos pelo `test_client`.
 
 Falta ainda: o botão que **gera** o aviso (a página hoje só mostra), e a Settlement Advice de **Option**,
 que segue como âncora morta no sidenav.
+
+---
+
+## §185 — Other Products Summary: o vazio agora se explica
+
+Relato: "não aponta nada nem no Trade Level nem no Settlement Summary". Reproduzido em um minuto — e a
+causa não era nenhuma das duas tabelas.
+
+### O que estava acontecendo
+
+A página abre em **hoje**. As duas tabelas leem o batch de liquidação **daquela data**
+(`operations-b3_YYYYMMDD.json` e companhia), **sem walk-back**: a data de liquidação é uma data real, e
+mostrar o movimento de outro dia sob o rótulo de hoje seria pior do que mostrar nada.
+
+Os **widgets do topo, não**: eles leem a posição *mais recente disponível* (`_forecast_latest_ref`, com
+walk-back de pregões). Então num dia sem batch importado a tela se contradizia em silêncio — o card dizia
+"2 swaps liquidando", as duas tabelas ficavam vazias, e nada na página explicava a diferença. Parecia
+código quebrado; era arquivo ausente.
+
+Não é bug de leitura: nas datas com batch, as tabelas sempre funcionaram (o 27/07 devolve as linhas de
+swap desde o §182).
+
+### A correção é uma frase, não um walk-back
+
+Fazer as tabelas recuarem para o último dia com arquivo "resolveria" o vazio mentindo sobre a data. O que
+entrou foi diagnóstico: `_ops_batch_status(ref)` confere as quatro fontes do dia mais a posição SWAP e
+devolve `{missing, blocking, last_batch}`, publicado no payload como `sources`.
+
+A faixa na tela distingue **dois casos**, porque a ação de quem lê é diferente:
+
+- **Bloqueante** (`alert-warning`) — falta o **Operations B3**. Sem ele não há universo: zero linhas,
+  sempre. A faixa nomeia o que falta e oferece **ir para o último dia com batch** (busca 60 dias para
+  trás), porque sem essa dica a pessoa fica trocando data às cegas.
+- **Informativo** (`alert-info`) — falta uma fonte auxiliar (OTM, Athena, Events, Posição). As linhas
+  aparecem; algumas **colunas** é que ficam em branco. Nada de sugerir troca de data.
+
+Usar a mesma cor nos dois faria "faltou tudo" parecer "faltou um detalhe" — o teste prende as duas classes.
+
+### Verificação
+
+Seção 10 do `scripts/tests/check_ops_summary.py` (52 asserções no total): o diretório vazio (bloqueante,
+sem dia a sugerir), o batch presente com auxiliares faltando (informativo) e a busca do último dia com
+batch. Mais o cabeamento: o endpoint publica `sources`, o JS chama `setSources`, e os três ganchos da faixa
+existem no HTML.
+
+**Vale para as outras telas do batch.** Toda página que lê o batch por data tem o mesmo silêncio possível.
+Aqui ele foi fechado; nas irmãs, não.

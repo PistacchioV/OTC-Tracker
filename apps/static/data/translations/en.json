@@ -1541,5 +1541,9 @@
   "map-tab-swap-ir-client": "Swap IR — Client Exceptions",
   "map-tab-swap-ir-term": "Swap IR — Term Brackets",
   "ops-col-direction": "Direction",
-  "ops-col-account": "Account"
+  "ops-col-account": "Account",
+  "ops-src-none": "No settlement batch for",
+  "ops-src-missing": "Missing:",
+  "ops-src-partial": "Partial batch — derived columns stay blank. Missing:",
+  "ops-src-goto": "Go to the last day with a batch"
 }

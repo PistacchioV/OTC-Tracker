@@ -198,6 +198,22 @@
         </div>
     </div>
 
+    <!-- Diagnóstico do batch da data. Os widgets acima leem a posição MAIS
+         RECENTE; as duas tabelas leem o batch DA DATA. Sem esta faixa, um dia sem
+         importação deixa a página se contradizendo em silêncio — card com número,
+         tabela vazia, nenhuma palavra sobre o motivo. -->
+    <div class="row mt-2 d-none" id="ops-src-row">
+        <div class="col-12">
+            <div class="alert mb-0 d-flex align-items-start gap-2" id="ops-src-alert" role="alert">
+                <i class="ti ti-alert-triangle mt-1" id="ops-src-icon"></i>
+                <div class="flex-grow-1">
+                    <div id="ops-src-msg"></div>
+                    <button type="button" class="btn btn-sm btn-link p-0 mt-1 d-none" id="ops-src-goto"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Settlement Summary table -->
     <div class="row mt-2">
         <div class="col-12">
@@ -539,7 +555,51 @@ document.addEventListener('DOMContentLoaded', function () {
                         esc(r.tax_income), esc(r.difference)]);
                 });
                 dtSummary.draw(false); dtTrade.draw(false); setWidgets(j.widgets);
+                setSources(j.sources, j.date);
             }).catch(function () {});
+    }
+
+    // ── Por que as tabelas estão vazias ──────────────────────────────────────
+    //  Distingue os dois casos, porque a ação da pessoa é diferente:
+    //    · falta o Operations B3  → não há UNIVERSO. Zero linhas, sempre. É rodar
+    //      o batch da data (ou ir para o último dia que tem).
+    //    · falta uma fonte auxiliar → as linhas aparecem, algumas COLUNAS é que
+    //      ficam em branco. Aviso mais fraco, sem sugerir troca de data.
+    function fmtBr(ymd) {
+        var p = String(ymd || '').split('-');
+        return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : (ymd || '');
+    }
+    function setSources(src, ymd) {
+        var row = document.getElementById('ops-src-row');
+        if (!row) return;
+        src = src || {};
+        var missing = src.missing || [];
+        if (!missing.length) { row.classList.add('d-none'); return; }
+        var alertEl = document.getElementById('ops-src-alert');
+        var goto = document.getElementById('ops-src-goto');
+        var blocking = !!src.blocking;
+        alertEl.className = 'alert mb-0 d-flex align-items-start gap-2 ' +
+                            (blocking ? 'alert-warning' : 'alert-info');
+        document.getElementById('ops-src-icon').className =
+            'ti mt-1 ' + (blocking ? 'ti-alert-triangle' : 'ti-info-circle');
+        document.getElementById('ops-src-msg').innerHTML = blocking
+            ? '<strong>' + esc(t('ops-src-none', 'No settlement batch for')) + ' ' + esc(fmtBr(ymd)) +
+              '.</strong> ' + esc(t('ops-src-missing', 'Missing:')) + ' ' + esc(missing.join(' · ')) + '.'
+            : esc(t('ops-src-partial', 'Partial batch — derived columns stay blank. Missing:')) +
+              ' ' + esc(missing.join(' · ')) + '.';
+        if (blocking && src.last_batch) {
+            goto.textContent = t('ops-src-goto', 'Go to the last day with a batch') +
+                               ' (' + fmtBr(src.last_batch) + ')';
+            goto.classList.remove('d-none');
+            goto.onclick = function () {
+                var inp = document.getElementById('ops-ref-date');
+                if (inp) inp.value = fmtBr(src.last_batch);
+                loadDate(src.last_batch);
+            };
+        } else {
+            goto.classList.add('d-none');
+        }
+        row.classList.remove('d-none');
     }
 
     // ── Observação do Settlement Summary → overlay do dia ────────────────────

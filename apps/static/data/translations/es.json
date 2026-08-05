@@ -1540,5 +1540,9 @@
   "map-tab-swap-ir-client": "IR de Swap — Excepciones por Cliente",
   "map-tab-swap-ir-term": "IR de Swap — Tramos de Plazo",
   "ops-col-direction": "Dirección",
-  "ops-col-account": "Cuenta"
+  "ops-col-account": "Cuenta",
+  "ops-src-none": "Sin lote de liquidación en",
+  "ops-src-missing": "Faltan:",
+  "ops-src-partial": "Lote parcial — las columnas derivadas quedan en blanco. Faltan:",
+  "ops-src-goto": "Ir al último día con lote"
 }
