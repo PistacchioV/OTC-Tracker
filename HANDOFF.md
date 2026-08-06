@@ -9433,3 +9433,28 @@ esticar um dos três e a fileira sai desalinhada) e aplica `border-radius: 10px`
 `.ops-row-act` do Other Products Summary, que mostra a mesma linha de liquidação: formatos diferentes nas
 duas telas leem como sistemas diferentes. Travado no teste, inclusive a paridade do raio entre as duas
 páginas.
+
+---
+
+## §209 — Valor Base saía cem vezes maior no aviso
+
+`280,000,000.00` na tela, `R$ 28.000.000.000,00` no aviso impresso. Duas leituras do MESMO dado, que é o
+defeito que este módulo mais repete.
+
+O arquivo de **posição** escreve a vírgula como separador **decimal** (`280000000,00`), sem separador de
+milhar. A célula da tela passava por `_swapchar_fmt_value`, que sabe disso; o número cru — o que o aviso
+imprime — passava por `_mtm_parse_num`, que trata a vírgula como **milhar** e devolve 28 bilhões para o
+mesmo texto. Cem vezes.
+
+A leitura virou uma só: **`_swapchar_value_num`**, usada pelo formatador da célula **e** pelo
+`_swadv_collect`. Texto não numérico continua passando inteiro na célula e devolvendo `None` no cru —
+`None` e não `0`, senão um campo ilegível viraria um valor base zerado no contrato do cliente.
+
+Os campos vizinhos ficaram como estavam, e por um motivo: `curva_banco`, `curva_cliente` e `bruto` vêm do
+**Athena**, em formato US, e a célula deles é o texto cru sem reformatação — a leitura bate. O descompasso
+só existia onde a célula era **reformatada** por uma regra e o cru lido por outra.
+
+### Verificação
+
+Seção 15 do `check_swap_advice.py`: o número reportado, a célula e o cru batendo para quatro formatos, o
+vazio que não vira zero, e a prova estrutural de que o `valor_base` não pode voltar ao parser de uso geral.

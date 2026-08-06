@@ -6412,16 +6412,32 @@ def _swapchar_amort_text(v):
     return s
 
 
+def _swapchar_value_num(v):
+    """Célula numérica do arquivo de POSIÇÃO → float, ou None.
+
+    O arquivo escreve a vírgula como separador DECIMAL ('280000000,00'), sem
+    separador de milhar. É por isso que ele não pode passar pelos parsers de uso
+    geral: o `_mtm_parse_num` trata a vírgula como milhar e devolve
+    28.000.000.000 para esse mesmo texto — cem vezes o valor.
+
+    Existe para que a CÉLULA e o NÚMERO CRU saiam da mesma leitura. Eram duas, e
+    o Valor Base aparecia certo na tela e cem vezes maior no aviso impresso."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    try:
+        return float(s.replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return None
+
+
 def _swapchar_fmt_value(v):
     """Numeric cell → #,##0.00 (1,234.56); non-numeric passes through unchanged."""
     s = str(v or '').strip()
     if not s:
         return ''
-    try:
-        n = float(s.replace(' ', '').replace(',', '.'))
-    except ValueError:
-        return s
-    return '{:,.2f}'.format(n)
+    n = _swapchar_value_num(s)
+    return s if n is None else '{:,.2f}'.format(n)
 
 
 def _lp_fmt_dec8(v):
@@ -7374,7 +7390,10 @@ def _swadv_collect(ref):
             # Crus para o aviso: ele imprime em BR (R$ 1.234,56), e a tela em US.
             # Reformatar o texto de uma para a outra erraria no primeiro valor
             # com separador ambíguo — do número não há como errar.
-            'valor_base': _mtm_parse_num(pos.get('valor_base', '')),
+            # MESMA leitura da célula (`_swapchar_fmt_value`, logo acima): o
+            # arquivo de posição usa vírgula DECIMAL, e ler esse texto com o
+            # parser de uso geral multiplicava o Valor Base por cem no aviso.
+            'valor_base': _swapchar_value_num(pos.get('valor_base', '')),
             'curva_banco': _mtm_parse_num(_cell(arow, ai, 'Owner curve')),
             'curva_cliente': _mtm_parse_num(_cell(arow, ai, 'Counterparty curve')),
         })

@@ -481,5 +481,30 @@ check('usa o parser tolerante aos dois formatos', '_conf_to_float(str(val))' in 
 check('e nao o que so le US', '_mtm_parse_num(' in blk, False)
 check('apagar nao encosta nos arquivos de origem', "e['deleted']" in SRC, True)
 
+print('\n== 15. o Valor Base: UMA leitura para a celula e para o aviso ==')
+# O arquivo de POSICAO escreve a virgula como separador DECIMAL ('280000000,00'),
+# sem separador de milhar. Lido pelo parser de uso geral, esse mesmo texto vira
+# 28.000.000.000 — cem vezes o valor. A tela mostrava certo (tinha o seu proprio
+# parse) e o aviso impresso saia com o numero errado: duas leituras do MESMO dado.
+check('o caso reportado: 280 milhoes',
+      R._swapchar_value_num('280000000,00'), 280000000.0)
+check('   e a celula concorda', R._swapchar_fmt_value('280000000,00'), '280,000,000.00')
+# A prova de verdade: o texto do arquivo -> celula -> numero cru, sem divergir.
+for raw in ('280000000,00', '1234,56', '0,00', '280000000.00'):
+    cel = R._swapchar_fmt_value(raw)
+    check('%r: celula e cru batem' % raw,
+          R._swapchar_value_num(raw), float(cel.replace(',', '')))
+check('vazio nao vira zero', R._swapchar_value_num(''), None)
+check('texto nao numerico passa inteiro', R._swapchar_fmt_value('n/a'), 'n/a')
+check('   e o cru dele e None, nao 0', R._swapchar_value_num('n/a'), None)
+# Estrutural: o aviso NAO pode voltar a ler a posicao com o parser de uso geral.
+blk = SRC.split('def _swadv_collect')[1].split('\ndef ')[0]
+check('o valor_base sai da leitura da posicao',
+      "'valor_base': _swapchar_value_num(" in blk, True)
+check('e nao do parser de uso geral',
+      "'valor_base': _mtm_parse_num(" in blk, False)
+check('e o formatador da celula usa a MESMA funcao',
+      '_swapchar_value_num(s)' in SRC, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
