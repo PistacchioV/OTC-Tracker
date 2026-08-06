@@ -69,18 +69,30 @@ check('o icone do Total nao e de relogio', 'ti-sum' in tot.split('</h3>', 1)[0],
 NDF = io.open(os.path.join(ROOT, 'apps/templates/pages/ndf-summary.html'),
               encoding='utf-8', errors='ignore').read()
 grad_ndf = re.search(r'\.ops-recon--total \{ background: (linear-gradient\([^)]*\))', NDF).group(1)
-grad_pc = re.search(r'\.col-pending-total \.card \{[^}]*background: (linear-gradient\([^)]*\))',
-                    HTML, re.S).group(1)
+bloco = re.search(r'\.col-pending-total \.card \{([^}]*)\}', HTML, re.S).group(1)
+grad_pc = re.search(r'background-image: (linear-gradient\([^)]*\))', bloco).group(1)
 check('o gradiente e o mesmo do NDF Summary', grad_pc, grad_ndf)
-check('   e a borda sai (o gradiente e a moldura)',
-      re.search(r'\.col-pending-total \.card \{[^}]*border: 0', HTML, re.S) is not None, True)
+check('   e a borda sai (o gradiente e a moldura)', 'border: 0' in bloco, True)
+# ISTO e o que quebrou a primeira versao: o <style> da pagina e carregado ANTES
+# do CSS do tema (layouts/base.html), entao o `.card{background-color:...}` dele
+# vem depois e reverte o que nao estiver marcado. Como as regras de TEXTO tinham
+# !important e a do FUNDO nao, o card saiu branco com letra branca — em branco.
+for decl in ('border', 'background-color', 'background-image'):
+    check('%s leva !important (o CSS do tema vem depois)' % decl,
+          re.search(re.escape(decl) + r':[^;]*!important', bloco) is not None, True)
+check('e ha um fundo solido antes do gradiente',
+      'background-color: #' in bloco, True)
 # Sobre fundo escuro, o que herdaria .text-muted tem de ir a branco — senao as
 # dez linhas do card ficam cinza-sobre-azul, ilegiveis.
 white = HTML.split('.col-pending-total .pending-widget-title', 1)[1].split('}', 1)[0]
 for sel in ('.pending-widget-value', '.text-muted', 'b'):
     check('%s vai a branco' % sel, sel in white, True)
-check('o icone ganha o chip translucido',
-      'background-color: rgba(255,255,255,.18)' in HTML, True)
+# O chip do ícone é o violeta do card de Total do NDF Summary: sobre o azul do
+# cartão um chip translúcido some, e era ele que dava o contraste da referência.
+chip = re.search(r'\.col-pending-total \.avatar-title \{([^}]*)\}', HTML, re.S).group(1)
+check('o icone ganha o chip violeta', 'linear-gradient' in chip, True)
+check('   com fundo solido antes dele', 'background-color: #' in chip, True)
+check('   e marcado (o CSS do tema vem depois)', chip.count('!important') >= 2, True)
 
 print('\n== 3. o layout comporta os sete ==')
 # O Bootstrap nao tem row-cols-7 (o grid dele para em 6): a largura vem do CSS

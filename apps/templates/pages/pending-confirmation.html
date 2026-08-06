@@ -97,10 +97,19 @@
        uma severidade, e a soma delas. O gradiente escuro e o MESMO do card de
        Total do NDF Summary (.ops-recon--total) — o mesmo papel nas duas telas
        lido do mesmo jeito. Sobre ele todo texto vai a branco, inclusive o que
-       herdaria .text-muted. */
+       herdaria .text-muted.
+
+       TUDO aqui leva `!important` porque este <style> é carregado ANTES do CSS
+       do tema (ver layouts/base.html): o `.card{background-color:var(--ins-card-bg)}`
+       do tema vem depois e reverte o que não estiver marcado. Foi exatamente o
+       que aconteceu na primeira versão — as regras de TEXTO tinham !important e
+       a do FUNDO não, então o card ficou branco com letra branca: em branco.
+       O resto do arquivo já usava !important pelo mesmo motivo. */
     .pending-widgets-row .col-pending-total .card {
-        border: 0;
-        background: linear-gradient(135deg, #0066cc 0%, #34369b 100%);
+        border: 0 !important;
+        background-color: #0d47a8 !important;      /* fallback sólido */
+        background-image: linear-gradient(135deg, #0066cc 0%, #34369b 100%) !important;
+        box-shadow: 0 10px 26px rgba(13, 71, 168, .28);
     }
     .pending-widgets-row .col-pending-total .pending-widget-title,
     .pending-widgets-row .col-pending-total .pending-widget-value,
@@ -110,13 +119,20 @@
     }
     /* O ponto de cada linha fica um tom abaixo do texto: no fundo escuro, branco
        cheio nele competiria com o número. */
-    .pending-widgets-row .col-pending-total .pending-total-dot { color: rgba(255,255,255,.55); }
+    .pending-widgets-row .col-pending-total .pending-total-dot { color: rgba(255,255,255,.55) !important; }
+    /* O ícone ganha o mesmo chip violeta do card de Total do NDF Summary: sobre o
+       azul do cartão, um chip translúcido some — o violeta é o que dá o contraste
+       da referência. */
     .pending-widgets-row .col-pending-total .avatar-title {
-        background-color: rgba(255,255,255,.18) !important;
+        background-color: #8b5cf6 !important;
+        background-image: linear-gradient(135deg, #7c5cff 0%, #a855f7 100%) !important;
         color: #fff !important;
+        box-shadow: 0 4px 12px rgba(124, 92, 255, .35);
     }
+    /* O separador acompanha o fundo escuro (o hairline claro sumiria nele). */
+    .pending-widgets-row .col-pending-total .pending-widget-value { letter-spacing: -.5px; }
     /* O hover dos outros cards vira a borda azul; aqui não há borda para virar. */
-    .pending-widgets-row .col-pending-total .card:hover { border-color: transparent; }
+    .pending-widgets-row .col-pending-total .card:hover { border-color: transparent !important; }
 
     /* Staggered entrance: the six widgets fade+rise in sequence on load.
        Keyframes (not transition) — one-shot entry, never re-triggered. */
