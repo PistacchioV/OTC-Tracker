@@ -17,12 +17,16 @@ self.addEventListener('activate', function (event) {
 var PAGE_URL = {
     'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
     'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
-    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'Index B3': '/index-b3',
+    'NDF Other Publisher': '/new_deals-ndf-otherpublisher',
+    // Daily Settlement › NDF › Other Publisher — outra pagina, outro rotulo.
+    'NDF Other Publisher (Settlement)': '/ndf-other-publisher',
+    'NDF Vanilla': '/new_deals-ndf-vanilla', 'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
     'Reconciliation': '/reconciliation-payrec', 'Pending Confirmation': '/pending-confirmation',
     'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
+    'Intrag Swap': '/intrag-swap',
     'Support': '/tickets-list'
 };
 

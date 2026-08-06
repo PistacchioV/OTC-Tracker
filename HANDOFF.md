@@ -9497,3 +9497,31 @@ tiver; quando ele traz só seis, as duas últimas saem **zero** — e esse zero 
 a precisão que falta está na **origem**, não na formatação da tela. Se a coluna continuar em `...00`
 depois do restart, o `SETTLEMENT.xlsx` está mesmo gravando seis casas, e aí a precisão tem de vir do
 arquivo (ou de outra coluna dele), não daqui.
+
+---
+
+## §211 — Notificação do Other Publisher levava à tela errada
+
+Gerar o arquivo pelo Send em **Daily Settlement › NDF › Other Publisher** e clicar no aviso abria o
+**New Deals › NDF › Other Publisher**.
+
+O rótulo `page` da notificação é a chave de **duas** coisas: para onde o clique leva e **quem enxerga o
+aviso** (`api_get_notifications` filtra pelo acesso à página que o rótulo aponta). A tela de liquidação
+usava `'NDF Other Publisher'`, que é o rótulo do New Deals (vem do `_GENERIC_ND_PRODUCTS`) — então, além
+do destino errado, o aviso **sumia** para quem tem a tela de liquidação liberada e a de New Deals não.
+
+Rótulo próprio: **`_NOTIF_DS_OTHERPUB = 'NDF Other Publisher (Settlement)'`**, usado nos quatro pontos da
+tela (confirm, edit, delete e Send) e apontando para `/ndf-other-publisher`.
+
+### O mapa existe TRÊS vezes
+
+`_NOTIF_PAGE_URL` (routes, para o filtro de acesso), `PAGE_URL` em `partials/topbar.html` (clique no
+sino) e `PAGE_URL` em `static/js/sw-push.js` (clique no push do sistema). Eles **já estavam divergindo**:
+o `sw-push.js` não tinha `NDF Vanilla` nem `Intrag Swap`, então um clique no push desses dois não ia a
+lugar nenhum enquanto o mesmo clique no sino funcionava. Os três foram sincronizados.
+
+### Verificação
+
+`scripts/tests/check_notif_page_url.py` (novo): os três mapas com as mesmas chaves e destinos, todo
+destino sendo página do menu, nenhum destino repetido (rótulo duplicado sem querer), e as quatro
+notificações da tela de liquidação usando a constante.

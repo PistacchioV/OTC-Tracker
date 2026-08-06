@@ -184,11 +184,24 @@ def csp_report():
 # stays open so a fully-restricted user always has a safe landing (no redirect loop).
 _ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access'}
 
+# Rótulo do Daily Settlement › NDF › Other Publisher. Ele NÃO pode ser o mesmo
+# do New Deals ('NDF Other Publisher', que vem do `_GENERIC_ND_PRODUCTS`): o
+# rótulo é a chave que decide DUAS coisas — para onde o sino leva ao clicar e
+# QUEM enxerga a notificação (o filtro por acesso de página). Compartilhado, a
+# notificação da tela de liquidação abria a de New Deals e sumia para quem só
+# tem a de liquidação liberada.
+_NOTIF_DS_OTHERPUB = 'NDF Other Publisher (Settlement)'
+
 # Notification "page" label → the sidebar URL it belongs to (for feed filtering).
+# ⚠️ Este mapa tem MAIS DUAS cópias, no navegador: `PAGE_URL` em
+# partials/topbar.html (clique no sino) e em static/js/sw-push.js (clique no push
+# do sistema). Os três têm de concordar, senão o mesmo aviso leva a lugares
+# diferentes conforme onde foi clicado — `check_notif_page_url.py` prova isso.
 _NOTIF_PAGE_URL = {
     'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
     'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
     'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'NDF Vanilla': '/new_deals-ndf-vanilla',
+    _NOTIF_DS_OTHERPUB: '/ndf-other-publisher',
     'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
     'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
@@ -10112,7 +10125,7 @@ def api_ndfop_row_confirm():
         log.error('[ndf-other-publisher] confirm save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Confirmed',
-                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+                         _NOTIF_DS_OTHERPUB, '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 
@@ -10146,7 +10159,7 @@ def api_ndfop_row_edit():
         log.error('[ndf-other-publisher] edit save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Edited',
-                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+                         _NOTIF_DS_OTHERPUB, '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 
@@ -10177,7 +10190,7 @@ def api_ndfop_row_delete():
         log.error('[ndf-other-publisher] delete save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _create_notification(sid, session.get('user_name', ''), 'NDF Other Publisher Row Deleted',
-                         'NDF Other Publisher', '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
+                         _NOTIF_DS_OTHERPUB, '{} ({})'.format(rid, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 
@@ -10333,7 +10346,7 @@ def api_ndfop_send():
         _ndfop_meta_save(path, meta)
     except Exception:
         log.error('[ndf-other-publisher] sent-status save failed:\n%s', traceback.format_exc())
-    _create_notification(sid, session.get('user_name', ''), 'Sent to B3', 'NDF Other Publisher',
+    _create_notification(sid, session.get('user_name', ''), 'Sent to B3', _NOTIF_DS_OTHERPUB,
                          str(len(ids)) + ' row' + ('' if len(ids) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'count': len(ids), 'files': files})
 
