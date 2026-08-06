@@ -5,62 +5,66 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* Curva única da página. As nativas do CSS são fracas demais para leitura de
-   intenção; esta é a mesma do Pending Confirmation e do Manual Confirmations. */
-#fxo-page { --fxo-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+/* ============================================================================
+   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
+   O desenho dos cards é o do New Deals Monitor: cartão neutro com moldura e
+   sombra suave, chip de ícone no gradiente da marca (--vr-grad) e o total à
+   direita em dígitos de largura fixa.
 
-/* ── Cards de status ──────────────────────────────────────────────────
-   Mesmo desenho da família de widgets do app: chip de ícone colorido, rótulo em
-   caixa alta pequena, número grande com dígitos de largura fixa.
+   Repare que o cartão NÃO é um `.card` do Bootstrap: é um <div> com classe
+   própria. Foi o que resolveu de vez o cartão branco — sobre um `.card` o tema
+   redeclara fundo, borda, raio e cor DEPOIS deste <style> (extra_css vem antes
+   do head-css), e cada propriedade precisava de !important para sobreviver.
+   ============================================================================ */
+#fxo-page { --fxo-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
 
-   Cor de fundo, borda, raio e cor de texto levam !important porque o `.card` do
-   tema declara TODAS elas e é carregado DEPOIS deste <style> (layouts/base.html).
-   Sem a marca o cartão volta a branco com moldura cinza — foi o que aconteceu. */
 #fxo-page .fxo-widget {
-    border-radius: 18px !important;
-    border: 1px solid var(--ins-border-color) !important;
-    padding: .85rem 1rem !important;
-    height: 100%; cursor: pointer;
-    display: flex; align-items: center; gap: .7rem;
-    position: relative; overflow: hidden;
-    transition: transform 200ms var(--fxo-ease),
-                box-shadow 200ms var(--fxo-ease),
-                border-color 200ms var(--fxo-ease);
+    height: 100%;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1rem 1.15rem;
+    display: flex; align-items: center; gap: .75rem;
+    cursor: pointer;
+    transition: transform 260ms var(--fxo-ease), box-shadow 260ms var(--fxo-ease),
+                border-color 260ms var(--fxo-ease);
 }
 @media (hover: hover) and (pointer: fine) {
-    #fxo-page .fxo-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+    #fxo-page .fxo-widget:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+    }
 }
 #fxo-page .fxo-widget:active { transform: scale(.985); }
 /* O card ativo é o filtro que está valendo. Sem essa marca, clicar num card e
    esquecer deixa a tabela parecendo a lista inteira quando não é. */
-#fxo-page .fxo-widget.is-active { box-shadow: 0 0 0 2px rgba(13,110,253,.55), 0 10px 24px rgba(0,0,0,.10); }
-#fxo-page .fxo-widget__ico {
-    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; color: #fff;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem;
+#fxo-page .fxo-widget.is-active {
+    border-color: var(--vr-accent-1, #0066cc);
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, .18),
+                var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
 }
+#fxo-page .fxo-widget__ico {
+    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    color: #fff; font-size: 1.25rem;
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+}
+/* O status é a COR do chip, não a do cartão: o cartão inteiro tingido briga com
+   a tabela abaixo e some no tema escuro. */
+#fxo-page .fxo-w-ok   .fxo-widget__ico { background: linear-gradient(100deg, #1a8a4a, #34c759); box-shadow: 0 4px 12px rgba(26,138,74,.28); }
+#fxo-page .fxo-w-nok  .fxo-widget__ico { background: linear-gradient(100deg, #c0392b, #ff5a5a); box-shadow: 0 4px 12px rgba(192,57,43,.28); }
+#fxo-page .fxo-w-none .fxo-widget__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+
 #fxo-page .widget-lbl {
-    font-size:.66rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.05em; opacity:.7; margin:0; line-height:1.3;
+    font-size: .78rem; font-weight: 700; letter-spacing: -.01em;
+    margin: 0; color: var(--ins-body-color);
 }
 #fxo-page .widget-val {
-    font-size:1.55rem; font-weight:700; line-height:1;
-    font-variant-numeric:tabular-nums; margin:0; letter-spacing:-.5px;
+    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
 }
-
-#fxo-page .fxo-w-total {
-    background-color:#0d47a8 !important;
-    background-image: linear-gradient(135deg, #0066cc 0%, #34369b 100%) !important;
-    border-color: transparent !important; color:#fff !important;
-    box-shadow: 0 10px 26px rgba(13,71,168,.28);
-}
-#fxo-page .fxo-w-total .fxo-widget__ico { background: rgba(255,255,255,.2); }
-#fxo-page .fxo-w-total .widget-lbl { opacity:.8; }
-#fxo-page .fxo-w-ok   { background-color:#e8f5e9 !important; color:#1b5e20 !important; border-color:#bfe3c2 !important; }
-#fxo-page .fxo-w-ok   .fxo-widget__ico { background: linear-gradient(135deg,#34c759 0%,#1b8a3a 100%); }
-#fxo-page .fxo-w-nok  { background-color:#fde8e8 !important; color:#b71c1c !important; border-color:#f2bcbc !important; }
-#fxo-page .fxo-w-nok  .fxo-widget__ico { background: linear-gradient(135deg,#ff5a5a 0%,#c0392b 100%); }
-#fxo-page .fxo-w-none { background-color:#fff8e1 !important; color:#7b5e00 !important; border-color:#ffe0a3 !important; }
-#fxo-page .fxo-w-none .fxo-widget__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
 
 /* Entrada escalonada: 45ms entre cards. Nada nasce de scale(0) — nada no mundo
    real aparece do nada. */
@@ -77,8 +81,8 @@
 .fxo-chip {
     display:inline-flex; align-items:center; gap:.35rem;
     font-size:.7rem; font-weight:600; padding:.28rem .7rem; border-radius:20px;
-    background:var(--bs-tertiary-bg); color:var(--bs-body-color);
-    border:1px solid var(--bs-border-color); white-space:nowrap;
+    background:var(--ins-tertiary-bg, #eef0f4); color:var(--ins-body-color);
+    border:1px solid var(--ins-border-color); white-space:nowrap;
 }
 .fxo-chip b { font-variant-numeric:tabular-nums; }
 .fxo-chip-nok { cursor:pointer; transition:border-color 140ms, background 140ms; }
@@ -99,10 +103,11 @@
 #fxo-table_filter { display:none !important; }
 
 /* ── Filtros por coluna ──────────────────────────────────────────────
-   Com scrollX o DataTables CLONA o thead: a linha visível é a da
-   `.dt-scroll-headInner`, e a do <table> real fica escondida no corpo. Por isso
-   a linha entra nas DUAS e o evento é delegado só à visível — foi exatamente
-   por não fazer isso que a linha não aparecia. */
+   A linha é montada ANTES do `.DataTable()`, e é isso que a faz aparecer: com
+   `scrollX` o DataTables MOVE o <thead> para a tabela do cabeçalho rolável e
+   deixa uma cópia oculta no corpo. Acrescentar a linha depois do init a punha na
+   cópia — existia no DOM e não aparecia. Com ela já no lugar, o DataTables leva
+   as duas linhas juntas, e `orderCellsTop` mantém a ordenação na primeira. */
 #fxo-table thead .fxo-col-filters th,
 .dt-scroll-headInner thead .fxo-col-filters th,
 .dataTables_scrollHeadInner thead .fxo-col-filters th { padding:3px 4px; }
@@ -110,10 +115,10 @@
 .dt-scroll-headInner thead .fxo-col-filters input,
 .dataTables_scrollHeadInner thead .fxo-col-filters input {
     width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--bs-border-color); background:var(--bs-body-bg);
-    color:var(--bs-body-color);
+    border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
+    color:var(--ins-body-color);
 }
-.fxo-col-filters input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
+.fxo-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
 
 /* ── Data ────────────────────────────────────────────────────────── */
 .date-wrap { position:relative; width:130px; }
@@ -121,16 +126,16 @@
 .date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
 .date-wrap-icon {
     position:absolute; right:9px; top:50%; transform:translateY(-50%);
-    z-index:1; pointer-events:none; font-size:15px; color:var(--bs-secondary-color, #6c757d);
+    z-index:1; pointer-events:none; font-size:15px; color:var(--ins-secondary-color, #6c757d);
 }
 
 /* ── Upload ──────────────────────────────────────────────────────── */
 .upload-zone {
-    border:2px dashed var(--bs-border-color); border-radius:12px; padding:.9rem 1rem;
-    text-align:center; background:var(--bs-tertiary-bg); cursor:pointer;
+    border:2px dashed var(--ins-border-color); border-radius:12px; padding:.9rem 1rem;
+    text-align:center; background:var(--ins-tertiary-bg, #eef0f4); cursor:pointer;
     transition:border-color 160ms, background 160ms;
 }
-.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--bs-secondary-bg); }
+.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--ins-tertiary-bg); }
 .upload-zone input[type=file] { display:none; }
 .upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
 
@@ -161,39 +166,31 @@
     <!-- ── Cards de status ───────────────────────────────────────── -->
     <div class="row g-2 mb-3">
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="card fxo-widget fxo-w-total" data-status="">
+            <div class="fxo-widget fxo-w-total" data-status="">
                 <span class="fxo-widget__ico"><i class="ti ti-sum"></i></span>
-                <div>
-                    <p class="widget-lbl" data-lang="fxo-w-total">Total</p>
-                    <p class="widget-val" id="w-total">—</p>
-                </div>
+                <p class="widget-lbl" data-lang="fxo-w-total">Total</p>
+                <p class="widget-val" id="w-total">—</p>
             </div>
         </div>
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="card fxo-widget fxo-w-ok" data-status="OK">
+            <div class="fxo-widget fxo-w-ok" data-status="OK">
                 <span class="fxo-widget__ico"><i class="ti ti-circle-check"></i></span>
-                <div>
-                    <p class="widget-lbl" data-lang="fxo-w-ok">OK</p>
-                    <p class="widget-val" id="w-ok">—</p>
-                </div>
+                <p class="widget-lbl" data-lang="fxo-w-ok">OK</p>
+                <p class="widget-val" id="w-ok">—</p>
             </div>
         </div>
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="card fxo-widget fxo-w-nok" data-status="NOK">
+            <div class="fxo-widget fxo-w-nok" data-status="NOK">
                 <span class="fxo-widget__ico"><i class="ti ti-alert-triangle"></i></span>
-                <div>
-                    <p class="widget-lbl" data-lang="fxo-w-nok">NOK</p>
-                    <p class="widget-val" id="w-nok">—</p>
-                </div>
+                <p class="widget-lbl" data-lang="fxo-w-nok">NOK</p>
+                <p class="widget-val" id="w-nok">—</p>
             </div>
         </div>
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="card fxo-widget fxo-w-none" data-status="Sem match">
+            <div class="fxo-widget fxo-w-none" data-status="Sem match">
                 <span class="fxo-widget__ico"><i class="ti ti-unlink"></i></span>
-                <div>
-                    <p class="widget-lbl" data-lang="fxo-w-nomatch">Sem match na Athena</p>
-                    <p class="widget-val" id="w-nomatch">—</p>
-                </div>
+                <p class="widget-lbl" data-lang="fxo-w-nomatch">Sem match na Athena</p>
+                <p class="widget-val" id="w-nomatch">—</p>
             </div>
         </div>
     </div>
@@ -353,8 +350,15 @@
         if (table) { table.destroy(); $('#fxo-table').empty().append('<thead><tr></tr></thead>'); }
         COLUMNS = columns.slice();
 
-        var head = $('#fxo-table thead tr').empty();
-        columns.forEach(function (c) { head.append($('<th>').text(c)); });
+        var thead = $('#fxo-table thead').empty();
+        var head = $('<tr>').appendTo(thead);
+        columns.forEach(function (cn) { head.append($('<th>').text(cn)); });
+
+        // A 2ª linha do thead JÁ montada aqui: ver o comentário do CSS.
+        var filters = $('<tr class="fxo-col-filters">').appendTo(thead);
+        columns.forEach(function (cn) {
+            filters.append($('<th>').append($('<input type="text">').attr('placeholder', cn)));
+        });
 
         var defs = columns.map(function (name, i) {
             var col = {
@@ -393,29 +397,19 @@
         table = $('#fxo-table').DataTable({
             data: [],
             columns: defs,
-            scrollX: true,
+            // Mesma configuração das demais tabelas largas do app (Pending
+            // Confirmation, Index B3): o scrollY é o que congela o cabeçalho,
+            // e orderCellsTop deixa a ordenação na 1ª linha do thead — sem ele,
+            // clicar no campo de filtro reordenaria a tabela.
+            responsive: false, scrollX: true, scrollY: '60vh',
+            scrollCollapse: true, autoWidth: false, orderCellsTop: true,
             // Só o comprimento da página e a tabela: a busca global do
             // DataTables sai daqui (a linha de filtro por coluna a substitui).
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: parseInt($('#fxoPageLength').val(), 10) || 50,
             order: [[0, 'asc']],
-            language: { emptyTable: 'Rode a reconciliação para a data escolhida.' },
-            initComplete: function () { buildColumnFilters(this.api()); }
+            language: { emptyTable: 'Rode a reconciliação para a data escolhida.' }
         });
-    }
-
-    function buildColumnFilters(api) {
-        var $row = $('<tr class="fxo-col-filters">');
-        api.columns().every(function (i) {
-            $row.append($('<th>').append(
-                $('<input type="text">').attr('placeholder', COLUMNS[i] || '')));
-        });
-        // As DUAS theads: a do <table> real (que o scrollX esconde) e a clonada
-        // que o usuário enxerga. Só a segunda recebe os eventos.
-        $(api.table().node()).find('thead').append($row.clone());
-        $(api.table().container()).find('.dt-scroll-headInner table thead,' +
-                                        '.dataTables_scrollHeadInner table thead')
-                                  .append($row.clone());
     }
 
     function paint(payload) {
@@ -549,12 +543,16 @@
         $('#btnRunFxo').on('click', function () { run('auto'); });
         $('#btnRunManual').on('click', function () { run('manual'); });
 
-        // Delegado no wrapper e restrito ao cabeçalho VISÍVEL: o outro é a cópia
-        // escondida pelo scrollX, e deixar os dois disparando faria cada tecla
-        // filtrar duas vezes.
-        $('#fxo-table_wrapper').on('input', '.fxo-col-filters input', function () {
-            if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
+        // A linha de filtro foi montada antes do init, então o DataTables a
+        // levou junto para o cabeçalho visível — o evento é delegado no
+        // documento porque o nó é remontado a cada rebuild da tabela.
+        $(document).on('input', '.fxo-col-filters input', function () {
+            if (!table) return;
             table.column($(this).closest('th').index()).search(this.value).draw();
+        });
+        // Clicar no campo não pode ordenar a coluna atrás dele.
+        $(document).on('click', '.fxo-col-filters input, .fxo-col-filters th', function (e) {
+            e.stopPropagation();
         });
 
         $('#btnClearFilters').on('click', function () {

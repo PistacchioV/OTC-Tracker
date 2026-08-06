@@ -28363,13 +28363,50 @@ def _mc_counts(rows):
     }
 
 
+def _mc_confirmation_docs(row):
+    """Os PDFs da confirmação daquela linha, no Electronic Inventory.
+
+    A pasta é DERIVADA da linha (cliente × produto × data da operação) e não de
+    um campo gravado: é isso que faz o botão Abrir funcionar também para as
+    confirmações que já existiam antes de o carimbo passar a existir — e essas
+    são justamente as que alguém precisa procurar.
+
+    Só PDF: é o que abre em preview no navegador. O .doc baixaria, e o .xml é do
+    FepWeb — nenhum dos dois é o que se confere na tela.
+    """
+    try:
+        from apps.pages import manual_conf as _mc
+        cliente, rel = _mc.confirmation_folder(row)
+        if not cliente:
+            return []
+        base = _ei_resolve_client_dir(cliente)
+        if not base:
+            return []
+        folder = os.path.join(base, *rel.split('/'))
+        long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
+        if not os.path.isdir(long_folder):
+            return []
+        out = []
+        for name in sorted(os.listdir(long_folder)):
+            if not name.lower().endswith('.pdf'):
+                continue
+            out.append({'name': os.path.splitext(name)[0],
+                        'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
+                                '&rel=' + quote(rel + '/' + name))})
+        return out
+    except Exception:
+        log.warning('[manual-conf] não consegui listar a pasta da confirmação:\n%s',
+                    traceback.format_exc())
+        return []
+
+
 @blueprint.route('/api/manual-confirmation/monitor')
 def api_mc_monitor():
     if not session.get('authenticated'):
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
-        return jsonify(_mc.monitor_payload())
+        return jsonify(_mc.monitor_payload(docs_for=_mc_confirmation_docs))
     except Exception as e:
         log.error('[manual-conf] monitor: %s', e)
         return jsonify({'error': str(e)}), 500
@@ -28450,17 +28487,24 @@ def api_mc_validate():
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
     payload = request.get_json(silent=True) or {}
-    key = str(payload.get('key') or '').strip()
+    # A validação é da CONFIRMAÇÃO, e um documento cobre várias operações — por
+    # isso o corpo traz `keys`. Validar trade a trade faria a mesma folha ser
+    # conferida dez vezes, e bastaria esquecer uma para o grupo travar.
+    keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
+    keys = [str(k).strip() for k in keys if str(k or '').strip()]
     stage = str(payload.get('stage') or '').strip().upper()
     if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
         return jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
-    row = _mc.mark_validated(key, stage, session.get('user_sid', ''))
-    if row is None:
+    rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', '')) for k in keys)
+            if r is not None]
+    if not rows:
         return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
-                         'Validada pelo {} · {}'.format(stage, row.get('Cliente', '') or key))
-    return jsonify({'success': True, 'row': row})
+                         'Validada pelo {} · {}{}'.format(
+                             stage, rows[0].get('Cliente', '') or keys[0],
+                             ' (%d ops)' % len(rows) if len(rows) > 1 else ''))
+    return jsonify({'success': True, 'row': rows[0], 'rows': rows})
 
 
 @blueprint.route('/api/manual-confirmation/reject', methods=['POST'])
@@ -28474,7 +28518,8 @@ def api_mc_reject():
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
     payload = request.get_json(silent=True) or {}
-    key = str(payload.get('key') or '').strip()
+    keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
+    keys = [str(k).strip() for k in keys if str(k or '').strip()]
     stage = str(payload.get('stage') or '').strip().upper()
     comment = str(payload.get('comment') or '').strip()
     if stage not in (_mc.STAGE_MO, _mc.STAGE_FO):
@@ -28484,11 +28529,14 @@ def api_mc_reject():
         # tem de perguntar de volta o que estava errado.
         return jsonify({'success': False,
                         'message': 'O comentário é obrigatório: é ele que diz o que refazer.'}), 400
-    before = _mc.find_row(key)
+    before = next((r for r in (_mc.find_row(k) for k in keys) if r is not None), None)
     if before is None:
         return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
     sid = session.get('user_sid', '')
-    _mc.reject(key, stage, sid, comment)
+    # O documento inteiro volta para o OTC: rejeitar só uma operação deixaria as
+    # outras esperando um papel que já foi devolvido.
+    for k in keys:
+        _mc.reject(k, stage, sid, comment)
     emailed = False
     try:
         from apps.pages.otc_emails import send_mc_reject_email

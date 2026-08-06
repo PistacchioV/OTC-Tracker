@@ -9912,19 +9912,20 @@ no corpo rolável (escondido) e uma **cópia** é montada dentro de `.dt-scroll-
 usuário enxerga. Acrescentar a linha de filtro só no `<thead>` da tabela faz ela existir no DOM e **não
 aparecer** — foi o que aconteceu nas duas páginas.
 
-O jeito certo é o que a Recon Comitente já fazia: montar a linha, acrescentá-la **nas duas** theads, e
-delegar o evento **só à visível** —
+O jeito certo — e o mais simples — é **montar a linha ANTES do `.DataTable()`**. Com ela já no `<thead>`,
+o DataTables leva as duas linhas juntas para onde o cabeçalho for, e não há cópia a sincronizar. É o que
+o Pending Confirmation faz há tempo (lá a linha vem no HTML estático, `#column-search-inputs`).
 
-```js
-$('#tabela_wrapper').on('input', '.col-filters input', function () {
-    if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
-    ...
-});
-```
+Duas coisas acompanham:
 
-O `return` não é detalhe: sem ele as duas cópias disparam e cada tecla filtra duas vezes. E o CSS tem de
-mirar os três seletores (`#tabela thead`, `.dt-scroll-headInner thead`, `.dataTables_scrollHeadInner
-thead`), porque o nome do container mudou entre as versões do DataTables.
+- **`orderCellsTop: true`** — sem ele a ordenação passa a ser a da 2ª linha, e clicar no campo de filtro
+  reordena a tabela;
+- o CSS tem de mirar os três seletores (`#tabela thead`, `.dt-scroll-headInner thead`,
+  `.dataTables_scrollHeadInner thead`), porque o nome do container mudou entre versões do DataTables.
+
+Tentar acrescentar a linha **depois** do init foi o que falhou duas vezes: no `initComplete` o container
+de scroll ainda não existe, e `api.table().node()` devolve a tabela do CORPO — cuja thead é justamente a
+cópia oculta.
 
 ### 2. O `<style>` da página é carregado ANTES do CSS do tema
 
@@ -9936,10 +9937,20 @@ O sintoma é traiçoeiro: no card de Total do Pending Confirmation as regras de 
 `!important` e a do **fundo** não, então o cartão ficou branco com letra branca — em branco, sem título,
 sem número, sem erro nenhum. Na Recon FXO os cards saíram brancos com moldura cinza pelo mesmo motivo.
 
-**Regra prática:** numa regra de página que pinta um `.card`, marque `background-color`,
-`background-image`, `border`, `border-radius` e `color`. Declare também uma **cor sólida antes do
-gradiente**, para o cartão nunca depender só da imagem de fundo. Os testes `check_pc_widgets.py` e
-`check_recon_fxo.py` passaram a exigir isso.
+**Regra prática, na ordem de preferência:**
+
+1. **Não use `.card` para um widget seu.** O New Deals Monitor não usa: `.ndm-card` é um `<div>` com
+   classe própria, e por isso nunca disputa nada. Foi para lá que a Recon FXO e as duas telas de Manual
+   Confirmations migraram, e o problema sumiu junto com os `!important`.
+2. Se o `.card` for inevitável (é o caso dos widgets do Pending Confirmation, que herdam padding e
+   sombra dele), marque `background-color`, `background-image`, `border`, `border-radius` e `color`, e
+   declare uma **cor sólida antes do gradiente** para o cartão nunca depender só da imagem de fundo.
+
+Os testes `check_pc_widgets.py` e `check_recon_fxo.py` prendem cada um o seu caminho.
+
+E uma regra que já estava no CLAUDE.md e eu tinha furado: a camada visual usa **`--ins-*` e `--vr-*`,
+nunca `--bs-*`**. O chip de ícone de um card é `--vr-grad`, o mesmo gradiente da marca em toda a
+aplicação — um gradiente próprio por tela faz cada página parecer de um sistema diferente.
 
 ### Enquanto isso, na tela do Monitor
 
@@ -9949,6 +9960,23 @@ tela que reconstrói o documento: quem valida precisa ver o papel que vai ao cli
 pode montar outra coisa se o day-file mudou desde então. O `rel` é relativo à pasta do cliente porque é
 assim que aquele endpoint recebe — ele resolve a pasta pelo nome e barra qualquer caminho que escape
 dela.
+
+### O item do Monitor é a CONFIRMAÇÃO, não o trade
+
+Um documento é emitido por **contraparte × produto × data de negociação** (com a LOB junto) e cobre
+todas as operações do grupo. O Monitor mostrava um item por trade: a mesma folha aparecia dez vezes na
+fila, e validar significava clicar dez vezes no mesmo papel — bastava esquecer um para o grupo travar.
+
+Agora o card agrupa por `GROUP_FIELDS` (LOB · Cliente · Produto · Data Operação), o item traz `keys` com
+todos os Trade IDs, e **validar ou rejeitar age no grupo inteiro**. O número grande do card conta
+**confirmações**; o subtítulo conta as operações que elas cobrem — contar trades no número grande faria a
+fila parecer três vezes maior do que o trabalho que ela é. A idade do grupo é a da operação que espera há
+mais tempo.
+
+O botão *Abrir* deixou de depender do link carimbado: a pasta é **derivada da linha**
+(`confirmation_folder`), e o Monitor lista os **PDFs** que estiverem lá. É isso que faz o botão funcionar
+para as confirmações que já existiam antes de o carimbo passar a existir — e são justamente essas que
+alguém precisa procurar. Só PDF: é o que abre em preview; o `.doc` baixaria e o `.xml` é do FepWeb.
 
 A tela **Track Confirmations** ganhou a coluna de **Actions** (abrir · editar · excluir), o **Export**
 (CSV e copiar) — que leva o que está **na tela**, com filtro e ordenação aplicados, porque quem filtrou

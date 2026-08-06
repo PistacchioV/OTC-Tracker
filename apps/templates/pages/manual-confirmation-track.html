@@ -5,53 +5,62 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* Curva única da página. As nativas do CSS são fracas demais para leitura de
-   intenção; esta é a mesma já usada no Pending Confirmation e no Monitor. */
-#mc-page { --mc-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+/* ============================================================================
+   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
+   Cards no desenho do New Deals Monitor: cartão neutro com moldura e sombra
+   suave, chip de ícone no gradiente e o total à direita em dígitos de largura
+   fixa.
 
-/* ── Cards ───────────────────────────────────────────────────────────
-   Mesmo desenho da família de widgets do app (Pending Confirmation / NDF
-   Summary): chip de ícone, rótulo em caixa alta pequena, número grande com
-   dígitos de largura fixa. !important no fundo porque este <style> é carregado
-   ANTES do CSS do tema (layouts/base.html) e o `.card{background-color:…}` dele
-   vem depois — sem a marca o cartão volta a branco. */
+   O cartão NÃO é um `.card` do Bootstrap: é um <div> com classe própria. Sobre
+   um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
+   (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
+   ============================================================================ */
+#mc-page { --mc-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
 #mc-page .mc-w {
-    border-radius: 18px; border: 1px solid var(--ins-border-color) !important;
-    padding: .85rem 1rem; height: 100%; cursor: pointer;
-    display: flex; align-items: center; gap: .7rem;
-    transition: transform 200ms var(--mc-ease),
-                box-shadow 200ms var(--mc-ease),
-                border-color 200ms var(--mc-ease);
+    height: 100%;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: .9rem 1rem;
+    display: flex; align-items: center; gap: .65rem; cursor: pointer;
+    transition: transform 260ms var(--mc-ease), box-shadow 260ms var(--mc-ease),
+                border-color 260ms var(--mc-ease);
 }
 @media (hover: hover) and (pointer: fine) {
-    #mc-page .mc-w:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+    #mc-page .mc-w:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+    }
 }
 #mc-page .mc-w:active { transform: scale(.985); }
 /* O card ativo é o filtro que está valendo. Sem essa marca, clicar num card e
    esquecer deixa a tabela parecendo a lista inteira quando não é. */
-#mc-page .mc-w.is-active { box-shadow: 0 0 0 2px rgba(13,110,253,.55), 0 10px 24px rgba(0,0,0,.10); }
+#mc-page .mc-w.is-active {
+    border-color: var(--vr-accent-1, #0066cc);
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, .18),
+                var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+}
 #mc-page .mc-w__ico {
-    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; color: #fff;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem;
+    width: 40px; height: 40px; flex: 0 0 auto; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.15rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
 }
-#mc-page .mc-w__lbl { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0; line-height: 1.3; }
-#mc-page .mc-w__val { font-size: 1.55rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; margin: 0; letter-spacing: -.5px; }
+/* A etapa é a cor do CHIP, não a do cartão: o cartão inteiro tingido briga com a
+   tabela abaixo e some no tema escuro. */
+#mc-page .mc-w-otc .mc-w__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+#mc-page .mc-w-mo  .mc-w__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+#mc-page .mc-w-fo  .mc-w__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); box-shadow: 0 4px 12px rgba(124,58,237,.28); }
+#mc-page .mc-w-ok  .mc-w__ico { background: linear-gradient(100deg, #1a8a4a, #34c759); box-shadow: 0 4px 12px rgba(26,138,74,.28); }
 
-#mc-page .mc-w-tot {
-    background-color: #0d47a8 !important;
-    background-image: linear-gradient(135deg,#0066cc 0%,#34369b 100%) !important;
-    border-color: transparent !important; color: #fff !important;
-    box-shadow: 0 10px 26px rgba(13,71,168,.28);
+#mc-page .mc-w__lbl { font-size: .78rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
+#mc-page .mc-w__val {
+    margin-left: auto; font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
 }
-#mc-page .mc-w-tot .mc-w__ico { background: rgba(255,255,255,.2); }
-#mc-page .mc-w-otc { background-color:#eef4ff !important; color:#0d3a8a !important; border-color:#cfe0ff !important; }
-#mc-page .mc-w-otc .mc-w__ico { background: linear-gradient(135deg,#2f7bff 0%,#0d47a8 100%); }
-#mc-page .mc-w-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; border-color:#ffe0b0 !important; }
-#mc-page .mc-w-mo  .mc-w__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
-#mc-page .mc-w-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; border-color:#ded0ff !important; }
-#mc-page .mc-w-fo  .mc-w__ico { background: linear-gradient(135deg,#7c5cff 0%,#a855f7 100%); }
-#mc-page .mc-w-ok  { background-color:#e8f5e9 !important; color:#1b5e20 !important; border-color:#bfe3c2 !important; }
-#mc-page .mc-w-ok  .mc-w__ico { background: linear-gradient(135deg,#34c759 0%,#1b8a3a 100%); }
 
 /* Entrada escalonada: 45ms entre cards. Nada nasce de scale(0) — nada no mundo
    real aparece do nada. */
@@ -77,10 +86,10 @@
 #mc-table td.mc-acts .btn:active { transform: scale(.94); }
 
 /* ── Filtros por coluna ──────────────────────────────────────────────
-   Com scrollX o DataTables CLONA o thead: a linha visível é a da
-   `.dt-scroll-headInner`, e a do <table> real fica escondida no corpo. Por isso
-   a linha é acrescentada nas DUAS e o evento é delegado só à visível — foi
-   exatamente por não fazer isso que a linha não aparecia. */
+   A linha é montada ANTES do `.DataTable()`, e é isso que a faz aparecer: com
+   `scrollX` o DataTables MOVE o <thead> para a tabela do cabeçalho rolável e
+   deixa uma cópia oculta no corpo. Acrescentar a linha depois do init a punha na
+   cópia — existia no DOM e não aparecia. */
 #mc-table thead .mc-col-filters th,
 .dt-scroll-headInner thead .mc-col-filters th,
 .dataTables_scrollHeadInner thead .mc-col-filters th { padding:3px 4px; }
@@ -88,7 +97,7 @@
 .dt-scroll-headInner thead .mc-col-filters input,
 .dataTables_scrollHeadInner thead .mc-col-filters input {
     width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--ins-border-color); background:var(--ins-body-bg);
+    border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
     color:var(--ins-body-color);
 }
 .mc-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
@@ -127,33 +136,33 @@
 
     <div class="row g-2 mb-3">
         <div class="col-6 col-lg col-mc-w">
-            <div class="card mc-w mc-w-tot" data-pending="">
+            <div class="mc-w mc-w-tot" data-pending="">
                 <span class="mc-w__ico"><i class="ti ti-sum"></i></span>
-                <div><p class="mc-w__lbl" data-lang="mc-w-total">Total</p><p class="mc-w__val" id="w-total">—</p></div>
+                <p class="mc-w__lbl" data-lang="mc-w-total">Total</p><p class="mc-w__val" id="w-total">—</p>
             </div>
         </div>
         <div class="col-6 col-lg col-mc-w">
-            <div class="card mc-w mc-w-otc" data-pending="Pending OTC">
+            <div class="mc-w mc-w-otc" data-pending="Pending OTC">
                 <span class="mc-w__ico"><i class="ti ti-user-check"></i></span>
-                <div><p class="mc-w__lbl">Pending OTC</p><p class="mc-w__val" id="w-otc">—</p></div>
+                <p class="mc-w__lbl">Pending OTC</p><p class="mc-w__val" id="w-otc">—</p>
             </div>
         </div>
         <div class="col-6 col-lg col-mc-w">
-            <div class="card mc-w mc-w-mo" data-pending="Pending MO">
+            <div class="mc-w mc-w-mo" data-pending="Pending MO">
                 <span class="mc-w__ico"><i class="ti ti-checkup-list"></i></span>
-                <div><p class="mc-w__lbl">Pending MO</p><p class="mc-w__val" id="w-mo">—</p></div>
+                <p class="mc-w__lbl">Pending MO</p><p class="mc-w__val" id="w-mo">—</p>
             </div>
         </div>
         <div class="col-6 col-lg col-mc-w">
-            <div class="card mc-w mc-w-fo" data-pending="Pending FO">
+            <div class="mc-w mc-w-fo" data-pending="Pending FO">
                 <span class="mc-w__ico"><i class="ti ti-briefcase"></i></span>
-                <div><p class="mc-w__lbl">Pending FO</p><p class="mc-w__val" id="w-fo">—</p></div>
+                <p class="mc-w__lbl">Pending FO</p><p class="mc-w__val" id="w-fo">—</p>
             </div>
         </div>
         <div class="col-6 col-lg col-mc-w">
-            <div class="card mc-w mc-w-ok" data-pending="Ok">
+            <div class="mc-w mc-w-ok" data-pending="Ok">
                 <span class="mc-w__ico"><i class="ti ti-circle-check"></i></span>
-                <div><p class="mc-w__lbl">Ok</p><p class="mc-w__val" id="w-ok">—</p></div>
+                <p class="mc-w__lbl">Ok</p><p class="mc-w__val" id="w-ok">—</p>
             </div>
         </div>
     </div>
@@ -290,10 +299,19 @@
     }
 
     function buildTable() {
-        var head = $('#mc-table thead tr').empty();
+        var thead = $('#mc-table thead').empty();
+        var head = $('<tr>').appendTo(thead);
         head.append('<th><input type="checkbox" id="mcAll" class="form-check-input"></th>');
         head.append('<th>Actions</th>');
         COLUMNS.forEach(function (c) { head.append($('<th>').text(label(c))); });
+
+        // A 2ª linha do thead JÁ montada aqui: ver o comentário do CSS.
+        var filters = $('<tr class="mc-col-filters">').appendTo(thead);
+        filters.append('<th></th><th></th>');
+        COLUMNS.forEach(function (c) {
+            filters.append($('<th>').append(
+                $('<input type="text">').attr('placeholder', label(c))));
+        });
 
         var defs = [{
             data: null, orderable: false, className: 'text-center',
@@ -336,31 +354,17 @@
         });
 
         table = $('#mc-table').DataTable({
-            data: [], columns: defs, scrollX: true,
+            data: [], columns: defs,
+            // Mesma configuração das demais tabelas largas do app (Pending
+            // Confirmation, Index B3): o scrollY é o que congela o cabeçalho, e
+            // orderCellsTop deixa a ordenação na 1ª linha do thead — sem ele,
+            // clicar no campo de filtro reordenaria a tabela.
+            responsive: false, scrollX: true, scrollY: '60vh',
+            scrollCollapse: true, autoWidth: false, orderCellsTop: true,
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: 50, order: [[OFFSET, 'asc']],
-            language: { emptyTable: 'Nenhuma confirmação registrada.' },
-            initComplete: function () { buildColumnFilters(this.api()); }
+            language: { emptyTable: 'Nenhuma confirmação registrada.' }
         });
-    }
-
-    function buildColumnFilters(api) {
-        var $row = $('<tr class="mc-col-filters">');
-        api.columns().every(function (i) {
-            var th = $('<th>');
-            if (i >= OFFSET) {
-                $('<input type="text">')
-                    .attr('placeholder', label(COLUMNS[i - OFFSET]))
-                    .appendTo(th);
-            }
-            $row.append(th);
-        });
-        // As DUAS theads: a do <table> real (escondida pelo scrollX) e a clonada
-        // que o usuário enxerga. Só a segunda recebe os eventos.
-        $(api.table().node()).find('thead').append($row.clone());
-        $(api.table().container()).find('.dt-scroll-headInner table thead,' +
-                                        '.dataTables_scrollHeadInner table thead')
-                                  .append($row.clone());
     }
 
     function buildColumnMenu() {
@@ -510,11 +514,16 @@
             $('.mc-pick').prop('checked', this.checked); updateApply();
         });
 
-        // Delegado no wrapper e restrito ao cabeçalho VISÍVEL: o outro é a cópia
-        // escondida, e deixar os dois disparando faria cada tecla filtrar duas vezes.
-        $('#mc-table_wrapper').on('input', '.mc-col-filters input', function () {
-            if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
+        // A linha de filtro foi montada antes do init, então o DataTables a levou
+        // junto para o cabeçalho visível. O evento é delegado no documento
+        // porque o nó é remontado a cada rebuild da tabela.
+        $(document).on('input', '.mc-col-filters input', function () {
+            if (!table) return;
             table.column($(this).closest('th').index()).search(this.value).draw();
+        });
+        // Clicar no campo não pode ordenar a coluna atrás dele.
+        $(document).on('click', '.mc-col-filters input, .mc-col-filters th', function (e) {
+            e.stopPropagation();
         });
 
         $('#mcClearFilters').on('click', function () {

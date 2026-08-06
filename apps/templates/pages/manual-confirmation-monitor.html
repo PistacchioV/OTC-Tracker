@@ -4,77 +4,122 @@
 
 {% block extra_css %}
 <style>
-/* ── Cards de etapa ──────────────────────────────────────────────────
-   Um card por mesa da esteira. Cada um é uma FILA: o número no topo é o
-   tamanho dela, e a lista abaixo é a fila em si, do mais antigo para o mais
-   novo. Tudo aqui leva !important no fundo porque este <style> é carregado
-   ANTES do CSS do tema (layouts/base.html) — sem a marca o `.card` do tema
-   repinta o cartão de branco. */
-/* border-radius e color entram marcados junto com o fundo: o `.card` do tema
-   declara os TRÊS e é carregado depois deste <style>. Marcar só o fundo deixava
-   o cartão colorido com a moldura e o raio do tema. */
-.mc-card { border-radius: 18px !important; border: none !important; overflow: hidden; height: 100%; }
-.mc-card .card-body { padding: 0; }
-.mc-card__head {
-    display: flex; align-items: center; gap: .75rem;
-    padding: 1rem 1.15rem .9rem;
-}
-.mc-card__ico {
-    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.15rem; color: #fff;
-}
-.mc-card__lbl { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0; }
-.mc-card__val { font-size: 1.75rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; margin: 0; }
-.mc-card__count { margin-left: auto; text-align: right; }
+/* ============================================================================
+   Confirmations Monitor — uma fila por mesa da esteira.
+   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
+   O desenho é o do New Deals Monitor: cartão neutro com moldura e sombra suave,
+   chip de ícone no gradiente, total à direita em dígitos de largura fixa.
 
-.mc-c-otc { background-color:#eef4ff !important; color:#0d3a8a !important; }
-.mc-c-otc  .mc-card__ico { background: linear-gradient(135deg,#2f7bff 0%,#0d47a8 100%); }
-.mc-c-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; }
-.mc-c-mo   .mc-card__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
-.mc-c-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; }
-.mc-c-fo   .mc-card__ico { background: linear-gradient(135deg,#7c5cff 0%,#a855f7 100%); }
+   O cartão NÃO é um `.card` do Bootstrap, é um <div> com classe própria — sobre
+   um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
+   (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
+   ============================================================================ */
+#mc-monitor { --mc-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
+#mc-monitor .mc-card {
+    height: 100%;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    display: flex; flex-direction: column; overflow: hidden;
+}
+#mc-monitor .mc-card__head {
+    display: flex; align-items: center; gap: .75rem;
+    padding: 1.05rem 1.15rem .85rem;
+}
+#mc-monitor .mc-card__ico {
+    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.25rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+}
+/* A etapa é a cor do CHIP, não a do cartão: o cartão inteiro tingido briga com a
+   lista dentro dele e some no tema escuro. */
+#mc-monitor .mc-c-otc .mc-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+#mc-monitor .mc-c-mo  .mc-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+#mc-monitor .mc-c-fo  .mc-card__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); box-shadow: 0 4px 12px rgba(124,58,237,.28); }
+
+#mc-monitor .mc-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
+/* O subtítulo diz quantas OPERAÇÕES estão dentro das confirmações do card: o
+   número grande conta documentos, e sem esta linha some a informação de volume. */
+#mc-monitor .mc-card__sub { font-size: .68rem; color: var(--ins-secondary-color); margin: 0; }
+#mc-monitor .mc-card__val {
+    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+}
 
 /* ── A fila ──────────────────────────────────────────────────────────
    Rolagem interna com altura máxima: um card com 60 confirmações não pode
    empurrar os outros dois para fora da tela — os três se leem lado a lado. */
-.mc-list { background: var(--ins-secondary-bg); max-height: 26rem; overflow-y: auto; padding: .35rem; }
-.mc-item {
-    background: var(--ins-body-bg); border: 1px solid var(--ins-border-color);
-    border-radius: 12px; padding: .6rem .7rem; margin-bottom: .35rem;
-    transition: border-color 160ms cubic-bezier(0.23,1,0.32,1),
-                box-shadow 160ms cubic-bezier(0.23,1,0.32,1);
+#mc-monitor .mc-list {
+    background: var(--ins-tertiary-bg, #eef0f4);
+    max-height: 27rem; overflow-y: auto; padding: .4rem;
+    border-top: 1px solid var(--ins-border-color);
 }
-.mc-item:last-child { margin-bottom: 0; }
+#mc-monitor .mc-item {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--ins-border-color);
+    border-radius: 12px; padding: .6rem .7rem; margin-bottom: .4rem;
+    transition: border-color 200ms var(--mc-ease), box-shadow 200ms var(--mc-ease);
+}
+#mc-monitor .mc-item:last-child { margin-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
-    .mc-item:hover { border-color: rgba(0,102,204,.35); box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+    #mc-monitor .mc-item:hover {
+        border-color: var(--vr-accent-1, #0066cc);
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
+    }
 }
-.mc-item__top { display: flex; align-items: baseline; gap: .4rem; }
-.mc-item__cli { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-item__age { margin-left: auto; font-size: .68rem; font-weight: 700; flex-shrink: 0; }
-.mc-item__meta { font-size: .68rem; color: var(--ins-secondary-color); margin-top: .1rem; }
-.mc-item__acts { display: flex; gap: .3rem; margin-top: .5rem; flex-wrap: wrap; }
-.mc-item__acts .btn { font-size: .68rem; padding: .18rem .55rem; line-height: 1.5; }
+#mc-monitor .mc-item__top { display: flex; align-items: baseline; gap: .4rem; }
+#mc-monitor .mc-item__cli { font-size: .8rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
+#mc-monitor .mc-item__age { margin-left: auto; font-size: .68rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#mc-monitor .mc-item__meta { font-size: .68rem; color: var(--ins-secondary-color); margin-top: .1rem; }
+/* Quantas operações a confirmação cobre. Uma folha com dez trades é UMA
+   confirmação — sem esta marca o item parece uma operação solta. */
+#mc-monitor .mc-item__ops {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .64rem; font-weight: 800; letter-spacing: .02em;
+    padding: .1rem .4rem; border-radius: 999px;
+    background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
+}
+#mc-monitor .mc-item__acts { display: flex; gap: .3rem; margin-top: .55rem; flex-wrap: wrap; align-items: center; }
+#mc-monitor .mc-item__acts .btn { font-size: .68rem; padding: .18rem .55rem; line-height: 1.5; }
 /* O botão responde ao toque: sem isso a lista parece congelada num clique. */
-.mc-item__acts .btn:active { transform: scale(.97); }
+#mc-monitor .mc-item__acts .btn:active { transform: scale(.97); }
+#mc-monitor .mc-docs { display: flex; flex-wrap: wrap; gap: .25rem; }
+#mc-monitor .mc-docs a {
+    font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: 7px;
+    border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
+    text-decoration: none; max-width: 15rem; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+}
+#mc-monitor .mc-docs a:hover { border-color: var(--vr-accent-1, #0066cc); }
 
 /* A idade da pendência vira cor a partir do momento em que ela é um problema.
    Verde não entra: uma confirmação nova não é uma conquista, é o normal. */
-.mc-age-0 { color: var(--ins-secondary-color); }
-.mc-age-1 { color: #c07a00; }
-.mc-age-2 { color: #c0392b; }
+#mc-monitor .mc-age-0 { color: var(--ins-secondary-color); }
+#mc-monitor .mc-age-1 { color: #b07500; }
+#mc-monitor .mc-age-2 { color: #c0392b; }
 
-.mc-empty { padding: 1.4rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
+#mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
 
+/* Entrada escalonada — 40ms entre itens, curta o bastante para não atrasar a
+   leitura da fila. Nada nasce de scale(0). */
 @media (prefers-reduced-motion: no-preference) {
-    .mc-item { animation: mcIn 240ms cubic-bezier(0.23,1,0.32,1) both; }
-    @keyframes mcIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    #mc-monitor .mc-item { animation: mcIn 240ms var(--mc-ease) both; }
+    #mc-monitor .mc-item:nth-child(1) { animation-delay: 0ms; }
+    #mc-monitor .mc-item:nth-child(2) { animation-delay: 40ms; }
+    #mc-monitor .mc-item:nth-child(3) { animation-delay: 80ms; }
+    #mc-monitor .mc-item:nth-child(4) { animation-delay: 120ms; }
+    #mc-monitor .mc-item:nth-child(n+5) { animation-delay: 160ms; }
+    @keyframes mcIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 }
 </style>
 {% endblock %}
 
 {% block page_content %}
-<div class="container-fluid">
+<div class="container-fluid" id="mc-monitor">
 
     <div class="page-title-head d-flex align-items-center mb-4">
         <div class="flex-grow-1 d-flex align-items-center gap-2">
@@ -137,7 +182,7 @@
         MO:  { cls: 'mc-c-mo',  icon: 'ti-checkup-list' },
         FO:  { cls: 'mc-c-fo',  icon: 'ti-briefcase' }
     };
-    var pending = { key: '', stage: '' };
+    var pending = { keys: [], stage: '' };
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -152,27 +197,39 @@
     }
 
     function item(it, stage) {
-        var meta = [it['Data Operação'], it.Produto, it.LOB, it['Trade ID']]
-                   .filter(Boolean).map(esc).join(' · ');
+        var meta = [it['Data Operação'], it.Produto, it.LOB].filter(Boolean).map(esc).join(' · ');
         var age = it['Aging Confirmação'];
-        // O botão de abrir só existe quando a linha sabe ONDE está o documento.
-        // Um botão que abre nada é pior do que botão nenhum: parece defeito.
-        var open = it.link
-            ? '<a class="btn btn-sm btn-outline-primary" href="' + esc(it.link) + '" target="_blank" rel="noopener">' +
-              '<i class="ti ti-external-link me-1"></i><span data-lang="mc-open">Abrir</span></a>'
-            : '<span class="text-muted" style="font-size:.66rem;align-self:center" data-lang="mc-nolink">documento ainda não gerado</span>';
+        var keys = JSON.stringify(it.keys || []).replace(/"/g, '&quot;');
+
+        // Os PDFs vêm da PASTA da confirmação no Electronic Inventory, resolvida
+        // pelo cliente × produto × data — não de um link gravado. É o que faz o
+        // Abrir funcionar também nas confirmações anteriores ao carimbo, que são
+        // justamente as que alguém precisa procurar.
+        var docs = (it.docs || []).length
+            ? '<div class="mc-docs">' + it.docs.map(function (d) {
+                  return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
+                         esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
+                         esc(d.name) + '</a>';
+              }).join('') + '</div>'
+            : '<span class="text-muted" style="font-size:.64rem" data-lang="mc-nolink">' +
+              'nenhum PDF na pasta da confirmação</span>';
+
         var reject = (stage === 'OTC') ? '' :
-            '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + esc(it.key) + '" data-stage="' + stage + '">' +
+            '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + keys + '" data-stage="' + stage + '">' +
             '<i class="ti ti-corner-up-left me-1"></i><span data-lang="mc-reject">Rejeitar</span></button>';
+
         return '<div class="mc-item">' +
             '<div class="mc-item__top">' +
                 '<span class="mc-item__cli">' + esc(it.Cliente || '—') + '</span>' +
                 '<span class="mc-item__age ' + ageClass(age) + '">' +
                     (age === '' || age == null ? '' : esc(age) + 'd') + '</span>' +
             '</div>' +
-            '<div class="mc-item__meta">' + meta + '</div>' +
-            '<div class="mc-item__acts">' + open +
-                '<button class="btn btn-sm btn-success" data-mc-validate="' + esc(it.key) + '" data-stage="' + stage + '">' +
+            '<div class="mc-item__meta">' + meta +
+                ' <span class="mc-item__ops"><i class="ti ti-layers-subtract"></i>' +
+                (it.count || 1) + ' op' + ((it.count || 1) === 1 ? '' : 's') + '</span>' +
+            '</div>' +
+            '<div class="mc-item__acts">' + docs +
+                '<button class="btn btn-sm btn-success ms-auto" data-mc-validate="' + keys + '" data-stage="' + stage + '">' +
                 '<i class="ti ti-check me-1"></i><span data-lang="mc-validate">Validar</span></button>' +
                 reject +
             '</div></div>';
@@ -183,16 +240,21 @@
         var body = c.items.length
             ? c.items.map(function (it) { return item(it, c.stage); }).join('')
             : '<div class="mc-empty" data-lang="mc-empty">Nada pendente nesta etapa.</div>';
+        // O número grande conta CONFIRMAÇÕES (documentos); o subtítulo conta as
+        // operações que elas cobrem. Contar trades no número grande faria a fila
+        // parecer três vezes maior do que o trabalho que ela é.
+        var sub = c.trades ? (c.trades + ' opera' + (c.trades === 1 ? 'ção' : 'ções')) : '—';
         return '<div class="col-12 col-lg-4">' +
-            '<div class="card mc-card ' + st.cls + '">' +
-              '<div class="card-body">' +
-                '<div class="mc-card__head">' +
-                  '<span class="mc-card__ico"><i class="ti ' + st.icon + '"></i></span>' +
-                  '<div><p class="mc-card__lbl">' + esc(c.label) + '</p></div>' +
-                  '<div class="mc-card__count"><p class="mc-card__val">' + c.count + '</p></div>' +
+            '<div class="mc-card ' + st.cls + '">' +
+              '<div class="mc-card__head">' +
+                '<span class="mc-card__ico"><i class="ti ' + st.icon + '"></i></span>' +
+                '<div>' +
+                  '<p class="mc-card__title">' + esc(c.label) + '</p>' +
+                  '<p class="mc-card__sub">' + sub + '</p>' +
                 '</div>' +
-                '<div class="mc-list">' + body + '</div>' +
+                '<p class="mc-card__val">' + c.count + '</p>' +
               '</div>' +
+              '<div class="mc-list">' + body + '</div>' +
             '</div></div>';
     }
 
@@ -225,7 +287,7 @@
         $(document).on('click', '[data-mc-validate]', function () {
             var btn = $(this);
             post('/api/manual-confirmation/validate', {
-                key: btn.attr('data-mc-validate'), stage: btn.attr('data-stage')
+                keys: JSON.parse(btn.attr('data-mc-validate')), stage: btn.attr('data-stage')
             }).then(function (j) {
                 if (!j.success) {
                     Swal.fire({ icon: 'error', title: 'Não foi possível validar', text: j.message || '' });
@@ -236,10 +298,12 @@
         });
 
         $(document).on('click', '[data-mc-reject]', function () {
-            pending.key = $(this).attr('data-mc-reject');
+            pending.keys = JSON.parse($(this).attr('data-mc-reject'));
             pending.stage = $(this).attr('data-stage');
             $('#mcRejectComment').val('');
-            $('#mcRejectWho').text('Etapa: ' + pending.stage + ' · Trade ID: ' + pending.key);
+            $('#mcRejectWho').text('Etapa: ' + pending.stage + ' · ' + pending.keys.length +
+                                   ' opera' + (pending.keys.length === 1 ? 'ção' : 'ções') +
+                                   ': ' + pending.keys.join(', '));
             new bootstrap.Modal(document.getElementById('mcRejectModal')).show();
         });
 
@@ -251,7 +315,7 @@
                 return;
             }
             post('/api/manual-confirmation/reject', {
-                key: pending.key, stage: pending.stage, comment: comment
+                keys: pending.keys, stage: pending.stage, comment: comment
             }).then(function (j) {
                 bootstrap.Modal.getInstance(document.getElementById('mcRejectModal')).hide();
                 if (!j.success) {

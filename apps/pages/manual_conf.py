@@ -516,6 +516,47 @@ def reject(key, stage, sid, comment):
 
 
 # =============================================================================
+# Onde o documento foi gravado
+# =============================================================================
+
+# Produto → pasta do Electronic Inventory. É o MESMO nome que os quatro `save`
+# de confirmação usam ao gravar; um segundo nome aqui faria a pasta existir e o
+# Monitor procurar noutra.
+PRODUCT_FOLDER = {
+    'NDF COMM': 'NDF Commodities',
+    'OPTION COMM': 'Commodities Options',
+    'OPTION': 'FX Options',
+    'NDF FWD START': 'NDF FWD Start',
+}
+
+_MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
+             6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October',
+             11: 'November', 12: 'December'}
+
+
+def confirmation_folder(row):
+    """(cliente, caminho relativo da pasta) do documento daquela confirmação.
+
+    A pasta é DERIVADA da própria linha — cliente, produto e data da operação —,
+    e não de um campo gravado. É isso que faz o botão *Abrir* funcionar para as
+    confirmações que já existiam antes de o carimbo existir: um link guardado só
+    aparece nas que foram salvas depois, e essas são justamente as que ninguém
+    precisa procurar.
+
+    (None, None) quando falta o que forma o caminho.
+    """
+    cliente = str(row.get('Cliente', '') or '').strip()
+    produto = PRODUCT_FOLDER.get(str(row.get('Produto', '') or '').strip().upper())
+    d = parse_date(row.get('Data Operação'))
+    if not (cliente and produto and d):
+        return None, None
+    rel = '/'.join(['Confirmations', '%04d' % d.year,
+                    '%02d. %s' % (d.month, _MONTH_EN[d.month]),
+                    '%02d' % d.day, produto])
+    return cliente, rel
+
+
+# =============================================================================
 # O que o Monitor mostra
 # =============================================================================
 
@@ -532,17 +573,38 @@ MONITOR_FIELDS = ('Data Operação', 'Cliente', 'Produto', 'LOB', 'Trade ID',
                   'Aging Confirmação')
 
 
-def monitor_payload():
-    """Os cards do Monitor: cada etapa com a sua lista de confirmações.
+# O que define UMA confirmação. O documento é emitido por contraparte × produto ×
+# data de negociação (e a LOB acompanha), cobrindo todas as operações do grupo —
+# então o Monitor tem de mostrar UM item por documento, não um por trade. Uma
+# lista com dez linhas do mesmo cliente no mesmo dia é uma confirmação só, e
+# validar dez vezes o mesmo papel é o erro que isso evita.
+GROUP_FIELDS = ('LOB', 'Cliente', 'Produto', 'Data Operação')
+
+
+def group_key(row):
+    return tuple(norm(row.get(f)) for f in GROUP_FIELDS)
+
+
+def _aging_int(v):
+    s = str(v or '').strip()
+    return int(s) if s.lstrip('-').isdigit() else 0
+
+
+def monitor_payload(docs_for=None):
+    """Os cards do Monitor: cada etapa com a sua lista de CONFIRMAÇÕES.
 
     'Pending MO/FO' entra nos DOIS cards — a confirmação está parada de verdade
     nas duas mesas, e mostrá-la só num deles esconderia trabalho da outra.
+
+    `docs_for(row)` é injetado pela camada de rotas (ela é quem sabe resolver a
+    pasta do Electronic Inventory); sem ele o item sai sem documentos, e o card
+    continua mostrando a pendência — que existe do mesmo jeito.
     """
     rows = load_rows('pending')
     rules = validation_rules()
     cards, sem_cadastro = [], set()
     for stage, label in MONITOR_STAGES:
-        itens = []
+        grupos = {}
         for r in rows:
             rule, found = rule_for(r.get('Produto'), r.get('LOB'), rules)
             if not found:
@@ -553,18 +615,35 @@ def monitor_payload():
             p = r.get('Pending')
             if p != label and not (p == PENDING_MOFO and stage in (STAGE_MO, STAGE_FO)):
                 continue
-            item = {k: r.get(k, '') for k in MONITOR_FIELDS}
-            item['key'] = str(r.get(KEY_COLUMN, '') or '')
-            item['stage'] = stage
-            # O endereço do documento. Vazio quando a confirmação ainda não foi
-            # gerada — o card mostra o item de todo jeito (ele ESTÁ pendente),
-            # mas sem botão de abrir, que abriria o nada.
-            item['link'] = str(r.get('Confirmation Link', '') or '')
-            itens.append(item)
+            gk = group_key(r)
+            item = grupos.get(gk)
+            if item is None:
+                item = {k: r.get(k, '') for k in MONITOR_FIELDS}
+                item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
+                # Os documentos são resolvidos UMA vez por grupo: eles são do
+                # grupo, não do trade — a pasta é a mesma para todos eles.
+                if docs_for:
+                    item['docs'] = docs_for(r) or []
+                grupos[gk] = item
+            k = str(r.get(KEY_COLUMN, '') or '')
+            if k:
+                item['keys'].append(k)
+                item['trades'].append(k)
+            # A idade do grupo é a da operação que espera há MAIS tempo: é ela
+            # que diz há quanto tempo aquele documento está parado.
+            if _aging_int(r.get('Aging Confirmação')) > _aging_int(item.get('Aging Confirmação')):
+                item['Aging Confirmação'] = r.get('Aging Confirmação', '')
+        itens = list(grupos.values())
+        for it in itens:
+            it['count'] = len(it['keys'])
+            # `key` continua existindo para quem só precisa de uma referência.
+            it['key'] = it['keys'][0] if it['keys'] else ''
         # Mais antigo primeiro: é a fila, e quem espera há mais tempo vem antes.
-        itens.sort(key=lambda i: -(int(i['Aging Confirmação'])
-                                   if str(i['Aging Confirmação']).lstrip('-').isdigit() else 0))
-        cards.append({'stage': stage, 'label': label, 'count': len(itens), 'items': itens})
+        itens.sort(key=lambda i: -_aging_int(i.get('Aging Confirmação')))
+        cards.append({'stage': stage, 'label': label,
+                      'count': len(itens),
+                      'trades': sum(i['count'] for i in itens),
+                      'items': itens})
     warnings = []
     if sem_cadastro:
         warnings.append(

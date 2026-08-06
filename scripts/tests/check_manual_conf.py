@@ -177,7 +177,47 @@ check('   e não no card do OTC (ela já passou / é isenta)',
       any(i['key'] == 'T3' for i in por_label[M.PENDING_OTC]['items']), False)
 check('o item traz o que identifica a confirmação sem abrir',
       sorted(por_label[M.PENDING_OTC]['items'][0].keys()),
-      sorted(list(M.MONITOR_FIELDS) + ['key', 'stage', 'link']))
+      sorted(list(M.MONITOR_FIELDS) + ['key', 'keys', 'trades', 'count', 'stage', 'docs']))
+
+# ── O item do card é a CONFIRMAÇÃO, não o trade ──────────────────────────────
+# O documento é emitido por contraparte × produto × data e cobre todas as
+# operações do grupo. Mostrar um item por trade faria a mesma folha aparecer dez
+# vezes na fila — e validar dez vezes o mesmo papel.
+for i in (1, 2, 3):
+    novo('GRP%d' % i, produto='NDF COMM')
+    r = M.find_row('GRP%d' % i)
+    r['Data Operação'] = '05/08/2026'
+    M.upsert_row(r)
+p = M.monitor_payload()
+grp = next((i for i in p['cards'][0]['items'] if i['Data Operação'] == '05/08/2026'), None)
+check('as três operações do mesmo cliente/dia viram UM item', bool(grp), True)
+check('   com as três chaves juntas', sorted(grp['keys']), ['GRP1', 'GRP2', 'GRP3'])
+check('   e a contagem de operações', grp['count'], 3)
+check('o card conta CONFIRMAÇÕES no total',
+      p['cards'][0]['count'], len(p['cards'][0]['items']))
+check('   e as operações à parte',
+      p['cards'][0]['trades'], sum(i['count'] for i in p['cards'][0]['items']))
+# A LOB entra na chave: mesma contraparte e dia em LOBs diferentes são dois
+# documentos, e juntá-los faria uma validação carimbar a folha da outra mesa.
+check('a chave do grupo é LOB × Cliente × Produto × Data',
+      M.GROUP_FIELDS, ('LOB', 'Cliente', 'Produto', 'Data Operação'))
+check('   e ignora pontuação do nome',
+      M.group_key({'LOB': 'CEM', 'Cliente': 'ACME  S.A.', 'Produto': 'NDF COMM',
+                   'Data Operação': '05/08/2026'}) ==
+      M.group_key({'LOB': 'cem', 'Cliente': 'Acme S/A.', 'Produto': 'ndf comm',
+                   'Data Operação': '05/08/2026'}), True)
+# A pasta do documento sai da própria linha: é o que faz o Abrir funcionar nas
+# confirmações anteriores ao carimbo, que são as que alguém precisa procurar.
+cli, rel = M.confirmation_folder({'Cliente': 'ACME S.A.', 'Produto': 'NDF COMM',
+                                  'Data Operação': '05/08/2026'})
+check('a pasta da confirmação vem da linha', (cli, rel),
+      ('ACME S.A.', 'Confirmations/2026/08. August/05/NDF Commodities'))
+check('   e o nome da pasta é o mesmo que o save grava',
+      sorted(M.PRODUCT_FOLDER.values()),
+      ['Commodities Options', 'FX Options', 'NDF Commodities', 'NDF FWD Start'])
+check('sem produto conhecido nao inventa pasta',
+      M.confirmation_folder({'Cliente': 'X', 'Produto': '?', 'Data Operação': '05/08/2026'}),
+      (None, None))
 # Produto sem cadastro → aviso na tela.
 novo('T8', produto='PRODUTO NOVO')
 p = M.monitor_payload()
@@ -253,10 +293,14 @@ check('linha sem Trade ID é recusada',
 # A linha de filtro tem de entrar nas DUAS theads: com scrollX o DataTables
 # CLONA o cabeçalho, e a linha só na tabela real fica escondida no corpo — foi
 # exatamente assim que ela sumiu da tela sem erro nenhum.
-check('a linha de filtro entra nas duas theads',
-      HTML.count('.append($row.clone())'), 2)
-check('   e a clonada e a que recebe o evento',
-      "closest('.dt-scroll-head, .dataTables_scrollHead')" in HTML, True)
+# A linha de filtro tem de ser montada ANTES do `.DataTable()`: com scrollX o
+# DataTables MOVE o thead para a tabela do cabeçalho rolável e deixa uma cópia
+# oculta no corpo — acrescentá-la depois do init a punha na cópia, onde ela
+# existia no DOM e não aparecia.
+i_filtros = HTML.find("$('<tr class=\"mc-col-filters\">')")
+i_init = HTML.find(".DataTable({")
+check('a linha de filtro é montada antes do init', 0 < i_filtros < i_init, True)
+check('   e a ordenação fica na 1a linha do thead', 'orderCellsTop: true' in HTML, True)
 check('a coluna de Actions existe', 'mc-acts' in HTML and 'data-mc-edit=' in HTML, True)
 check('   com excluir e abrir', ('data-mc-del=' in HTML, 'Confirmation Link' in HTML), (True, True))
 check('ha botao de export', ('mcExportCsv' in HTML, 'mcExportCopy' in HTML), (True, True))
