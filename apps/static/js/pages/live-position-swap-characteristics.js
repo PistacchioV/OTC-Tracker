@@ -140,11 +140,15 @@
     var statusBadge = '<span class="badge bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
     // Os botões carregam o índice da linha NO PAYLOAD (data-i), não a posição na
     // tela: a tabela ordena e pagina, e a posição visual não identifica nada.
+    // `sc-row-act` e NAO `rounded-circle`: o circulo do Bootstrap so fica redondo
+    // quando o botao ja e quadrado, e com o padding do .btn-sm ele sai OVAL. A
+    // classe trava 32x32 e arredonda os cantos — mesmo padrao do .ops-row-act do
+    // Other Products Summary.
     var actionsCell =
       '<div class="d-flex justify-content-center gap-1">' +
-      '<a class="btn btn-info btn-sm rounded-circle sc-act" data-act="edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
-      '<a class="btn btn-success btn-sm rounded-circle sc-act" data-act="confirm" href="#" title="Confirm"><i class="ti ti-check"></i></a>' +
-      '<a class="btn btn-danger btn-sm rounded-circle sc-act" data-act="delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
+      '<a class="btn btn-info btn-sm sc-row-act sc-act" data-act="edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+      '<a class="btn btn-success btn-sm sc-row-act sc-act" data-act="confirm" href="#" title="Confirm"><i class="ti ti-check"></i></a>' +
+      '<a class="btn btn-danger btn-sm sc-row-act sc-act" data-act="delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
       '</div>';
     var data = rows.map(function (r, i) {
       var st = (statuses && statuses[i] && statusCell(statuses[i])) || statusBadge;

@@ -449,6 +449,22 @@ check('com os campos vindos das COLUNAS do servidor',
 # Editar o Numero de Contrato criaria uma linha orfa: e a chave do registro.
 check('a chave fica travada no modal', "var locked = (i === KEY_COL);" in HTML, True)
 
+# ── formato dos botoes ────────────────────────────────────────────────────
+# `rounded-circle` arredonda em 50% da CAIXA; a caixa do .btn-sm e mais larga
+# que alta por causa do padding lateral, entao o resultado e uma ELIPSE. So
+# travar 32x32 faz o raio produzir um quadrado de cantos redondos.
+check('nenhum botao de acao usa rounded-circle',
+      'rounded-circle sc-act' in JS or 'sc-act" ' in JS.replace('sc-row-act sc-act', ''), False)
+check('os tres usam a classe de tamanho travado', JS.count('sc-row-act sc-act'), 3)
+check('e a pagina trava 32x32',
+      'min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;' in HTML, True)
+check('com canto arredondado, nao circulo', 'border-radius: 10px !important;' in HTML, True)
+# O Other Products Summary mostra a MESMA linha de liquidacao: botoes de
+# formatos diferentes nas duas telas leem como telas de sistemas diferentes.
+OPS = read('apps/templates/pages/other-products-summary.html')
+check('mesmo raio do Other Products Summary',
+      'border-radius: 10px !important;' in OPS, True)
+
 print('\n== 14. a edicao vale na TELA e no AVISO IMPRESSO ==')
 # E o ponto do modulo inteiro: se a celula corrigida so valesse na tela, o
 # cliente receberia o valor antigo e ninguem notaria.

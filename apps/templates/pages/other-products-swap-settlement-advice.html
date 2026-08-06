@@ -229,6 +229,39 @@
     background: rgba(255,255,255,.08) !important;
     color: #6ea8fe !important;
 }
+
+/* ── Botões de ação da linha (Edit / Confirm / Delete) ──────────────────────
+   Quadrado arredondado, NÃO círculo. O `rounded-circle` do Bootstrap arredonda
+   os cantos em 50% da CAIXA — e a caixa do .btn-sm é mais larga que alta por
+   causa do padding lateral, então o resultado é uma elipse. Travar 32×32 é o
+   que faz o raio produzir um quadrado de cantos redondos, e é o mesmo padrão
+   do .ops-row-act do Other Products Summary — as duas telas mostram a mesma
+   linha de liquidação e não podem ter botões de formatos diferentes.
+
+   min/max junto de width/height: sem eles, um `min-width` de tema aplicado a
+   .btn volta a esticar um dos botões e a fileira sai desalinhada. */
+#swapchar-page .sc-row-act {
+    width: 32px; height: 32px;
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    padding: 0; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    border-radius: 10px !important;
+}
+#swapchar-page .sc-row-act > i { font-size: 1rem; }
+#swapchar-page .sc-row-act {
+    transition: transform 140ms ease-out, box-shadow 140ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-page .sc-row-act:hover { transform: translateY(-1px); }
+    #swapchar-page .btn-danger.sc-row-act:hover  { box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+    #swapchar-page .btn-success.sc-row-act:hover { box-shadow: 0 2px 8px rgba(25,135,84,.38); }
+    #swapchar-page .btn-info.sc-row-act:hover    { box-shadow: 0 2px 8px rgba(13,202,240,.38); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-page .sc-row-act,
+    #swapchar-page .sc-row-act:hover { transition: none; transform: none; }
+}
 </style>
 {% endblock extra_css %}
 

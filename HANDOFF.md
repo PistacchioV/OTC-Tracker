@@ -9425,3 +9425,11 @@ saiu foi a linha *deste aviso*. O endpoint aceita `undo`.
 Seções 13 e 14 do `check_swap_advice.py`: a coluna opt-in, os seis literais que não podem ter sobrado, as
 sete páginas irmãs seguindo sem Actions, a chave travada no modal, e a edição chegando ao aviso impresso
 com o parser tolerante.
+
+**Adendo ao §208** — os botões de ação saíam **ovais**. `rounded-circle` arredonda em 50% da **caixa**, e
+a caixa do `.btn-sm` é mais larga que alta por causa do padding lateral — o círculo vira elipse. A classe
+`.sc-row-act` trava **32×32** (com `min/max` junto de `width/height`, senão um `min-width` de tema volta a
+esticar um dos três e a fileira sai desalinhada) e aplica `border-radius: 10px` — o **mesmo** raio do
+`.ops-row-act` do Other Products Summary, que mostra a mesma linha de liquidação: formatos diferentes nas
+duas telas leem como sistemas diferentes. Travado no teste, inclusive a paridade do raio entre as duas
+páginas.
