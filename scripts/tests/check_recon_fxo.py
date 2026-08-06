@@ -67,9 +67,13 @@ def write_map(key, rows):
         json.dump(rows, fh, ensure_ascii=False)
 
 
-write_map('fxo-cpty-cnpj', [
-    {'COUNTERPARTY': 'Açúcar   Brasil  S.A.', 'CNPJ': '01.234.567/0001-89'},
-])
+# O Counterparty → CNPJ sai do REFERENCE DATA, não de um cadastro próprio: ele já
+# é a fonte de quem é cada contraparte, e uma segunda lista dos mesmos clientes
+# envelheceria sozinha. Aqui ele é substituído por linhas sintéticas.
+R._refdata_rows = lambda: [
+    {'COUNTERPARTY': 'Açúcar   Brasil  S.A.', 'TAX ID': '01.234.567/0001-89',
+     'FX CASH ACCRONYM': 'ACUBRA', 'SPN': '9001'},
+]
 write_map('fxo-internal-cpty', [
     {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No'},
     {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes'},

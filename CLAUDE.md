@@ -104,7 +104,7 @@ Current mappings (24): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-ac
 `commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
 `api-links`, `opb3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`,
-`fxo-cpty-cnpj`, `fxo-internal-cpty`.
+`fxo-internal-cpty`, `manual-conf-validation`.
 See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197/§216 for the rest. Some carry rules
 that are easy to break from the UI:
 
@@ -143,12 +143,16 @@ that are easy to break from the UI:
   `getTrades` — e a data dele fica no **caminho** (`AAAA-MM-DD`), que é justamente para o que o
   placeholder serve.
 
-- **`fxo-cpty-cnpj` / `fxo-internal-cpty`** — os dois de-para da reconciliação de FXO. O primeiro
-  (Counterparty → CNPJ) nasce **vazio** de propósito: a planilha de origem não está no repositório, e a
-  tela avisa em vez de semear meia dúzia de linhas de memória — sem cadastro a coluna Ctpty cai nos
-  fallbacks e compara nome com nome. No segundo, a coluna **`INVERT DIRECTION`** decide *quando* a regra
-  vale: `No` renomeia sempre; `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os
-  dois NOK — aplicá-la sempre inverteria a direção de operações que estavam certas (HANDOFF §216).
+- **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna **`INVERT DIRECTION`**
+  decide *quando* a regra vale: `No` renomeia sempre; `Yes` é a perna espelhada e só entra quando Ctpty
+  **e** JPM Dir estão os dois NOK — aplicá-la sempre inverteria a direção de operações que estavam
+  certas (HANDOFF §216). O Counterparty → CNPJ **não** tem cadastro: sai do Reference Data (nome, FX Cash
+  accronym e SPN levando ao mesmo Tax ID), porque um de-para paralelo seria uma segunda lista dos mesmos
+  clientes e envelheceria sozinho.
+- **`manual-conf-validation`** — quem valida a confirmação de cada produto (Produto × LOB → OTC / MO /
+  FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é coringa** do produto. MO e FO correm em **paralelo**,
+  não em fila. Produto sem linha cadastrada cai em OTC + MO e a tela **avisa** — em vez de deixar a
+  confirmação parada num Pending que ninguém sabe de quem é (HANDOFF §217).
 
 - **`swap-index`** — the B3 curve code → curve name (`C00` → `VCP`). It points at the **same
   `SwapIndex.json`** the B3 Index Results page edits (see the `file` note above), and every code→text

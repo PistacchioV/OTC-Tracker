@@ -30,11 +30,21 @@
 }
 /* O Total usa o MESMO gradiente do card de Total do NDF Summary e do Pending
    Confirmation — o mesmo papel, lido do mesmo jeito nas três telas. */
-.fxo-w-total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); color:#fff; }
+/* O `!important` no fundo nao e preciosismo: este <style> e carregado ANTES do
+   CSS do tema (ver layouts/base.html), e o `.card{background-color:...}` dele vem
+   depois. Sem a marca o cartao volta a branco — e, com a letra branca por cima,
+   fica literalmente em branco. Foi o que aconteceu no card de Total do Pending
+   Confirmation antes desta correcao. */
+.fxo-w-total {
+    background-color:#0d47a8 !important;
+    background-image: linear-gradient(135deg, #0066cc 0%, #34369b 100%) !important;
+    color:#fff !important;
+    box-shadow: 0 10px 26px rgba(13,71,168,.28);
+}
 .fxo-w-total .widget-lbl { opacity:.8; }
-.fxo-w-ok    { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7 !important; }
-.fxo-w-nok   { background:#fde8e8; color:#b71c1c; border:1px solid #ef9a9a !important; }
-.fxo-w-none  { background:#fff8e1; color:#7b5e00; border:1px solid #ffe082 !important; }
+.fxo-w-ok    { background:#e8f5e9 !important; color:#1b5e20 !important; border:1px solid #a5d6a7 !important; }
+.fxo-w-nok   { background:#fde8e8 !important; color:#b71c1c !important; border:1px solid #ef9a9a !important; }
+.fxo-w-none  { background:#fff8e1 !important; color:#7b5e00 !important; border:1px solid #ffe082 !important; }
 
 /* ── Faixa de diagnóstico ────────────────────────────────────────── */
 .fxo-chip {
@@ -49,22 +59,17 @@
 .fxo-chip-nok.is-active { box-shadow:0 0 0 2px rgba(13,110,253,.5); }
 .fxo-chip-nok:hover { border-color:#0d6efd; }
 
-/* ── Status badges da tabela ─────────────────────────────────────── */
-.s-badge {
-    display:inline-block; font-size:.68rem; font-weight:700;
-    padding:.22rem .7rem; border-radius:20px; white-space:nowrap; letter-spacing:.03em;
-}
-.s-ok    { background:#d1e7dd; color:#0a3622; }
-.s-nok   { background:#f8d7da; color:#842029; }
-.s-none  { background:#fff3cd; color:#856404; }
-
 /* ── Tabela ──────────────────────────────────────────────────────── */
 #fxo-table th { white-space:nowrap; font-size:.68rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
 #fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; }
-/* A célula NOK é pintada; é o que faz a divergência aparecer sem ler coluna por
-   coluna numa tabela de 38 colunas. */
-#fxo-table td.cell-nok { background:#f8d7da !important; color:#842029 !important; font-weight:700; text-align:center; }
-#fxo-table td.cell-ok  { color:#0a3622; text-align:center; }
+#fxo-table td.cell-status { text-align:center; }
+/* Números alinhados à direita e com dígitos de largura fixa: é assim que uma
+   coluna de valor se compara de relance, linha contra linha. */
+#fxo-table td.cell-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* A busca própria do DataTables sai: a linha de filtro por coluna faz o mesmo
+   trabalho com precisão, e as duas juntas se combinam em silêncio — um termo
+   esquecido lá em cima escondia linhas que o filtro da coluna dizia mostrar. */
+#fxo-table_filter { display:none !important; }
 
 /* ── Filtros por coluna (segunda linha do thead) ─────────────────── */
 #fxo-table thead .fxo-col-filters th { padding:3px 4px; }
@@ -176,11 +181,12 @@
             </div>
             <div class="d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
-                <select id="fxoPageLength" class="form-select form-select-sm" style="width:80px;">
-                    <option value="10">10</option>
-                    <option value="25" selected>25</option>
-                    <option value="50">50</option>
+                <select id="fxoPageLength" class="form-select form-select-sm" style="width:84px;">
+                    <option value="50" selected>50</option>
                     <option value="100">100</option>
+                    <option value="150">150</option>
+                    <option value="200">200</option>
+                    <option value="-1" data-lang="map-all">All</option>
                 </select>
                 <label class="form-label mb-0" style="font-size:.75rem;" data-lang="b3-entries">entries</label>
             </div>
@@ -278,9 +284,26 @@
 
     function isStatusCol(name) { return /^Status /.test(name) || name === 'Status'; }
 
+    // Colunas de valor. AMT e PREMIUM são dinheiro (duas casas, milhar separado);
+    // STRIKE é taxa, e as oito casas são significativas — arredondá-la para duas
+    // faria dois strikes diferentes aparecerem iguais na tela.
+    function isMoneyCol(n) { return /\b(Amt|Premium)\b/i.test(n); }
+    function isRateCol(n) { return /\bStrike\b/i.test(n); }
+
+    function fmtNum(v, dec, group) {
+        if (v === null || v === undefined || String(v).trim() === '') return '';
+        var n = Number(String(v).replace(/\s/g, ''));
+        if (!isFinite(n)) return v;          // texto que não é número passa intacto
+        return n.toLocaleString('pt-BR', {
+            minimumFractionDigits: dec, maximumFractionDigits: dec, useGrouping: !!group
+        });
+    }
+
     function badge(s) {
-        var m = { 'OK': 's-ok', 'NOK': 's-nok', 'Sem match': 's-none' };
-        return '<span class="s-badge ' + (m[s] || 's-none') + '">' + (s || '—') + '</span>';
+        var m = { 'OK': 'text-bg-success', 'NOK': 'text-bg-danger', 'Sem match': 'text-bg-warning' };
+        if (!s) return '';
+        return '<span class="badge rounded-pill bg-gradient ' +
+               (m[s] || 'text-bg-secondary') + '">' + s + '</span>';
     }
 
     function buildTable(columns) {
@@ -298,16 +321,28 @@
                 data: (function (k) { return function (row) { return row[k] == null ? '' : row[k]; }; })(name),
                 title: name
             };
-            if (i === 0) {
-                // Ortogonal: o badge só no display. Devolver HTML em todos os
-                // tipos faz o DataTables ordenar e buscar pela string do markup.
+            // Ortogonal: o badge (e o número formatado) só no display. Devolver
+            // HTML em todos os tipos faz o DataTables ordenar e filtrar pela
+            // string do markup — a coluna passaria a ordenar por classe CSS, e o
+            // filtro por coluna deixaria de achar o valor digitado.
+            if (isStatusCol(name)) {
                 col.render = function (d, type) { return type === 'display' ? badge(d) : (d || ''); };
-                col.className = 'text-center';
-            } else if (isStatusCol(name)) {
-                col.className = 'text-center';
-                col.createdCell = function (td, data) {
-                    td.classList.add(data === 'NOK' ? 'cell-nok' : (data === 'OK' ? 'cell-ok' : ''));
-                };
+                col.className = 'cell-status';
+            } else if (isMoneyCol(name) || isRateCol(name)) {
+                var dec = isRateCol(name) ? 8 : 2, grp = !isRateCol(name);
+                col.render = (function (dec, grp) {
+                    return function (d, type) {
+                        // Ordenar pelo valor CRU (senão '1.000,00' fica antes de
+                        // '9,00'), mas filtrar pelo TEXTO QUE ESTÁ NA TELA — quem
+                        // digita no filtro copia o que está vendo.
+                        if (type === 'sort' || type === 'type') {
+                            var n = Number(String(d == null ? '' : d).replace(/\s/g, ''));
+                            return isFinite(n) ? n : 0;
+                        }
+                        return fmtNum(d, dec, grp);
+                    };
+                })(dec, grp);
+                col.className = 'cell-num';
             }
             return col;
         });
@@ -316,7 +351,10 @@
             data: [],
             columns: defs,
             scrollX: true,
-            pageLength: parseInt($('#fxoPageLength').val(), 10) || 25,
+            // Só o comprimento da página e a tabela: a busca global do
+            // DataTables sai daqui (a linha de filtro por coluna a substitui).
+            dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
+            pageLength: parseInt($('#fxoPageLength').val(), 10) || 50,
             order: [[0, 'asc']],
             language: { emptyTable: 'Rode a reconciliação para a data escolhida.' },
             initComplete: function () { buildColumnFilters(); }

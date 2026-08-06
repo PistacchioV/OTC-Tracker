@@ -1,0 +1,276 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}Confirmations Monitor{% endblock title %}
+
+{% block extra_css %}
+<style>
+/* ── Cards de etapa ──────────────────────────────────────────────────
+   Um card por mesa da esteira. Cada um é uma FILA: o número no topo é o
+   tamanho dela, e a lista abaixo é a fila em si, do mais antigo para o mais
+   novo. Tudo aqui leva !important no fundo porque este <style> é carregado
+   ANTES do CSS do tema (layouts/base.html) — sem a marca o `.card` do tema
+   repinta o cartão de branco. */
+.mc-card { border-radius: 18px; border: none !important; overflow: hidden; height: 100%; }
+.mc-card .card-body { padding: 0; }
+.mc-card__head {
+    display: flex; align-items: center; gap: .75rem;
+    padding: 1rem 1.15rem .9rem;
+}
+.mc-card__ico {
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.15rem; color: #fff;
+}
+.mc-card__lbl { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0; }
+.mc-card__val { font-size: 1.75rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; margin: 0; }
+.mc-card__count { margin-left: auto; text-align: right; }
+
+.mc-c-otc { background-color:#eef4ff !important; color:#0d3a8a; }
+.mc-c-otc  .mc-card__ico { background: linear-gradient(135deg,#2f7bff 0%,#0d47a8 100%); }
+.mc-c-mo  { background-color:#fff5e6 !important; color:#7a4a00; }
+.mc-c-mo   .mc-card__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
+.mc-c-fo  { background-color:#f2ecff !important; color:#4a2a8a; }
+.mc-c-fo   .mc-card__ico { background: linear-gradient(135deg,#7c5cff 0%,#a855f7 100%); }
+
+/* ── A fila ──────────────────────────────────────────────────────────
+   Rolagem interna com altura máxima: um card com 60 confirmações não pode
+   empurrar os outros dois para fora da tela — os três se leem lado a lado. */
+.mc-list { background: var(--ins-secondary-bg); max-height: 26rem; overflow-y: auto; padding: .35rem; }
+.mc-item {
+    background: var(--ins-body-bg); border: 1px solid var(--ins-border-color);
+    border-radius: 12px; padding: .6rem .7rem; margin-bottom: .35rem;
+    transition: border-color 160ms cubic-bezier(0.23,1,0.32,1),
+                box-shadow 160ms cubic-bezier(0.23,1,0.32,1);
+}
+.mc-item:last-child { margin-bottom: 0; }
+@media (hover: hover) and (pointer: fine) {
+    .mc-item:hover { border-color: rgba(0,102,204,.35); box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+}
+.mc-item__top { display: flex; align-items: baseline; gap: .4rem; }
+.mc-item__cli { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-item__age { margin-left: auto; font-size: .68rem; font-weight: 700; flex-shrink: 0; }
+.mc-item__meta { font-size: .68rem; color: var(--ins-secondary-color); margin-top: .1rem; }
+.mc-item__acts { display: flex; gap: .3rem; margin-top: .5rem; flex-wrap: wrap; }
+.mc-item__acts .btn { font-size: .68rem; padding: .18rem .55rem; line-height: 1.5; }
+/* O botão responde ao toque: sem isso a lista parece congelada num clique. */
+.mc-item__acts .btn:active { transform: scale(.97); }
+
+/* A idade da pendência vira cor a partir do momento em que ela é um problema.
+   Verde não entra: uma confirmação nova não é uma conquista, é o normal. */
+.mc-age-0 { color: var(--ins-secondary-color); }
+.mc-age-1 { color: #c07a00; }
+.mc-age-2 { color: #c0392b; }
+
+.mc-empty { padding: 1.4rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
+
+@media (prefers-reduced-motion: no-preference) {
+    .mc-item { animation: mcIn 240ms cubic-bezier(0.23,1,0.32,1) both; }
+    @keyframes mcIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid">
+
+    <div class="page-title-head d-flex align-items-center mb-4">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="clipboard-check" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="mc-monitor-title">Confirmations Monitor</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="manual-confirmation">Manual Confirmation</a></li>
+                <li class="breadcrumb-item active"><a href="javascript:void(0);" data-lang="mc-nav-monitor">Confirmations Monitor</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="alert alert-warning d-none" id="mc-warnings"></div>
+
+    <div class="row g-3" id="mc-cards"></div>
+</div>
+
+<!-- ── Reject: o comentário é o conteúdo do aviso ─────────────────── -->
+<div class="modal fade" id="mcRejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
+                    <i data-lucide="corner-up-left" style="width:18px;height:18px;" class="text-danger"></i>
+                    <span data-lang="mc-reject-title">Rejeitar confirmação</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="text-muted small mb-2" id="mcRejectWho"></p>
+                <p class="text-muted small mb-2" data-lang="mc-reject-desc">
+                    A confirmação volta para <b>Pending OTC</b> e as validações já dadas são
+                    limpas — o documento vai ser refeito. O comentário abaixo vai no aviso
+                    para brazil.otc.ops@jpmorgan.com.
+                </p>
+                <textarea class="form-control" id="mcRejectComment" rows="4"
+                          placeholder="O que precisa ser corrigido?"></textarea>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
+                <button class="btn btn-sm btn-danger" id="mcRejectConfirm" data-lang="mc-reject-send">Rejeitar e avisar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(function () {
+    'use strict';
+
+    var STAGE_STYLE = {
+        OTC: { cls: 'mc-c-otc', icon: 'ti-user-check' },
+        MO:  { cls: 'mc-c-mo',  icon: 'ti-checkup-list' },
+        FO:  { cls: 'mc-c-fo',  icon: 'ti-briefcase' }
+    };
+    var pending = { key: '', stage: '' };
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function ageClass(n) {
+        var d = parseInt(n, 10);
+        if (isNaN(d)) return 'mc-age-0';
+        return d >= 10 ? 'mc-age-2' : (d >= 5 ? 'mc-age-1' : 'mc-age-0');
+    }
+
+    function item(it, stage) {
+        var meta = [it['Data Operação'], it.Produto, it.LOB, it['Trade ID']]
+                   .filter(Boolean).map(esc).join(' · ');
+        var age = it['Aging Confirmação'];
+        // O botão de abrir só existe quando a linha sabe ONDE está o documento.
+        // Um botão que abre nada é pior do que botão nenhum: parece defeito.
+        var open = it.link
+            ? '<a class="btn btn-sm btn-outline-primary" href="' + esc(it.link) + '" target="_blank" rel="noopener">' +
+              '<i class="ti ti-external-link me-1"></i><span data-lang="mc-open">Abrir</span></a>'
+            : '<span class="text-muted" style="font-size:.66rem;align-self:center" data-lang="mc-nolink">documento ainda não gerado</span>';
+        var reject = (stage === 'OTC') ? '' :
+            '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + esc(it.key) + '" data-stage="' + stage + '">' +
+            '<i class="ti ti-corner-up-left me-1"></i><span data-lang="mc-reject">Rejeitar</span></button>';
+        return '<div class="mc-item">' +
+            '<div class="mc-item__top">' +
+                '<span class="mc-item__cli">' + esc(it.Cliente || '—') + '</span>' +
+                '<span class="mc-item__age ' + ageClass(age) + '">' +
+                    (age === '' || age == null ? '' : esc(age) + 'd') + '</span>' +
+            '</div>' +
+            '<div class="mc-item__meta">' + meta + '</div>' +
+            '<div class="mc-item__acts">' + open +
+                '<button class="btn btn-sm btn-success" data-mc-validate="' + esc(it.key) + '" data-stage="' + stage + '">' +
+                '<i class="ti ti-check me-1"></i><span data-lang="mc-validate">Validar</span></button>' +
+                reject +
+            '</div></div>';
+    }
+
+    function card(c) {
+        var st = STAGE_STYLE[c.stage] || STAGE_STYLE.OTC;
+        var body = c.items.length
+            ? c.items.map(function (it) { return item(it, c.stage); }).join('')
+            : '<div class="mc-empty" data-lang="mc-empty">Nada pendente nesta etapa.</div>';
+        return '<div class="col-12 col-lg-4">' +
+            '<div class="card mc-card ' + st.cls + '">' +
+              '<div class="card-body">' +
+                '<div class="mc-card__head">' +
+                  '<span class="mc-card__ico"><i class="ti ' + st.icon + '"></i></span>' +
+                  '<div><p class="mc-card__lbl">' + esc(c.label) + '</p></div>' +
+                  '<div class="mc-card__count"><p class="mc-card__val">' + c.count + '</p></div>' +
+                '</div>' +
+                '<div class="mc-list">' + body + '</div>' +
+              '</div>' +
+            '</div></div>';
+    }
+
+    function load() {
+        fetch('/api/manual-confirmation/monitor')
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j.error) return;
+                $('#mc-cards').html((j.cards || []).map(card).join(''));
+                var w = $('#mc-warnings');
+                if ((j.warnings || []).length) {
+                    w.removeClass('d-none').html(j.warnings.map(function (x) {
+                        return '<div>' + esc(x) + '</div>';
+                    }).join(''));
+                } else { w.addClass('d-none').empty(); }
+            })
+            .catch(function () {});
+    }
+
+    function post(url, body) {
+        return fetch(url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        }).then(function (r) { return r.json(); });
+    }
+
+    $(document).ready(function () {
+        load();
+
+        $(document).on('click', '[data-mc-validate]', function () {
+            var btn = $(this);
+            post('/api/manual-confirmation/validate', {
+                key: btn.attr('data-mc-validate'), stage: btn.attr('data-stage')
+            }).then(function (j) {
+                if (!j.success) {
+                    Swal.fire({ icon: 'error', title: 'Não foi possível validar', text: j.message || '' });
+                    return;
+                }
+                load();
+            });
+        });
+
+        $(document).on('click', '[data-mc-reject]', function () {
+            pending.key = $(this).attr('data-mc-reject');
+            pending.stage = $(this).attr('data-stage');
+            $('#mcRejectComment').val('');
+            $('#mcRejectWho').text('Etapa: ' + pending.stage + ' · Trade ID: ' + pending.key);
+            new bootstrap.Modal(document.getElementById('mcRejectModal')).show();
+        });
+
+        $('#mcRejectConfirm').on('click', function () {
+            var comment = $('#mcRejectComment').val().trim();
+            if (!comment) {
+                Swal.fire({ icon: 'warning', title: 'Falta o comentário',
+                            text: 'É ele que diz ao OTC o que refazer.' });
+                return;
+            }
+            post('/api/manual-confirmation/reject', {
+                key: pending.key, stage: pending.stage, comment: comment
+            }).then(function (j) {
+                bootstrap.Modal.getInstance(document.getElementById('mcRejectModal')).hide();
+                if (!j.success) {
+                    Swal.fire({ icon: 'error', title: 'Não foi possível rejeitar', text: j.message || '' });
+                    return;
+                }
+                load();
+                // O reject foi gravado mesmo se o e-mail não saiu — dizer isso é o
+                // que evita alguém rejeitar de novo achando que não funcionou.
+                Swal.fire({
+                    icon: j.emailed ? 'success' : 'warning',
+                    title: 'Confirmação devolvida ao OTC',
+                    text: j.emailed ? 'O aviso foi enviado para brazil.otc.ops@jpmorgan.com.'
+                                    : 'O aviso por e-mail não saiu (relay indisponível), mas a confirmação já voltou para Pending OTC.',
+                    timer: j.emailed ? 2600 : undefined,
+                    showConfirmButton: !j.emailed
+                });
+            });
+        });
+
+        if (window.lucide) lucide.createIcons();
+    });
+})();
+</script>
+{% endblock %}

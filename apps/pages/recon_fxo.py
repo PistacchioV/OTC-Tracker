@@ -231,17 +231,56 @@ def _mapping_rows(key):
 
 
 def lookup_cnpj():
-    """Counterparty (como a Athena escreve) → CNPJ, do cadastro `fxo-cpty-cnpj`.
+    """Counterparty (como a Athena escreve) → CNPJ, do **Reference Data**.
 
-    A chave é normalizada (sem acento, espaços colapsados, maiúscula) porque os
-    dois lados escrevem a razão social com pontuação diferente.
+    Não existe cadastro próprio para isto: o Reference Data já é a fonte de quem
+    é cada contraparte, com nome, SPN e Tax ID na mesma linha. Um de-para
+    paralelo seria uma segunda lista dos mesmos clientes, e envelheceria sozinho
+    — todo cliente novo entraria no Reference Data e a recon continuaria sem
+    casar, sem ninguém saber por quê.
+
+    O índice aceita três chaves para a mesma linha, porque a Athena escreve a
+    contraparte de três jeitos conforme o campo: a razão social, o accronym de FX
+    Cash e o SPN. As três levam ao mesmo Tax ID.
     """
     mapa = {}
-    for r in _mapping_rows('fxo-cpty-cnpj'):
-        chave = _chave_lookup(r.get('COUNTERPARTY'))
-        if chave:
-            mapa[chave] = so_digitos(r.get('CNPJ'))
+    for r in _refdata_rows():
+        cnpj = so_digitos(r.get('TAX ID'))
+        if not cnpj:
+            continue
+        for campo in ('COUNTERPARTY', 'FX CASH ACCRONYM', 'SPN'):
+            chave = _chave_lookup(r.get(campo))
+            if chave:
+                mapa.setdefault(chave, cnpj)
     return mapa
+
+
+_REFDATA_CACHE = {'mtime': None, 'rows': []}
+
+
+def _refdata_rows():
+    """As linhas do RefData.json, relidas quando o arquivo muda.
+
+    Cache por mtime, não por processo: o Reference Data é editado dentro da
+    própria aplicação, e um cache eterno faria a recon do dia seguinte continuar
+    sem o cliente que alguém acabou de cadastrar.
+    """
+    path = os.path.join(_DATA_DIR, 'RefData.json')
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return []
+    if _REFDATA_CACHE['mtime'] == mtime:
+        return _REFDATA_CACHE['rows']
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        rows = [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+    except Exception:
+        _LOG.warning('[recon_fxo] não consegui ler o Reference Data')
+        rows = []
+    _REFDATA_CACHE.update({'mtime': mtime, 'rows': rows})
+    return rows
 
 
 def internal_cpty_rules():
@@ -583,8 +622,8 @@ def reconcile(df_dp, df_at):
 
     mapa_cnpj = lookup_cnpj()
     if not mapa_cnpj:
-        avisos.append('O cadastro Counterparty × CNPJ (FXO) está vazio — a coluna '
-                      'Ctpty vai comparar pelo nome simplificado dos dois lados.')
+        avisos.append('O Reference Data não devolveu nenhum Tax ID — a coluna Ctpty '
+                      'vai comparar pelo nome simplificado dos dois lados.')
     diretas, espelhadas = internal_cpty_rules()
 
     cols_bloco = list(df_dp.columns[IDX_BLOCO_FIXING_INI:IDX_BLOCO_FIXING_FIM + 1])

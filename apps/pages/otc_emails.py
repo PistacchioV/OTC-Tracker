@@ -28,9 +28,12 @@ import io
 import json
 import base64
 import hashlib
+import logging
 import zipfile
 import unicodedata
 from datetime import datetime
+
+_LOG = logging.getLogger(__name__)
 from email.header import Header
 
 _DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
@@ -1766,3 +1769,78 @@ def _fcst_norm_local(s):
     importar de routes (evita import circular)."""
     s = str(s or '').strip().lower()
     return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Manual Confirmations — reject de MO/FO
+# ──────────────────────────────────────────────────────────────────────────
+MC_REJECT_TO = 'brazil.otc.ops@jpmorgan.com'
+
+
+def build_mc_reject_email(row, stage, sid, comment):
+    """O aviso de que uma confirmação foi rejeitada e voltou para o OTC.
+
+    O comentário é o conteúdo do e-mail — é ele que diz o que refazer —, por
+    isso vai num bloco próprio e não numa linha da tabela de identificação, onde
+    um texto de três frases quebraria o alinhamento e seria lido por último.
+    """
+    ident = [
+        ('Trade ID', str(row.get('Trade ID', '') or '')),
+        ('Cliente', str(row.get('Cliente', '') or '')),
+        ('Produto', str(row.get('Produto', '') or '')),
+        ('LOB', str(row.get('LOB', '') or '')),
+        ('Data da operação', str(row.get('Data Operação', '') or '')),
+        ('Cetip ID', str(row.get('Cetip ID', '') or '')),
+    ]
+    ident = [(k, v) for k, v in ident if v]
+
+    intro = _ep('A confirmação abaixo foi <b>rejeitada pelo ' + _esc(stage) +
+                '</b> e voltou para o status <b>Pending OTC</b>. As validações já '
+                'registradas foram limpas, porque o documento será refeito.')
+    body = (_email_kv('Confirmação', ident) +
+            '<div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>' +
+            _email_notice('<b>Motivo apontado por ' + _esc(sid or '—') + ':</b><br>' +
+                          _esc(comment).replace('\n', '<br>')))
+
+    subject = 'Confirmação rejeitada pelo {} — {}{}'.format(
+        stage, str(row.get('Cliente', '') or 'Confirmação'),
+        ' · ' + str(row.get('Trade ID', '')) if row.get('Trade ID') else '')
+    html = _email_shell('Confirmação rejeitada', _today_br(), intro, body,
+                        footer_extra='JPMC Internal Use Only')
+    return {'subject': subject, 'html': html, 'to': MC_REJECT_TO}
+
+
+def send_mc_reject_email(row, stage, sid, comment):
+    """Envia o aviso pelo relay interno. Retorna True/False — o reject em si já
+    foi gravado, então uma falha de SMTP não pode derrubar a chamada: a
+    confirmação PRECISA voltar para o OTC mesmo que o e-mail não saia."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.image import MIMEImage
+
+    draft = build_mc_reject_email(row, stage, sid, comment)
+    msg = MIMEMultipart('related')
+    msg['Subject'] = draft['subject']
+    msg['From'] = 'otc.tracker@jpmorgan.com'
+    msg['To'] = draft['to']
+
+    alt = MIMEMultipart('alternative')
+    alt.attach(MIMEText('Confirmação rejeitada pelo {}. Veja em um cliente HTML.'.format(stage), 'plain'))
+    alt.attach(MIMEText(draft['html'], 'html'))
+    msg.attach(alt)
+
+    logo = _logo_bytes()
+    if logo:
+        img = MIMEImage(logo)
+        img.add_header('Content-ID', '<' + _E_LOGO_CID + '>')
+        img.add_header('Content-Disposition', 'inline', filename=os.path.basename(_E_LOGO_FILE))
+        msg.attach(img)
+
+    try:
+        with smtplib.SMTP('mailhost.jpmchase.net', 25, timeout=20) as server:
+            server.sendmail('otc.tracker@jpmorgan.com', [draft['to']], msg.as_string())
+        return True
+    except Exception:
+        _LOG.warning('[manual-conf] não consegui enviar o aviso de reject')
+        return False

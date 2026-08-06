@@ -16389,12 +16389,72 @@ def _pc_refdata_enrich(row):
         row['Signature Type'] = str(rec.get('SIGNATURE TYPE', '') or '').strip()
 
 
-def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=None):
+# Produtos cuja operação mapeada gera CONFIRMAÇÃO, e por isso entra também na
+# esteira de Manual Confirmations. NDF Vanilla e Other Publisher ficam de fora:
+# eles alimentam o Pending Confirmation, mas não geram documento de confirmação.
+# A chave é o `source` (ver `_pc_save_from_deal`), não o Product Type — as três
+# páginas genéricas de NDF gravam com o mesmo 'NDF', e olhar o Product Type
+# traria Vanilla e Other Publisher junto com o FWD Start.
+_MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'}
+
+
+def _mc_save_from_deal(deal, source, trade_number=None):
+    """Espelha para Manual Confirmations a operação que acabou de ser mapeada.
+
+    Chamado de dentro do `_pc_save_from_deal` de propósito: quem decide se um
+    deal vira confirmação de cliente (perna interna? intragrupo?) é aquela
+    função, e repetir o teste aqui criaria uma segunda resposta para a mesma
+    pergunta — que é como as duas telas passariam a discordar de quem tem
+    confirmação pendente.
+
+    Nunca sobrescreve uma linha que já existe: se a esteira já andou, um novo
+    mapeamento do mesmo deal (um amend, uma remapeação) não pode apagar o
+    'Conferido OTC' que alguém carimbou.
+    """
+    if source not in _MC_CONFIRMATION_SOURCES:
+        return
+    try:
+        from apps.pages import manual_conf as _mc
+        key = str(trade_number or deal.get('Deal', '') or '').strip()
+        if not key or _mc.find_row(key) is not None:
+            return
+        td = _parse_date_any(deal.get('TradeDate', ''))
+        md = _parse_date_any(deal.get('SettlementDate', ''))
+
+        def first(*names):
+            for n in names:
+                v = str(deal.get(n, '') or '').strip()
+                if v:
+                    return v
+            return ''
+
+        _mc.upsert_row(_mc.blank_row(**{
+            'Legal Entity': first('LE', 'TradingBook'),
+            'Cliente': str(deal.get('Client', '') or ''),
+            'Produto': source,
+            'LOB': 'CEM',
+            'Trade ID': key,
+            'Cetip ID': first('B3_ID'),
+            # Notional e moeda têm nome diferente em cada produto; a cadeia
+            # evita um ramo por página, que envelheceria a cada coluna nova.
+            'Moeda': first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency'),
+            'Notional': first('Notional', 'TotalNotional'),
+            'Data Operação': td.strftime('%d/%m/%Y') if td else first('TradeDate'),
+            'Data de vencimento': md.strftime('%d/%m/%Y') if md else first('SettlementDate'),
+        }))
+    except Exception:
+        log.warning('[manual-conf] save-from-deal falhou:\n%s', traceback.format_exc())
+
+
+def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=None,
+                       source=None):
     """Build and insert a pending row from a Success+mapped New Deals deal.
     product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO),
     'NDF FWD START' / 'NDF OTHER PUB' / 'NDF VANILLA' (generic NDF pages).
     pending_status overrides the default 'Pending OTC' (signature-type rules);
-    trade_number overrides the Deal id (FWD Start rows are keyed by B3 ID)."""
+    trade_number overrides the Deal id (FWD Start rows are keyed by B3 ID).
+    `source` distingue as três páginas genéricas de NDF, que gravam o MESMO
+    Product Type — sem ele o FWD Start não se separa de Vanilla/Other Publisher."""
     try:
         client = str(deal.get('Client', '') or '')
         if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
@@ -16416,6 +16476,9 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
         _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
         _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
+        # A MESMA operação entra na esteira de validação da confirmação — só os
+        # produtos que geram documento (ver _MC_CONFIRMATION_SOURCES).
+        _mc_save_from_deal(deal, source or product_type, trade_number=row['Trade Number'])
     except Exception:
         log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
 
@@ -17735,6 +17798,11 @@ _MAP_OPB3_STATUSES = [
 ]
 _MAP_OPB3_USE = ['Consider', 'Disregard']
 
+# Quem valida a confirmação: REQUESTED = precisa passar por essa mesa; EXEMPT =
+# não precisa. Fechado de propósito — um terceiro valor cairia no ramo do EXEMPT
+# e tiraria a mesa da esteira sem ninguém perceber.
+_MAP_MC_VALIDATION = ['REQUESTED', 'EXEMPT']
+
 _ATHENA_GETTRADES = ('https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
                      '/api/v1/getTrades?product={}&date=YYYYMMDD')
 
@@ -18252,25 +18320,41 @@ _MAPPING_DEFS = {
         'upgrade': _api_links_upgrade,
         'seed': list(_API_LINKS_SEED),
     },
-    # Reconciliação de FXO, de-para 1: a contraparte como a ATHENA escreve → o
-    # CNPJ que a CETIP registra. Vinha de uma planilha no OneDrive de uma pessoa
-    # ('Mapping COUNTERPARTY to CNPJ.xlsx'), que o servidor não alcança.
+    # Quem valida a confirmação de cada produto, por Produto × LOB. Era regra de
+    # boca: termo e opção de commodities, FXO e NDF FWD Start passam por OTC e
+    # MO; swap e opção de EDG passam por OTC, MO e FO.
     #
-    # Nasce VAZIO de propósito: o conteúdo da planilha não está no repositório, e
-    # semear meia dúzia de linhas de memória faria a recon casar algumas
-    # contrapartes e errar as outras em silêncio. Sem cadastro, a coluna Ctpty
-    # compara nome com nome pelos dois fallbacks — pior que o CNPJ, mas honesto —
-    # e a tela avisa que o cadastro está vazio.
-    'fxo-cpty-cnpj': {
-        'label': 'FXO Recon — Counterparty × CNPJ',
+    # LOB em branco é CORINGA do produto — a maioria valida igual em toda LOB, e
+    # exigir uma linha por LOB faria a tela pedir cadastro a cada LOB nova.
+    #
+    # MO e FO correm em PARALELO, não em fila: as duas validam depois do OTC, e a
+    # confirmação só fecha quando as duas pedidas responderem.
+    'manual-conf-validation': {
+        'label': 'Manual Confirmations — Validation Trail',
         'columns': [
-            {'key': 'COUNTERPARTY', 'label': 'Counterparty (como a Athena escreve)'},
-            {'key': 'CNPJ', 'label': 'CNPJ'},
+            {'key': 'PRODUCT', 'label': 'Produto'},
+            {'key': 'LOB', 'label': 'LOB (blank = any)'},
+            {'key': 'OTC', 'label': 'OTC', 'type': 'select', 'options': _MAP_MC_VALIDATION},
+            {'key': 'MO', 'label': 'MO', 'type': 'select', 'options': _MAP_MC_VALIDATION},
+            {'key': 'FO', 'label': 'FO', 'type': 'select', 'options': _MAP_MC_VALIDATION},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
-        'seed': [],
+        'seed': [
+            {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
+            {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
+            {'PRODUCT': 'OPTION', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio (FXO)'},
+            {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': ''},
+            {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'REQUESTED', 'NOTES': ''},
+            {'PRODUCT': 'OPTION EDG', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'REQUESTED', 'NOTES': 'Opção de EDG'},
+        ],
     },
-    # Reconciliação de FXO, de-para 2: a perna INTERNA. Ela chega à Athena com o
+    # Reconciliação de FXO: a perna INTERNA. Ela chega à Athena com o
     # nome da mesa (o book), enquanto a CETIP registra o código do fundo — sem
     # tradução, toda operação intragrupo sai NOK.
     #
@@ -23681,6 +23765,10 @@ _GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF',
                        'other-publishers': 'NDF',
                        'vanilla': 'NDF'}
 
+# Qual das três páginas genéricas de NDF gera confirmação. Só o FWD Start —
+# Vanilla e Other Publisher alimentam o Pending Confirmation e param por aí.
+_GENERIC_ND_MC_SOURCE = {'fwd-start': 'NDF FWD START'}
+
 
 def _generic_nd_pending_status(product, deal):
     """Pending Status for a mapped (Status→Success) generic-NDF deal.
@@ -23711,9 +23799,12 @@ def _generic_nd_pc_trigger(product, deal):
     tn = None
     if product == 'fwd-start':
         tn = str(deal.get('B3_ID', '') or '').strip() or None
+    # `source` separa as três páginas, que gravam o mesmo Product Type 'NDF':
+    # só o FWD Start gera confirmação e entra em Manual Confirmations.
     _pc_save_from_deal(deal, _GENERIC_ND_PC_TYPE.get(product, 'NDF'),
                        pending_status=_generic_nd_pending_status(product, deal),
-                       trade_number=tn)
+                       trade_number=tn,
+                       source=_GENERIC_ND_MC_SOURCE.get(product))
 
 
 # ==============================================================================
@@ -24411,6 +24502,49 @@ def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, 
              dt_venc=venc.strftime('%Y%m%d') if venc else '')
 
 
+def _mc_conf_trade_keys(picked, product):
+    """As chaves de Manual Confirmations das operações que a confirmação cobre.
+
+    O FWD Start é chaveado pelo **B3 ID** — é assim que a linha nasce, tanto no
+    Pending Confirmation quanto aqui. Usar o Deal para todos deixaria justamente
+    as linhas de FWD Start sem carimbo, e sem erro nenhum: elas simplesmente não
+    seriam encontradas.
+    """
+    field = 'B3_ID' if product == 'ndf-fwdstart' else 'Deal'
+    out = []
+    for item in (picked or []):
+        d = item[0] if isinstance(item, (list, tuple)) else item
+        k = str((d or {}).get(field, '') or '').strip()
+        if k:
+            out.append(k)
+    return out
+
+
+def _mc_stamp_generated(picked, product, link=''):
+    """Confirmação salva → Data envio validação OTC nas linhas que ela cobre."""
+    try:
+        from apps.pages import manual_conf as _mc
+        for k in _mc_conf_trade_keys(picked, product):
+            _mc.mark_generated(k, link=link)
+    except Exception:
+        log.warning('[manual-conf] carimbo de geração falhou:\n%s', traceback.format_exc())
+
+
+def _mc_stamp_otc_validated(picked, product, sid):
+    """Confirmação validada no checklist → Conferido OTC + Time Stamp (hora e SPN).
+
+    O SPN vem da sessão de quem clicou; a validação do OTC acontece na MESMA tela
+    de checklist que já existia, e não numa segunda tela paralela — duas telas de
+    validação do mesmo documento acabariam divergindo sobre o que foi conferido.
+    """
+    try:
+        from apps.pages import manual_conf as _mc
+        for k in _mc_conf_trade_keys(picked, product):
+            _mc.mark_validated(k, _mc.STAGE_OTC, sid)
+    except Exception:
+        log.warning('[manual-conf] carimbo de validação falhou:\n%s', traceback.format_exc())
+
+
 def _conf_pc_set_fepweb(trade_numbers, numero):
     """Grava o numeroContrato na coluna FepWeb ID das linhas do Pending
     Confirmation cujo Trade Number é uma das operações da confirmação
@@ -24579,6 +24713,10 @@ def api_conf_ndfcomm_save():
     validate_url = ('/confirmation/ndf-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
+    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
+    # que é para onde o Monitor manda quem for conferir.
+    _mc_stamp_generated(picked, 'ndf-comm', link=validate_url)
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -24669,7 +24807,12 @@ def api_conf_ndfcomm_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state)
-    acr, merc = (key.split('|') + ['', ''])[:2]
+    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
+    # A validação do checklist É a validação do OTC: carimba Conferido OTC
+    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
+    # cobre. As operações saem do MESMO recorte que gerou o documento.
+    _mc_stamp_otc_validated(_conf_pick_ndfcomm(ref, acr, merc, fam or 'strike-usd'),
+                            'ndf-comm', session.get('user_sid', ''))
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'NDF Comm', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -24990,6 +25133,10 @@ def api_conf_optcomm_save():
     validate_url = ('/confirmation/opt-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
+    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
+    # que é para onde o Monitor manda quem for conferir.
+    _mc_stamp_generated(picked, 'opt-comm', link=validate_url)
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25061,7 +25208,12 @@ def api_conf_optcomm_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'opt-comm')
-    acr, merc = (key.split('|') + ['', ''])[:2]
+    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
+    # A validação do checklist É a validação do OTC: carimba Conferido OTC
+    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
+    # cobre. As operações saem do MESMO recorte que gerou o documento.
+    _mc_stamp_otc_validated(_conf_pick_optcomm(ref, acr, merc, fam or 'strike-usd'),
+                            'opt-comm', session.get('user_sid', ''))
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'Opt Comm', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -25395,6 +25547,10 @@ def api_conf_optfxo_save():
     validate_url = ('/confirmation/opt-fxo/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
+    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
+    # que é para onde o Monitor manda quem for conferir.
+    _mc_stamp_generated(picked, 'opt-fxo', link=validate_url)
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25466,7 +25622,12 @@ def api_conf_optfxo_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'opt-fxo')
-    acr, merc = (key.split('|') + ['', ''])[:2]
+    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
+    # A validação do checklist É a validação do OTC: carimba Conferido OTC
+    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
+    # cobre. As operações saem do MESMO recorte que gerou o documento.
+    _mc_stamp_otc_validated(_conf_pick_optfxo(ref, acr, merc, fam or 'strike-usd'),
+                            'opt-fxo', session.get('user_sid', ''))
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'Opt FXO', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -25802,6 +25963,10 @@ def api_conf_fwdstart_save():
     validate_url = ('/confirmation/ndf-fwdstart/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
+    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
+    # que é para onde o Monitor manda quem for conferir.
+    _mc_stamp_generated(picked, 'ndf-fwdstart', link=validate_url)
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25873,7 +26038,12 @@ def api_conf_fwdstart_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'ndf-fwdstart')
-    acr, merc = (key.split('|') + ['', ''])[:2]
+    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
+    # A validação do checklist É a validação do OTC: carimba Conferido OTC
+    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
+    # cobre. As operações saem do MESMO recorte que gerou o documento.
+    _mc_stamp_otc_validated(_conf_pick_fwdstart(ref, acr, merc, fam or 'strike-usd'),
+                            'ndf-fwdstart', session.get('user_sid', ''))
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'NDF FWD Start', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -28087,6 +28257,207 @@ def reconciliation_payrec_justify():
 
 
 # ==============================================================================
+#  MANUAL CONFIRMATIONS — a esteira de validação de uma confirmação gerada.
+#  Duas telas: Confirmations Monitor (os cards por etapa) e Track Confirmations
+#  (a tabela inteira). O motor está em apps/pages/manual_conf.py; aqui só entram
+#  sessão, o SPN de quem validou e o e-mail do reject.
+# ==============================================================================
+@blueprint.route('/manual-confirmation')
+def manual_confirmation():
+    """O item do menu apontava para cá antes das duas telas existirem. Mantido
+    como porta de entrada, levando ao Monitor — que é o primeiro item da lista e
+    a tela por onde o trabalho começa."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return redirect(url_for('pages_blueprint.manual_confirmation_monitor'))
+
+
+@blueprint.route('/manual-confirmation/monitor')
+def manual_confirmation_monitor():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/manual-confirmation-monitor.html',
+                           segment='manual-confirmation-monitor')
+
+
+@blueprint.route('/manual-confirmation/track')
+def manual_confirmation_track():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    from apps.pages import manual_conf as _mc
+    return render_template('pages/manual-confirmation-track.html',
+                           segment='manual-confirmation-track',
+                           mc_columns=_mc.COLUMNS,
+                           mc_labels=_mc.COLUMN_LABELS,
+                           mc_dates=_mc.DATE_COLUMNS,
+                           mc_derived=_mc.DERIVED_COLUMNS,
+                           mc_key=_mc.KEY_COLUMN)
+
+
+@blueprint.route('/api/manual-confirmation/data')
+def api_mc_data():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from apps.pages import manual_conf as _mc
+        rows = _mc.load_all()
+        return jsonify({'columns': _mc.COLUMNS, 'labels': _mc.COLUMN_LABELS,
+                        'data': rows, 'counts': _mc_counts(rows)})
+    except Exception as e:
+        log.error('[manual-conf] data: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+def _mc_counts(rows):
+    from apps.pages import manual_conf as _mc
+    return {
+        'total': len(rows),
+        'otc': sum(1 for r in rows if r.get('Pending') == _mc.PENDING_OTC),
+        'mo': sum(1 for r in rows if r.get('Pending') in (_mc.PENDING_MO, _mc.PENDING_MOFO)),
+        'fo': sum(1 for r in rows if r.get('Pending') in (_mc.PENDING_FO, _mc.PENDING_MOFO)),
+        'ok': sum(1 for r in rows if r.get('Pending') == _mc.STATUS_OK),
+    }
+
+
+@blueprint.route('/api/manual-confirmation/monitor')
+def api_mc_monitor():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from apps.pages import manual_conf as _mc
+        return jsonify(_mc.monitor_payload())
+    except Exception as e:
+        log.error('[manual-conf] monitor: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])
+def api_mc_upsert():
+    """Grava uma linha (edição no modal, linha nova ou edição em massa)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get('rows')
+    if rows is None:
+        rows = [payload.get('row') or {}]
+    if not isinstance(rows, list):
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    saved = []
+    for src in rows:
+        if not isinstance(src, dict):
+            continue
+        key = str(src.get(_mc.KEY_COLUMN, '') or '').strip()
+        if not key:
+            # Sem Trade ID a linha não tem chave: o próximo upsert apagaria a
+            # anterior sem chave e ficaria uma só. Recusa em vez de perder linha.
+            return jsonify({'success': False,
+                            'message': 'Trade ID é obrigatório — é a chave da linha.'}), 400
+        row = _mc.find_row(key) or _mc.blank_row()
+        for c in _mc.COLUMNS:
+            if c in src and c not in _mc.DERIVED_COLUMNS:
+                row[c] = str(src.get(c) or '')
+        _mc.upsert_row(row)
+        saved.append(row)
+    return jsonify({'success': True, 'rows': saved})
+
+
+@blueprint.route('/api/manual-confirmation/derive', methods=['POST'])
+def api_mc_derive():
+    """Recalcula as derivadas de um lote de linhas SEM gravar — é o que a edição
+    em massa usa para mostrar Pending e Aging já corretos antes de salvar."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get('rows')
+    if not isinstance(rows, list):
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    rules = _mc.validation_rules()
+    out = []
+    for src in rows:
+        row = dict(src) if isinstance(src, dict) else {}
+        _mc.refresh_derived(row, rules)
+        out.append({c: row.get(c, '') for c in _mc.DERIVED_COLUMNS})
+    return jsonify({'success': True, 'rows': out})
+
+
+@blueprint.route('/api/manual-confirmation/delete', methods=['POST'])
+def api_mc_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
+    n = 0
+    for k in keys:
+        if str(k or '').strip():
+            _mc.delete_row(k)
+            n += 1
+    return jsonify({'success': True, 'deleted': n})
+
+
+@blueprint.route('/api/manual-confirmation/validate', methods=['POST'])
+def api_mc_validate():
+    """Valida uma etapa. O SPN vem da SESSÃO, não do corpo do POST — quem
+    carimba é quem está logado, e aceitar o SPN do cliente deixaria qualquer
+    sessão assinar por outra pessoa."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    key = str(payload.get('key') or '').strip()
+    stage = str(payload.get('stage') or '').strip().upper()
+    if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
+        return jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
+    row = _mc.mark_validated(key, stage, session.get('user_sid', ''))
+    if row is None:
+        return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Manual Confirmation', 'Confirmation',
+                         'Validada pelo {} · {}'.format(stage, row.get('Cliente', '') or key))
+    return jsonify({'success': True, 'row': row})
+
+
+@blueprint.route('/api/manual-confirmation/reject', methods=['POST'])
+def api_mc_reject():
+    """Reject de MO/FO: devolve a confirmação para Pending OTC e avisa a mesa.
+
+    A gravação vem ANTES do e-mail de propósito: a confirmação precisa voltar
+    para o OTC mesmo que o relay não responda. O retorno diz se o e-mail saiu.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    payload = request.get_json(silent=True) or {}
+    key = str(payload.get('key') or '').strip()
+    stage = str(payload.get('stage') or '').strip().upper()
+    comment = str(payload.get('comment') or '').strip()
+    if stage not in (_mc.STAGE_MO, _mc.STAGE_FO):
+        return jsonify({'success': False, 'message': 'Só MO e FO rejeitam.'}), 400
+    if not comment:
+        # Sem comentário o aviso chega dizendo "refaça" e nada mais — e o OTC
+        # tem de perguntar de volta o que estava errado.
+        return jsonify({'success': False,
+                        'message': 'O comentário é obrigatório: é ele que diz o que refazer.'}), 400
+    before = _mc.find_row(key)
+    if before is None:
+        return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
+    sid = session.get('user_sid', '')
+    _mc.reject(key, stage, sid, comment)
+    emailed = False
+    try:
+        from apps.pages.otc_emails import send_mc_reject_email
+        emailed = send_mc_reject_email(before, stage, sid, comment)
+    except Exception:
+        log.warning('[manual-conf] aviso de reject falhou:\n%s', traceback.format_exc())
+    _create_notification(sid, session.get('user_name', ''),
+                         'Manual Confirmation', 'Confirmation',
+                         'Rejeitada pelo {} · {}'.format(stage, before.get('Cliente', '') or key))
+    return jsonify({'success': True, 'emailed': bool(emailed)})
+
+
+# ==============================================================================
 #  FXO RECONCILIATION — posição B3/CETIP (DPOSICAO .OPC) × Athena (EOD FXO).
 #  O motor está em apps/pages/recon_fxo.py; aqui só entram sessão, data e o
 #  encaminhamento dos arquivos do upload manual.
@@ -28095,9 +28466,13 @@ def reconciliation_payrec_justify():
 def reconciliation_fxo():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
+    # D-1 no calendário ANBIMA: a posição da B3 e o EOD da Athena são do
+    # fechamento anterior. Abrir em "hoje" mandaria todo mundo procurar um
+    # arquivo que ainda não existe — e numa segunda-feira, ou no dia seguinte a
+    # um feriado, "ontem" no calendário civil não é dia útil nenhum.
     return render_template('pages/reconciliation-fxo.html',
                            segment='reconciliation-fxo',
-                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+                           ref_date=_prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/reconciliation-fxo/data')

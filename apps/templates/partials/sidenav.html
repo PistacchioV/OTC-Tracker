@@ -627,10 +627,28 @@
                     </li>
         
                     <li class="side-nav-item">
-                        <a href="/manual-confirmation" class="side-nav-link">
+                        <a data-bs-toggle="collapse" href="#manualConfirmation" aria-expanded="false"
+                           aria-controls="manualConfirmation" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="check-circle"></i></span>
                             <span class="menu-text" data-lang="manual-confirmation">Manual Confirmation</span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="manualConfirmation">
+                            <ul class="sub-menu">
+                                <!-- O Monitor vem primeiro: é por onde o trabalho
+                                     começa (o que está parado em cada mesa). -->
+                                <li class="side-nav-item">
+                                    <a href="/manual-confirmation/monitor" class="side-nav-link">
+                                        <span class="menu-text" data-lang="mc-nav-monitor">Confirmations Monitor</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/manual-confirmation/track" class="side-nav-link">
+                                        <span class="menu-text" data-lang="mc-nav-track">Track Confirmations</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
         
                     <li class="side-nav-item">

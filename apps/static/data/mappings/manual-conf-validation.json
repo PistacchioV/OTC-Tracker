@@ -1,0 +1,50 @@
+[
+  {
+    "PRODUCT": "NDF COMM",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "EXEMPT",
+    "NOTES": "Termo de mercadoria"
+  },
+  {
+    "PRODUCT": "OPTION COMM",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "EXEMPT",
+    "NOTES": "Opção de mercadoria"
+  },
+  {
+    "PRODUCT": "OPTION",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "EXEMPT",
+    "NOTES": "Opção de câmbio (FXO)"
+  },
+  {
+    "PRODUCT": "NDF FWD START",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "EXEMPT",
+    "NOTES": ""
+  },
+  {
+    "PRODUCT": "SWAP",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "REQUESTED",
+    "NOTES": ""
+  },
+  {
+    "PRODUCT": "OPTION EDG",
+    "LOB": "",
+    "OTC": "REQUESTED",
+    "MO": "REQUESTED",
+    "FO": "REQUESTED",
+    "NOTES": "Opção de EDG"
+  }
+]

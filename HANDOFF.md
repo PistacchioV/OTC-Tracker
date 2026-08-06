@@ -9814,3 +9814,86 @@ conserto de código. Está preso em teste para não virar surpresa.
 `scripts/tests/check_recon_fxo.py` (novo). As duas bases são construídas no teste — inclusive a linha de
 dados com **mais colunas que o cabeçalho**, que é o cronograma de fixing seguindo à direita sem título, e
 o 'Texto para Colunas' que parte o **cabeçalho** junto com o dado.
+
+---
+
+## §217 — Manual Confirmations: a esteira de validação virou tela
+
+Uma confirmação gerada precisa passar por mesas antes de ir ao cliente, e isso vivia numa planilha
+(`MANUAIS.xlsx`). Agora são duas telas sob **Manual Confirmation**, e dois DuckDB
+(`manual_confirmations_pending` e `manual_confirmations_ok`), com a mesma divisão do Pending Confirmation
+e pela mesma razão: a tela abre lendo só o que ainda pede ação.
+
+### A esteira
+
+    (mapeada no New Deals) → Pending OTC → Pending MO e/ou Pending FO → Ok
+
+Quem valida cada etapa sai do cadastro novo **`manual-conf-validation`**, por **Produto × LOB**, com
+`REQUESTED` / `EXEMPT`. Termo e opção de commodities, FXO e NDF FWD Start passam por OTC e MO; swap e
+opção de EDG passam também pelo FO. **LOB em branco é coringa** do produto — a maioria valida igual em
+toda LOB, e exigir uma linha por LOB faria a tela pedir cadastro a cada LOB nova.
+
+Três decisões que vale ter escritas:
+
+**MO e FO correm em paralelo, não em fila.** As duas validam a mesma confirmação depois do OTC, e a
+linha só fecha quando as duas pedidas responderem. Encadeá-las atrasaria a segunda por nada — e uma
+confirmação parada nas duas aparece nos **dois** cards, porque mostrá-la só num esconderia trabalho da
+outra mesa.
+
+**O `Pending` e o `Aging Confirmação` são DERIVADOS**, recalculados na leitura a partir das colunas de
+validação. Estão no banco porque vieram no arquivo, mas quem manda é o cálculo: uma coluna `Pending`
+digitada discordaria das datas ao lado dela no primeiro reject, e a tela mostraria uma etapa que já
+passou. O aging conta da **data de envio para o OTC**, não da data da operação — uma operação de três
+meses atrás cuja confirmação saiu ontem não está atrasada.
+
+**O reject de MO/FO limpa o que já foi validado.** A confirmação volta para Pending OTC, e o
+`Conferido OTC` **e** as validações já dadas são apagadas: o documento vai ser refeito, e um
+"VALIDADO p/ MO" carimbado sobre a versão anterior seria um aval que ninguém deu à versão nova. O
+carimbo do reject fica na coluna da mesa que devolveu, com o SPN de quem devolveu. O aviso vai para
+`brazil.otc.ops@jpmorgan.com` com o comentário — que é **obrigatório**, porque sem ele o e-mail chega
+dizendo "refaça" e nada mais. A gravação vem **antes** do e-mail: a confirmação precisa voltar para o
+OTC mesmo que o relay não responda, e a tela diz quando o aviso não saiu.
+
+### De onde as linhas vêm
+
+Do **mesmo** gancho que alimenta o Pending Confirmation: `_mc_save_from_deal` é chamado de dentro de
+`_pc_save_from_deal`. Quem decide se um deal vira confirmação de cliente (perna interna? intragrupo?) é
+aquela função, e repetir o teste criaria uma segunda resposta para a mesma pergunta — que é como as duas
+telas passariam a discordar de quem tem confirmação pendente.
+
+Só entram os **quatro** produtos que geram documento (`_MC_CONFIRMATION_SOURCES`). O recorte é pelo
+`source` e **não** pelo Product Type: as três páginas genéricas de NDF gravam o mesmo `'NDF'`, e olhar o
+Product Type traria Vanilla e Other Publisher junto com o FWD Start. O FWD Start é chaveado pelo **B3
+ID**, como no Pending Confirmation — usar o Deal para todos deixaria justamente essas linhas sem carimbo,
+sem erro nenhum.
+
+### Os carimbos
+
+- **Confirmação salva** (`/api/confirmation/*/save`) → `Data envio validação OTC`, e o endereço da tela
+  de validação fica guardado na linha (coluna técnica `Confirmation Link`, fora da tabela) — é para lá
+  que o botão *Abrir* do Monitor manda. A data só é carimbada se estiver em branco: regerar o documento
+  não pode reiniciar a idade de uma pendência de duas semanas. O link, ao contrário, é sempre reescrito.
+- **Confirmação validada no checklist** (`/api/confirmation/*/validate`) → `Conferido OTC` + `Time Stamp`
+  com hora e **SPN da sessão**. A validação do OTC acontece na MESMA tela de checklist que já existia:
+  uma segunda tela de validação do mesmo documento acabaria divergindo sobre o que foi conferido.
+
+O SPN vem sempre da sessão, nunca do corpo do POST — aceitá-lo do cliente deixaria qualquer sessão
+assinar por outra pessoa.
+
+### As colunas
+
+As três colunas de carimbo do arquivo se chamavam **todas** `Time Stamp`; no banco viraram
+`Time Stamp OTC` / `MO` / `FO`, e a tela mostra as três com o rótulo curto, encostadas em quem validou.
+O `Trade ID` aparecia **duas vezes** na lista original (cópia colada) — ficou uma, e é a chave da linha.
+
+### Importação
+
+`scripts/import_manual_confirmations.py` cria os dois bancos e carrega o `MANUAIS.xlsx`. O cabeçalho é
+casado por semelhança (sem acento, caixa ou pontuação), e as três `Time Stamp` são resolvidas **pela
+posição** — a que vem depois de `Conferido OTC` é a do OTC, e assim por diante: é a única informação que
+as distingue no arquivo. O script **reescreve** os dois bancos, então rodar duas vezes não duplica. Sem
+a planilha ele cria os bancos vazios e diz onde procurou.
+
+### Verificação
+
+`scripts/tests/check_manual_conf.py` (novo).

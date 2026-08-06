@@ -1,0 +1,365 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}Track Confirmations{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* !important no fundo dos cartões: este <style> é carregado ANTES do CSS do
+   tema (layouts/base.html), e o `.card{background-color:...}` dele vem depois. */
+.mc-w { border-radius:18px; border:none !important; padding:.9rem 1.1rem; position:relative; overflow:hidden; }
+.mc-w .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; opacity:.7; }
+.mc-w .val { font-size:1.6rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+.mc-w-tot { background-color:#0d47a8 !important;
+            background-image:linear-gradient(135deg,#0066cc 0%,#34369b 100%) !important;
+            color:#fff !important; box-shadow:0 10px 26px rgba(13,71,168,.28); }
+.mc-w-otc { background-color:#eef4ff !important; color:#0d3a8a !important; }
+.mc-w-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; }
+.mc-w-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; }
+.mc-w-ok  { background-color:#e8f5e9 !important; color:#1b5e20 !important; }
+
+#mc-table th { white-space:nowrap; font-size:.66rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
+#mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; }
+#mc-table_filter { display:none !important; }
+#mc-table thead .mc-col-filters th { padding:3px 4px; }
+#mc-table thead .mc-col-filters input {
+    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
+    border:1px solid var(--bs-border-color); background:var(--bs-body-bg); color:var(--bs-body-color);
+}
+/* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
+   digita nela — a alternativa (escondê-la) faria perguntarem onde foi parar. */
+#mc-table td.mc-derived { background: var(--ins-secondary-bg); font-style: italic; }
+
+.btn-toolbar-all { font-size:.75rem !important; padding:.25rem .6rem !important;
+                   height:auto !important; line-height:1.4 !important; white-space:nowrap !important; }
+.btn-toolbar-all:active { transform: scale(.97); }
+.mc-mass-wrap { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+.mc-mass-wrap .form-select, .mc-mass-wrap .form-control { height:31px; font-size:.75rem; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="list-checks" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="mc-track-title">Track Confirmations</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="manual-confirmation">Manual Confirmation</a></li>
+                <li class="breadcrumb-item active"><a href="javascript:void(0);" data-lang="mc-nav-track">Track Confirmations</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-lg"><div class="card mc-w mc-w-tot h-100"><div class="lbl" data-lang="mc-w-total">Total</div><div class="val" id="w-total">—</div></div></div>
+        <div class="col-6 col-lg"><div class="card mc-w mc-w-otc h-100"><div class="lbl">Pending OTC</div><div class="val" id="w-otc">—</div></div></div>
+        <div class="col-6 col-lg"><div class="card mc-w mc-w-mo h-100"><div class="lbl">Pending MO</div><div class="val" id="w-mo">—</div></div></div>
+        <div class="col-6 col-lg"><div class="card mc-w mc-w-fo h-100"><div class="lbl">Pending FO</div><div class="val" id="w-fo">—</div></div></div>
+        <div class="col-6 col-lg"><div class="card mc-w mc-w-ok h-100"><div class="lbl">Ok</div><div class="val" id="w-ok">—</div></div></div>
+    </div>
+
+    <!-- Show entries -->
+    <div class="card mb-2">
+        <div class="card-header d-flex align-items-center gap-2">
+            <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
+            <select id="mcPageLength" class="form-select form-select-sm" style="width:84px;">
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="150">150</option>
+                <option value="200">200</option>
+                <option value="-1" data-lang="map-all">All</option>
+            </select>
+            <label class="form-label mb-0" style="font-size:.75rem;" data-lang="b3-entries">entries</label>
+        </div>
+    </div>
+
+    <!-- Ações + atualização em massa -->
+    <div class="card mb-2">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="ti ti-columns me-1"></i><span data-lang="mc-columns">Columns</span>
+                </button>
+                <ul class="dropdown-menu" id="mcColMenu" style="max-height:20rem;overflow-y:auto;"></ul>
+            </div>
+            <button class="btn btn-sm btn-outline-primary btn-toolbar-all" id="mcAddRow">
+                <i class="ti ti-plus me-1"></i><span data-lang="mc-addrow">Add Row</span>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="mcClearFilters">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="recon-btn-clear">Clear Filters</span>
+            </button>
+            <span class="vr d-none d-lg-inline"></span>
+            <!-- Modelo do New Deals / Pending Confirmation: escolhe-se a COLUNA e o
+                 campo de valor à esquerda se adapta ao tipo dela. -->
+            <div class="mc-mass-wrap">
+                <div id="mcMassValueWrap" style="min-width:190px;"></div>
+                <select class="form-select form-select-sm" id="mcMassColumn" style="width:230px;"></select>
+                <button class="btn btn-sm btn-primary btn-toolbar-all" id="mcMassApply" disabled>
+                    <i class="ti ti-edit me-1"></i><span data-lang="mc-apply">Apply to selected</span>
+                    <span class="badge bg-light text-dark ms-1" id="mcSelCount">0</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-2">
+            <div class="table-responsive pt-2">
+                <table id="mc-table" class="table table-striped table-hover nowrap" style="width:100%">
+                    <thead><tr></tr></thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(function () {
+    'use strict';
+
+    // O servidor é quem manda a lista de colunas, o que é data e o que é
+    // derivado. Uma cópia aqui teria de ser reeditada a cada coluna nova, e a
+    // coluna acrescentada lá apareceria vazia aqui, sem erro nenhum.
+    var COLUMNS = {{ mc_columns | tojson }};
+    var LABELS  = {{ mc_labels  | tojson }};
+    var DATES   = {{ mc_dates   | tojson }};
+    var DERIVED = {{ mc_derived | tojson }};
+    var KEY     = {{ mc_key     | tojson }};
+
+    var table = null, rows = [];
+
+    function label(c) { return LABELS[c] || c; }
+    function isDate(c) { return DATES.indexOf(c) !== -1; }
+    function isDerived(c) { return DERIVED.indexOf(c) !== -1; }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function badge(p) {
+        var m = { 'Pending OTC': 'text-bg-primary', 'Pending MO': 'text-bg-warning',
+                  'Pending FO': 'text-bg-info', 'Pending MO/FO': 'text-bg-warning',
+                  'Ok': 'text-bg-success' };
+        if (!p) return '';
+        return '<span class="badge rounded-pill bg-gradient ' + (m[p] || 'text-bg-secondary') + '">' +
+               esc(p) + '</span>';
+    }
+
+    function buildTable() {
+        var head = $('#mc-table thead tr').empty();
+        head.append('<th><input type="checkbox" id="mcAll" class="form-check-input"></th>');
+        COLUMNS.forEach(function (c) { head.append($('<th>').text(label(c))); });
+
+        var defs = [{
+            data: null, orderable: false, className: 'text-center',
+            render: function (row) {
+                return '<input type="checkbox" class="form-check-input mc-pick" value="' +
+                       esc(row[KEY]) + '">';
+            }
+        }];
+        COLUMNS.forEach(function (name) {
+            var col = {
+                // `data` como FUNÇÃO: os nomes têm barra, parênteses e acento
+                // ('VALIDADO p/ MO', 'Enviado p/ cliente (…)'), que o DataTables
+                // leria como caminho aninhado ou chamada de função.
+                data: (function (k) { return function (r) { return r[k] == null ? '' : r[k]; }; })(name),
+                title: label(name)
+            };
+            if (name === 'Pending') {
+                col.render = function (d, t) { return t === 'display' ? badge(d) : (d || ''); };
+                col.className = 'text-center';
+            } else if (isDerived(name)) {
+                col.className = 'mc-derived text-center';
+            }
+            return defs.push(col);
+        });
+
+        table = $('#mc-table').DataTable({
+            data: [], columns: defs, scrollX: true,
+            dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
+            pageLength: 50, order: [[1, 'asc']],
+            language: { emptyTable: 'Nenhuma confirmação registrada.' },
+            initComplete: buildColumnFilters
+        });
+    }
+
+    function buildColumnFilters() {
+        var thead = $('#mc-table thead');
+        if (thead.find('.mc-col-filters').length) return;
+        var tr = $('<tr class="mc-col-filters">').append('<th></th>');
+        COLUMNS.forEach(function (name, i) {
+            var th = $('<th>');
+            $('<input type="text">').attr('placeholder', '⌕')
+                .on('keyup change', function () {
+                    var c = i + 1;                      // +1 pela coluna do checkbox
+                    if (table.column(c).search() !== this.value) {
+                        table.column(c).search(this.value).draw();
+                    }
+                }).appendTo(th);
+            tr.append(th);
+        });
+        thead.append(tr);
+    }
+
+    function buildColumnMenu() {
+        var ul = $('#mcColMenu').empty();
+        COLUMNS.forEach(function (name, i) {
+            $('<li>').append(
+                $('<label class="dropdown-item d-flex align-items-center gap-2 mb-0">')
+                    .append($('<input type="checkbox" class="form-check-input m-0" checked>')
+                        .on('change', function () { table.column(i + 1).visible(this.checked); }))
+                    .append($('<span>').text(label(name)))
+            ).appendTo(ul);
+        });
+    }
+
+    // ── Atualização em massa ────────────────────────────────────────────
+    // Derivadas fora da lista: digitá-las cria um valor que a próxima gravação
+    // desfaz. E o Trade ID também: é a CHAVE da linha — aplicar o mesmo número
+    // em várias fundiria todas numa só, sem desfazer.
+    function massColumns() {
+        return COLUMNS.filter(function (c) { return !isDerived(c) && c !== KEY; });
+    }
+
+    function buildMassColumnSelect() {
+        var sel = $('#mcMassColumn').empty()
+            .append('<option value="">— coluna a alterar —</option>');
+        massColumns().forEach(function (c) {
+            sel.append($('<option>').val(c).text(label(c) === c ? c : label(c) + ' (' + c + ')'));
+        });
+    }
+
+    function buildMassValueField(col) {
+        var wrap = $('#mcMassValueWrap').empty();
+        if (!col) { $('#mcMassApply').prop('disabled', true); return; }
+        var input;
+        if (isDate(col)) {
+            // Mesma máscara do resto do app (d/m/Y): um campo que aceita
+            // dd/mm/aaaa e grava mm/dd/aaaa erra sem avisar.
+            input = $('<input type="text" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off">');
+            wrap.append(input);
+            // O flatpickr vem do bundle do tema. O guard é o mesmo do Pending
+            // Confirmation: sem ele, uma página que carregue antes do vendor
+            // quebra o campo inteiro em vez de virar um input de texto comum.
+            if (typeof flatpickr !== 'undefined') {
+                flatpickr(input[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+            }
+        } else {
+            input = $('<input type="text" class="form-control form-control-sm" placeholder="novo valor">');
+            wrap.append(input);
+        }
+        input.attr('id', 'mcMassValue');
+        updateApply();
+    }
+
+    function selectedKeys() {
+        return $('#mc-table').find('.mc-pick:checked').map(function () { return this.value; }).get();
+    }
+
+    function updateApply() {
+        var n = selectedKeys().length;
+        $('#mcSelCount').text(n);
+        $('#mcMassApply').prop('disabled', !(n && $('#mcMassColumn').val()));
+    }
+
+    function applyMass() {
+        var col = $('#mcMassColumn').val();
+        var val = $('#mcMassValue').val() || '';
+        var keys = selectedKeys();
+        if (!col || !keys.length) return;
+        var payload = keys.map(function (k) {
+            var o = {}; o[KEY] = k; o[col] = val; return o;
+        });
+        fetch('/api/manual-confirmation/upsert', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: payload })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j.success) {
+                Swal.fire({ icon: 'error', title: 'Não foi possível gravar', text: j.message || '' });
+                return;
+            }
+            // As derivadas (Pending, Aging) são recalculadas NO SERVIDOR e voltam
+            // na resposta — recalcular em JS criaria uma segunda regra, e as duas
+            // telas passariam a discordar da mesma linha.
+            load();
+        });
+    }
+
+    function paint(payload) {
+        rows = payload.data || [];
+        var c = payload.counts || {};
+        $('#w-total').text(c.total || 0); $('#w-otc').text(c.otc || 0);
+        $('#w-mo').text(c.mo || 0); $('#w-fo').text(c.fo || 0); $('#w-ok').text(c.ok || 0);
+        table.clear().rows.add(rows).draw();
+        updateApply();
+    }
+
+    function load() {
+        fetch('/api/manual-confirmation/data')
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (!j.error) paint(j); })
+            .catch(function () {});
+    }
+
+    $(document).ready(function () {
+        buildTable();
+        buildColumnMenu();
+        buildMassColumnSelect();
+        load();
+
+        $('#mcPageLength').on('change', function () {
+            table.page.len(parseInt(this.value, 10)).draw();
+        });
+        $('#mcMassColumn').on('change', function () { buildMassValueField(this.value); });
+        $('#mcMassApply').on('click', applyMass);
+        $(document).on('change', '.mc-pick', updateApply);
+        $(document).on('change', '#mcAll', function () {
+            $('.mc-pick').prop('checked', this.checked);
+            updateApply();
+        });
+        $('#mcClearFilters').on('click', function () {
+            $('.mc-col-filters input').val('');
+            table.columns().search('').draw();
+        });
+
+        $('#mcAddRow').on('click', function () {
+            Swal.fire({
+                title: 'Nova confirmação',
+                input: 'text',
+                inputLabel: 'Trade ID (é a chave da linha)',
+                inputPlaceholder: 'ex.: 25F01779096',
+                showCancelButton: true,
+                inputValidator: function (v) {
+                    return (v || '').trim() ? undefined : 'O Trade ID é obrigatório.';
+                }
+            }).then(function (res) {
+                if (!res.isConfirmed) return;
+                var o = {}; o[KEY] = res.value.trim();
+                fetch('/api/manual-confirmation/upsert', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rows: [o] })
+                }).then(function (r) { return r.json(); }).then(function (j) {
+                    if (!j.success) {
+                        Swal.fire({ icon: 'error', title: 'Não foi possível criar', text: j.message || '' });
+                        return;
+                    }
+                    load();
+                });
+            });
+        });
+
+        if (window.lucide) lucide.createIcons();
+    });
+})();
+</script>
+{% endblock %}
