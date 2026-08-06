@@ -1,0 +1,506 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}FXO Reconciliation{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* ── Cards de status ─────────────────────────────────────────────── */
+.fxo-widget {
+    border-radius: 20px;
+    border: none;
+    padding: 1.1rem 1.25rem;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+    .fxo-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.10); }
+}
+/* O card ativo é o filtro que está valendo. Sem essa marca, clicar num card e
+   esquecer deixa a tabela parecendo a lista inteira quando não é. */
+.fxo-widget.is-active { box-shadow: 0 0 0 2px rgba(13,110,253,.65), 0 12px 32px rgba(0,0,0,.12); }
+.fxo-widget .widget-icon { opacity:.20; position:absolute; right:1rem; top:50%; transform:translateY(-50%); }
+.fxo-widget .widget-val { font-size:2rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+.fxo-widget .widget-lbl {
+    font-size:.7rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; opacity:.65; margin-bottom:.4rem;
+}
+/* O Total usa o MESMO gradiente do card de Total do NDF Summary e do Pending
+   Confirmation — o mesmo papel, lido do mesmo jeito nas três telas. */
+.fxo-w-total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); color:#fff; }
+.fxo-w-total .widget-lbl { opacity:.8; }
+.fxo-w-ok    { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7 !important; }
+.fxo-w-nok   { background:#fde8e8; color:#b71c1c; border:1px solid #ef9a9a !important; }
+.fxo-w-none  { background:#fff8e1; color:#7b5e00; border:1px solid #ffe082 !important; }
+
+/* ── Faixa de diagnóstico ────────────────────────────────────────── */
+.fxo-chip {
+    display:inline-flex; align-items:center; gap:.35rem;
+    font-size:.7rem; font-weight:600; padding:.28rem .7rem; border-radius:20px;
+    background:var(--bs-tertiary-bg); color:var(--bs-body-color);
+    border:1px solid var(--bs-border-color); white-space:nowrap;
+}
+.fxo-chip b { font-variant-numeric:tabular-nums; }
+.fxo-chip-nok { cursor:pointer; transition:border-color 140ms, background 140ms; }
+.fxo-chip-nok.has-nok { background:#fde8e8; color:#b71c1c; border-color:#ef9a9a; }
+.fxo-chip-nok.is-active { box-shadow:0 0 0 2px rgba(13,110,253,.5); }
+.fxo-chip-nok:hover { border-color:#0d6efd; }
+
+/* ── Status badges da tabela ─────────────────────────────────────── */
+.s-badge {
+    display:inline-block; font-size:.68rem; font-weight:700;
+    padding:.22rem .7rem; border-radius:20px; white-space:nowrap; letter-spacing:.03em;
+}
+.s-ok    { background:#d1e7dd; color:#0a3622; }
+.s-nok   { background:#f8d7da; color:#842029; }
+.s-none  { background:#fff3cd; color:#856404; }
+
+/* ── Tabela ──────────────────────────────────────────────────────── */
+#fxo-table th { white-space:nowrap; font-size:.68rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
+#fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; }
+/* A célula NOK é pintada; é o que faz a divergência aparecer sem ler coluna por
+   coluna numa tabela de 38 colunas. */
+#fxo-table td.cell-nok { background:#f8d7da !important; color:#842029 !important; font-weight:700; text-align:center; }
+#fxo-table td.cell-ok  { color:#0a3622; text-align:center; }
+
+/* ── Filtros por coluna (segunda linha do thead) ─────────────────── */
+#fxo-table thead .fxo-col-filters th { padding:3px 4px; }
+#fxo-table thead .fxo-col-filters input {
+    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
+    border:1px solid var(--bs-border-color); background:var(--bs-body-bg);
+    color:var(--bs-body-color);
+}
+.fxo-col-filters input::placeholder { color:var(--bs-secondary-color); opacity:.6; }
+
+/* ── Data ────────────────────────────────────────────────────────── */
+.date-wrap { position:relative; width:130px; }
+.date-wrap input[type=date] { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
+.date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
+.date-wrap-icon {
+    position:absolute; right:9px; top:50%; transform:translateY(-50%);
+    z-index:1; pointer-events:none; font-size:15px; color:var(--bs-secondary-color, #6c757d);
+}
+
+/* ── Upload ──────────────────────────────────────────────────────── */
+.upload-zone {
+    border:2px dashed var(--bs-border-color); border-radius:12px; padding:.9rem 1rem;
+    text-align:center; background:var(--bs-tertiary-bg); cursor:pointer;
+    transition:border-color 160ms, background 160ms;
+}
+.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--bs-secondary-bg); }
+.upload-zone input[type=file] { display:none; }
+.upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
+
+.btn-toolbar-all {
+    font-size:.75rem !important; padding:.25rem .6rem !important;
+    height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
+}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="container-fluid">
+
+    <div class="page-title-head d-flex align-items-center mb-4">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="git-compare" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="recon-fxo-title">FXO Reconciliation</h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="reconciliations-title">Reconciliations</a></li>
+                <li class="breadcrumb-item active"><a href="javascript:void(0);" data-lang="nav-recon-fxo">FXO</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ── Cards de status ───────────────────────────────────────── -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="card fxo-widget fxo-w-total h-100" data-status="">
+                <div class="widget-lbl" data-lang="fxo-w-total">Total</div>
+                <div class="widget-val" id="w-total">—</div>
+                <i data-lucide="layers" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card fxo-widget fxo-w-ok h-100" data-status="OK">
+                <div class="widget-lbl" data-lang="fxo-w-ok">OK</div>
+                <div class="widget-val" id="w-ok">—</div>
+                <i data-lucide="check-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card fxo-widget fxo-w-nok h-100" data-status="NOK">
+                <div class="widget-lbl" data-lang="fxo-w-nok">NOK</div>
+                <div class="widget-val" id="w-nok">—</div>
+                <i data-lucide="alert-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card fxo-widget fxo-w-none h-100" data-status="Sem match">
+                <div class="widget-lbl" data-lang="fxo-w-nomatch">Sem match na Athena</div>
+                <div class="widget-val" id="w-nomatch">—</div>
+                <i data-lucide="unlink" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnóstico: por onde a operação casou, e o alerta de chave repetida. -->
+    <div class="d-flex flex-wrap gap-2 mb-2" id="fxo-diag">
+        <span class="fxo-chip"><i class="ti ti-key"></i> DealID <b id="d-dealid">0</b></span>
+        <span class="fxo-chip"><i class="ti ti-key-off"></i> MatchingDealID <b id="d-matching">0</b></span>
+        <span class="fxo-chip"><i class="ti ti-copy"></i> <span data-lang="fxo-d-dup">Chave duplicada</span> <b id="d-dup">0</b></span>
+    </div>
+
+    <!-- NOK por campo: diz QUAL campo está quebrando. Sem isto, "40 linhas com
+         NOK" não indica por onde começar numa tabela de 38 colunas. -->
+    <div class="d-flex flex-wrap gap-2 mb-3" id="fxo-nok-fields"></div>
+
+    <div class="alert alert-warning d-none" id="fxo-warnings"></div>
+
+    <!-- ── Card principal ────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-header d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="recon-lbl-date">Date:</label>
+                <div class="date-wrap">
+                    <input type="text" id="fxo-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
+                    <i class="ti ti-calendar date-wrap-icon"></i>
+                    <input type="date" id="fxo-date" value="{{ ref_date }}">
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
+                <select id="fxoPageLength" class="form-select form-select-sm" style="width:80px;">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <label class="form-label mb-0" style="font-size:.75rem;" data-lang="b3-entries">entries</label>
+            </div>
+            <div class="ms-auto text-muted" style="font-size:.7rem;" id="fxo-ranat"></div>
+        </div>
+
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
+                <i data-lucide="x-circle" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-clear">Clear Filters</span>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all"
+                    data-bs-toggle="modal" data-bs-target="#fxoUploadModal">
+                <i data-lucide="upload-cloud" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-manual">Manual Upload</span>
+            </button>
+            <button class="btn btn-sm btn-primary btn-toolbar-all" id="btnRunFxo">
+                <i data-lucide="play" style="width:12px;height:12px;"></i>
+                <span data-lang="recon-btn-run">Run Reconciliation</span>
+            </button>
+        </div>
+
+        <div class="card-body">
+            <div class="table-responsive pt-2">
+                <table id="fxo-table" class="table table-striped table-hover nowrap" style="width:100%">
+                    <thead><tr></tr></thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Upload manual ─────────────────────────────────────────────── -->
+<div class="modal fade" id="fxoUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
+                    <i data-lucide="upload-cloud" style="width:18px;height:18px;" class="text-primary"></i>
+                    <span data-lang="fxo-modal-title">Upload manual</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted small mb-3" data-lang="fxo-modal-desc">
+                    Para o dia em que a rede ou o relatório da Athena não respondem.
+                    Os dois arquivos são identificados pelo conteúdo, então a ordem não importa.
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1" style="font-size:.73rem;">Posição B3 (DPOSICAO .OPC)</label>
+                        <label class="upload-zone d-block" id="fxo-zone1">
+                            <i data-lucide="file-text" style="width:22px;height:22px;" class="text-muted"></i>
+                            <div class="small text-muted mt-1">73760_AAMMDD_DPOSICAO.OPC</div>
+                            <div class="fn d-none" id="fxo-name1"></div>
+                            <input type="file" id="fxo-file-dpos" accept=".OPC,.opc,.txt,.csv">
+                        </label>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1" style="font-size:.73rem;">Athena — EOD FXO (CSV)</label>
+                        <label class="upload-zone d-block" id="fxo-zone2">
+                            <i data-lucide="file-spreadsheet" style="width:22px;height:22px;" class="text-muted"></i>
+                            <div class="small text-muted mt-1">brazil_fxo_trades.csv</div>
+                            <div class="fn d-none" id="fxo-name2"></div>
+                            <input type="file" id="fxo-file-athena" accept=".csv,.txt">
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="btnRunManual" data-lang="recon-btn-run">Run Reconciliation</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(function () {
+    'use strict';
+
+    // As colunas VÊM DO SERVIDOR (payload.columns). O motor é quem sabe quais
+    // campos ele compara — uma lista fixa aqui teria de ser reeditada a cada
+    // campo novo, e a coluna acrescentada lá apareceria vazia aqui, sem erro.
+    var COLUMNS = [];
+    var table = null;
+    var activeStatus = '';     // filtro vindo dos cards
+    var activeField = '';      // filtro vindo dos chips de NOK por campo
+
+    function isStatusCol(name) { return /^Status /.test(name) || name === 'Status'; }
+
+    function badge(s) {
+        var m = { 'OK': 's-ok', 'NOK': 's-nok', 'Sem match': 's-none' };
+        return '<span class="s-badge ' + (m[s] || 's-none') + '">' + (s || '—') + '</span>';
+    }
+
+    function buildTable(columns) {
+        if (table) { table.destroy(); $('#fxo-table').empty().append('<thead><tr></tr></thead>'); }
+        COLUMNS = columns.slice();
+
+        var head = $('#fxo-table thead tr').empty();
+        columns.forEach(function (c) { head.append($('<th>').text(c)); });
+
+        var defs = columns.map(function (name, i) {
+            var col = {
+                // `data` como FUNÇÃO: os nomes das colunas têm ponto, barra e
+                // parênteses ('Ath_P/C', 'Combinação de operações'), que o
+                // DataTables leria como caminho aninhado ou chamada de função.
+                data: (function (k) { return function (row) { return row[k] == null ? '' : row[k]; }; })(name),
+                title: name
+            };
+            if (i === 0) {
+                // Ortogonal: o badge só no display. Devolver HTML em todos os
+                // tipos faz o DataTables ordenar e buscar pela string do markup.
+                col.render = function (d, type) { return type === 'display' ? badge(d) : (d || ''); };
+                col.className = 'text-center';
+            } else if (isStatusCol(name)) {
+                col.className = 'text-center';
+                col.createdCell = function (td, data) {
+                    td.classList.add(data === 'NOK' ? 'cell-nok' : (data === 'OK' ? 'cell-ok' : ''));
+                };
+            }
+            return col;
+        });
+
+        table = $('#fxo-table').DataTable({
+            data: [],
+            columns: defs,
+            scrollX: true,
+            pageLength: parseInt($('#fxoPageLength').val(), 10) || 25,
+            order: [[0, 'asc']],
+            language: { emptyTable: 'Rode a reconciliação para a data escolhida.' },
+            initComplete: function () { buildColumnFilters(); }
+        });
+    }
+
+    function buildColumnFilters() {
+        var thead = $('#fxo-table thead');
+        if (thead.find('.fxo-col-filters').length) return;
+        var tr = $('<tr class="fxo-col-filters">');
+        COLUMNS.forEach(function (name, i) {
+            var th = $('<th>');
+            $('<input type="text">').attr('placeholder', '⌕')
+                .on('keyup change', function () {
+                    if (table.column(i).search() !== this.value) {
+                        table.column(i).search(this.value).draw();
+                    }
+                }).appendTo(th);
+            tr.append(th);
+        });
+        thead.append(tr);
+    }
+
+    function paint(payload) {
+        var counts = payload.counts || {};
+        $('#w-total').text(counts.total || 0);
+        $('#w-ok').text(counts.ok || 0);
+        $('#w-nok').text(counts.nok || 0);
+        $('#w-nomatch').text(counts.no_match || 0);
+        $('#d-dealid').text(counts.match_dealid || 0);
+        $('#d-matching').text(counts.match_matching || 0);
+        $('#d-dup').text(counts.dup_key || 0);
+        $('#fxo-ranat').text(payload.ran_at ? ('Última execução: ' + payload.ran_at) : '');
+
+        var box = $('#fxo-nok-fields').empty();
+        var byField = counts.nok_por_campo || {};
+        Object.keys(byField).forEach(function (name) {
+            var n = byField[name];
+            $('<span>')
+                .addClass('fxo-chip fxo-chip-nok' + (n > 0 ? ' has-nok' : ''))
+                .attr('data-field', name)
+                .html('<i class="ti ti-alert-triangle"></i> ' +
+                      name.replace(/^Status /, '') + ' <b>' + n + '</b>')
+                .appendTo(box);
+        });
+
+        var warn = $('#fxo-warnings');
+        if ((payload.warnings || []).length) {
+            warn.removeClass('d-none').html(payload.warnings.map(function (w) {
+                return '<div>' + w + '</div>';
+            }).join(''));
+        } else {
+            warn.addClass('d-none').empty();
+        }
+
+        var cols = payload.columns || [];
+        if (cols.length && (cols.length !== COLUMNS.length ||
+                            cols.some(function (c, i) { return c !== COLUMNS[i]; }))) {
+            buildTable(cols);
+        }
+        if (table) { table.clear().rows.add(payload.data || []).draw(); }
+        applyFilters();
+    }
+
+    function applyFilters() {
+        if (!table) return;
+        table.column(0).search(activeStatus ? '^' + activeStatus + '$' : '', true, false);
+        COLUMNS.forEach(function (name, i) {
+            if (i && isStatusCol(name)) {
+                table.column(i).search(activeField === name ? '^NOK$' : '', true, false);
+            }
+        });
+        table.draw();
+        $('.fxo-widget').removeClass('is-active')
+            .filter('[data-status="' + activeStatus + '"]').addClass(activeStatus ? 'is-active' : '');
+        $('.fxo-chip-nok').removeClass('is-active')
+            .filter('[data-field="' + activeField + '"]').addClass(activeField ? 'is-active' : '');
+    }
+
+    function isoDate() { return $('#fxo-date').val() || ''; }
+
+    function syncDateDisplay() {
+        var v = isoDate();
+        if (!v) { $('#fxo-date-display').val(''); return; }
+        var p = v.split('-');
+        $('#fxo-date-display').val(p[2] + '/' + p[1] + '/' + p[0]);
+    }
+
+    function loadData() {
+        fetch('/reconciliation-fxo/data?recon_date=' + encodeURIComponent(isoDate()))
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (!j.error) paint(j); })
+            .catch(function () {});
+    }
+
+    function run(mode) {
+        var fd = new FormData();
+        fd.append('mode', mode);
+        fd.append('recon_date', isoDate());
+        if (mode === 'manual') {
+            var f1 = document.getElementById('fxo-file-dpos').files[0];
+            var f2 = document.getElementById('fxo-file-athena').files[0];
+            if (!f1 || !f2) {
+                Swal.fire({ icon: 'warning', title: 'Faltou um arquivo',
+                            text: 'Envie a posição B3 e o relatório da Athena.' });
+                return;
+            }
+            fd.append('files', f1);
+            fd.append('files', f2);
+        }
+        Swal.fire({ title: 'Reconciliando…', allowOutsideClick: false,
+                    didOpen: function () { Swal.showLoading(); } });
+        fetch('/reconciliation-fxo/run', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                Swal.close();
+                if (j.not_found) {
+                    // Arquivo do dia ainda não chegou: o caminho procurado vai na
+                    // mensagem, senão não há como saber se foi a data ou a pasta.
+                    Swal.fire({ icon: 'info', title: 'Arquivo do dia não encontrado',
+                                html: '<div style="font-size:.8rem;word-break:break-all">' +
+                                      (j.detail || '') + '</div>' +
+                                      '<p class="mt-2 mb-0" style="font-size:.8rem">' +
+                                      'Use o <b>Manual Upload</b> se você já tem os arquivos.</p>' });
+                    return;
+                }
+                if (!j.success) {
+                    Swal.fire({ icon: 'error', title: 'Não foi possível reconciliar',
+                                text: j.error || 'Erro desconhecido.' });
+                    return;
+                }
+                bootstrap.Modal.getInstance(document.getElementById('fxoUploadModal'))?.hide();
+                paint(j);
+                Swal.fire({ icon: 'success', title: 'Reconciliação concluída',
+                            text: j.meta || '', timer: 2600, showConfirmButton: false });
+            })
+            .catch(function (e) {
+                Swal.close();
+                Swal.fire({ icon: 'error', title: 'Falha na chamada', text: String(e) });
+            });
+    }
+
+    $(document).ready(function () {
+        buildTable(['Status']);          // cabeçalho mínimo até o /data responder
+        syncDateDisplay();
+        loadData();
+
+        $('#fxo-date').on('change', function () { syncDateDisplay(); loadData(); });
+        $('#fxoPageLength').on('change', function () {
+            if (table) table.page.len(parseInt(this.value, 10)).draw();
+        });
+        $('#btnRunFxo').on('click', function () { run('auto'); });
+        $('#btnRunManual').on('click', function () { run('manual'); });
+
+        $('#btnClearFilters').on('click', function () {
+            activeStatus = activeField = '';
+            $('.fxo-col-filters input').val('');
+            if (table) { table.columns().search(''); }
+            applyFilters();
+        });
+
+        // Clicar de novo no mesmo card desliga o filtro — senão só o Clear
+        // Filters volta à lista inteira, e ninguém procura ali por isso.
+        $(document).on('click', '.fxo-widget', function () {
+            var s = $(this).attr('data-status') || '';
+            activeStatus = (activeStatus === s) ? '' : s;
+            applyFilters();
+        });
+        $(document).on('click', '.fxo-chip-nok', function () {
+            var f = $(this).attr('data-field') || '';
+            activeField = (activeField === f) ? '' : f;
+            applyFilters();
+        });
+
+        ['fxo-file-dpos', 'fxo-file-athena'].forEach(function (id, i) {
+            $('#' + id).on('change', function () {
+                if (this.files[0]) {
+                    $('#fxo-name' + (i + 1)).text(this.files[0].name).removeClass('d-none');
+                }
+            });
+        });
+
+        if (window.lucide) lucide.createIcons();
+    });
+})();
+</script>
+{% endblock %}

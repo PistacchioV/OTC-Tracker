@@ -204,6 +204,7 @@ _NOTIF_PAGE_URL = {
     _NOTIF_DS_OTHERPUB: '/ndf-other-publisher',
     'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
+    'Recon FXO': '/reconciliation-fxo',
     'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
     'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
     'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
@@ -17748,6 +17749,13 @@ _API_LINKS_SEED = (
      'NOTES': 'Sem consumidor ainda'},
     {'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
      'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
+    # Recon FXO: outro Athena — o relatório EOD do bob-reports, não o getTrades.
+    # A data fica no CAMINHO (AAAA-MM-DD), que é justamente o caso para o qual o
+    # placeholder existe: nenhum parâmetro de query alcança ali.
+    {'USE': 'Recon FXO', 'PRODUCT': 'FXO',
+     'URL': ('http://athena-reports.jpmchase.net:8080/bob-reports/'
+             'YYYY-MM-DD/EOD/GEM_OFFICIAL_TRD/FXOEODReport/brazil_fxo_trades.csv'),
+     'NOTES': 'Relatório EOD que a reconciliação de FXO compara com a posição B3'},
 )
 
 
@@ -18235,7 +18243,7 @@ _MAPPING_DEFS = {
         'label': 'API Links',
         'columns': [
             {'key': 'USE', 'label': 'Usage', 'type': 'select',
-             'options': ['New Deals', 'Unwinds']},
+             'options': ['New Deals', 'Unwinds', 'Recon FXO']},
             {'key': 'PRODUCT', 'label': 'Product (blank = any)', 'type': 'select',
              'options': _MAP_API_PRODUCTS},
             {'key': 'URL', 'label': 'URL (YYYYMMDD = reference date)'},
@@ -18243,6 +18251,51 @@ _MAPPING_DEFS = {
         ],
         'upgrade': _api_links_upgrade,
         'seed': list(_API_LINKS_SEED),
+    },
+    # Reconciliação de FXO, de-para 1: a contraparte como a ATHENA escreve → o
+    # CNPJ que a CETIP registra. Vinha de uma planilha no OneDrive de uma pessoa
+    # ('Mapping COUNTERPARTY to CNPJ.xlsx'), que o servidor não alcança.
+    #
+    # Nasce VAZIO de propósito: o conteúdo da planilha não está no repositório, e
+    # semear meia dúzia de linhas de memória faria a recon casar algumas
+    # contrapartes e errar as outras em silêncio. Sem cadastro, a coluna Ctpty
+    # compara nome com nome pelos dois fallbacks — pior que o CNPJ, mas honesto —
+    # e a tela avisa que o cadastro está vazio.
+    'fxo-cpty-cnpj': {
+        'label': 'FXO Recon — Counterparty × CNPJ',
+        'columns': [
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty (como a Athena escreve)'},
+            {'key': 'CNPJ', 'label': 'CNPJ'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
+    # Reconciliação de FXO, de-para 2: a perna INTERNA. Ela chega à Athena com o
+    # nome da mesa (o book), enquanto a CETIP registra o código do fundo — sem
+    # tradução, toda operação intragrupo sai NOK.
+    #
+    # INVERT DIRECTION separa os dois casos, e a diferença importa:
+    #   'No'  → só o nome muda, e a troca vale SEMPRE;
+    #   'Yes' → a perna vem espelhada (o Buy/Sell também está invertido), e a
+    #           troca vale só quando Ctpty e JPM Dir estão os DOIS NOK. Aplicar
+    #           essa sempre inverteria a direção de operações que estavam certas.
+    'fxo-internal-cpty': {
+        'label': 'FXO Recon — Internal Counterparty',
+        'columns': [
+            {'key': 'ATHENA NAME', 'label': 'Nome na Athena'},
+            {'key': 'CETIP CODE', 'label': 'Código na CETIP'},
+            {'key': 'INVERT DIRECTION', 'label': 'Perna espelhada (inverte Buy/Sell)',
+             'type': 'select', 'options': ['No', 'Yes']},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'ATHENA NAME': 'LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO - LABAY LAWTON',
+             'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No',
+             'NOTES': 'Nome do fundo por extenso na Athena'},
+            {'ATHENA NAME': 'BCO J.P. MORGAN S.A. 2768 - GEM BR - EXPENSES & CASH MGMT',
+             'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes',
+             'NOTES': 'Conta interna GEM — a perna chega com a direção invertida'},
+        ],
     },
     # Quais linhas do Operations B3 entram numa apuração de liquidação — de
     # qualquer produto. Era `swap-b3-events`, só com o Tipo Operação do swap;
@@ -28030,6 +28083,59 @@ def reconciliation_payrec_justify():
         return jsonify({'success': True})
     except Exception as e:
         log.error('[recon_payrec_justify] %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==============================================================================
+#  FXO RECONCILIATION — posição B3/CETIP (DPOSICAO .OPC) × Athena (EOD FXO).
+#  O motor está em apps/pages/recon_fxo.py; aqui só entram sessão, data e o
+#  encaminhamento dos arquivos do upload manual.
+# ==============================================================================
+@blueprint.route('/reconciliation-fxo')
+def reconciliation_fxo():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/reconciliation-fxo.html',
+                           segment='reconciliation-fxo',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/reconciliation-fxo/data')
+def reconciliation_fxo_data():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from apps.pages.recon_fxo import load_last
+        return jsonify(load_last(request.args.get('recon_date', '')))
+    except Exception as e:
+        log.error('[recon_fxo_data] %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/reconciliation-fxo/run', methods=['POST'])
+def reconciliation_fxo_run():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    mode = request.form.get('mode', 'auto')
+    recon_date = request.form.get('recon_date', '')
+    try:
+        from apps.pages.recon_fxo import run_fxo
+        files = request.files.getlist('files') if mode == 'manual' else None
+        result = run_fxo(recon_date, files=files, mode=mode)
+        if result.get('success'):
+            _create_notification(
+                session.get('user_sid', ''), session.get('user_name', ''),
+                'Recon FXO', 'Reconciliation',
+                result.get('meta', '') + (' (' + recon_date + ')' if recon_date else '')
+            )
+        return jsonify(result)
+    except FileNotFoundError as e:
+        # O arquivo de posição do dia ainda não chegou na rede. Não é erro de
+        # código: a tela oferece o upload manual em vez de mostrar um stack.
+        log.warning('[recon_fxo_run] arquivo não encontrado: %s', e)
+        return jsonify({'not_found': True, 'detail': str(e)})
+    except Exception as e:
+        log.error('[recon_fxo_run] %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

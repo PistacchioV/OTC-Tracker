@@ -100,12 +100,13 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
   file's own extra columns (`STATUS`/`MAKER`/`CHECKER`) too: the `/mapping` POST rewrites the whole file
   and would drop anything not declared (HANDOFF §188).
 
-Current mappings (22): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
+Current mappings (24): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
 `commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
 `api-links`, `opb3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
-`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`.
-See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197 for the rest. Some carry rules that
-are easy to break from the UI:
+`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`,
+`fxo-cpty-cnpj`, `fxo-internal-cpty`.
+See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197/§216 for the rest. Some carry rules
+that are easy to break from the UI:
 
 - **`opb3-events`** — quais linhas do Operations B3 entram numa apuração de liquidação, e é a MESMA
   resposta para o NDF Summary, o Other Products, os avisos e a mensageria. A linha é uma **regra** sobre
@@ -138,7 +139,16 @@ are easy to break from the UI:
   usage. `date` is always rewritten; `product` only on the wildcard row — a product-specific row is used
   as registered, since it was picked *by* product. The `Unwinds` row ships **empty on purpose** — with no
   URL its consumer fails asking for registration, while `New Deals` falls back to the historical address
-  (HANDOFF §173).
+  (HANDOFF §173). O uso **`Recon FXO`** é outro Athena — o relatório EOD do `bob-reports`, não o
+  `getTrades` — e a data dele fica no **caminho** (`AAAA-MM-DD`), que é justamente para o que o
+  placeholder serve.
+
+- **`fxo-cpty-cnpj` / `fxo-internal-cpty`** — os dois de-para da reconciliação de FXO. O primeiro
+  (Counterparty → CNPJ) nasce **vazio** de propósito: a planilha de origem não está no repositório, e a
+  tela avisa em vez de semear meia dúzia de linhas de memória — sem cadastro a coluna Ctpty cai nos
+  fallbacks e compara nome com nome. No segundo, a coluna **`INVERT DIRECTION`** decide *quando* a regra
+  vale: `No` renomeia sempre; `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os
+  dois NOK — aplicá-la sempre inverteria a direção de operações que estavam certas (HANDOFF §216).
 
 - **`swap-index`** — the B3 curve code → curve name (`C00` → `VCP`). It points at the **same
   `SwapIndex.json`** the B3 Index Results page edits (see the `file` note above), and every code→text

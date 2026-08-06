@@ -22,6 +22,7 @@ var PAGE_URL = {
     'NDF Other Publisher (Settlement)': '/ndf-other-publisher',
     'NDF Vanilla': '/new_deals-ndf-vanilla', 'Index B3': '/index-b3',
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
+    'Recon FXO': '/reconciliation-fxo',
     'Reconciliation': '/reconciliation-payrec', 'Pending Confirmation': '/pending-confirmation',
     'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',

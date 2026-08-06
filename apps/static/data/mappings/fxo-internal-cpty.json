@@ -1,0 +1,14 @@
+[
+  {
+    "ATHENA NAME": "LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO - LABAY LAWTON",
+    "CETIP CODE": "INTRAGLAWTONFDO",
+    "INVERT DIRECTION": "No",
+    "NOTES": "Nome do fundo por extenso na Athena"
+  },
+  {
+    "ATHENA NAME": "BCO J.P. MORGAN S.A. 2768 - GEM BR - EXPENSES & CASH MGMT",
+    "CETIP CODE": "INTRAGLAWTONFDO",
+    "INVERT DIRECTION": "Yes",
+    "NOTES": "Conta interna GEM — a perna chega com a direção invertida"
+  }
+]

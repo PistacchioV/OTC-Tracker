@@ -181,8 +181,14 @@ check('idempotente', len(R._api_links_upgrade(up)), len(up))
 print('\n== 5. o mapping esta ligado na tela ==')
 cols = [c['key'] for c in R._MAPPING_DEFS['api-links']['columns']]
 check('colunas', cols, ['USE', 'PRODUCT', 'URL', 'NOTES'])
-check('USE e um select com os dois usos',
-      R._MAPPING_DEFS['api-links']['columns'][0].get('options'), ['New Deals', 'Unwinds'])
+check('USE e um select com os usos cadastrados',
+      R._MAPPING_DEFS['api-links']['columns'][0].get('options'),
+      ['New Deals', 'Unwinds', 'Recon FXO'])
+# Todo uso que aparece no seed tem de estar na lista do select — senao a linha
+# existe no arquivo e nao ha como reeditá-la pela tela.
+check('   e cobre todos os usos do seed',
+      sorted({r['USE'] for r in R._API_LINKS_SEED}
+             - set(R._MAPPING_DEFS['api-links']['columns'][0]['options'])), [])
 check('PRODUCT lista os produtos da API',
       R._MAPPING_DEFS['api-links']['columns'][1].get('options'),
       ['', 'NDF', 'FXO', 'Commodities', 'Swaps'])

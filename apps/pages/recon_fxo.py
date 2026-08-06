@@ -1,0 +1,909 @@
+# -*- coding: utf-8 -*-
+"""FXO Reconciliation — DPOSICAO (posição B3/CETIP) × Athena (sistema interno).
+
+Porte do script `recon_fxo.py` que a mesa rodava na mão. A regra de comparação é
+a mesma, campo a campo; o que mudou é como as bases entram e como o resultado
+sai.
+
+O que saiu do script, e por quê:
+
+  * **O Excel.** O resultado agora é a própria página: os cards contam os status
+    e a tabela mostra as linhas, com o NOK pintado na célula. O arquivo era um
+    passo a mais entre rodar e olhar, e cada rodada deixava um arquivo diferente
+    na pasta de alguém.
+
+  * **Os dois XLSX intermediários.** A Parte A baixava a Athena e importava a
+    DPOSICAO para dois `.xlsx` em `test\\`, que a Parte B relia. Aqui as bases
+    entram direto em memória. Isso também matou a aba `OPC_260702_DPOSICAO`
+    cravada no código — um nome de aba de UM dia específico, que só funcionava
+    porque havia um resolvedor por semelhança atrás dele.
+
+  * **Os caminhos do Desktop de quem escreveu.** A DPOSICAO vem da MESMA raiz da
+    rotina Save CETIP Files (`CETIP_DEST_ROOT`), e o endereço da Athena está
+    cadastrado em `api-links` (uso **Recon FXO**) como todo endpoint do sistema.
+
+  * **Os dois de-para que estavam no código.** O Counterparty → CNPJ vinha de uma
+    planilha no OneDrive de uma pessoa; as contrapartes internas (GEM, LAWTON)
+    eram constantes. Viraram cadastro (`fxo-cpty-cnpj` e `fxo-internal-cpty`),
+    editável em /mapping e válido no próximo run, sem restart.
+
+Chave do match: `Combinação de operações` (DPOSICAO) × `DealID` (Athena), com
+`MatchingDealID` como segunda tentativa e SÓ para as chaves que não existem em
+DealID — a prioridade é do DealID, senão uma mesma operação casaria duas vezes.
+"""
+
+import io
+import json
+import logging
+import os
+import re
+import unicodedata
+from datetime import datetime
+
+import pandas as pd
+
+_LOG = logging.getLogger(__name__)
+
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_DATA_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data'))
+_MAPPINGS_DIR = os.path.join(_DATA_DIR, 'mappings')
+_CACHE_DIR = os.path.join(_DATA_DIR, 'cache', 'reconciliation', 'fxo')
+
+# Raiz das posições CETIP — a MESMA da rotina Save CETIP Files e da recon de
+# Comitente, pelo mesmo env var. Duas raízes seriam duas verdades sobre onde o
+# arquivo do dia está.
+_CETIP_BASE = os.getenv(
+    'CETIP_DEST_ROOT',
+    r"I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files")
+
+# Nome do arquivo de posição de opções, com a data no padrão da B3 (AAMMDD).
+_DPOSICAO_NAME = '73760_{yymmdd}_DPOSICAO.OPC'
+
+# Endereço do relatório EOD de FXO — usado só quando o cadastro `api-links` não
+# tem a linha do Recon FXO. É o mesmo que estava no script.
+_ATHENA_FXO_FALLBACK = ('http://athena-reports.jpmchase.net:8080/bob-reports/'
+                        'YYYY-MM-DD/EOD/GEM_OFFICIAL_TRD/FXOEODReport/'
+                        'brazil_fxo_trades.csv')
+_API_USE = 'Recon FXO'
+_API_PRODUCT = 'FXO'
+
+_MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
+             6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October',
+             11: 'November', 12: 'December'}
+
+# ── Filtros da base âncora ───────────────────────────────────────────────────
+FILTRO_PARTE_CONTA = '73760009'
+FILTRO_CLASSE = 'TAXAS DE CAMBIO'
+
+# ── Colunas ──────────────────────────────────────────────────────────────────
+COL_DP_PARTE_CONTA = 'Parte (Conta)'
+COL_DP_CLASSE = 'Classe do ativo subjacente'
+COL_DP_CHAVE = 'Combinação de operações'
+COL_DP_CODIGO_IF = 'Código IF'
+COL_DP_MEDIA_ASIAT = 'Média Asiática'
+COL_DP_FIX_ADATIVO = 'Data de fixing do ativo subjacente'
+
+COL_AT_CHAVE = 'DealID'
+COL_AT_MATCHING = 'MatchingDealID'
+COL_AT_OPTIONSTYLE = 'OptionStyle'
+
+# Bloco de datas de fixing (colunas CC..ES da DPOSICAO, por POSIÇÃO). É onde a
+# opção asiática lista as datas de verificação; ele não tem cabeçalho próprio,
+# por isso o recorte é posicional.
+IDX_BLOCO_FIXING_INI = 80
+IDX_BLOCO_FIXING_FIM = 148
+VALOR_MEDIA_ASIATICA_DATAS = 'SIMPLES_DATAS'
+
+
+# =============================================================================
+# Leitura das bases
+# =============================================================================
+
+def _text_to_columns(df, coluna, sep=';'):
+    """Divide `coluna` pelo separador, QUEBRANDO TAMBÉM o nome do cabeçalho.
+
+    É o 'Texto para Colunas' do Excel: ele parte a linha inteira, header
+    incluído. Quebrar só os dados deixaria N colunas novas com um nome só.
+    """
+    idx = df.columns.get_loc(coluna)
+    partes = df[coluna].astype('string').str.split(sep, expand=True)
+    n = partes.shape[1]
+
+    nomes = str(coluna).split(sep)
+    if len(nomes) < n:
+        nomes = nomes + ['%s_%d' % (coluna, i + 1) for i in range(len(nomes), n)]
+    else:
+        nomes = nomes[:n]
+    partes.columns = nomes
+    return pd.concat([df.iloc[:, :idx], partes, df.iloc[:, idx + 1:]], axis=1)
+
+
+def read_dposicao(src):
+    """Lê o `.OPC` (separado por TAB) como a Parte A do script fazia.
+
+    Duas coisas que o arquivo faz e um `read_csv` ingênuo não sobrevive:
+
+      1. **as linhas de dados podem ter MAIS colunas que o cabeçalho** — o
+         cronograma de verificação de barreiras / média asiática continua para a
+         direita sem título. Por isso o número de colunas sai do arquivo inteiro
+         e as excedentes ganham nome genérico;
+      2. **algumas colunas trazem vários campos separados por `;`**, no dado e no
+         próprio cabeçalho.
+
+    Tudo entra como texto (`dtype=str`): zeros à esquerda de conta e CNPJ são
+    parte do valor, e a conversão vem depois, por campo.
+    """
+    if hasattr(src, 'read'):
+        raw = src.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode('latin-1', errors='replace')
+        linhas = raw.splitlines(True)
+        buf = io.StringIO(''.join(linhas))
+    else:
+        with open(src, 'r', encoding='latin-1') as fh:
+            linhas = fh.readlines()
+        buf = io.StringIO(''.join(linhas))
+
+    if not linhas:
+        raise ValueError('Arquivo de DPOSICAO vazio.')
+
+    ncols = max(l.count('\t') for l in linhas) + 1
+    header = [c for c in linhas[0].rstrip('\n').split('\t') if c.strip() != '']
+    extra = max(ncols - len(header), 0)
+    names = header + ['extra_%d' % (i + 1) for i in range(extra)]
+
+    df = pd.read_csv(buf, sep='\t', dtype=str, header=0, names=names,
+                     engine='python', index_col=False)
+
+    com_pv = [c for c in df.columns
+              if (';' in str(c)
+                  or df[c].astype('string').str.contains(';', na=False).any())]
+    for col in com_pv:
+        df = _text_to_columns(df, col, sep=';')
+    _LOG.info('[recon_fxo] DPOSICAO: %d linhas, %d colunas (%d expandidas por ";")',
+              len(df), len(df.columns), len(com_pv))
+    return df
+
+
+def read_athena(src):
+    """Lê o relatório EOD de FXO (CSV separado por `|`)."""
+    if isinstance(src, bytes):
+        src = io.BytesIO(src)
+    return pd.read_csv(src, sep='|', encoding='utf-8-sig')
+
+
+def dposicao_path(ref_date):
+    """`<raiz>/AAAA/MM. Month/DD/73760_AAMMDD_DPOSICAO.OPC`."""
+    d = _parse_date(ref_date)
+    return os.path.join(_CETIP_BASE, d.strftime('%Y'),
+                        '%02d. %s' % (d.month, _MONTH_EN[d.month]),
+                        d.strftime('%d'),
+                        _DPOSICAO_NAME.format(yymmdd=d.strftime('%y%m%d')))
+
+
+def athena_url(ref_date):
+    """Endereço do relatório do dia, do cadastro `api-links`.
+
+    Sem linha cadastrada cai no endereço histórico — a rotina existia antes do
+    cadastro e deixá-la sem URL nenhuma a quebraria na primeira instância que
+    ainda não abriu a tela de mappings.
+    """
+    d = _parse_date(ref_date)
+    template = None
+    try:
+        from apps.pages import athena_api
+        template, _ = athena_api.registered_link(_API_USE, _API_PRODUCT)
+    except Exception as exc:                       # pragma: no cover - defensivo
+        _LOG.debug('[recon_fxo] cadastro api-links indisponível: %s', exc)
+    if not template:
+        template = _ATHENA_FXO_FALLBACK
+    return re.sub(r'yyyy[-/. ]?mm[-/. ]?dd', d.strftime('%Y-%m-%d'),
+                  template, flags=re.I)
+
+
+def _parse_date(ref_date):
+    s = str(ref_date or '').strip()
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d'):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    raise ValueError('Data inválida: %r. Use AAAA-MM-DD.' % ref_date)
+
+
+# =============================================================================
+# Os dois cadastros
+# =============================================================================
+
+def _mapping_rows(key):
+    """Linhas de um cadastro de /mapping, lidas do disco a cada chamada.
+
+    Importar `routes` daqui seria circular; ler o JSON direto é o mesmo padrão de
+    `athena_api._api_link_rows` e `otc_emails._ndf_pdf_set`. Ler a cada chamada é
+    de propósito: edição na tela vale no próximo run, sem restart.
+    """
+    try:
+        with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return []
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+def lookup_cnpj():
+    """Counterparty (como a Athena escreve) → CNPJ, do cadastro `fxo-cpty-cnpj`.
+
+    A chave é normalizada (sem acento, espaços colapsados, maiúscula) porque os
+    dois lados escrevem a razão social com pontuação diferente.
+    """
+    mapa = {}
+    for r in _mapping_rows('fxo-cpty-cnpj'):
+        chave = _chave_lookup(r.get('COUNTERPARTY'))
+        if chave:
+            mapa[chave] = so_digitos(r.get('CNPJ'))
+    return mapa
+
+
+def internal_cpty_rules():
+    """Contrapartes internas: (renomeações diretas, regras de perna espelhada).
+
+    Uma perna interna chega à Athena com o nome da MESA (o book), não o do
+    cliente, e a CETIP registra o código do fundo. Duas formas:
+
+      * `INVERT DIRECTION = No` — só o nome muda; a renomeação vale sempre;
+      * `INVERT DIRECTION = Yes` — a perna vem ESPELHADA: além do nome, o Buy/Sell
+        está invertido. Essa vale só quando Ctpty **e** JPM Dir estão os dois
+        NOK, que é a assinatura da perna espelhada — aplicá-la sempre inverteria
+        a direção de operações que estavam certas.
+    """
+    diretas, espelhadas = {}, []
+    for r in _mapping_rows('fxo-internal-cpty'):
+        nome = str(r.get('ATHENA NAME') or '').strip()
+        codigo = str(r.get('CETIP CODE') or '').strip()
+        if not nome or not codigo:
+            continue
+        if str(r.get('INVERT DIRECTION') or '').strip().lower().startswith(('y', 's')):
+            espelhadas.append((nome.upper(), codigo))
+        else:
+            diretas[nome.upper()] = codigo
+    return diretas, espelhadas
+
+
+# =============================================================================
+# Normalizações e comparação
+# =============================================================================
+
+def norm_txt(v):
+    if pd.isna(v):
+        return None
+    return str(v).strip()
+
+
+def ajustar_prefixo_cetip(v):
+    """`CETIP-` → `CETIP_` na chave de operação.
+
+    Os dois lados escrevem o mesmo identificador com traço e com underline; sem
+    normalizar, a operação simplesmente não casa e sai como órfã.
+    """
+    if pd.isna(v):
+        return v
+    s = str(v).lstrip()
+    if s.startswith('CETIP-'):
+        return 'CETIP_' + s[len('CETIP-'):]
+    return str(v)
+
+
+def so_digitos(v):
+    if pd.isna(v):
+        return None
+    if isinstance(v, (int, float)):
+        if float(v).is_integer():
+            v = int(v)
+        s = str(v)
+    else:
+        s = str(v).strip()
+        if re.fullmatch(r'\d+\.0+', s):
+            s = s.split('.')[0]
+    s = re.sub(r'\D', '', s).lstrip('0')
+    return s or None
+
+
+def num_br(v):
+    """Número em formato BR (1.234,56) ou simples ('7415') → float.
+
+    Só trata o ponto como separador de milhar QUANDO há vírgula: '1234.56' sem
+    vírgula é decimal americano, e apagar o ponto dele daria 123456.
+    """
+    if pd.isna(v):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip()
+    if s == '':
+        return None
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
+    return pd.to_numeric(s, errors='coerce')
+
+
+def texto_simples(v):
+    if pd.isna(v):
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def _chave_lookup(v):
+    if v is None or (not isinstance(v, str) and pd.isna(v)):
+        return None
+    s = str(v).strip()
+    if s == '':
+        return None
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s)
+                if not unicodedata.combining(c))
+    return re.sub(r'\s+', ' ', s).upper()
+
+
+def _texto_vazio_para_na(v):
+    if pd.isna(v):
+        return None
+    s = str(v).strip()
+    if s == '' or s.upper() in {'NAN', 'NONE'}:
+        return None
+    return s.upper()
+
+
+def comparar(a, b, tolerancia=None, tipo=None):
+    """OK/NOK de um par de valores já normalizados.
+
+    Vazio dos dois lados é OK: a operação não tem o campo, e os dois sistemas
+    concordam nisso. Vazio de um lado só é NOK — é justamente o que a recon
+    procura.
+    """
+    if tipo == 'texto':
+        a, b = _texto_vazio_para_na(a), _texto_vazio_para_na(b)
+    a_na, b_na = pd.isna(a), pd.isna(b)
+    if a_na and b_na:
+        return 'OK'
+    if a_na or b_na:
+        return 'NOK'
+    if tipo == 'valor' or tolerancia is not None:
+        a_num = pd.to_numeric(a, errors='coerce')
+        b_num = pd.to_numeric(b, errors='coerce')
+        if pd.isna(a_num) or pd.isna(b_num):
+            return 'NOK'
+        return 'OK' if abs(a_num - b_num) <= (tolerancia or 0) else 'NOK'
+    return 'OK' if a == b else 'NOK'
+
+
+def aplicar_substituicao(serie, mapa):
+    if not mapa:
+        return serie
+    norm = {str(k).strip().upper(): v for k, v in mapa.items()}
+
+    def _tr(v):
+        if pd.isna(v):
+            return v
+        return norm.get(str(v).strip().upper(), v)
+    return serie.apply(_tr)
+
+
+def aplicar_lookup(serie, mapa):
+    return serie.apply(lambda v: None if pd.isna(v) else mapa.get(_chave_lookup(v)))
+
+
+def normalizar_data(serie):
+    """Texto/serial/AAAAMMDD → data, sem ambiguidade de dia × mês.
+
+    A ordem importa: AAAA-MM-DD é lido como ISO e o resto como BR (dia primeiro).
+    Deixar o pandas adivinhar fazia 03/04 virar 4 de março num arquivo e 3 de
+    abril no outro, e a recon acusava NOK numa data que era a mesma.
+    """
+    def _to_date(v):
+        if pd.isna(v):
+            return pd.NaT
+        if isinstance(v, pd.Timestamp):
+            return v.normalize()
+        num = pd.to_numeric(v, errors='coerce')
+        if pd.notna(num) and str(v).strip().replace('.', '').isdigit():
+            n = int(num)
+            if 19000101 <= n <= 29991231:
+                d = pd.to_datetime(str(n), format='%Y%m%d', errors='coerce')
+                if pd.notna(d):
+                    return d.normalize()
+            d = pd.to_datetime(num, unit='D', origin='1899-12-30', errors='coerce')
+            if pd.notna(d):
+                return d.normalize()
+        s = str(v).strip()
+        if re.match(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}', s):
+            d = pd.to_datetime(s, errors='coerce', dayfirst=False)
+            if pd.notna(d):
+                return d.normalize()
+        d = pd.to_datetime(s, errors='coerce', dayfirst=True)
+        return d.normalize() if pd.notna(d) else pd.NaT
+    return serie.apply(_to_date)
+
+
+# =============================================================================
+# Derivações — o fixing da opção asiática
+# =============================================================================
+
+def _datas_do_bloco(row, cols_bloco):
+    datas = []
+    for c in cols_bloco:
+        v = row.get(c)
+        if pd.isna(v):
+            continue
+        num = pd.to_numeric(v, errors='coerce')
+        if pd.isna(num) or num == 0:
+            continue
+        d = pd.to_datetime(str(int(num)), format='%Y%m%d', errors='coerce')
+        if pd.notna(d):
+            datas.append(d)
+    return sorted(set(datas))
+
+
+def deriv_fix_date(row, ctx):
+    """Último fixing. Na asiática ele é a última data do cronograma; na europeia
+    é a própria data de fixing do ativo subjacente."""
+    if str(row.get(ctx['col_media'])).strip().upper() == ctx['valor_datas'].upper():
+        datas = _datas_do_bloco(row, ctx['cols_bloco'])
+        return datas[-1] if datas else pd.NaT
+    return row.get(ctx['col_fix_ad'])
+
+
+def deriv_primeiro_fix(row, ctx):
+    """Primeiro fixing — só existe na asiática; a europeia fixa uma vez só."""
+    if str(row.get(ctx['col_media'])).strip().upper() == ctx['valor_datas'].upper():
+        datas = _datas_do_bloco(row, ctx['cols_bloco'])
+        return datas[0] if datas else pd.NaT
+    return pd.NaT
+
+
+# =============================================================================
+# Os campos comparados
+# =============================================================================
+
+CAMPOS = [
+    {'nome': 'JPM_Dir', 'dp': 'Posição da Parte', 'at': 'TransactionType',
+     'rot_dp': 'CET JPM Dir', 'rot_at': 'ATH JPM Dir', 'rot_st': 'Status JPM Dir',
+     'subst_dp': {'TITULAR': 'Buy', 'LANCADOR': 'Sell'}},
+
+    {'nome': 'P_C', 'dp': 'Tipo de Opção', 'at': 'OptionType',
+     'rot_dp': 'CET P / C', 'rot_at': 'Ath_P/C', 'rot_st': 'Status P/C',
+     'subst_at': {'Put on USD': 'PUT', 'Call on USD': 'CALL'}},
+
+    {'nome': 'Ctpty', 'dp': 'CPF/CNPJ Cliente Contraparte', 'at': 'MatchingCounterpartyName',
+     'rot_dp': 'CET Ctpty', 'rot_at': 'ATH Client Ext', 'rot_st': 'Status Ctpty',
+     # A Athena traz o NOME; a CETIP, o CNPJ. O cadastro traduz um no outro, e
+     # quando não há tradução os dois caem no nome simplificado — comparar nome
+     # com nome erra menos do que comparar nome com CNPJ, que erraria sempre.
+     'lookup_at': True, 'tipo': 'digitos',
+     'fallback_dp': 'Contraparte (Nome simplificado)',
+     'fallback_at': 'CounterpartyName'},
+
+    {'nome': 'Amt', 'dp': 'Quantidade', 'at': 'Quantity',
+     'rot_dp': 'CET Amt', 'rot_at': 'ATH Amt', 'rot_st': 'Status Amt',
+     'abs_at': True, 'tipo': 'valor'},
+
+    {'nome': 'Premium', 'dp': 'Valor financeiro total do prêmio', 'at': 'Premium',
+     'rot_dp': 'CET Premium', 'rot_at': 'ATH Premium', 'rot_st': 'Status Premium',
+     # Tolerância de 0,67: o prêmio da CETIP é arredondado no registro, e a
+     # diferença de centavos não é quebra de recon.
+     'abs_at': True, 'arred': 2, 'tolerancia': 0.67, 'tipo': 'valor'},
+
+    {'nome': 'Strike', 'dp': 'Strike (valor)', 'at': 'Strike',
+     'rot_dp': 'CET Strike', 'rot_at': 'ATH Strike', 'rot_st': 'Status Strike',
+     'tipo': 'valor'},
+
+    {'nome': 'TD', 'dp': 'Data Registro', 'at': 'TradeDate',
+     'rot_dp': 'CET TD', 'rot_at': 'ATH TD', 'rot_st': 'Status TD',
+     'tipo': 'data', 'fmt': '%d/%m/%Y'},
+
+    {'nome': 'VD', 'dp': 'Data Vencimento', 'at': 'SettlementDate',
+     'rot_dp': 'CET VD', 'rot_at': 'ATH VD', 'rot_st': 'Status VD',
+     'tipo': 'data', 'fmt': '%d/%m/%Y'},
+
+    {'nome': 'Fix_Date', 'dp': None, 'at': 'FixingDate',
+     'rot_dp': 'CET Fix Date', 'rot_at': 'ATH Fix Date', 'rot_st': 'Status Fix Date',
+     'tipo': 'data', 'derivacao': deriv_fix_date, 'fmt': '%d/%m/%Y'},
+
+    {'nome': 'Primeiro_Fix', 'dp': None, 'at': 'FirstFixingDate',
+     'rot_dp': 'CET 1º Fix', 'rot_at': 'ATH 1º Fix', 'rot_st': 'Status 1º Fix',
+     'tipo': 'data', 'derivacao': deriv_primeiro_fix, 'fmt': '%d/%m/%Y'},
+
+    {'nome': 'Asian_European', 'dp': 'Média Asiática', 'at': 'OptionStyle',
+     'rot_dp': 'Asian / European CET', 'rot_at': 'Asian / European ATH',
+     'rot_st': 'Status Asian/European',
+     'subst_dp': {'SIMPLES_DATAS': 'Asian'},
+     'subst_at': {'Vanilla Option': '', 'Avg Rate Option': 'Asian', 'European': ''},
+     'tipo': 'texto'},
+]
+
+STATUS_COLS = [c['rot_st'] for c in CAMPOS]
+
+# Colunas da tabela, na ordem em que aparecem na página.
+COLUMNS = (['Status', 'Código IF', 'Combinação de operações']
+           + [x for c in CAMPOS for x in (c['rot_dp'], c['rot_at'], c['rot_st'])]
+           + ['Match', 'Chave Duplicada'])
+
+
+# =============================================================================
+# Match
+# =============================================================================
+
+def base_athena_para_match(df_at):
+    """Athena expandida para o match, com PRIORIDADE do DealID.
+
+    A chave da CETIP pode bater com o `DealID` ou com o `MatchingDealID`. As duas
+    entram, mas a linha de MatchingDealID só é considerada quando aquela chave
+    NÃO existe em DealID nenhum — senão a mesma operação apareceria duas vezes e
+    o `drop_duplicates` escolheria qualquer uma das duas.
+    """
+    chave_deal = df_at[COL_AT_CHAVE].apply(norm_txt)
+    chave_match = df_at[COL_AT_MATCHING].apply(norm_txt)
+    set_deal = set(chave_deal.dropna().unique())
+
+    base_deal = df_at.copy()
+    base_deal['_chave_norm'] = chave_deal.values
+    base_deal['match_athena_por'] = 'DealID'
+    base_deal['_prio'] = 1
+    base_deal = base_deal[base_deal['_chave_norm'].notna()].copy()
+
+    base_match = df_at.copy()
+    base_match['_chave_norm'] = chave_match.values
+    base_match['match_athena_por'] = 'MatchingDealID'
+    base_match['_prio'] = 2
+    base_match = base_match[base_match['_chave_norm'].notna()
+                            & ~base_match['_chave_norm'].isin(set_deal)].copy()
+
+    out = pd.concat([base_deal, base_match], ignore_index=True)
+    out = out.sort_values('_prio').drop_duplicates(subset=['_chave_norm'], keep='first')
+    return out
+
+
+# =============================================================================
+# Reconciliação
+# =============================================================================
+
+def reconcile(df_dp, df_at):
+    """DPOSICAO × Athena → (linhas, contagens, avisos)."""
+    avisos = []
+
+    for c in (COL_DP_PARTE_CONTA, COL_DP_CLASSE, COL_DP_CHAVE, COL_DP_CODIGO_IF,
+              COL_DP_MEDIA_ASIAT, COL_DP_FIX_ADATIVO):
+        if c not in df_dp.columns:
+            raise KeyError('Coluna %r não existe na DPOSICAO.' % c)
+    for c in (COL_AT_CHAVE, COL_AT_MATCHING, COL_AT_OPTIONSTYLE):
+        if c not in df_at.columns:
+            raise KeyError('Coluna %r não existe no relatório da Athena.' % c)
+
+    df_dp = df_dp.copy()
+    df_dp[COL_DP_CHAVE] = df_dp[COL_DP_CHAVE].apply(ajustar_prefixo_cetip)
+
+    mapa_cnpj = lookup_cnpj()
+    if not mapa_cnpj:
+        avisos.append('O cadastro Counterparty × CNPJ (FXO) está vazio — a coluna '
+                      'Ctpty vai comparar pelo nome simplificado dos dois lados.')
+    diretas, espelhadas = internal_cpty_rules()
+
+    cols_bloco = list(df_dp.columns[IDX_BLOCO_FIXING_INI:IDX_BLOCO_FIXING_FIM + 1])
+
+    # ── Base âncora: a nossa conta, só câmbio ────────────────────────────────
+    conta_txt = df_dp[COL_DP_PARTE_CONTA].apply(norm_txt)
+    conta_num = pd.to_numeric(df_dp[COL_DP_PARTE_CONTA], errors='coerce')
+    try:
+        alvo_num = float(FILTRO_PARTE_CONTA)
+    except ValueError:
+        alvo_num = None
+    # A conta chega ora como texto ora como número, conforme quem gravou o
+    # arquivo — os dois testes existem para a linha não sumir por causa disso.
+    cond_conta = (conta_txt == FILTRO_PARTE_CONTA)
+    if alvo_num is not None:
+        cond_conta = cond_conta | (conta_num == alvo_num)
+    cond_classe = (df_dp[COL_DP_CLASSE].apply(norm_txt).fillna('').str.upper()
+                   == FILTRO_CLASSE.upper())
+    df_anc = df_dp[cond_conta & cond_classe].copy()
+
+    if df_anc.empty:
+        avisos.append('Nenhuma linha de opção de câmbio na conta %s — confira a data.'
+                      % FILTRO_PARTE_CONTA)
+
+    chave_dp = df_anc[COL_DP_CHAVE].apply(norm_txt)
+    df_anc['_chave_norm'] = chave_dp.values
+    df_anc['alerta_chave_duplicada'] = (chave_dp.duplicated(keep=False)
+                                        & chave_dp.notna()).values
+
+    df_at = df_at.copy()
+    df_final = df_anc.merge(base_athena_para_match(df_at), on='_chave_norm',
+                            how='left', suffixes=('_dp', '_at'))
+    df_final['sem_correspondencia_athena'] = df_final['match_athena_por'].isna()
+
+    def col_dp(nome):
+        if nome in df_final.columns:
+            return nome
+        if '%s_dp' % nome in df_final.columns:
+            return '%s_dp' % nome
+        raise KeyError('Não encontrei %r na base final.' % nome)
+
+    def col_at(nome):
+        if nome in df_final.columns:
+            return nome
+        if '%s_at' % nome in df_final.columns:
+            return '%s_at' % nome
+        raise KeyError('Não encontrei a coluna Athena %r na base final.' % nome)
+
+    ctx = {'col_media': col_dp(COL_DP_MEDIA_ASIAT),
+           'col_fix_ad': col_dp(COL_DP_FIX_ADATIVO),
+           'cols_bloco': [col_dp(c) for c in cols_bloco],
+           'valor_datas': VALOR_MEDIA_ASIATICA_DATAS}
+
+    saida = pd.DataFrame()
+    saida['Código IF'] = df_final[col_dp(COL_DP_CODIGO_IF)].values
+    saida['Combinação de operações'] = df_final[col_dp(COL_DP_CHAVE)].values
+
+    for m in CAMPOS:
+        if m.get('derivacao') is not None:
+            v_dp = df_final.apply(lambda row, f=m['derivacao']: f(row, ctx), axis=1)
+        else:
+            v_dp = df_final[col_dp(m['dp'])]
+        v_at = df_final[col_at(m['at'])]
+
+        if m.get('lookup_at'):
+            v_at = aplicar_lookup(v_at, mapa_cnpj)
+
+        v_dp = aplicar_substituicao(v_dp, m.get('subst_dp'))
+        v_at = aplicar_substituicao(v_at, m.get('subst_at'))
+
+        if m.get('abs_dp'):
+            v_dp = pd.to_numeric(v_dp, errors='coerce').abs()
+        if m.get('abs_at'):
+            v_at = pd.to_numeric(v_at, errors='coerce').abs()
+
+        if m.get('tipo') == 'data':
+            v_dp, v_at = normalizar_data(v_dp), normalizar_data(v_at)
+        elif m.get('tipo') == 'digitos':
+            v_dp = pd.Series(v_dp).apply(so_digitos)
+            v_at = pd.Series(v_at).apply(so_digitos)
+        elif m.get('tipo') == 'valor':
+            # A CETIP vem como texto e em formato BR; a Athena já é numérica.
+            v_dp = pd.Series(v_dp).apply(num_br)
+            v_at = pd.to_numeric(pd.Series(v_at), errors='coerce')
+
+        if m.get('arred') is not None:
+            v_dp = pd.to_numeric(v_dp, errors='coerce').round(m['arred'])
+            v_at = pd.to_numeric(v_at, errors='coerce').round(m['arred'])
+
+        v_dp, v_at = pd.Series(list(v_dp)), pd.Series(list(v_at))
+
+        # Sem tradução dos dois lados, cai no nome — ver o comentário do campo.
+        if m.get('fallback_dp'):
+            nomes = df_final[col_dp(m['fallback_dp'])].apply(texto_simples).values
+            v_dp = pd.Series([n if pd.isna(v) else v for v, n in zip(v_dp, nomes)])
+        if m.get('fallback_at'):
+            nomes = df_final[col_at(m['fallback_at'])].apply(texto_simples).values
+            v_at = pd.Series([n if pd.isna(v) else v for v, n in zip(v_at, nomes)])
+
+        if diretas and m['nome'] == 'Ctpty':
+            v_at = aplicar_substituicao(v_at, diretas)
+
+        if m.get('tipo') == 'data':
+            fmt = m.get('fmt', '%d/%m/%Y')
+            saida[m['rot_dp']] = pd.Series(v_dp).dt.strftime(fmt).values
+            saida[m['rot_at']] = pd.Series(v_at).dt.strftime(fmt).values
+        else:
+            saida[m['rot_dp']] = pd.Series(v_dp).values
+            saida[m['rot_at']] = pd.Series(v_at).values
+
+        saida[m['rot_st']] = [comparar(a, b, m.get('tolerancia'), m.get('tipo'))
+                              for a, b in zip(v_dp, v_at)]
+
+    _aplicar_perna_espelhada(saida, espelhadas)
+
+    saida['Match'] = df_final['match_athena_por'].fillna('Sem match').values
+    saida['Chave Duplicada'] = ['Sim' if x else ''
+                               for x in df_final['alerta_chave_duplicada'].values]
+
+    sem_match = df_final['sem_correspondencia_athena'].values
+    tem_nok = saida[STATUS_COLS].eq('NOK').any(axis=1).values if STATUS_COLS else []
+    # 'Sem match' vence 'NOK': sem a outra ponta, os onze NOK são consequência de
+    # um só problema, e contá-la como divergência de campo esconde o que houve.
+    saida.insert(0, 'Status', ['Sem match' if s else ('NOK' if n else 'OK')
+                              for s, n in zip(sem_match, tem_nok)])
+
+    rows = [{k: _cell(v) for k, v in rec.items()}
+            for rec in saida.to_dict('records')]
+    return rows, _contar(rows), avisos
+
+
+def _aplicar_perna_espelhada(saida, espelhadas):
+    """A perna interna que chega invertida: espelha a direção e renomeia.
+
+    Só entra onde Ctpty E JPM Dir estão os DOIS NOK — a assinatura de que a linha
+    é a perna espelhada da mesa, e não uma divergência de verdade.
+    """
+    if not espelhadas or saida.empty:
+        return
+    precisa = {'Status Ctpty', 'Status JPM Dir', 'ATH Client Ext', 'ATH JPM Dir',
+               'CET JPM Dir', 'CET Ctpty'}
+    if not precisa.issubset(saida.columns):
+        return
+
+    def _flip(v):
+        if pd.isna(v):
+            return v
+        s = str(v).strip().upper()
+        return 'Buy' if s == 'SELL' else ('Sell' if s == 'BUY' else v)
+
+    for nome_at, codigo in espelhadas:
+        mask = (
+            (saida['Status Ctpty'] == 'NOK') & (saida['Status JPM Dir'] == 'NOK') &
+            saida['ATH Client Ext'].apply(
+                lambda x, n=nome_at: pd.notna(x) and str(x).strip().upper() == n)
+        )
+        if not mask.any():
+            continue
+        saida.loc[mask, 'ATH JPM Dir'] = saida.loc[mask, 'ATH JPM Dir'].apply(_flip)
+        saida.loc[mask, 'Status JPM Dir'] = [
+            comparar(a, b) for a, b in zip(saida.loc[mask, 'CET JPM Dir'],
+                                           saida.loc[mask, 'ATH JPM Dir'])]
+        saida.loc[mask, 'ATH Client Ext'] = codigo
+        saida.loc[mask, 'Status Ctpty'] = [
+            comparar(a, b) for a, b in zip(saida.loc[mask, 'CET Ctpty'],
+                                           saida.loc[mask, 'ATH Client Ext'])]
+        _LOG.info('[recon_fxo] perna espelhada %s: %d linha(s) ajustada(s)',
+                  nome_at, int(mask.sum()))
+
+
+def _cell(v):
+    if v is None or (not isinstance(v, str) and pd.isna(v)):
+        return ''
+    if isinstance(v, float) and float(v).is_integer():
+        return str(int(v))
+    if isinstance(v, (int, float)):
+        return str(v)
+    return str(v).strip()
+
+
+def _contar(rows):
+    """As contagens dos cards. `nok_por_campo` diz QUAL campo está quebrando —
+    sem ela, '40 linhas com NOK' não indica por onde começar."""
+    counts = {
+        'total': len(rows),
+        'ok': sum(1 for r in rows if r.get('Status') == 'OK'),
+        'nok': sum(1 for r in rows if r.get('Status') == 'NOK'),
+        'no_match': sum(1 for r in rows if r.get('Status') == 'Sem match'),
+        'match_dealid': sum(1 for r in rows if r.get('Match') == 'DealID'),
+        'match_matching': sum(1 for r in rows if r.get('Match') == 'MatchingDealID'),
+        'dup_key': sum(1 for r in rows if r.get('Chave Duplicada') == 'Sim'),
+    }
+    counts['nok_por_campo'] = {c: sum(1 for r in rows if r.get(c) == 'NOK')
+                               for c in STATUS_COLS}
+    return counts
+
+
+# =============================================================================
+# Cache por data
+# =============================================================================
+
+def _cache_path(recon_date):
+    d = _parse_date(recon_date)
+    return os.path.join(_CACHE_DIR, 'fxo_%s.json' % d.strftime('%Y%m%d'))
+
+
+def _persist(recon_date, payload):
+    try:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        tmp = _cache_path(recon_date) + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+        os.replace(tmp, _cache_path(recon_date))
+    except Exception as exc:                       # pragma: no cover - defensivo
+        _LOG.warning('[recon_fxo] não consegui gravar o cache: %s', exc)
+
+
+def load_last(recon_date=''):
+    """Último resultado gravado para a data — a página abre com ele, sem rodar.
+
+    Data ausente/inválida devolve o vazio em vez de estourar: a tela pede o
+    resultado assim que carrega, antes de o usuário escolher qualquer coisa.
+    """
+    vazio = {'columns': COLUMNS, 'data': [], 'counts': _contar([]), 'warnings': []}
+    try:
+        path = _cache_path(recon_date)
+    except ValueError:
+        return vazio
+    if not os.path.exists(path):
+        return vazio
+    try:
+        with open(path, encoding='utf-8') as fh:
+            payload = json.load(fh)
+    except Exception:
+        return vazio
+    payload.setdefault('columns', COLUMNS)
+    payload.setdefault('warnings', [])
+    return payload
+
+
+# =============================================================================
+# Execução
+# =============================================================================
+
+def _classificar_upload(nome, blob):
+    """Qual dos dois arquivos é este — pelo CONTEÚDO, não pelo nome.
+
+    O nome depende de quem baixou (`brazil_fxo_trades (2).csv`), e trocar as duas
+    bases de lugar faria a recon rodar inteira e devolver tudo órfão.
+    """
+    head = blob[:4096].decode('latin-1', errors='replace')
+    if COL_AT_CHAVE in head and '|' in head:
+        return 'athena'
+    if COL_DP_PARTE_CONTA in head or 'DPOSICAO' in nome.upper():
+        return 'dposicao'
+    if nome.upper().endswith('.OPC'):
+        return 'dposicao'
+    return 'athena' if nome.lower().endswith('.csv') else None
+
+
+def run_fxo(recon_date, files=None, mode='auto'):
+    """Roda a reconciliação e devolve o que a página mostra.
+
+    `mode='auto'` busca as duas bases (rede + Athena); `mode='manual'` usa os
+    arquivos enviados na tela, para o dia em que a rede ou o relatório não
+    respondem.
+    """
+    _parse_date(recon_date)                    # falha cedo, com a data na mão
+    origem = {}
+
+    if mode == 'manual':
+        for f in (files or []):
+            blob = f.read()
+            qual = _classificar_upload(getattr(f, 'filename', '') or '', blob)
+            if qual == 'athena':
+                origem['athena'] = read_athena(blob)
+            elif qual == 'dposicao':
+                origem['dposicao'] = read_dposicao(io.BytesIO(blob))
+        faltando = [n for n in ('dposicao', 'athena') if n not in origem]
+        if faltando:
+            raise ValueError('Faltou o arquivo de %s.' % ' e de '.join(
+                {'dposicao': 'posição (DPOSICAO .OPC)',
+                 'athena': 'trades da Athena (CSV)'}[n] for n in faltando))
+    else:
+        caminho = dposicao_path(recon_date)
+        if not os.path.exists(caminho):
+            raise FileNotFoundError(caminho)
+        origem['dposicao'] = read_dposicao(caminho)
+        origem['athena'] = read_athena(_baixar_athena(recon_date))
+
+    rows, counts, avisos = reconcile(origem['dposicao'], origem['athena'])
+    payload = {
+        'columns': COLUMNS,
+        'data': rows,
+        'counts': counts,
+        'warnings': avisos,
+        'recon_date': _parse_date(recon_date).strftime('%Y-%m-%d'),
+        'ran_at': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'mode': mode,
+    }
+    _persist(recon_date, payload)
+    payload['success'] = True
+    payload['meta'] = '%d operações · %d OK · %d NOK · %d sem match' % (
+        counts['total'], counts['ok'], counts['nok'], counts['no_match'])
+    return payload
+
+
+def _baixar_athena(recon_date):
+    """Bytes do relatório EOD do dia."""
+    url = athena_url(recon_date)
+    try:
+        from apps.pages import athena_api
+        session = athena_api.build_session()
+    except Exception:
+        import requests
+        session = requests.Session()
+        # Mesma razão do athena_api: o proxy corporativo recusa o host interno
+        # que o navegador alcança direto.
+        session.trust_env = False
+    resp = session.get(url, timeout=180)
+    resp.raise_for_status()
+    return resp.content

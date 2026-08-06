@@ -9747,3 +9747,70 @@ especificidade, que é o tipo de coisa que funciona hoje e quebra num upgrade de
 `scripts/tests/check_pc_widgets.py` (novo). A seção 4 roda a contagem **real** do arquivo no `jsc`, com
 linhas sintéticas no lugar da DataTable — reescrevê-la em Python seria uma terceira cópia da regra, que é
 exatamente o que o teste deveria pegar.
+
+---
+
+## §216 — Reconciliação de FXO: o script da mesa virou página
+
+A mesa rodava um `recon_fxo.py` na mão: pedia a data no terminal, baixava o relatório EOD da Athena e
+lia a DPOSICAO da rede para dois `.xlsx` numa pasta `test\`, reconciliava e cuspia um terceiro `.xlsx`
+com o NOK pintado. Agora é a página **Reconciliations › FXO** (`/reconciliation-fxo`), com o motor em
+`apps/pages/recon_fxo.py` e a regra de comparação intacta, campo a campo.
+
+### O que ela compara
+
+A base âncora é a **nossa** conta (`73760009`) e só **TAXAS DE CAMBIO** dentro da DPOSICAO. A chave do
+match é a `Combinação de operações` contra o `DealID` da Athena e, para as chaves que não existem em
+DealID nenhum, contra o `MatchingDealID` — nessa ordem, porque sem a prioridade a mesma operação casa
+duas vezes e o desempate vira sorte. Onze campos saem com OK/NOK: direção, Put/Call, contraparte,
+quantidade, prêmio (tolerância de 0,67), strike, trade date, vencimento, o último e o primeiro fixing, e
+Asian/European.
+
+O **Status da linha** é derivado dos onze, com uma regra que vale registrar: **'Sem match' vence 'NOK'**.
+Sem a outra ponta os onze status dão NOK de uma vez, e contar isso como divergência de campo esconde o
+que de fato houve — a operação não existe do outro lado.
+
+### O que saiu do script, e por quê
+
+**O Excel.** O resultado é a página: quatro cards contam Total / OK / NOK / Sem match e filtram a tabela
+ao clique, uma faixa de chips diz **qual campo** está quebrando (numa tabela de 38 colunas, "40 linhas com
+NOK" não indica por onde começar), e a célula NOK vem pintada. O arquivo era um passo a mais entre rodar
+e olhar, e cada rodada deixava um arquivo diferente na pasta de alguém.
+
+**Os dois XLSX intermediários.** A Parte A gravava e a Parte B relia. Isso também matou a aba
+`OPC_260702_DPOSICAO` cravada no código — o nome da aba de UM dia específico, que só funcionava porque
+havia um resolvedor por semelhança atrás dele.
+
+**Os caminhos do Desktop de quem escreveu.** A DPOSICAO vem da MESMA raiz da rotina Save CETIP Files
+(`CETIP_DEST_ROOT`), e o endereço da Athena entrou no cadastro `api-links` com o uso novo **Recon FXO** —
+é outro Athena, o relatório EOD do `bob-reports`, não o `getTrades`. A data dele fica no **caminho**
+(`AAAA-MM-DD`), que é exatamente o caso para o qual o placeholder existe: parâmetro de query nenhum
+alcança ali.
+
+**Os dois de-para que estavam no código**, que é o que mais importa aqui:
+
+- **`fxo-cpty-cnpj`** — a contraparte como a Athena escreve → o CNPJ que a CETIP registra. Vinha de uma
+  planilha no OneDrive de uma pessoa, que o servidor não alcança. Nasce **vazio**: o conteúdo não está no
+  repositório, e semear meia dúzia de linhas de memória faria a recon casar algumas contrapartes e errar
+  as outras em silêncio. Sem cadastro, a coluna Ctpty cai nos dois fallbacks e compara nome com nome —
+  pior que o CNPJ, mas honesto — e a tela **avisa** que o cadastro está vazio.
+- **`fxo-internal-cpty`** — a perna interna, que chega à Athena com o nome da mesa (o book) enquanto a
+  CETIP registra o código do fundo. A coluna **`INVERT DIRECTION`** separa dois casos que não podem ser
+  tratados juntos: `No` só troca o nome, e vale **sempre**; `Yes` é a perna **espelhada** (o Buy/Sell
+  também veio invertido) e vale **só quando Ctpty e JPM Dir estão os dois NOK**, que é a assinatura da
+  perna espelhada. Aplicar a segunda sempre inverteria a direção de operações que estavam certas — e um
+  Buy virado em Sell numa recon é pior do que a divergência que ela ia mostrar.
+
+### Um ponto em aberto para a mesa
+
+Na europeia o de-para de estilo só traduz `SIMPLES_DATAS`. Se a DPOSICAO escrever **`NAO`** em vez de
+deixar a Média Asiática em branco, a coluna Asian/European acusa NOK em toda opção europeia. O
+classificador que absorveria `NAO`/`N`/`NONE` existe no script original e foi deixado **desligado** de
+propósito — respeitei isso. Se o arquivo real vier assim, é uma linha a acrescentar no cadastro, não um
+conserto de código. Está preso em teste para não virar surpresa.
+
+### Verificação
+
+`scripts/tests/check_recon_fxo.py` (novo). As duas bases são construídas no teste — inclusive a linha de
+dados com **mais colunas que o cabeçalho**, que é o cronograma de fixing seguindo à direita sem título, e
+o 'Texto para Colunas' que parte o **cabeçalho** junto com o dado.
