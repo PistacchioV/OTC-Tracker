@@ -9709,3 +9709,41 @@ do que ficar com metade da mudança e ar de sucesso.
 ### Verificação
 
 `scripts/tests/check_pc_mass_update.py` (novo).
+
+---
+
+## §215 — Pending Confirmation: o card de Total, e os cards deixando de depender da posição
+
+A linha de widgets tinha seis cards, um por faixa de aging. Faltava o número que mais se procura: o
+total. Quem precisava dele somava os seis na mão, e a soma de dez linhas × seis cards erra.
+
+Entrou um **sétimo card, Total**, no fim da linha. Ele não é uma faixa a mais: é a soma das seis, em
+azul (`#0066cc`) para sair da rampa verde→vermelha das faixas, com moldura e fundo próprios. Uma sétima
+cor dentro da rampa faria dele mais um nível de severidade aos olhos de quem só bate o olho.
+
+Duas decisões que valem estar escritas:
+
+**O Total soma o que os cards somam, e nada além.** Ele conta *dentro* do mesmo teste de faixa: uma linha
+sem Aging não entra em faixa nenhuma e também não entra no total. Contar essas linhas só no total deixaria
+o card fora da soma dos outros seis — e a primeira leitura de quem olha a tela é somar os cards. Um total
+que não fecha com os vizinhos parece defeito mesmo quando está certo. (As linhas sem Aging já não
+apareciam em card nenhum antes disso; o Total não piora nem melhora esse ponto, apenas não o contradiz.)
+
+**Os cards passaram a se identificar pelo `data-pc-band`.** O `updateWidgets()` casava o resultado com o
+card pelo **índice** do `querySelectorAll` contra o `RANGE_ORDER`. Inserir um card no meio — ou mover um —
+deslocava em silêncio os números de todos os seguintes: nenhum erro no console, todos os cards
+preenchidos, cada um com o número do vizinho. Acrescentar o sétimo card no fim teria funcionado por sorte;
+o próximo, não. Agora cada `.card-body` declara a sua faixa e o JS lê o atributo.
+
+### Layout
+
+O Bootstrap não tem `row-cols-7` (o grid dele para em 6), então a largura de 1/7 em telas ≥1400px vem do
+CSS da própria página e o `row-cols-xxl-6` **saiu** do markup — deixá-lo lá poria os dois disputando
+especificidade, que é o tipo de coisa que funciona hoje e quebra num upgrade de tema. Abaixo disso o
+`row-cols-md-3` continua valendo e o Total cai sozinho na última linha, o que lê bem: ele é o fecho.
+
+### Verificação
+
+`scripts/tests/check_pc_widgets.py` (novo). A seção 4 roda a contagem **real** do arquivo no `jsc`, com
+linhas sintéticas no lugar da DataTable — reescrevê-la em Python seria uma terceira cópia da regra, que é
+exatamente o que o teste deveria pegar.

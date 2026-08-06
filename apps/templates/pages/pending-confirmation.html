@@ -84,6 +84,24 @@
         margin-left: auto;
     }
 
+    /* Sete cards numa linha so (as seis faixas + o Total). O Bootstrap nao tem
+       row-cols-7 — o grid dele para em 6 —, entao a largura vem daqui e a classe
+       row-cols-xxl-6 saiu do markup para nao disputar especificidade. */
+    @media (min-width: 1400px) {
+        .pending-widgets-row > .col {
+            flex: 0 0 auto;
+            width: 14.2857%;
+        }
+    }
+    /* O card de Total nao pertence a rampa verde→vermelha das faixas: ele nao e
+       uma severidade, e a soma delas. Azul o tira da rampa, e a borda mais forte
+       marca que ele se le de outro jeito. */
+    .pending-widgets-row .col-pending-total .card {
+        border-color: rgba(0, 102, 204, .35);
+        background: linear-gradient(180deg,
+                    rgba(0, 102, 204, .06) 0%, rgba(0, 102, 204, 0) 60%);
+    }
+
     /* Staggered entrance: the six widgets fade+rise in sequence on load.
        Keyframes (not transition) — one-shot entry, never re-triggered. */
     @keyframes pendingWidgetIn {
@@ -101,6 +119,7 @@
         .pending-widgets-row .col:nth-child(4) { animation-delay: 150ms; }
         .pending-widgets-row .col:nth-child(5) { animation-delay: 200ms; }
         .pending-widgets-row .col:nth-child(6) { animation-delay: 250ms; }
+        .pending-widgets-row .col:nth-child(7) { animation-delay: 300ms; }
     }
     /* Reduced motion: keep the shadow/border feedback, drop the lift + entrance. */
     @media (prefers-reduced-motion: reduce) {
@@ -516,11 +535,11 @@
         <!-- ===============================================================
              LINHA DE WIDGETS (PENDING STATUS POR FAIXA DE DIAS)
              =============================================================== -->
-        <div class="row row-cols-xxl-6 row-cols-md-3 row-cols-1 g-1 align-items-center pending-widgets-row">
+        <div class="row row-cols-md-3 row-cols-1 g-1 align-items-center pending-widgets-row">
             <!-- Card 1: < 10 dias de pendência (verde claro) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="u10">
                         <!-- Título do card + ícone de ajuda -->
                         <div class="d-flex justify-content-between">
                             <h5 title="< 10 dias de pendencia"
@@ -602,7 +621,7 @@
             <!-- Card 2: >= 10 e < 20 dias (verde amarelado) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="r10">
                         <div class="d-flex justify-content-between">
                             <h5 title=">= 10 dias de pendencia e < 20 dias de pendencia"
                                 class="pending-widget-title"
@@ -681,7 +700,7 @@
             <!-- Card 3: >= 20 e < 30 dias (amarelo) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="r20">
                         <div class="d-flex justify-content-between">
                             <h5 title=">= 20 dias de pendencia e < 30 dias de pendencia"
                                 class="pending-widget-title"
@@ -760,7 +779,7 @@
             <!-- Card 4: >= 30 e < 60 dias (amarelo alaranjado) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="r30">
                         <div class="d-flex justify-content-between">
                             <h5 title=">= 30 dias de pendencia e < 60 dias de pendencia"
                                 class="pending-widget-title"
@@ -839,7 +858,7 @@
             <!-- Card 5: >= 60 e < 90 dias (laranja) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="r60">
                         <div class="d-flex justify-content-between">
                             <h5 title=">= 60 dias de pendencia e < 90 dias de pendencia"
                                 class="pending-widget-title"
@@ -918,7 +937,7 @@
             <!-- Card 6: > 90 dias (vermelho) -->
             <div class="col">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" data-pc-band="r90">
                         <div class="d-flex justify-content-between">
                             <h5 title="> 90 dias de pendencia"
                                 class="text-danger pending-widget-title">
@@ -985,6 +1004,87 @@
                         </div>
                         <div class="mb-0">
                             <span class="text-danger"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Others</span>
+                            <span class="float-end"><b>0</b></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 7: TOTAL (azul) — a soma das seis faixas, nao uma faixa a
+                 mais. Todo numero daqui e a soma da MESMA linha dos outros seis
+                 cards, para que a conta na tela feche na vista. -->
+            <div class="col col-pending-total">
+                <div class="card">
+                    <div class="card-body" data-pc-band="total">
+                        <div class="d-flex justify-content-between">
+                            <h5 title="Total de pendencias (soma das seis faixas)"
+                                class="pending-widget-title"
+                                style="color: #0066cc;">
+                                Total<br>de pendencias
+                            </h5>
+                            <p class="mb-0 fs-lg">
+                                <i class="ti ti-info-hexagon-filled text-muted"></i>
+                            </p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 my-2">
+                            <div class="avatar-md flex-shrink-0">
+                                <span class="avatar-title rounded-circle fs-22"
+                                      style="background-color: #0066cc; color: white;">
+                                    <i class="ti ti-sum"></i>
+                                </span>
+                            </div>
+                            <h3 class="mb-0 pending-widget-value" style="color: #0066cc;">
+                                {{ pending_total or 0 }}
+                            </h3>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Digital Signature</span>
+                            <span class="float-end"><b>{{ pending_digital_signature_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending FO</span>
+                            <span class="float-end"><b>{{ pending_fo_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Legal</span>
+                            <span class="float-end"><b>{{ pending_legal_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending MO</span>
+                            <span class="float-end"><b>{{ pending_mo_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending MO/FO</span>
+                            <span class="float-end"><b>{{ pending_mo_fo_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Original</span>
+                            <span class="float-end"><b>{{ pending_original_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending OTC</span>
+                            <span class="float-end"><b>{{ pending_otc_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending POA</span>
+                            <span class="float-end"><b>{{ pending_poa_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-1">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="text-nowrap text-muted">Pending Signature Allowance</span>
+                            <span class="float-end"><b>{{ pending_signature_allowance_total or 0 }}</b></span>
+                        </div>
+                        <div class="mb-0">
+                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Others</span>
                             <span class="float-end"><b>0</b></span>
                         </div>
@@ -2275,7 +2375,10 @@ $(document).ready(function() {
         return 'r90';
     }
     function updateWidgets() {
-        var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90'];
+        // 'total' e o setimo card: nao e uma faixa, e a soma das seis. Fica na
+        // mesma estrutura de contagem justamente para nao existir uma segunda
+        // regra de "o que conta como pendencia" — ele soma o que os cards somam.
+        var RANGE_ORDER = ['u10','r10','r20','r30','r60','r90','total'];
         var TYPE_ORDER  = ['ds','fo','legal','mo','mofo','orig','otc','poa','sa','others'];
         var pendingToType = {
             'Pending Digital Signature': 'ds',
@@ -2313,12 +2416,20 @@ $(document).ready(function() {
             counts[band].total++;
             var pType = pendingToType[_pcStrip(d[11])] || 'others';
             counts[band][pType]++;
+            // O card de Total soma DENTRO do mesmo if: uma linha sem Aging nao
+            // entra em faixa nenhuma e tambem nao entra no total. Contar essas
+            // linhas so no total deixaria o card fora da soma dos outros seis —
+            // e a primeira leitura de quem olha a tela e somar os cards.
+            counts.total.total++;
+            counts.total[pType]++;
         });
 
-        // Update widget cards in DOM order (matches RANGE_ORDER)
-        document.querySelectorAll('.pending-widgets-row .card-body').forEach(function(cardBody, i) {
-            var range = RANGE_ORDER[i];
-            if (!range) return;
+        // Cada card diz a que faixa pertence pelo data-pc-band. Era pela POSICAO
+        // no DOM, o que fazia inserir um card no meio deslocar em silencio os
+        // numeros de todos os seguintes.
+        document.querySelectorAll('.pending-widgets-row .card-body[data-pc-band]').forEach(function(cardBody) {
+            var range = cardBody.getAttribute('data-pc-band');
+            if (!counts[range]) return;
             var totalEl = cardBody.querySelector('.pending-widget-value');
             if (totalEl) totalEl.textContent = counts[range]['total'];
             cardBody.querySelectorAll('.float-end b').forEach(function(b, j) {
