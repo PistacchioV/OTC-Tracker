@@ -303,6 +303,18 @@ HTML = io.open(os.path.join(ROOT, 'apps/templates/pages/reconciliation-fxo.html'
                encoding='utf-8', errors='ignore').read()
 check('a tela usa as colunas do servidor', 'payload.columns' in HTML, True)
 check('   e não tem uma lista própria', 'CET JPM Dir' in HTML, False)
+check('a linha de filtro entra nas duas theads',
+      HTML.count('.append($row.clone())'), 2)
+check('   e a clonada e a que recebe o evento',
+      "closest('.dt-scroll-head, .dataTables_scrollHead')" in HTML, True)
+# O `.card` do tema declara fundo, borda e raio e e carregado DEPOIS do <style>
+# da pagina: sem !important o cartao volta a branco com moldura cinza.
+import re as _re
+bloco = _re.search(r'#fxo-page \.fxo-widget \{([^}]*)\}', HTML, _re.S).group(1)
+for decl in ('border-radius', 'border', 'padding'):
+    check('%s do card leva !important' % decl,
+          _re.search(_re.escape(decl) + r':[^;]*!important', bloco) is not None, True)
+
 check('o card de Total usa o mesmo gradiente das outras telas',
       'linear-gradient(135deg, #0066cc 0%, #34369b 100%)' in HTML, True)
 

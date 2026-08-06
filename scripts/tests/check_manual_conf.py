@@ -250,11 +250,39 @@ check('só MO e FO rejeitam',
 check('linha sem Trade ID é recusada',
       cl.post('/api/manual-confirmation/upsert',
               json={'rows': [{'Cliente': 'sem chave'}]}).status_code, 400)
+# A linha de filtro tem de entrar nas DUAS theads: com scrollX o DataTables
+# CLONA o cabeçalho, e a linha só na tabela real fica escondida no corpo — foi
+# exatamente assim que ela sumiu da tela sem erro nenhum.
+check('a linha de filtro entra nas duas theads',
+      HTML.count('.append($row.clone())'), 2)
+check('   e a clonada e a que recebe o evento',
+      "closest('.dt-scroll-head, .dataTables_scrollHead')" in HTML, True)
+check('a coluna de Actions existe', 'mc-acts' in HTML and 'data-mc-edit=' in HTML, True)
+check('   com excluir e abrir', ('data-mc-del=' in HTML, 'Confirmation Link' in HTML), (True, True))
+check('ha botao de export', ('mcExportCsv' in HTML, 'mcExportCopy' in HTML), (True, True))
+# O export leva o que esta NA TELA (filtro e ordenacao aplicados): exportar a
+# base inteira depois de filtrar entrega outra coisa do que se esta vendo.
+check('   e exporta o que esta filtrado',
+      "search: 'applied', order: 'applied'" in HTML, True)
+
 check('o sidenav tem os dois subitens, o Monitor primeiro',
       [u for u in __import__('re').findall(r'href="(/manual-confirmation[^"]*)"',
                                            io.open(os.path.join(ROOT, 'apps/templates/partials/sidenav.html'),
                                                    encoding='utf-8').read())],
       ['/manual-confirmation/monitor', '/manual-confirmation/track'])
+
+# O botao Abrir leva ao PAPEL que foi gravado no Electronic Inventory, nao a uma
+# tela que o reconstroi: quem valida precisa ver o que vai ao cliente.
+link = R._mc_ei_link('ACME S.A.', '/base/ACME S.A.',
+                     '/base/ACME S.A./Confirmations/2026/08. August/06/NDF Commodities/x.pdf')
+check('o link aponta para o arquivo no Electronic Inventory',
+      link.startswith('/api/electronic-inventory/file?client='), True)
+check('   com o caminho RELATIVO a pasta do cliente',
+      'rel=Confirmations/2026/08.%20August/06' in link, True)
+check('   e sem o caminho absoluto do share', '/base/' in link, False)
+check('caminho fora da pasta do cliente nao vira link',
+      R._mc_ei_link('ACME', '/base/ACME', '/outro/x.pdf'), '')
+check('sem arquivo nao inventa link', R._mc_ei_link('ACME', '/base/ACME', ''), '')
 
 print('\n== 11. o e-mail do reject ==')
 from apps.pages import otc_emails as E                            # noqa: E402

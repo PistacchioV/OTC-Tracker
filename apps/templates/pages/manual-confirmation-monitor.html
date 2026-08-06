@@ -10,7 +10,10 @@
    novo. Tudo aqui leva !important no fundo porque este <style> é carregado
    ANTES do CSS do tema (layouts/base.html) — sem a marca o `.card` do tema
    repinta o cartão de branco. */
-.mc-card { border-radius: 18px; border: none !important; overflow: hidden; height: 100%; }
+/* border-radius e color entram marcados junto com o fundo: o `.card` do tema
+   declara os TRÊS e é carregado depois deste <style>. Marcar só o fundo deixava
+   o cartão colorido com a moldura e o raio do tema. */
+.mc-card { border-radius: 18px !important; border: none !important; overflow: hidden; height: 100%; }
 .mc-card .card-body { padding: 0; }
 .mc-card__head {
     display: flex; align-items: center; gap: .75rem;
@@ -25,11 +28,11 @@
 .mc-card__val { font-size: 1.75rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; margin: 0; }
 .mc-card__count { margin-left: auto; text-align: right; }
 
-.mc-c-otc { background-color:#eef4ff !important; color:#0d3a8a; }
+.mc-c-otc { background-color:#eef4ff !important; color:#0d3a8a !important; }
 .mc-c-otc  .mc-card__ico { background: linear-gradient(135deg,#2f7bff 0%,#0d47a8 100%); }
-.mc-c-mo  { background-color:#fff5e6 !important; color:#7a4a00; }
+.mc-c-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; }
 .mc-c-mo   .mc-card__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
-.mc-c-fo  { background-color:#f2ecff !important; color:#4a2a8a; }
+.mc-c-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; }
 .mc-c-fo   .mc-card__ico { background: linear-gradient(135deg,#7c5cff 0%,#a855f7 100%); }
 
 /* ── A fila ──────────────────────────────────────────────────────────

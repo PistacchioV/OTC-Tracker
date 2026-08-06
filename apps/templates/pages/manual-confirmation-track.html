@@ -5,41 +5,111 @@
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
-/* !important no fundo dos cartões: este <style> é carregado ANTES do CSS do
-   tema (layouts/base.html), e o `.card{background-color:...}` dele vem depois. */
-.mc-w { border-radius:18px; border:none !important; padding:.9rem 1.1rem; position:relative; overflow:hidden; }
-.mc-w .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; opacity:.7; }
-.mc-w .val { font-size:1.6rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
-.mc-w-tot { background-color:#0d47a8 !important;
-            background-image:linear-gradient(135deg,#0066cc 0%,#34369b 100%) !important;
-            color:#fff !important; box-shadow:0 10px 26px rgba(13,71,168,.28); }
-.mc-w-otc { background-color:#eef4ff !important; color:#0d3a8a !important; }
-.mc-w-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; }
-.mc-w-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; }
-.mc-w-ok  { background-color:#e8f5e9 !important; color:#1b5e20 !important; }
+/* Curva única da página. As nativas do CSS são fracas demais para leitura de
+   intenção; esta é a mesma já usada no Pending Confirmation e no Monitor. */
+#mc-page { --mc-ease: cubic-bezier(0.23, 1, 0.32, 1); }
 
+/* ── Cards ───────────────────────────────────────────────────────────
+   Mesmo desenho da família de widgets do app (Pending Confirmation / NDF
+   Summary): chip de ícone, rótulo em caixa alta pequena, número grande com
+   dígitos de largura fixa. !important no fundo porque este <style> é carregado
+   ANTES do CSS do tema (layouts/base.html) e o `.card{background-color:…}` dele
+   vem depois — sem a marca o cartão volta a branco. */
+#mc-page .mc-w {
+    border-radius: 18px; border: 1px solid var(--ins-border-color) !important;
+    padding: .85rem 1rem; height: 100%; cursor: pointer;
+    display: flex; align-items: center; gap: .7rem;
+    transition: transform 200ms var(--mc-ease),
+                box-shadow 200ms var(--mc-ease),
+                border-color 200ms var(--mc-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #mc-page .mc-w:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#mc-page .mc-w:active { transform: scale(.985); }
+/* O card ativo é o filtro que está valendo. Sem essa marca, clicar num card e
+   esquecer deixa a tabela parecendo a lista inteira quando não é. */
+#mc-page .mc-w.is-active { box-shadow: 0 0 0 2px rgba(13,110,253,.55), 0 10px 24px rgba(0,0,0,.10); }
+#mc-page .mc-w__ico {
+    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+#mc-page .mc-w__lbl { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0; line-height: 1.3; }
+#mc-page .mc-w__val { font-size: 1.55rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; margin: 0; letter-spacing: -.5px; }
+
+#mc-page .mc-w-tot {
+    background-color: #0d47a8 !important;
+    background-image: linear-gradient(135deg,#0066cc 0%,#34369b 100%) !important;
+    border-color: transparent !important; color: #fff !important;
+    box-shadow: 0 10px 26px rgba(13,71,168,.28);
+}
+#mc-page .mc-w-tot .mc-w__ico { background: rgba(255,255,255,.2); }
+#mc-page .mc-w-otc { background-color:#eef4ff !important; color:#0d3a8a !important; border-color:#cfe0ff !important; }
+#mc-page .mc-w-otc .mc-w__ico { background: linear-gradient(135deg,#2f7bff 0%,#0d47a8 100%); }
+#mc-page .mc-w-mo  { background-color:#fff5e6 !important; color:#7a4a00 !important; border-color:#ffe0b0 !important; }
+#mc-page .mc-w-mo  .mc-w__ico { background: linear-gradient(135deg,#ffb020 0%,#e08600 100%); }
+#mc-page .mc-w-fo  { background-color:#f2ecff !important; color:#4a2a8a !important; border-color:#ded0ff !important; }
+#mc-page .mc-w-fo  .mc-w__ico { background: linear-gradient(135deg,#7c5cff 0%,#a855f7 100%); }
+#mc-page .mc-w-ok  { background-color:#e8f5e9 !important; color:#1b5e20 !important; border-color:#bfe3c2 !important; }
+#mc-page .mc-w-ok  .mc-w__ico { background: linear-gradient(135deg,#34c759 0%,#1b8a3a 100%); }
+
+/* Entrada escalonada: 45ms entre cards. Nada nasce de scale(0) — nada no mundo
+   real aparece do nada. */
+@media (prefers-reduced-motion: no-preference) {
+    #mc-page .mc-w { animation: mcWIn 260ms var(--mc-ease) both; }
+    #mc-page .col-mc-w:nth-child(1) .mc-w { animation-delay: 0ms; }
+    #mc-page .col-mc-w:nth-child(2) .mc-w { animation-delay: 45ms; }
+    #mc-page .col-mc-w:nth-child(3) .mc-w { animation-delay: 90ms; }
+    #mc-page .col-mc-w:nth-child(4) .mc-w { animation-delay: 135ms; }
+    #mc-page .col-mc-w:nth-child(5) .mc-w { animation-delay: 180ms; }
+    @keyframes mcWIn { from { opacity:0; transform: translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
+}
+
+/* ── Tabela ──────────────────────────────────────────────────────── */
 #mc-table th { white-space:nowrap; font-size:.66rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
 #mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; }
 #mc-table_filter { display:none !important; }
-#mc-table thead .mc-col-filters th { padding:3px 4px; }
-#mc-table thead .mc-col-filters input {
-    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--bs-border-color); background:var(--bs-body-bg); color:var(--bs-body-color);
-}
 /* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
-   digita nela — a alternativa (escondê-la) faria perguntarem onde foi parar. */
+   digita nela — escondê-la faria perguntarem onde foi parar. */
 #mc-table td.mc-derived { background: var(--ins-secondary-bg); font-style: italic; }
+#mc-table td.mc-acts { white-space: nowrap; text-align: center; }
+#mc-table td.mc-acts .btn { padding: .1rem .35rem; line-height: 1.2; font-size: .78rem; }
+#mc-table td.mc-acts .btn:active { transform: scale(.94); }
 
-.btn-toolbar-all { font-size:.75rem !important; padding:.25rem .6rem !important;
-                   height:auto !important; line-height:1.4 !important; white-space:nowrap !important; }
-.btn-toolbar-all:active { transform: scale(.97); }
-.mc-mass-wrap { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
-.mc-mass-wrap .form-select, .mc-mass-wrap .form-control { height:31px; font-size:.75rem; }
+/* ── Filtros por coluna ──────────────────────────────────────────────
+   Com scrollX o DataTables CLONA o thead: a linha visível é a da
+   `.dt-scroll-headInner`, e a do <table> real fica escondida no corpo. Por isso
+   a linha é acrescentada nas DUAS e o evento é delegado só à visível — foi
+   exatamente por não fazer isso que a linha não aparecia. */
+#mc-table thead .mc-col-filters th,
+.dt-scroll-headInner thead .mc-col-filters th,
+.dataTables_scrollHeadInner thead .mc-col-filters th { padding:3px 4px; }
+#mc-table thead .mc-col-filters input,
+.dt-scroll-headInner thead .mc-col-filters input,
+.dataTables_scrollHeadInner thead .mc-col-filters input {
+    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
+    border:1px solid var(--ins-border-color); background:var(--ins-body-bg);
+    color:var(--ins-body-color);
+}
+.mc-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
+
+#mc-page .btn-toolbar-all { font-size:.75rem !important; padding:.25rem .6rem !important;
+                            height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
+                            transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease); }
+@media (hover: hover) and (pointer: fine) {
+    #mc-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
+#mc-page .btn-toolbar-all:active { transform: scale(.97) !important; }
+#mc-page .mc-mass-wrap { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+#mc-page .mc-mass-wrap .form-select, #mc-page .mc-mass-wrap .form-control { height:31px; font-size:.75rem; }
+#mcEditModal .modal-content { border-radius:18px; border:none; box-shadow:0 24px 60px rgba(0,0,0,.15); }
+#mcEditGrid label { font-size:.68rem; font-weight:600; margin-bottom:.15rem; }
+#mcEditGrid input { font-size:.75rem; }
 </style>
 {% endblock %}
 
 {% block page_content %}
-<div class="container-fluid">
+<div class="container-fluid" id="mc-page">
 
     <div class="page-title-head d-flex align-items-center mb-3">
         <div class="flex-grow-1 d-flex align-items-center gap-2">
@@ -56,14 +126,38 @@
     </div>
 
     <div class="row g-2 mb-3">
-        <div class="col-6 col-lg"><div class="card mc-w mc-w-tot h-100"><div class="lbl" data-lang="mc-w-total">Total</div><div class="val" id="w-total">—</div></div></div>
-        <div class="col-6 col-lg"><div class="card mc-w mc-w-otc h-100"><div class="lbl">Pending OTC</div><div class="val" id="w-otc">—</div></div></div>
-        <div class="col-6 col-lg"><div class="card mc-w mc-w-mo h-100"><div class="lbl">Pending MO</div><div class="val" id="w-mo">—</div></div></div>
-        <div class="col-6 col-lg"><div class="card mc-w mc-w-fo h-100"><div class="lbl">Pending FO</div><div class="val" id="w-fo">—</div></div></div>
-        <div class="col-6 col-lg"><div class="card mc-w mc-w-ok h-100"><div class="lbl">Ok</div><div class="val" id="w-ok">—</div></div></div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="card mc-w mc-w-tot" data-pending="">
+                <span class="mc-w__ico"><i class="ti ti-sum"></i></span>
+                <div><p class="mc-w__lbl" data-lang="mc-w-total">Total</p><p class="mc-w__val" id="w-total">—</p></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="card mc-w mc-w-otc" data-pending="Pending OTC">
+                <span class="mc-w__ico"><i class="ti ti-user-check"></i></span>
+                <div><p class="mc-w__lbl">Pending OTC</p><p class="mc-w__val" id="w-otc">—</p></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="card mc-w mc-w-mo" data-pending="Pending MO">
+                <span class="mc-w__ico"><i class="ti ti-checkup-list"></i></span>
+                <div><p class="mc-w__lbl">Pending MO</p><p class="mc-w__val" id="w-mo">—</p></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="card mc-w mc-w-fo" data-pending="Pending FO">
+                <span class="mc-w__ico"><i class="ti ti-briefcase"></i></span>
+                <div><p class="mc-w__lbl">Pending FO</p><p class="mc-w__val" id="w-fo">—</p></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="card mc-w mc-w-ok" data-pending="Ok">
+                <span class="mc-w__ico"><i class="ti ti-circle-check"></i></span>
+                <div><p class="mc-w__lbl">Ok</p><p class="mc-w__val" id="w-ok">—</p></div>
+            </div>
+        </div>
     </div>
 
-    <!-- Show entries -->
     <div class="card mb-2">
         <div class="card-header d-flex align-items-center gap-2">
             <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
@@ -78,7 +172,6 @@
         </div>
     </div>
 
-    <!-- Ações + atualização em massa -->
     <div class="card mb-2">
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
             <div class="dropdown">
@@ -90,6 +183,15 @@
             <button class="btn btn-sm btn-outline-primary btn-toolbar-all" id="mcAddRow">
                 <i class="ti ti-plus me-1"></i><span data-lang="mc-addrow">Add Row</span>
             </button>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" id="mcExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="#" id="mcExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                </ul>
+            </div>
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="mcClearFilters">
                 <i class="ti ti-filter-off me-1"></i><span data-lang="recon-btn-clear">Clear Filters</span>
             </button>
@@ -99,7 +201,7 @@
             <div class="mc-mass-wrap">
                 <div id="mcMassValueWrap" style="min-width:190px;"></div>
                 <select class="form-select form-select-sm" id="mcMassColumn" style="width:230px;"></select>
-                <button class="btn btn-sm btn-primary btn-toolbar-all" id="mcMassApply" disabled>
+                <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="mcMassApply" disabled>
                     <i class="ti ti-edit me-1"></i><span data-lang="mc-apply">Apply to selected</span>
                     <span class="badge bg-light text-dark ms-1" id="mcSelCount">0</span>
                 </button>
@@ -110,6 +212,29 @@
                 <table id="mc-table" class="table table-striped table-hover nowrap" style="width:100%">
                     <thead><tr></tr></thead>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Edição de uma linha ────────────────────────────────────────── -->
+<div class="modal fade" id="mcEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
+                    <i data-lucide="edit-3" style="width:18px;height:18px;" class="text-primary"></i>
+                    <span data-lang="mc-edit-title">Editar confirmação</span>
+                    <span class="badge bg-secondary-subtle text-secondary" id="mcEditKey"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <div class="row g-2" id="mcEditGrid"></div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
+                <button class="btn btn-sm btn-primary bg-gradient" id="mcEditSave" data-lang="btn-save">Save</button>
             </div>
         </div>
     </div>
@@ -134,11 +259,15 @@
     var DERIVED = {{ mc_derived | tojson }};
     var KEY     = {{ mc_key     | tojson }};
 
-    var table = null, rows = [];
+    // Offsets fixos: 0 = checkbox, 1 = Actions, as colunas de dado começam em 2.
+    var OFFSET = 2;
+
+    var table = null, rows = [], activePending = '', editing = null;
 
     function label(c) { return LABELS[c] || c; }
     function isDate(c) { return DATES.indexOf(c) !== -1; }
     function isDerived(c) { return DERIVED.indexOf(c) !== -1; }
+    function editable(c) { return !isDerived(c) && c !== KEY; }
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -155,9 +284,15 @@
                esc(p) + '</span>';
     }
 
+    function rowByKey(k) {
+        for (var i = 0; i < rows.length; i++) if (rows[i][KEY] === k) return rows[i];
+        return null;
+    }
+
     function buildTable() {
         var head = $('#mc-table thead tr').empty();
         head.append('<th><input type="checkbox" id="mcAll" class="form-check-input"></th>');
+        head.append('<th>Actions</th>');
         COLUMNS.forEach(function (c) { head.append($('<th>').text(label(c))); });
 
         var defs = [{
@@ -165,6 +300,20 @@
             render: function (row) {
                 return '<input type="checkbox" class="form-check-input mc-pick" value="' +
                        esc(row[KEY]) + '">';
+            }
+        }, {
+            data: null, orderable: false, searchable: false, className: 'mc-acts',
+            render: function (row) {
+                var k = esc(row[KEY]);
+                // O botão de abrir só existe quando a linha sabe ONDE está o
+                // documento: um botão que abre nada parece defeito.
+                var open = row['Confirmation Link']
+                    ? '<a class="btn btn-link text-primary p-0 me-1" title="Abrir confirmação" target="_blank" rel="noopener" href="' +
+                      esc(row['Confirmation Link']) + '"><i class="ti ti-external-link"></i></a>'
+                    : '';
+                return open +
+                    '<button class="btn btn-link text-secondary p-0 me-1" title="Editar" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
+                    '<button class="btn btn-link text-danger p-0" title="Excluir" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
             }
         }];
         COLUMNS.forEach(function (name) {
@@ -176,39 +325,42 @@
                 title: label(name)
             };
             if (name === 'Pending') {
+                // Ortogonal: o badge só no display. Devolver HTML em todos os
+                // tipos faria a coluna ordenar e filtrar pela classe CSS.
                 col.render = function (d, t) { return t === 'display' ? badge(d) : (d || ''); };
                 col.className = 'text-center';
             } else if (isDerived(name)) {
                 col.className = 'mc-derived text-center';
             }
-            return defs.push(col);
+            defs.push(col);
         });
 
         table = $('#mc-table').DataTable({
             data: [], columns: defs, scrollX: true,
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
-            pageLength: 50, order: [[1, 'asc']],
+            pageLength: 50, order: [[OFFSET, 'asc']],
             language: { emptyTable: 'Nenhuma confirmação registrada.' },
-            initComplete: buildColumnFilters
+            initComplete: function () { buildColumnFilters(this.api()); }
         });
     }
 
-    function buildColumnFilters() {
-        var thead = $('#mc-table thead');
-        if (thead.find('.mc-col-filters').length) return;
-        var tr = $('<tr class="mc-col-filters">').append('<th></th>');
-        COLUMNS.forEach(function (name, i) {
+    function buildColumnFilters(api) {
+        var $row = $('<tr class="mc-col-filters">');
+        api.columns().every(function (i) {
             var th = $('<th>');
-            $('<input type="text">').attr('placeholder', '⌕')
-                .on('keyup change', function () {
-                    var c = i + 1;                      // +1 pela coluna do checkbox
-                    if (table.column(c).search() !== this.value) {
-                        table.column(c).search(this.value).draw();
-                    }
-                }).appendTo(th);
-            tr.append(th);
+            if (i >= OFFSET) {
+                $('<input type="text">')
+                    .attr('placeholder', label(COLUMNS[i - OFFSET]))
+                    .appendTo(th);
+            }
+            $row.append(th);
         });
-        thead.append(tr);
+        // As DUAS theads: a do <table> real (escondida pelo scrollX) e a clonada
+        // que o usuário enxerga. Só a segunda recebe os eventos.
+        $(api.table().node()).find('thead').append($row.clone());
+        $(api.table().container()).find('.dt-scroll-headInner table thead,' +
+                                        '.dataTables_scrollHeadInner table thead')
+                                  .append($row.clone());
     }
 
     function buildColumnMenu() {
@@ -217,7 +369,7 @@
             $('<li>').append(
                 $('<label class="dropdown-item d-flex align-items-center gap-2 mb-0">')
                     .append($('<input type="checkbox" class="form-check-input m-0" checked>')
-                        .on('change', function () { table.column(i + 1).visible(this.checked); }))
+                        .on('change', function () { table.column(i + OFFSET).visible(this.checked); }))
                     .append($('<span>').text(label(name)))
             ).appendTo(ul);
         });
@@ -227,38 +379,36 @@
     // Derivadas fora da lista: digitá-las cria um valor que a próxima gravação
     // desfaz. E o Trade ID também: é a CHAVE da linha — aplicar o mesmo número
     // em várias fundiria todas numa só, sem desfazer.
-    function massColumns() {
-        return COLUMNS.filter(function (c) { return !isDerived(c) && c !== KEY; });
-    }
-
     function buildMassColumnSelect() {
         var sel = $('#mcMassColumn').empty()
             .append('<option value="">— coluna a alterar —</option>');
-        massColumns().forEach(function (c) {
+        COLUMNS.filter(editable).forEach(function (c) {
             sel.append($('<option>').val(c).text(label(c) === c ? c : label(c) + ' (' + c + ')'));
         });
+    }
+
+    function dateInput(cls) {
+        var i = $('<input type="text" autocomplete="off">')
+            .addClass('form-control form-control-sm ' + (cls || ''))
+            .attr('placeholder', 'dd/mm/aaaa');
+        // O flatpickr vem do bundle do tema. O guard é o mesmo do Pending
+        // Confirmation: sem ele, uma página que carregue antes do vendor
+        // quebra o campo inteiro em vez de virar um input de texto comum.
+        setTimeout(function () {
+            if (typeof flatpickr !== 'undefined') {
+                flatpickr(i[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+            }
+        }, 0);
+        return i;
     }
 
     function buildMassValueField(col) {
         var wrap = $('#mcMassValueWrap').empty();
         if (!col) { $('#mcMassApply').prop('disabled', true); return; }
-        var input;
-        if (isDate(col)) {
-            // Mesma máscara do resto do app (d/m/Y): um campo que aceita
-            // dd/mm/aaaa e grava mm/dd/aaaa erra sem avisar.
-            input = $('<input type="text" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off">');
-            wrap.append(input);
-            // O flatpickr vem do bundle do tema. O guard é o mesmo do Pending
-            // Confirmation: sem ele, uma página que carregue antes do vendor
-            // quebra o campo inteiro em vez de virar um input de texto comum.
-            if (typeof flatpickr !== 'undefined') {
-                flatpickr(input[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-            }
-        } else {
-            input = $('<input type="text" class="form-control form-control-sm" placeholder="novo valor">');
-            wrap.append(input);
-        }
+        var input = isDate(col) ? dateInput()
+                                : $('<input type="text" class="form-control form-control-sm" placeholder="novo valor">');
         input.attr('id', 'mcMassValue');
+        wrap.append(input);
         updateApply();
     }
 
@@ -272,27 +422,34 @@
         $('#mcMassApply').prop('disabled', !(n && $('#mcMassColumn').val()));
     }
 
-    function applyMass() {
-        var col = $('#mcMassColumn').val();
-        var val = $('#mcMassValue').val() || '';
-        var keys = selectedKeys();
-        if (!col || !keys.length) return;
-        var payload = keys.map(function (k) {
-            var o = {}; o[KEY] = k; o[col] = val; return o;
-        });
-        fetch('/api/manual-confirmation/upsert', {
+    function save(payload) {
+        return fetch('/api/manual-confirmation/upsert', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ rows: payload })
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (!j.success) {
                 Swal.fire({ icon: 'error', title: 'Não foi possível gravar', text: j.message || '' });
-                return;
+                return false;
             }
-            // As derivadas (Pending, Aging) são recalculadas NO SERVIDOR e voltam
-            // na resposta — recalcular em JS criaria uma segunda regra, e as duas
-            // telas passariam a discordar da mesma linha.
+            // As derivadas (Pending, Aging) são recalculadas NO SERVIDOR e vêm de
+            // volta no /data — recalcular em JS criaria uma segunda regra, e as
+            // duas telas passariam a discordar da mesma linha.
             load();
+            return true;
         });
+    }
+
+    // ── Filtro pelos cards ──────────────────────────────────────────────
+    function applyPendingFilter() {
+        // 'Pending MO/FO' está parada nas DUAS mesas: o card de MO e o de FO têm
+        // de contá-la e mostrá-la, senão cada mesa vê menos trabalho do que tem.
+        var term = '';
+        if (activePending === 'Pending MO') term = '^Pending (MO|MO/FO)$';
+        else if (activePending === 'Pending FO') term = '^Pending (FO|MO/FO)$';
+        else if (activePending) term = '^' + activePending.replace('/', '\\/') + '$';
+        table.column(OFFSET).search(term, true, false).draw();
+        $('.mc-w').removeClass('is-active')
+            .filter('[data-pending="' + activePending + '"]').addClass(activePending ? 'is-active' : '');
     }
 
     function paint(payload) {
@@ -301,6 +458,7 @@
         $('#w-total').text(c.total || 0); $('#w-otc').text(c.otc || 0);
         $('#w-mo').text(c.mo || 0); $('#w-fo').text(c.fo || 0); $('#w-ok').text(c.ok || 0);
         table.clear().rows.add(rows).draw();
+        applyPendingFilter();
         updateApply();
     }
 
@@ -309,6 +467,25 @@
             .then(function (r) { return r.json(); })
             .then(function (j) { if (!j.error) paint(j); })
             .catch(function () {});
+    }
+
+    // ── Export ──────────────────────────────────────────────────────────
+    // Exporta o que está NA TELA (filtros e ordenação aplicados), não a base
+    // inteira: quem filtrou e clicou em exportar quer o que está vendo.
+    function visibleMatrix() {
+        var idx = [];
+        COLUMNS.forEach(function (c, i) { if (table.column(i + OFFSET).visible()) idx.push(i); });
+        var out = [idx.map(function (i) { return label(COLUMNS[i]); })];
+        table.rows({ search: 'applied', order: 'applied' }).data().each(function (r) {
+            out.push(idx.map(function (i) { return String(r[COLUMNS[i]] == null ? '' : r[COLUMNS[i]]); }));
+        });
+        return out;
+    }
+
+    function toCsv(m) {
+        return m.map(function (line) {
+            return line.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(';');
+        }).join('\r\n');
     }
 
     $(document).ready(function () {
@@ -321,40 +498,107 @@
             table.page.len(parseInt(this.value, 10)).draw();
         });
         $('#mcMassColumn').on('change', function () { buildMassValueField(this.value); });
-        $('#mcMassApply').on('click', applyMass);
-        $(document).on('change', '.mc-pick', updateApply);
-        $(document).on('change', '#mcAll', function () {
-            $('.mc-pick').prop('checked', this.checked);
-            updateApply();
-        });
-        $('#mcClearFilters').on('click', function () {
-            $('.mc-col-filters input').val('');
-            table.columns().search('').draw();
+        $('#mcMassApply').on('click', function () {
+            var col = $('#mcMassColumn').val(), val = $('#mcMassValue').val() || '';
+            var keys = selectedKeys();
+            if (!col || !keys.length) return;
+            save(keys.map(function (k) { var o = {}; o[KEY] = k; o[col] = val; return o; }));
         });
 
-        $('#mcAddRow').on('click', function () {
+        $(document).on('change', '.mc-pick', updateApply);
+        $(document).on('change', '#mcAll', function () {
+            $('.mc-pick').prop('checked', this.checked); updateApply();
+        });
+
+        // Delegado no wrapper e restrito ao cabeçalho VISÍVEL: o outro é a cópia
+        // escondida, e deixar os dois disparando faria cada tecla filtrar duas vezes.
+        $('#mc-table_wrapper').on('input', '.mc-col-filters input', function () {
+            if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
+            table.column($(this).closest('th').index()).search(this.value).draw();
+        });
+
+        $('#mcClearFilters').on('click', function () {
+            $('.mc-col-filters input').val('');
+            activePending = '';
+            table.columns().search('');
+            applyPendingFilter();
+        });
+
+        $(document).on('click', '.mc-w', function () {
+            var p = $(this).attr('data-pending') || '';
+            // Clicar de novo no mesmo card desliga o filtro — senão só o Clear
+            // Filters volta à lista inteira, e ninguém procura ali por isso.
+            activePending = (activePending === p) ? '' : p;
+            applyPendingFilter();
+        });
+
+        $('#mcExportCsv').on('click', function (e) {
+            e.preventDefault();
+            var blob = new Blob(['﻿' + toCsv(visibleMatrix())],
+                                { type: 'text/csv;charset=utf-8;' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'track-confirmations.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+        $('#mcExportCopy').on('click', function (e) {
+            e.preventDefault();
+            var txt = visibleMatrix().map(function (l) { return l.join('\t'); }).join('\n');
+            navigator.clipboard.writeText(txt).then(function () {
+                Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false });
+            });
+        });
+
+        // ── Actions ─────────────────────────────────────────────────────
+        $(document).on('click', '[data-mc-edit]', function () {
+            var k = $(this).attr('data-mc-edit');
+            var row = rowByKey(k);
+            if (!row) return;
+            editing = k;
+            $('#mcEditKey').text(k);
+            var grid = $('#mcEditGrid').empty();
+            COLUMNS.forEach(function (c) {
+                var col = $('<div class="col-12 col-md-4 col-xl-3">');
+                $('<label>').text(label(c) === c ? c : label(c) + ' (' + c + ')').appendTo(col);
+                var inp = isDate(c) ? dateInput()
+                        : $('<input type="text" class="form-control form-control-sm">');
+                inp.val(row[c] || '').attr('data-col', c);
+                // Derivadas e a chave ficam visíveis mas travadas: escondê-las
+                // faria perguntarem onde foram parar; deixá-las editáveis criaria
+                // um valor que a próxima gravação desfaz.
+                if (!editable(c)) inp.prop('readonly', true).addClass('bg-body-secondary');
+                inp.appendTo(col);
+                grid.append(col);
+            });
+            new bootstrap.Modal(document.getElementById('mcEditModal')).show();
+        });
+
+        $('#mcEditSave').on('click', function () {
+            if (!editing) return;
+            var o = {}; o[KEY] = editing;
+            $('#mcEditGrid input[data-col]').each(function () {
+                var c = $(this).attr('data-col');
+                if (editable(c)) o[c] = $(this).val() || '';
+            });
+            save([o]).then(function (ok) {
+                if (ok) bootstrap.Modal.getInstance(document.getElementById('mcEditModal')).hide();
+            });
+        });
+
+        $(document).on('click', '[data-mc-del]', function () {
+            var k = $(this).attr('data-mc-del');
             Swal.fire({
-                title: 'Nova confirmação',
-                input: 'text',
-                inputLabel: 'Trade ID (é a chave da linha)',
-                inputPlaceholder: 'ex.: 25F01779096',
-                showCancelButton: true,
-                inputValidator: function (v) {
-                    return (v || '').trim() ? undefined : 'O Trade ID é obrigatório.';
-                }
-            }).then(function (res) {
-                if (!res.isConfirmed) return;
-                var o = {}; o[KEY] = res.value.trim();
-                fetch('/api/manual-confirmation/upsert', {
+                icon: 'warning', title: 'Excluir esta confirmação?',
+                text: 'Trade ID ' + k + '. Não tem desfazer.',
+                showCancelButton: true, confirmButtonText: 'Excluir',
+                confirmButtonColor: '#d33'
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                fetch('/api/manual-confirmation/delete', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rows: [o] })
-                }).then(function (r) { return r.json(); }).then(function (j) {
-                    if (!j.success) {
-                        Swal.fire({ icon: 'error', title: 'Não foi possível criar', text: j.message || '' });
-                        return;
-                    }
-                    load();
-                });
+                    body: JSON.stringify({ key: k })
+                }).then(function (x) { return x.json(); }).then(load);
             });
         });
 

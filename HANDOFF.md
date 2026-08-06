@@ -9897,3 +9897,61 @@ a planilha ele cria os bancos vazios e diz onde procurou.
 ### Verificação
 
 `scripts/tests/check_manual_conf.py` (novo).
+
+---
+
+## §218 — A linha de filtro por coluna sumia com `scrollX`, e o card ficava branco
+
+Duas armadilhas de tela que apareceram juntas nas páginas novas (Recon FXO e Manual Confirmations) e
+valem para **qualquer** página futura, porque nenhuma das duas dá erro no console.
+
+### 1. `scrollX` clona o cabeçalho
+
+Com `scrollX: true` o DataTables desenha o cabeçalho **duas vezes**: o `<thead>` do `<table>` real fica
+no corpo rolável (escondido) e uma **cópia** é montada dentro de `.dt-scroll-headInner`, que é a que o
+usuário enxerga. Acrescentar a linha de filtro só no `<thead>` da tabela faz ela existir no DOM e **não
+aparecer** — foi o que aconteceu nas duas páginas.
+
+O jeito certo é o que a Recon Comitente já fazia: montar a linha, acrescentá-la **nas duas** theads, e
+delegar o evento **só à visível** —
+
+```js
+$('#tabela_wrapper').on('input', '.col-filters input', function () {
+    if (!$(this).closest('.dt-scroll-head, .dataTables_scrollHead').length) return;
+    ...
+});
+```
+
+O `return` não é detalhe: sem ele as duas cópias disparam e cada tecla filtra duas vezes. E o CSS tem de
+mirar os três seletores (`#tabela thead`, `.dt-scroll-headInner thead`, `.dataTables_scrollHeadInner
+thead`), porque o nome do container mudou entre as versões do DataTables.
+
+### 2. O `<style>` da página é carregado ANTES do CSS do tema
+
+`layouts/base.html` põe o bloco `extra_css` **antes** do `head-css.html`. O `.card` do tema declara
+`background-color`, `border`, `border-radius` **e** `color`; como ele vem depois, qualquer uma dessas
+propriedades escrita sem `!important` numa regra da página é revertida.
+
+O sintoma é traiçoeiro: no card de Total do Pending Confirmation as regras de **texto** tinham
+`!important` e a do **fundo** não, então o cartão ficou branco com letra branca — em branco, sem título,
+sem número, sem erro nenhum. Na Recon FXO os cards saíram brancos com moldura cinza pelo mesmo motivo.
+
+**Regra prática:** numa regra de página que pinta um `.card`, marque `background-color`,
+`background-image`, `border`, `border-radius` e `color`. Declare também uma **cor sólida antes do
+gradiente**, para o cartão nunca depender só da imagem de fundo. Os testes `check_pc_widgets.py` e
+`check_recon_fxo.py` passaram a exigir isso.
+
+### Enquanto isso, na tela do Monitor
+
+O botão *Abrir* passou a apontar para o **PDF gravado no Electronic Inventory**
+(`/api/electronic-inventory/file?client=…&rel=Confirmations/AAAA/mm. Mês/dd/<produto>/…`), não para a
+tela que reconstrói o documento: quem valida precisa ver o papel que vai ao cliente, e a tela de geração
+pode montar outra coisa se o day-file mudou desde então. O `rel` é relativo à pasta do cliente porque é
+assim que aquele endpoint recebe — ele resolve a pasta pelo nome e barra qualquer caminho que escape
+dela.
+
+A tela **Track Confirmations** ganhou a coluna de **Actions** (abrir · editar · excluir), o **Export**
+(CSV e copiar) — que leva o que está **na tela**, com filtro e ordenação aplicados, porque quem filtrou
+e clicou em exportar quer o que está vendo — e os cards viraram filtro: clicar filtra a tabela pelo
+estágio, clicar de novo desliga. O card de MO e o de FO contam também as linhas em `Pending MO/FO`, que
+estão paradas nas duas mesas de verdade.

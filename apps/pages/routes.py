@@ -24520,6 +24520,30 @@ def _mc_conf_trade_keys(picked, product):
     return out
 
 
+def _mc_ei_link(client_key, client_dir, file_path):
+    """Endereço do documento salvo no Electronic Inventory.
+
+    O botão *Abrir* do Monitor tem de levar ao PAPEL — o PDF que foi gravado em
+    `<Cliente>/Confirmations/AAAA/mm. Mês/dd/<produto>/` —, não a uma tela que o
+    reconstrói. Quem valida precisa ver o que foi (ou vai ser) enviado ao
+    cliente, e a tela de geração pode montar outra coisa se o day-file mudou.
+
+    O `rel` é RELATIVO à pasta do cliente porque é assim que
+    `/api/electronic-inventory/file` recebe: ele resolve a pasta pelo nome do
+    cliente e barra qualquer caminho que escape dela.
+    """
+    if not (client_key and client_dir and file_path):
+        return ''
+    try:
+        rel = os.path.relpath(file_path, client_dir)
+    except ValueError:                       # drives diferentes no Windows
+        return ''
+    if rel.startswith('..'):
+        return ''
+    return ('/api/electronic-inventory/file?client=' + quote(str(client_key)) +
+            '&rel=' + quote(rel.replace(os.sep, '/')))
+
+
 def _mc_stamp_generated(picked, product, link=''):
     """Confirmação salva → Data envio validação OTC nas linhas que ela cobre."""
     try:
@@ -24713,10 +24737,15 @@ def api_conf_ndfcomm_save():
     validate_url = ('/confirmation/ndf-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
-    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
-    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
-    # que é para onde o Monitor manda quem for conferir.
-    _mc_stamp_generated(picked, 'ndf-comm', link=validate_url)
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas de
+    # Manual Confirmations e guarda o endereço do PDF no Electronic
+    # Inventory — é para onde o botão Abrir do Monitor manda. O link é do
+    # papel que foi gravado, não da tela que o reconstrói: quem valida
+    # precisa ver o que vai ao cliente, e a tela de geração pode montar
+    # outra coisa se o day-file mudou desde então.
+    _mc_stamp_generated(picked, 'ndf-comm',
+                        link=_mc_ei_link(conf['parteb_nome'] or acr,
+                                         client_dir, pdf_path))
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25133,10 +25162,15 @@ def api_conf_optcomm_save():
     validate_url = ('/confirmation/opt-comm/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
-    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
-    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
-    # que é para onde o Monitor manda quem for conferir.
-    _mc_stamp_generated(picked, 'opt-comm', link=validate_url)
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas de
+    # Manual Confirmations e guarda o endereço do PDF no Electronic
+    # Inventory — é para onde o botão Abrir do Monitor manda. O link é do
+    # papel que foi gravado, não da tela que o reconstrói: quem valida
+    # precisa ver o que vai ao cliente, e a tela de geração pode montar
+    # outra coisa se o day-file mudou desde então.
+    _mc_stamp_generated(picked, 'opt-comm',
+                        link=_mc_ei_link(conf['parteb_nome'] or acr,
+                                         client_dir, pdf_path))
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25547,10 +25581,15 @@ def api_conf_optfxo_save():
     validate_url = ('/confirmation/opt-fxo/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
-    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
-    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
-    # que é para onde o Monitor manda quem for conferir.
-    _mc_stamp_generated(picked, 'opt-fxo', link=validate_url)
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas de
+    # Manual Confirmations e guarda o endereço do PDF no Electronic
+    # Inventory — é para onde o botão Abrir do Monitor manda. O link é do
+    # papel que foi gravado, não da tela que o reconstrói: quem valida
+    # precisa ver o que vai ao cliente, e a tela de geração pode montar
+    # outra coisa se o day-file mudou desde então.
+    _mc_stamp_generated(picked, 'opt-fxo',
+                        link=_mc_ei_link(conf['parteb_nome'] or acr,
+                                         client_dir, pdf_path))
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
@@ -25963,10 +26002,15 @@ def api_conf_fwdstart_save():
     validate_url = ('/confirmation/ndf-fwdstart/validate?date=' + ref_state.strftime('%Y-%m-%d')
                     + '&acronym=' + quote(acr) + '&mercadoria=' + quote(merc)
                     + '&family=' + quote(family))
-    # A confirmação saiu: carimba a Data envio validação OTC nas linhas
-    # de Manual Confirmations e guarda o endereço DESTA tela de validação,
-    # que é para onde o Monitor manda quem for conferir.
-    _mc_stamp_generated(picked, 'ndf-fwdstart', link=validate_url)
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas de
+    # Manual Confirmations e guarda o endereço do PDF no Electronic
+    # Inventory — é para onde o botão Abrir do Monitor manda. O link é do
+    # papel que foi gravado, não da tela que o reconstrói: quem valida
+    # precisa ver o que vai ao cliente, e a tela de geração pode montar
+    # outra coisa se o day-file mudou desde então.
+    _mc_stamp_generated(picked, 'ndf-fwdstart',
+                        link=_mc_ei_link(conf['parteb_nome'] or acr,
+                                         client_dir, pdf_path))
     return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
                     'numero_contrato': numero_contrato,
                     'fepweb_updated': fep_updated,
