@@ -262,6 +262,16 @@
    — Account (texto nowrap) e Observation (um <input> que só tem min-width 90px)
    ficavam com o texto cortado. Com os mínimos a tabela ganha largura própria e
    o .dt-scroll-body rola; o DataTables mantém cabeçalho e corpo alinhados. */
+/* Trade Level — as duas colunas de TAXA. O Forward Rate passou a mostrar todas
+   as casas que o SETTLEMENT.xlsx traz (antes eram 6 fixas) e o Fixing Rate segue
+   a mesma precisão. Sem largura mínima a coluna se acomoda e o número quebra no
+   meio — uma taxa partida em duas linhas é pior que uma arredondada, porque
+   parece um valor diferente. `nowrap` impede a quebra; o mínimo é o que dá à
+   tabela largura própria para o scrollX rolar de verdade. */
+#ops-trade-table th:nth-child(12), #ops-trade-table td:nth-child(12),
+#ops-trade-table th:nth-child(15), #ops-trade-table td:nth-child(15) {
+    min-width: 165px; white-space: nowrap;
+}
 #ops-summary-table th:nth-child(4),  #ops-summary-table td:nth-child(4)  { min-width: 440px; }  /* Counterparty */
 #ops-summary-table th:nth-child(5),  #ops-summary-table td:nth-child(5)  { min-width: 130px; }  /* Receive */
 #ops-summary-table th:nth-child(6),  #ops-summary-table td:nth-child(6)  { min-width: 130px; }  /* Pay */

@@ -9349,15 +9349,31 @@ def _ndfc_fmt_date(v):
     return d.strftime('%d/%m/%Y') if d else s
 
 
+# Piso de casas do forward rate. Antes era também o TETO ('{:.6f}'), e o arquivo
+# traz mais: a taxa aparecia arredondada na tela enquanto o Fixing Rate era
+# calculado com a precisão inteira — o valor mostrado não explicava o resultado.
+# Piso e não valor fixo para as taxas curtas não encolherem ('5.4' → '5.400000').
+_NDFC_FWD_MIN_DEC = 6
+
+
+def _ndfc_text_decimals(v):
+    """Casas decimais que o TEXTO traz. É o que o arquivo escreveu — não uma
+    escolha nossa —, e a vírgula decimal conta igual ao ponto."""
+    s = str(v or '').strip().replace(' ', '').replace(',', '.')
+    return len(s.split('.', 1)[1]) if '.' in s else 0
+
+
 def _ndfc_fmt_fwd(v):
-    """Forward rate → 0.000000 (6 decimals); comma decimal tolerated; non-numeric kept."""
+    """Forward rate com TODAS as casas do arquivo (mínimo 6); vírgula decimal
+    tolerada; texto não numérico passa inteiro."""
     s = str(v or '').strip()
     if not s:
         return ''
     try:
-        return '{:.6f}'.format(float(s.replace(' ', '').replace(',', '.')))
+        n = float(s.replace(' ', '').replace(',', '.'))
     except ValueError:
         return s
+    return '{:.{}f}'.format(n, max(_NDFC_FWD_MIN_DEC, _ndfc_text_decimals(s)))
 
 
 def _ndfc_ensure_meta(data, default_status='OK'):
@@ -9630,7 +9646,12 @@ def _ndfc_strike_calc(rec, lp, is_cross):
     ratio = settle / notional
     add = (ratio > 0 and pos == 'comprador') or (ratio < 0 and pos == 'vendedor')
     delta = abs(settle) / notional
-    return '{:.6f}'.format(fwd + delta if add else fwd - delta)
+    # Mesma precisão do forward que o gerou: o fixing é `forward ± delta`, então
+    # mostrar menos casas que o forward esconderia justamente a diferença que a
+    # conta produziu, e mostrar mais inventaria dígitos que nenhuma das entradas
+    # tem. O cálculo em si sempre foi feito com o valor cheio.
+    dec = max(_NDFC_FWD_MIN_DEC, _ndfc_text_decimals(rec.get('VL_FORWARD_RATE', '')))
+    return '{:.{}f}'.format(fwd + delta if add else fwd - delta, dec)
 
 
 def _ndfc_opb3_rescue(rec, resgates, contr_map, by_taxid):

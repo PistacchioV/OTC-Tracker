@@ -9458,3 +9458,35 @@ só existia onde a célula era **reformatada** por uma regra e o cru lido por ou
 
 Seção 15 do `check_swap_advice.py`: o número reportado, a célula e o cru batendo para quatro formatos, o
 vazio que não vira zero, e a prova estrutural de que o `valor_base` não pode voltar ao parser de uso geral.
+
+---
+
+## §210 — Forward Rate mostrava 6 casas; o arquivo tem mais
+
+No Trade Level do NDF Summary a taxa forward saía com **seis casas fixas**
+(`_ndfc_fmt_fwd` → `'{:.6f}'`), enquanto o SETTLEMENT.xlsx traz todas as que o sistema de origem
+calculou. O Fixing Rate, que é `forward ± settlement/notional`, **já era calculado com o valor cheio** e
+também impresso com seis — então a taxa na tela não explicava o fixing ao lado dela, e a diferença que a
+mesa precisa conferir ficava dentro do arredondamento.
+
+O valor **cru nunca foi truncado**: o importador guarda o texto do openpyxl e `_ndfc_valnum` lê a
+precisão inteira. O que mudou é só a **exibição**.
+
+* **Forward Rate** — mostra as casas que o texto do arquivo traz, com **piso de 6**
+  (`_ndfc_text_decimals`). Piso e não valor fixo: uma taxa curta virando `5.4` faria a coluna deixar de
+  ler como taxa.
+* **Fixing Rate** — a **mesma** precisão do forward que o gerou. Menos casas esconderia a diferença que a
+  conta produziu; mais inventaria dígitos que nenhuma das entradas tem.
+
+O `round(..., 6)` do `_ndfc_opb3_rescue` **não** mudou: aquilo é tolerância de casamento contra a Live
+Position, não exibição.
+
+E a coluna precisou de largura: com `scrollX` ligado mas sem `min-width`, a tabela se acomoda em 100% do
+card e a taxa longa **quebra em duas linhas** — uma taxa partida ao meio parece um valor diferente, o que
+é pior que a arredondada que se acabou de corrigir. `min-width: 165px` + `nowrap` nas colunas 12 e 15.
+
+### Verificação
+
+`scripts/tests/check_ndfsum_fwd_rate.py` (novo, 4 seções), incluindo a conferência **posicional** de que
+o CSS aponta para as colunas certas (contando os `<th>` do cabeçalho) e a prova de que o cálculo continua
+lendo o campo cru.
