@@ -1607,5 +1607,10 @@
   "cp-dm2-empty": "ran — nothing pending",
   "cp-dm2-never": "no automatic run recorded yet",
   "cp-dm2-next": "next",
-  "cp-dm2-nowbr": "now in Brazil"
+  "cp-dm2-nowbr": "now in Brazil",
+  "sc-actions": "Actions",
+  "sw-edit-title": "Edit advice row",
+  "sw-edit-hint": "The correction applies to this day’s advice — on screen and in the printed document. The source files are not changed.",
+  "sw-edit-cancel": "Cancel",
+  "sw-edit-save": "Save"
 }

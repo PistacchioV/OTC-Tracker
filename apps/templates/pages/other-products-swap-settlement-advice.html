@@ -233,7 +233,10 @@
 {% endblock extra_css %}
 
 {% block page_content %}
-<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-settlement-advice/data" data-ref-date="{{ ref_date }}">
+<!-- data-actions liga a coluna de Actions no visualizador compartilhado. Ele
+     serve cinco páginas: sem este atributo, as outras quatro continuam sem
+     a coluna e sem saber que ela existe. -->
+<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-settlement-advice/data" data-ref-date="{{ ref_date }}" data-actions="1">
     {% set title='Swap Settlement Advice' %}
     {% set crumbs=['OTC Tracker', 'Daily Settlements', 'Other Products', 'Swap', 'Settlement Advice'] %}
     {% include 'partials/page-title.html' %}
@@ -320,6 +323,37 @@
         </div>
     </div>
 </div>
+
+<!-- ── Modal de edição da linha ─────────────────────────────────────────────
+     Mesmo padrão do "Add/Edit row" das páginas de New Deals: os campos são
+     gerados a partir das colunas que o servidor mandou, então uma coluna nova
+     no aviso aparece aqui sozinha — sem uma segunda lista para manter. -->
+<div class="modal fade" id="swAdvEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-sm">
+          <i class="ti ti-edit me-1"></i><span data-lang="sw-edit-title">Editar linha do aviso</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info py-2 fs-xs" data-lang="sw-edit-hint">
+          A correção vale para o aviso deste dia — na tela e no documento impresso.
+          Os arquivos de origem não são alterados.
+        </div>
+        <div class="row g-2" id="swAdvEditFields"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal"
+                data-lang="sw-edit-cancel">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary bg-gradient" id="swAdvEditSave">
+          <i class="ti ti-device-floppy me-1"></i><span data-lang="sw-edit-save">Salvar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock page_content %}
 
 {% block extra_javascript %}
@@ -335,6 +369,128 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+<!-- Ações da linha (Edit / Confirm / Delete) — também em script PRÓPRIO. O
+     visualizador compartilhado desenha os botões e entrega o clique; o que cada
+     um FAZ é desta página, porque só ela tem endpoint para gravar. -->
+<script>
+(function () {
+    var page = document.getElementById('swapchar-page');
+    if (!page || !page.getAttribute('data-actions')) return;
+    var API = '/api/other-products-swap-settlement-advice';
+    var KEY_COL = 2;                       // Número de Contrato — a chave da linha
+    var modalEl = document.getElementById('swAdvEditModal');
+    var fieldsEl = document.getElementById('swAdvEditFields');
+    var saveBtn = document.getElementById('swAdvEditSave');
+    var editing = null;                    // {contrato, cells, columns}
+
+    function alertBox(icon, title, text) {
+        if (window.Swal) Swal.fire({ icon: icon, title: title, text: text });
+        else alert(title + (text ? '\n' + text : ''));
+    }
+    // A data sai do MESMO campo que a tabela usa — ler a tela em vez de guardar
+    // um estado próprio evita gravar a edição no dia errado depois de trocar a data.
+    function currentYmd() {
+        var v = (document.getElementById('sc-date') || {}).value || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
+    }
+    function reload() { if (window.scLoad) window.scLoad(currentYmd()); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function post(path, body) {
+        return fetch(API + path, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify(body)
+        }).then(function (r) { return r.json().catch(function () { return {}; }); });
+    }
+
+    function openEdit(cells, columns) {
+        editing = { contrato: String(cells[KEY_COL] || '').trim(), cells: cells, columns: columns };
+        fieldsEl.innerHTML = columns.map(function (label, i) {
+            // O Número de Contrato é a CHAVE do registro — editá-lo criaria uma
+            // linha órfã e deixaria a original intacta. Fica visível e travado.
+            var locked = (i === KEY_COL);
+            return '<div class="col-md-6">' +
+                '<label class="form-label form-label-sm mb-1">' + esc(label) +
+                (locked ? ' <span class="badge text-bg-secondary">chave</span>' : '') + '</label>' +
+                '<input type="text" class="form-control form-control-sm sw-edit-inp" ' +
+                'data-i="' + i + '" value="' + esc(cells[i]) + '"' + (locked ? ' readonly' : '') + '>' +
+                '</div>';
+        }).join('');
+        if (window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+        if (!editing) return;
+        // Só o que MUDOU vai no payload: gravar as 15 células congelaria a linha
+        // inteira nos valores de hoje, e amanhã ela deixaria de acompanhar os
+        // arquivos de origem.
+        var changed = {};
+        fieldsEl.querySelectorAll('.sw-edit-inp').forEach(function (inp) {
+            var i = parseInt(inp.getAttribute('data-i'), 10);
+            if (String(editing.cells[i] == null ? '' : editing.cells[i]) !== inp.value) {
+                changed[i] = inp.value;
+            }
+        });
+        if (!Object.keys(changed).length) {
+            if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            return;
+        }
+        saveBtn.disabled = true;
+        post('/row', { date: currentYmd(), contrato: editing.contrato, cells: changed })
+            .then(function (j) {
+                if (!j.ok) { alertBox('error', 'Editar', j.error || 'Falha ao gravar.'); return; }
+                if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                reload();
+            })
+            .catch(function () { alertBox('error', 'Editar', 'Falha de rede.'); })
+            .then(function () { saveBtn.disabled = false; });
+    });
+
+    // Chamado pelo visualizador compartilhado a cada clique num botão da linha.
+    window.scRowAction = function (act, i, cells, columns) {
+        var contrato = String(cells[KEY_COL] || '').trim();
+        if (act === 'edit') { openEdit(cells, columns); return; }
+        if (!contrato) { alertBox('warning', 'Ação', 'Linha sem Número de Contrato.'); return; }
+
+        if (act === 'confirm') {
+            // O status é por contraparte × LOB × produto (é assim que o aviso é
+            // emitido), então confirmar UMA linha confirma o aviso inteiro. Dizer
+            // isso antes evita a surpresa de ver várias linhas mudarem de cor.
+            post('/row/confirm', { date: currentYmd(), contrato: contrato })
+                .then(function (j) {
+                    if (!j.ok) { alertBox('error', 'Confirmar', j.error || 'Falha.'); return; }
+                    alertBox('success', 'Confirmado',
+                        'Aviso de ' + (j.counterparty || '') + ' marcado como Sent' +
+                        (j.rows > 1 ? ' (' + j.rows + ' linhas do mesmo aviso).' : '.'));
+                    reload();
+                })
+                .catch(function () { alertBox('error', 'Confirmar', 'Falha de rede.'); });
+            return;
+        }
+
+        if (act === 'delete') {
+            var ask = window.Swal
+                ? Swal.fire({ icon: 'warning', title: 'Remover do aviso?',
+                              text: 'Contrato ' + contrato + ' sai do aviso deste dia. Os arquivos de origem não são alterados.',
+                              showCancelButton: true, confirmButtonText: 'Remover',
+                              cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545' })
+                    .then(function (r) { return r.isConfirmed; })
+                : Promise.resolve(window.confirm('Remover o contrato ' + contrato + ' do aviso deste dia?'));
+            ask.then(function (ok) {
+                if (!ok) return;
+                return post('/row/delete', { date: currentYmd(), contrato: contrato })
+                    .then(function (j) {
+                        if (!j.ok) { alertBox('error', 'Remover', j.error || 'Falha.'); return; }
+                        reload();
+                    });
+            }).catch(function () { alertBox('error', 'Remover', 'Falha de rede.'); });
+        }
+    };
+})();
+</script>
 <!-- Print Advice em script PRÓPRIO: o visualizador genérico é compartilhado com
      Athena/Events/VCP e não pode ganhar um botão que só existe aqui. -->
 <script>

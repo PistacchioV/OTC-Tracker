@@ -11,7 +11,7 @@
   // ':gt(1)' NÃO serve aqui: o thead tem duas linhas (títulos + filtros), o jQuery
   // enumera 2×N <th> e os das colunas 0/1 da segunda linha caem em posição > 1,
   // devolvendo checkbox e Actions para a exportação. Índice de COLUNA, então.
-  function exportFromData(idx) { return idx > 1; }
+  function exportFromData(idx) { return idx >= LEAD; }
 
   // dd/mm/yyyy chronological sort — DataTables orders strings by default, so date
   // columns were sorted as text (by day). This type detector makes any date column
@@ -33,6 +33,13 @@
   // Endpoint is per-page (data-api) so the same JS drives Characteristics,
   // Cashflow and Premium — all share this generic columns/rows table.
   var API = page.getAttribute('data-api') || '/api/live-position-swap-characteristics/data';
+  // Colunas FIXAS à esquerda (fora dos dados): checkbox, Status e — só quando a
+  // página pede — Actions. O deslocamento aparecia como o literal `2` em seis
+  // lugares; esquecer um deles faz o filtro por coluna filtrar a coluna vizinha,
+  // sem erro nenhum. LEAD é esse número, calculado UMA vez — e depois do `page`,
+  // que é de onde a opção vem.
+  var ACTIONS = !!page.getAttribute('data-actions');
+  var LEAD = ACTIONS ? 3 : 2;
 
   var dt = null;               // jQuery DataTables instance
   var COLS = [];               // [{label, idx}]
@@ -118,31 +125,43 @@
     var titleRow =
       '<tr id="swapchar-head">' +
       '<th class="text-center" style="min-width:38px"><input type="checkbox" id="scCheckAll" class="form-check-input"></th>' +
+      (ACTIONS ? '<th class="text-center" data-lang="sc-actions">Actions</th>' : '') +
       '<th data-lang="sc-status">Status</th>' +
       columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
     var filterRow =
       '<tr class="sc-th-filter">' +
-      '<th></th><th></th>' +
+      new Array(LEAD + 1).join('<th></th>') +
       columns.map(function (c, i) {
         return '<th><input type="text" class="form-control form-control-sm sc-col-filter" data-col="' +
-          (i + 2) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
+          (i + LEAD) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
       }).join('') + '</tr>';
     document.querySelector('#swapchar-table thead').innerHTML = titleRow + filterRow;
 
     var statusBadge = '<span class="badge bg-secondary-subtle text-secondary" data-lang="sc-status-custody">' + esc(t('status')) + '</span>';
+    // Os botões carregam o índice da linha NO PAYLOAD (data-i), não a posição na
+    // tela: a tabela ordena e pagina, e a posição visual não identifica nada.
+    var actionsCell =
+      '<div class="d-flex justify-content-center gap-1">' +
+      '<a class="btn btn-info btn-sm rounded-circle sc-act" data-act="edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+      '<a class="btn btn-success btn-sm rounded-circle sc-act" data-act="confirm" href="#" title="Confirm"><i class="ti ti-check"></i></a>' +
+      '<a class="btn btn-danger btn-sm rounded-circle sc-act" data-act="delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
+      '</div>';
     var data = rows.map(function (r, i) {
       var st = (statuses && statuses[i] && statusCell(statuses[i])) || statusBadge;
-      return ['<input type="checkbox" class="form-check-input sc-row-check">', st].concat(
-        r.map(function (v) { return esc(v); })
-      );
+      var lead = ['<input type="checkbox" class="form-check-input sc-row-check" data-i="' + i + '">'];
+      if (ACTIONS) lead.push(actionsCell.replace(/class="btn /g, 'data-i="' + i + '" class="btn '));
+      lead.push(st);
+      return lead.concat(r.map(function (v) { return esc(v); }));
     });
 
     if (dt) { dt.destroy(); }
-    var colDefs = [{ orderable: false, className: 'text-center', targets: 0 }];
+    var colDefs = [{ orderable: false, className: 'text-center',
+                     targets: ACTIONS ? [0, 1] : [0] }];
 
     dt = jQuery('#swapchar-table').DataTable({
       data: data,
-      columns: [{}, {}].concat(columns.map(function () { return {}; })),
+      columns: new Array(LEAD).join(',').split(',').map(function () { return {}; })
+        .concat(columns.map(function () { return {}; })),
       columnDefs: colDefs,
       // No scrollX: the header + body stay in ONE table (never misaligns). The
       // wrapping .table-responsive (overflow-x) provides the horizontal scroll,
@@ -188,6 +207,18 @@
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
 
+    // Os botões só existem se a página pediu; o que eles FAZEM é dela também
+    // (window.scRowAction). Este arquivo serve cinco páginas — ele desenha e
+    // entrega o clique, não sabe o que é confirmar ou apagar em cada uma.
+    if (ACTIONS) {
+      jQuery('#swapchar-table tbody').off('click.scact').on('click.scact', '.sc-act', function (e) {
+        e.preventDefault();
+        var i = parseInt(this.getAttribute('data-i'), 10);
+        if (isNaN(i) || typeof window.scRowAction !== 'function') return;
+        window.scRowAction(this.getAttribute('data-act'), i, rows[i], columns);
+      });
+    }
+
     // Select-all checkbox
     var checkAll = document.getElementById('scCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
@@ -199,11 +230,11 @@
   function buildColumnsToggle() {
     var wrap = document.querySelector('.columnToggleWrapper');
     if (!wrap) return;
-    var items = dt.columns().header().toArray().slice(2).map(function (th, index) {
+    var items = dt.columns().header().toArray().slice(LEAD).map(function (th, index) {
       var label = th.textContent.trim();
       return '<li class="px-3 py-1">' +
         '<div class="form-check">' +
-        '<input class="form-check-input toggle-vis" type="checkbox" data-column="' + (index + 2) + '" id="scCol' + index + '" checked>' +
+        '<input class="form-check-input toggle-vis" type="checkbox" data-column="' + (index + LEAD) + '" id="scCol' + index + '" checked>' +
         '<label class="form-check-label fw-medium" for="scCol' + index + '">' + esc(label) + '</label>' +
         '</div></li>';
     }).join('');
@@ -227,7 +258,7 @@
     document.querySelectorAll('#swapchar-table .sc-col-filter').forEach(function (inp) {
       if (inp.value) dt.column(+inp.getAttribute('data-col')).search(inp.value);
     });
-    chips.forEach(function (c) { dt.column(c.idx + 2).search(c.value); });
+    chips.forEach(function (c) { dt.column(c.idx + LEAD).search(c.value); });
     dt.draw();
   }
 

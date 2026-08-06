@@ -9370,3 +9370,58 @@ pergunta, se o relógio do servidor está onde se pensa.
 dia normal sem repetição, o restart às 20h recuperando os dois slots, o SMTP caindo e o horário sendo
 retentado **sem duplicar**, o destinatário cadastrado depois ainda recebendo o aviso do dia, o `empty`
 mantendo a reserva, e o status publicado pelo endpoint que a tela consome.
+
+---
+
+## §208 — Coluna de Actions no Settlement Advice de Swap
+
+Edit (modal), Confirm e Delete por linha, no padrão das páginas de New Deals.
+
+### A parte perigosa: o visualizador é compartilhado
+
+`live-position-swap-characteristics.js` serve **cinco páginas**. Ele tinha duas colunas fixas à esquerda
+(checkbox e Status) e esse `2` aparecia como **literal em seis lugares**: o filtro por coluna
+(`data-col`), o `columns` do DataTables, o `slice` do menu de colunas, o `data-column` do mesmo menu, os
+chips do smart filter e o `exportFromData`. Acrescentar uma coluna e esquecer um deles faz o filtro
+passar a filtrar a **coluna vizinha** — sem erro nenhum na tela.
+
+Os seis viraram **`LEAD`**, calculado uma vez a partir de `data-actions` no `#swapchar-page`. A coluna é
+**opt-in**: as outras quatro páginas não têm o atributo e não mudaram — e o teste prende isso, arquivo
+por arquivo.
+
+O compartilhado **desenha** os botões e entrega o clique (`window.scRowAction`); o que cada um **faz** é
+da página, porque só ela tem endpoint para gravar. Mesma regra do Print Advice (§184).
+
+### As edições valem no aviso IMPRESSO, não só na tela
+
+Aqui está o ponto. A linha é derivada de cinco arquivos; a correção vai para um **overlay do dia**, ao
+lado do overlay do Settlement Summary — reimportar o batch não a apaga, e nada do que veio da B3/Athena
+é sobrescrito. A chave é o **Número de Contrato**, não a posição na tela (a tabela ordena por cliente).
+
+O overlay sincroniza as **células e os números crus** (`_SWADV_NUM_FIELDS`): o aviso impresso lê os
+crus, então corrigir só a célula deixaria a tela certa e o documento do cliente errado — a divergência
+que este módulo inteiro existe para evitar. Tela e aviso passaram a ler o mesmo `_swadv_items`.
+
+**O parser tem de aceitar os dois formatos.** A tabela mostra em US (`12,345.67`) e o aviso imprime em BR
+(`R$ 12.345,67`), então o operador digita ora um, ora outro. `_mtm_parse_num` lê só US e transforma
+`12.345,67` em **12,345** — o aviso sairia com um valor mil vezes menor, sem nada na tela acusando. Por
+isso o overlay usa `_conf_to_float`, que entende os dois. (Verificado nos dois sentidos.)
+
+Só as células **alteradas** vão no payload: gravar as 15 congelaria a linha nos valores de hoje e amanhã
+ela deixaria de acompanhar os arquivos.
+
+### Confirm e Delete
+
+**Confirm** marca `Sent` — e o status vive no overlay do Settlement Summary, por **contraparte × LOB ×
+produto**, porque é assim que o aviso é emitido: um documento por destinatário. Confirmar uma linha
+confirma o aviso a que ela pertence, e a tela **diz quantas linhas mudaram junto** em vez de deixar a
+surpresa acontecer.
+
+**Delete** marca a linha como apagada no overlay — o contrato continua existindo na B3 e no Athena; o que
+saiu foi a linha *deste aviso*. O endpoint aceita `undo`.
+
+### Verificação
+
+Seções 13 e 14 do `check_swap_advice.py`: a coluna opt-in, os seis literais que não podem ter sobrado, as
+sete páginas irmãs seguindo sem Actions, a chave travada no modal, e a edição chegando ao aviso impresso
+com o parser tolerante.

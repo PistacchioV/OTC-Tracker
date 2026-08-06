@@ -1607,5 +1607,10 @@
   "cp-dm2-empty": "rodou — nada pendente",
   "cp-dm2-never": "nenhum disparo automático registrado ainda",
   "cp-dm2-next": "próximo",
-  "cp-dm2-nowbr": "agora no Brasil"
+  "cp-dm2-nowbr": "agora no Brasil",
+  "sc-actions": "Ações",
+  "sw-edit-title": "Editar linha do aviso",
+  "sw-edit-hint": "A correção vale para o aviso deste dia — na tela e no documento impresso. Os arquivos de origem não são alterados.",
+  "sw-edit-cancel": "Cancelar",
+  "sw-edit-save": "Salvar"
 }

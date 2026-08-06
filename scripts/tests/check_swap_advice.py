@@ -419,5 +419,51 @@ check('padding na barra', '.card-body > .d-flex.justify-content-between' in HTML
 check('altura igual para todos os botoes', '.card-body > .d-flex .dt-button' in HTML, True)
 check('respiro antes da tabela', '.card-body > .table-responsive' in HTML, True)
 
+print('\n== 13. a coluna de Actions (Edit / Confirm / Delete) ==')
+# O visualizador serve CINCO paginas. A coluna nova e opt-in: sem data-actions
+# nada muda para as outras quatro — e o deslocamento das colunas fixas (LEAD)
+# tem de acompanhar, senao o filtro por coluna passa a filtrar a vizinha, sem
+# erro nenhum na tela.
+JS = read('apps/static/js/pages/live-position-swap-characteristics.js')
+check('a coluna e opt-in', "page.getAttribute('data-actions')" in JS, True)
+check('e esta pagina pediu', 'data-actions="1"' in HTML, True)
+check('LEAD conta as colunas fixas', 'var LEAD = ACTIONS ? 3 : 2;' in JS, True)
+# Nenhum literal 2 pode ter sobrado nos seis lugares que dependem do offset.
+for frag in ("(i + 2)", "slice(2)", "(index + 2)", "c.idx + 2", "idx > 1", "[{}, {}]"):
+    check('sem literal %r' % frag, frag in JS, False)
+for frag in ("(i + LEAD)", "slice(LEAD)", "(index + LEAD)", "c.idx + LEAD", "idx >= LEAD"):
+    check('usa %r' % frag, frag in JS, True)
+# As outras quatro paginas nao pediram a coluna — e nao podem ganha-la.
+for pg in ('live-position-swap-characteristics', 'live-position-swap-cashflow',
+           'live-position-swap-premium', 'other-products-swap-athena',
+           'other-products-swap-events', 'other-products-swap-vcp',
+           'other-products-ndf-settlement-advice'):
+    other = read('apps/templates/pages/%s.html' % pg)
+    check('%s segue sem Actions' % pg, 'data-actions' in other, False)
+# O que os botoes FAZEM e da pagina: o arquivo compartilhado so entrega o clique.
+check('o compartilhado delega', 'window.scRowAction' in JS, True)
+check('e a pagina implementa', 'window.scRowAction = function' in HTML, True)
+check('o modal existe', 'id="swAdvEditModal"' in HTML, True)
+check('com os campos vindos das COLUNAS do servidor',
+      'columns.map(function (label, i)' in HTML, True)
+# Editar o Numero de Contrato criaria uma linha orfa: e a chave do registro.
+check('a chave fica travada no modal', "var locked = (i === KEY_COL);" in HTML, True)
+
+print('\n== 14. a edicao vale na TELA e no AVISO IMPRESSO ==')
+# E o ponto do modulo inteiro: se a celula corrigida so valesse na tela, o
+# cliente receberia o valor antigo e ninguem notaria.
+SRC = read('apps/pages/routes.py')
+check('a tela le as linhas com overlay', 'items = _swadv_items(ref)' in SRC, True)
+check('o aviso impresso tambem', 'for r in _swadv_items(ref):' in SRC, True)
+check('e o overlay sincroniza os numeros CRUS', '_SWADV_NUM_FIELDS' in SRC, True)
+# `_mtm_parse_num` le so o formato US; a tabela mostra US e o aviso imprime BR,
+# entao o operador digita ora um ora outro.
+blk = SRC.split('def _swadv_apply_edits')[1].split('\ndef ')[0]
+check('usa o parser tolerante aos dois formatos', '_conf_to_float(str(val))' in blk, True)
+# A CHAMADA, nao o nome — o comentario ao lado cita o parser errado de proposito,
+# para explicar por que ele nao serve aqui.
+check('e nao o que so le US', '_mtm_parse_num(' in blk, False)
+check('apagar nao encosta nos arquivos de origem', "e['deleted']" in SRC, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

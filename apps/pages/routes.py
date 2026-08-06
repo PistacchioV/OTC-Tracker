@@ -7392,7 +7392,7 @@ def _swadv_email_rows(ref):
         return otc_emails._brl(v) if v is not None else ''
 
     out = []
-    for r in _swadv_collect(ref):
+    for r in _swadv_items(ref):
         c = r['cells']
         out.append(dict(r, cells=[
             c[2],                                   # Número de Contrato
@@ -7412,9 +7412,91 @@ def _swadv_email_rows(ref):
     return out
 
 
+# ── Edições manuais do aviso de Swap ─────────────────────────────────────────
+#  A linha é derivada de cinco arquivos; quando um deles vem errado (ou falta), a
+#  mesa precisa corrigir a célula e mandar o aviso assim mesmo. As correções
+#  ficam num overlay do DIA, fora dos arquivos de origem: reimportar o batch não
+#  as apaga, e nada do que veio da B3/Athena é sobrescrito.
+#
+#  A chave é o NÚMERO DE CONTRATO, não a posição na tela — a tabela ordena por
+#  cliente e a posição muda a cada carga.
+_SWADV_KEY_COL = 2
+# Célula editada que também é NÚMERO: sem isto a tela mostraria o valor corrigido
+# e o aviso impresso continuaria imprimindo o original, que é a divergência que
+# este módulo inteiro existe para evitar.
+_SWADV_NUM_FIELDS = {6: 'valor_base', 8: 'curva_banco', 10: 'curva_cliente',
+                     11: 'bruto', 13: 'ir', 14: 'liquido'}
+
+
+def _swadv_edits_path(ref):
+    """Ao lado do overlay do Settlement Summary, na pasta do dia — mesma
+    convenção do `_opssum_meta_path`."""
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%d'),
+                        'swap-settlement-advice_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _swadv_edits_load(ref):
+    fp = _swadv_edits_path(ref)
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return (fp, d) if isinstance(d, dict) else (fp, {})
+    except Exception:
+        return fp, {}
+
+
+def _swadv_apply_edits(items, edits):
+    """Aplica o overlay às linhas coletadas: some com as apagadas e sobrescreve
+    as células editadas — nas células E nos números crus, que são o que o aviso
+    impresso lê."""
+    if not edits:
+        return items
+    out = []
+    for r in items:
+        key = str(r['cells'][_SWADV_KEY_COL] or '').strip()
+        e = edits.get(key) or {}
+        if e.get('deleted'):
+            continue
+        cells = list(r['cells'])
+        rec = dict(r)
+        for idx_s, val in (e.get('cells') or {}).items():
+            try:
+                i = int(idx_s)
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= i < len(cells):
+                continue
+            cells[i] = str(val)
+            fld = _SWADV_NUM_FIELDS.get(i)
+            # `_conf_to_float` e não `_mtm_parse_num`: a TABELA mostra em US
+            # ('12,345.67') e o aviso imprime em BR ('R$ 12.345,67'), então o
+            # operador digita ora um, ora outro. O parser tolerante entende os
+            # dois; o outro lê '12.345,67' como 12,345 e o aviso sai com um valor
+            # mil vezes menor, sem erro nenhum na tela.
+            if fld:
+                rec[fld] = _conf_to_float(str(val))
+            elif i == 12:                      # Alíquota IR ('22.50%') → fração
+                n = _conf_to_float(str(val).replace('%', ''))
+                rec['rate'] = None if n is None else n / 100.0
+            elif i == 0:
+                rec['counterparty'] = str(val)
+            elif i == 1:
+                rec['lob'] = str(val)
+        rec['cells'] = cells
+        out.append(rec)
+    return out
+
+
+def _swadv_items(ref):
+    """As linhas do aviso JÁ com as edições manuais do dia aplicadas. É por aqui
+    que a tela e o aviso impresso passam — os dois, sempre."""
+    return _swadv_apply_edits(_swadv_collect(ref), _swadv_edits_load(ref)[1])
+
+
 def _swadv_rows(ref):
     """Só as células, na ordem de `_SWADV_COLUMNS` — o que a tela consome."""
-    return [r['cells'] for r in _swadv_collect(ref)]
+    return [r['cells'] for r in _swadv_items(ref)]
 
 
 @blueprint.route('/other-products-swap-settlement-advice')
@@ -7424,6 +7506,115 @@ def other_products_swap_settlement_advice():
     return render_template('pages/other-products-swap-settlement-advice.html',
                            segment='other-products-swap-settlement-advice',
                            ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+def _swadv_ref_and_key(payload):
+    """(ref, contrato) de um payload das ações da linha, ou (None, '')."""
+    ds = str((payload or {}).get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    return ref, str((payload or {}).get('contrato') or '').strip()
+
+
+@blueprint.route('/api/other-products-swap-settlement-advice/row', methods=['POST'])
+def api_swadv_row_save():
+    """Grava a edição manual de uma linha do aviso.
+
+    Só as células que vieram no payload são gravadas — o resto continua saindo
+    dos arquivos, então uma correção pontual não congela a linha inteira no
+    valor de hoje."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _swadv_ref_and_key(payload)
+    if not key:
+        return jsonify({'ok': False, 'error': 'Linha sem Número de Contrato — nada a gravar.'}), 400
+    cells = payload.get('cells') or {}
+    if not isinstance(cells, dict):
+        return jsonify({'ok': False, 'error': 'Payload inválido.'}), 400
+    # Ler → alterar → gravar sob o MESMO lock: dois operadores editando linhas
+    # diferentes do mesmo dia perderiam uma das duas edições.
+    with _cache_lock:
+        fp, edits = _swadv_edits_load(ref)
+        e = edits.setdefault(key, {})
+        cur = e.setdefault('cells', {})
+        for k, v in cells.items():
+            try:
+                i = int(k)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= i < len(_SWADV_COLUMNS):
+                cur[str(i)] = '' if v is None else str(v)
+        e['edited_by'] = session.get('user_sid', '')
+        e['edited_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        try:
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            _atomic_write_json(fp, edits)
+        except Exception as exc:                            # noqa: BLE001
+            log.error('[swap-advice] não consegui gravar a edição:\n%s', traceback.format_exc())
+            return jsonify({'ok': False, 'error': str(exc)}), 500
+    return jsonify({'ok': True})
+
+
+@blueprint.route('/api/other-products-swap-settlement-advice/row/delete', methods=['POST'])
+def api_swadv_row_delete():
+    """Tira a linha do aviso do dia.
+
+    Marca como apagada no overlay em vez de mexer nos arquivos de origem: o
+    contrato continua existindo na B3 e no Athena, e o que se apagou foi a
+    LINHA DESTE AVISO. Reimportar o batch não a traz de volta, e mandar `undo`
+    traz."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _swadv_ref_and_key(payload)
+    if not key:
+        return jsonify({'ok': False, 'error': 'Linha sem Número de Contrato.'}), 400
+    with _cache_lock:
+        fp, edits = _swadv_edits_load(ref)
+        e = edits.setdefault(key, {})
+        e['deleted'] = not payload.get('undo')
+        e['deleted_by'] = session.get('user_sid', '')
+        e['deleted_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        try:
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            _atomic_write_json(fp, edits)
+        except Exception as exc:                            # noqa: BLE001
+            log.error('[swap-advice] não consegui apagar a linha:\n%s', traceback.format_exc())
+            return jsonify({'ok': False, 'error': str(exc)}), 500
+    return jsonify({'ok': True})
+
+
+@blueprint.route('/api/other-products-swap-settlement-advice/row/confirm', methods=['POST'])
+def api_swadv_row_confirm():
+    """Confirma a linha → status Sent.
+
+    O status vive no overlay do Settlement Summary e é por **contraparte × LOB ×
+    produto**, porque é assim que o aviso é emitido: um documento por
+    destinatário. Confirmar uma linha confirma o aviso a que ela pertence — e é
+    por isso que a tela avisa quantas linhas mudam junto, em vez de deixar
+    parecer que só aquela mudou."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _swadv_ref_and_key(payload)
+    try:
+        items = _swadv_items(ref)
+    except Exception:
+        log.error('[swap-advice] falha lendo as linhas:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as linhas do dia.'}), 500
+    row = next((r for r in items
+                if str(r['cells'][_SWADV_KEY_COL] or '').strip() == key), None)
+    if row is None:
+        return jsonify({'ok': False, 'error': 'Contrato não encontrado nesta data.'}), 404
+    cpty, lob = row.get('counterparty', ''), row.get('lob', '')
+    with _cache_lock:
+        _opssum_set_status(ref, [(cpty, lob, 'SWAP')], 'Sent')
+    n = sum(1 for r in items
+            if r.get('counterparty') == cpty and r.get('lob', '') == lob)
+    return jsonify({'ok': True, 'status': 'Sent', 'counterparty': cpty, 'rows': n})
 
 
 @blueprint.route('/api/other-products-swap-settlement-advice/data')
@@ -7436,7 +7627,7 @@ def api_swap_settlement_advice_data():
     except ValueError:
         ref = datetime.now()
     try:
-        items = _swadv_collect(ref)
+        items = _swadv_items(ref)
     except Exception:
         log.error('[swap-advice] falha montando o aviso:\n%s', traceback.format_exc())
         items = []
