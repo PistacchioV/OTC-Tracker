@@ -9352,8 +9352,12 @@ def _ndfc_fmt_date(v):
 # Piso de casas do forward rate. Antes era também o TETO ('{:.6f}'), e o arquivo
 # traz mais: a taxa aparecia arredondada na tela enquanto o Fixing Rate era
 # calculado com a precisão inteira — o valor mostrado não explicava o resultado.
-# Piso e não valor fixo para as taxas curtas não encolherem ('5.4' → '5.400000').
-_NDFC_FWD_MIN_DEC = 6
+# Piso e não valor fixo: acima dele valem as casas que o arquivo tiver, e abaixo
+# a taxa curta não encolhe ('5.4' → '5.40000000'), senão a coluna deixa de ler
+# como taxa. Oito é o mínimo pedido pela mesa para conferir o fixing — quando o
+# arquivo traz só seis, as duas últimas saem zero, e esse zero é informação: diz
+# que a precisão que falta está na ORIGEM, não na tela.
+_NDFC_FWD_MIN_DEC = 8
 
 
 def _ndfc_text_decimals(v):

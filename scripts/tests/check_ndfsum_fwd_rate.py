@@ -11,8 +11,11 @@ O que este teste prende:
   1. o forward mostrando TODAS as casas do arquivo. Voltar a um `'{:.6f}'` nao
      quebra nada — so esconde os digitos de novo, silenciosamente.
 
-  2. o piso de seis. Uma taxa curta ('5.4') nao pode encolher para '5.4' na
-     coluna: a coluna inteira tem de ler como taxa, nao como numero solto.
+  2. o piso de OITO (pedido da mesa). Uma taxa curta ('5.4') nao pode encolher
+     para '5.4' na coluna: a coluna inteira tem de ler como taxa, nao como
+     numero solto. Quando o arquivo traz so seis casas, as duas ultimas saem
+     zero — e esse zero e informacao: diz que a precisao que falta esta na
+     ORIGEM, nao na tela.
 
   3. o fixing acompanhando a precisao do forward que o gerou. Menos casas
      esconderia a diferenca que a conta produziu; mais inventaria digitos que
@@ -55,12 +58,16 @@ def read(rel):
 print('== 1. o forward mostra o que o arquivo tem ==')
 F = R._ndfc_fmt_fwd
 check('13 casas saem as 13', F('5.4321987654321'), '5.4321987654321')
-check('7 casas saem as 7', F('1234.5678901'), '1234.5678901')
-check('6 continua 6', F('5.432199'), '5.432199')
-# Piso: a coluna inteira tem de ler como taxa.
-check('taxa curta sobe para o piso de 6', F('5.4'), '5.400000')
-check('inteiro tambem', F('5'), '5.000000')
-check('e o zero a esquerda nao se perde', F('0.05'), '0.050000')
+check('7 casas sobem ao piso', F('1234.5678901'), '1234.56789010')
+check('9 casas saem as 9', F('5.123456789'), '5.123456789')
+# Piso de OITO (pedido da mesa): quando o arquivo traz so seis, as duas ultimas
+# saem zero — e esse zero e informacao, diz que a precisao que falta esta na
+# ORIGEM e nao na tela.
+check('6 casas sobem ao piso de 8', F('5.432199'), '5.43219900')
+check('taxa curta tambem', F('5.4'), '5.40000000')
+check('inteiro tambem', F('5'), '5.00000000')
+check('e o zero a esquerda nao se perde', F('0.05'), '0.05000000')
+check('o piso e 8', R._NDFC_FWD_MIN_DEC, 8)
 # O arquivo as vezes vem com virgula decimal.
 check('virgula decimal conta igual', F('5,4321987654321'), '5.4321987654321')
 check('texto nao numerico passa inteiro', F('n/a'), 'n/a')
@@ -77,14 +84,14 @@ def fixing(fwd, settle='1000.00', notional='1000000.00'):
 
 
 check('forward com 13 casas -> fixing com 13', fixing('5.4321987654321'), '5.4331987654321')
-check('forward com 6 -> fixing com 6', fixing('5.432199'), '5.433199')
-check('forward curto -> os dois no piso', fixing('5.4'), '5.401000')
+check('forward com 6 -> os dois no piso de 8', fixing('5.432199'), '5.43319900')
+check('forward curto -> os dois no piso', fixing('5.4'), '5.40100000')
 # A direcao da conta nao mudou: vendedor subtrai.
 check('vendedor subtrai',
       R._ndfc_strike_calc({'VL_FORWARD_RATE': '5.432199',
                            '[PROD] Cockpit.SETTLEMENT': '1000.00',
                            'VL_NOTIONAL_FC': '1000000.00'}, {'pos': 'VENDEDOR'}, False),
-      '5.431199')
+      '5.43119900')
 check('cross-currency segue sem calcular', fixing_cross := R._ndfc_strike_calc(
       {'VL_FORWARD_RATE': '5.432199'}, LP, True), '-')
 

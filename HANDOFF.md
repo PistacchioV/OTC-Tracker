@@ -9490,3 +9490,10 @@ card e a taxa longa **quebra em duas linhas** — uma taxa partida ao meio parec
 `scripts/tests/check_ndfsum_fwd_rate.py` (novo, 4 seções), incluindo a conferência **posicional** de que
 o CSS aponta para as colunas certas (contando os `<th>` do cabeçalho) e a prova de que o cálculo continua
 lendo o campo cru.
+
+**Adendo ao §210** — o piso subiu de 6 para **8 casas** (`_NDFC_FWD_MIN_DEC`), a pedido da mesa, e o
+Fixing Rate acompanha. Vale registrar o que o piso significa: acima dele valem as casas que o **arquivo**
+tiver; quando ele traz só seis, as duas últimas saem **zero** — e esse zero é informação, porque diz que
+a precisão que falta está na **origem**, não na formatação da tela. Se a coluna continuar em `...00`
+depois do restart, o `SETTLEMENT.xlsx` está mesmo gravando seis casas, e aí a precisão tem de vir do
+arquivo (ou de outra coluna dele), não daqui.
