@@ -94,13 +94,29 @@
         }
     }
     /* O card de Total nao pertence a rampa verde→vermelha das faixas: ele nao e
-       uma severidade, e a soma delas. Azul o tira da rampa, e a borda mais forte
-       marca que ele se le de outro jeito. */
+       uma severidade, e a soma delas. O gradiente escuro e o MESMO do card de
+       Total do NDF Summary (.ops-recon--total) — o mesmo papel nas duas telas
+       lido do mesmo jeito. Sobre ele todo texto vai a branco, inclusive o que
+       herdaria .text-muted. */
     .pending-widgets-row .col-pending-total .card {
-        border-color: rgba(0, 102, 204, .35);
-        background: linear-gradient(180deg,
-                    rgba(0, 102, 204, .06) 0%, rgba(0, 102, 204, 0) 60%);
+        border: 0;
+        background: linear-gradient(135deg, #0066cc 0%, #34369b 100%);
     }
+    .pending-widgets-row .col-pending-total .pending-widget-title,
+    .pending-widgets-row .col-pending-total .pending-widget-value,
+    .pending-widgets-row .col-pending-total .text-muted,
+    .pending-widgets-row .col-pending-total b {
+        color: #fff !important;
+    }
+    /* O ponto de cada linha fica um tom abaixo do texto: no fundo escuro, branco
+       cheio nele competiria com o número. */
+    .pending-widgets-row .col-pending-total .pending-total-dot { color: rgba(255,255,255,.55); }
+    .pending-widgets-row .col-pending-total .avatar-title {
+        background-color: rgba(255,255,255,.18) !important;
+        color: #fff !important;
+    }
+    /* O hover dos outros cards vira a borda azul; aqui não há borda para virar. */
+    .pending-widgets-row .col-pending-total .card:hover { border-color: transparent; }
 
     /* Staggered entrance: the six widgets fade+rise in sequence on load.
        Keyframes (not transition) — one-shot entry, never re-triggered. */
@@ -1019,8 +1035,7 @@
                     <div class="card-body" data-pc-band="total">
                         <div class="d-flex justify-content-between">
                             <h5 title="Total de pendencias (soma das seis faixas)"
-                                class="pending-widget-title"
-                                style="color: #0066cc;">
+                                class="pending-widget-title">
                                 Total<br>de pendencias
                             </h5>
                             <p class="mb-0 fs-lg">
@@ -1029,62 +1044,61 @@
                         </div>
                         <div class="d-flex align-items-center gap-2 my-2">
                             <div class="avatar-md flex-shrink-0">
-                                <span class="avatar-title rounded-circle fs-22"
-                                      style="background-color: #0066cc; color: white;">
+                                <span class="avatar-title rounded-circle fs-22">
                                     <i class="ti ti-sum"></i>
                                 </span>
                             </div>
-                            <h3 class="mb-0 pending-widget-value" style="color: #0066cc;">
+                            <h3 class="mb-0 pending-widget-value">
                                 {{ pending_total or 0 }}
                             </h3>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Digital Signature</span>
                             <span class="float-end"><b>{{ pending_digital_signature_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending FO</span>
                             <span class="float-end"><b>{{ pending_fo_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Legal</span>
                             <span class="float-end"><b>{{ pending_legal_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending MO</span>
                             <span class="float-end"><b>{{ pending_mo_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending MO/FO</span>
                             <span class="float-end"><b>{{ pending_mo_fo_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Original</span>
                             <span class="float-end"><b>{{ pending_original_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending OTC</span>
                             <span class="float-end"><b>{{ pending_otc_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending POA</span>
                             <span class="float-end"><b>{{ pending_poa_total or 0 }}</b></span>
                         </div>
                         <div class="mb-1">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Pending Signature Allowance</span>
                             <span class="float-end"><b>{{ pending_signature_allowance_total or 0 }}</b></span>
                         </div>
                         <div class="mb-0">
-                            <span style="color: #0066cc;"><i class="ti ti-point-filled"></i></span>
+                            <span class="pending-total-dot"><i class="ti ti-point-filled"></i></span>
                             <span class="text-nowrap text-muted">Others</span>
                             <span class="float-end"><b>0</b></span>
                         </div>

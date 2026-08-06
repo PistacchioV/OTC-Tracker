@@ -59,15 +59,28 @@ check('o RANGE_ORDER tem as mesmas sete',
 print('\n== 2. o card de Total e visualmente outra coisa ==')
 # A rampa das faixas vai de verde a vermelho; o Total nao e uma severidade a
 # mais, e a soma delas. Se ele entrar na rampa, vira uma setima faixa aos olhos.
-ramp = re.findall(r"pending-widget-value\"[^>]*style=\"color: (#[0-9a-fA-F]{6})", HTML)
-tot = HTML.split('data-pc-band="total"', 1)[1]
-tot_color = re.search(r'pending-widget-value" style="color: (#[0-9a-fA-F]{6})', tot).group(1)
-check('a cor do Total nao repete nenhuma faixa',
-      [c for c in ramp if c.lower() == tot_color.lower()], [tot_color])
-check('   (e a unica ocorrencia e o proprio Total)', tot_color.lower(), '#0066cc')
-check('o Total tem a classe que muda a moldura', 'col col-pending-total' in HTML, True)
-check('   e a moldura esta declarada', '.col-pending-total .card' in HTML, True)
+tot = HTML.split('data-pc-band="total"', 1)[1].split('<!-- end row widgets -->', 1)[0]
+check('o Total tem a classe que o distingue', 'col col-pending-total' in HTML, True)
+check('   e nao carrega cor inline nenhuma',
+      re.findall(r'style="color: (#[0-9a-fA-F]{6})', tot), [])
 check('o icone do Total nao e de relogio', 'ti-sum' in tot.split('</h3>', 1)[0], True)
+# O gradiente e o MESMO do card de Total do NDF Summary: mesmo papel nas duas
+# telas, lido do mesmo jeito. Se um dos dois for repintado sozinho, cai aqui.
+NDF = io.open(os.path.join(ROOT, 'apps/templates/pages/ndf-summary.html'),
+              encoding='utf-8', errors='ignore').read()
+grad_ndf = re.search(r'\.ops-recon--total \{ background: (linear-gradient\([^)]*\))', NDF).group(1)
+grad_pc = re.search(r'\.col-pending-total \.card \{[^}]*background: (linear-gradient\([^)]*\))',
+                    HTML, re.S).group(1)
+check('o gradiente e o mesmo do NDF Summary', grad_pc, grad_ndf)
+check('   e a borda sai (o gradiente e a moldura)',
+      re.search(r'\.col-pending-total \.card \{[^}]*border: 0', HTML, re.S) is not None, True)
+# Sobre fundo escuro, o que herdaria .text-muted tem de ir a branco — senao as
+# dez linhas do card ficam cinza-sobre-azul, ilegiveis.
+white = HTML.split('.col-pending-total .pending-widget-title', 1)[1].split('}', 1)[0]
+for sel in ('.pending-widget-value', '.text-muted', 'b'):
+    check('%s vai a branco' % sel, sel in white, True)
+check('o icone ganha o chip translucido',
+      'background-color: rgba(255,255,255,.18)' in HTML, True)
 
 print('\n== 3. o layout comporta os sete ==')
 # O Bootstrap nao tem row-cols-7 (o grid dele para em 6): a largura vem do CSS
