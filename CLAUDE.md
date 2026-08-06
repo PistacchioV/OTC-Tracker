@@ -46,12 +46,17 @@ Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies thi
 
 `run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~27.5k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~29.3k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
 
 - `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
 - `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents. **FX Options is the exception and the pattern to follow for new documents**: `opcao_fx_pdf()` builds the PDF from the *rendered document HTML* (the same string that becomes the `.doc`) via `_WordHtmlToFlowables`, so the two outputs cannot drift apart — see HANDOFF §139.
 - `otc_boxparse.py` — parser for the booking-recap e-mail. **It is the second copy of a rule that also lives in the browser** (`static/js/pages/otc-fileupload.js`); the two must agree field by field, and `scripts/tests/check_boxparse.py` is what proves it (HANDOFF §157).
 - `otc_tickets.py` — Support Center JSON store (CRUD, sequential `#OTC-0001` ids, the six permission rules) — HANDOFF §161
+- `manual_conf.py` — the manual-confirmation trail (the two DuckDBs, the derived `Pending`/`Aging`, the
+  OTC → MO/FO order read from the `manual-conf-validation` mapping, and the grouping that makes an item
+  of the Monitor **one confirmation** instead of one trade) — HANDOFF §217/§218
+- `recon_fxo.py` — FXO reconciliation engine (DPOSICAO × Athena EOD), the page's replacement for the
+  desk's Excel script — HANDOFF §216
 - `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py`
 
 ### Authentication flow
@@ -245,8 +250,26 @@ Partials (sidebar, header, topbar) are included inside the layout files. The `se
 - **Scheduled jobs run on Brazil time, not the server's.** `_br_now()` (`zoneinfo` `America/Sao_Paulo`, falling back to a fixed `-03:00` when `tzdata` is missing — the Windows case) backs the 19:00/19:30 pending-action email and the 11:30 Pending Confirmation maintenance. `datetime.now()` is the server's local clock and silently fired them at the wrong hour. Because the instance is restarted several times a day, `_ndm_pending_catch_up()` also fires the day's already-passed slots at startup; the on-disk claim file is what keeps that from becoming a repeated e-mail.
 - **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
 - **`Docs/` and `docs/` both exist in this repo** (21 tracked files under the capitalised one, 33 under the lowercase one — an artefact of a case-insensitive filesystem). Screenshots live under **lowercase `docs/sop-screenshots/`**, which is what `SOP_PROCESSAMENTO_OTC.md` and `GUIA_DO_USUARIO_OTC_TRACKER.md` reference. Since the on-disk directory is `Docs`, a plain `git add docs/...` records the path **capitalised** and the new files land in a different tree — invisible on macOS, broken images on Linux/Windows. Stage with `git -c core.ignorecase=false add docs/sop-screenshots/` and verify the casing in the index. Both documents are generated from their `.md` (the single source) by `scripts/build_sop_docx.py`, which takes the source file as an optional argument; see HANDOFF §155 for the screenshot-capture traps.
-- **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128.
+- **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128. `import_manual_confirmations.py` joins them: `apps/static/data/db/` is **gitignored**, so the two manual-confirmation DuckDBs do not travel with the pull — the script creates them and seeds the pending one from `MANUAIS.xlsx` (`--xlsx <caminho>`, `--schema-only` to just create them empty). Without that run the two Manual Confirmation pages open empty and nothing is wrong with the code.
+  `backfill_manual_confirmations.py` is the third: the mirror that puts a mapped deal into the trail
+  (`_mc_save_from_deal`) is a **forward hook** — it fires when the deal flips to `Success`, so everything
+  mapped *before* the trail existed fed Pending Confirmation and stopped there. The script sweeps the New
+  Deals cache and replays those deals through the **same** two functions the mapping calls
+  (`_pc_is_internal_counterparty` + `_mc_save_from_deal`) — restating the "does this owe a confirmation?"
+  rule here is how the two screens would start disagreeing. Idempotent (never overwrites a stamped
+  `Conferido OTC`), `--dry-run` to preview, `--source "NDF COMM"` to limit. Only the four families in
+  `_MC_CONFIRMATION_SOURCES` are swept, and **FWD Start is keyed by B3 ID, not Deal** — key it by Deal and
+  the next real mapping creates a *second* row for the same trade.
 - **Regression checks live in `scripts/tests/`** — self-contained scripts, no framework: each prints `ok`/`FAIL` per assertion and exits 0/1, resolves the repo root from its own path, and touches no real data (tickets go to a `tempfile`, the DuckDB is recreated in tmp, Outlook/SMTP are stubbed). [`scripts/tests/README.md`](scripts/tests/README.md) maps each script to the module it protects — run the matching one after touching that module. `check_boxparse.py` is the only one that needs an external binary (macOS `jsc`, to run the browser copy of the parser), so it does not run on the team's Windows box. See HANDOFF §163.
+- **Two armadilhas de tela que não dão erro no console** (custaram duas rodadas de correção — HANDOFF §218):
+  - **A linha de filtro por coluna tem de ser montada ANTES do `.DataTable()`**, com `orderCellsTop: true`.
+    Com `scrollX: true` o DataTables desenha o cabeçalho duas vezes (a cópia visível vai para
+    `.dt-scroll-headInner`, o `<thead>` real fica escondido no corpo rolável), e `api.table().node()`
+    devolve a tabela do **corpo** — acrescentar a linha no `initComplete` a deixa no DOM e invisível.
+  - **Não use `.card` para um widget seu.** `layouts/base.html` carrega o `extra_css` da página **antes**
+    do `head-css.html`, então o `.card` do tema (`background-color`, `border`, `border-radius`, `color`)
+    vence qualquer regra da página sem `!important`. O padrão da casa é um `<div>` com classe própria
+    (`.ndm-card` do New Deals Monitor, `.fxo-widget`, `.mc-card`), usando `--vr-card-*` e `--vr-grad`.
 - **One JS file drives FIVE pages.** `static/js/pages/live-position-swap-characteristics.js` is a generic
   `{columns, rows}` viewer chosen by the page's `data-api`: Live Position Swap Characteristics, Other
   Products Swap (Athena · Events · VCP) and the two Settlement Advice pages (Swap and NDF Commodities).

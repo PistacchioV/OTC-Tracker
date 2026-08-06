@@ -9789,17 +9789,39 @@ alcança ali.
 
 **Os dois de-para que estavam no código**, que é o que mais importa aqui:
 
-- **`fxo-cpty-cnpj`** — a contraparte como a Athena escreve → o CNPJ que a CETIP registra. Vinha de uma
-  planilha no OneDrive de uma pessoa, que o servidor não alcança. Nasce **vazio**: o conteúdo não está no
-  repositório, e semear meia dúzia de linhas de memória faria a recon casar algumas contrapartes e errar
-  as outras em silêncio. Sem cadastro, a coluna Ctpty cai nos dois fallbacks e compara nome com nome —
-  pior que o CNPJ, mas honesto — e a tela **avisa** que o cadastro está vazio.
+- **Counterparty → CNPJ: sai do Reference Data, e NÃO virou cadastro.** No código era uma planilha do
+  OneDrive de uma pessoa, que o servidor não alcança. A primeira versão criou um `fxo-cpty-cnpj` vazio em
+  `/mapping`; ele foi **removido no mesmo ciclo**, a pedido da mesa e com razão: seria uma segunda lista
+  dos mesmos clientes, mantida à mão, envelhecendo em paralelo ao Reference Data — e nascendo vazia, a
+  recon compararia nome com nome sem ninguém perceber. Agora `lookup_cnpj()` monta o de-para lendo o
+  **Reference Data**: para cada linha com `TAX ID`, indexa **COUNTERPARTY**, **FX CASH ACCRONYM** e
+  **SPN** apontando para o mesmo CNPJ (só dígitos dos dois lados, porque CETIP e Athena pontuam
+  diferente). Cliente cadastrado uma vez serve as duas telas; cliente novo entra no Reference Data como
+  sempre entrou. Se aparecer uma grafia que o Reference Data não conhece, o conserto é registrar o
+  accronym lá — não abrir uma tabela nova.
 - **`fxo-internal-cpty`** — a perna interna, que chega à Athena com o nome da mesa (o book) enquanto a
   CETIP registra o código do fundo. A coluna **`INVERT DIRECTION`** separa dois casos que não podem ser
   tratados juntos: `No` só troca o nome, e vale **sempre**; `Yes` é a perna **espelhada** (o Buy/Sell
   também veio invertido) e vale **só quando Ctpty e JPM Dir estão os dois NOK**, que é a assinatura da
   perna espelhada. Aplicar a segunda sempre inverteria a direção de operações que estavam certas — e um
   Buy virado em Sell numa recon é pior do que a divergência que ela ia mostrar.
+
+### A tela, depois do primeiro uso
+
+Ajustes que a mesa pediu vendo a página rodar, e que valem para qualquer tela desta família:
+
+- **A data de referência abre em D-1 pelo calendário ANBIMA** (`_prev_anbima_bizday`), não em "ontem". A
+  DPOSICAO é gerada no fechamento; abrir a página numa segunda-feira pedindo o domingo devolve um erro de
+  arquivo inexistente que parece falha do sistema. Feriado e fim de semana entram na mesma conta.
+- **50 linhas por página**, com 100 / 150 / 200 / All. A tabela tem 38 colunas: `All` num dia cheio
+  trava o navegador, e é escolha de quem está olhando, não default.
+- **Formato por natureza da coluna**: AMT e PREMIUM em `#,##0.00`, Strike em `#0.00000000` — oito casas
+  porque é onde mora a divergência que a recon existe para achar. A formatação é **ortogonal**: a
+  ordenação e o filtro usam o número cru, o `display` leva o texto formatado. Ordenar por texto colocaria
+  `1.000,00` antes de `900,00`.
+- **Status / OK / NOK como badge pill com gradiente** (success e error), e **sem o campo de busca global**
+  no canto — a linha de filtro por coluna é mais precisa e o campo solto convidava a procurar um DealID
+  na coluna errada.
 
 ### Um ponto em aberto para a mesa
 
@@ -9870,9 +9892,11 @@ sem erro nenhum.
 ### Os carimbos
 
 - **Confirmação salva** (`/api/confirmation/*/save`) → `Data envio validação OTC`, e o endereço da tela
-  de validação fica guardado na linha (coluna técnica `Confirmation Link`, fora da tabela) — é para lá
-  que o botão *Abrir* do Monitor manda. A data só é carimbada se estiver em branco: regerar o documento
-  não pode reiniciar a idade de uma pendência de duas semanas. O link, ao contrário, é sempre reescrito.
+  de validação fica guardado na linha (coluna técnica `Confirmation Link`, fora da tabela). A data só é
+  carimbada se estiver em branco: regerar o documento não pode reiniciar a idade de uma pendência de duas
+  semanas. O link, ao contrário, é sempre reescrito. **Corrigido em §218:** o botão *Abrir* do Monitor
+  não usa mais esse link — ele deriva a pasta da linha e abre o **PDF do Electronic Inventory**, senão as
+  confirmações anteriores ao carimbo (justamente as que alguém precisa procurar) ficariam sem botão.
 - **Confirmação validada no checklist** (`/api/confirmation/*/validate`) → `Conferido OTC` + `Time Stamp`
   com hora e **SPN da sessão**. A validação do OTC acontece na MESMA tela de checklist que já existia:
   uma segunda tela de validação do mesmo documento acabaria divergindo sobre o que foi conferido.
@@ -9893,6 +9917,11 @@ casado por semelhança (sem acento, caixa ou pontuação), e as três `Time Stam
 posição** — a que vem depois de `Conferido OTC` é a do OTC, e assim por diante: é a única informação que
 as distingue no arquivo. O script **reescreve** os dois bancos, então rodar duas vezes não duplica. Sem
 a planilha ele cria os bancos vazios e diz onde procurou.
+
+**Isto é um passo obrigatório na instância do time**, e não um extra: `apps/static/data/db/` está no
+`.gitignore`, então os dois bancos **não vêm no pull**. Sem rodar o script as duas telas abrem vazias e
+não há nada errado com o código — o mesmo tipo de "não está funcionando" que os scripts de migração do
+Pending Confirmation já produziram (§128).
 
 ### Verificação
 

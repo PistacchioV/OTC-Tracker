@@ -23,9 +23,12 @@ O que saiu do script, e por quê:
     cadastrado em `api-links` (uso **Recon FXO**) como todo endpoint do sistema.
 
   * **Os dois de-para que estavam no código.** O Counterparty → CNPJ vinha de uma
-    planilha no OneDrive de uma pessoa; as contrapartes internas (GEM, LAWTON)
-    eram constantes. Viraram cadastro (`fxo-cpty-cnpj` e `fxo-internal-cpty`),
-    editável em /mapping e válido no próximo run, sem restart.
+    planilha no OneDrive de uma pessoa: agora sai do **Reference Data**
+    (`lookup_cnpj`, indexando COUNTERPARTY / FX CASH ACCRONYM / SPN pelo TAX ID),
+    e não de um cadastro próprio — um de-para paralelo seria uma segunda lista
+    dos mesmos clientes, mantida à mão. As contrapartes internas (GEM, LAWTON)
+    eram constantes e viraram cadastro (`fxo-internal-cpty`), editável em
+    /mapping e válido no próximo run, sem restart.
 
 Chave do match: `Combinação de operações` (DPOSICAO) × `DealID` (Athena), com
 `MatchingDealID` como segunda tentativa e SÓ para as chaves que não existem em
