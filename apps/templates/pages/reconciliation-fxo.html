@@ -34,6 +34,14 @@
     #fxo-page .fxo-widget:hover {
         transform: translateY(-3px);
         box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+        border-color: rgba(0, 102, 204, .28);
+    }
+    /* Animação padrão do ícone (about → sidenav → New Deals Monitor → aqui):
+       o chip cresce e inclina de leve. É o que dá ao card a sensação de peça
+       viva; sem ela só o cartão se move e o ícone parece colado. */
+    #fxo-page .fxo-widget:hover .fxo-widget__ico {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
     }
 }
 #fxo-page .fxo-widget:active { transform: scale(.985); }
@@ -50,6 +58,7 @@
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
     color: #fff; font-size: 1.25rem;
     box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--fxo-ease), box-shadow 260ms var(--fxo-ease);
 }
 /* O status é a COR do chip, não a do cartão: o cartão inteiro tingido briga com
    a tabela abaixo e some no tema escuro. */
@@ -78,17 +87,33 @@
 }
 
 /* ── Faixa de diagnóstico ────────────────────────────────────────── */
-.fxo-chip {
+#fxo-page .fxo-chip {
     display:inline-flex; align-items:center; gap:.35rem;
     font-size:.7rem; font-weight:600; padding:.28rem .7rem; border-radius:20px;
     background:var(--ins-tertiary-bg, #eef0f4); color:var(--ins-body-color);
     border:1px solid var(--ins-border-color); white-space:nowrap;
 }
-.fxo-chip b { font-variant-numeric:tabular-nums; }
-.fxo-chip-nok { cursor:pointer; transition:border-color 140ms, background 140ms; }
-.fxo-chip-nok.has-nok { background:#fde8e8; color:#b71c1c; border-color:#ef9a9a; }
-.fxo-chip-nok.is-active { box-shadow:0 0 0 2px rgba(13,110,253,.5); }
-.fxo-chip-nok:hover { border-color:#0d6efd; }
+#fxo-page .fxo-chip b { font-variant-numeric:tabular-nums; }
+#fxo-page .fxo-chip-nok {
+    cursor:pointer;
+    transition:border-color 140ms var(--fxo-ease), background 140ms var(--fxo-ease),
+               transform 140ms var(--fxo-ease);
+}
+/* O chip com NOK é vermelho, e o vermelho precisa das DUAS versões: a receita
+   clara (fundo pastel, texto escuro) invertida some no tema escuro — é o mesmo
+   par do Pay/Rec. */
+#fxo-page .fxo-chip-nok.has-nok { background:#fde8e8; color:#b71c1c; border-color:#ef9a9a; }
+[data-bs-theme=dark] #fxo-page .fxo-chip-nok.has-nok {
+    background:rgba(244,67,54,.18); color:#ef9a9a; border-color:rgba(244,67,54,.35);
+}
+#fxo-page .fxo-chip-nok.is-active {
+    box-shadow:0 0 0 2px color-mix(in oklab, var(--vr-accent-1, #0066cc) 45%, transparent);
+    border-color:var(--vr-accent-1, #0066cc);
+}
+@media (hover: hover) and (pointer: fine) {
+    #fxo-page .fxo-chip-nok:hover { border-color:var(--vr-accent-1, #0066cc); transform:translateY(-1px); }
+}
+#fxo-page .fxo-chip-nok:active { transform:scale(.97); }
 
 /* ── Tabela ──────────────────────────────────────────────────────── */
 #fxo-table th { white-space:nowrap; font-size:.68rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
@@ -118,30 +143,51 @@
     border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
     color:var(--ins-body-color);
 }
-.fxo-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
+#fxo-page .fxo-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
 
 /* ── Data ────────────────────────────────────────────────────────── */
-.date-wrap { position:relative; width:130px; }
-.date-wrap input[type=date] { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
-.date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
-.date-wrap-icon {
+#fxo-page .date-wrap { position:relative; width:130px; }
+#fxo-page .date-wrap input[type=date] { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
+#fxo-page .date-wrap input[type=text] { pointer-events:none; padding-right:28px; }
+#fxo-page .date-wrap-icon {
     position:absolute; right:9px; top:50%; transform:translateY(-50%);
     z-index:1; pointer-events:none; font-size:15px; color:var(--ins-secondary-color, #6c757d);
 }
 
 /* ── Upload ──────────────────────────────────────────────────────── */
+/* A zona de arrastar é a do Pay/Rec: tracejado no --ins-border-color e fundo no
+   tertiary, que existem nos dois temas — o azul do foco é o accent da marca. */
 .upload-zone {
     border:2px dashed var(--ins-border-color); border-radius:12px; padding:.9rem 1rem;
     text-align:center; background:var(--ins-tertiary-bg, #eef0f4); cursor:pointer;
-    transition:border-color 160ms, background 160ms;
+    transition:border-color 160ms var(--vr-ease, ease), background 160ms var(--vr-ease, ease);
 }
-.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--ins-tertiary-bg); }
+.upload-zone:hover, .upload-zone.dragover {
+    border-color:var(--vr-accent-1, #0066cc);
+    background:color-mix(in oklab, var(--vr-accent-1, #0066cc) 6%, var(--ins-tertiary-bg, #eef0f4));
+}
 .upload-zone input[type=file] { display:none; }
-.upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
+.upload-zone .fn { font-size:.72rem; color:var(--vr-accent-1, #0066cc); font-weight:600; margin-top:.3rem; }
 
-.btn-toolbar-all {
+/* Mesma micro-interação dos botões de barra do resto do app (New Deals,
+   Track Confirmations): sobe 1px no hover, afunda no clique. */
+#fxo-page .btn-toolbar-all {
     font-size:.75rem !important; padding:.25rem .6rem !important;
     height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
+    transition: transform 140ms var(--fxo-ease), box-shadow 140ms var(--fxo-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #fxo-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
+#fxo-page .btn-toolbar-all:active { transform: scale(.97) !important; }
+
+/* O modal fica no MESMO raio dos cards (--vr-card-radius). Ele nasce fora do
+   #fxo-page — o Bootstrap não o move, mas o container fecha antes dele —, então
+   o seletor é o id do próprio modal. */
+#fxoUploadModal .modal-content {
+    border-radius: var(--vr-card-radius, 18px);
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
 }
 </style>
 {% endblock %}

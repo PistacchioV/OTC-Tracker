@@ -23,6 +23,21 @@
     border-radius: var(--vr-card-radius, 18px);
     box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
     display: flex; flex-direction: column; overflow: hidden;
+    transition: box-shadow 260ms var(--mc-ease), border-color 260ms var(--mc-ease);
+}
+/* O cartão NÃO levanta como os do New Deals Monitor: aquele é um atalho
+   inteiro clicável, este tem uma lista rolável e botões dentro — mover o card
+   sob o cursor tiraria o botão de baixo do dedo. Ele reage na moldura e na
+   sombra, e o ícone faz a animação padrão da casa. */
+@media (hover: hover) and (pointer: fine) {
+    #mc-monitor .mc-card:hover {
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+        border-color: rgba(0, 102, 204, .28);
+    }
+    #mc-monitor .mc-card:hover .mc-card__ico {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
+    }
 }
 #mc-monitor .mc-card__head {
     display: flex; align-items: center; gap: .75rem;
@@ -34,6 +49,7 @@
     color: #fff; font-size: 1.25rem;
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
     box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--mc-ease), box-shadow 260ms var(--mc-ease);
 }
 /* A etapa é a cor do CHIP, não a do cartão: o cartão inteiro tingido briga com a
    lista dentro dele e some no tema escuro. */
@@ -84,7 +100,13 @@
     background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
 }
 #mc-monitor .mc-item__acts { display: flex; gap: .3rem; margin-top: .55rem; flex-wrap: wrap; align-items: center; }
-#mc-monitor .mc-item__acts .btn { font-size: .68rem; padding: .18rem .55rem; line-height: 1.5; }
+#mc-monitor .mc-item__acts .btn {
+    font-size: .68rem; padding: .18rem .55rem; line-height: 1.5;
+    transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #mc-monitor .mc-item__acts .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
 /* O botão responde ao toque: sem isso a lista parece congelada num clique. */
 #mc-monitor .mc-item__acts .btn:active { transform: scale(.97); }
 #mc-monitor .mc-docs { display: flex; flex-wrap: wrap; gap: .25rem; }
@@ -93,16 +115,32 @@
     border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
     text-decoration: none; max-width: 15rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
+    transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
 }
-#mc-monitor .mc-docs a:hover { border-color: var(--vr-accent-1, #0066cc); }
+#mc-monitor .mc-docs a:hover {
+    border-color: var(--vr-accent-1, #0066cc);
+    background: color-mix(in oklab, var(--vr-accent-1, #0066cc) 8%, transparent);
+}
 
 /* A idade da pendência vira cor a partir do momento em que ela é um problema.
-   Verde não entra: uma confirmação nova não é uma conquista, é o normal. */
+   Verde não entra: uma confirmação nova não é uma conquista, é o normal.
+   Âmbar e vermelho pedem tom mais claro no tema escuro — os de tema claro são
+   escuros DEMAIS sobre o preto e a marca de atraso deixaria de saltar. */
 #mc-monitor .mc-age-0 { color: var(--ins-secondary-color); }
 #mc-monitor .mc-age-1 { color: #b07500; }
 #mc-monitor .mc-age-2 { color: #c0392b; }
+[data-bs-theme=dark] #mc-monitor .mc-age-1 { color: #ffd54f; }
+[data-bs-theme=dark] #mc-monitor .mc-age-2 { color: #ff8a80; }
 
 #mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
+
+/* O modal fica no MESMO raio e na mesma moldura dos cards. Ele nasce fora do
+   #mc-monitor (o container fecha antes dele), por isso o seletor é o id. */
+#mcRejectModal .modal-content {
+    border-radius: var(--vr-card-radius, 18px);
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+}
 
 /* Entrada escalonada — 40ms entre itens, curta o bastante para não atrasar a
    leitura da fila. Nada nasce de scale(0). */
@@ -258,11 +296,24 @@
             '</div></div>';
     }
 
+    // A tela SEM cards e SEM explicação é indistinguível de "não há nada
+    // pendente" — foi assim que uma instância reiniciando pareceu uma fila
+    // vazia. Quando a chamada falha, a página diz que falhou.
+    function fail(msg) {
+        $('#mc-cards').html(
+            '<div class="col-12"><div class="mc-card"><div class="mc-empty">' +
+            '<i class="ti ti-plug-connected-x d-block mb-2" style="font-size:1.6rem"></i>' +
+            esc(msg) + '</div></div></div>');
+    }
+
     function load() {
         fetch('/api/manual-confirmation/monitor')
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function (j) {
-                if (j.error) return;
+                if (j.error) { fail(j.error); return; }
                 $('#mc-cards').html((j.cards || []).map(card).join(''));
                 var w = $('#mc-warnings');
                 if ((j.warnings || []).length) {
@@ -271,7 +322,10 @@
                     }).join(''));
                 } else { w.addClass('d-none').empty(); }
             })
-            .catch(function () {});
+            .catch(function () {
+                fail('Não foi possível carregar a esteira. Atualize a página; ' +
+                     'se persistir, o servidor pode estar reiniciando.');
+            });
     }
 
     function post(url, body) {

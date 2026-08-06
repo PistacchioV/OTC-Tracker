@@ -32,6 +32,14 @@
     #mc-page .mc-w:hover {
         transform: translateY(-3px);
         box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+        border-color: rgba(0, 102, 204, .28);
+    }
+    /* Animação padrão do ícone (about → sidenav → New Deals Monitor → aqui):
+       o chip cresce e inclina de leve. Sem ela só o cartão se move e o ícone
+       parece colado nele. */
+    #mc-page .mc-w:hover .mc-w__ico {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
     }
 }
 #mc-page .mc-w:active { transform: scale(.985); }
@@ -48,6 +56,7 @@
     color: #fff; font-size: 1.15rem;
     background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
     box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--mc-ease), box-shadow 260ms var(--mc-ease);
 }
 /* A etapa é a cor do CHIP, não a do cartão: o cartão inteiro tingido briga com a
    tabela abaixo e some no tema escuro. */
@@ -79,11 +88,27 @@
 #mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; }
 #mc-table_filter { display:none !important; }
 /* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
-   digita nela — escondê-la faria perguntarem onde foi parar. */
-#mc-table td.mc-derived { background: var(--ins-secondary-bg); font-style: italic; }
+   digita nela — escondê-la faria perguntarem onde foi parar. O tom é o
+   --ins-tertiary-bg; o secondary é BRANCO no tema claro, e a marca sumia. */
+#mc-table td.mc-derived { background: var(--ins-tertiary-bg, #f6f7fb); font-style: italic; }
 #mc-table td.mc-acts { white-space: nowrap; text-align: center; }
-#mc-table td.mc-acts .btn { padding: .1rem .35rem; line-height: 1.2; font-size: .78rem; }
+#mc-table td.mc-acts .btn {
+    padding: .1rem .35rem; line-height: 1.2; font-size: .78rem;
+    transition: transform 140ms var(--mc-ease), color 140ms var(--mc-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #mc-table td.mc-acts .btn:hover { transform: translateY(-1px) scale(1.08); }
+}
 #mc-table td.mc-acts .btn:active { transform: scale(.94); }
+
+/* Campos travados do modal (derivadas e a chave): mesmo tom da coluna derivada
+   da tabela — o `bg-body-secondary` do Bootstrap é --bs-*, que este tema não
+   define, e o campo saía branco como se fosse editável. */
+#mc-page .mc-locked, #mcEditModal .mc-locked {
+    background: var(--ins-tertiary-bg, #f6f7fb) !important;
+    color: var(--ins-secondary-color) !important;
+    cursor: not-allowed;
+}
 
 /* ── Filtros por coluna ──────────────────────────────────────────────
    A linha é montada ANTES do `.DataTable()`, e é isso que a faz aparecer: com
@@ -100,7 +125,7 @@
     border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
     color:var(--ins-body-color);
 }
-.mc-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
+#mc-page .mc-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
 
 #mc-page .btn-toolbar-all { font-size:.75rem !important; padding:.25rem .6rem !important;
                             height:auto !important; line-height:1.4 !important; white-space:nowrap !important;
@@ -111,7 +136,14 @@
 #mc-page .btn-toolbar-all:active { transform: scale(.97) !important; }
 #mc-page .mc-mass-wrap { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
 #mc-page .mc-mass-wrap .form-select, #mc-page .mc-mass-wrap .form-control { height:31px; font-size:.75rem; }
-#mcEditModal .modal-content { border-radius:18px; border:none; box-shadow:0 24px 60px rgba(0,0,0,.15); }
+/* O modal fica no MESMO raio e na mesma moldura dos cards. Sem a borda ele
+   flutua sem contorno no tema escuro, onde o fundo dele e o da página são
+   quase o mesmo preto. */
+#mcEditModal .modal-content {
+    border-radius: var(--vr-card-radius, 18px);
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+}
 #mcEditGrid label { font-size:.68rem; font-weight:600; margin-bottom:.15rem; }
 #mcEditGrid input { font-size:.75rem; }
 </style>
@@ -134,6 +166,9 @@
         </div>
     </div>
 
+    <!-- Só o "Total" leva data-lang. "Pending OTC/MO/FO" e "Ok" são os VALORES
+         gravados na coluna Pending, os mesmos que a tabela imprime no badge —
+         traduzir o card e não o badge faria a mesma linha ter dois nomes. -->
     <div class="row g-2 mb-3">
         <div class="col-6 col-lg col-mc-w">
             <div class="mc-w mc-w-tot" data-pending="">
@@ -167,6 +202,9 @@
         </div>
     </div>
 
+    <!-- Um card, duas faixas de cabeçalho: é o desenho do FXO Reconciliation.
+         Dois cards empilhados abriam uma moldura e uma sombra a mais entre a
+         barra e a tabela, e as duas faixas são a MESMA barra de ferramentas. -->
     <div class="card mb-2">
         <div class="card-header d-flex align-items-center gap-2">
             <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="b3-show">Show</label>
@@ -179,9 +217,7 @@
             </select>
             <label class="form-label mb-0" style="font-size:.75rem;" data-lang="b3-entries">entries</label>
         </div>
-    </div>
 
-    <div class="card mb-2">
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
@@ -576,7 +612,7 @@
                 // Derivadas e a chave ficam visíveis mas travadas: escondê-las
                 // faria perguntarem onde foram parar; deixá-las editáveis criaria
                 // um valor que a próxima gravação desfaz.
-                if (!editable(c)) inp.prop('readonly', true).addClass('bg-body-secondary');
+                if (!editable(c)) inp.prop('readonly', true).addClass('mc-locked');
                 inp.appendTo(col);
                 grid.append(col);
             });
@@ -601,7 +637,9 @@
                 icon: 'warning', title: 'Excluir esta confirmação?',
                 text: 'Trade ID ' + k + '. Não tem desfazer.',
                 showCancelButton: true, confirmButtonText: 'Excluir',
-                confirmButtonColor: '#d33'
+                // Vermelho do tema (--ins-danger), não o vermelho de fábrica do
+                // SweetAlert — é o mesmo botão em todas as telas do app.
+                confirmButtonColor: '#d93025', cancelButtonColor: '#6c757d'
             }).then(function (r) {
                 if (!r.isConfirmed) return;
                 fetch('/api/manual-confirmation/delete', {
