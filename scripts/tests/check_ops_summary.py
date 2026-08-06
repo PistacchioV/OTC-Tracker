@@ -649,5 +649,57 @@ finally:
 check('a tela mostra as duas quebras',
       ('id="ops-w-option-fx"' in HTML) and ('id="ops-w-option-comm"' in HTML), True)
 
+print('\n== 17. Cashflow x Maturity: a juncao e pelo CODIGO DO CONTRATO ==')
+# Um swap bullet vencendo hoje aparece TAMBEM como evento na DFLUXO — e o mesmo
+# pagamento, e conta como Maturity. A dedupe existe para isso.
+#
+# A chave era o "Codigo Identificador", que no arquivo REAL e o LOB ('CEM') e se
+# repete em todas as linhas do dia. Um bullet de CEM vencendo apagava TODO
+# cashflow de CEM da contagem: o card mostrava Cashflow 0 · Maturity 1 com um
+# evento de fluxo liquidando na mesma data, e o zero passava por "nao teve fluxo
+# hoje". A juncao certa e o CODIGO DO CONTRATO.
+check('a chave e por arquivo', sorted(R._OPS_SWAP_JOIN_TOKENS), ['swap_flx', 'swap_pos'])
+check('   posicao: Contrato', R._OPS_SWAP_JOIN_TOKENS['swap_pos'], ['contrato'])
+check('   fluxo: Codigo do contrato',
+      R._OPS_SWAP_JOIN_TOKENS['swap_flx'][0], 'codigo do contrato')
+# E ela resolve no cabecalho REAL de cada arquivo.
+pos_keys = ['Tipo de Contrato', 'Tipo Sistema', 'Contrato', 'Codigo Identificador',
+            'Data Vencimento']
+check('resolve na DPOSICAO-SWAP',
+      R._fcst_resolve_key([k for k in pos_keys if R._fcst_norm(k) != 'tipo de contrato'],
+                          R._OPS_SWAP_JOIN_TOKENS['swap_pos']), 'Contrato')
+check('resolve na DFLUXO (cabecalho de producao)',
+      R._fcst_resolve_key(R._B3_SWAP_HEADERS['swap_fluxo'],
+                          R._OPS_SWAP_JOIN_TOKENS['swap_flx']), 'Código do contrato')
+# E NAO pega o "Tipo de Contrato", que e '1'/'2' e juntaria tudo com tudo.
+check('nao cai no Tipo de Contrato',
+      R._fcst_resolve_key([k for k in pos_keys if R._fcst_norm(k) != 'tipo de contrato'],
+                          R._OPS_SWAP_JOIN_TOKENS['swap_pos']) != 'Tipo de Contrato', True)
+
+tmp = tempfile.mkdtemp(prefix='ops-cashflow-')
+_b3_root = R.B3_JSON_ROOT
+try:
+    R.B3_JSON_ROOT = tmp
+    dref = R._prev_anbima_bizday(datetime.now()).strftime('%y%m%d')
+    pos_src = next(s2 for s2 in R._FORECAST_SOURCES if s2['key'] == 'swap_pos')
+    flx_src = next(s2 for s2 in R._FORECAST_SOURCES if s2['key'] == 'swap_flx')
+    # Um bullet (tipo 2) vencendo hoje + um cashflow de OUTRO contrato no mesmo
+    # dia. Os dois com o MESMO Codigo Identificador — que e o caso real.
+    write_json(os.path.join(tmp, 'Swap', R._b3_date_subpath(dref), pos_src['file'](dref)),
+               [{'Tipo de Contrato': '2', 'Contrato': '25F01779096',
+                 'Codigo Identificador': 'CEM', 'Data Vencimento': '20260805'}])
+    write_json(os.path.join(tmp, 'Swap', R._b3_date_subpath(dref), flx_src['file'](dref)),
+               [{'Código do contrato': '25F01779096', 'Codigo Identificador': 'CEM',
+                 'Data de ocorrência do Evento': '20260805'},
+                {'Código do contrato': '26A02508395', 'Codigo Identificador': 'CEM',
+                 'Data de ocorrência do Evento': '20260805'}])
+    w = R._ops_settlement_counts(date(2026, 8, 5), None)['swap']
+    check('o bullet conta como Maturity', w['maturity'], 1)
+    check('o cashflow do OUTRO contrato aparece', w['flow'], 1)
+    check('   e o do proprio bullet nao conta duas vezes', w['total'], 2)
+finally:
+    R.B3_JSON_ROOT = _b3_root
+    shutil.rmtree(tmp, ignore_errors=True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -1537,7 +1537,7 @@
   "tkd-mail-fail": "Salvo, mas o e-mail de encerramento não pôde ser enviado:",
   "map-tab-cetip-files": "Arquivos CETIP (Rotina de Save)",
   "map-tab-api-links": "Links das APIs",
-  "map-tab-swap-b3-events": "Eventos de Liquidação de Swap (B3)",
+  "map-tab-opb3-events": "Eventos do Operations B3",
   "map-tab-swap-ir-client": "IR de Swap — Exceções por Cliente",
   "map-tab-swap-ir-term": "IR de Swap — Faixas de Prazo",
   "ops-col-direction": "Direção",

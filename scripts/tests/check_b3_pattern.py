@@ -113,6 +113,10 @@ LEGACY_PREFIX = {
 seed = {r['MARKET']: r for r in R._MAPPING_DEFS['commodities-b3']['seed'] if r.get('MARKET')}
 fixed = {m: r['B3 CODE'] for m, r in seed.items() if r['TYPE'] == 'FIXED'}
 dyn = {m: r['B3 CODE'] for m, r in seed.items() if r['TYPE'] == 'PREFIX'}
+# Os SPECIAL levam DOIS codigos (proximo / distante) — a mesma leitura que o
+# `_box_commodity_maps` faz do cadastro.
+spc = {m: {'near': r['B3 CODE'], 'far': r.get('B3 CODE FAR', '')}
+       for m, r in seed.items() if r['TYPE'] == 'SPECIAL'}
 for contract in ('Dec26', 'May27', 'Jan30'):
     p = B._contract_parts(contract)
     for mkt, old_prefix in LEGACY_PREFIX.items():
@@ -122,8 +126,18 @@ for contract in ('Dec26', 'May27', 'Jan30'):
 
 check('FCPO (mudanca pedida)', B.calculate_b3_id('FCPO_BURSA_MYR', 'Dec26', False, fixed, dyn),
       'KOZ6BNMK')
-check('BRT_IPE vanilla', B.calculate_b3_id('BRT_IPE', 'Dec26', True, fixed, dyn), 'COZ6')
-check('BRT_IPE asian',   B.calculate_b3_id('BRT_IPE', 'Dec26', False, fixed, dyn), 'CO1-2')
+# O seed passou a trazer os dois codigos do BRT_IPE (§212). Vanilla nao mudou;
+# asiatica sem data de liquidacao continua CO1-2, como era.
+check('o seed cadastra os dois codigos do BRT_IPE', spc.get('BRT_IPE'),
+      {'near': 'CO"MY"', 'far': 'CO1-2'})
+check('BRT_IPE vanilla', B.calculate_b3_id('BRT_IPE', 'Dec26', True, fixed, dyn, spc), 'COZ6')
+check('BRT_IPE asian',   B.calculate_b3_id('BRT_IPE', 'Dec26', False, fixed, dyn, spc), 'CO1-2')
+# Consequencia de tirar a linha do cadastro, escrita aqui para nao virar
+# surpresa: sem a linha SPECIAL o market cai na regra generica de prefixo e sai
+# 'BRT' + mes/ano. E o mesmo que acontece com qualquer market sem cadastro, mas
+# aqui o codigo errado se PARECE com um codigo certo.
+check('sem a linha SPECIAL cai no prefixo generico',
+      B.calculate_b3_id('BRT_IPE', 'Dec26', False, fixed, dyn, {}), 'BRTZ6')
 check('FIXED continua literal', B.calculate_b3_id('NG_NYMEX', 'Dec26', False, fixed, dyn), 'NG1')
 check('market desconhecido usa o trecho antes do _',
       B.calculate_b3_id('ZZ_FOO', 'Dec26', False, fixed, dyn), 'ZZZ6')
@@ -170,6 +184,72 @@ else:
         py_out = [B.build_b3_code(p, c) for p, c in CASES]
         for (pat, con), j, p_ in zip(CASES, js_out, py_out):
             check('%s: %s + %s' % (os.path.basename(jsfile)[:12], pat, con), j, p_)
+
+# ── BRT_IPE: a regra vive em TRES lugares (o Python e as duas copias JS) ──────
+# O check_boxparse.py so compara o otc-fileupload.js; o deals-processing-table.js
+# ja divergiu dele antes (§164, o FCPO saia '.KOZ7BNMK F' de um lado e 'KOZ7BNMK'
+# do outro). Aqui as DUAS copias sao executadas contra o mesmo Python.
+print('\n== 5b. calculateB3Id do BRT_IPE nas duas copias JS ==')
+SPECIAL = {'BRT_IPE': {'near': 'CO"MY"', 'far': 'CO1-2'}}
+# (contrato, data de liquidacao, vanilla) -> o codigo esperado
+IPE_CASES = [('Mar27', '05/01/2027', False, 'CO1-2'),   # 2 meses a frente
+             ('Mar27', '02/02/2027', False, 'COH7'),    # 1 mes a frente
+             ('Mar27', '28/02/2027', False, 'COH7'),    # o DIA nao conta
+             ('Jan27', '05/12/2026', False, 'COF7'),    # vira o ano
+             ('Mar27', '05/12/2026', False, 'CO1-2'),   # 3 meses
+             ('Mar27', '05/03/2027', False, 'CO1-2'),   # mesmo mes
+             ('Mar27', '',           False, 'CO1-2'),   # sem data = como era
+             ('Mar27', 'lixo',       False, 'CO1-2'),
+             ('Mar27', '2027-02-02', False, 'COH7'),    # o input date manda ISO
+             ('Mar27', '05/01/2027', True,  'COH7'),    # vanilla nao mudou
+             ('Mar27', '',           True,  'COH7')]
+if not os.path.exists(JSC):
+    print('  --  jsc ausente (nao e macOS) — so o Python')
+for ctr, sd, van, exp in IPE_CASES:
+    check('py: %s %s van=%s' % (ctr, sd or '(sem data)', van),
+          B.calculate_b3_id('BRT_IPE', ctr, van, {}, {}, SPECIAL, sd), exp)
+if os.path.exists(JSC):
+    for jsfile in ('apps/static/js/pages/otc-fileupload.js',
+                   'apps/static/js/pages/deals-processing-table.js'):
+        src = io.open(jsfile, encoding='utf-8').read()
+        need = []
+        for fn in ('splitB3Pattern', 'buildB3Code', 'contractParts',
+                   'contractMonthYear', 'dateMonthYear', 'monthsAhead', 'calculateB3Id'):
+            m = re.search(r'\n    function ' + fn + r'\(.*?\n    \}\n', src, re.S)
+            assert m, '%s: nao achei %s' % (jsfile, fn)
+            need.append(m.group(0))
+        # O MONTH_ABBR_ORDER ocupa DUAS linhas — o padrao de uma linha so
+        # recortava metade do array, e o jsc reclamava de sintaxe num ponto que
+        # nao tinha nada a ver com o teste.
+        for var, pat in (('B3_MY_RE', r'\n    var B3_MY_RE = [^\n]+\n'),
+                         ('MONTH_ABBR_ORDER', r'\n    var MONTH_ABBR_ORDER = \[.*?\];\n')):
+            m = re.search(pat, src, re.S)
+            assert m, '%s: nao achei %s' % (jsfile, var)
+            need.append(m.group(0))
+        mmc = re.search(r'\n    var MONTH_CODES = \{.*?\n    \};\n', src, re.S)
+        mmn = re.search(r'\n    var MONTH_NAMES_ABBR = \{.*?\n    \};\n', src, re.S)
+        harness = (mmc.group(0) + mmn.group(0) + ''.join(need) +
+                   '\nvar MARKET_FIXED_CODES = {}, MARKET_DYNAMIC_PREFIX = {};\n' +
+                   'var MARKET_SPECIAL_CODES = ' + json.dumps(SPECIAL) + ';\n' +
+                   'var CASES = ' + json.dumps([[c, d, v] for c, d, v, _ in IPE_CASES]) + ';\n' +
+                   'var OUT = CASES.map(function (x) {'
+                   '  return calculateB3Id("BRT_IPE", x[0], x[2], x[1]); });\n'
+                   'print(JSON.stringify(OUT));\n')
+        fd, path = tempfile.mkstemp(suffix='.js')
+        os.write(fd, harness.encode('utf-8'))
+        os.close(fd)
+        try:
+            r = subprocess.run([JSC, path], capture_output=True, text=True)
+            out = (r.stdout or '').strip()
+            if not out:
+                check('%s executou' % os.path.basename(jsfile), r.stderr.strip()[:300], '')
+                continue
+            js_out = json.loads(out)
+        finally:
+            os.unlink(path)
+        for (ctr, sd, van, exp), js in zip(IPE_CASES, js_out):
+            check('%s: %s %s van=%s' % (os.path.basename(jsfile)[:12], ctr,
+                                        sd or '(sem data)', van), js, exp)
 
 print('\n== 6. padrao dos arquivos CETIP ==')
 check('offset e final', R._cetip_split_pattern('CETIP21_YYMMDD_DPOSICAO-SWAP'),

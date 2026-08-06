@@ -102,10 +102,17 @@ mappable must be registrable through the `/mapping` page. Add an entry to `_MAPP
 
 Current mappings (22): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
 `commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
-`api-links`, `swap-b3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
+`api-links`, `opb3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`.
 See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197 for the rest. Some carry rules that
 are easy to break from the UI:
+
+- **`opb3-events`** — quais linhas do Operations B3 entram numa apuração de liquidação, e é a MESMA
+  resposta para o NDF Summary, o Other Products, os avisos e a mensageria. A linha é uma **regra** sobre
+  Tipo Título × Tipo Operação × Status B3, com **campo em branco = coringa** e `USE` = Consider /
+  Disregard. Precedência: Disregard vence; um Tipo Título com ao menos um Consider próprio vira lista
+  branca; Tipo Título sem Consider não é filtrado. Era o `swap-b3-events` (só o Tipo Operação do swap) —
+  ver HANDOFF §213, inclusive a mudança de semântica da tabela vazia.
 
 - **`publisher-ndf`** — a row with **no Match Tokens matches only the complete text** (that is what lets
   `PTAX` and `PTAX|BRR|PTAX` be independent registrations), and column **`NOTES = BACEN` is what routes
@@ -115,6 +122,9 @@ are easy to break from the UI:
   `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
   `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
   table so it reads apart from the fixed part (HANDOFF §164). `commodities-b3` also carries the
+  **B3 CODE FAR** (a linha `SPECIAL` do BRT_IPE leva DOIS códigos: `B3 CODE` = `CO"MY"` para o
+  contrato do mês seguinte e `B3 CODE FAR` = `CO1-2` para dois meses ou mais à frente da liquidação —
+  vanilla usa sempre o do mês; HANDOFF §212) e o
   **Tipo de Cotação / Fonte de Informação** written into the Conecta files (`QUOTE TYPE NDF`,
   `QUOTE TYPE OPT`, `INFO SOURCE`): the column holds the **layout code**, and there are two quote-type
   columns because the Termo and Opção layouts use different domains (letter vs number) for the same

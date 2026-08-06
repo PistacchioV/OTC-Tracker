@@ -38,6 +38,10 @@ pieces = [
     cut('extractMonth',     r'function extractMonthFromTradeDate\(.*?\n    \}'),
     cut('extractDirection', r'function extractDirection\(.*?\n    \}'),
     cut('contractParts',    r'function contractParts\(.*?\n    \}'),
+    cut('MONTH_ABBR_ORDER',  r'var MONTH_ABBR_ORDER\s*=\s*\[.*?\];'),
+    cut('contractMonthYear', r'function contractMonthYear\(.*?\n    \}'),
+    cut('dateMonthYear',     r'function dateMonthYear\(.*?\n    \}'),
+    cut('monthsAhead',       r'function monthsAhead\(.*?\n    \}'),
     cut('B3_MY_RE',        r'var B3_MY_RE = [^\n]+'),
     cut('splitB3Pattern',  r'function splitB3Pattern\(.*?\n    \}'),
     cut('buildB3Code',     r'function buildB3Code\(.*?\n    \}'),
@@ -53,12 +57,16 @@ FIXED = {'MPB_LME': 'LOPBDY', 'MAL_LME': 'LOAHDY', 'NG_NYMEX': 'NG1',
 DYN = {'BO_CBOT': 'BO"MY"', 'C_CBOT': 'C_"MY"', 'SB_ICE': 'SB"MY"',
        'W_CBOT': 'W_"MY"', 'KC_ICE': 'KC"MY"', 'WTI_NYMEX': 'WTI"MY"',
        'FCPO_BURSA_MYR': 'KO"MY"BNMK'}
+# SPECIAL: os DOIS codigos do BRT_IPE, hoje cadastrados (B3 CODE / B3 CODE FAR).
+SPECIAL = {'BRT_IPE': {'near': 'CO"MY"', 'far': 'CO1-2'}}
 HOL = {'BO_CBOT': 'CBY_AGS', 'MAL_LME': 'LME', 'BRT_IPE': 'IPE',
        'FCPO_BURSA_MYR': 'BURSA', 'NG_NYMEX': 'NYMEX'}
 
 def jsc_run(body):
-    src = ('var MARKET_FIXED_CODES=%s;var MARKET_DYNAMIC_PREFIX=%s;\n'
-           % (json.dumps(FIXED), json.dumps(DYN))) + '\n'.join(pieces) + '\n' + body
+    src = ('var MARKET_FIXED_CODES=%s;var MARKET_DYNAMIC_PREFIX=%s;'
+           'var MARKET_SPECIAL_CODES=%s;\n'
+           % (json.dumps(FIXED), json.dumps(DYN), json.dumps(SPECIAL))) + \
+          '\n'.join(pieces) + '\n' + body
     r = subprocess.run([JSC, '-e', src], capture_output=True, text=True)
     if r.returncode != 0:
         print(r.stderr[:2000]); sys.exit('jsc falhou')
@@ -115,13 +123,35 @@ COMBOS = [('MAL_LME', 'May27'), ('BO_CBOT', 'Dec26'), ('C_CBOT', 'Jul25'),
           ('W_CBOT', 'Nov28'), ('UNKNOWN_MKT', 'Feb26'), ('KC_ICE', 'Aug26'),
           ('', 'May27'), ('MAL_LME', ''), ('SB_ICE', 'bad'),
           ('FO_0.5%_ROT_BRG_FOB', 'Jun26')]
+# A data de liquidacao so muda o BRT_IPE asiatico, mas entra em TODOS os combos:
+# se algum dia ela vazar para outro market, a divergencia aparece aqui.
+SETTLES = ['', '05/01/2027', '02/02/2027', '28/02/2027', '05/12/2026',
+           '05/03/2027', '2027-02-02', 'lixo']
 for van in (True, False):
-    ins = [list(c) for c in COMBOS]
-    body = ('var IN=%s;IN.forEach(function(x){print(String(calculateB3Id(x[0],x[1],%s)));});'
+    ins = [[m, c, sd] for (m, c) in COMBOS for sd in SETTLES]
+    body = ('var IN=%s;IN.forEach(function(x){print(String(calculateB3Id(x[0],x[1],%s,x[2])));});'
             % (json.dumps(ins), 'true' if van else 'false'))
-    for (mkt, ctr), js in zip(COMBOS, jsc_run(body).splitlines()):
-        check('b3(%r,%r,van=%s)' % (mkt, ctr, van),
-              P.calculate_b3_id(mkt, ctr, van, FIXED, DYN), js)
+    for (mkt, ctr, sd), js in zip(ins, jsc_run(body).splitlines()):
+        check('b3(%r,%r,van=%s,settle=%r)' % (mkt, ctr, van, sd),
+              P.calculate_b3_id(mkt, ctr, van, FIXED, DYN, SPECIAL, sd), js)
+
+# O caso que motivou a regra (§212), escrito por extenso para nao depender do
+# JS: asiatica de BRT_IPE com o contrato DOIS meses a frente da liquidacao sai
+# CO1-2; com UM mes, sai o codigo do mes.
+print('== BRT_IPE asiatico x distancia ate a liquidacao ==')
+for settle, ctr, exp in (('05/01/2027', 'Mar27', 'CO1-2'),
+                         ('02/02/2027', 'Mar27', 'COH7'),
+                         ('28/02/2027', 'Mar27', 'COH7'),
+                         ('05/12/2026', 'Jan27', 'COF7'),
+                         ('05/12/2026', 'Mar27', 'CO1-2'),
+                         ('05/03/2027', 'Mar27', 'CO1-2'),
+                         ('',           'Mar27', 'CO1-2')):
+    check('asian %s %s' % (settle, ctr),
+          P.calculate_b3_id('BRT_IPE', ctr, False, FIXED, DYN, SPECIAL, settle), exp)
+# Vanilla nao mudou: sempre o codigo do mes, com ou sem data.
+for settle in ('05/01/2027', ''):
+    check('vanilla %r' % settle,
+          P.calculate_b3_id('BRT_IPE', 'Mar27', True, FIXED, DYN, SPECIAL, settle), 'COH7')
 
 # --- isCentsFactor / parseFator -------------------------------------------
 print('== isCentsFactor ==')
@@ -164,8 +194,8 @@ SUBJ = {'BOZ6': {'commodity': 'SOYBEAN OIL', 'fatorConversao': 0.01}}
 # alimentando o JS com os deals que o Python extraiu, e conferimos a extracao
 # separadamente contra o esperado (bloco "identidade das 3 linhas").
 def js_build_rows(deals, layout):
-    src = ('var MARKET_FIXED_CODES=%s,MARKET_DYNAMIC_PREFIX=%s;\n'
-           % (json.dumps(FIXED), json.dumps(DYN))
+    src = ('var MARKET_FIXED_CODES=%s,MARKET_DYNAMIC_PREFIX=%s,MARKET_SPECIAL_CODES=%s;\n'
+           % (json.dumps(FIXED), json.dumps(DYN), json.dumps(SPECIAL))
            + 'var REF=%s,SUBJ=%s,DEALS=%s,LAYOUT=%s;\n' %
            (json.dumps(REF), json.dumps(SUBJ), json.dumps(deals), json.dumps(layout))
            + '\n'.join(pieces) + '\n'
@@ -189,7 +219,7 @@ print('   linhas extraidas pelo Python: %d (esperado 3)' % len(py_deals))
 if len(py_deals) != 3:
     fails.append('parse_email_html devolveu %d linhas' % len(py_deals))
 
-MAPS = {'fixed': FIXED, 'dynamic': DYN, 'holiday': HOL}
+MAPS = {'fixed': FIXED, 'dynamic': DYN, 'holiday': HOL, 'special': SPECIAL}
 for layout in ('opt', 'ndf'):
     js_rows = js_build_rows(py_deals, layout)
     for i, d in enumerate(py_deals):

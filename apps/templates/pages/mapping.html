@@ -206,7 +206,7 @@
         { key: 'swap-curves',    icon: 'ti-chart-line',      lang: 'map-tab-swap-curves',   label: 'Swap Curves (Athena × B3)' },
         { key: 'cetip-files',    icon: 'ti-file-download',   lang: 'map-tab-cetip-files',   label: 'CETIP Files (Save Routine)' },
         { key: 'api-links',      icon: 'ti-api',             lang: 'map-tab-api-links',     label: 'API Links' },
-        { key: 'swap-b3-events', icon: 'ti-cash',            lang: 'map-tab-swap-b3-events', label: 'Swap Settlement Events (B3)' },
+        { key: 'opb3-events',    icon: 'ti-cash',            lang: 'map-tab-opb3-events',    label: 'Operations B3 Events' },
         { key: 'swap-ir-client', icon: 'ti-user-dollar',     lang: 'map-tab-swap-ir-client', label: 'Swap IR — Client Exceptions' },
         { key: 'swap-ir-term',   icon: 'ti-calendar-stats',  lang: 'map-tab-swap-ir-term',   label: 'Swap IR — Term Brackets' },
         { key: 'ndfc-ir-exempt', icon: 'ti-receipt-off',     lang: 'map-tab-ndfc-ir',        label: 'NDF Commodities IR — Exempt' },
@@ -469,6 +469,17 @@
                     (c.options || []).map(function (o) {
                         return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o || '—') + '</option>';
                     }).join('') + '</select>';
+            } else if (c.type === 'datalist') {
+                /* Domínio ABERTO: as opções são sugestões, não trava. O Status B3
+                   e o Tipo Operação ganham valores novos sem aviso da B3 — um
+                   `select` deixaria o cadastro do valor novo impossível pela
+                   tela, que é justamente onde ele precisa ser feito. */
+                var dlId = 'mapDl' + i;
+                fld = '<input type="text" list="' + dlId + '" class="form-control form-control-sm map-fld"' +
+                    ' data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">' +
+                    '<datalist id="' + dlId + '">' +
+                    (c.options || []).map(function (o) { return '<option value="' + esc(o) + '"></option>'; }).join('') +
+                    '</datalist>';
             } else {
                 fld = '<input type="text" class="form-control form-control-sm map-fld" data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">';
             }

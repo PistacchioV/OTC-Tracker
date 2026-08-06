@@ -4651,7 +4651,10 @@ $(document).ready(function() {
 
             $('#ar-fxholiday').val(market ? (MKT_FX[market] || '') : '');
 
-            var ua = (market && contract) ? OTCFileUpload.calculateB3Id(market, contract, isVanilla) : '';
+            // A data de liquidação decide o código do BRT_IPE asiático (§212):
+            // contrato no mês seguinte usa o código do mês, dois ou mais usa CO1-2.
+            var settleDate = ($('#ar-settledate').val() || '').trim();
+            var ua = (market && contract) ? OTCFileUpload.calculateB3Id(market, contract, isVanilla, settleDate) : '';
             $('#ar-underlying').val(ua);
             $('#ar-commodities').val(ua ? (_SUBJACENTE_MAP_NDF[ua] || '') : '');
 
@@ -4824,7 +4827,7 @@ $(document).ready(function() {
         $(document).on('change', '#ar-fixstart, #ar-fixend', arAutoTradeType);
 
         // Contract / TradeType → recalculate auto-fields
-        $(document).on('input change', '#ar-contract, #ar-tradetype', arRecalc);
+        $(document).on('input change', '#ar-contract, #ar-tradetype, #ar-settledate', arRecalc);
 
         // Save / Update
         $(document).on('click', '#ar-save-btn', function () {

@@ -1,0 +1,30 @@
+[
+  {
+    "TIPO TITULO": "SWAP",
+    "TIPO OPERACAO": "PAGAMENTO DE DIF. AMORTIZACAO",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": ""
+  },
+  {
+    "TIPO TITULO": "SWAP",
+    "TIPO OPERACAO": "PAGAMENTO DE DIF. DE JUROS",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": ""
+  },
+  {
+    "TIPO TITULO": "SWAP",
+    "TIPO OPERACAO": "PAGAMENTO DE PREMIO",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": ""
+  },
+  {
+    "TIPO TITULO": "",
+    "TIPO OPERACAO": "",
+    "STATUS B3": "CANCELADA: COMANDADA",
+    "USE": "Disregard",
+    "NOTES": "Cancelada na B3 — fora de toda liquidação"
+  }
+]

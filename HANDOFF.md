@@ -9525,3 +9525,187 @@ lugar nenhum enquanto o mesmo clique no sino funcionava. Os três foram sincroni
 `scripts/tests/check_notif_page_url.py` (novo): os três mapas com as mesmas chaves e destinos, todo
 destino sendo página do menu, nenhum destino repetido (rótulo duplicado sem querer), e as quatro
 notificações da tela de liquidação usando a constante.
+
+---
+
+## §212 — BRT_IPE asiático: o código depende da distância até a liquidação
+
+Toda asiática de `BRT_IPE` saía **`CO1-2`**, fixo. A regra é outra: o que decide é quantos **meses de
+calendário** o contrato está à frente da **data de liquidação**.
+
+- contrato no **mês seguinte** → o código do mês (`CO"MY"` → `COH7`);
+- **dois meses ou mais** → `CO1-2`.
+
+Os exemplos que definiram a regra: liquidação `05/01/2027` com contrato `Mar27` (+2) → `CO1-2`;
+liquidação `02/02/2027` com o mesmo `Mar27` (+1) → `COH7`. **Vanilla não mudou** — é sempre o código do
+mês.
+
+O dia não entra na conta: `28/02/2027` continua sendo +1 para `Mar27`. Sem data de liquidação legível a
+resposta é `CO1-2`, que é exatamente o comportamento anterior.
+
+### Os dois códigos viraram cadastro
+
+A linha `SPECIAL` do **Commodities × B3** vinha com o `B3 CODE` vazio e os dois códigos moravam no
+código-fonte, em três lugares. Agora:
+
+| coluna | conteúdo | quando sai |
+| --- | --- | --- |
+| `B3 CODE` | `CO"MY"` | vanilla, e asiática com contrato no mês seguinte |
+| `B3 CODE FAR` (nova) | `CO1-2` | asiática com contrato dois meses ou mais à frente |
+
+`SPECIAL` continua sendo SPECIAL porque **qual dos dois sai é lógica**, não de-para. O `upgrade` do
+mapping preenche as duas colunas quando estão vazias, então a instância que já tem o arquivo em disco
+passa a valer sem script de migração.
+
+**Consequência a saber:** apagar a linha `SPECIAL` do cadastro faz o `BRT_IPE` cair na regra genérica de
+prefixo e emitir `BRT` + mês/ano (`BRTZ6`) — um código errado que *se parece* com um código certo. Está
+preso no `check_b3_pattern.py` para não virar surpresa.
+
+### A regra vive em TRÊS lugares
+
+`otc_boxparse.calculate_b3_id` (servidor) e as duas cópias JS (`otc-fileupload.js` e
+`deals-processing-table.js`). A data de liquidação passou a ser lida **antes** do `b3Id` nas três, e os
+formulários de Add/Edit das duas páginas de commodities recalculam o Underlying Asset quando o
+`#ar-settledate` muda — sem isso o código ficaria velho na tela.
+
+### Verificação
+
+`check_boxparse.py` compara o Python com o `otc-fileupload.js` em todos os combos × 8 datas de
+liquidação; `check_b3_pattern.py` ganhou a seção **5b**, que roda as **duas** cópias JS contra o Python
+nos casos do BRT_IPE — é ela que pega a divergência entre os dois arquivos JS (já aconteceu no §164).
+
+---
+
+## §213 — Operations B3: o que entra na liquidação, e por qual das duas visões
+
+Duas correções na mesma cadeia, as duas erravam **número** sem erro nenhum na tela.
+
+### 1. A operação cancelada era somada
+
+Uma linha com **Status B3 = `CANCELADA: COMANDADA`** continua no arquivo da B3 com o valor cheio. Ela
+entrava no Settlement B3 do NDF Summary e nos cards de conciliação — um caixa que não vai acontecer,
+num total que ninguém conseguia explicar linha a linha.
+
+O cadastro **`swap-b3-events` virou `opb3-events` ("Operations B3 Events")** e deixou de ser uma lista de
+Tipo Operação para ser uma **regra** sobre as três colunas que decidem isso:
+
+| coluna | |
+| --- | --- |
+| `TIPO TITULO` | TER · OPC · SWAP · COE — **em branco = qualquer** |
+| `TIPO OPERACAO` | domínio aberto (sugestões, não trava) |
+| `STATUS B3` | domínio aberto |
+| `USE` | **Consider** / **Disregard** (em branco = Consider) |
+
+Precedência em `_opb3_settle_ok`: **Disregard vence sempre**; depois, um Tipo Título que tenha ao menos
+um Consider próprio vira **lista branca** (é o caso do SWAP: só amortização, juros e prêmio); Tipo Título
+sem nenhum Consider **não é filtrado** (é como TER e OPC se comportam). O casamento ignora caixa, acento
+e **pontuação** — `CANCELADA: COMANDADA` e `CANCELADA:COMANDADA` são a mesma coisa, e comparar o texto
+cru fazia a regra simplesmente não valer.
+
+O seed reproduz o comportamento anterior (as três linhas de SWAP) e acrescenta a linha do cancelamento,
+sem Tipo Título, que vale para os quatro produtos de uma vez.
+
+**Mudança de semântica a saber:** antes, esvaziar a tabela significava "nenhum swap entra". Hoje isso se
+**diz**: uma linha `SWAP` / resto em branco / `Disregard`. Tabela vazia agora não filtra nada — o que
+distingue "não quero nenhum" de "ainda não cadastrei".
+
+A regra é aplicada em **cinco** consumidores (`_ops_swap_settling`, `_ndfsum_collect`, `_ndfadv_collect`,
+`_ndfc_opb3_resgates` e a mensageria) via `_opb3_settle_rows`/`_opb3_settle_ok`. A **página** Operations
+B3 segue mostrando o arquivo inteiro: ela é a fonte, e esconder a linha cancelada lá deixaria o time sem
+onde vê-la.
+
+### 2. O intragrupo vinha com o sinal invertido
+
+Um negócio JPM × MGT chega pelos **dois** arquivos de casa que alimentam o Operations B3, espelhado:
+`Conta 73760.00-9 / Conta Contraparte 04880.00-6` com o valor de uma ponta, e as contas invertidas com o
+sinal trocado. Procurando só pelo Título, quem decidia o sinal era a **ordem de chegada no arquivo** —
+metade dos intragrupo saía com o Settlement B3 invertido contra a coluna SETTLEMENT, e a diferença dava o
+**dobro** do valor.
+
+`_ndfsum_b3_legs` indexa por **três** chaves, da mais específica para a mais frouxa:
+`(Título, Conta, Conta Contraparte)` → `(Título, Conta)` → `Título`. A conta de casa sai do `LEGAL` da
+linha e a da contraparte sai do **nome dela** (`_opb3_legal_side`), que no intragrupo é a outra entidade
+JPM. Resgate continua vencendo qualquer outro Tipo Operação do mesmo Título.
+
+### 3. O nome da contraparte passou a sair do Cpty SPN
+
+No swap o nome vinha do `CounterParty` do Athena; no termo de commodities, do `Nome da Contraparte` da
+posição. Dois **textos livres**, escritos por sistemas diferentes, que divergem em pontuação e sufixo —
+o mesmo cliente virava duas linhas no Settlement Summary, e não parecia defeito, parecia cliente
+repetido.
+
+A coluna **`Cpty SPN`** do OTM Settlements é um identificador e existe igual dos dois lados.
+`_otm_cpty_name` resolve nesta ordem: cadastro **`le-spn`** (entidade nossa não está no Reference Data
+como contraparte) → **Reference Data por SPN**. Não achou = string vazia, e quem chama mantém o nome que
+já tinha. O SPN da linha do aviso também passa a sair do OTM, sem o caminho de volta nome → SPN, que
+errava em toda diferença de pontuação. O omnibus por CNPJ (§197) segue como segunda tentativa.
+
+O nome resolvido é o **mesmo** que vai para o cadastro de IR (`swap-ir-client`) — mostrar um nome e casar
+a alíquota por outro deixaria quem edita o cadastro registrando o texto que vê, sem efeito nenhum.
+
+### 4. O card de Swap contava Cashflow como Maturity
+
+Um swap bullet vencendo hoje aparece **também** como evento na DFLUXO — é o mesmo pagamento, e conta como
+Maturity. A dedupe existe para isso, e a chave era o **"Código Identificador"** — que no arquivo real é o
+**LOB** (`CEM`) e se repete em todas as linhas do dia. Um bullet de CEM vencendo apagava **todo** cashflow
+de CEM da contagem: o card mostrava `Cashflow 0 · Maturity 1` com um evento de fluxo liquidando na mesma
+data, e o zero passava por "não teve fluxo hoje".
+
+A junção passou a ser pelo **CÓDIGO DO CONTRATO** (`_OPS_SWAP_JOIN_TOKENS`), que tem nomes diferentes nos
+dois arquivos: `Contrato` na DPOSICAO-SWAP e `Código do contrato` na DFLUXO. Sem a coluna, a dedupe não
+roda e a rotina **conta a mais** (com um `warning`) — um Cashflow sobrando aparece na tela e alguém
+pergunta; um Cashflow faltando passa por normal.
+
+### Verificação
+
+`scripts/tests/check_opb3_events.py` (novo) cobre 1 e 2; a seção **6** do `check_ops_trade_swap.py` cobre
+3; a seção **17** do `check_ops_summary.py` cobre 4.
+
+---
+
+## §214 — Pending Confirmation: atualização em massa por coluna
+
+A barra de ações só sabia aplicar **uma** coisa em massa — o Pending Status. Qualquer outra coluna exigia
+abrir o modal linha a linha.
+
+Agora é o modelo das páginas de New Deals: escolhe-se a **coluna** e o campo de valor à esquerda se
+adapta ao tipo dela.
+
+| tipo | colunas | como aparece |
+| --- | --- | --- |
+| `date` | Trade Date · Maturity Date · EA · Send Date · Return Date | máscara `dd/mm/yyyy` (flatpickr `d/m/Y`, a mesma do modal) — não se digitam as barras |
+| `select` | LOB · Product Type · Pending Status · Signature Type | lista fechada; a de Signature Type sai do **próprio Reference Data**, então uma assinatura nova aparece sozinha |
+| `refdata` | SPN · Client | autocomplete do Reference Data, o mesmo do modal de edição |
+| `text` | Break Reason · Comments · FepWeb ID · Pendência | texto livre |
+
+### O que fica de FORA da lista, e por quê
+
+- **Status, Aging, Owner, Economic Group** — são **derivadas**. Digitar por cima cria um valor que a
+  próxima gravação desfaz, sem avisar.
+- **Trade Number** — é a **chave** da linha no banco (`_pc_upsert_row` grava por ela). Aplicar o mesmo
+  número em várias linhas as fundiria numa só, e isso não tem desfazer.
+
+### O recálculo é do SERVIDOR
+
+`PC_CASCADE` diz qual coluna dispara o quê:
+
+- **SPN / Client** → identidade da contraparte: o par SPN↔Client, Owner, Economic Group e Signature Type,
+  todos do Reference Data;
+- **Trade Date / Maturity Date** → prazo e idade: Aging, Status e o **Pending Status**, que depende de
+  `Maturity − Trade ≤ 60` (prazo curto → `Exception Digital Fep Web` + Status `Ok`, e a linha migra para
+  o banco `ok`).
+
+O recálculo roda no endpoint novo **`/api/pending-confirmation/derive`** (`_pc_derive_row`), que reusa
+`_pc_refdata_lookup`, `_pc_aging_band_label` e `_pc_signature_status` — as **mesmas** funções da
+importação do Pending Update. Uma cópia em JavaScript faria a mesma operação sair com um Pending Status
+pelo arquivo e outro por uma edição na tela, e as duas telas mostrariam números diferentes do mesmo dia.
+Uma chamada por lote, não por linha.
+
+Uma derivada só é sobrescrita quando o servidor tem resposta: sem contraparte no Reference Data, apagar o
+Owner que já estava lá seria perder informação por causa de um cadastro faltando. Se o `/derive` falhar, o
+valor escolhido é aplicado mesmo assim e a tela **diz** que as derivadas não foram recalculadas — melhor
+do que ficar com metade da mudança e ar de sucesso.
+
+### Verificação
+
+`scripts/tests/check_pc_mass_update.py` (novo).

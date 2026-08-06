@@ -53,7 +53,7 @@ fails = []
 #     este teste falhar sem ter quebrado nada;
 #   * e o seed e justamente o que precisa ser fixado: ele tem de reproduzir a
 #     formula da planilha na instalacao nova, antes de qualquer edicao.
-_SWAP_MAPS = ('swap-b3-events', 'swap-ir-client', 'swap-ir-term')
+_SWAP_MAPS = ('opb3-events', 'swap-ir-client', 'swap-ir-term')
 _real_mapping_rows = R._mapping_rows
 R._mapping_rows = lambda key: ([dict(r) for r in R._MAPPING_DEFS[key]['seed']]
                                if key in _SWAP_MAPS else _real_mapping_rows(key))
@@ -241,12 +241,81 @@ check('o DataTables sabe quantas colunas de dado ha',
       "initTable('ops-trade-table', 10, 50)" in HTML, True)
 
 print('\n== 5. os tres cadastros existem e o seed reproduz a formula ==')
-for key in ('swap-b3-events', 'swap-ir-client', 'swap-ir-term'):
+for key in ('opb3-events', 'swap-ir-client', 'swap-ir-term'):
     check('%s registrado em _MAPPING_DEFS' % key, ("'%s': {" % key) in SRC, True)
     check('%s na aba do /mapping' % key, ("key: '%s'" % key) in read('apps/templates/pages/mapping.html'), True)
-check('os tres eventos de liquidacao', sorted(R._ops_swap_event_set()),
-      ['pagamento de dif. amortizacao', 'pagamento de dif. de juros', 'pagamento de premio'])
-check('RESGATE NAO e evento de liquidacao', 'resgate' in R._ops_swap_event_set(), False)
+# O universo de swap agora sai do `opb3-events`, que e a MESMA regra usada pelo
+# NDF Summary, pelos avisos e pela mensageria.
+def swap_ok(op, status='PENDENTE DE LIQUIDACAO FINANCEIRA'):
+    return R._opb3_settle_ok({'Tipo Titulo': 'SWAP', 'Tipo Título': 'SWAP',
+                              'Tipo Operacao': op, 'Tipo Operação': op, 'Status': status})
+
+
+for op in ('PAGAMENTO DE DIF. AMORTIZACAO', 'PAGAMENTO DE DIF. DE JUROS',
+           'PAGAMENTO DE PREMIO'):
+    check('%s e evento de liquidacao' % op, swap_ok(op), True)
+check('RESGATE NAO e evento de liquidacao', swap_ok('RESGATE'), False)
+check('RESGATE ANTECIPADO tambem nao', swap_ok('RESGATE ANTECIPADO'), False)
+# O acento do arquivo da B3 nao pode desfazer o casamento.
+check('AMORTIZACAO com cedilha casa', swap_ok('PAGAMENTO DE DIF. AMORTIZAÇÃO'), True)
+# E a regra do cancelamento vale para o swap tambem, apesar de estar cadastrada
+# numa linha sem Tipo Titulo nenhum.
+check('CANCELADA: COMANDADA tira o evento',
+      swap_ok('PAGAMENTO DE DIF. DE JUROS', 'CANCELADA: COMANDADA'), False)
+
+print('\n== 6. o nome da contraparte sai do Cpty SPN do OTM ==')
+# O nome vinha do `CounterParty` do Athena (swap) e do `Nome da Contraparte` da
+# posicao (commodities): dois TEXTOS LIVRES, escritos por sistemas diferentes,
+# que divergem em pontuacao e sufixo. O MESMO cliente virava duas linhas no
+# Settlement Summary — e ninguem via defeito nenhum, so um cliente repetido.
+#
+# O Cpty SPN e um identificador, e existe igual dos dois lados. Ele resolve por
+# duas fontes, nesta ordem: cadastro `le-spn` (se for entidade NOSSA — que nao
+# esta no Reference Data como contraparte) e Reference Data por SPN.
+check('SPN comparavel ignora zero a esquerda e o rabo .0',
+      [R._spn_key(v) for v in ('1234567', '01234567.0', '1234567.0', ' 1.234.567 ')],
+      ['1234567'] * 4)
+check('   e texto sem numero nao vira SPN', [R._spn_key(v) for v in ('', None, 'abc')],
+      ['', '', ''])
+
+_rows = R._mapping_rows
+_spn = R._refdata_by_spn
+try:
+    R._mapping_rows = lambda k: ([{'LE': 'MGT', 'NAME': 'JPMORGAN CHASE BANK, N.A. - SP',
+                                   'SPN': '0000042', 'NOTES': ''},
+                                  {'LE': 'ATACAMA', 'NAME': '', 'SPN': '0000043', 'NOTES': ''}]
+                                 if k == 'le-spn' else _rows(k))
+    R._refdata_by_spn = lambda: {'99': 'ACME BRASIL LTDA'}
+    check('SPN de entidade nossa vem do le-spn',
+          R._otm_cpty_name('42'), 'JPMORGAN CHASE BANK, N.A. - SP')
+    check('   e com o zero a esquerda tambem', R._otm_cpty_name('0000042'),
+          'JPMORGAN CHASE BANK, N.A. - SP')
+    # Linha de LE sem razao social cadastrada: melhor o codigo da entidade do que
+    # o vazio, que deixaria o aviso anonimo.
+    check('LE sem NAME cai no codigo da LE', R._otm_cpty_name('43'), 'ATACAMA')
+    check('SPN de cliente vem do Reference Data', R._otm_cpty_name('99'), 'ACME BRASIL LTDA')
+    # Nao achou: string vazia, para quem chama manter o nome que ja tinha.
+    check('SPN desconhecido devolve vazio', R._otm_cpty_name('12345'), '')
+    check('SPN vazio devolve vazio', R._otm_cpty_name(''), '')
+finally:
+    R._mapping_rows = _rows
+    R._refdata_by_spn = _spn
+
+# E as duas familias do Trade Level usam isso, ANTES do texto livre.
+blk = SRC.split('def _ops_swap_trade_rows', 1)[1].split('\ndef ', 1)[0]
+check('o swap tenta o SPN primeiro',
+      blk.index('_otm_cpty_name(') < blk.index("_cell(arow, ai, 'CounterParty')"), True)
+check('   e guarda o SPN por Trade Id', 'otm_spn_by_trade' in blk, True)
+blk = SRC.split('def _ndfadv_collect', 1)[1].split('\ndef ', 1)[0]
+check('o termo de commodities tenta o SPN primeiro',
+      blk.index('_otm_cpty_name(') < blk.index("_lcell(lrow, 'Nome da Contraparte')"), True)
+# O omnibus continua valendo como 2a tentativa: sem SPN no OTM, o nome que vem da
+# B3 e o do titular do guarda-chuva, e o cliente sai do CNPJ (§197).
+check('   e o omnibus por CNPJ segue como segunda tentativa',
+      blk.index('_otm_cpty_name(') < blk.index('_refdata_by_taxid()'), True)
+# O SPN da linha tambem passa a sair do OTM, sem o caminho de volta nome -> SPN.
+check('   e o SPN da linha vem do OTM quando existe',
+      "otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')" in blk, True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

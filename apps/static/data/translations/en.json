@@ -1537,7 +1537,7 @@
   "tkd-mail-fail": "Saved, but the closing e-mail could not be sent:",
   "map-tab-cetip-files": "CETIP Files (Save Routine)",
   "map-tab-api-links": "API Links",
-  "map-tab-swap-b3-events": "Swap Settlement Events (B3)",
+  "map-tab-opb3-events": "Operations B3 Events",
   "map-tab-swap-ir-client": "Swap IR — Client Exceptions",
   "map-tab-swap-ir-term": "Swap IR — Term Brackets",
   "ops-col-direction": "Direction",

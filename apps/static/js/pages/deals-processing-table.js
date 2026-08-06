@@ -187,6 +187,13 @@ var OTCFileUpload = (function () {
         'FCPO_BURSA_MYR': 'KO"MY"BNMK'
     };
 
+    // SPECIAL: o código depende de LÓGICA (vanilla/asiática e a distância do
+    // contrato até a liquidação), mas os dois códigos em si são cadastro —
+    // `near` é a coluna B3 CODE e `far` a B3 CODE FAR. Fallback até o fetch.
+    var MARKET_SPECIAL_CODES = {
+        'BRT_IPE': { near: 'CO"MY"', far: 'CO1-2' }
+    };
+
     // De-para agora cadastrado na página Mapping (Commodities × B3). Os
     // literais acima são o fallback até o fetch responder — e se ele falhar, o
     // comportamento antigo continua. No sucesso os objetos são esvaziados e
@@ -201,13 +208,20 @@ var OTCFileUpload = (function () {
             Object.keys(MARKET_FIXED_CODES).forEach(function (k) { delete MARKET_FIXED_CODES[k]; });
             Object.keys(MARKET_DYNAMIC_PREFIX).forEach(function (k) { delete MARKET_DYNAMIC_PREFIX[k]; });
             Object.keys(MARKET_TO_FX_HOLIDAY).forEach(function (k) { delete MARKET_TO_FX_HOLIDAY[k]; });
+            Object.keys(MARKET_SPECIAL_CODES).forEach(function (k) { delete MARKET_SPECIAL_CODES[k]; });
             d.rows.forEach(function (row) {
                 var typ  = String(row['TYPE'] || '').toUpperCase();
                 var mkt  = String(row['MARKET'] || '').trim().toUpperCase();
                 var code = String(row['B3 CODE'] || '');   // sem trim: 'C ' tem espaço no código
                 var cal  = String(row['HOLIDAY CALENDAR'] || '').trim();
                 if (mkt && cal) MARKET_TO_FX_HOLIDAY[mkt] = cal;
-                if (!mkt || !code || typ === 'SPECIAL') return;
+                if (typ === 'SPECIAL') {
+                    if (mkt) MARKET_SPECIAL_CODES[mkt] = {
+                        near: code, far: String(row['B3 CODE FAR'] || '').trim()
+                    };
+                    return;
+                }
+                if (!mkt || !code) return;
                 if (typ.indexOf('PREFIX') !== -1) {
                     MARKET_DYNAMIC_PREFIX[mkt] = code;
                 } else {
@@ -221,25 +235,62 @@ var OTCFileUpload = (function () {
     // Calculate B3 Underlying Asset Code from market + contract + vanilla flag
     // contract format: "May27", "Dec26", etc.
     // -------------------------------------------------------------------------
-    function calculateB3Id(market, contract, isVanilla) {
+    // Ordem dos meses, para medir a DISTÂNCIA entre o contrato e a liquidação.
+    // MONTH_CODES dá a LETRA da B3 ('H'), não o número do mês — e letra não se
+    // subtrai.
+    var MONTH_ABBR_ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    function contractMonthYear(contract) {
+        if (!contract) return null;
+        var m = String(contract).trim().match(/^([A-Za-z]{3})(\d+)$/);
+        if (!m) return null;
+        var abbr = m[1].charAt(0).toUpperCase() + m[1].slice(1, 3).toLowerCase();
+        var idx = MONTH_ABBR_ORDER.indexOf(abbr);
+        if (idx < 0) return null;
+        var y = parseInt(m[2], 10);
+        if (m[2].length <= 2) y += 2000;       // 'Mar27' → 2027
+        return { month: idx + 1, year: y };
+    }
+
+    function dateMonthYear(value) {
+        // Os dois formatos que circulam: a tela grava dd/mm/yyyy, o input date
+        // devolve yyyy-mm-dd.
+        var s = String(value == null ? '' : value).trim().slice(0, 10);
+        var m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) return { month: +m[2], year: +m[3] };
+        m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) return { month: +m[2], year: +m[1] };
+        return null;
+    }
+
+    // Quantos MESES de calendário o contrato está à frente da liquidação. O dia
+    // não entra: o que define o código B3 é o mês. null = não deu para ler, e
+    // quem chama trata isso como "não sei", não como zero.
+    function monthsAhead(settleDate, contract) {
+        var c = contractMonthYear(contract), d = dateMonthYear(settleDate);
+        if (!c || !d) return null;
+        return (c.year - d.year) * 12 + (c.month - d.month);
+    }
+
+    function calculateB3Id(market, contract, isVanilla, settleDate) {
         if (!market || !contract) return '';
         var mkt = market.toUpperCase().trim();
 
         // Fixed code — return immediately
         if (MARKET_FIXED_CODES[mkt]) return MARKET_FIXED_CODES[mkt];
 
-        // BRT_IPE special: vanilla → CO + month + last_char, asian → CO1-2.
-        // É o ÚNICO SPECIAL que sobrou: o código depende de vanilla/asian, que é
-        // lógica, não de-para. O FCPO saiu daqui — virou o padrão KO"MY"BNMK no
-        // cadastro Commodities × B3 (§164). Este arquivo emitia '.KOZ7BNMK F' e o
-        // otc-fileupload.js emitia 'KOZ7BNMK' para o MESMO deal; com o cadastro
-        // passa a existir um valor só.
-        if (mkt === 'BRT_IPE') {
-            if (isVanilla) {
-                var mo = buildB3Code('CO', contract);
-                return mo || 'CO1-2';
+        // SPECIAL (hoje só o BRT_IPE): os dois códigos vêm do cadastro; qual dos
+        // dois sai é lógica. Vanilla usa sempre o do mês (CO"MY" → COH7).
+        // Asiática passou a depender da distância até a LIQUIDAÇÃO: contrato no
+        // mês seguinte usa o do mês, dois meses ou mais usa o distante (CO1-2).
+        // Antes toda asiática saía CO1-2 — certo só para o segundo caso. §212
+        var sp = MARKET_SPECIAL_CODES[mkt];
+        if (sp) {
+            if (isVanilla || monthsAhead(settleDate, contract) === 1) {
+                return buildB3Code(sp.near, contract) || sp.far;
             }
-            return 'CO1-2';
+            return sp.far;
         }
 
         // Padrão do cadastro: parte fixa + mês/ano + parte fixa
@@ -587,7 +638,10 @@ var OTCFileUpload = (function () {
         var instrument   = getField(deal, 'Instrument');
 
         // B3 ID (Codigo do Ativo Subjacente)
-        var b3Id         = calculateB3Id(market, contract, isVanilla);
+        // A data de liquidação entra no cálculo do código B3 (BRT_IPE asiático),
+        // por isso é lida ANTES dele.
+        var settleDate   = fmtDateStr(getField(deal, 'SettlementDate') || getField(deal, 'SettleDate'));
+        var b3Id         = calculateB3Id(market, contract, isVanilla, settleDate);
 
         // Subjacente lookup
         var subjEntry    = subjacenteIdx ? (subjacenteIdx[b3Id] || null) : null;
@@ -603,7 +657,6 @@ var OTCFileUpload = (function () {
         var ref = (acronym && refMap[acronym]) ? refMap[acronym] : { spn: '', counterparty: '', taxId: '' };
 
         // Date fields
-        var settleDate   = fmtDateStr(getField(deal, 'SettlementDate') || getField(deal, 'SettleDate'));
         var spotDate     = fmtDateStr(getField(deal, 'SpotDate'));
         var fxConvDate   = fmtDateStr(getField(deal, 'FXConvDate') || getField(deal, 'FxConvDate'));
 

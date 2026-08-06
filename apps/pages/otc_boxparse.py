@@ -295,21 +295,83 @@ def strip_b3_marker(code):
     return _B3_MY_RE.sub('', '' if code is None else str(code))
 
 
-def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix):
-    """``calculateB3Id`` do JS. Os dois mapas vêm do cadastro Commodities × B3
+def contract_month_year(contract):
+    """``'Mar27'`` → ``(3, 2027)``; ``None`` quando não dá para ler.
+
+    Ano com dois dígitos vira 20xx; com quatro, vale como está — as duas formas
+    aparecem no recap."""
+    if not contract:
+        return None
+    m = _CONTRACT_RE.match(str(contract).strip())
+    if not m:
+        return None
+    abbr = m.group(1)[0].upper() + m.group(1)[1:3].lower()
+    full = _MONTH_NAMES_ABBR.get(abbr, abbr)
+    try:
+        month = _MONTH_FULL_ORDER.index(full) + 1
+    except ValueError:
+        return None
+    digits = m.group(2)
+    year = int(digits)
+    if len(digits) <= 2:
+        year += 2000
+    return (month, year)
+
+
+def date_month_year(value):
+    """Mês/ano de uma data em ``dd/mm/yyyy`` ou ``yyyy-mm-dd`` — os dois formatos
+    que circulam (a tela grava um, o recap manda o outro)."""
+    s = str(value or '').strip()[:10]
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', s)
+    if m:
+        return (int(m.group(2)), int(m.group(3)))
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', s)
+    if m:
+        return (int(m.group(2)), int(m.group(1)))
+    return None
+
+
+def months_ahead(settle_date, contract):
+    """Quantos MESES o contrato está à frente da data de liquidação.
+
+    Conta mês de calendário, não dias: ``05/01/2027`` → ``Mar27`` é 2, e
+    ``28/01/2027`` → ``Mar27`` continua sendo 2. O dia não entra porque o que
+    define o código B3 é o mês do contrato contra o mês da liquidação.
+
+    ``None`` quando qualquer um dos dois não dá para ler — quem chama trata isso
+    como "não sei", não como zero."""
+    c = contract_month_year(contract)
+    d = date_month_year(settle_date)
+    if not c or not d:
+        return None
+    return (c[1] - d[1]) * 12 + (c[0] - d[0])
+
+
+def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix,
+                    special=None, settle_date=''):
+    """``calculateB3Id`` do JS. Os mapas vêm do cadastro Commodities × B3
     (/mapping) — nada de literal aqui, ver HANDOFF §131."""
     if not market or not contract:
         return ''
     mkt = str(market).upper().strip()
     if mkt in fixed_codes:
         return fixed_codes[mkt]
-    # BRT_IPE é o único SPECIAL que sobrou: o código depende de vanilla/asian,
-    # que é lógica, não de-para. O FCPO saiu daqui — virou o padrão KO"MY"BNMK
-    # no cadastro (§164).
-    if mkt == 'BRT_IPE':
-        if is_vanilla:
-            return build_b3_code('CO', contract) or 'CO1-2'
-        return 'CO1-2'
+    # SPECIAL (hoje só o BRT_IPE): DOIS códigos cadastrados, e qual dos dois sai
+    # é lógica, não de-para — por isso a linha continua SPECIAL.
+    #
+    #   B3 CODE      → o contrato PRÓXIMO (padrão CO"MY" → COH7)
+    #   B3 CODE FAR  → o contrato distante (CO1-2)
+    #
+    # Vanilla é sempre o próximo, como sempre foi. Asiática passou a depender da
+    # distância até a LIQUIDAÇÃO: contrato no mês seguinte usa o código do mês;
+    # dois meses ou mais, o CO1-2. Antes toda asiática saía CO1-2, o que estava
+    # certo só para a segunda situação.
+    sp = (special or {}).get(mkt)
+    if sp:
+        near, far = sp.get('near') or '', sp.get('far') or ''
+        if is_vanilla or months_ahead(settle_date, contract) == 1:
+            return build_b3_code(near, contract) or far
+        return far
     pattern = dynamic_prefix.get(mkt)
     if not pattern:
         u = mkt.find('_')
@@ -508,8 +570,8 @@ def build_deal(deal, ref_map, subj_idx, maker_sid, layout, maps):
 
     layout: 'ndf' (NDF Commodities) ou 'opt' (Opt Commodities — leva Premium,
     PremiumPerUnit, PremiumCCY e SpotDate a mais).
-    maps: {'fixed': {...}, 'dynamic': {...}, 'holiday': {...}} do cadastro
-    Commodities × B3.
+    maps: {'fixed': {...}, 'dynamic': {...}, 'holiday': {...}, 'special': {...}}
+    do cadastro Commodities × B3.
     """
     maker_sid = maker_sid or ''
     deal_name = _get_field(deal, 'DealName')
@@ -529,8 +591,13 @@ def build_deal(deal, ref_map, subj_idx, maker_sid, layout, maps):
     trade_type = 'VANILLA' if is_vanilla else 'ASIAN'
 
     instrument = _get_field(deal, 'Instrument')
+    # A data de liquidação entra no cálculo do código B3 (BRT_IPE asiático), por
+    # isso é lida ANTES dele — mais abaixo ela é reaproveitada na coluna.
+    settle_date = _fmt_date_str(_get_field(deal, 'SettlementDate')
+                                or _get_field(deal, 'SettleDate'))
     b3_id = calculate_b3_id(market, contract, is_vanilla,
-                            maps.get('fixed') or {}, maps.get('dynamic') or {})
+                            maps.get('fixed') or {}, maps.get('dynamic') or {},
+                            maps.get('special') or {}, settle_date)
 
     subj_entry = (subj_idx or {}).get(b3_id)
     commodity = (subj_entry or {}).get('commodity', '') if subj_entry else ''
@@ -546,8 +613,6 @@ def build_deal(deal, ref_map, subj_idx, maker_sid, layout, maps):
     if deal.get('_invertDirection'):
         acronym, ref = 'LAWTON', _LAWTON
 
-    settle_date = _fmt_date_str(_get_field(deal, 'SettlementDate')
-                                or _get_field(deal, 'SettleDate'))
     spot_date = _fmt_date_str(_get_field(deal, 'SpotDate'))
     fx_conv_date = _fmt_date_str(_get_field(deal, 'FXConvDate')
                                  or _get_field(deal, 'FxConvDate'))

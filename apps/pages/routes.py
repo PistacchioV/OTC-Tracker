@@ -5217,6 +5217,14 @@ _OPS_SRC_MAP = {
     'ndf':      ('ndf', 'maturity'),    # TER maturity
 }
 
+# Como achar o CÓDIGO DO CONTRATO em cada um dos dois arquivos de swap. É a
+# chave que liga a posição ao fluxo, e ela tem nomes diferentes nos dois:
+# 'Contrato' na DPOSICAO-SWAP, 'Código do contrato' na DFLUXO.
+_OPS_SWAP_JOIN_TOKENS = {
+    'swap_pos': ['contrato'],
+    'swap_flx': ['codigo do contrato', 'código do contrato', 'codigo contrato'],
+}
+
 
 def _ops_src_latest_path(src, max_back=10):
     """Newest existing snapshot (path, dref) for ONE forecast source, walking back
@@ -5254,8 +5262,14 @@ def _ops_settlement_counts(settle_ref, pos_ref):
     # count — a flow event only counts as Flow when its contract's maturity is
     # NOT the picker date. swap_pos is processed before swap_flx in
     # _FORECAST_SOURCES, so the set is fully populated by the time Flow is read.
+    #
+    # A junção é pelo CÓDIGO DO CONTRATO — não pelo "Código Identificador", que
+    # no arquivo real é o LOB ('CEM') e se repete em todas as linhas do dia.
+    # Usá-lo como chave fazia UM swap bullet vencendo hoje apagar TODO cashflow
+    # de 'CEM' da contagem: o card mostrava Cashflow 0 · Maturity 1 com um evento
+    # de fluxo liquidando na mesma data, e nada acusava porque o zero parece
+    # "não teve fluxo hoje".
     swap_mat_ids = set()
-    _ID_TOKENS = ['código identificador', 'codigo identificador', 'identificador']
     for src in _FORECAST_SOURCES:
         mapping = _OPS_SRC_MAP.get(src['key'])
         if not mapping:
@@ -5285,7 +5299,19 @@ def _ops_settlement_counts(settle_ref, pos_ref):
         cw = src.get('count_where')
         cw_key = _fcst_resolve_key(keys, cw[0]) if cw else None
         cw_allowed = cw[1] if cw else None
-        id_key = _fcst_resolve_key(keys, _ID_TOKENS)   # contract join key (swap)
+        # Chave de junção posição × fluxo: 'Contrato' na DPOSICAO-SWAP e 'Código
+        # do contrato' na DFLUXO. O filtro do 'tipo de contrato' é o mesmo de
+        # `_ops_swap_pos_terms`: sem ele o fallback por substring casaria com a
+        # coluna do TIPO, que é '1'/'2' e junta tudo com tudo.
+        id_key = _fcst_resolve_key(
+            [k for k in keys if _fcst_norm(k) != 'tipo de contrato'],
+            _OPS_SWAP_JOIN_TOKENS.get(src['key'], []))
+        if src['key'] in _OPS_SWAP_JOIN_TOKENS and id_key is None:
+            # Sem a chave, a dedupe não roda — e a escolha é contar a mais em vez
+            # de contar a menos: um Cashflow sobrando aparece na tela e alguém
+            # pergunta; um Cashflow faltando passa por "não teve fluxo hoje".
+            log.warning("[ops] %s: sem coluna de contrato (%s); a dedupe "
+                        "posição × fluxo não roda hoje", src['key'], path)
         # Classe do ativo subjacente — só a posição de OPÇÃO precisa, para
         # separar câmbio de commodities dentro do mesmo card.
         classe_key = (_fcst_resolve_key(keys, ['classe do ativo subjacente',
@@ -5304,7 +5330,9 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                     cwv = str(int(cwv))
                 if cwv not in cw_allowed:
                     continue
-            cid = str(row.get(id_key, '') or '').strip() if id_key else ''
+            # `_fcst_norm_contract` + caixa alta: os dois arquivos escrevem o
+            # mesmo contrato com espaço sobrando ou com o rabo '.0' de número.
+            cid = _fcst_norm_contract(row.get(id_key, '')).upper() if id_key else ''
             # Flow event whose contract matures on the picker date → it's the
             # maturity payment (already counted via swap_pos), not a Flow.
             if src['key'] == 'swap_flx' and cid and cid in swap_mat_ids:
@@ -5374,13 +5402,86 @@ def _ops_norm_event(v):
     return re.sub(r'\s+', ' ', _fcst_norm(v)).strip()
 
 
-def _ops_swap_event_set():
-    """Tipos de Operação (normalizados) que marcam um swap liquidando. Cadastro
-    `swap-b3-events`; cadastro vazio = nenhum swap entra (é o pedido explícito de
-    quem esvaziou a tabela, não um estado a contornar)."""
-    return {_ops_norm_event(r.get('TIPO OPERACAO', ''))
-            for r in _mapping_rows('swap-b3-events')
-            if str(r.get('TIPO OPERACAO', '') or '').strip()}
+def _opb3_ev_key(v):
+    """Chave de comparação de Tipo Título / Tipo Operação / Status B3.
+
+    Além de caixa e acento (`_fcst_norm`), colapsa PONTUAÇÃO em espaço: a B3
+    escreve o mesmo status como `CANCELADA: COMANDADA` num arquivo e
+    `CANCELADA:COMANDADA` noutro, e quem cadastra digita de um jeito ou de
+    outro. Comparar o texto cru fazia a regra simplesmente não valer — sem erro
+    nenhum, que é o pior desfecho possível para um filtro."""
+    return re.sub(r'[^a-z0-9]+', ' ', _fcst_norm(v)).strip()
+
+
+def _opb3_event_rules():
+    """(consider, disregard) do cadastro `opb3-events`, cada regra já como a
+    tripla normalizada (tipo título, tipo operação, status B3). `''` é coringa.
+
+    USE em branco vale como **Consider**: é o que as linhas do antigo
+    `swap-b3-events` queriam dizer, e é a leitura inofensiva das duas."""
+    cons, dis = [], []
+    for r in _mapping_rows('opb3-events'):
+        rule = (_opb3_ev_key(r.get('TIPO TITULO', '')),
+                _opb3_ev_key(r.get('TIPO OPERACAO', '')),
+                _opb3_ev_key(r.get('STATUS B3', '')))
+        if not any(rule):
+            continue                       # linha totalmente vazia não é regra
+        (dis if _fcst_norm(r.get('USE', '')).strip().startswith('disreg')
+         else cons).append(rule)
+    return cons, dis
+
+
+def _opb3_rule_hit(rule, tit, op, st):
+    rt, ro, rs = rule
+    return ((not rt or rt == tit) and (not ro or ro == op) and (not rs or rs == st))
+
+
+def _opb3_settle_ok(rec, rules=None):
+    """A linha do Operations B3 entra numa apuração de liquidação? Cadastro
+    `opb3-events`, e é a MESMA resposta para o NDF Summary, o Other Products, os
+    avisos e a mensageria — o mesmo negócio não pode contar numa tela e sumir na
+    outra.
+
+    Precedência:
+      1. **Disregard** vence sempre. É o que tira a operação `CANCELADA:
+         COMANDADA`, que continua no arquivo com o valor cheio e somava um caixa
+         que não vai acontecer.
+      2. Um Tipo Título com ao menos um **Consider** próprio vira LISTA BRANCA —
+         é o caso do SWAP, onde só amortização, juros e prêmio são liquidação
+         (resgate é vencimento). Regra de título em branco também conta como
+         casamento aqui: ela vale para qualquer título.
+      3. Tipo Título sem nenhum Consider não é filtrado — é como TER e OPC se
+         comportam hoje, e é o que mantém a tela igual para quem não cadastrar
+         nada.
+
+    "Nenhum swap entra" continua sendo possível, mas agora se DIZ: uma linha
+    Tipo Título = SWAP, resto em branco, Disregard. Antes isso se fazia
+    esvaziando a tabela, o que não distinguia "não quero nenhum" de "ainda não
+    cadastrei".
+
+    `rules` é o par já lido por quem varre muitas linhas: sem ele cada registro
+    reabre o cadastro (um `stat` por linha, por tela)."""
+    cons, dis = rules if rules is not None else _opb3_event_rules()
+    tit = _opb3_ev_key(rec.get('Tipo Título', ''))
+    op = _opb3_ev_key(rec.get('Tipo Operação', ''))
+    st = _opb3_ev_key(rec.get('Status', ''))
+    if any(_opb3_rule_hit(r, tit, op, st) for r in dis):
+        return False
+    if any(r[0] == tit for r in cons if r[0]):
+        return any(_opb3_rule_hit(r, tit, op, st) for r in cons)
+    return True
+
+
+def _opb3_settle_rows(ref):
+    """Linhas do Operations B3 de `ref` que valem para liquidação — o
+    `_opb3_load` já peneirado pelo cadastro. A PÁGINA Operations B3 segue lendo
+    o arquivo inteiro: ela é a fonte, e esconder linha lá deixaria o time sem
+    onde ver a operação cancelada que a regra descartou."""
+    _jp, data = _opb3_load(ref)
+    if not data:
+        return []
+    rules = _opb3_event_rules()
+    return [r for r in data if _opb3_settle_ok(r, rules)]
 
 
 def _swadv_indexador(cod, nome):
@@ -5559,21 +5660,20 @@ def _ops_swap_settling(opb3):
     """(titulos, by_titulo) do Operations B3: quais SWAPs liquidam no dia.
 
     `titulos` = [(Título, linha), …] com **UMA entrada por swap**, na ordem de
-    chegada: Tipo Título = SWAP e Tipo Operação registrado em `swap-b3-events`.
+    chegada: Tipo Título = SWAP e a linha aprovada pelo cadastro `opb3-events`.
     O mesmo swap chega uma vez por Tipo Operação (amortização, juros, prêmio) e
     viraria linhas repetidas na tela.
 
     `by_titulo` = {Título → as linhas daquele título}, sujeitas AOS MESMOS dois
-    filtros: só os Tipos Operação registrados em `swap-b3-events` entram. É delas
-    que sai o Settlement B3 do Trade Level e, por consequência, o lado B3 do card
-    de Swap. Somar todas as linhas do Título (que é o que se fazia até aqui)
-    trazia para o valor eventos que a tabela não mostra — o card fechava num
-    número que nenhuma linha da tela explicava.
+    filtros. É delas que sai o Settlement B3 do Trade Level e, por consequência,
+    o lado B3 do card de Swap. Somar todas as linhas do Título (que é o que se
+    fazia até aqui) trazia para o valor eventos que a tabela não mostra — o card
+    fechava num número que nenhuma linha da tela explicava.
 
     É a definição do universo de swaps liquidando, e vale para as duas telas
     (Trade Level e Settlement Advice). Duplicá-la deixaria uma tela mostrando um
     swap que a outra não mostra, sem erro em lugar nenhum."""
-    wanted = _ops_swap_event_set()
+    rules = _opb3_event_rules()
     titulos, seen, by_titulo = [], set(), {}
     for rec in (opb3 or []):
         titulo = str(rec.get('Título', '') or '').strip()
@@ -5581,7 +5681,7 @@ def _ops_swap_settling(opb3):
             continue
         if 'swap' not in _fcst_norm(rec.get('Tipo Título', '')):
             continue
-        if _ops_norm_event(rec.get('Tipo Operação', '')) not in wanted:
+        if not _opb3_settle_ok(rec, rules):
             continue
         by_titulo.setdefault(titulo.upper(), []).append(rec)
         if titulo.upper() in seen:
@@ -5623,12 +5723,17 @@ def _ops_swap_trade_rows(settle_ref):
             by_contract.setdefault(k, []).append(row)
 
     _ojp, otm = _otm_load(ref_dt)
-    otm_by_trade = {}
+    otm_by_trade, otm_spn_by_trade = {}, {}
     for rec in (otm or []):
         tid = str(rec.get('Trade Id', '') or '').strip().upper()
         amt = _conf_to_float(rec.get('Amount'))
         if tid and amt is not None:
             otm_by_trade[tid] = otm_by_trade.get(tid, 0.0) + amt
+        # Cpty SPN: o identificador da contraparte na PRÓPRIA linha do fluxo. O
+        # primeiro não vazio vale — as várias linhas de um trade são do mesmo
+        # cliente, e uma delas vir sem SPN não pode apagar o nome.
+        if tid and _spn_key(rec.get('Cpty SPN', '')) and tid not in otm_spn_by_trade:
+            otm_spn_by_trade[tid] = str(rec.get('Cpty SPN', '') or '').strip()
 
     def _cell(row, idx_map, name):
         i = idx_map.get(name)
@@ -5639,12 +5744,19 @@ def _ops_swap_trade_rows(settle_ref):
         key = titulo.upper()
         arow = by_cetip.get(key)
         internal_id = _cell(arow, ai, 'Kapital ID') if arow else ''
-        # Counterparty: o nome do Athena é a razão social que o cadastro de IR
-        # espera; o Nome Simplificado do B3 ('INTRAGMGTFDO') é um apelido de conta
-        # e nunca casaria com "BANCO ..." nem com as entidades JPM. Ele fica só
-        # como último recurso, para a linha não sair anônima.
-        counterparty = (_cell(arow, ai, 'CounterParty') if arow else '') or \
-                       str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip()
+        # Counterparty: o **Cpty SPN** do OTM resolvido pelo `le-spn` e pelo
+        # Reference Data (`_otm_cpty_name`) — um identificador, não um texto
+        # livre. O nome do Athena vem depois, porque é a razão social que o
+        # cadastro de IR espera; o Nome Simplificado do B3 ('INTRAGMGTFDO') é um
+        # apelido de conta e nunca casaria com "BANCO ..." nem com as entidades
+        # JPM, então fica só como último recurso para a linha não sair anônima.
+        #
+        # É o MESMO nome que vai para o cadastro de IR logo abaixo: mostrar um
+        # nome e casar a alíquota por outro deixaria quem edita o `swap-ir-client`
+        # cadastrando o texto que vê e sem efeito nenhum.
+        counterparty = (_otm_cpty_name(otm_spn_by_trade.get(internal_id.strip().upper(), '')) or
+                        (_cell(arow, ai, 'CounterParty') if arow else '') or
+                        str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
 
         # Type: VCP quando QUALQUER uma das duas pontas do evento indexa em VCP.
         vcp = False
@@ -5656,7 +5768,7 @@ def _ops_swap_trade_rows(settle_ref):
 
         settlement = otm_by_trade.get(internal_id.strip().upper()) if internal_id else None
         # Settlement B3: soma das linhas do Título que ENTRAM no universo — os
-        # Tipos Operação registrados em `swap-b3-events`. O mesmo Título costuma
+        # linhas aprovadas pelo `opb3-events`. O mesmo Título costuma
         # trazer outros eventos no arquivo; somá-los dava um total que nenhuma
         # linha da tela explicava, e o card de Swap herdava a diferença.
         # A visão do Operations B3 já vem filtrada para um lado (banco ou MGT),
@@ -5720,8 +5832,8 @@ def _ops_swap_trade_rows(settle_ref):
 #  e não de uma segunda varredura do Operations B3 — que traria linhas que a
 #  tabela não mostra e deixaria o card e a tabela discordando na tela.
 #
-#  Consequência a entender: o lado B3 do card de Swap cobre só os Tipos Operação
-#  registrados em `swap-b3-events` (é o universo do Trade Level). Registrar mais
+#  Consequência a entender: o lado B3 do card de Swap cobre só as linhas que o
+#  cadastro `opb3-events` aprova (é o universo do Trade Level). Registrar mais
 #  um evento lá faz o card e a tabela crescerem JUNTOS — que é o ponto.
 #
 #  Família sem Trade Level ainda (Option, NDF Commodities, COE) volta `na: True`:
@@ -7841,6 +7953,72 @@ def _ndfc_ir_exempt(client):
 
 
 _REFDATA_TAXID_CACHE = {'mtime': None, 'map': {}}
+_REFDATA_SPN_CACHE = {'mtime': None, 'map': {}}
+
+
+def _spn_key(v):
+    """SPN comparável. O OTM grava '1234567', o Reference Data às vezes
+    '1234567.0' (veio de planilha) e às vezes com zero à esquerda. Só os dígitos,
+    sem os zeros da frente — comparar as strings deixava metade sem casar.
+
+    O rabo `.0` sai ANTES de tirar a pontuação: depois, aquele zero viraria mais
+    um dígito no fim e '1234567.0' deixaria de casar com '1234567'."""
+    s = str(v or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return re.sub(r'\D', '', s).lstrip('0')
+
+
+def _refdata_by_spn():
+    """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime."""
+    path = os.path.join(_B3_DATA_DIR, 'RefData.json')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if _REFDATA_SPN_CACHE['mtime'] != mt:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            data = []
+        m = {}
+        for rec in (data if isinstance(data, list) else []):
+            spn = _spn_key(rec.get('SPN', ''))
+            name = str(rec.get('COUNTERPARTY', '') or '').strip()
+            if spn and name and spn not in m:
+                m[spn] = name
+        _REFDATA_SPN_CACHE['mtime'] = mt
+        _REFDATA_SPN_CACHE['map'] = m
+    return _REFDATA_SPN_CACHE['map']
+
+
+def _otm_cpty_name(spn):
+    """Razão social da contraparte a partir do **Cpty SPN** do OTM Settlements.
+
+    O SPN é o identificador que o OTM carrega na própria linha do fluxo, e é o
+    único que existe igual dos dois lados. Antes o nome do swap saía do
+    `CounterParty` do Athena e o de commodities do `Nome da Contraparte` da
+    posição — dois textos livres, escritos por sistemas diferentes, que
+    divergiam em pontuação e sufixo e faziam o MESMO cliente virar duas linhas
+    no Settlement Summary.
+
+    Duas fontes, nesta ordem:
+      1. cadastro **`le-spn`** — se o SPN é de uma entidade nossa, o nome é o
+         `Reference Data Name` dela. Entidade própria não está no Reference Data
+         como contraparte, então procurá-la lá devolveria vazio;
+      2. **Reference Data** por SPN.
+
+    Vazio quando não acha: quem chama mantém o nome que já tinha, para a linha
+    não sair anônima."""
+    k = _spn_key(spn)
+    if not k:
+        return ''
+    for r in _mapping_rows('le-spn'):
+        if _spn_key(r.get('SPN', '')) == k:
+            return (str(r.get('NAME', '') or '').strip()
+                    or str(r.get('LE', '') or '').strip())
+    return _refdata_by_spn().get(k, '')
 
 
 def _refdata_by_taxid():
@@ -7918,27 +8096,38 @@ def _ndfadv_media_label(date_str):
 
 
 def _ndfadv_otm_by_suffix(ref):
-    """{sufixo do Trade Id → Σ Amount} do OTM Settlements do dia.
+    """({sufixo do Trade Id → Σ Amount}, {sufixo → Cpty SPN}) do OTM do dia.
 
     O Trade Id do OTM e o Nº da Confirmação carregam o MESMO identificador depois
     do hífen; o prefixo difere entre os sistemas. Por isso o join é pelo sufixo —
-    e a soma é necessária porque um trade aparece em várias linhas de fluxo."""
+    e a soma é necessária porque um trade aparece em várias linhas de fluxo.
+
+    O SPN sai junto porque é a mesma linha: é dele que sai o nome da contraparte
+    do aviso (`_otm_cpty_name`), e uma segunda leitura do arquivo só para buscá-lo
+    abriria espaço para as duas discordarem."""
     _jp, otm = _otm_load(ref)
-    out = {}
+    out, spn = {}, {}
     for rec in (otm or []):
         tid = str(rec.get('Trade Id', '') or '').strip().upper()
         if not tid:
             continue
         suf = tid.rsplit('-', 1)[-1]
+        if not suf:
+            continue
         amt = _conf_to_float(rec.get('Amount'))
-        if suf and amt is not None:
+        if amt is not None:
             out[suf] = out.get(suf, 0.0) + amt
-    return out
+        if _spn_key(rec.get('Cpty SPN', '')) and suf not in spn:
+            spn[suf] = str(rec.get('Cpty SPN', '') or '').strip()
+    return out, spn
 
 
 def _ndfadv_collect(ref):
     """Linhas do NDF Settlement Advice (commodities) para a data `ref`."""
-    _jp, opb3 = _opb3_load(ref)
+    # Peneirado pelo `opb3-events` UMA vez, no topo: a lista de Títulos e a soma
+    # do Settlement B3 lá embaixo têm de enxergar as mesmas linhas. Filtrar só a
+    # seleção deixava a operação cancelada fora da tabela e dentro do total.
+    opb3 = _opb3_settle_rows(ref)
     if not opb3:
         return []
     tipo_maps = _opb3_tipo_maps(ref)
@@ -7969,7 +8158,7 @@ def _ndfadv_collect(ref):
         if k:
             by_contract.setdefault(k, row)
 
-    otm_by_suffix = _ndfadv_otm_by_suffix(ref)
+    otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
 
@@ -7984,14 +8173,18 @@ def _ndfadv_collect(ref):
         # guarda-chuva, não o do cliente — quem é o cliente sai do CNPJ da
         # posição, procurado no RefData. Fora do omnibus, o nome da posição vale.
         # Errar isso manda o aviso de liquidação para o cliente errado.
+        conf = _lcell(lrow, 'Codigo Identificador')
+        suf = conf.rsplit('-', 1)[-1].upper() if conf else ''
+        # 1ª fonte: o **Cpty SPN** do OTM. É um identificador na própria linha do
+        # fluxo, e resolve o omnibus de graça — a linha do OTM é do trade, não da
+        # conta guarda-chuva.
+        cliente = _otm_cpty_name(otm_spn.get(suf, '')) if suf else ''
         cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ da Contraparte') if ch.isdigit())
-        cliente = ''
-        if _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
+        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
             cliente = _refdata_by_taxid().get(cnpj, '')
         cliente = (cliente
                    or _lcell(lrow, 'Nome da Contraparte')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
-        conf = _lcell(lrow, 'Codigo Identificador')
 
         # Cotação Mercadoria: a data única do fixing do subjacente; vazia (o caso
         # da asiática), o mês/ano da 1ª data de verificação.
@@ -7999,13 +8192,16 @@ def _ndfadv_collect(ref):
         if not cot:
             cot = _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
 
-        apurado = otm_by_suffix.get(conf.rsplit('-', 1)[-1].upper()) if conf else None
+        apurado = otm_by_suffix.get(suf) if suf else None
         ir = _ndfc_ir(apurado, cliente)
         # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
         liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
 
+        # SPN: o do OTM quando existe (é o mesmo que deu o nome); senão, o de
+        # sempre, pelo nome no Reference Data. Guardar o do OTM evita o caminho
+        # de volta nome → SPN, que erra em toda diferença de pontuação.
         ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
-        spn = ref_rec.get('spn', '')
+        spn = str(otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')
         net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
 
         # Settlement B3: soma de TODAS as linhas daquele Título no Operations B3
@@ -9624,10 +9820,14 @@ def _ndfc_b3_maps(ref):
 def _ndfc_opb3_resgates(ref):
     """(valor, Título) pairs from the day's Operations B3 rows whose Tipo
     Operação = Resgate and Tipo Título = TER — candidate CETIP contracts for
-    cockpit rows whose CD_CETIP_RETURN is still unresolved."""
+    cockpit rows whose CD_CETIP_RETURN is still unresolved.
+
+    Peneirado pelo `opb3-events`: uma operação cancelada não é candidata a
+    contrato de nada — casá-la aqui amarraria a linha do Cockpit a um Título que
+    a B3 já desfez."""
     out = []
     try:
-        _, ops = _opb3_load(ref)
+        ops = _opb3_settle_rows(ref)
         for r in (ops or []):
             if _fcst_norm(str(r.get('Tipo Operação', ''))) != 'resgate':
                 continue
@@ -11433,9 +11633,15 @@ def api_opb3_mensageria():
         m = _fcst_norm(str(rec.get('Modalidade Liquidação', '') or ''))
         return m.startswith('bilateral') or m.startswith('bruta')
 
-    # Linhas elegíveis: Bilateral*/Bruta*, fora da visão MGT, ainda não geradas
-    # (ou explicitamente marcadas para regerar).
+    # Linhas elegíveis: aprovadas pelo cadastro `opb3-events`, Bilateral*/Bruta*,
+    # fora da visão MGT, ainda não geradas (ou marcadas para regerar). O cadastro
+    # entra aqui pelo mesmo motivo que entra nas telas: uma operação cancelada na
+    # B3 não pode virar mensagem pedindo o pagamento dela.
+    ev_rules = _opb3_event_rules()
+
     def _eligible(rec):
+        if not _opb3_settle_ok(rec, ev_rules):
+            return False
         if not _bilateral(rec) or _mgt_view(rec):
             return False
         if str(rec.get('_ob_status', '') or '') == _OPB3_STATUS_GENERATED:
@@ -12191,22 +12397,57 @@ def _ndfsum_money(n):
     return '({})'.format(s) if n < -0.005 else s
 
 
-def _ndfsum_collect(ref):
-    ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
-    # Operations B3 settlement leg per Título: Resgate rows are the settlement
-    # proper, so they win; any other operation type is only a fallback.
-    _, ops = _opb3_load(ref)
-    b3_val, b3_val_any = {}, {}
+def _ndfsum_b3_legs(ops):
+    """Lado B3 do Trade Level, indexado por TRÊS chaves do mais específico ao
+    mais frouxo: (Título, Conta, Conta Contraparte), (Título, Conta) e Título.
+
+    As duas primeiras existem por causa do INTRAGRUPO. O mesmo negócio JPM × MGT
+    chega pelos DOIS arquivos de casa que alimentam o Operations B3 (o do Banco e
+    o da MGT), espelhado: uma linha com Conta 73760.00-9 / Conta Contraparte
+    04880.00-6 e o valor de uma ponta, outra com as contas invertidas e o sinal
+    trocado. Procurando só pelo Título, quem decidia o sinal era a ordem de
+    chegada no arquivo — metade dos intragrupo saía com o Settlement B3 invertido
+    contra a coluna SETTLEMENT e a diferença dava o dobro do valor.
+
+    Devolve (resgates, resto): o Resgate é a liquidação propriamente dita e vence
+    qualquer outro Tipo Operação do mesmo Título."""
+    strong, weak = {}, {}
     for r in (ops or []):
         titulo = str(r.get('Título', '') or '').strip().upper()
         if not titulo:
             continue
-        if _fcst_norm(str(r.get('Tipo Operação', ''))) == 'resgate':
-            b3_val.setdefault(titulo, r.get('Valor', ''))
-        else:
-            b3_val_any.setdefault(titulo, r.get('Valor', ''))
-    for titulo, v in b3_val_any.items():
-        b3_val.setdefault(titulo, v)
+        conta = _acc_digits(r.get('Conta', ''))
+        ccp = _acc_digits(r.get('Conta Contraparte', ''))
+        dst = strong if _fcst_norm(str(r.get('Tipo Operação', ''))) == 'resgate' else weak
+        for k in ((titulo, conta, ccp), (titulo, conta), (titulo,)):
+            dst.setdefault(k, r.get('Valor', ''))
+    return strong, weak
+
+
+def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
+    """Valor B3 do contrato pela ótica de `casa` (a conta da nossa entidade).
+
+    Vai da chave mais específica para a mais frouxa e, dentro de cada uma, o
+    Resgate vence. Chave com pedaço vazio é pulada: `casa` só é conhecida quando
+    o LEGAL classifica, e `cpty_acc` só quando a contraparte é a OUTRA entidade
+    JPM — que é exatamente o caso em que as duas visões existem."""
+    strong, weak = legs
+    for k in ((titulo, casa, cpty_acc), (titulo, casa), (titulo,)):
+        if not all(k):
+            continue
+        for d in (strong, weak):
+            if k in d:
+                return d[k]
+    return ''
+
+
+def _ndfsum_collect(ref):
+    ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
+    # Operations B3 settlement leg, já peneirado pelo cadastro `opb3-events` —
+    # uma operação CANCELADA: COMANDADA continua no arquivo com o valor cheio e
+    # entrava tanto no Settlement B3 da linha quanto nos cards de conciliação.
+    ops = _opb3_settle_rows(ref)
+    legs = _ndfsum_b3_legs(ops)
 
     def _ter_date(v):
         d = _fcst_parse_date(v)
@@ -12229,7 +12470,12 @@ def _ndfsum_collect(ref):
         lp = contr_map.get(b3.upper(), {}) if b3 else {}
         trade_date = _ter_date(lp.get('emissao', ''))
         settle_date = _ter_date(lp.get('venc', ''))
-        raw_b3 = b3_val.get(b3.upper(), '') if b3 else ''
+        # Qual das duas visões da B3 é a NOSSA: a conta de casa sai do LEGAL da
+        # linha e, no intragrupo, a conta da contraparte sai do nome dela — que é
+        # a outra entidade JPM. Sem isso o sinal vinha da ordem do arquivo.
+        casa = _opb3_legal_side(row[ci['LEGAL']])
+        cpty_acc = _opb3_legal_side(row[ci['NM_COUNTERPARTY']])
+        raw_b3 = _ndfsum_b3_val(legs, b3.upper(), casa, cpty_acc) if b3 else ''
         # Cockpit DISPLAY cells are US-formatted (#,##0.00 via _swapchar_fmt_value)
         # → parse with the US parser; the raw Operations B3 Valor keeps the same
         # BR/US-tolerant parse the resgates reader uses.
@@ -15601,6 +15847,62 @@ def api_pending_confirmation_upsert():
     return jsonify({'success': True, 'category': target})
 
 
+#  Colunas DERIVADAS do Pending Confirmation: as que a tela não deixa editar
+#  porque saem de outra coisa. Owner / Economic Group / Signature Type vêm do
+#  Reference Data pelo SPN (ou pelo nome); Aging e Status saem do Trade Date; e o
+#  Pending Status sai do PRAZO (Maturity − Trade) pela regra do Pending Update.
+_PC_DERIVED_COLUMNS = ('Owner', 'Economic Group', 'Signature Type', 'Aging',
+                       'Status', 'Pending Status')
+
+
+def _pc_derive_row(src):
+    """Campos derivados de UMA linha do Pending Confirmation.
+
+    Existe para que a atualização em massa da tela não tenha uma segunda cópia
+    das regras. Elas já vivem aqui — `_pc_refdata_lookup`, `_pc_aging_band_label`
+    e `_pc_signature_status` são as MESMAS que a importação do Pending Update
+    usa. Uma cópia em JavaScript faria a mesma operação sair com um Pending
+    Status pelo arquivo e outro por uma edição na tela, sem nada acusando.
+
+    `src` traz o que o usuário tem em mãos (SPN, Client, Trade Date, Maturity
+    Date). A resposta traz as seis colunas derivadas — quem chama decide quais
+    aplicar, porque isso depende de QUAL coluna foi alterada."""
+    rec = _pc_refdata_lookup({'SPN': str(src.get('SPN', '') or ''),
+                              'Client': str(src.get('Client', '') or '')},
+                             _fxo_refdata_by_spn(), _pc_refdata_by_name())
+    trade_dt = _parse_date_any(str(src.get('Trade Date', '') or ''))
+    mat_dt = _parse_date_any(str(src.get('Maturity Date', '') or ''))
+    pending_status, status = _pc_signature_status(rec, trade_dt, mat_dt)
+    aging = (datetime.now().date() - trade_dt).days if trade_dt else None
+    return {
+        # SPN e Client saem juntos: escolher um preenche o outro, como no modal.
+        'SPN': str(rec.get('SPN', '') or '') or str(src.get('SPN', '') or ''),
+        'Client': str(rec.get('COUNTERPARTY', '') or '') or str(src.get('Client', '') or ''),
+        'Owner': str(rec.get('BANKER', '') or ''),
+        'Economic Group': str(rec.get('ECONOMIC GROUP', '') or ''),
+        'Signature Type': str(rec.get('SIGNATURE TYPE', '') or ''),
+        'Aging': '' if aging is None else str(aging),
+        'Status': status,
+        'Pending Status': pending_status,
+    }
+
+
+@blueprint.route('/api/pending-confirmation/derive', methods=['POST'])
+def api_pending_confirmation_derive():
+    """Recalcula as colunas derivadas de várias linhas de uma vez — é o que a
+    atualização em massa chama depois de aplicar o valor na coluna escolhida.
+
+    Uma chamada para o lote inteiro: o Reference Data é lido uma vez por
+    requisição, e linha a linha seriam N leituras e N idas ao servidor."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    rows = (request.get_json(silent=True) or {}).get('rows') or []
+    if not isinstance(rows, list):
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    return jsonify({'success': True,
+                    'rows': [_pc_derive_row(r if isinstance(r, dict) else {}) for r in rows]})
+
+
 @blueprint.route('/api/pending-confirmation/delete', methods=['POST'])
 def api_pending_confirmation_delete():
     """Delete a row (by Trade Number) from all three DBs."""
@@ -17415,6 +17717,23 @@ def _interbook_upgrade(rows):
 # branco vale para qualquer produto daquele uso.
 _MAP_API_PRODUCTS = ['', 'NDF', 'FXO', 'Commodities', 'Swaps']
 
+# Domínios das três colunas do Operations B3 que decidem se a linha entra numa
+# apuração de liquidação. Tipo Título é fechado (são os quatro tipos de título
+# que a B3 registra); Tipo Operação e Status B3 são ABERTOS — as listas abaixo
+# são sugestões no campo, não uma trava, porque a B3 acrescenta valores sem
+# avisar e um `select` fecharia a porta para o cadastro do valor novo.
+_MAP_OPB3_TITULOS = ['', 'TER', 'OPC', 'SWAP', 'COE']
+_MAP_OPB3_OPERACOES = [
+    'PAGAMENTO DE DIF. AMORTIZACAO', 'PAGAMENTO DE DIF. DE JUROS',
+    'PAGAMENTO DE PREMIO', 'RESGATE', 'RESGATE ANTECIPADO',
+    'REGISTRO', 'PAGAMENTO DE EVENTO', 'VENCIMENTO ANTECIPADO',
+]
+_MAP_OPB3_STATUSES = [
+    'CANCELADA: COMANDADA', 'FINALIZADA', 'PENDENTE DE LIQUIDACAO FINANCEIRA',
+    'PENDENTE DE CONFIRMACAO', 'PENDENTE DE AUTORIZACAO', 'REGISTRADA',
+]
+_MAP_OPB3_USE = ['Consider', 'Disregard']
+
 _ATHENA_GETTRADES = ('https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
                      '/api/v1/getTrades?product={}&date=YYYYMMDD')
 
@@ -17543,6 +17862,18 @@ def _commodities_b3_upgrade(rows):
             r['B3 CODE'] = 'KO"MY"BNMK'
             continue
 
+        # BRT_IPE: os dois códigos eram literais no código-fonte e a linha do
+        # cadastro vinha VAZIA. Preencher aqui — e não só no seed — é o que faz a
+        # regra valer na instância que já tem o arquivo em disco; sem isto a
+        # asiática ficaria sem código nenhum, que é pior do que o CO1-2 fixo que
+        # havia antes. Só preenche o que está vazio: quem editar pela tela manda.
+        if mkt == 'BRT_IPE' and typ == 'SPECIAL':
+            if not code.strip():
+                r['B3 CODE'] = 'CO"MY"'
+            if not str(r.get('B3 CODE FAR') or '').strip():
+                r['B3 CODE FAR'] = 'CO1-2'
+            continue
+
         if 'PREFIX' not in typ or '"' in code or not code:
             continue
         # Formato antigo: o mês/ano vinha sempre no fim, e o espaço era literal.
@@ -17648,6 +17979,7 @@ _MAPPING_DEFS = {
             {'key': 'TYPE', 'label': 'Type', 'type': 'select', 'options': ['FIXED', 'PREFIX', 'SPECIAL']},
             {'key': 'MARKET', 'label': 'Market (Athena)'},
             {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
+            {'key': 'B3 CODE FAR', 'label': 'B3 Code — far contract (SPECIAL only)'},
             {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
             {'key': 'FIXED QUOTE', 'label': 'Fixed Quote', 'type': 'select', 'options': ['', 'YES']},
             {'key': 'QUOTE TYPE NDF', 'label': 'Tipo de Cotação — NDF (blank = F/A)'},
@@ -17679,7 +18011,13 @@ _MAPPING_DEFS = {
                 # deals-processing-table). Agora é um padrão só, aqui. §164
                 ('FCPO_BURSA_MYR', 'KO"MY"BNMK', 'BURSA'),
             )] +
-            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': '', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
+            # BRT_IPE: os DOIS códigos agora estão cadastrados. B3 CODE é o do
+            # contrato PRÓXIMO (padrão CO"MY" → COH7) e B3 CODE FAR é o do
+            # distante (CO1-2). Vanilla usa sempre o próximo; asiática usa o
+            # próximo quando o contrato é o mês seguinte à liquidação e o
+            # distante a partir de dois meses (§212).
+            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': 'CO"MY"',
+              'B3 CODE FAR': 'CO1-2', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
             [{'TYPE': 'FIXED', 'MARKET': '', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
              ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
         ),
@@ -17906,23 +18244,49 @@ _MAPPING_DEFS = {
         'upgrade': _api_links_upgrade,
         'seed': list(_API_LINKS_SEED),
     },
-    # Quais Tipo Operação do Operations B3 significam "swap liquidando hoje" — é
-    # a lista que o Trade Level do Other Products Summary varre para achar os
-    # swaps do dia. RESGATE e RESGATE ANTECIPADO ficam de fora de propósito: são
-    # vencimento/antecipação, não pagamento de diferencial.
+    # Quais linhas do Operations B3 entram numa apuração de liquidação — de
+    # qualquer produto. Era `swap-b3-events`, só com o Tipo Operação do swap;
+    # hoje a linha é uma REGRA sobre as três colunas que decidem isso (Tipo
+    # Título, Tipo Operação e Status B3) mais o que fazer com ela.
     #
-    # O casamento é sem acento e sem caixa, então 'AMORTIZAÇÃO' com cedilha no
-    # arquivo casa com a linha registrada sem ele.
-    'swap-b3-events': {
-        'label': 'Swap Settlement Events (B3)',
+    # Campo em branco é CORINGA ('vale para qualquer'), então a regra do
+    # cancelamento se escreve numa linha só e vale para TER, OPC, SWAP e COE de
+    # uma vez.
+    #
+    # Precedência (ver `_opb3_settle_ok`): Disregard vence sempre; depois, um
+    # Tipo Título que tenha ao menos um Consider vira LISTA BRANCA — só o que
+    # está registrado entra. Tipo Título sem nenhum Consider não é filtrado.
+    #
+    # O casamento ignora caixa, acento e pontuação: 'CANCELADA: COMANDADA',
+    # 'CANCELADA:COMANDADA' e 'Cancelada Comandada' são a mesma coisa, e
+    # 'AMORTIZAÇÃO' com cedilha casa com a linha registrada sem ele.
+    'opb3-events': {
+        'label': 'Operations B3 Events',
         'columns': [
-            {'key': 'TIPO OPERACAO', 'label': 'Tipo Operação (Operations B3)'},
+            {'key': 'TIPO TITULO', 'label': 'Tipo Título (blank = any)', 'type': 'select',
+             'options': _MAP_OPB3_TITULOS},
+            {'key': 'TIPO OPERACAO', 'label': 'Tipo Operação (blank = any)',
+             'type': 'datalist', 'options': _MAP_OPB3_OPERACOES},
+            {'key': 'STATUS B3', 'label': 'Status B3 (blank = any)',
+             'type': 'datalist', 'options': _MAP_OPB3_STATUSES},
+            {'key': 'USE', 'label': 'Consider / Disregard', 'type': 'select',
+             'options': _MAP_OPB3_USE},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
-            {'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO', 'NOTES': ''},
-            {'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS', 'NOTES': ''},
-            {'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'NOTES': ''},
+            # As três do swap, como estavam em `swap-b3-events`. RESGATE e RESGATE
+            # ANTECIPADO ficam de fora de propósito: são vencimento/antecipação,
+            # não pagamento de diferencial.
+            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO',
+             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS',
+             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO',
+             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+            # A operação cancelada continua no arquivo da B3 com o valor cheio.
+            # Somá-la é contar um caixa que não vai acontecer.
+            {'TIPO TITULO': '', 'TIPO OPERACAO': '', 'STATUS B3': 'CANCELADA: COMANDADA',
+             'USE': 'Disregard', 'NOTES': 'Cancelada na B3 — fora de toda liquidação'},
         ],
     },
     # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
@@ -21949,7 +22313,7 @@ def _box_subjacente_index():
 def _box_commodity_maps():
     """Mapas Commodities × B3 vindos do CADASTRO (/mapping), não de literais —
     é a mesma fonte que o JS consome via /api/mappings/commodities-b3 (§131)."""
-    fixed, dynamic, holiday = {}, {}, {}
+    fixed, dynamic, holiday, special = {}, {}, {}, {}
     for row in _mapping_rows('commodities-b3'):
         typ = str(row.get('TYPE') or '').upper()
         mkt = str(row.get('MARKET') or '').strip().upper()
@@ -21957,13 +22321,20 @@ def _box_commodity_maps():
         cal = str(row.get('HOLIDAY CALENDAR') or '').strip()
         if mkt and cal:
             holiday[mkt] = cal
-        if not mkt or not code or typ == 'SPECIAL':
+        if typ == 'SPECIAL' and mkt:
+            # SPECIAL leva os DOIS códigos: o do mês (B3 CODE) e o distante
+            # (B3 CODE FAR). Qual dos dois sai é lógica — vanilla/asiática e a
+            # distância até a liquidação —, mas os códigos em si saem do
+            # cadastro, não do código-fonte.
+            special[mkt] = {'near': code, 'far': str(row.get('B3 CODE FAR') or '').strip()}
+            continue
+        if not mkt or not code:
             continue
         if 'PREFIX' in typ:
             dynamic[mkt] = code
         else:
             fixed[mkt] = code
-    return {'fixed': fixed, 'dynamic': dynamic, 'holiday': holiday}
+    return {'fixed': fixed, 'dynamic': dynamic, 'holiday': holiday, 'special': special}
 
 
 def _box_persist_deals(product, deals):

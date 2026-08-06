@@ -1425,6 +1425,42 @@ $(document).ready(function() {
     });
 
     // ========================================================================
+    // ATUALIZAÇÃO EM MASSA — as colunas oferecidas e o tipo de campo de cada uma
+    // ========================================================================
+    //  `kind` decide o campo que aparece à esquerda do dropdown de coluna:
+    //    date     → máscara dd/mm/yyyy (flatpickr), sem digitar as barras
+    //    select   → lista fechada
+    //    refdata  → autocomplete do Reference Data, o MESMO do modal de edição
+    //    text     → texto livre
+    //
+    //  Ficam de fora Status, Aging, Owner e Economic Group (derivadas — ver o
+    //  comentário na construção da barra) e Trade Number (chave da linha).
+    //
+    //  Declarado ANTES da DataTable de propósito: o `initComplete` roda durante
+    //  a construção dela, e uma `var` atribuída depois chegaria como undefined.
+    var PC_MASS_COLUMNS = [
+        { dtCol: 3,  label: 'LOB',            kind: 'select',
+          options: ['CEM', 'EDG'] },
+        { dtCol: 4,  label: 'SPN',            kind: 'refdata', field: 'SPN' },
+        { dtCol: 5,  label: 'Client',         kind: 'refdata', field: 'COUNTERPARTY' },
+        { dtCol: 7,  label: 'Product Type',   kind: 'select',
+          options: ['NDF', 'NDF COMM', 'OPTION', 'OPTION COMM', 'SWAP',
+                    'UNWIND NDF', 'UNWIND NDF COMM', 'UNWIND OPTION',
+                    'UNWIND OPTION COMM', 'UNWIND SWAP'] },
+        { dtCol: 8,  label: 'Trade Date',     kind: 'date' },
+        { dtCol: 9,  label: 'Maturity Date',  kind: 'date' },
+        { dtCol: 11, label: 'Pending Status', kind: 'select', optionsVar: 'PENDING_STATUS_OPTS' },
+        { dtCol: 13, label: 'EA',             kind: 'date' },
+        { dtCol: 14, label: 'Send Date',      kind: 'date' },
+        { dtCol: 15, label: 'Return Date',    kind: 'date' },
+        { dtCol: 16, label: 'Break Reason',   kind: 'text' },
+        { dtCol: 17, label: 'Comments',       kind: 'text' },
+        { dtCol: 19, label: 'Signature Type', kind: 'select', optionsVar: 'PC_SIGNATURE_TYPES' },
+        { dtCol: 20, label: 'FepWeb ID',      kind: 'text' },
+        { dtCol: 21, label: 'Pendência',      kind: 'text' }
+    ];
+
+    // ========================================================================
     // INICIALIZAÇÃO DA DATATABLE
     // ========================================================================
     var table = $('#pending-confirmation-table').DataTable({
@@ -1707,33 +1743,38 @@ $(document).ready(function() {
             if (conditionalActions) {
 
                 // ---------------------------------------------------------
-                // Combobox de Status — NÃO é filtro.
-                // Serve para selecionar o status a ser aplicado em massa
-                // nas rows selecionadas ao clicar em Confirm.
+                // Atualização em massa, no modelo das páginas de New Deals:
+                // primeiro se escolhe a COLUNA, depois o campo de valor à
+                // esquerda se adapta ao tipo dela (data com máscara, dropdown
+                // com autocomplete, texto livre).
+                //
+                // Antes daqui só dava para aplicar o Pending Status — qualquer
+                // outra coluna exigia abrir o modal linha a linha.
+                //
+                // Colunas de FORA da lista, e por quê:
+                //   Status, Aging, Owner, Economic Group  → são DERIVADAS. Não
+                //     se digitam: saem do Trade Date e do Reference Data, e são
+                //     recalculadas sozinhas quando a origem muda.
+                //   Trade Number  → é a CHAVE da linha no banco. Aplicar o mesmo
+                //     número em várias linhas fundiria todas numa só.
                 // ---------------------------------------------------------
-                var statusSelect = document.createElement('select');
-                statusSelect.className = 'form-select form-select-sm d-none me-2';
-                statusSelect.style.width = '250px';
-                statusSelect.id = 'statusMassUpdate';
-                statusSelect.setAttribute('data-table-status-mass-update', '');
-                statusSelect.innerHTML =
-                    '<option value="">Select Status to Apply</option>' +
-                    '<option value="Abonado via PDF">Abonado via PDF</option>' +
-                    '<option value="Client Treasury Allowance">Client Treasury Allowance</option>' +
-                    '<option value="Concluded">Concluded</option>' +
-                    '<option value="Exception">Exception</option>' +
-                    '<option value="Exception Digital Fep Web">Exception Digital Fep Web</option>' +
-                    '<option value="Exception Fepweb">Exception Fepweb</option>' +
-                    '<option value="Pending Digital Signature">Pending Digital Signature</option>' +
-                    '<option value="Pending FO">Pending FO</option>' +
-                    '<option value="Pending Legal">Pending Legal</option>' +
-                    '<option value="Pending MO">Pending MO</option>' +
-                    '<option value="Pending MO/FO">Pending MO/FO</option>' +
-                    '<option value="Pending Original">Pending Original</option>' +
-                    '<option value="Pending OTC">Pending OTC</option>' +
-                    '<option value="Pending POA">Pending POA</option>' +
-                    '<option value="Pending Signature Allowance">Pending Signature Allowance</option>' +
-                    '<option value="Signed Digitally">Signed Digitally</option>';
+                var valueWrapper = document.createElement('div');
+                valueWrapper.id = 'pcMassValueWrapper';
+                valueWrapper.className = 'd-none me-2 position-relative';
+                valueWrapper.innerHTML =
+                    '<input type="text" id="pcMassValueInput" class="form-control form-control-sm" ' +
+                    'style="width:230px" disabled placeholder="Select a column first…">';
+
+                var columnSelect = document.createElement('select');
+                columnSelect.className = 'form-select form-select-sm d-none me-2';
+                columnSelect.style.width = '220px';
+                columnSelect.id = 'pcMassColumnSelect';
+                columnSelect.setAttribute('data-table-status-mass-update', '');
+                columnSelect.innerHTML =
+                    '<option value="">Select Column to Apply</option>' +
+                    PC_MASS_COLUMNS.map(function (c) {
+                        return '<option value="' + c.dtCol + '">' + c.label + '</option>';
+                    }).join('');
 
                 // Botão Confirm
                 var confirmBtn = document.createElement('button');
@@ -1741,7 +1782,7 @@ $(document).ready(function() {
                 confirmBtn.setAttribute('data-table-confirm-selected', '');
                 confirmBtn.setAttribute('data-bs-toggle', 'tooltip');
                 confirmBtn.setAttribute('data-bs-placement', 'top');
-                confirmBtn.setAttribute('title', 'Confirm mass status update');
+                confirmBtn.setAttribute('title', 'Apply the value to the selected rows');
                 confirmBtn.innerHTML = '<i class="ti ti-check me-1"></i> Confirm';
 
                 // Botão Delete
@@ -1753,7 +1794,8 @@ $(document).ready(function() {
                 deleteBtn.setAttribute('title', 'Delete selected rows');
                 deleteBtn.innerHTML = '<i class="ti ti-trash me-1"></i> Delete';
 
-                conditionalActions.appendChild(statusSelect);
+                conditionalActions.appendChild(valueWrapper);
+                conditionalActions.appendChild(columnSelect);
                 conditionalActions.appendChild(confirmBtn);
                 conditionalActions.appendChild(deleteBtn);
             }
@@ -1804,18 +1846,120 @@ $(document).ready(function() {
     function toggleActionButtons(show) {
         var confirmBtn = $('[data-table-confirm-selected]');
         var deleteBtn = $('[data-table-delete-selected]');
-        var statusSelect = $('[data-table-status-mass-update]');
+        var columnSelect = $('#pcMassColumnSelect');
+        var valueWrapper = $('#pcMassValueWrapper');
 
         if (show) {
             confirmBtn.removeClass('d-none');
             deleteBtn.removeClass('d-none');
-            statusSelect.removeClass('d-none');
+            columnSelect.removeClass('d-none');
+            valueWrapper.removeClass('d-none');
         } else {
             confirmBtn.addClass('d-none');
             deleteBtn.addClass('d-none');
-            statusSelect.addClass('d-none');
+            columnSelect.addClass('d-none');
+            valueWrapper.addClass('d-none');
+            columnSelect.val('');
+            pcMassBuildValueField('');   // volta ao campo desabilitado
         }
     }
+
+
+    // ========================================================================
+    // CAMPO DE VALOR — muda de tipo conforme a coluna escolhida
+    // ========================================================================
+    // Assinaturas cadastradas no Reference Data. Sai do próprio arquivo em vez
+    // de uma lista fixa: uma assinatura nova aparece aqui sozinha, e um valor
+    // que não existe no cadastro não pode ser aplicado.
+    var PC_SIGNATURE_TYPES = [];
+
+    function pcMassColumn(dtCol) {
+        for (var i = 0; i < PC_MASS_COLUMNS.length; i++) {
+            if (String(PC_MASS_COLUMNS[i].dtCol) === String(dtCol)) return PC_MASS_COLUMNS[i];
+        }
+        return null;
+    }
+
+    function pcMassBuildValueField(dtCol) {
+        var wrap = document.getElementById('pcMassValueWrapper');
+        if (!wrap) return;
+        var col = pcMassColumn(dtCol);
+        if (!col) {
+            wrap.innerHTML = '<input type="text" id="pcMassValueInput" ' +
+                'class="form-control form-control-sm" style="width:230px" disabled ' +
+                'placeholder="Select a column first…">';
+            return;
+        }
+        if (col.kind === 'select') {
+            var opts = col.optionsVar === 'PENDING_STATUS_OPTS' ? PENDING_STATUS_OPTS
+                     : col.optionsVar === 'PC_SIGNATURE_TYPES'  ? PC_SIGNATURE_TYPES
+                     : (col.options || []);
+            wrap.innerHTML = '<select id="pcMassValueInput" class="form-select form-select-sm" ' +
+                'style="width:230px"><option value="">— Select —</option></select>';
+            var sel = document.getElementById('pcMassValueInput');
+            opts.forEach(function (o) {
+                var op = document.createElement('option');
+                op.value = o; op.textContent = o;
+                sel.appendChild(op);
+            });
+            return;
+        }
+        if (col.kind === 'date') {
+            // A MESMA máscara do modal: flatpickr d/m/Y escreve as barras, então
+            // ninguém precisa digitá-las — e o valor fica em dd/mm/yyyy, que é o
+            // formato que a célula e o servidor esperam.
+            wrap.innerHTML = '<input type="text" id="pcMassValueInput" ' +
+                'class="form-control form-control-sm" style="width:230px" ' +
+                'placeholder="dd/mm/yyyy" autocomplete="off">';
+            if (typeof flatpickr !== 'undefined') {
+                flatpickr(document.getElementById('pcMassValueInput'),
+                          { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+            }
+            return;
+        }
+        if (col.kind === 'refdata') {
+            // Autocomplete igual ao do modal — a lista sai do Reference Data, e
+            // escolher um item preenche SPN e Client de uma vez (o servidor
+            // recalcula o par no /derive logo depois).
+            wrap.innerHTML = '<input type="text" id="pcMassValueInput" ' +
+                'class="form-control form-control-sm" style="width:230px" ' +
+                'placeholder="Type to search…" autocomplete="off">' +
+                '<ul id="pcMassValueDd" class="smart-filter-dropdown mb-0 ps-0"></ul>';
+            var inp = document.getElementById('pcMassValueInput');
+            var dd = document.getElementById('pcMassValueDd');
+            inp.addEventListener('input', function () {
+                var v = this.value.trim().toLowerCase();
+                dd.innerHTML = '';
+                if (!v || !refData.length) { dd.style.display = 'none'; return; }
+                var hits = refData.filter(function (r) {
+                    return r[col.field] && String(r[col.field]).toLowerCase().indexOf(v) !== -1;
+                }).slice(0, 12);
+                if (!hits.length) { dd.style.display = 'none'; return; }
+                hits.forEach(function (rec) {
+                    var li = document.createElement('li');
+                    li.innerHTML = '<strong>' + (rec['SPN'] || '') + '</strong> — ' +
+                                   (rec['COUNTERPARTY'] || '');
+                    li.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        inp.value = String(rec[col.field] || '');
+                        dd.style.display = 'none';
+                    });
+                    dd.appendChild(li);
+                });
+                dd.style.display = 'block';
+            });
+            inp.addEventListener('blur', function () {
+                setTimeout(function () { dd.style.display = 'none'; }, 160);
+            });
+            return;
+        }
+        wrap.innerHTML = '<input type="text" id="pcMassValueInput" ' +
+            'class="form-control form-control-sm" style="width:230px" autocomplete="off">';
+    }
+
+    $(document).on('change', '#pcMassColumnSelect', function () {
+        pcMassBuildValueField(this.value);
+    });
 
 
     // ========================================================================
@@ -1839,15 +1983,42 @@ $(document).ready(function() {
     //   5. Ao confirmar, o <select> de Pending Status (coluna index 10)
     //      de cada row selecionada é atualizado com o status escolhido
     //
+    // As colunas DERIVADAS na ordem da tabela — o que o /derive devolve e onde
+    // cada coisa entra. Elas nunca são escolhidas pelo usuário: são consequência.
+    var PC_DERIVED_CELLS = {
+        'Status': 2, 'SPN': 4, 'Client': 5, 'Aging': 6, 'Pending Status': 11,
+        'Owner': 12, 'Economic Group': 18, 'Signature Type': 19
+    };
+
+    // Que derivadas recalcular quando TAL coluna muda. Sai daqui, e não de um if
+    // encadeado no meio do handler, para a regra caber de relance:
+    //   SPN / Client        → identidade da contraparte (o par SPN↔Client, Owner,
+    //                         Economic Group e Signature Type saem do Reference Data)
+    //   Trade / Maturity    → prazo e idade (Aging, Status e o Pending Status, que
+    //                         depende de Maturity − Trade ≤ 60)
+    var PC_CASCADE = {
+        4:  ['SPN', 'Client', 'Owner', 'Economic Group', 'Signature Type'],
+        5:  ['SPN', 'Client', 'Owner', 'Economic Group', 'Signature Type'],
+        8:  ['Aging', 'Status', 'Pending Status'],
+        9:  ['Aging', 'Status', 'Pending Status']
+    };
+
     $(document).on('click', '[data-table-confirm-selected]', function(e) {
         e.preventDefault();
 
-        var selectedStatus = $('#statusMassUpdate').val();
-
-        // Validação: status deve estar selecionado
-        if (!selectedStatus) {
+        var colVal = $('#pcMassColumnSelect').val();
+        var col = pcMassColumn(colVal);
+        if (!col) {
             Swal.fire({ icon: 'warning', title: 'Pending Confirmation',
-                html: 'Please select a status before confirming.', confirmButtonColor: '#0066cc' });
+                html: 'Please select a column before confirming.', confirmButtonColor: '#0066cc' });
+            return;
+        }
+        var vi = document.getElementById('pcMassValueInput');
+        var newValue = vi ? String(vi.value || '').trim() : '';
+        if (!newValue) {
+            Swal.fire({ icon: 'warning', title: 'Pending Confirmation',
+                html: 'Please enter a value for <strong>' + col.label + '</strong>.',
+                confirmButtonColor: '#0066cc' });
             return;
         }
 
@@ -1866,13 +2037,17 @@ $(document).ready(function() {
             return;
         }
 
+        var cascade = PC_CASCADE[Number(col.dtCol)] || [];
+        var extra = cascade.length
+            ? '<br><small class="text-muted">' + cascade.join(', ') +
+              ' will be recalculated.</small>' : '';
+
         // Modal de confirmação (SweetAlert2 — padrão do sistema)
         Swal.fire({
             icon: 'question',
             title: 'Please Confirm',
-            html: 'Are you sure you want to apply the status ' +
-                  '"<strong>' + selectedStatus + '</strong>" to ' +
-                  '<strong>' + checkedRows.length + '</strong> selected row(s)?',
+            html: 'Apply <strong>' + col.label + '</strong> = "<strong>' + newValue +
+                  '</strong>" to <strong>' + checkedRows.length + '</strong> selected row(s)?' + extra,
             showCancelButton: true,
             confirmButtonText: 'Confirm',
             cancelButtonText: 'Cancel',
@@ -1880,36 +2055,78 @@ $(document).ready(function() {
         }).then(function(result) {
             if (!result.isConfirmed) return;
 
-            // Atualizar o <select> de Pending Status (coluna 11, 0-indexed — SPN added at 3)
-            // em cada row selecionada — atualiza o dado da DataTable (col 11) e
-            // persiste no DB (sem recarregar a cada uma; recarrega uma vez no fim)
-            var _persists = [];
+            // 1) aplica o valor na coluna escolhida, em memória
+            var rows = [];
             checkedRows.forEach(function(row) {
                 var dtRow = table.row(row);
                 var d = dtRow.data();
                 if (!d) return;
                 d = d.slice();
-                d[11] = selectedStatus;
-                dtRow.data(d);
-                _persists.push(pcPersistRow(d, false));
+                d[col.dtCol] = newValue;
+                rows.push({ dtRow: dtRow, d: d });
             });
-            pcNotify('Pending Bulk Update',
-                     checkedRows.length + ' row(s) → ' + selectedStatus);
+            if (!rows.length) return;
 
-            // Resetar checkboxes
-            $('#pending-confirmation-table tbody input[type="checkbox"]').prop('checked', false);
-            $('#selectAll').prop('checked', false).prop('indeterminate', false);
+            // 2) recalcula as derivadas NO SERVIDOR. As regras (Reference Data,
+            //    faixa de aging, prazo ≤ 60) vivem lá e são as mesmas da
+            //    importação do Pending Update — uma segunda cópia aqui faria a
+            //    mesma operação sair com um Pending Status pelo arquivo e outro
+            //    por uma edição na tela.
+            var payload = rows.map(function(r) {
+                return {
+                    'SPN': _pcStrip(r.d[4]), 'Client': _pcStrip(r.d[5]),
+                    'Trade Date': _pcStrip(r.d[8]), 'Maturity Date': _pcStrip(r.d[9])
+                };
+            });
+            var derive = cascade.length
+                ? fetch('/api/pending-confirmation/derive', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ rows: payload })
+                  }).then(function(r){ return r.json(); })
+                    .catch(function(err){ console.error('pending derive error', err); return null; })
+                : Promise.resolve(null);
 
-            // Resetar combobox de status
-            $('#statusMassUpdate').val('');
+            derive.then(function(res) {
+                var derived = (res && res.success && res.rows) ? res.rows : null;
+                var _persists = [];
+                rows.forEach(function(r, i) {
+                    if (derived && derived[i]) {
+                        cascade.forEach(function(name) {
+                            var cell = PC_DERIVED_CELLS[name];
+                            // Só sobrescreve quando o servidor tem resposta: sem
+                            // contraparte no Reference Data, apagar o Owner que já
+                            // estava lá seria perder informação por causa de um
+                            // cadastro faltando.
+                            if (cell != null && derived[i][name]) r.d[cell] = derived[i][name];
+                        });
+                    }
+                    r.dtRow.data(r.d);
+                    _persists.push(pcPersistRow(r.d, false));
+                });
+                if (cascade.length && !derived) {
+                    // O valor escolhido foi aplicado; o que não deu foi o
+                    // recálculo. Dizer isso é melhor do que deixar a tela com
+                    // metade da mudança e ar de sucesso.
+                    Swal.fire({ icon: 'warning', title: 'Pending Confirmation',
+                        html: '<strong>' + col.label + '</strong> applied, but the ' +
+                              'derived columns could not be recalculated. Reopen the ' +
+                              'row to refresh them.', confirmButtonColor: '#0066cc' });
+                }
+                pcNotify('Pending Bulk Update',
+                         rows.length + ' row(s) → ' + col.label + ' = ' + newValue);
 
-            // Esconder botões condicionais
-            toggleActionButtons(false);
+                $('#pending-confirmation-table tbody input[type="checkbox"]').prop('checked', false);
+                $('#selectAll').prop('checked', false).prop('indeterminate', false);
+                $('#pcMassColumnSelect').val('');
+                pcMassBuildValueField('');
+                toggleActionButtons(false);
 
-            // Redesenhar tabela e, após persistir tudo, recarregar do DB (rows que
-            // viraram Concluded migram para o db ok).
-            table.draw(false);
-            Promise.all(_persists).then(function(){ sfApply(); });
+                // Redesenha e, depois de persistir tudo, recarrega do DB (rows
+                // que viraram Concluded / Ok migram de banco).
+                table.draw(false);
+                updateWidgets();
+                Promise.all(_persists).then(function(){ sfApply(); });
+            });
         });
     });
 
@@ -2470,7 +2687,18 @@ $(document).ready(function() {
     var refData = [];
     fetch('/static/data/RefData.json')
         .then(function(r){ return r.json(); })
-        .then(function(d){ refData = d; })
+        .then(function(d){
+            refData = d;
+            // Assinaturas efetivamente cadastradas, para o dropdown da edição em
+            // massa. Uma lista fixa aqui envelheceria calada: a assinatura nova
+            // existiria no cadastro e não na tela.
+            var seen = {};
+            (refData || []).forEach(function (r) {
+                var v = String(r['SIGNATURE TYPE'] || '').trim();
+                if (v && !seen[v.toUpperCase()]) { seen[v.toUpperCase()] = 1; PC_SIGNATURE_TYPES.push(v); }
+            });
+            PC_SIGNATURE_TYPES.sort();
+        })
         .catch(function(){ console.warn('RefData.json not loaded'); });
 
     var LOB_OPTS = ['CEM', 'EDG'];
