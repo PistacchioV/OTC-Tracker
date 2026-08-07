@@ -347,7 +347,16 @@ p = M.monitor_payload()
 check('produto sem cadastro vira aviso', any('PRODUTO NOVO' in w for w in p['warnings']), True)
 
 print('\n== 8. as colunas ==')
-check('30 colunas na tela', len(M.COLUMNS), 30)
+check('31 colunas na tela', len(M.COLUMNS), 31)
+# Os DOIS identificadores, sempre os dois. A chave da linha não é sempre a mesma
+# coisa — FWD Start é chaveado pelo B3 ID, o resto pelo Deal —, e sem a coluna
+# própria o Deal daquelas linhas não existia na tela.
+check('   o Athena ID ao lado da chave',
+      M.COLUMNS[M.COLUMNS.index('Trade ID') + 1:M.COLUMNS.index('Trade ID') + 3],
+      ['Athena ID', 'Cetip ID'])
+# O nome da coluna é da planilha legada; o que o código escreve nela é o B3_ID.
+check('   e o rótulo do Cetip ID diz o que está lá',
+      M.COLUMN_LABELS.get('Cetip ID'), 'B3 ID')
 # Uma coluna de justificativa POR MESA, ao lado do carimbo dela. Uma só,
 # compartilhada, faria a segunda mesa sobrescrever a explicação da primeira.
 check('   uma coluna de comentário por etapa',
@@ -360,8 +369,8 @@ check('o Trade ID repetido do arquivo virou uma só',
 check('os três Time Stamp têm nome próprio no banco',
       [c for c in M.COLUMNS if c.startswith('Time Stamp')],
       ['Time Stamp OTC', 'Time Stamp MO', 'Time Stamp FO'])
-check('   e o rótulo curto na tela (e Moeda exibida como Ativo)',
-      sorted(set(M.COLUMN_LABELS.values())), ['Ativo', 'Time Stamp'])
+check('   e o rótulo curto na tela (com Moeda como Ativo e Cetip ID como B3 ID)',
+      sorted(set(M.COLUMN_LABELS.values())), ['Ativo', 'B3 ID', 'Time Stamp'])
 check('o link do documento fica FORA da tabela',
       ('Confirmation Link' in M.DB_COLUMNS, 'Confirmation Link' in M.COLUMNS),
       (True, False))

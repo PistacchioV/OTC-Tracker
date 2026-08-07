@@ -77,6 +77,13 @@ COLUMNS = [
     'Produto',
     'LOB',
     'Trade ID',
+    # Os dois identificadores da operação, lado a lado. `Trade ID` é a CHAVE da
+    # linha, e ela não é sempre a mesma coisa: o FWD Start é chaveado pelo B3 ID
+    # (chaveá-lo pelo Deal criaria uma segunda linha para o mesmo trade no
+    # mapeamento seguinte), os demais pelo Deal da Athena. Sem uma coluna
+    # própria, o Deal daquelas linhas simplesmente não existia na tela — e é por
+    # ele que se procura a operação na Athena.
+    'Athena ID',
     'Cetip ID',
     'Moeda',
     'Notional',
@@ -122,6 +129,10 @@ COLUMN_LABELS = {
     # a commodity da confirmação (OLEO, PLATTS…) — é ela que separa os
     # documentos de um mesmo cliente×dia e acha a confirmação EXATA na pasta.
     'Moeda': 'Ativo',
+    # O nome da coluna é da planilha legada; o que o código escreve nela é, e
+    # sempre foi, o `B3_ID` do deal. O rótulo passa a dizer o que está lá —
+    # renomear a COLUNA quebraria o arquivo de quem já a tem no banco.
+    'Cetip ID': 'B3 ID',
 }
 
 # Colunas de data (a tela usa máscara nelas, e o import normaliza para dd/mm/aaaa).

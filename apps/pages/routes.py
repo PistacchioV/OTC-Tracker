@@ -16455,6 +16455,11 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             'Produto': source,
             'LOB': _lob_for_source(source),
             'Trade ID': key,
+            # Os dois identificadores, sempre os dois. A CHAVE (`Trade ID`) é o
+            # Deal para quase todo produto e o B3 ID para o FWD Start — então sem
+            # a coluna própria o Deal daquelas linhas não existia na tela, e é
+            # por ele que se acha a operação na Athena.
+            'Athena ID': first('Deal'),
             'Cetip ID': first('B3_ID'),
             # O campo é o ATIVO da confirmação: nas commodities entra a
             # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e
