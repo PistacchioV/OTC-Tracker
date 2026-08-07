@@ -95,6 +95,14 @@ _LOCK_ALLOWED_ENDPOINTS = {
     'pages_blueprint.sign_in_page',       # "Not you? Sign in"
     'pages_blueprint.login',              # sign in as a different user
     'pages_blueprint.logout',             # allow logging out while locked
+    # O /dev-login do DEV BYPASS. O bloco que o define NÃO vai para o
+    # repositório, então em produção este endpoint simplesmente não existe e a
+    # entrada é inerte — `request.endpoint` nunca vai valer isto. Ela está aqui
+    # porque, sem ela, a tela travada devolvia o /dev-login para o próprio lock
+    # ANTES de ele rodar o `session.clear()` que desbloquearia: fora da rede JPM
+    # não há phonebook para o Unlock consultar, e o desenvolvimento ficava preso
+    # num laço sem saída visível.
+    'pages_blueprint.dev_login',
 }
 
 
@@ -16399,6 +16407,18 @@ def _pc_refdata_enrich(row):
 _MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'}
 
 
+# LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de
+# mercadorias não é a de câmbio: no cadastro Produto × LOB da esteira a LOB é
+# metade da chave, e no Reference Data ela separa os produtos. Os quatro tipos de
+# mercadoria (termo, opção e os unwinds deles) saem como COMMODITY; o resto segue
+# CEM, que é o que sempre foi.
+_COMMODITY_SOURCES = {'NDF COMM', 'OPTION COMM', 'UNWIND NDF COMM', 'UNWIND OPTION COMM'}
+
+
+def _lob_for_source(source):
+    return 'COMMODITY' if _mc_mod.upper_norm(source) in _COMMODITY_SOURCES else 'CEM'
+
+
 def _mc_save_from_deal(deal, source, trade_number=None):
     """Espelha para Manual Confirmations a operação que acabou de ser mapeada.
 
@@ -16433,7 +16453,7 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             'Legal Entity': first('LE', 'TradingBook'),
             'Cliente': str(deal.get('Client', '') or ''),
             'Produto': source,
-            'LOB': 'CEM',
+            'LOB': _lob_for_source(source),
             'Trade ID': key,
             'Cetip ID': first('B3_ID'),
             # O campo é o ATIVO da confirmação: nas commodities entra a
@@ -16469,7 +16489,8 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         aging = (datetime.now().date() - td).days if td else None
         row = {c: '' for c in _PC_COLUMNS}
         row['Status'] = _pc_aging_band_label(aging)
-        row['LOB'] = 'CEM'
+        # A LOB acompanha o produto: mercadoria é COMMODITY, o resto é CEM.
+        row['LOB'] = _lob_for_source(source or product_type)
         row['SPN'] = str(deal.get('SPN', '') or '')
         row['Client'] = client
         row['Aging'] = str(aging) if aging is not None else ''
@@ -17895,87 +17916,15 @@ def _le_spn_upgrade(rows):
     return rows
 
 
-# Quem valida a confirmação de cada tipo. Uma linha por tipo, na ordem da lista.
-# Constante de módulo (e não literal dentro do `_MAPPING_DEFS`) porque o `upgrade`
-# também precisa dela: ele completa o arquivo já existente com os tipos que ainda
-# não têm linha nenhuma.
-_MC_VALIDATION_SEED = (
-    {'PRODUCT': 'NDF VANILLA', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda'},
-    {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com início futuro'},
-    {'PRODUCT': 'NDF OTHER PUBLISHER', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com publicador não-BACEN'},
-    {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
-    {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
-    {'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio'},
-    {'PRODUCT': 'FXO', 'LOB': 'EDG', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'REQUESTED', 'NOTES': 'Opção de EDG — o FO também valida'},
-    {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'REQUESTED', 'NOTES': ''},
-    {'PRODUCT': 'SWAP CORPORATE', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'REQUESTED', 'NOTES': ''},
-)
-
-
-def _mc_validation_upgrade(rows):
-    """Traz o cadastro da esteira para os nomes do Electronic Inventory.
-
-    Roda na LEITURA, e é obrigatório: a instância que já abriu a tela de mapping
-    tem o arquivo em disco e nunca mais receberia o seed novo. Sem isto, a coluna
-    PRODUCT — que agora é um `select` — abriria um cadastro 'OPTION' com o
-    primeiro item da lista selecionado, e o primeiro Save do usuário trocaria o
-    produto da linha sem ninguém pedir.
-
-    Três conversões, e a primeira é a que não pode se perder: 'OPTION EDG' não é
-    um produto, é a opção de câmbio **na LOB EDG**. Ela vira PRODUCT 'FXO' com
-    LOB 'EDG' — que é o desenho Produto × LOB que a tabela sempre teve, e o
-    único jeito de a regra "EDG também passa pelo FO" continuar existindo.
-
-    A terceira é o 'NDF' genérico, que existiu entre dois commits do mesmo dia e
-    podia significar tanto Vanilla quanto FWD Start. Ele vira 'NDF VANILLA', e a
-    ambiguidade não custa nada: as duas linhas nascem do seed com a MESMA regra
-    (OTC + MO), então as duas leituras dão no mesmo resultado.
-    """
-    out, vistos = [], set()
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        r = dict(r)
-        prod = _mc_mod.upper_norm(r.get('PRODUCT'))
-        lob = str(r.get('LOB') or '').strip()
-        if prod == 'OPTION EDG':
-            prod, lob = 'FXO', (lob or 'EDG')
-        elif prod == 'NDF':
-            prod = 'NDF VANILLA'
-        r['PRODUCT'] = _mc_mod.confirmation_type(prod, lob)
-        r['LOB'] = lob
-        # A tradução pode encostar duas linhas na mesma chave (o arquivo antigo
-        # tinha 'OPTION' e poderia ganhar 'FXO'). A primeira ganha: descartar a
-        # segunda é o que evita duas regras concorrentes para o mesmo par.
-        chave = (r['PRODUCT'].upper(), lob.upper())
-        if chave in vistos:
-            continue
-        vistos.add(chave)
-        out.append(r)
-
-    # Tipo que ainda não tem linha NENHUMA entra com a do seed. Sem isto, o
-    # arquivo de uma instância que já abriu a tela de mapping ficaria sem os
-    # tipos novos, e eles cairiam no DEFAULT_RULE (OTC + MO) — o que para o
-    # SWAP CORPORATE é a regra ERRADA, porque nele o FO também valida.
-    #
-    # O teste é pelo PRODUTO, não pelo par Produto × LOB: quem apagou a linha
-    # coringa de um produto e deixou só a da sua LOB fez isso de propósito, e
-    # ressuscitar a coringa mudaria o comportamento de toda LOB não cadastrada.
-    com_linha = {p for p, _l in vistos}
-    for s in _MC_VALIDATION_SEED:
-        if s['PRODUCT'].upper() not in com_linha:
-            out.append(dict(s))
-            com_linha.add(s['PRODUCT'].upper())
-    return out
+# O cadastro de quem valida cada tipo mora no `manual_conf` — é regra da esteira,
+# e é ELE quem a lê a cada linha do Monitor. Enquanto o seed e o `upgrade` viviam
+# aqui, o `manual_conf._mapping_rows` lia o arquivo CRU: quem nunca abriu a tela
+# de /mapping rodava com os nomes velhos, e o SWAP CORPORATE caía no DEFAULT_RULE
+# (OTC + MO) — a regra errada, porque nele o FO também valida.
+#
+# Os apelidos ficam porque é por eles que o `_MAPPING_DEFS` abaixo se registra.
+_MC_VALIDATION_SEED = _mc_mod.VALIDATION_SEED
+_mc_validation_upgrade = _mc_mod.validation_upgrade
 
 
 # Valor do campo "Tipo de Cotação" no arquivo de Opção. Era o literal '5' nos

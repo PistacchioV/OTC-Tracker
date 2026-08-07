@@ -357,14 +357,108 @@ def stamp_now(sid):
 
 def _mapping_rows(key):
     """Cadastro de /mapping lido do disco a cada chamada — edição na tela vale na
-    próxima leitura, sem restart. Importar `routes` daqui seria circular."""
+    próxima leitura, sem restart. Importar `routes` daqui seria circular.
+
+    O `upgrade` do cadastro da esteira é aplicado AQUI, e não só na tela de
+    /mapping: era essa a diferença entre os dois leitores. O `_MAPPING_DEFS` do
+    `routes` roda o upgrade ao servir a tela, mas quem lê a regra a cada linha do
+    Monitor é esta função — e ela via o arquivo CRU. Numa instância que nunca
+    abriu o /mapping (ou que abriu e não salvou), a `OPTION EDG` do formato
+    antigo virava um coringa de FXO e mandava TODA opção de câmbio para o FO, e o
+    SWAP CORPORATE, sem linha nenhuma, caía no DEFAULT_RULE (OTC + MO) — a regra
+    errada, porque nele o FO também valida.
+    """
     import json
     try:
         with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:
-        return []
-    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+        rows = []
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    return validation_upgrade(rows) if key == 'manual-conf-validation' else rows
+
+
+# Quem valida a confirmação de cada tipo. Uma linha por tipo, na ordem da lista.
+# Constante de módulo (e não literal dentro do `_MAPPING_DEFS`) porque o `upgrade`
+# também precisa dela: ele completa o arquivo já existente com os tipos que ainda
+# não têm linha nenhuma.
+VALIDATION_SEED = (
+    {'PRODUCT': 'NDF VANILLA', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda'},
+    {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com início futuro'},
+    {'PRODUCT': 'NDF OTHER PUBLISHER', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com publicador não-BACEN'},
+    {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
+    {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
+    {'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio'},
+    {'PRODUCT': 'FXO', 'LOB': 'EDG', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': 'Opção de EDG — o FO também valida'},
+    {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': ''},
+    {'PRODUCT': 'SWAP CORPORATE', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': ''},
+)
+
+
+def validation_upgrade(rows):
+    """Traz o cadastro da esteira para os nomes do Electronic Inventory.
+
+    Roda na LEITURA, e é obrigatório: a instância que já abriu a tela de mapping
+    tem o arquivo em disco e nunca mais receberia o seed novo. Sem isto, a coluna
+    PRODUCT — que agora é um `select` — abriria um cadastro 'OPTION' com o
+    primeiro item da lista selecionado, e o primeiro Save do usuário trocaria o
+    produto da linha sem ninguém pedir.
+
+    Três conversões, e a primeira é a que não pode se perder: 'OPTION EDG' não é
+    um produto, é a opção de câmbio **na LOB EDG**. Ela vira PRODUCT 'FXO' com
+    LOB 'EDG' — que é o desenho Produto × LOB que a tabela sempre teve, e o
+    único jeito de a regra "EDG também passa pelo FO" continuar existindo.
+
+    A terceira é o 'NDF' genérico, que existiu entre dois commits do mesmo dia e
+    podia significar tanto Vanilla quanto FWD Start. Ele vira 'NDF VANILLA', e a
+    ambiguidade não custa nada: as duas linhas nascem do seed com a MESMA regra
+    (OTC + MO), então as duas leituras dão no mesmo resultado.
+    """
+    out, vistos = [], set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        prod = upper_norm(r.get('PRODUCT'))
+        lob = str(r.get('LOB') or '').strip()
+        if prod == 'OPTION EDG':
+            prod, lob = 'FXO', (lob or 'EDG')
+        elif prod == 'NDF':
+            prod = 'NDF VANILLA'
+        r['PRODUCT'] = confirmation_type(prod, lob)
+        r['LOB'] = lob
+        # A tradução pode encostar duas linhas na mesma chave (o arquivo antigo
+        # tinha 'OPTION' e poderia ganhar 'FXO'). A primeira ganha: descartar a
+        # segunda é o que evita duas regras concorrentes para o mesmo par.
+        chave = (r['PRODUCT'].upper(), lob.upper())
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        out.append(r)
+
+    # Tipo que ainda não tem linha NENHUMA entra com a do seed. Sem isto, o
+    # arquivo de uma instância que já abriu a tela de mapping ficaria sem os
+    # tipos novos, e eles cairiam no DEFAULT_RULE (OTC + MO) — o que para o
+    # SWAP CORPORATE é a regra ERRADA, porque nele o FO também valida.
+    #
+    # O teste é pelo PRODUTO, não pelo par Produto × LOB: quem apagou a linha
+    # coringa de um produto e deixou só a da sua LOB fez isso de propósito, e
+    # ressuscitar a coringa mudaria o comportamento de toda LOB não cadastrada.
+    com_linha = {p for p, _l in vistos}
+    for s in VALIDATION_SEED:
+        if s['PRODUCT'].upper() not in com_linha:
+            out.append(dict(s))
+            com_linha.add(s['PRODUCT'].upper())
+    return out
 
 
 def validation_rules():
