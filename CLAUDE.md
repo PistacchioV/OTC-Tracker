@@ -434,28 +434,28 @@ São **24** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
     documento com dois nomes. São **oito tipos, sempre em MAIÚSCULO** (é código,
     não rótulo — a comparação entre as telas é feita sobre ele):
 
-    | Tipo | Pasta no Electronic Inventory |
-    |---|---|
-    | `NDF VANILLA` | `NDF Vanilla` |
-    | `NDF FWD START` | `NDF FWD Start` |
-    | `OTHER PUBLISHER` | `NDF Other Publisher` |
-    | `NDF COMM` | `NDF Commodities` |
-    | `OPTION COMM` | `Commodities Options` |
-    | `FXO` | `FX Options` |
-    | `SWAP` | `Swap` |
-    | `SWAP CORPORATE` | `Swap Corporate` |
+    `NDF VANILLA` · `NDF FWD START` · `NDF OTHER PUBLISHER` · `NDF COMM` ·
+    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE`
 
     As três páginas de NDF do New Deals gravam o mesmo Product Type e têm cada
     uma o seu tipo aqui: o documento que sai de cada uma é diferente, e um `NDF`
     genérico obrigava a adivinhar qual delas gerou a linha.
-  - **`TYPE_FOLDER` é a fonte única do nome da pasta**, para os dois jeitos de um
-    documento chegar ao share: o `save` do app e o **upload manual**. Eles
-    gravavam em pastas diferentes para o mesmo produto (`FXO` × `FX Options`), e
-    como o Monitor procura PDF só onde o app grava, a confirmação subida à mão
-    ficava invisível para ele com o arquivo lá. Os quatro nomes de pasta
-    históricos (`NDF Commodities`, `Commodities Options`, `FX Options`,
-    `NDF FWD Start`) **não podem mudar** — renomeá-los deixaria para trás tudo o
-    que já foi gravado.
+  - **A pasta É o código do tipo** — `TYPE_FOLDER` é a identidade, e é ela que os
+    quatro `save` do New Deals e o upload manual consultam em vez de escrever a
+    string. Antes o app gravava num nome bonito (`FX Options`) e o upload no
+    código (`FXO`): o mesmo produto em duas pastas, e como o Monitor procurava o
+    PDF só onde o app grava, a confirmação subida à mão ficava invisível com o
+    arquivo lá. Dar ao app um segundo nome recriava a divergência pela outra
+    ponta; o share já está cheio de pastas com o nome do tipo, que é o que a mesa
+    reconhece.
+  - **`TYPE_FOLDER_LEGACY` é só de LEITURA**, e é obrigatório: os nomes antigos
+    (`NDF Vanilla`, `NDF FWD Start`, `NDF Other Publisher`, `NDF Commodities`,
+    `Commodities Options`, `FX Options`, `Swap`, `Swap Corporate`) continuam
+    cheios no share. Quem procura o documento usa
+    **`confirmation_folders()`** — a pasta de escrita primeiro, as antigas
+    depois, e o mesmo nome de arquivo só uma vez. `confirmation_folder()`
+    (singular) devolve só a de escrita. Unificar o nome sem isto apagaria da tela
+    toda confirmação anterior, com os arquivos intactos no share.
   - Os dois lados da comparação passam por **`manual_conf.confirmation_type()`**,
     que traduz a nomenclatura de quem criou a linha (`OPTION`, e o `NDF` × LOB
     `COMMODITY` da planilha legada) para o nome único. Ele classifica **pela
@@ -694,6 +694,21 @@ e não uma evolução dela — aquela valida a confirmação que a tela de gera�
 acabou de produzir, chaveada por contraparte × mercadoria × data; esta valida uma
 **etapa da esteira**, chaveada pelos Trade IDs do grupo, e serve as três mesas.
 Fundi-las obrigaria uma a carregar os dois modelos de chave.
+
+**Gerar é gravar.** O checklist do New Deals fecha o ciclo do DOCUMENTO
+(New → Generated → Success) e **não carimba a etapa do OTC na esteira** — o
+`_mc_stamp_otc_validated` foi removido dos quatro `/validate` do New Deals, e só
+o `_mc_stamp_generated` continua. Carimbando, a confirmação nascia já na mesa
+seguinte e a fila de Pending OTC do Monitor ficava vazia por construção: o OTC
+não tinha onde conferir o que ele mesmo acabara de emitir, com o D+3 correndo em
+silêncio.
+
+**Validar e Rejeitar vivem os dois na tela de validação**, não no card do
+Monitor. São as duas respostas à mesma pergunta — o documento está certo? — e as
+duas exigem tê-lo aberto; no card, o Reject ficava a um clique de quem nunca viu
+o papel. O card tem um botão só. O Reject continua sendo só das mesas seguintes
+(`can_reject = stage != OTC`): o OTC é quem monta o documento e não tem a quem
+devolvê-lo.
 
 **O checklist muda por mesa: MO e FO conferem só os DADOS ECONÔMICOS**
 (`CHECKLIST_ECONOMICO` = operações da Tabela de Referência + datas). Contraparte,
