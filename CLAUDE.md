@@ -361,12 +361,13 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **24** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
-`b3-omnibus-account`, `fxo-internal-cpty`, `manual-conf-validation`.
+`b3-omnibus-account`, `fxo-internal-cpty`, `manual-conf-validation`,
+`manual-conf-sla`.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -652,13 +653,28 @@ Confirmation e parou ali; é para isso que existe o
 `_MC_CONFIRMATION_SOURCES` geram documento: NDF Vanilla e Other Publisher
 ficam de fora de propósito.
 
+**Só as páginas genéricas de NDF trazem a entidade no deal** (campo `LE`:
+JPM/MGT/LAWTON, resolvido do Settlement Location pelo `le-accronym`). Mercadoria
+e FXO não têm o campo, e o fallback para `TradingBook` escrevia o nome do BOOK
+(`ALUM-BRAZIL-BANCO`) na coluna Legal Entity. `_mc_legal_entity` resolve:
+mercadoria é sempre **JPM** (a mesa booka termo e opção de commodity no Banco
+J.P. Morgan, é uma entidade só) e FXO fica **em branco** quando o deal não diz —
+em branco pede cadastro, o nome do book afirmava uma entidade errada. A razão
+social sai do `le-spn` (LE → NAME), nunca de um literal.
+
 ### O prazo da esteira, e por que ele é em dias ÚTEIS
 
 Cada mesa tem um SLA contado da **DATA DA OPERAÇÃO** (trade date) e não da data
 em que a confirmação foi gerada — o prazo é do trade, e gerar o documento com
-atraso não compra tempo novo. `SLA_BIZDAYS`: **OTC D+3, MO D+4, FO D+6**. Eles
-não se somam: MO e FO correm em paralelo depois do OTC, e os dois contam do
-mesmo trade date.
+atraso não compra tempo novo. **OTC D+3, MO D+4, FO D+6**. Eles não se somam: MO
+e FO correm em paralelo depois do OTC, e os dois contam do mesmo trade date.
+
+Os prazos são **cadastráveis** (`manual-conf-sla`, uma linha por mesa) e o
+`SLA_BIZDAYS` virou o fallback com os valores históricos. Quem lê é
+`sla_days()`, cacheado por mtime porque o Monitor pergunta o prazo três vezes por
+linha; **prazo em branco devolve o valor histórico**, e não "sem prazo" — uma
+célula limpa pela tela apagaria o vermelho de toda confirmação atrasada em
+silêncio.
 
 **Dias úteis pelo calendário ANBIMA**, o mesmo `static/data/anbima.json` que o
 resto do app usa (`manual_conf` relê o arquivo em vez de importar o `routes`, que

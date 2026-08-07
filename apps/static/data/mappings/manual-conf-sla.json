@@ -1,0 +1,17 @@
+[
+  {
+    "STAGE": "OTC",
+    "BIZDAYS": "3",
+    "NOTES": "Dias úteis da data da operação até o OTC conferir"
+  },
+  {
+    "STAGE": "MO",
+    "BIZDAYS": "4",
+    "NOTES": "Dias úteis até o MO validar — corre em paralelo ao FO"
+  },
+  {
+    "STAGE": "FO",
+    "BIZDAYS": "6",
+    "NOTES": "Dias úteis até o FO validar — corre em paralelo ao MO"
+  }
+]

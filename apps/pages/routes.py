@@ -16477,6 +16477,32 @@ def _lob_for_source(source):
     return 'COMMODITY' if _mc_mod.upper_norm(source) in _COMMODITY_SOURCES else 'CEM'
 
 
+def _mc_legal_entity(deal, source):
+    """Legal Entity da linha espelhada na esteira.
+
+    Só as páginas genéricas de NDF trazem a entidade no deal (campo `LE`:
+    JPM/MGT/LAWTON, resolvido do Settlement Location pelo mapping le-accronym).
+    As de mercadoria e a de FXO **não têm o campo** — e o antigo fallback para
+    `TradingBook` escrevia na coluna Legal Entity o nome do BOOK
+    (`ALUM-BRAZIL-BANCO`, `BANCO_Crude_Brazil_NA`), que não é entidade nenhuma.
+
+    Mercadoria é sempre **JPM**: a mesa booka termo e opção de commodity no
+    Banco J.P. Morgan, e é uma entidade só. FXO fica em branco quando o deal não
+    diz — em branco pede cadastro, o nome do book afirmava uma entidade errada.
+
+    A razão social sai do cadastro `le-spn` (LE → NAME), nunca de um literal
+    aqui: é de lá que o resto do app lê a identidade da entidade, e a coluna
+    guarda o nome por extenso ('BANCO J.P MORGAN S.A'), como nas linhas vindas
+    da planilha. Sem NAME cadastrado sobra a sigla, que ainda é uma entidade.
+    """
+    le = str(deal.get('LE', '') or '').strip().upper()
+    if not le and _mc_mod.upper_norm(source) in _COMMODITY_SOURCES:
+        le = 'JPM'
+    if not le:
+        return ''
+    return str(_ndf_le_row(le).get('NAME', '') or '').strip() or le
+
+
 def _mc_save_from_deal(deal, source, trade_number=None):
     """Espelha para Manual Confirmations a operação que acabou de ser mapeada.
 
@@ -16508,7 +16534,7 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             return ''
 
         _mc.upsert_row(_mc.blank_row(**{
-            'Legal Entity': first('LE', 'TradingBook'),
+            'Legal Entity': _mc_legal_entity(deal, source),
             'Cliente': str(deal.get('Client', '') or ''),
             'Produto': source,
             'LOB': _lob_for_source(source),
@@ -17989,6 +18015,12 @@ def _le_spn_upgrade(rows):
 _MC_VALIDATION_SEED = _mc_mod.VALIDATION_SEED
 _mc_validation_upgrade = _mc_mod.validation_upgrade
 
+# O prazo de cada mesa mora no mesmo lugar, e pela mesma razão: quem o lê a cada
+# linha do Monitor é o `manual_conf`, não esta tela.
+_MC_SLA_SEED = _mc_mod.SLA_SEED
+_mc_sla_upgrade = _mc_mod.sla_upgrade
+_MC_STAGES = [_mc_mod.STAGE_OTC, _mc_mod.STAGE_MO, _mc_mod.STAGE_FO]
+
 
 # Valor do campo "Tipo de Cotação" no arquivo de Opção. Era o literal '5' nos
 # dois builders (servidor e navegador); vira o default da coluna QUOTE TYPE OPT.
@@ -18450,6 +18482,26 @@ _MAPPING_DEFS = {
         # A opção de EDG é a linha FXO × LOB EDG — o que era 'OPTION EDG', um
         # produto que nenhuma linha do banco jamais teve.
         'seed': [dict(s) for s in _MC_VALIDATION_SEED],
+    },
+    # O PRAZO de cada mesa, em dias ÚTEIS contados da DATA DA OPERAÇÃO — é ele
+    # que acende o verde/amarelo/vermelho do Confirmations Monitor e que torna a
+    # justificativa obrigatória quando a validação sai fora do prazo.
+    #
+    # Duas coisas que a tabela não diz sozinha: o prazo corre do TRADE, não da
+    # data em que a confirmação foi gerada (gerar o documento com atraso não
+    # compra tempo novo), e os prazos NÃO se somam — MO e FO correm em paralelo
+    # depois do OTC, os dois contados do mesmo trade date. Os dias são úteis pelo
+    # calendário ANBIMA, senão a confirmação de sexta-feira nasceria atrasada na
+    # segunda sem ninguém ter deixado de trabalhar.
+    'manual-conf-sla': {
+        'label': 'Manual Confirmations — SLA',
+        'upgrade': _mc_sla_upgrade,
+        'columns': [
+            {'key': 'STAGE', 'label': 'Mesa', 'type': 'select', 'options': _MC_STAGES},
+            {'key': 'BIZDAYS', 'label': 'Prazo (dias úteis do trade date)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [dict(s) for s in _MC_SLA_SEED],
     },
     # Reconciliação de FXO: a perna INTERNA. Ela chega à Athena com o
     # nome da mesa (o book), enquanto a CETIP registra o código do fundo — sem

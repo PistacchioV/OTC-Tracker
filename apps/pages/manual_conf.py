@@ -231,17 +231,90 @@ STAGE_COMMENT_COLUMN = {
 #
 # As mesas correm em PARALELO depois do OTC, e por isso os prazos não se somam:
 # D+4 do MO e D+6 do FO são os dois contados do mesmo trade date.
+#
+# Estes números são o **fallback**: o prazo de cada mesa é cadastrável em
+# /mapping (`manual-conf-sla`), e o que está aqui é o que valia quando ele era
+# fixo no código — para o comportamento ser idêntico até alguém editar a tabela.
 SLA_BIZDAYS = {
     STAGE_OTC: 3,
     STAGE_MO: 4,
     STAGE_FO: 6,
 }
 
+# O seed do cadastro. As três mesas, uma linha cada — a etapa é a chave, e não há
+# uma quarta: quem valida é OTC, MO ou FO.
+SLA_SEED = tuple(
+    {'STAGE': st, 'BIZDAYS': str(SLA_BIZDAYS[st]), 'NOTES': nota}
+    for st, nota in (
+        (STAGE_OTC, 'Dias úteis da data da operação até o OTC conferir'),
+        (STAGE_MO, 'Dias úteis até o MO validar — corre em paralelo ao FO'),
+        (STAGE_FO, 'Dias úteis até o FO validar — corre em paralelo ao MO'),
+    )
+)
+
+
+def sla_upgrade(rows):
+    """Garante uma linha por mesa e normaliza a etapa para MAIÚSCULO.
+
+    Roda na LEITURA, pelo mesmo motivo do `validation_upgrade`: a instância que
+    já abriu a tela de mapping tem o arquivo em disco e nunca mais receberia o
+    seed. Etapa repetida some — a primeira ganha, senão duas linhas disputariam
+    o prazo da mesma mesa.
+    """
+    out, vistos = [], set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        st = upper_norm(r.get('STAGE'))
+        if st not in SLA_BIZDAYS or st in vistos:
+            continue
+        r['STAGE'] = st
+        vistos.add(st)
+        out.append(r)
+    for s in SLA_SEED:
+        if s['STAGE'] not in vistos:
+            out.append(dict(s))
+            vistos.add(s['STAGE'])
+    return out
+
+
+# O cadastro é lido a CADA linha do Monitor (três etapas por linha), então ele é
+# cacheado por mtime em vez de reler o disco: edição na tela continua valendo no
+# request seguinte, que é o contrato dos mappings.
+_SLA_CACHE = {'mtime': None, 'val': None}
+
+
+def sla_days():
+    """Mesa → dias úteis de prazo, do cadastro `manual-conf-sla`.
+
+    Prazo em branco (ou que não seja um número) devolve o valor histórico do
+    `SLA_BIZDAYS`: uma célula limpa pela tela não pode virar "sem prazo", que é
+    como uma confirmação atrasada deixaria de acender o vermelho em silêncio.
+    """
+    try:
+        mtime = os.path.getmtime(_mapping_path('manual-conf-sla'))
+    except OSError:
+        mtime = None
+    if _SLA_CACHE['val'] is not None and _SLA_CACHE['mtime'] == mtime:
+        return _SLA_CACHE['val']
+    out = dict(SLA_BIZDAYS)
+    for r in _mapping_rows('manual-conf-sla'):
+        st = upper_norm(r.get('STAGE'))
+        if st not in out:
+            continue
+        try:
+            out[st] = int(float(str(r.get('BIZDAYS', '')).strip().replace(',', '.')))
+        except (TypeError, ValueError):
+            pass
+    _SLA_CACHE.update(mtime=mtime, val=out)
+    return out
+
 
 def sla_deadline(row, stage):
     """A data limite daquela etapa: trade date + N dias úteis. None sem data."""
     d = parse_date(row.get('Data Operação'))
-    n = SLA_BIZDAYS.get(str(stage or '').upper())
+    n = sla_days().get(str(stage or '').upper())
     if not d or n is None:
         return None
     return _add_bizdays(d, n)
@@ -366,6 +439,10 @@ def stamp_now(sid):
 # O cadastro da esteira
 # =============================================================================
 
+def _mapping_path(key):
+    return os.path.join(_MAPPINGS_DIR, '%s.json' % key)
+
+
 def _mapping_rows(key):
     """Cadastro de /mapping lido do disco a cada chamada — edição na tela vale na
     próxima leitura, sem restart. Importar `routes` daqui seria circular.
@@ -381,12 +458,16 @@ def _mapping_rows(key):
     """
     import json
     try:
-        with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
+        with open(_mapping_path(key), encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:
         rows = []
     rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
-    return validation_upgrade(rows) if key == 'manual-conf-validation' else rows
+    if key == 'manual-conf-validation':
+        return validation_upgrade(rows)
+    if key == 'manual-conf-sla':
+        return sla_upgrade(rows)
+    return rows
 
 
 # Quem valida a confirmação de cada tipo. Uma linha por tipo, na ordem da lista.
