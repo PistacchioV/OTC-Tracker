@@ -136,12 +136,16 @@
    cópia — existia no DOM e não aparecia. */
 #mc-table thead .mc-col-filters th,
 .dt-scroll-headInner thead .mc-col-filters th,
-.dataTables_scrollHeadInner thead .mc-col-filters th { padding:3px 4px; }
+.dataTables_scrollHeadInner thead .mc-col-filters th { padding:4px 5px; }
+/* Mesma geometria da Recon FXO e do resto do app: 30px de altura e .72rem. A
+   receita menor daqui (2px de padding, .62rem) fazia a linha nascer FINA — um
+   fio entre o cabeçalho e a primeira linha, com o cursor difícil de acertar. */
 #mc-table thead .mc-col-filters input,
 .dt-scroll-headInner thead .mc-col-filters input,
 .dataTables_scrollHeadInner thead .mc-col-filters input {
-    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
+    width:100%; height:30px; font-size:.72rem; font-weight:400;
+    padding:3px 9px; border-radius:8px;
+    border:1px solid var(--ins-border-color); background:var(--ins-tertiary-bg, #f8f9fa);
     color:var(--ins-body-color);
 }
 #mc-page .mc-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }

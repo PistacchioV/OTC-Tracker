@@ -155,12 +155,21 @@
    Bootstrap sai OVAL, porque círculo só é círculo em botão já quadrado. */
 /* A coluna de Actions tem largura mínima: sem ela o DataTables a espremia até a
    largura do botão, e o cabeçalho quebrava em "ACTION" / "S". O `th` precisa da
-   mesma regra porque com scrollX ele vive noutra tabela. */
-#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; min-width:74px; }
+   mesma regra porque com scrollX ele vive noutra tabela.
+
+   O `min-width` sozinho NÃO resolveu: os 74px são a largura da CÉLULA, e o
+   padding do tema come ~30px deles — sobrava menos do que "ACTIONS" ocupa em
+   .7rem maiúsculo, e a palavra quebrava dentro de uma coluna que já tinha a
+   largura pedida. Por isso vão as três coisas juntas: `nowrap` no cabeçalho
+   (a regra geral do padrão é `normal`, mas aqui o nome é curto e é ELE que
+   define a largura), padding menor e a mínima em 96px. */
+#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; min-width:96px; }
 #fxo-table thead th:nth-child(2),
 .dt-scroll-head thead th:nth-child(2),
 .dt-scroll-headInner thead th:nth-child(2),
-.dataTables_scrollHeadInner thead th:nth-child(2) { min-width:74px; }
+.dataTables_scrollHeadInner thead th:nth-child(2) {
+    min-width:96px; white-space:nowrap !important; padding-left:4px !important; padding-right:4px !important;
+}
 #fxo-table td.fxo-acts .btn.ops-row-act {
     width:32px; height:32px; min-width:32px; max-width:32px;
     padding:0; flex:0 0 auto; border-radius:10px !important;
