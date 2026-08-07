@@ -415,6 +415,15 @@
     // Offsets fixos: 0 = checkbox, 1 = Actions, as colunas de dado começam em 2.
     var OFFSET = 2;
 
+    // A coluna pela qual a tabela abre ordenada (menor aging primeiro). Se ela
+    // não existir nas colunas do servidor, cai na primeira coluna de dado — o
+    // que a tabela fazia antes —, em vez de pedir a coluna -1 e não ordenar.
+    var AGING_COL = 'Aging Confirmação';
+    function agingIdx() {
+        var i = COLUMNS.indexOf(AGING_COL);
+        return OFFSET + (i === -1 ? 0 : i);
+    }
+
     var table = null, rows = [], activePending = '', editing = null, adding = false;
 
     function label(c) { return LABELS[c] || c; }
@@ -523,6 +532,18 @@
                     return t === 'display' ? fmtValor(d) : (d == null ? '' : String(d));
                 };
                 col.className = 'mc-num text-center';
+            } else if (name === AGING_COL) {
+                // Ordenação NUMÉRICA garantida. O servidor manda o aging como
+                // TEXTO, e a linha sem data de operação manda ''. Basta uma
+                // dessas para o DataTables tipar a coluna como string — e aí
+                // '10' vem antes de '9', que é a ordem do alfabeto, não a do
+                // atraso. Vazio vira -Infinity (o mesmo que o Notional faz) e
+                // todas as linhas sem aging ficam juntas numa ponta só.
+                col.render = function (d, t) {
+                    if (t === 'sort' || t === 'type') return num(d);
+                    return d == null ? '' : String(d);
+                };
+                col.className = 'mc-derived text-center';
             } else if (isDerived(name)) {
                 col.className = 'mc-derived text-center';
             }
@@ -542,7 +563,11 @@
             responsive: false, scrollX: true, scrollY: '60vh',
             scrollCollapse: true, autoWidth: true, orderCellsTop: true,
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
-            pageLength: 50, order: [[OFFSET, 'asc']],
+            // A tabela abre ordenada pelo Aging Confirmação, do menor para o
+            // maior. O índice sai do nome, não de um número: as colunas vêm do
+            // servidor (`BOOT.columns`) e um índice fixo passaria a apontar
+            // para a coluna vizinha assim que alguma fosse inserida antes.
+            pageLength: 50, order: [[agingIdx(), 'asc']],
             language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: 'Nenhuma confirmação registrada.' }
         });
     }
