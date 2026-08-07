@@ -180,13 +180,30 @@ Live Positions, o Track Confirmations e as três Recons).
      mínima que o corpo não tem.
 
   Confira o alinhamento em TODA tela nova antes de dar por pronta.
-- **Seleção de célula para copiar.** New Deals usa a extensão `select` do
-  DataTables (`items:'cell'`); todas as outras páginas usam o
-  **`static/js/table-std.js`**: `otcCellCopy('#id', { skip: [0, 1] })` (skip =
+- **Seleção de célula para copiar — em TODA tabela, sem exceção.** Há dois
+  caminhos, e conferir só um deles esconde metade das telas: New Deals e as três
+  de Intrag usam a extensão `select` do DataTables (`items:'cell'`); todas as
+  outras carregam o **`static/js/table-std.js`** e chamam
+  `otcCellCopy('#id', { skip: [0, 1] })` **depois do `.DataTable()`** (skip =
   checkbox e Actions). Mesmo visual (azul `#b3d7ff`/`#0066cc`, hover
   `cursor:cell`, flash verde ao copiar), Ctrl/Cmd+C copia com `\t`/`\n` (cola
   no Excel), Esc limpa. O helper é idempotente e delega no nó da tabela, então
-  sobrevive a redraws.
+  sobrevive a redraws; ele ignora cliques em `input`/`select`/`button`, então
+  convive com edição na linha. Numa página que monta **uma tabela por card**
+  (Accrual e MtM de Swap), a chamada é por tabela, dentro do laço — um seletor
+  fixo pegaria só a primeira.
+- **Linha de filtro por coluna: texto e placeholder centralizados**, e isso vem
+  do `visual-refresh.css` (`table thead th input[...]`), não de cada página. O
+  seletor é estrutural porque cada tela batiza a classe do próprio campo, e era
+  essa repetição que fazia a tela nova nascer sem a regra — 10 das 27 páginas
+  com filtro por coluna estavam sem ela.
+- **Números.** Valor sai em `#,##0.00`
+  (`toLocaleString('en-US', {min/maxFractionDigits: 2})`) com
+  `font-variant-numeric: tabular-nums`. **Taxa não é valor**: Strike fica com as
+  casas que tem (a Recon FXO usa 8) — duas casas fariam dois strikes diferentes
+  aparecerem iguais na tela. A formatação é **ortogonal**: só o `display`; o
+  `sort` sai pelo número cru (senão `1,000.00` vem antes de `9.00`) e o `filter`
+  pelo texto que está na tela, porque quem digita no filtro copia o que vê.
 - **Status** sempre como badge pill `bg-gradient` (mapa de cores por status).
 
 ---
