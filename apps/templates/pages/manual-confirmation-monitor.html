@@ -454,11 +454,15 @@
                        esc(d.name) + '</a>';
             }).join('') + '</div>');
         }
-        // Timeout de 30 s: sem ele, uma resposta que nunca chega (o servidor
+        // Timeout de 90 s: sem ele, uma resposta que nunca chega (o servidor
         // reiniciando embaixo da aba) deixava o spinner girando para sempre —
-        // "procurando" eterno é pior que dizer que não achou.
+        // "procurando" eterno é pior que dizer que não achou. Mas 30 s eram
+        // POUCO para o primeiro lote com o share frio (o scan da raiz + uma
+        // listagem por pasta, tudo pela rede): a página desistia e pintava
+        // 'no PDF' com o servidor ainda procurando — "antes demorava mas
+        // carregava, agora não aparece nada".
         var ctl = ('AbortController' in window) ? new AbortController() : null;
-        var timer = ctl && setTimeout(function () { ctl.abort(); }, 30000);
+        var timer = ctl && setTimeout(function () { ctl.abort(); }, 90000);
         fetch('/api/manual-confirmation/docs', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ items: itens }),

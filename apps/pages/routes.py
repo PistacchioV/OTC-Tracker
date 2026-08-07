@@ -28644,6 +28644,20 @@ def api_mc_docs_batch():
     itens = (request.get_json(silent=True) or {}).get('items') or []
     if not isinstance(itens, list):
         return jsonify({'error': 'items must be a list'}), 400
+    # Raiz inacessível é o diagnóstico que NENHUM item consegue dar sozinho:
+    # cada um só vê a própria pasta "inexistente". Um drive mapeado que o
+    # processo não enxerga produz exatamente um Monitor 100% 'no PDF'.
+    if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+        log.warning('[manual-conf] docs: raiz do Electronic Inventory inacessível '
+                    'deste processo: %s', ELECTRONIC_INVENTORY_ROOT)
+    else:
+        # Aquece o scan da raiz UMA vez por lote. Sem isto, com o cache frio
+        # (logo depois de um restart), cada item pagava a própria listagem da
+        # raiz inteira pela rede — 50 cards viravam 50 varreduras, o lote
+        # estourava o prazo da página e TODOS os cards diziam 'no PDF'. Quem
+        # aquecia o cache era a página do Electronic Inventory; a fila do
+        # Monitor não pode depender de alguém ter aberto outra tela.
+        _ei_scan_root(grace=10.0)
     out = []
     for it in itens[:200]:
         if not isinstance(it, dict):
