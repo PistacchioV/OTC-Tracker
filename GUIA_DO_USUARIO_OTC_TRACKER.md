@@ -270,9 +270,13 @@ A confirmação passa por uma esteira antes de sair: **OTC → MO e/ou FO → Ok
 4. **Validar** carimba a etapa com a data, a hora e o SPN de quem validou, e a confirmação passa para a etapa seguinte.
 5. **Rejeitar** (MO e FO) pede um comentário, avisa o Brazil OTC Ops por e-mail e devolve a confirmação para o OTC. As validações já dadas são apagadas: o documento vai ser refeito.
 
+> **Cada etapa é assinada pela mesa dela.** Pending OTC é do **Back Office**, Pending MO do **MO** e Pending FO do **FO** — o papel vem do seu cadastro em *Users & Roles*. Quem não é da mesa continua abrindo a confirmação e lendo o documento, mas o botão do card aparece como **View** e a tela de validação não mostra o *Validar* nem o *Devolver ao OTC*.
+
+**O prazo de cada mesa** (dias úteis contados da data da operação) é cadastrável em **Mapping → Manual Confirmations — SLA**: OTC D+3, MO D+4 e FO D+6 de fábrica. Os prazos não se somam — MO e FO correm em paralelo, os dois contados da mesma data de operação. Validar depois do prazo exige uma justificativa, que fica gravada na coluna daquela mesa.
+
 ![Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 
-A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa.
+A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa. Ela abre ordenada pelo **Aging Confirmação**, do menor para o maior.
 
 > As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, quando a confirmação é gerada no New Deals.
 
@@ -353,6 +357,8 @@ Rotinas disponíveis:
 - Pending Confirmation — Weekly Escalation
 - Pending Signature Confirmations — Collection
 - Deals Monitor — Pending Action
+
+> **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. Os demais mandam direto.
 
 ---
 

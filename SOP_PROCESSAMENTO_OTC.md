@@ -217,11 +217,13 @@ Fila das operações com confirmação pendente, para o operador acompanhar e tr
 
 Fila de validação da confirmação manual, na ordem **OTC → MO e/ou FO → Ok** (quem valida cada produto sai do cadastro *Manual Confirmations — Validation Trail*, em Mapping). Cada item é **uma confirmação** — contraparte × produto × LOB × data de negociação —, e não uma operação: o botão *Abrir* mostra o PDF gravado no Electronic Inventory, *Validar* carimba a etapa com data, hora e SPN, e *Rejeitar* (MO/FO) pede comentário, avisa o Brazil OTC Ops e devolve a confirmação ao OTC.
 
+**Cada etapa é assinada pela mesa dela**, pelo papel do usuário: Pending OTC é do Back Office, Pending MO do MO e Pending FO do FO. Quem não é da mesa abre a confirmação e lê o documento, mas não assina — o botão do card aparece como *View*. O **prazo** de cada mesa, em dias úteis contados da data da operação, é cadastrável em *Mapping → Manual Confirmations — SLA* (OTC D+3, MO D+4, FO D+6 de fábrica); validar fora do prazo exige justificativa, gravada na coluna daquela mesa.
+
 ![Manual Confirmation — Confirmations Monitor](docs/sop-screenshots/manual-confirmation_monitor.png)
 
 #### Manual Confirmation — Track Confirmations
 
-Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira.
+Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging Confirmação*, do menor para o maior.
 
 ![Manual Confirmation — Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 

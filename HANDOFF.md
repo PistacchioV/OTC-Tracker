@@ -10012,3 +10012,235 @@ A tela **Track Confirmations** ganhou a coluna de **Actions** (abrir · editar �
 e clicou em exportar quer o que está vendo — e os cards viraram filtro: clicar filtra a tabela pelo
 estágio, clicar de novo desliga. O card de MO e o de FO contam também as linhas em `Pending MO/FO`, que
 estão paradas nas duas mesas de verdade.
+
+## §219 — "No PDF in the folder": quatro causas empilhadas, cada uma escondendo a seguinte
+
+O Confirmations Monitor abria com os cards certos e **nenhum documento** — todos os itens diziam *no PDF
+in the confirmation folder*, com os arquivos intactos no share. Levou um dia porque eram quatro
+problemas em série, e cada um só apareceu depois de o anterior sair da frente.
+
+### 1. Código velho no disco
+
+A instância do time rodava uma versão anterior ao `caa2426`, em que os documentos vinham embutidos no
+payload do Monitor. O endpoint `POST /api/manual-confirmation/docs` **não existia ali** — o console
+mostrava o Monitor respondendo e mais nada, porque a chamada em lote nunca chegava. Antes de caçar bug,
+confira sempre as **três defasagens**: código velho no disco (pull não feito), processo velho na memória
+(waitress não reiniciado) e página velha no navegador (aba aberta desde antes do restart). As três
+produziram um "não funciona" diferente no mesmo dia.
+
+### 2. As pastas gêmeas de pontuação
+
+Antes de o casamento cego a pontuação existir (`_ei_match_key`), o app não achava `REFINARIA … S.A`
+partindo de uma linha que diz `… SA` — e **criava a gêmea sanitizada ao lado**. O share ficou com as
+duas, cada uma com uma parte dos documentos.
+
+O casamento cego resolveu a busca, mas o cache da raiz (`_EI_ROOT_CACHE['dirs']`) guarda **uma pasta por
+chave**: a última gêmea enumerada sombreava a outra, e se os PDFs estivessem na sombreada, sumiam. O
+cache passou a ter também `multi` (todas as pastas de cada chave) e `_ei_client_dir_names(client)`
+devolve a lista inteira. **Escrita continua tendo um destino único** (`_ei_actual_dir_name`) — duas
+pastas de escrita recriariam o problema pela outra ponta —, mas **leitura olha todas**: o
+`_mc_confirmation_docs` varre as gêmeas × as pastas de nome legado e deduplica por nome de arquivo, e o
+`api_ei_file` tenta cada base até achar o arquivo, com a trava de traversal aplicada **por base**.
+
+### 3. O diagnóstico saía num nível que o console descarta
+
+As três saídas silenciosas do `_mc_confirmation_docs` ganharam log — em `log.info`. O console do waitress
+imprime `INFO` **só do logger de requests**; log de módulo aparece a partir de `WARNING`. Foi por isso
+que os avisos de CSP apareciam e os meus não. Diagnóstico que precisa ser visto na instância do time vai
+em `log.warning`, e a mensagem diz o que foi tentado: a(s) pasta(s) do cliente com *existe / NÃO EXISTE*
+e a lista de caminhos relativos procurados.
+
+### 4. O ajuste de velocidade tinha trocado "demora" por "não aparece"
+
+O diagnóstico do usuário estava certo: *"antes demorava mas carregava, agora não aparece nada"*. Duas
+coisas somadas:
+
+- o cache da varredura da raiz era aquecido **só pela página do Electronic Inventory**. Com o cache
+  frio, cada item do lote re-listava a raiz do share inteira — 50 cards, 50 varreduras de rede. O
+  endpoint em lote passou a chamar `_ei_scan_root(grace=10.0)` **uma vez por lote**, antes de resolver
+  qualquer item;
+- a página abortava o `fetch` em **30 s** e pintava "no PDF" enquanto o servidor ainda procurava. O
+  código anterior não tinha prazo nenhum — daí "demorava, mas carregava". O timeout foi para **90 s**.
+
+A primeira carga depois de um restart ainda pode levar 1–2 minutos com o share frio; as seguintes são
+rápidas (cache de 60 s por pasta).
+
+### A réplica local
+
+Para provar tudo isso sem acesso à rede JPM: `ELECTRONIC_INVENTORY_ROOT` é uma variável de ambiente, e
+apontá-la para uma árvore falsa no scratchpad reproduz o share — inclusive as gêmeas. Foi assim que o
+bug da pasta sombreada foi confirmado.
+
+
+## §220 — A esteira ganha dono, prazo cadastrável e a Legal Entity que era um book
+
+### Cada etapa é assinada pela mesa dela
+
+Qualquer pessoa autenticada validava qualquer etapa. Agora vale o papel do usuário
+(`_MC_STAGE_ROLE`): **Pending OTC → `BO`** (a mesa de OTC Ops é o Back Office do cadastro de papéis),
+**Pending MO → `MO`**, **Pending FO → `FO`**. É o que separa as funções, e é a razão de a esteira ter
+três etapas: quem monta o documento não pode assiná-lo pela mesa seguinte logo em seguida.
+
+**Master passa; `ADMIN` não.** Master é o único que escapa de toda restrição no app (§5 do CLAUDE.md);
+administrar acessos, porém, não é sentar na mesa, e um admin assinando pelo MO desfaz a segregação que a
+regra existe para garantir. Quem é de mesa precisa do papel da mesa — vale conferir Users & Roles antes
+de subir isto, porque quem estiver sem papel de mesa perde o botão.
+
+**Rejeitar segue a mesma regra**: é a outra resposta à MESMA pergunta que o validar responde — o
+documento está certo?
+
+Três camadas, e a que vale é a última: no Monitor o botão verde *Validate* vira um *View* de contorno
+(o payload diz, por etapa, o que a sessão pode), na tela de validação somem os dois botões e entra uma
+faixa âmbar dizendo de quem é a etapa, e os dois endpoints devolvem **403 com `stage_forbidden`**. Sem a
+trava no endpoint, um POST direto assinaria pela mesa de qualquer um.
+
+**Abrir a tela continua livre de propósito.** O que some são os botões, não o documento: escondendo a
+confirmação, o OTC deixaria de ver o que o MO está conferindo. E o botão de validar **continua no DOM**
+quando está escondido — o script o usa para acompanhar o checklist, e um `null` ali derrubaria o resto
+da página (a troca de PDF vem depois dele).
+
+### O prazo virou cadastro
+
+Os SLAs estavam fixos no código. Viraram o mapping **`manual-conf-sla`** (uma linha por mesa), com o
+`SLA_BIZDAYS` rebaixado a **fallback** com os valores históricos — o comportamento é idêntico até alguém
+editar a tabela. O seed e o `upgrade` moram no `manual_conf`, e não no `routes`, pelo mesmo motivo do
+cadastro de validação: quem lê a regra a cada linha do Monitor é aquele módulo, e ele não importa o
+`routes`.
+
+Duas decisões: `sla_days()` é **cacheado por mtime** porque o Monitor pergunta o prazo três vezes por
+linha e edição na tela precisa valer no request seguinte; e **prazo em branco devolve o valor
+histórico**, não "sem prazo" — uma célula limpa pela tela apagaria o vermelho de toda confirmação
+atrasada em silêncio.
+
+### Legal Entity: era o nome do BOOK
+
+A coluna trazia `ALUM-BRAZIL-BANCO`, `BANCO_Crude_Brazil_NA`, `AGS-BRAZIL-BANCO`. Só as páginas
+genéricas de NDF trazem a entidade no deal (campo `LE`, resolvido do Settlement Location pelo
+`le-accronym`); mercadoria e FXO **não têm o campo**, e o `first('LE', 'TradingBook')` caía no book, que
+não é entidade nenhuma.
+
+`_mc_legal_entity` resolve pelo produto: **mercadoria é sempre JPM** (a mesa booka termo e opção de
+commodity no Banco J.P. Morgan, é uma entidade só) e **FXO fica em branco** quando o deal não diz — em
+branco pede cadastro, enquanto o nome do book afirmava uma entidade errada. A razão social sai do
+cadastro **`le-spn`** (LE → NAME), nunca de um literal: é de lá que o resto do app lê a identidade da
+entidade, e é a grafia que as linhas vindas da planilha já usam. Vale para o que for mapeado daqui para
+a frente; as linhas já gravadas se corrigem pela edição em massa do Track.
+
+### O Track abre pelo aging
+
+A tabela abria pela coluna *Pending*, que é a primeira. Passa a abrir por **Aging Confirmação
+crescente**, e o índice sai do **nome** da coluna, não de um número — as colunas vêm do servidor e um
+índice fixo passaria a apontar para a vizinha assim que alguma fosse inserida antes. Junto foi a
+ordenação **numérica**: o servidor manda o aging como TEXTO e a linha sem data de operação manda vazio;
+basta uma dessas para o DataTables tipar a coluna como string, e aí `104` vem antes de `9`.
+
+
+## §221 — O que a tela diz sobre a confirmação: três números que não fechavam
+
+### Daily Metric: 177 no cartão, 167 na barra
+
+O cartão mostrava a leitura **ao vivo** e a última barra do gráfico o **último snapshot em disco**, com o
+badge de variação calculado sobre a barra. Quem lia não tinha como saber se o `+9%` ia de 153 para 167
+ou para 177.
+
+Mês e dia **em curso não estão fechados**: o valor deles é o de agora, que é o que este e-mail reporta e
+o que a tabela por grupo econômico logo abaixo soma. `_pc_metrics_stamp_now` carimba a leitura viva no
+ponto corrente e **refaz o `pct`** — sem recalcular, a barra subiria e a variação continuaria a do
+snapshot, trocando uma incoerência por outra. Sem ponto para o período em curso ele cria um: no dia 1º
+de um mês novo a última barra era a do mês anterior.
+
+A página `/metrics-pending-confirmation` não muda: lá tudo vem da mesma série de snapshots, e portanto
+já é coerente consigo mesma.
+
+### O aviso da esteira não levava a lugar nenhum
+
+A página da notificação é `'Confirmation'`, que **não estava no `_NOTIF_PAGE_URL`** — e sem destino o
+clique no sino não faz nada. Entrou nas **três** cópias do mapa (`routes.py`, `partials/topbar.html` e
+`static/js/sw-push.js`), apontando para o Confirmations Monitor. O rótulo continua `'Confirmation'`, e
+não vira `'Manual Confirmation'`, porque é o que as notificações **já gravadas** carregam: renomear
+deixaria o histórico do sino sem destino.
+
+O texto ia em português com a tela em inglês. O detalhe é **gravado no banco** e o feed o mostra cru,
+então ele nasce em INGLÊS como todo o resto do sino (`Validated by OTC · …`). As notificações antigas
+continuam em português — o texto está no banco.
+
+De quebra, o aviso de reject usava uma variável `key` que **nunca existiu** naquela função; só não
+estourava porque o `or` à esquerda quase sempre tem o Cliente preenchido.
+
+### O card de Confirmations do New Deals Monitor parava em "Generated"
+
+Ele mostra agora **um ciclo só**, do documento até a assinatura: `New → Generated → … → Success` é a
+geração e `Pending OTC → Pending MO/FO → Ok` é a esteira. Quando o grupo já tem linha na esteira, a
+etapa dela **vence** o status do documento (mostrar `Generated` numa confirmação já em Pending MO é
+parar o relógio na metade), e o anel de progresso só fecha em verde no `Ok`. As cores dos chips são as
+**mesmas** do Confirmations Monitor: as duas telas mostram a mesma fila.
+
+O join é pelos **Trade IDs** (`_conf_segregate` passou a coletar `Deal` e `B3_ID` de cada grupo), nunca
+por contraparte × mercadoria — os dois lados normalizam nome e mercadoria de jeitos diferentes, e um
+de-para por texto casaria errado em silêncio. Os dois identificadores vão juntos porque a chave da
+esteira é o Deal para quase todo produto e o **B3 ID** para o FWD Start.
+
+O grupo vale pela operação **menos avançada** (`_CONF_STAGE_ORDER`) — dizer `Ok` porque uma das dez foi
+validada esconderia as nove restantes —, e operação que **ainda não entrou** na esteira não conta, senão
+um documento recém-gerado nasceria vermelho. O índice é lido **uma vez por request** e passado aos
+quatro cards: dentro do `_conf_stage_counts` ele abriria os dois DuckDB oito vezes na mesma tela.
+
+
+## §222 — Thread de scheduler não tem application context
+
+O aviso de pendências das 19:00/19:30 do Deals Monitor falhava com **`RuntimeError: Working outside of
+application context`** e o e-mail não saía.
+
+O scheduler roda numa **thread própria**, e lá não existe application context. `render_template` (o
+corpo do aviso) exige um — e o `_get_logo_path` também, porque lê `current_app.root_path`.
+
+**O sintoma engana**: o botão *Run* do Control Panel funciona, porque roda dentro de um request e ganha
+o contexto de graça. Só o automático falha, e o único lugar onde isso aparece é a linha vermelha do
+card.
+
+`_app_context()` resolve — no-op dentro de um request, e fora dele entra no contexto do app capturado no
+**`record_once` do blueprint**, que é o único momento em que o app existe e este módulo é alcançável (a
+fábrica `create_app` importa as rotas, então guardar a referência ao contrário seria circular).
+
+Dois detalhes:
+
+- o `with` envolve a **montagem inteira** da mensagem, não só o `render_template`. Envolvendo só ele, o
+  erro reaparece três linhas abaixo, no logo. O **SMTP fica de fora**: rede não precisa de contexto e não
+  é para segurá-lo durante o envio;
+- uma varredura pelas cinco threads de scheduler mostrou que esta é a **única** que renderiza template ou
+  toca `current_app`. Pending Confirmation, as duas da Athena e o box scan não precisam de contexto.
+
+O horário que falha é **devolvido** pela própria rotina (o slot só fica reservado quando o envio dá
+certo, §207), então o catch-up retenta na volta seguinte: depois do pull e do restart o aviso do dia sai
+sozinho, sem apertar o Run. O `check_ndm_pending_sched.py` passa a disparar o envio de dentro de uma
+thread, sem request — que é exatamente o caminho que quebrou e que nenhuma asserção cobria.
+
+
+## §223 — A Weekly Escalation vira rascunho, não envio direto
+
+A escalação CEM/EDG saía pelo SMTP no clique do *Run*: quem apertava o botão só descobria o que tinha
+ido depois de ir. É uma cobrança **nominal a banqueiros**, com nome de cliente e contagem por empresa —
+quem assina quer ler antes.
+
+Passa a seguir o caminho do **Daily Metric**, que é o outro card de e-mail do painel:
+`_build_weekly_escalation_eml` devolve os bytes do `.eml` com `X-Unsent: 1`, a página salva o arquivo e o
+Outlook o abre como rascunho editável. Sem SMTP nenhum na rotina.
+
+O TO/CC salvo continua o mesmo cadastro, com uma diferença de sentido: ele agora **pré-preenche** o
+rascunho em vez de endereçar um envio — e por isso vai nos **cabeçalhos** da mensagem, não num envelope.
+
+A notificação mudou junto (`Weekly Escalation Draft`, *draft generated*): ela dizia *e-mailed*, e
+continuar dizendo isso descreveria um envio que não acontece mais.
+
+### E na Recon FXO, no mesmo dia
+
+A coluna de comentário ficou **centralizada** (o `text-align:left` veio de carona com o recorte por
+largura; o limite e o ellipsis continuam, senão uma justificativa longa empurra as ~38 colunas para
+fora). E o **Export** ganhou Excel, Print e PDF: a matriz é montada à mão — é isso que garante o "exporta
+o que está na tela" —, mas xlsx e PDF ninguém escreve à mão, então entraram pelo **Buttons** do
+DataTables, já vendorizado no repo.
+
+Duas armadilhas: o Buttons precisa ser criado **sob demanda e re-vinculado**, porque o `buildTable`
+destrói e recria a DataTable quando as colunas chegam do servidor — um Buttons preso à instância
+anterior morre junto, **sem erro no console**, deixando um menu que não faz nada. E o PDF sai em **A3
+paisagem, fonte 6 e larguras proporcionais**: em retrato as colunas estouram a folha em silêncio.
