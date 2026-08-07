@@ -495,6 +495,43 @@ def _ei_actual_dir_name(folder):
     return folder
 
 
+def _ei_client_dir_names(client):
+    """TODAS as pastas da raiz que casam com esta contraparte (cega à pontuação).
+
+    Antes de o casamento ignorar pontuação, o app não achava a pasta 'S.A' a
+    partir da linha 'SA' e criava a gêmea sanitizada ao lado — o share guarda as
+    DUAS, com documentos repartidos entre elas. `_ei_actual_dir_name` devolve UM
+    nome por chave (é o contrato certo para ESCRITA, que precisa de um destino
+    só); a LEITURA tem de olhar em todas, senão a gêmea vencedora do scan
+    sombreia a outra e o PDF que está nela "não existe".
+
+    Sempre devolve ao menos o nome sanitizado, para a leitura degradar para o
+    comportamento antigo quando não há gêmea nenhuma."""
+    folder = _ei_sanitize(client)
+    if not folder:
+        return []
+    key = _ei_match_key(folder)
+    nomes = []
+    try:
+        with _EI_ROOT_CACHE_LOCK:
+            complete = bool(_EI_ROOT_CACHE.get('complete'))
+            if complete:
+                nomes = list((_EI_ROOT_CACHE.get('multi') or {}).get(key) or [])
+    except Exception:
+        complete, nomes = False, []
+    if not nomes and not complete:
+        # Scan ainda correndo: uma listagem direta é lenta mas correta — e é o
+        # mesmo fallback que `_ei_actual_dir_name` já paga nesse estado.
+        try:
+            if os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
+                nomes = [e for e in os.listdir(ELECTRONIC_INVENTORY_ROOT)
+                         if _ei_match_key(e) == key
+                         and os.path.isdir(os.path.join(ELECTRONIC_INVENTORY_ROOT, e))]
+        except Exception:
+            nomes = []
+    return nomes or [folder]
+
+
 def _ensure_counterparty_folders(company):
     """Create ELECTRONIC_INVENTORY_ROOT\\<company>\\{Confirmations,Transactional,SSI}
     if missing. Tolerant existence match (case/whitespace/illegal-char insensitive)
@@ -28487,31 +28524,38 @@ def _mc_confirmation_docs(row, trades=None):
             log.info('[manual-conf] docs: linha sem pasta derivável — Cliente=%r Produto=%r Data=%r',
                      row.get('Cliente'), row.get('Produto'), row.get('Data Operação'))
             return []
-        base = _ei_resolve_client_dir(cliente)
-        if not base:
+        nomes_disco = _ei_client_dir_names(cliente)
+        if not nomes_disco:
             log.info('[manual-conf] docs: cliente %r não resolveu para pasta nenhuma', cliente)
             return []
+        # TODAS as gêmeas de pontuação da contraparte ('S.A' e 'SA'), não só a
+        # vencedora do scan: os documentos ficaram repartidos entre elas na
+        # época em que o app criava a pasta sanitizada por não achar a humana.
+        bases = [os.path.join(ELECTRONIC_INVENTORY_ROOT, n) for n in nomes_disco]
         out, vistos = [], set()
-        for rel in rels:
-            folder = os.path.join(base, *rel.split('/'))
-            for name in _mc_folder_pdfs(folder):
-                # O mesmo documento pode ter sido copiado para as duas pastas na
-                # transição. Mostrar duas vezes o que se abre igual só faria a
-                # pessoa conferir duas vezes o mesmo papel.
-                if name.lower() in vistos:
-                    continue
-                vistos.add(name.lower())
-                out.append({'name': os.path.splitext(name)[0],
-                            'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
-                                    '&rel=' + quote(rel + '/' + name))})
+        for base in bases:
+            for rel in rels:
+                folder = os.path.join(base, *rel.split('/'))
+                for name in _mc_folder_pdfs(folder):
+                    # O mesmo documento pode ter sido copiado para as duas
+                    # pastas na transição. Mostrar duas vezes o que se abre
+                    # igual só faria a pessoa conferir duas vezes o mesmo papel.
+                    if name.lower() in vistos:
+                        continue
+                    vistos.add(name.lower())
+                    out.append({'name': os.path.splitext(name)[0],
+                                'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
+                                        '&rel=' + quote(rel + '/' + name))})
         if not out:
             # O diagnóstico que faltava: qual caminho o servidor tentou, e se a
             # pasta do cliente sequer existe — é a diferença entre "o nome da
             # pasta não bate" e "o documento não está lá".
-            base_existe = os.path.isdir(_ei_long_path(os.path.normpath(os.path.abspath(base))))
-            log.info('[manual-conf] docs: nenhum PDF para %r — pasta do cliente %s (%s); tentadas: %s',
-                     cliente, base, 'existe' if base_existe else 'NAO EXISTE',
-                     ' | '.join(rels))
+            estados = ', '.join(
+                '%s (%s)' % (b, 'existe' if os.path.isdir(
+                    _ei_long_path(os.path.normpath(os.path.abspath(b)))) else 'NAO EXISTE')
+                for b in bases)
+            log.info('[manual-conf] docs: nenhum PDF para %r — pasta(s) do cliente: %s; tentadas: %s',
+                     cliente, estados, ' | '.join(rels))
             return []
         # A pasta do dia tem UM PDF por confirmação (MATARIPE - OLEO - … nº
         # DBH-1OJ8L5, MATARIPE - PLATTS - … nº DBH-1OJAXM), e o filtro tem de
@@ -29107,7 +29151,8 @@ def _ei_iter_files(base, doctype):
 # thread that fills this cache; requests serve whatever is cached and never wait
 # more than a short grace period. `complete` distinguishes "scanned, folder truly
 # absent" from "not scanned yet" so the UI never shows a false "no folder" badge.
-_EI_ROOT_CACHE = {'ts': 0.0, 'exists': None, 'dirs': {}, 'complete': False, 'scanning': False}
+_EI_ROOT_CACHE = {'ts': 0.0, 'exists': None, 'dirs': {}, 'multi': {},
+                  'complete': False, 'scanning': False}
 _EI_ROOT_CACHE_TTL = 300.0       # seconds a completed scan stays fresh
 _EI_ROOT_CACHE_LOCK = threading.Lock()
 
@@ -29115,7 +29160,7 @@ _EI_ROOT_CACHE_LOCK = threading.Lock()
 def _ei_scan_root_worker():
     """Full (unbounded) share scan → fills _EI_ROOT_CACHE. Runs in a daemon thread
     so the slow enumeration never blocks the request that triggered it."""
-    exists, dirs, ok = False, {}, False
+    exists, dirs, multi, ok = False, {}, {}, False
     try:
         exists = os.path.isdir(ELECTRONIC_INVENTORY_ROOT)
         if exists:
@@ -29126,7 +29171,15 @@ def _ei_scan_root_worker():
                             # A chave do cache é a MESMA do lookup
                             # (_ei_match_key): pontuação fora, senão a pasta
                             # 'S.A' nunca casa com a linha 'SA'.
-                            dirs[_ei_match_key(entry.name)] = entry.name
+                            key = _ei_match_key(entry.name)
+                            dirs[key] = entry.name
+                            # Gêmeas de pontuação têm a MESMA chave: antes do
+                            # casamento cego à pontuação o app não achava a
+                            # pasta 'S.A' e criava a 'SA' ao lado — o share
+                            # guarda as DUAS, com documentos repartidos entre
+                            # elas. Com uma entrada só, a última enumerada
+                            # SOMBREAVA a outra e o que estava nela "sumia".
+                            multi.setdefault(key, []).append(entry.name)
                     except OSError:
                         continue
         ok = True
@@ -29134,7 +29187,8 @@ def _ei_scan_root_worker():
         log.warning('[ei] scanning root failed:\n%s', traceback.format_exc())
     with _EI_ROOT_CACHE_LOCK:
         if ok:
-            _EI_ROOT_CACHE.update(ts=time.time(), exists=exists, dirs=dirs, complete=True)
+            _EI_ROOT_CACHE.update(ts=time.time(), exists=exists, dirs=dirs,
+                                  multi=multi, complete=True)
         _EI_ROOT_CACHE['scanning'] = False
 
 
@@ -29248,23 +29302,31 @@ def api_ei_file():
     client = (request.args.get('client') or '').strip()
     rel = (request.args.get('rel') or '').strip()
     download = request.args.get('download') in ('1', 'true', 'yes')
-    base = _ei_resolve_client_dir(client)
-    if not base or not rel:
+    if not client or not rel:
         return abort(404)
-    # Path-traversal guard. Deliberately NOT os.path.realpath: on Windows it
-    # resolves the mapped drive (I:) to its UNC target, swapping 3 chars for ~37
-    # and pushing a deep Confirmations path over MAX_PATH — the file then 404s
-    # even though it is right there on the share. normpath collapses '..' and
-    # '.' textually, which is exactly what this guard needs; an absolute or
-    # drive-qualified `rel` escapes base and is caught by the same comparison.
-    base_abs = os.path.normpath(os.path.abspath(base))
-    full = os.path.normpath(os.path.join(base_abs, rel))
-    if not (full == base_abs or full.startswith(base_abs + os.sep)):
-        return abort(400)
+    # O arquivo pode estar em QUALQUER gêmea de pontuação da contraparte
+    # ('S.A' ou 'SA') — a mesma razão pela qual a busca de docs olha em todas.
+    full = None
+    for nome in _ei_client_dir_names(client):
+        # Path-traversal guard. Deliberately NOT os.path.realpath: on Windows it
+        # resolves the mapped drive (I:) to its UNC target, swapping 3 chars for
+        # ~37 and pushing a deep Confirmations path over MAX_PATH — the file
+        # then 404s even though it is right there on the share. normpath
+        # collapses '..' and '.' textually, which is exactly what this guard
+        # needs; an absolute or drive-qualified `rel` escapes base and is
+        # caught by the same comparison.
+        base_abs = os.path.normpath(os.path.abspath(
+            os.path.join(ELECTRONIC_INVENTORY_ROOT, nome)))
+        cand = os.path.normpath(os.path.join(base_abs, rel))
+        if not (cand == base_abs or cand.startswith(base_abs + os.sep)):
+            return abort(400)
+        cand = _ei_long_path(cand)
+        if os.path.isfile(cand):
+            full = cand
+            break
+    if not full:
+        return abort(404)
     name = os.path.basename(full)
-    full = _ei_long_path(full)
-    if not os.path.isfile(full):
-        return abort(404)
     try:
         return send_file(full, as_attachment=download, download_name=name)
     except TypeError:   # Flask < 2.0
