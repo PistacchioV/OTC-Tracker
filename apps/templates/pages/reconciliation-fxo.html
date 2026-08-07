@@ -186,7 +186,7 @@
    corta com reticências (o título no hover mostra o inteiro). Sem o limite, uma
    justificativa de duas linhas empurraria as 38 colunas para fora da tela. */
 #fxo-table td.fxo-comment {
-    text-align:left; max-width:16rem;
+    text-align:center; max-width:16rem;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 #fxo-table td.fxo-comment input { font-size:.72rem; min-width:12rem; }
@@ -382,8 +382,11 @@
                     <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
                 </button>
                 <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" id="fxoExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
                     <li><a class="dropdown-item" href="#" id="fxoExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                    <li><a class="dropdown-item" href="#" id="fxoExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="#" id="fxoExportExcel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
+                    <li><a class="dropdown-item" href="#" id="fxoExportPrint"><i class="ti ti-printer me-1"></i> Print</a></li>
+                    <li><a class="dropdown-item" href="#" id="fxoExportPdf"><i class="ti ti-file-text me-1"></i> PDF</a></li>
                 </ul>
             </div>
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
@@ -461,6 +464,15 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<!-- Buttons só pelos FORMATOS (Excel/PDF/Print). O menu Export continua sendo o
+     <ul> desta página — o dropdown do Buttons traria outro visual de botão, e a
+     toolbar é padronizada no app inteiro. -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
@@ -963,8 +975,71 @@
             if (!table) return;
             var txt = fxoMatrix().map(function (l) { return l.join('\t'); }).join('\n');
             (window.otcCopyText ? otcCopyText(txt) : navigator.clipboard.writeText(txt))
-                .then(function () { Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false }); });
+                .then(function () { Swal.fire({ icon: 'success', title: t('copied'), timer: 1200, showConfirmButton: false }); });
         });
+
+        // Excel / Print / PDF saem pelo Buttons do DataTables — são formatos que
+        // ninguém escreve à mão (xlsx é um zip, o PDF precisa de layout). O que
+        // eles exportam é o MESMO contrato do CSV acima: `columns` recusa o
+        // checkbox e o Actions (índice < OFFSET) e as ocultas, e o `modifier`
+        // manda a ordenação e os filtros da tela, com todas as páginas.
+        //
+        // Os botões são criados SEM container visível e disparados pelos itens
+        // do menu desta página: o dropdown do próprio Buttons traria outro
+        // visual de botão, e a toolbar é padronizada no app inteiro.
+        var expOpts = {
+            columns: function (idx) { return idx >= OFFSET && table.column(idx).visible(); },
+            modifier: { page: 'all', search: 'applied', order: 'applied' }
+        };
+        // O título é lido A CADA export (função, não string): a data da recon
+        // muda pelo campo, e um título calculado uma vez ficaria preso à data em
+        // que a página abriu.
+        function titulo() { return 'Recon FXO ' + ($('#fxo-date').val() || ''); }
+
+        // O Buttons é criado SOB DEMANDA e amarrado à instância atual da tabela.
+        // `buildTable` destrói e recria a DataTable quando as colunas chegam do
+        // servidor, e um Buttons preso à instância anterior morre junto — sem
+        // erro nenhum, só um menu que não faz nada.
+        var btns = null, btnsFor = null;
+        function exportButtons() {
+            if (btns && btnsFor === table) return btns;
+            if (btns) { try { btns.destroy(); } catch (e) {} }
+            btns = new $.fn.dataTable.Buttons(table, {
+                buttons: [
+                    { extend: 'excel', title: titulo, filename: 'recon-fxo', exportOptions: expOpts },
+                    { extend: 'print', title: titulo, exportOptions: expOpts },
+                    // A recon tem ~38 colunas: retrato cortaria a tabela em silêncio.
+                    { extend: 'pdf', title: titulo, filename: 'recon-fxo',
+                      orientation: 'landscape', pageSize: 'A3', exportOptions: expOpts,
+                      customize: function (doc) {
+                          doc.defaultStyle.fontSize = 6;
+                          // Sem largura por coluna o pdfmake dá a MESMA a todas,
+                          // e as 38 da recon estouram a folha; '*' reparte o que
+                          // há entre elas.
+                          if (doc.content && doc.content[1]) {
+                              doc.content[1].table.widths = Array(
+                                  doc.content[1].table.body[0].length).fill('*');
+                          }
+                      } }
+                ]
+            });
+            btnsFor = table;
+            // O container vai para fora da tela: o handler de cada botão é
+            // delegado a partir dele, então ele precisa existir — mas o menu
+            // que se vê é o <ul> desta página, não o do Buttons.
+            btns.container().addClass('d-none').appendTo('body');
+            return btns;
+        }
+        function dispara(i) {
+            return function (e) {
+                e.preventDefault();
+                if (!table) return;
+                exportButtons().container().find('.dt-button').eq(i).trigger('click');
+            };
+        }
+        $('#fxoExportExcel').on('click', dispara(0));
+        $('#fxoExportPrint').on('click', dispara(1));
+        $('#fxoExportPdf').on('click', dispara(2));
 
         $('#btnClearFilters').on('click', function () {
             activeStatus = activeField = '';
