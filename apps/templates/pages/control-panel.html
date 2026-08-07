@@ -491,8 +491,10 @@
                     <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
                     <p class="cp-card__desc" data-lang="cp-r-we-desc">
                         Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
-                        (CEM / EDG), grouped by banker and broken down by company. Set the TO / CC once —
-                        they are saved and reused on every run.
+                        (CEM / EDG), grouped by banker and broken down by company. Builds it as an
+                        Outlook draft (.eml download) addressed to the saved recipients — open the file
+                        to review and send it yourself. Set the TO / CC once — they are saved and reused
+                        on every run.
                     </p>
                     <div class="cp-field">
                         <label data-lang="cp-dm-to">TO</label>
@@ -506,7 +508,7 @@
                     </div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → e-mail</span>
+                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → .eml draft</span>
                         </span>
                         <button type="button" class="cp-run-btn" data-escalation-run>
                             <i class="ti ti-player-play"></i>
@@ -973,6 +975,19 @@ document.addEventListener('click', function (e) {
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
             if (res.ok && res.body && res.body.success !== false) {
+                // A rotina não envia mais: devolve o e-mail como rascunho .eml
+                // (base64) salvo localmente — a pessoa abre no Outlook, revisa e
+                // envia. Mesmo caminho do Daily Metric.
+                if (res.body.b64) {
+                    var bin = atob(res.body.b64);
+                    var bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    var url = URL.createObjectURL(new Blob([bytes], { type: 'message/rfc822' }));
+                    var a = document.createElement('a');
+                    a.href = url; a.download = res.body.filename || 'weekly_escalation_draft.eml';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+                }
                 Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
                             html: res.body.message || t('cp-done-msg', 'Done.'), confirmButtonColor: '#0066cc' });
             } else {

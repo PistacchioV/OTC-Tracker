@@ -4306,9 +4306,14 @@ def _pc_weekly_escalation(rows):
     return out
 
 
-def _send_weekly_escalation_email(ref, to_list, cc_list):
-    """Deliver the CEM/EDG weekly escalation e-mail to the saved recipients.
-    Best-effort — returns True or an error string."""
+def _build_weekly_escalation_eml(ref, to_list, cc_list):
+    """Build the CEM/EDG weekly escalation as an Outlook draft (.eml bytes,
+    X-Unsent) instead of delivering it — the person downloads the file, reviews
+    and sends it themselves. Returns (bytes, None) or (None, error string).
+
+    Mesma entrega do Daily Metric, e pela mesma razão: é uma cobrança nominal a
+    banqueiros, então quem assina quer ler antes de sair. Como rascunho o TO/CC
+    salvo vira o TO/CC pré-preenchido, e não o destinatário de um envio."""
     from email.mime.image import MIMEImage
     try:
         ref_fmt = ref.strftime('%d/%m/%Y')
@@ -4324,6 +4329,7 @@ def _send_weekly_escalation_email(ref, to_list, cc_list):
             msg['To'] = ', '.join(to_list)
         if cc_list:
             msg['Cc'] = ', '.join(cc_list)
+        msg['X-Unsent'] = '1'               # → Outlook abre o .eml como rascunho editável
         alt = MIMEMultipart('alternative')
         alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
         alt.attach(MIMEText(html, 'html', 'utf-8'))
@@ -4336,14 +4342,12 @@ def _send_weekly_escalation_email(ref, to_list, cc_list):
             limg.add_header('Content-Disposition', 'inline', filename='logo.png')
             msg.attach(limg)
         _attach_email_gradient(msg)
-        recipients = to_list + cc_list
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
-            server.sendmail(SHARED_MAILBOX, recipients, msg.as_string())
-        log.info('[weekly-escalation] e-mail sent — to=%s cc=%s (source=%s)', to_list, cc_list, source)
-        return True
+        log.info('[weekly-escalation] draft built — to=%s cc=%s (%d LOB, source=%s)',
+                 to_list, cc_list, len(blocks), source)
+        return msg.as_bytes(), None
     except Exception as e:
-        log.error('[weekly-escalation] e-mail FAILED:\n%s', traceback.format_exc())
-        return '{}: {}'.format(type(e).__name__, e)
+        log.error('[weekly-escalation] draft FAILED:\n%s', traceback.format_exc())
+        return None, '{}: {}'.format(type(e).__name__, e)
 
 
 @blueprint.route('/api/control-panel/weekly-escalation/recipients', methods=['GET', 'POST'])
@@ -4364,7 +4368,8 @@ def api_cp_weekly_escalation_recipients():
 
 @blueprint.route('/api/control-panel/weekly-escalation/run', methods=['POST'])
 def api_cp_weekly_escalation_run():
-    """Send the CEM/EDG weekly escalation e-mail to the saved recipients."""
+    """Build the CEM/EDG weekly escalation as a downloadable .eml draft (X-Unsent)
+    for the saved recipients — the person opens it in Outlook, reviews and sends."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
@@ -4378,14 +4383,19 @@ def api_cp_weekly_escalation_run():
     if not (to_list or cc_list):
         return jsonify({'success': False,
                         'error': 'Nenhum destinatário salvo. Preencha TO/CC antes de rodar.'}), 400
-    result = _send_weekly_escalation_email(ref, to_list, cc_list)
-    if result is not True:
-        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    raw, err = _build_weekly_escalation_eml(ref, to_list, cc_list)
+    if err:
+        return jsonify({'success': False, 'error': 'Draft failed: {}'.format(err)}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Weekly Escalation Sent', 'Control Panel',
-                         'CEM/EDG weekly escalation e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
+                         'Weekly Escalation Draft', 'Control Panel',
+                         'CEM/EDG weekly escalation draft generated ({})'.format(ref.strftime('%Y-%m-%d')))
+    n = len(to_list) + len(cc_list)
+    # O .eml vai como base64 no JSON e a página salva o arquivo — o mesmo caminho
+    # do Daily Metric, que é o outro card do painel que gera rascunho.
     return jsonify({'success': True,
-                    'message': 'Weekly Escalation enviado para {} destinatário(s).'.format(len(to_list) + len(cc_list))})
+                    'filename': 'Weekly_Escalation_CEM_EDG_{}.eml'.format(ref.strftime('%d%m%Y')),
+                    'b64': base64.b64encode(raw).decode('ascii'),
+                    'message': 'Draft gerado com {} destinatário(s). Abra o arquivo baixado no Outlook para revisar e enviar.'.format(n)})
 
 
 # ══════════════════════════════════════════════════════════════════════════
