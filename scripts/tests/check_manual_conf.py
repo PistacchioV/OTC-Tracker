@@ -453,7 +453,14 @@ check('o card do Monitor não rejeita', 'data-mc-reject' in MON, False)
 check('   e o Validate abre a tela de validação',
       '/manual-confirmation/validate?stage=' in MON, True)
 HTML = cl.get('/manual-confirmation/track').data.decode('utf-8')
-check('a tela recebe as colunas do servidor', 'var COLUMNS = [' in HTML, True)
+# O que vem do servidor sai num bloco `application/json`, e não interpolado no
+# meio do JS: `var X = {{ … }}` roda, mas o editor lê o <script> como JavaScript
+# puro e acusa erro de sintaxe numa página que funciona.
+import json as _json                                                # noqa: E402
+_boot = _json.loads(HTML.split('id="mc-boot">')[1].split('</script>')[0])
+check('a tela recebe as colunas do servidor', _boot['columns'], list(M.COLUMNS))
+check('   pelo bloco de dados, sem Jinja no meio do JS',
+      ('var COLUMNS = BOOT.columns' in HTML, '{{' in HTML), (True, False))
 check('   e não tem uma lista própria', "'Conferido OTC'" in HTML, False)
 check('o Trade ID fica fora da edição em massa',
       "c !== KEY" in HTML and 'isDerived(c)' in HTML, True)
