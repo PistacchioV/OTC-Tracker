@@ -652,6 +652,64 @@ Confirmation e parou ali; é para isso que existe o
 `_MC_CONFIRMATION_SOURCES` geram documento: NDF Vanilla e Other Publisher
 ficam de fora de propósito.
 
+### O prazo da esteira, e por que ele é em dias ÚTEIS
+
+Cada mesa tem um SLA contado da **DATA DA OPERAÇÃO** (trade date) e não da data
+em que a confirmação foi gerada — o prazo é do trade, e gerar o documento com
+atraso não compra tempo novo. `SLA_BIZDAYS`: **OTC D+3, MO D+4, FO D+6**. Eles
+não se somam: MO e FO correm em paralelo depois do OTC, e os dois contam do
+mesmo trade date.
+
+**Dias úteis pelo calendário ANBIMA**, o mesmo `static/data/anbima.json` que o
+resto do app usa (`manual_conf` relê o arquivo em vez de importar o `routes`, que
+seria circular — o que se repete é a leitura, não o dado). O `aging` também é em
+dias úteis: contando corridos, a confirmação de sexta-feira nascia com três dias
+de atraso na segunda, e o vermelho aparecia sem ninguém ter deixado de
+trabalhar.
+
+`sla_state()` devolve a luz — `ok` (2+ dias de folga), `warn` (véspera ou o
+próprio dia), `late`, e **`done` para a etapa já validada**: o prazo dela parou
+de correr, e mantê-la vermelha cobraria um trabalho que já foi feito. No Monitor
+o item vale pela operação **mais apertada** do grupo (um documento cobre várias
+operações; se uma estourou, o grupo estourou). O verde é neutro no card de
+propósito — pintar o que está no prazo é pintar quase a fila inteira, e aí o
+vermelho some no meio.
+
+**Passado o prazo, a validação exige justificativa.** `mark_validated` levanta
+`SlaCommentRequired` e o endpoint devolve **409 com `sla_comment_required`** —
+409 e não 400 porque o pedido está bem formado, o *estado* é que pede mais um
+campo. O motivo vai para a coluna daquela mesa (`OTC Comments`, `MO Comments`,
+`FO Comments`) — uma por etapa, porque o atraso do MO não explica o do FO e um
+campo único faria a segunda mesa sobrescrever a explicação da primeira. A tela é
+onde se pede; o endpoint é onde se garante.
+
+### Validar é abrir o documento, não clicar num botão
+
+O Validate do Monitor abre **`/manual-confirmation/validate`** (PDF do Electronic
+Inventory de um lado, checklist do outro), e não carimba no clique: quem assina
+está dizendo que olhou o documento.
+
+Ela é **irmã** da `confirmations/validate.html` (o checklist do OTC no New Deals)
+e não uma evolução dela — aquela valida a confirmação que a tela de geração
+acabou de produzir, chaveada por contraparte × mercadoria × data; esta valida uma
+**etapa da esteira**, chaveada pelos Trade IDs do grupo, e serve as três mesas.
+Fundi-las obrigaria uma a carregar os dois modelos de chave.
+
+**O checklist muda por mesa: MO e FO conferem só os DADOS ECONÔMICOS**
+(`CHECKLIST_ECONOMICO` = operações da Tabela de Referência + datas). Contraparte,
+CNPJ e a data do CGD são cadastro e contrato, e quem responde por eles é o OTC,
+que é quem monta o documento — pedir os quatro itens às três mesas faria duas
+delas assinarem por uma conferência que não é sua.
+
+### As colunas novas do banco não precisam de script de migração
+
+`ensure_db()` roda `ALTER TABLE … ADD COLUMN IF NOT EXISTS` para toda coluna de
+`DB_COLUMNS` que faltar. Isso importa porque `apps/static/data/db/` está no
+`.gitignore`: o banco da instância do time é anterior à coluna, e o `INSERT` —
+que lista as colunas explicitamente — falharia com *column not found*, derrubando
+as duas telas depois de um pull. **Coluna nova em `COLUMNS` é só isso**; não
+escreva um script em `scripts/` para ela.
+
 ### Outras
 
 - **Jobs agendados rodam no horário do Brasil, não no do servidor.**
