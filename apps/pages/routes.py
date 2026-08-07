@@ -18,6 +18,7 @@ import logging
 import time
 import duckdb
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from email.mime.text import MIMEText
@@ -26,7 +27,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 from flask import (
     render_template, request, redirect, send_file,
-    url_for, session, flash, jsonify, make_response
+    url_for, session, flash, jsonify, make_response, has_app_context
 )
 from jinja2 import TemplateNotFound
 
@@ -44,6 +45,39 @@ from apps.pages import otc_tickets
 # `manual_conf`) porque `_MAPPING_DEFS` precisa dela em tempo de importação.
 from apps.pages import manual_conf as _mc_mod
 _CONFIRMATION_TYPES = _mc_mod.CONFIRMATION_TYPES
+
+
+# ==============================================================================
+# APPLICATION CONTEXT PARA O QUE RODA FORA DE UM REQUEST
+# ==============================================================================
+# Os schedulers vivem em threads próprias, e lá NÃO existe application context —
+# `render_template` (o corpo dos e-mails) exige um e estoura com "Working outside
+# of application context". O sintoma é traiçoeiro: o botão Run do Control Panel
+# funciona, porque aquele roda dentro de um request, e só o envio automático
+# falha. Foi assim que o aviso das 19:00 do Deals Monitor morreu em silêncio.
+#
+# O app é capturado no REGISTRO do blueprint (`record_once`), que é o único
+# momento em que ele existe e este módulo é alcançável — a fábrica `create_app`
+# importa as rotas, então guardar a referência ao contrário seria circular.
+_FLASK_APP = None
+
+
+@blueprint.record_once
+def _capture_flask_app(state):
+    global _FLASK_APP
+    _FLASK_APP = state.app
+
+
+@contextmanager
+def _app_context():
+    """Garante application context. No-op dentro de um request (e quando o app
+    ainda não foi registrado, para o erro continuar aparecendo em vez de virar
+    um envio silenciosamente vazio)."""
+    if has_app_context() or _FLASK_APP is None:
+        yield
+    else:
+        with _FLASK_APP.app_context():
+            yield
 
 # ==============================================================================
 # LOGGING CONFIG
@@ -26767,34 +26801,40 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
     pendente — não manda e-mail) ou a mensagem de erro."""
     from email.mime.image import MIMEImage
     try:
-        blocks, grand_total = _ndm_pending_blocks(ref)
-        if not blocks:
-            log.info('[deals-monitor] %s: nada pendente, e-mail não enviado',
-                     ref.strftime('%Y-%m-%d'))
-            return 'empty'
-        ref_fmt = ref.strftime('%d/%m/%Y')
-        html = render_template('pages/email-template-deals-monitor.html',
-                               ref_date_fmt=ref_fmt, blocks=blocks,
-                               grand_total=grand_total, current_year=datetime.now().year)
-        msg = MIMEMultipart('related')
-        msg['Subject'] = 'Pending Action - Deals Monitor'
-        msg['From'] = SHARED_MAILBOX
-        if to_list:
-            msg['To'] = ', '.join(to_list)
-        if cc_list:
-            msg['Cc'] = ', '.join(cc_list)
-        alt = MIMEMultipart('alternative')
-        alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
-        alt.attach(MIMEText(html, 'html', 'utf-8'))
-        msg.attach(alt)
-        logo_path = _get_logo_path()
-        if logo_path:
-            with open(logo_path, 'rb') as f:
-                limg = MIMEImage(f.read())
-            limg.add_header('Content-ID', '<otc_logo>')
-            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
-            msg.attach(limg)
-        _attach_email_gradient(msg)
+        # O contexto envolve a MONTAGEM INTEIRA, não só o `render_template`: o
+        # `_get_logo_path` lê `current_app.root_path` e o gradiente do cabeçalho
+        # também passa por aqui. Envolver só o render trocava um "Working outside
+        # of application context" por outro, três linhas abaixo. Dentro do
+        # request do botão Run isto é no-op (ver `_app_context`).
+        with _app_context():
+            blocks, grand_total = _ndm_pending_blocks(ref)
+            if not blocks:
+                log.info('[deals-monitor] %s: nada pendente, e-mail não enviado',
+                         ref.strftime('%Y-%m-%d'))
+                return 'empty'
+            ref_fmt = ref.strftime('%d/%m/%Y')
+            html = render_template('pages/email-template-deals-monitor.html',
+                                   ref_date_fmt=ref_fmt, blocks=blocks,
+                                   grand_total=grand_total, current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
+            msg['Subject'] = 'Pending Action - Deals Monitor'
+            msg['From'] = SHARED_MAILBOX
+            if to_list:
+                msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            msg.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                msg.attach(limg)
+            _attach_email_gradient(msg)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
             server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
         log.info('[deals-monitor] aviso de pendências enviado — ref=%s · %d item(ns) '

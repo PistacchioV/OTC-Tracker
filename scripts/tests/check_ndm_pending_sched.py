@@ -187,6 +187,57 @@ from apps import create_app                                   # noqa: E402
 from apps.config import DebugConfig                           # noqa: E402
 
 app = create_app(DebugConfig)
+
+# ── O disparo roda numa THREAD, e la NAO ha application context ──────────────
+# `render_template` (o corpo do e-mail) e `_get_logo_path` (que le
+# current_app.root_path) exigem um. Sem ele o envio automatico das 19h morria com
+# "Working outside of application context" — e o sintoma enganava, porque o botao
+# Run do Control Panel funcionava: aquele roda dentro de um request.
+import threading                                              # noqa: E402
+
+
+class _SMTPStub(object):
+    raw = None
+
+    def __init__(self, *a, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def sendmail(self, frm, to, raw):
+        _SMTPStub.raw = raw
+
+
+_smtp_real, _blocks_real = R.smtplib.SMTP, R._ndm_pending_blocks
+R.smtplib.SMTP = _SMTPStub
+R._ndm_pending_blocks = lambda ref: ([{'tipo': 'Registration', 'label': 'NDF',
+                                       'itens': [{'produto': 'NDF Commodities',
+                                                  'total': 3, 'detalhe': 'New 3'}],
+                                       'total': 3}], 3)
+try:
+    check('o app fica disponivel fora do request', R._FLASK_APP is app, True)
+    _res = {}
+
+    def _numa_thread():
+        _res['r'] = R._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], [])
+
+    _t = threading.Thread(target=_numa_thread)
+    _t.start()
+    _t.join()
+    check('o envio funciona SEM request context', _res['r'], True)
+    check('   e o corpo foi renderizado',
+          'Pending Action - Deals Monitor' in (_SMTPStub.raw or ''), True)
+    check('   com o logo inline', 'otc_logo' in (_SMTPStub.raw or ''), True)
+    with app.test_request_context('/'):
+        check('e continua funcionando DENTRO de um request',
+              R._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], []), True)
+finally:
+    R.smtplib.SMTP, R._ndm_pending_blocks = _smtp_real, _blocks_real
+
 cl = app.test_client()
 with cl.session_transaction() as s:
     s['authenticated'] = True

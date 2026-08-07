@@ -773,6 +773,15 @@ escreva um script em `scripts/` para ela.
 
 ### Outras
 
+- **Thread de scheduler não tem application context.** `render_template` (o
+  corpo dos e-mails) e `current_app` (o `_get_logo_path`) exigem um, e sem ele o
+  disparo morre com *Working outside of application context*. O sintoma engana:
+  o botão **Run** do Control Panel funciona, porque roda dentro de um request, e
+  só o automático falha — foi assim que o aviso das 19:00 do Deals Monitor parou
+  em silêncio. Use `with _app_context():` (no-op dentro de um request; o app é
+  capturado no `record_once` do blueprint) e envolva a **montagem inteira** da
+  mensagem, não só o `render_template` — envolver só ele troca o erro por outro
+  três linhas abaixo, no logo.
 - **Jobs agendados rodam no horário do Brasil, não no do servidor.**
   `_br_now()` (`zoneinfo` `America/Sao_Paulo`, caindo para `-03:00` fixo quando
   falta `tzdata` — o caso Windows) sustenta o e-mail de pendências das 19:00/
