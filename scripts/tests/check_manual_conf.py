@@ -473,7 +473,32 @@ check('   pelo bloco de dados, sem Jinja no meio do JS',
 check('   e não tem uma lista própria', "'Conferido OTC'" in HTML, False)
 check('o Trade ID fica fora da edição em massa',
       "c !== KEY" in HTML and 'isDerived(c)' in HTML, True)
+# ── Cada etapa é assinada pela SUA mesa ─────────────────────────────────────
+# Pending OTC é do Back Office, Pending MO do MO, Pending FO do FO. É o que
+# separa as funções: quem monta o documento não pode assiná-lo pela mesa
+# seguinte. A tela esconde o botão, mas a trava que vale é a do endpoint — sem
+# ela um POST direto assinaria pela mesa de qualquer um.
+def _como(papel):
+    with cl.session_transaction() as ss:
+        ss['user_role'] = papel
+
+
+for _papel, _etapa, _esperado in (('BO', 'OTC', 200), ('BO', 'MO', 403),
+                                  ('MO', 'OTC', 403), ('FO', 'MO', 403),
+                                  ('ADMIN', 'MO', 403), ('HUB', 'FO', 403)):
+    _como(_papel)
+    check('%-5s não assina o Pending %s' % (_papel, _etapa) if _esperado == 403
+          else '%-5s assina o Pending %s' % (_papel, _etapa),
+          cl.post('/api/manual-confirmation/validate',
+                  json={'key': 'T7', 'stage': _etapa}).status_code, _esperado)
+# Rejeitar é a outra resposta à MESMA pergunta, então segue a mesma mesa.
+_como('FO')
+check('quem não assina a etapa também não a devolve',
+      cl.post('/api/manual-confirmation/reject',
+              json={'key': 'T7', 'stage': 'MO', 'comment': 'x'}).status_code, 403)
+
 # O SPN do carimbo vem da SESSÃO: mandar outro no corpo não pode valer.
+_como('MO')
 r = cl.post('/api/manual-confirmation/validate',
             json={'key': 'T7', 'stage': 'MO', 'sid': 'INVASOR'})
 check('o SPN do POST é ignorado',

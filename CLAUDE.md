@@ -726,6 +726,17 @@ o papel. O card tem um botão só. O Reject continua sendo só das mesas seguint
 (`can_reject = stage != OTC`): o OTC é quem monta o documento e não tem a quem
 devolvê-lo.
 
+**Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`): Pending OTC → papel
+`BO` (a mesa de OTC Ops é o Back Office do cadastro de papéis), Pending MO → `MO`,
+Pending FO → `FO`. É o que separa as funções — quem monta o documento não pode
+assiná-lo pela mesa seguinte. **Master é a única exceção; `ADMIN` NÃO é passe
+livre**, porque administrar acessos não é sentar na mesa. Rejeitar segue a mesma
+regra: é a outra resposta à mesma pergunta. Três camadas, e a que vale é a
+última: no Monitor o botão verde vira um de só leitura, na tela de validação
+somem os dois botões, e o endpoint devolve **403 com `stage_forbidden`**. Abrir a
+tela continua livre de propósito — esconder a confirmação faria o OTC deixar de
+ver o que o MO está conferindo.
+
 **O checklist muda por mesa: MO e FO conferem só os DADOS ECONÔMICOS**
 (`CHECKLIST_ECONOMICO` = operações da Tabela de Referência + datas). Contraparte,
 CNPJ e a data do CGD são cadastro e contrato, e quem responde por eles é o OTC,

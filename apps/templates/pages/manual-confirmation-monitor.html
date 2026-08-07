@@ -315,7 +315,8 @@
         en: { ops: 'op(s)', opsLong: 'operation(s)', none: '—',
               slaOk: '{n}d left', slaWarn: 'due tomorrow', slaToday: 'due today',
               slaLate: '{n}d overdue',
-              validate: 'Validate',
+              validate: 'Validate', view: 'View',
+              onlyDesk: 'Only {r} validates this stage',
               empty: 'Nothing pending at this stage.',
               nolink: 'no PDF in the confirmation folder',
               docsLoading: 'looking for the PDFs…',
@@ -325,7 +326,8 @@
         br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
               slaOk: 'faltam {n}d', slaWarn: 'vence amanhã', slaToday: 'vence hoje',
               slaLate: '{n}d de atraso',
-              validate: 'Validar',
+              validate: 'Validar', view: 'Ver',
+              onlyDesk: 'Só o {r} valida esta etapa',
               empty: 'Nada pendente nesta etapa.',
               nolink: 'nenhum PDF na pasta da confirmação',
               docsLoading: 'procurando os PDFs…',
@@ -335,7 +337,8 @@
         es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
               slaOk: 'faltan {n}d', slaWarn: 'vence mañana', slaToday: 'vence hoy',
               slaLate: '{n}d de retraso',
-              validate: 'Validar',
+              validate: 'Validar', view: 'Ver',
+              onlyDesk: 'Solo el {r} valida esta etapa',
               empty: 'Nada pendiente en esta etapa.',
               nolink: 'ningún PDF en la carpeta de la confirmación',
               docsLoading: 'buscando los PDFs…',
@@ -362,6 +365,11 @@
     }
 
     var _docSeq = 0;
+
+    // Preenchidos pelo payload do Monitor (ver `load`). Nulos até a 1ª resposta:
+    // nesse estado o botão nasce como Validar, que é o comportamento de sempre —
+    // e quem não pode assinar esbarra no endpoint, não numa tela adivinhando.
+    var CAN_VALIDATE = null, STAGE_ROLE = null;
 
     function item(it, stage) {
         // `Tipo` é o produto no nome do Confirmation Type do Electronic Inventory
@@ -419,15 +427,32 @@
                 (it.count || 1) + ' ' + esc(t('ops')) + '</span>' +
             '</div>' +
             (slaChip ? '<div class="mc-item__slarow">' + slaChip + '</div>' : '') +
-            '<div class="mc-item__acts">' + docs +
-                // Validar ABRE a tela de validação (PDF + checklist da etapa) em
-                // vez de carimbar no clique: um clique não é conferência, e quem
-                // assina precisa ter visto o documento.
-                '<a class="btn btn-sm btn-success ms-auto" target="_blank" rel="noopener" ' +
-                'href="/manual-confirmation/validate?stage=' + encodeURIComponent(stage) +
-                '&keys=' + encodeURIComponent((it.keys || []).join(',')) + '">' +
-                '<i class="ti ti-checkup-list me-1"></i>' + esc(t('validate')) + '</a>' +
+            '<div class="mc-item__acts">' + docs + acao(stage, it) +
             '</div></div>';
+    }
+
+    // O botão do item. Cada etapa é assinada pela SUA mesa (Pending OTC → Back
+    // Office, Pending MO → MO, Pending FO → FO), então quem não é da mesa não vê
+    // o botão verde de validar: vê um de só leitura, que abre a mesma tela sem os
+    // botões de assinar. Abrir continua livre de propósito — esconder a
+    // confirmação faria o OTC deixar de ver o que o MO está conferindo, e a
+    // recusa que importa é a do endpoint, não a do botão.
+    function acao(stage, it) {
+        var href = '/manual-confirmation/validate?stage=' + encodeURIComponent(stage) +
+                   '&keys=' + encodeURIComponent((it.keys || []).join(','));
+        var pode = !CAN_VALIDATE || CAN_VALIDATE[stage] !== false;
+        if (pode) {
+            // Validar ABRE a tela de validação (PDF + checklist da etapa) em vez
+            // de carimbar no clique: um clique não é conferência, e quem assina
+            // precisa ter visto o documento.
+            return '<a class="btn btn-sm btn-success ms-auto" target="_blank" rel="noopener" ' +
+                   'href="' + href + '">' +
+                   '<i class="ti ti-checkup-list me-1"></i>' + esc(t('validate')) + '</a>';
+        }
+        return '<a class="btn btn-sm btn-outline-secondary ms-auto" target="_blank" rel="noopener" ' +
+               'href="' + href + '" title="' +
+               esc(t('onlyDesk', { r: (STAGE_ROLE && STAGE_ROLE[stage]) || stage })) + '">' +
+               '<i class="ti ti-eye me-1"></i>' + esc(t('view')) + '</a>';
     }
 
     // Busca os PDFs DEPOIS de os cards estarem na tela, e numa chamada só.
@@ -519,6 +544,11 @@
             })
             .then(function (j) {
                 if (j.error) { fail(j.error); return; }
+                // Antes de desenhar: quem esta sessão pode assinar, por etapa. É
+                // o servidor que decide (papel do usuário × mesa da etapa), e o
+                // botão só reflete a decisão — a trava está no endpoint.
+                CAN_VALIDATE = j.can_validate || null;
+                STAGE_ROLE = j.stage_role || null;
                 $('#mc-cards').html((j.cards || []).map(card).join(''));
                 loadDocs();
                 // O servidor manda só a LISTA de produtos sem cadastro; a frase

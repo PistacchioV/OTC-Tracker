@@ -106,6 +106,11 @@
   #rej-cancel { background: #2a2a3a; color: #c0c0d0; }
   .already { background: #12432a; border: 1px solid #1a8a4a; color: #7ed6a2;
              border-radius: 6px; padding: 10px; font-size: 9.5pt; margin-bottom: 12px; }
+  /* Etapa de outra mesa: a tela abre inteira (o documento é para ler), o que
+     falta são os botões de assinar. Âmbar e não vermelho — não é erro de quem
+     abriu, é uma etapa que pertence a outra pessoa. */
+  .notmine { background: #3a2e12; border: 1px solid #8a6a1a; color: #e0c078;
+             border-radius: 6px; padding: 10px; font-size: 9.5pt; margin-bottom: 12px; }
 
   /* ── Preview do PDF ── */
   #preview { flex: 1 1 auto; height: 100vh; display: flex; flex-direction: column; }
@@ -166,6 +171,14 @@
     This stage has already been validated. The preview is the PDF saved in the Electronic Inventory.</div>
   {% endif %}
 
+  {# Cada etapa é assinada pela SUA mesa. Quem não é dela lê o documento e o
+     histórico — o que não existe são os botões de validar e de rejeitar. #}
+  {% if not can_validate %}
+  <div class="notmine" id="notmine" data-role="{{ stage_role }}" data-stage="{{ stage }}">
+    Only the {{ stage_role }} desk validates a confirmation at Pending {{ stage }}.
+    You can read the document, but not sign this stage.</div>
+  {% endif %}
+
   {# O checklist da ETAPA: o OTC confere o documento inteiro, MO e FO conferem só
      os dados econômicos. Os códigos vêm do servidor; a frase de cada um é
      montada no JS, no idioma da aplicação. #}
@@ -178,7 +191,11 @@
               placeholder="Why was this validated after the deadline?">{{ comment }}</textarea>
   </div>
 
-  <button id="btn-validate" disabled data-t="btnValidate">Validate</button>
+  {# Fora da mesa da etapa o botão sai da tela — mas continua no DOM, porque o
+     script o usa para acompanhar o checklist e um `null` aqui derrubaria o
+     resto da página (a troca de PDF vem depois dele). #}
+  <button id="btn-validate" disabled data-t="btnValidate"
+          {% if not can_validate %}style="display:none"{% endif %}>Validate</button>
 
   {# Rejeitar devolve a confirmação ao OTC e avisa por e-mail. Só as mesas
      seguintes rejeitam: o OTC é quem monta o documento, e devolvê-lo a si mesmo
@@ -216,6 +233,7 @@
   'keys':   trades,
   'stage':  stage,
   'already': already,
+  'can':    can_validate,
   'late':   sla_level == 'late'
 } | tojson }}</script>
 <script>
@@ -233,6 +251,7 @@
       histPending: 'not validated yet', docLabel: 'Document',
       noDoc: "No PDF in this confirmation's folder on the Electronic Inventory.",
       alreadyDone: 'This stage has already been validated. The preview is the PDF saved in the Electronic Inventory.',
+      notMine: 'Only the {r} desk validates a confirmation at Pending {s}. You can read the document, but not sign this stage.',
       notFoundTitle: 'Confirmation not found',
       notFoundText: 'It may have been deleted, or the link is out of date. Go back to the monitor and try again.',
       btnValidate: 'Validate', btnDone: 'Validated ✓', btnSending: 'Validating…',
@@ -265,6 +284,7 @@
       histPending: 'ainda não validada', docLabel: 'Documento',
       noDoc: 'Nenhum PDF na pasta desta confirmação no Electronic Inventory.',
       alreadyDone: 'Esta etapa já foi validada. O preview é o PDF salvo no Electronic Inventory.',
+      notMine: 'Só a mesa {r} valida uma confirmação em Pending {s}. Você pode ler o documento, mas não assinar esta etapa.',
       notFoundTitle: 'Confirmação não encontrada',
       notFoundText: 'Ela pode ter sido excluída, ou o link está desatualizado. Volte ao monitor e tente de novo.',
       btnValidate: 'Validar', btnDone: 'Validada ✓', btnSending: 'Validando…',
@@ -297,6 +317,7 @@
       histPending: 'aún no validada', docLabel: 'Documento',
       noDoc: 'Ningún PDF en la carpeta de esta confirmación en el Electronic Inventory.',
       alreadyDone: 'Esta etapa ya fue validada. La vista previa es el PDF guardado en el Electronic Inventory.',
+      notMine: 'Solo la mesa {r} valida una confirmación en Pending {s}. Puede leer el documento, pero no firmar esta etapa.',
       notFoundTitle: 'Confirmación no encontrada',
       notFoundText: 'Puede haber sido eliminada, o el enlace está desactualizado. Vuelva al monitor e intente de nuevo.',
       btnValidate: 'Validar', btnDone: 'Validada ✓', btnSending: 'Validando…',
@@ -344,6 +365,12 @@
     el.setAttribute('placeholder', t(el.getAttribute('data-t-ph')));
   });
 
+  /* Fora do laço acima porque a frase tem a MESA e a ETAPA dentro dela: o laço
+     troca o textContent inteiro e perderia os dois valores. */
+  var nm = document.getElementById('notmine');
+  if (nm) nm.textContent = t('notMine', { r: nm.getAttribute('data-role'),
+                                          s: nm.getAttribute('data-stage') });
+
   var panelChecks = document.getElementById('checks');
   if (!panelChecks) return;                        /* tela de "não encontrada" */
 
@@ -389,7 +416,10 @@
     boxes.forEach(function (b) { b.closest('.check-item').classList.toggle('done', b.checked); });
     var todos = boxes.every(function (b) { return b.checked; });
     var motivo = !V.late || String(whyText.value || '').trim() !== '';
-    btn.disabled = already || !todos || !motivo;
+    // `V.can === false` = etapa de outra mesa. O botão já está fora da tela;
+    // travá-lo aqui também é o que impede um `display` removido no inspetor de
+    // virar um clique — e o endpoint recusa de qualquer forma (403).
+    btn.disabled = already || V.can === false || !todos || !motivo;
   }
   boxes.forEach(function (b) {
     if (already) { b.checked = true; b.disabled = true; }

@@ -28663,7 +28663,14 @@ def api_mc_monitor():
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
-        return jsonify(_mc.monitor_payload())
+        payload = _mc.monitor_payload()
+        # Quem a sessão pode assinar, por etapa. O `monitor_payload` não sabe da
+        # sessão (e não deve saber: ele é o retrato da fila, igual para todos), e
+        # é a página que troca o botão verde de Validar por um de só leitura.
+        payload['can_validate'] = {s: _mc_can_validate(s)
+                                   for s in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO)}
+        payload['stage_role'] = dict(_MC_STAGE_ROLE)
+        return jsonify(payload)
     except Exception as e:
         log.error('[manual-conf] monitor: %s', e)
         return jsonify({'error': str(e)}), 500
@@ -28733,6 +28740,36 @@ def api_mc_docs_batch():
     return jsonify({'docs': out})
 
 
+# ── Quem assina cada etapa da esteira ────────────────────────────────────────
+# A validação é um ato da MESA, não do app: quem carimba o Pending MO está
+# dizendo que o Middle Office conferiu, e o que sustenta essa assinatura é o
+# papel do usuário. Uma mesa por etapa — é isso que separa as funções, e o OTC,
+# que monta o documento, não pode assiná-lo pelo MO logo em seguida.
+#
+# 'Pending OTC' é do BACK OFFICE (papel `BO`): a etapa se chama OTC porque é a
+# mesa de OTC Ops, que no cadastro de papéis é o Back Office.
+_MC_STAGE_ROLE = {'OTC': 'BO', 'MO': 'MO', 'FO': 'FO'}
+
+
+def _mc_can_validate(stage):
+    """A sessão pode validar/rejeitar esta etapa?
+
+    Master passa (§5: é o único que escapa de toda restrição). **ADMIN não é
+    passe livre** — administrar acessos não é sentar na mesa, e um admin
+    assinando pelo MO desfaz a segregação que esta regra existe para garantir.
+    """
+    if _session_is_master():
+        return True
+    return ((session.get('user_role') or '').strip().upper()
+            == _MC_STAGE_ROLE.get(str(stage or '').strip().upper()))
+
+
+def _mc_stage_denied(stage):
+    """A recusa, na voz de quem lê: qual mesa assina esta etapa."""
+    return ('Só o {} valida uma confirmação em Pending {}.'
+            .format(_MC_STAGE_ROLE.get(str(stage or '').strip().upper(), '—'), stage))
+
+
 @blueprint.route('/manual-confirmation/validate')
 def manual_confirmation_validate():
     """A tela de validação de UMA confirmação: PDF ao lado, checklist da etapa e
@@ -28780,12 +28817,17 @@ def manual_confirmation_validate():
         # `already` trava o botão: revalidar recarimbaria por cima de quem
         # assinou antes, apagando o dono da conferência anterior.
         already=bool(str(row.get(col_data, '') or '').strip()),
+        # A etapa é assinada pela MESA dela. Quem não é da mesa abre a tela e lê
+        # o documento — o que some são os dois botões, não o papel: esconder a
+        # confirmação faria o OTC deixar de ver o que o MO está conferindo.
+        can_validate=_mc_can_validate(stage),
+        stage_role=_MC_STAGE_ROLE.get(stage, ''),
         # Rejeitar é devolver ao OTC — que é quem monta o documento. O próprio
         # OTC não tem para quem devolver, então o botão não existe na etapa dele.
-        can_reject=(stage != _mc.STAGE_OTC),
+        can_reject=(stage != _mc.STAGE_OTC and _mc_can_validate(stage)),
         sla_level=sla['level'], sla_left=sla['left'],
         sla_deadline=_mc.fmt_date(sla['deadline']),
-        sla_days=_mc.SLA_BIZDAYS.get(stage),
+        sla_days=_mc.sla_days().get(stage),
         comment=row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), ''),
         docs=_mc_confirmation_docs(row, [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]))
 
@@ -28873,6 +28915,11 @@ def api_mc_validate():
     stage = str(payload.get('stage') or '').strip().upper()
     if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
         return jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
+    # A trava de verdade é aqui, e não no botão: a tela esconde, o endpoint
+    # garante. Sem isto, um POST direto assinaria pela mesa de qualquer um.
+    if not _mc_can_validate(stage):
+        return jsonify({'success': False, 'stage_forbidden': True,
+                        'message': _mc_stage_denied(stage)}), 403
     comment = str(payload.get('comment') or '').strip()
     try:
         rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
@@ -28911,6 +28958,11 @@ def api_mc_reject():
     comment = str(payload.get('comment') or '').strip()
     if stage not in (_mc.STAGE_MO, _mc.STAGE_FO):
         return jsonify({'success': False, 'message': 'Só MO e FO rejeitam.'}), 400
+    # Rejeitar é a outra resposta à MESMA pergunta que o validar responde — o
+    # documento está certo? —, então quem não assina a etapa também não a devolve.
+    if not _mc_can_validate(stage):
+        return jsonify({'success': False, 'stage_forbidden': True,
+                        'message': _mc_stage_denied(stage)}), 403
     if not comment:
         # Sem comentário o aviso chega dizendo "refaça" e nada mais — e o OTC
         # tem de perguntar de volta o que estava errado.
