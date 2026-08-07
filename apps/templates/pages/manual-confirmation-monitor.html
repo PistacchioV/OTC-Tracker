@@ -14,7 +14,9 @@
    um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
    (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
    ============================================================================ */
-#mc-monitor { --mc-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+/* O respiro entre o fim dos cards e o rodapé. Sem ele o cartão encosta na faixa
+   do footer e os dois leem como um bloco só. */
+#mc-monitor { --mc-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); padding-bottom: .9rem; }
 
 #mc-monitor .mc-card {
     height: 100%;
@@ -72,7 +74,15 @@
 #mc-monitor .mc-list {
     background: var(--ins-tertiary-bg, #eef0f4);
     /* Cards maiores (pedido da mesa): a fila cresce com a janela e o mínimo
-       garante presença mesmo com pouca coisa pendente. */
+       garante presença mesmo com pouca coisa pendente.
+
+       `flex: 1 1 auto` é o que faz a fila OCUPAR o cartão inteiro. Os três cards
+       têm a altura do mais cheio (a linha do grid os estica), e sem o flex-grow a
+       fila dos outros dois parava na altura do próprio conteúdo — o resto do
+       cartão aparecia como uma faixa BRANCA embaixo, o fundo do `.mc-card`
+       aparecendo por baixo da lista cinza. O `max-height` continua limitando o
+       card mais cheio, que é quem define a altura da linha. */
+    flex: 1 1 auto;
     min-height: 24rem;
     max-height: calc(100vh - 21rem); overflow-y: auto; padding: .5rem;
     border-top: 1px solid var(--ins-border-color);
@@ -103,6 +113,41 @@
     background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color);
 }
 #mc-monitor .mc-item__acts { display: flex; gap: .3rem; margin-top: .55rem; flex-wrap: wrap; align-items: center; }
+
+/* ── A luz do prazo ──────────────────────────────────────────────────────
+   OTC D+3, MO D+4, FO D+6 do trade date, em dias úteis ANBIMA. Mesma leitura
+   das luzes do New Deals Monitor — verde com folga, âmbar na véspera, vermelho
+   depois —, e como lá a cor não fica só num ponto: ela toma a moldura e a
+   sombra do item inteiro, que é o que se vê ao correr o olho pela fila.
+
+   As três cores existem nos DOIS temas: a receita clara (fundo pastel, texto
+   escuro) invertida some no escuro, que é o mesmo par do chip de NOK da recon. */
+#mc-monitor .mc-item__slarow { margin-top: .4rem; }
+#mc-monitor .mc-item__sla {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .64rem; font-weight: 800; letter-spacing: .02em;
+    padding: .14rem .5rem; border-radius: 999px; border: 1px solid transparent;
+}
+#mc-monitor .mc-sla-ok   .mc-item__sla { background: rgba(26,138,74,.12);  color: #1a8a4a; border-color: rgba(26,138,74,.28); }
+#mc-monitor .mc-sla-warn .mc-item__sla { background: rgba(176,117,0,.14);  color: #8a6100; border-color: rgba(176,117,0,.30); }
+#mc-monitor .mc-sla-late .mc-item__sla { background: rgba(192,57,43,.12);  color: #b71c1c; border-color: rgba(192,57,43,.32); }
+[data-bs-theme=dark] #mc-monitor .mc-sla-ok   .mc-item__sla { background: rgba(52,199,89,.16);  color: #7ed6a2; border-color: rgba(52,199,89,.32); }
+[data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: rgba(247,184,75,.16); color: #f7c56b; border-color: rgba(247,184,75,.32); }
+[data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: rgba(244,67,54,.18);  color: #ef9a9a; border-color: rgba(244,67,54,.35); }
+
+/* O item se tinge junto. O `ok` fica NEUTRO de propósito: pintar de verde o que
+   está dentro do prazo é pintar quase a fila inteira, e aí o vermelho some no
+   meio — só o que pede atenção ganha cor. */
+#mc-monitor .mc-item.mc-sla-warn {
+    border-color: rgba(176,117,0,.45);
+    box-shadow: 0 1px 3px rgba(176,117,0,.10), 0 6px 16px rgba(176,117,0,.16);
+}
+#mc-monitor .mc-item.mc-sla-late {
+    border-color: rgba(192,57,43,.5);
+    box-shadow: 0 1px 3px rgba(192,57,43,.12), 0 6px 16px rgba(192,57,43,.20);
+}
+[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-warn { border-color: rgba(247,184,75,.42); }
+[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-late { border-color: rgba(244,67,54,.48); }
 #mc-monitor .mc-item__acts .btn {
     font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
     transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
@@ -234,6 +279,8 @@
                 localStorage.getItem('language') || 'en').toLowerCase();
     var _TRANS = {
         en: { ops: 'op(s)', opsLong: 'operation(s)', none: '—',
+              slaOk: '{n}d left', slaWarn: 'due tomorrow', slaToday: 'due today',
+              slaLate: '{n}d overdue',
               validate: 'Validate', reject: 'Reject',
               empty: 'Nothing pending at this stage.',
               nolink: 'no PDF in the confirmation folder',
@@ -248,6 +295,8 @@
               rejOkMail: 'The notice was sent to brazil.otc.ops@jpmorgan.com.',
               rejOkNoMail: 'The e-mail notice did not go out (relay unavailable), but the confirmation is already back in Pending OTC.' },
         br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
+              slaOk: 'faltam {n}d', slaWarn: 'vence amanhã', slaToday: 'vence hoje',
+              slaLate: '{n}d de atraso',
               validate: 'Validar', reject: 'Rejeitar',
               empty: 'Nada pendente nesta etapa.',
               nolink: 'nenhum PDF na pasta da confirmação',
@@ -262,6 +311,8 @@
               rejOkMail: 'O aviso foi enviado para brazil.otc.ops@jpmorgan.com.',
               rejOkNoMail: 'O aviso por e-mail não saiu (relay indisponível), mas a confirmação já voltou para Pending OTC.' },
         es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
+              slaOk: 'faltan {n}d', slaWarn: 'vence mañana', slaToday: 'vence hoy',
+              slaLate: '{n}d de retraso',
               validate: 'Validar', reject: 'Rechazar',
               empty: 'Nada pendiente en esta etapa.',
               nolink: 'ningún PDF en la carpeta de la confirmación',
@@ -322,7 +373,22 @@
             '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + keys + '" data-stage="' + stage + '">' +
             '<i class="ti ti-corner-up-left me-1"></i>' + esc(t('reject')) + '</button>';
 
-        return '<div class="mc-item">' +
+        // A luz do prazo (OTC D+3, MO D+4, FO D+6 do trade date, em dias úteis).
+        // Mesma leitura das luzes do New Deals Monitor: verde com folga, âmbar na
+        // véspera, vermelho depois. O item inteiro se tinge — é a informação que
+        // precisa saltar ao correr o olho pela fila.
+        var sla = it.sla || {};
+        var slaCls = 'mc-sla-' + (sla.level || 'ok');
+        var slaTxt = '';
+        if (sla.level === 'late') slaTxt = t('slaLate', { n: Math.abs(sla.left || 0) });
+        else if (sla.level === 'warn') slaTxt = (sla.left === 0) ? t('slaToday') : t('slaWarn', { n: sla.left });
+        else if (sla.level === 'ok' && sla.left != null) slaTxt = t('slaOk', { n: sla.left });
+        var slaChip = slaTxt
+            ? '<span class="mc-item__sla ' + slaCls + '" title="' + esc(sla.deadline || '') + '">' +
+              '<i class="ti ti-clock-hour-4"></i>' + esc(slaTxt) + '</span>'
+            : '';
+
+        return '<div class="mc-item ' + slaCls + '">' +
             '<div class="mc-item__top">' +
                 '<span class="mc-item__cli">' + esc(it.Cliente || t('none')) + '</span>' +
                 '<span class="mc-item__age ' + ageClass(age) + '">' +
@@ -332,9 +398,15 @@
                 ' <span class="mc-item__ops"><i class="ti ti-layers-subtract"></i>' +
                 (it.count || 1) + ' ' + esc(t('ops')) + '</span>' +
             '</div>' +
+            (slaChip ? '<div class="mc-item__slarow">' + slaChip + '</div>' : '') +
             '<div class="mc-item__acts">' + docs +
-                '<button class="btn btn-sm btn-success ms-auto" data-mc-validate="' + keys + '" data-stage="' + stage + '">' +
-                '<i class="ti ti-check me-1"></i>' + esc(t('validate')) + '</button>' +
+                // Validar ABRE a tela de validação (PDF + checklist da etapa) em
+                // vez de carimbar no clique: um clique não é conferência, e quem
+                // assina precisa ter visto o documento.
+                '<a class="btn btn-sm btn-success ms-auto" target="_blank" rel="noopener" ' +
+                'href="/manual-confirmation/validate?stage=' + encodeURIComponent(stage) +
+                '&keys=' + encodeURIComponent((it.keys || []).join(',')) + '">' +
+                '<i class="ti ti-checkup-list me-1"></i>' + esc(t('validate')) + '</a>' +
                 reject +
             '</div></div>';
     }
@@ -429,21 +501,15 @@
         }).then(function (r) { return r.json(); });
     }
 
+    // A tela de validação abre em aba nova e chama isto ao carimbar: sem ele a
+    // fila continuaria mostrando uma confirmação que já saiu dela.
+    window.mcReload = load;
+
     $(document).ready(function () {
         load();
 
-        $(document).on('click', '[data-mc-validate]', function () {
-            var btn = $(this);
-            post('/api/manual-confirmation/validate', {
-                keys: JSON.parse(btn.attr('data-mc-validate')), stage: btn.attr('data-stage')
-            }).then(function (j) {
-                if (!j.success) {
-                    Swal.fire({ icon: 'error', title: t('valFail'), text: j.message || '' });
-                    return;
-                }
-                load();
-            });
-        });
+        // O Validate virou um <a> para /manual-confirmation/validate — não há
+        // mais carimbo no clique. Ver o comentário em `item()`.
 
         $(document).on('click', '[data-mc-reject]', function () {
             pending.keys = JSON.parse($(this).attr('data-mc-reject'));

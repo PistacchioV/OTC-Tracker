@@ -35,7 +35,7 @@ import os
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
@@ -164,6 +164,48 @@ check('tem o SPN', 'E930179' in stamp, True)
 check('tem hora e minuto', len(stamp.split(' · ')[0]) == len('01/01/2026 00:00'), True)
 check('sem SPN não inventa um', ' · —' in M.stamp_now(''), True)
 
+print('\n== 6b. o prazo de cada mesa ==')
+# Dias ÚTEIS a contar da DATA DA OPERAÇÃO (trade date), não da geração do
+# documento: o prazo é do trade, e gerar a confirmação com atraso não compra
+# tempo novo. As mesas correm em paralelo, então D+4 e D+6 saem do MESMO dia.
+check('OTC D+3, MO D+4, FO D+6',
+      [M.SLA_BIZDAYS[s] for s in (M.STAGE_OTC, M.STAGE_MO, M.STAGE_FO)], [3, 4, 6])
+SEG = {'Data Operação': '03/08/2026'}                      # segunda-feira
+check('o prazo é em dias ÚTEIS, não corridos',
+      [M.fmt_date(M.sla_deadline(SEG, s)) for s in (M.STAGE_OTC, M.STAGE_MO, M.STAGE_FO)],
+      ['06/08/2026', '07/08/2026', '11/08/2026'])          # D+6 pula o fim de semana
+check('a linha sem data de operação não inventa prazo',
+      M.sla_deadline({}, M.STAGE_OTC), None)
+
+# A luz: verde com folga, âmbar na véspera e no dia, vermelha depois.
+luzes = [M.sla_state(SEG, M.STAGE_OTC, date(2026, 8, d))['level']
+         for d in (4, 5, 6, 7)]
+check('verde → âmbar → vermelho', luzes, ['ok', 'warn', 'warn', 'late'])
+# A etapa validada PARA de contar: mantê-la vermelha cobraria um trabalho feito.
+check('a etapa já validada sai como done',
+      M.sla_state(dict(SEG, **{'Conferido OTC': '20/08/2026'}),
+                  M.STAGE_OTC, date(2026, 8, 31))['level'], 'done')
+
+print('\n== 6c. fora do prazo, a justificativa é obrigatória ==')
+novo('T8', **{'Data Operação': '01/01/2020'})              # prazo estourado há anos
+falhou = False
+try:
+    M.mark_validated('T8', M.STAGE_OTC, 'E930179')
+except M.SlaCommentRequired:
+    falhou = True
+check('sem motivo, o carimbo é RECUSADO', falhou, True)
+check('   e a linha continua pendente', M.find_row('T8')['Pending'], M.PENDING_OTC)
+r = M.mark_validated('T8', M.STAGE_OTC, 'E930179', 'arquivo da B3 saiu com atraso')
+check('com motivo, valida', bool(r['Conferido OTC']), True)
+# Uma coluna por mesa: o atraso do MO não explica o do FO.
+check('   e o motivo fica na coluna da etapa',
+      r['OTC Comments'], 'arquivo da B3 saiu com atraso')
+check('   sem encostar nas outras', (r['MO Comments'], r['FO Comments']), ('', ''))
+# Dentro do prazo ninguém precisa justificar nada.
+novo('T9')
+check('dentro do prazo, valida sem motivo',
+      bool(M.mark_validated('T9', M.STAGE_OTC, 'E930179')['Conferido OTC']), True)
+
 print('\n== 7. o Monitor ==')
 p = M.monitor_payload()
 por_label = {c['label']: c for c in p['cards']}
@@ -179,7 +221,10 @@ check('   e não no card do OTC (ela já passou / é isenta)',
 check('o item traz o que identifica a confirmação sem abrir',
       sorted(por_label[M.PENDING_OTC]['items'][0].keys()),
       sorted(list(M.MONITOR_FIELDS) +
-             ['Tipo', 'key', 'keys', 'trades', 'count', 'stage', 'docs']))
+             ['Tipo', 'sla', 'key', 'keys', 'trades', 'count', 'stage', 'docs']))
+check('   com a luz do prazo da ETAPA daquele card',
+      sorted(por_label[M.PENDING_OTC]['items'][0]['sla'].keys()),
+      ['deadline', 'left', 'level'])
 # `Tipo` é o produto no nome do Confirmation Type; `Produto` continua CRU no
 # item porque é ele que resolve a pasta do Electronic Inventory em /docs.
 check('   com o Tipo ao lado do Produto cru',
@@ -286,7 +331,14 @@ p = M.monitor_payload()
 check('produto sem cadastro vira aviso', any('PRODUTO NOVO' in w for w in p['warnings']), True)
 
 print('\n== 8. as colunas ==')
-check('27 colunas na tela', len(M.COLUMNS), 27)
+check('30 colunas na tela', len(M.COLUMNS), 30)
+# Uma coluna de justificativa POR MESA, ao lado do carimbo dela. Uma só,
+# compartilhada, faria a segunda mesa sobrescrever a explicação da primeira.
+check('   uma coluna de comentário por etapa',
+      [M.STAGE_COMMENT_COLUMN[s] for s in (M.STAGE_OTC, M.STAGE_MO, M.STAGE_FO)],
+      ['OTC Comments', 'MO Comments', 'FO Comments'])
+check('   e todas na tabela', [c for c in M.STAGE_COMMENT_COLUMN.values()
+                               if c not in M.COLUMNS], [])
 check('o Trade ID repetido do arquivo virou uma só',
       M.COLUMNS.count('Trade ID'), 1)
 check('os três Time Stamp têm nome próprio no banco',

@@ -46,7 +46,7 @@ import re
 import time
 import traceback
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     import duckdb
@@ -89,11 +89,16 @@ COLUMNS = [
     'Data envio validação OTC',
     'Conferido OTC',
     'Time Stamp OTC',
+    # A justificativa do atraso, quando a mesa carimba fora do prazo. Fica ao
+    # lado do carimbo dela, que é onde se procura o porquê.
+    'OTC Comments',
     'Data envio validação MO/FO',
     'VALIDADO p/ MO',
     'Time Stamp MO',
+    'MO Comments',
     'VALIDADO p/ FO',
     'Time Stamp FO',
+    'FO Comments',
     'Enviado p/ cliente (desbloqueado no fep)',
     'Nome fep',
 ]
@@ -169,6 +174,128 @@ STATUS_OK = 'Ok'
 
 REQUESTED = 'REQUESTED'
 EXEMPT = 'EXEMPT'
+
+# Os itens que cada mesa confere antes de carimbar. O servidor manda a LISTA de
+# códigos; a frase de cada um é montada na tela, no idioma da aplicação.
+#
+# **MO e FO conferem só os DADOS ECONÔMICOS** — as operações da Tabela de
+# Referência e as datas. Contraparte/CNPJ e a data do CGD são cadastro e
+# contrato: quem responde por eles é o OTC, que é quem monta o documento. Pedir
+# os quatro itens às três mesas faria duas delas assinarem por uma conferência
+# que não é sua, e a assinatura de um checklist é justamente o que se procura
+# quando uma confirmação é questionada.
+CHECKLIST_ECONOMICO = ('operations', 'dates')
+CHECKLIST = {
+    STAGE_OTC: ('counterparty', 'cgd') + CHECKLIST_ECONOMICO,
+    STAGE_MO: CHECKLIST_ECONOMICO,
+    STAGE_FO: CHECKLIST_ECONOMICO,
+}
+
+
+def checklist_for(stage):
+    return list(CHECKLIST.get(str(stage or '').upper(), CHECKLIST_ECONOMICO))
+
+
+# Coluna de carimbo de cada etapa: (a data da validação, o carimbo com quem).
+STAGE_COLUMNS = {
+    STAGE_OTC: ('Conferido OTC', 'Time Stamp OTC'),
+    STAGE_MO: ('VALIDADO p/ MO', 'Time Stamp MO'),
+    STAGE_FO: ('VALIDADO p/ FO', 'Time Stamp FO'),
+}
+
+# Onde fica a justificativa de atraso de cada mesa. Uma coluna por etapa, e não
+# uma só: o atraso do MO não explica o atraso do FO, e um campo compartilhado
+# faria a segunda mesa sobrescrever a explicação da primeira.
+STAGE_COMMENT_COLUMN = {
+    STAGE_OTC: 'OTC Comments',
+    STAGE_MO: 'MO Comments',
+    STAGE_FO: 'FO Comments',
+}
+
+# ── O SLA de cada mesa ──────────────────────────────────────────────────────
+# Dias ÚTEIS a contar da DATA DA OPERAÇÃO (trade date), não da data em que a
+# confirmação foi gerada: o prazo é do trade, e gerar o documento com atraso não
+# compra tempo novo. Úteis pelo mesmo calendário ANBIMA do aging — o prazo só
+# corre em dia de pregão.
+#
+# As mesas correm em PARALELO depois do OTC, e por isso os prazos não se somam:
+# D+4 do MO e D+6 do FO são os dois contados do mesmo trade date.
+SLA_BIZDAYS = {
+    STAGE_OTC: 3,
+    STAGE_MO: 4,
+    STAGE_FO: 6,
+}
+
+
+def sla_deadline(row, stage):
+    """A data limite daquela etapa: trade date + N dias úteis. None sem data."""
+    d = parse_date(row.get('Data Operação'))
+    n = SLA_BIZDAYS.get(str(stage or '').upper())
+    if not d or n is None:
+        return None
+    return _add_bizdays(d, n)
+
+
+def sla_state(row, stage, hoje=None):
+    """Como aquela etapa está contra o prazo.
+
+    Devolve `{'deadline', 'left', 'level'}`. `left` são os dias ÚTEIS que faltam
+    (negativo = passou), e `level` é a luz:
+
+      * `ok`   — folga de 2 dias úteis ou mais
+      * `warn` — falta 1 dia ou é hoje
+      * `late` — o prazo passou
+
+    A etapa JÁ VALIDADA sai como `done`: o prazo dela deixou de correr, e mantê-la
+    vermelha faria a tela cobrar um trabalho que já foi feito.
+    """
+    stage = str(stage or '').upper()
+    col_data, _col_stamp = STAGE_COLUMNS.get(stage, ('', ''))
+    deadline = sla_deadline(row, stage)
+    if col_data and str(row.get(col_data, '') or '').strip():
+        return {'deadline': deadline, 'left': None, 'level': 'done'}
+    if not deadline:
+        return {'deadline': None, 'left': None, 'level': 'ok'}
+    hoje = hoje or datetime.now().date()
+    if hoje > deadline:
+        left = -_bizdays_between(deadline, hoje)
+    else:
+        left = _bizdays_between(hoje, deadline)
+    return {'deadline': deadline, 'left': left,
+            'level': 'late' if left < 0 else ('warn' if left <= 1 else 'ok')}
+
+
+# As luzes na ordem da gravidade. É por ela que o grupo escolhe a sua: o item do
+# Monitor é UM documento cobrindo várias operações, e vale a mais apertada.
+_SLA_ORDEM = ('done', 'ok', 'warn', 'late')
+
+
+def sla_breached(row, stage, hoje=None):
+    """A validação desta etapa está FORA DO PRAZO? É o que torna a justificativa
+    obrigatória — a pergunta é feita no instante do carimbo, não depois."""
+    return sla_state(row, stage, hoje)['level'] == 'late'
+
+
+def stage_history(row):
+    """O histórico das três etapas da linha: quando e por quem.
+
+    É o que a tela de validação mostra no topo — e é o que responde "quem
+    conferiu isto?" sem abrir o Track.
+    """
+    out = []
+    for stage in (STAGE_OTC, STAGE_MO, STAGE_FO):
+        col_data, col_stamp = STAGE_COLUMNS[stage]
+        stamp = str(row.get(col_stamp, '') or '').strip()
+        out.append({
+            'stage': stage,
+            'date': str(row.get(col_data, '') or '').strip(),
+            'stamp': stamp,
+            # Um reject carimba 'REJEITADO <quando> · <quem>' na coluna da mesa
+            # que devolveu, e a data ao lado é limpa — sem esta marca a linha
+            # apareceria simplesmente como "não validada", perdendo o que houve.
+            'rejected': stamp.upper().startswith('REJEITADO'),
+        })
+    return out
 
 
 # =============================================================================
@@ -314,17 +441,77 @@ def pending_stage(row, rules=None):
     return STATUS_OK
 
 
+# Feriados ANBIMA, lidos do MESMO arquivo que o resto do app usa
+# (`static/data/anbima.json`). Importar o `routes`, que já tem o carregador,
+# seria circular — e uma segunda lista de feriados envelheceria sozinha, então o
+# que se repete aqui é só a leitura, não o dado.
+_ANBIMA = {'feriados': None}
+
+
+def _anbima_holidays():
+    if _ANBIMA['feriados'] is None:
+        import json
+        try:
+            path = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'anbima.json'))
+            with open(path, encoding='utf-8') as fh:
+                _ANBIMA['feriados'] = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+        except Exception:
+            # Sem o arquivo o aging vira a contagem só de dias de semana, que
+            # erra por feriado mas não some da tela nem estoura o request.
+            _LOG.warning('[manual-conf] anbima.json não pôde ser lido; o aging '
+                         'vai contar dias úteis sem os feriados')
+            _ANBIMA['feriados'] = set()
+    return _ANBIMA['feriados']
+
+
+def _bizdays_between(inicio, fim):
+    """Dias ÚTEIS de `inicio` (exclusive) até `fim` (inclusive), calendário ANBIMA.
+
+    Contagem por iteração e não por fórmula: a janela do aging é de dias a poucas
+    semanas, e uma fórmula de semanas × 5 ainda precisaria varrer os feriados do
+    intervalo. Data futura devolve 0 — negativo num "há quantos dias" não
+    significa nada.
+    """
+    if not inicio or not fim or fim <= inicio:
+        return 0
+    feriados = _anbima_holidays()
+    n, d = 0, inicio
+    while d < fim:
+        d += timedelta(days=1)
+        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in feriados:
+            n += 1
+    return n
+
+
+def _add_bizdays(inicio, n):
+    """`inicio` + n dias ÚTEIS (ANBIMA). n = 0 devolve a própria data."""
+    if not inicio:
+        return None
+    feriados = _anbima_holidays()
+    d, restam = inicio, int(n or 0)
+    while restam > 0:
+        d += timedelta(days=1)
+        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in feriados:
+            restam -= 1
+    return d
+
+
 def aging(row):
-    """Dias desde que a confirmação foi enviada para validação do OTC.
+    """Dias ÚTEIS desde que a confirmação foi enviada para validação do OTC.
 
     É a idade da PENDÊNCIA, não da operação: uma operação de três meses atrás
     cuja confirmação saiu ontem não está atrasada. Sem a data de envio, cai na
     data da operação, que é o que a planilha antiga tinha.
+
+    ÚTEIS pelo calendário ANBIMA, não corridos: a esteira só anda em dia de
+    pregão, e contar sábado, domingo e feriado fazia uma confirmação de
+    sexta-feira nascer com três dias de atraso na segunda — o vermelho do card
+    aparecia sem ninguém ter deixado de trabalhar.
     """
     d = parse_date(row.get('Data envio validação OTC')) or parse_date(row.get('Data Operação'))
     if not d:
         return None
-    return (datetime.now().date() - d).days
+    return _bizdays_between(d, datetime.now().date())
 
 
 def refresh_derived(row, rules=None):
@@ -348,12 +535,20 @@ def db_path(category):
 
 
 def ensure_db(path):
-    """Cria o banco vazio se ele não existir, para a tela abrir antes do primeiro
-    import."""
-    if os.path.isfile(path):
-        return
+    """Cria o banco vazio se ele não existir e ACRESCENTA as colunas que faltam.
+
+    A segunda parte é o que dispensa um script de migração: o banco fica fora do
+    repositório (`apps/static/data/db/` está no .gitignore), então a instância do
+    time tem o dela desde antes de a coluna existir. Sem isto, o primeiro
+    `INSERT` — que lista as colunas explicitamente — falharia com "column not
+    found" e a tela inteira sumiria depois de um pull.
+
+    `ADD COLUMN IF NOT EXISTS` é idempotente, então isto pode rodar a cada
+    leitura sem custo.
+    """
     if duckdb is None:
         return
+    novo = not os.path.isfile(path)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # close() em finally: uma conexão vazada segura o lock de escrita do
@@ -362,11 +557,22 @@ def ensure_db(path):
         try:
             cols = ', '.join('"{}" VARCHAR'.format(c) for c in DB_COLUMNS)
             con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(TABLE, cols))
+            existentes = {r[1] for r in con.execute(
+                "PRAGMA table_info('{}')".format(TABLE)).fetchall()}
+            for c in DB_COLUMNS:
+                if c not in existentes:
+                    # DDL sobre IDENTIFICADOR do próprio código (DB_COLUMNS é
+                    # constante de módulo): nome de coluna não pode ser bindado,
+                    # e é o único caso em que se monta a string.
+                    con.execute('ALTER TABLE {} ADD COLUMN IF NOT EXISTS "{}" VARCHAR'
+                                .format(TABLE, c))
+                    _LOG.info('[manual-conf] coluna %r acrescentada a %s', c, path)
         finally:
             con.close()
-        _LOG.info('[manual-conf] banco vazio criado em %s', path)
+        if novo:
+            _LOG.info('[manual-conf] banco vazio criado em %s', path)
     except Exception:
-        _LOG.warning('[manual-conf] não consegui criar %s', path)
+        _LOG.warning('[manual-conf] não consegui preparar %s:\n%s', path, traceback.format_exc())
 
 
 def load_rows(category):
@@ -512,16 +718,37 @@ def mark_generated(key, when=None, link=None, subject=None):
     return row
 
 
-def mark_validated(key, stage, sid):
+class SlaCommentRequired(Exception):
+    """Carimbo fora do prazo sem justificativa.
+
+    Exceção, e não um `return None`: quem chama precisa distinguir "não achei a
+    linha" de "achei e recusei", para a tela pedir o comentário em vez de dizer
+    que a confirmação não existe.
+    """
+
+
+def mark_validated(key, stage, sid, comment=''):
     """Valida uma etapa: carimba a data, o horário e o SPN de quem validou.
 
     Ao sair do OTC, carimba também a Data envio validação MO/FO — é o mesmo
     instante, e deixar quem valida preencher isso à mão faria a idade da segunda
     etapa nascer errada.
+
+    Passado o prazo da mesa (ver `SLA_BIZDAYS`), o `comment` é OBRIGATÓRIO e vai
+    para a coluna daquela etapa. A checagem é feita aqui, e não só na tela: a
+    tela é onde se pede, mas o endpoint é onde se garante — e o motivo do atraso
+    é justamente o que alguém vai procurar depois.
     """
     row = find_row(key)
     if row is None:
         return None
+    comment = str(comment or '').strip()
+    if sla_breached(row, stage) and not comment:
+        raise SlaCommentRequired(stage)
+    if comment:
+        col = STAGE_COMMENT_COLUMN.get(str(stage or '').upper())
+        if col:
+            row[col] = comment
     hoje = fmt_date(datetime.now().date())
     if stage == STAGE_OTC:
         row['Conferido OTC'] = hoje
@@ -758,6 +985,12 @@ def monitor_payload(docs_for=None):
                 # mostra, o mesmo do cadastro e do Confirmation Type do upload.
                 item['Tipo'] = confirmation_type(r.get('Produto'), r.get('LOB'))
                 item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
+                # O prazo é da ETAPA do card (OTC D+3, MO D+4, FO D+6 do trade
+                # date). O item guarda a luz e os dias que faltam; a frase é
+                # montada na tela, no idioma da aplicação.
+                st = sla_state(r, stage)
+                item['sla'] = {'level': st['level'], 'left': st['left'],
+                               'deadline': fmt_date(st['deadline'])}
                 # Os documentos são resolvidos UMA vez por grupo: eles são do
                 # grupo, não do trade — a pasta é a mesma para todos eles.
                 if docs_for:
@@ -771,6 +1004,14 @@ def monitor_payload(docs_for=None):
             # que diz há quanto tempo aquele documento está parado.
             if _aging_int(r.get('Aging Confirmação')) > _aging_int(item.get('Aging Confirmação')):
                 item['Aging Confirmação'] = r.get('Aging Confirmação', '')
+            # E o prazo do grupo é o da operação MAIS APERTADA. O documento é um
+            # só e cobre todas elas: se uma já estourou, o grupo inteiro está
+            # atrasado — mostrar o prazo da mais folgada esconderia isso.
+            st = sla_state(r, stage)
+            atual = item.get('sla') or {}
+            if _SLA_ORDEM.index(st['level']) > _SLA_ORDEM.index(atual.get('level', 'done')):
+                item['sla'] = {'level': st['level'], 'left': st['left'],
+                               'deadline': fmt_date(st['deadline'])}
         itens = list(grupos.values())
         for it in itens:
             it['count'] = len(it['keys'])

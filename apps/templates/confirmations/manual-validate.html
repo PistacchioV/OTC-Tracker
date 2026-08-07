@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validation — {{ cliente }} · {{ tipo }} · {{ trade_date }}</title>
+{# ============================================================================
+   A tela de validação da esteira de confirmação manual: checklist da etapa à
+   esquerda, o PDF do Electronic Inventory à direita.
+
+   É irmã da `confirmations/validate.html` (a do OTC no New Deals) e não uma
+   evolução dela: aquela valida a confirmação que a tela de geração acabou de
+   produzir, chaveada por contraparte × mercadoria × data; esta valida uma etapa
+   da ESTEIRA, chaveada pelos Trade IDs do grupo, e vale para as três mesas.
+   Fundi-las obrigaria uma a carregar os dois modelos de chave.
+
+   Página autônoma (não estende o layout): ela abre em aba nova a partir do
+   Monitor, e o menu lateral só tiraria espaço do documento. Como não há
+   I18nManager aqui, todo texto nasce em inglês e é traduzido pelo mapa `_TRANS`
+   local, lendo o mesmo `localStorage['__OTC_TRACKER_LANG__']` do resto do app.
+   ============================================================================ #}
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #12121f; color: #e0e0e0;
+         height: 100vh; display: flex; overflow: hidden; }
+
+  /* ── Painel esquerdo ── */
+  #panel { width: 380px; flex: 0 0 380px; background: #1a1a2e; padding: 20px;
+           overflow-y: auto; box-shadow: 4px 0 16px rgba(0,0,0,.4); }
+  #panel h1 { font-size: 13pt; color: #fff; margin-bottom: 2px; }
+  #panel .sub { font-size: 9pt; color: #9090b0; margin-bottom: 14px;
+                border-bottom: 1px solid #333; padding-bottom: 10px; }
+  .meta { font-size: 8.5pt; color: #a0a0c0; margin-bottom: 14px; line-height: 1.65; }
+  .meta b { color: #d0d0e8; }
+
+  .stage-pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+                font-size: 8.5pt; font-weight: bold; background: #3b2b6e; color: #c4b5fd; }
+
+  /* ── A luz do prazo ──────────────────────────────────────────────────────
+     Mesma leitura das luzes do New Deals Monitor: verde com folga, âmbar na
+     véspera, vermelho depois do prazo. Aqui em faixa (e não em halo de card)
+     porque o que precisa ser lido é a FRASE do prazo, não só a cor — quem abre
+     esta tela já está decidindo se carimba. */
+  .sla { border-radius: 8px; padding: 10px 12px; font-size: 9pt; line-height: 1.5;
+         margin-bottom: 14px; border: 1px solid; }
+  .sla b { display: block; font-size: 9.5pt; margin-bottom: 2px; }
+  .sla-ok   { background: rgba(26,138,74,.14);  border-color: rgba(26,138,74,.5);  color: #7ed6a2; }
+  .sla-warn { background: rgba(247,184,75,.14); border-color: rgba(247,184,75,.5); color: #f7c56b; }
+  .sla-late { background: rgba(220,53,69,.14);  border-color: rgba(220,53,69,.55); color: #f19aa2; }
+  .sla-done { background: rgba(120,120,150,.12); border-color: #3a3a5a; color: #9090b0; }
+
+  /* ── Histórico das três mesas ── */
+  .hist { border: 1px solid #2a2a5a; border-radius: 8px; padding: 10px 12px;
+          margin-bottom: 14px; background: #0d0d1a; }
+  .hist h2 { font-size: 8.5pt; color: #9090b0; text-transform: uppercase;
+             letter-spacing: .06em; margin-bottom: 8px; font-weight: 600; }
+  .hist-row { display: flex; gap: 8px; align-items: baseline; font-size: 8.5pt;
+              padding: 4px 0; border-top: 1px solid #1e1e38; }
+  .hist-row:first-of-type { border-top: none; }
+  .hist-stage { flex: 0 0 34px; font-weight: bold; color: #c4b5fd; }
+  .hist-when { color: #d0d0e8; }
+  .hist-who { color: #7a7a9a; font-size: 8pt; }
+  .hist-pending { color: #7a7a9a; font-style: italic; }
+  .hist-rejected { color: #f19aa2; }
+
+  .check-item { display: flex; gap: 10px; align-items: flex-start; background: #0d0d1a;
+                border: 1px solid #2a2a5a; border-radius: 6px; padding: 10px;
+                margin-bottom: 8px; cursor: pointer; font-size: 9.5pt; line-height: 1.45; }
+  .check-item input { margin-top: 2px; width: 15px; height: 15px; accent-color: #7c3aed; }
+  .check-item.done { border-color: #1a8a4a; }
+
+  #why { margin-bottom: 8px; }
+  #why label { display: block; font-size: 8.5pt; color: #f19aa2; margin-bottom: 4px; font-weight: bold; }
+  #why textarea { width: 100%; background: #0d0d1a; border: 1px solid #5a2a35;
+                  border-radius: 6px; color: #e0e0e0; padding: 8px; font-size: 9pt;
+                  font-family: inherit; resize: vertical; min-height: 62px; }
+  #why textarea:focus { outline: none; border-color: #dc3545; }
+
+  #btn-validate { width: 100%; background: #1a6e3c; border: none; color: #fff;
+                  padding: 11px; border-radius: 6px; cursor: pointer; font-size: 11pt;
+                  font-weight: bold; margin-top: 6px; }
+  #btn-validate:disabled { background: #2a2a3a; color: #707080; cursor: not-allowed; }
+  #vstatus { font-size: 9pt; margin-top: 10px; min-height: 16px; }
+  .already { background: #12432a; border: 1px solid #1a8a4a; color: #7ed6a2;
+             border-radius: 6px; padding: 10px; font-size: 9.5pt; margin-bottom: 12px; }
+
+  /* ── Preview do PDF ── */
+  #preview { flex: 1 1 auto; height: 100vh; display: flex; flex-direction: column; }
+  #preview iframe { width: 100%; flex: 1 1 auto; border: none; background: #444; }
+  #docbar { background: #1a1a2e; padding: 6px 12px; font-size: 8.5pt; color: #9090b0;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #docbar a { color: #c4b5fd; text-decoration: none; cursor: pointer; }
+  #docbar a.on { color: #fff; font-weight: bold; }
+  .nodoc { flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+           background: #202033; color: #7a7a9a; font-size: 10pt; text-align: center; padding: 30px; }
+</style>
+</head>
+<body>
+
+{% if not found %}
+<div id="panel">
+  <h1>✕ <span data-t="notFoundTitle">Confirmation not found</span></h1>
+  <p class="sub" data-t="notFoundText">
+    It may have been deleted, or the link is out of date. Go back to the monitor and try again.</p>
+</div>
+{% else %}
+<div id="panel">
+  <h1>✓ <span data-t="title">Confirmation validation</span></h1>
+  <p class="sub" data-t="sub">Check the PDF on the right and tick every item to finish.</p>
+
+  <div class="meta">
+    <b data-t="mCounterparty">Counterparty</b>: {{ cliente }}<br>
+    <b data-t="mProduct">Product</b>: {{ tipo }}{% if lob %} · {{ lob }}{% endif %}{% if ativo %} · {{ ativo }}{% endif %}<br>
+    <b data-t="mTradeDate">Trade date</b>: {{ trade_date }}<br>
+    <b data-t="mTrades">Trades</b>: {{ trades|length }} — {{ trades|join(', ') }}<br>
+    <b data-t="mStage">Stage</b>: <span class="stage-pill">{{ stage }}</span>
+  </div>
+
+  {# A faixa do prazo. O texto sai do JS porque a frase muda com o número. #}
+  <div class="sla sla-{{ sla_level }}" id="sla"
+       data-level="{{ sla_level }}" data-left="{{ sla_left if sla_left is not none else '' }}"
+       data-deadline="{{ sla_deadline }}" data-days="{{ sla_days }}"></div>
+
+  <div class="hist">
+    <h2 data-t="histTitle">Validation history</h2>
+    {% for h in history %}
+    <div class="hist-row">
+      <span class="hist-stage">{{ h.stage }}</span>
+      {% if h.rejected %}
+        <span class="hist-rejected">{{ h.stamp }}</span>
+      {% elif h.date %}
+        <span class="hist-when">{{ h.date }}</span>
+        <span class="hist-who">{{ h.stamp }}</span>
+      {% else %}
+        <span class="hist-pending" data-t="histPending">not validated yet</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if already %}
+  <div class="already" data-t="alreadyDone">
+    This stage has already been validated. The preview is the PDF saved in the Electronic Inventory.</div>
+  {% endif %}
+
+  {# O checklist da ETAPA: o OTC confere o documento inteiro, MO e FO conferem só
+     os dados econômicos. Os códigos vêm do servidor; a frase de cada um é
+     montada no JS, no idioma da aplicação. #}
+  <div id="checks" data-checks="{{ checks|join(',') }}"></div>
+
+  {# A justificativa só aparece fora do prazo, e aí é obrigatória. #}
+  <div id="why" style="display:none">
+    <label data-t="whyLabel">Reason for the delay (required)</label>
+    <textarea id="why-text" data-t-ph="whyPlaceholder"
+              placeholder="Why was this validated after the deadline?">{{ comment }}</textarea>
+  </div>
+
+  <button id="btn-validate" disabled data-t="btnValidate">Validate</button>
+  <div id="vstatus"></div>
+</div>
+
+<div id="preview">
+  {% if docs %}
+  <div id="docbar">
+    <span data-t="docLabel">Document</span>
+    {% for d in docs %}<a data-src="{{ d.url }}"{% if loop.first %} class="on"{% endif %}>{{ d.name }}</a>{% endfor %}
+  </div>
+  <iframe id="pdf" src="{{ docs[0].url }}" title="PDF"></iframe>
+  {% else %}
+  <div class="nodoc" data-t="noDoc">
+    No PDF in this confirmation's folder on the Electronic Inventory.</div>
+  {% endif %}
+</div>
+
+<script type="application/json" id="val-data">{{ {
+  'keys':   trades,
+  'stage':  stage,
+  'already': already,
+  'late':   sla_level == 'late'
+} | tojson }}</script>
+<script>
+(function () {
+  'use strict';
+  var V = JSON.parse(document.getElementById('val-data').textContent || '{}');
+
+  var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+              localStorage.getItem('language') || 'en').toLowerCase();
+  var _TRANS = {
+    en: {
+      title: 'Confirmation validation', sub: 'Check the PDF on the right and tick every item to finish.',
+      mCounterparty: 'Counterparty', mProduct: 'Product', mTradeDate: 'Trade date',
+      mTrades: 'Trades', mStage: 'Stage', histTitle: 'Validation history',
+      histPending: 'not validated yet', docLabel: 'Document',
+      noDoc: "No PDF in this confirmation's folder on the Electronic Inventory.",
+      alreadyDone: 'This stage has already been validated. The preview is the PDF saved in the Electronic Inventory.',
+      notFoundTitle: 'Confirmation not found',
+      notFoundText: 'It may have been deleted, or the link is out of date. Go back to the monitor and try again.',
+      btnValidate: 'Validate', btnDone: 'Validated ✓', btnSending: 'Validating…',
+      whyLabel: 'Reason for the delay (required)',
+      whyPlaceholder: 'Why was this validated after the deadline?',
+      whyMissing: 'The reason for the delay is required.',
+      okMsg: 'Stage validated.', failMsg: 'Validation failed.',
+      chk: { counterparty: 'Counterparty and Tax ID match the Reference Data',
+             cgd: 'CGD date matches the registered contract',
+             operations: 'Reference Table trades match (deal, amount, rate, direction)',
+             dates: 'Dates match (trade, fixings, PTAX and maturity)' },
+      slaOk: 'Within the deadline', slaWarn: 'Deadline is close', slaLate: 'Past the deadline',
+      slaDone: 'Stage already validated',
+      slaLeft: '{n} business day(s) left — due {d} ({s} is D+{k} from the trade date)',
+      slaToday: 'Due today, {d} ({s} is D+{k} from the trade date)',
+      slaOver: '{n} business day(s) past the deadline of {d} ({s} is D+{k} from the trade date)',
+      slaNoDate: 'No trade date on the row — deadline could not be computed.'
+    },
+    br: {
+      title: 'Validação da confirmação', sub: 'Confira o PDF ao lado e marque cada item para concluir.',
+      mCounterparty: 'Contraparte', mProduct: 'Produto', mTradeDate: 'Data da operação',
+      mTrades: 'Operações', mStage: 'Etapa', histTitle: 'Histórico de validação',
+      histPending: 'ainda não validada', docLabel: 'Documento',
+      noDoc: 'Nenhum PDF na pasta desta confirmação no Electronic Inventory.',
+      alreadyDone: 'Esta etapa já foi validada. O preview é o PDF salvo no Electronic Inventory.',
+      notFoundTitle: 'Confirmação não encontrada',
+      notFoundText: 'Ela pode ter sido excluída, ou o link está desatualizado. Volte ao monitor e tente de novo.',
+      btnValidate: 'Validar', btnDone: 'Validada ✓', btnSending: 'Validando…',
+      whyLabel: 'Motivo do atraso (obrigatório)',
+      whyPlaceholder: 'Por que esta validação saiu depois do prazo?',
+      whyMissing: 'O motivo do atraso é obrigatório.',
+      okMsg: 'Etapa validada.', failMsg: 'Falha na validação.',
+      chk: { counterparty: 'Contraparte e CNPJ conferem com o Reference Data',
+             cgd: 'Data do CGD confere com o contrato cadastrado',
+             operations: 'Operações da Tabela de Referência conferem (deal, quantidade, taxa, direção)',
+             dates: 'Datas conferem (negociação, fixings, PTAX e vencimento)' },
+      slaOk: 'Dentro do prazo', slaWarn: 'Prazo próximo', slaLate: 'Fora do prazo',
+      slaDone: 'Etapa já validada',
+      slaLeft: 'Faltam {n} dia(s) útil(eis) — vence em {d} ({s} é D+{k} da data da operação)',
+      slaToday: 'Vence hoje, {d} ({s} é D+{k} da data da operação)',
+      slaOver: '{n} dia(s) útil(eis) além do prazo de {d} ({s} é D+{k} da data da operação)',
+      slaNoDate: 'A linha não tem data de operação — não deu para calcular o prazo.'
+    },
+    es: {
+      title: 'Validación de la confirmación', sub: 'Revise el PDF al lado y marque cada ítem para concluir.',
+      mCounterparty: 'Contraparte', mProduct: 'Producto', mTradeDate: 'Fecha de operación',
+      mTrades: 'Operaciones', mStage: 'Etapa', histTitle: 'Historial de validación',
+      histPending: 'aún no validada', docLabel: 'Documento',
+      noDoc: 'Ningún PDF en la carpeta de esta confirmación en el Electronic Inventory.',
+      alreadyDone: 'Esta etapa ya fue validada. La vista previa es el PDF guardado en el Electronic Inventory.',
+      notFoundTitle: 'Confirmación no encontrada',
+      notFoundText: 'Puede haber sido eliminada, o el enlace está desactualizado. Vuelva al monitor e intente de nuevo.',
+      btnValidate: 'Validar', btnDone: 'Validada ✓', btnSending: 'Validando…',
+      whyLabel: 'Motivo del retraso (obligatorio)',
+      whyPlaceholder: '¿Por qué se validó después del plazo?',
+      whyMissing: 'El motivo del retraso es obligatorio.',
+      okMsg: 'Etapa validada.', failMsg: 'Falló la validación.',
+      chk: { counterparty: 'Contraparte y CNPJ coinciden con el Reference Data',
+             cgd: 'La fecha del CGD coincide con el contrato registrado',
+             operations: 'Operaciones de la Tabla de Referencia coinciden (deal, cantidad, tasa, dirección)',
+             dates: 'Las fechas coinciden (negociación, fixings, PTAX y vencimiento)' },
+      slaOk: 'Dentro del plazo', slaWarn: 'Plazo cercano', slaLate: 'Fuera del plazo',
+      slaDone: 'Etapa ya validada',
+      slaLeft: 'Faltan {n} día(s) hábil(es) — vence el {d} ({s} es D+{k} de la fecha de operación)',
+      slaToday: 'Vence hoy, {d} ({s} es D+{k} de la fecha de operación)',
+      slaOver: '{n} día(s) hábil(es) más allá del plazo del {d} ({s} es D+{k} de la fecha de operación)',
+      slaNoDate: 'La fila no tiene fecha de operación — no se pudo calcular el plazo.'
+    }
+  };
+  var T = _TRANS[LANG] || _TRANS.en;
+  function t(k, vars) {
+    var s = T[k] || _TRANS.en[k] || k;
+    if (vars) Object.keys(vars).forEach(function (v) { s = s.split('{' + v + '}').join(vars[v]); });
+    return s;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* Traduz o que veio renderizado do servidor em inglês. */
+  document.querySelectorAll('[data-t]').forEach(function (el) {
+    var k = el.getAttribute('data-t');
+    if (T[k] || _TRANS.en[k]) el.textContent = t(k);
+  });
+  document.querySelectorAll('[data-t-ph]').forEach(function (el) {
+    el.setAttribute('placeholder', t(el.getAttribute('data-t-ph')));
+  });
+
+  var panelChecks = document.getElementById('checks');
+  if (!panelChecks) return;                        /* tela de "não encontrada" */
+
+  /* ── A faixa do prazo ── */
+  var slaEl = document.getElementById('sla');
+  var level = slaEl.getAttribute('data-level');
+  var left = slaEl.getAttribute('data-left');
+  var deadline = slaEl.getAttribute('data-deadline');
+  var days = slaEl.getAttribute('data-days');
+  var head = { ok: 'slaOk', warn: 'slaWarn', late: 'slaLate', done: 'slaDone' }[level] || 'slaOk';
+  var detalhe;
+  if (!deadline) detalhe = t('slaNoDate');
+  else if (level === 'done') detalhe = deadline;
+  else {
+    var n = parseInt(left, 10);
+    var vars = { n: Math.abs(n), d: deadline, s: V.stage, k: days };
+    detalhe = n < 0 ? t('slaOver', vars) : (n === 0 ? t('slaToday', vars) : t('slaLeft', vars));
+  }
+  slaEl.innerHTML = '<b>' + esc(t(head)) + '</b>' + esc(detalhe);
+
+  /* ── O checklist da etapa ── */
+  var ids = (panelChecks.getAttribute('data-checks') || '').split(',').filter(Boolean);
+  panelChecks.innerHTML = ids.map(function (id) {
+    var txt = (T.chk && T.chk[id]) || (_TRANS.en.chk[id]) || id;
+    return '<label class="check-item"><input type="checkbox" data-check="' + esc(id) + '"> ' +
+           esc(txt) + '</label>';
+  }).join('');
+
+  var boxes = Array.prototype.slice.call(panelChecks.querySelectorAll('input[type="checkbox"]'));
+  var btn = document.getElementById('btn-validate');
+  var vs = document.getElementById('vstatus');
+  var why = document.getElementById('why');
+  var whyText = document.getElementById('why-text');
+  var already = !!V.already;
+
+  /* Fora do prazo o motivo é obrigatório — e é pedido AQUI, no instante do
+     carimbo, porque depois ninguém lembra. O servidor recusa do mesmo jeito
+     (409 sla_comment_required): a tela é onde se pede, o endpoint é onde se
+     garante. */
+  if (V.late && !already) why.style.display = '';
+
+  function sync() {
+    boxes.forEach(function (b) { b.closest('.check-item').classList.toggle('done', b.checked); });
+    var todos = boxes.every(function (b) { return b.checked; });
+    var motivo = !V.late || String(whyText.value || '').trim() !== '';
+    btn.disabled = already || !todos || !motivo;
+  }
+  boxes.forEach(function (b) {
+    if (already) { b.checked = true; b.disabled = true; }
+    b.addEventListener('change', sync);
+  });
+  whyText.addEventListener('input', sync);
+  sync();
+  if (already) { btn.textContent = t('btnDone'); whyText.disabled = true; }
+
+  /* Troca de documento sem recarregar a página: a pasta do dia pode ter um PDF
+     por mercadoria, e o grupo é de um deles. */
+  document.querySelectorAll('#docbar a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      document.getElementById('pdf').src = a.getAttribute('data-src');
+      document.querySelectorAll('#docbar a').forEach(function (x) { x.classList.remove('on'); });
+      a.classList.add('on');
+    });
+  });
+
+  btn.addEventListener('click', function () {
+    var motivo = String(whyText.value || '').trim();
+    if (V.late && !motivo) {
+      vs.style.color = '#f19aa2'; vs.textContent = '✖ ' + t('whyMissing');
+      return;
+    }
+    btn.disabled = true; btn.textContent = t('btnSending');
+    fetch('/api/manual-confirmation/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: V.keys, stage: V.stage, comment: motivo })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (res.success) {
+        btn.textContent = t('btnDone');
+        vs.style.color = '#7ed6a2';
+        vs.textContent = '✔ ' + t('okMsg');
+        already = true;
+        boxes.forEach(function (b) { b.disabled = true; });
+        whyText.disabled = true;
+        /* O Monitor que abriu esta aba recarrega sozinho — sem isto a fila de lá
+           continuaria mostrando uma confirmação que acabou de sair dela. */
+        if (window.opener && window.opener.mcReload) window.opener.mcReload();
+      } else {
+        btn.disabled = false; btn.textContent = t('btnValidate');
+        vs.style.color = '#f19aa2';
+        if (res.sla_comment_required) { why.style.display = ''; whyText.focus(); }
+        vs.textContent = '✖ ' + (res.message || t('failMsg'));
+      }
+    })
+    .catch(function (e) {
+      btn.disabled = false; btn.textContent = t('btnValidate');
+      vs.style.color = '#f19aa2';
+      vs.textContent = '✖ ' + e.message;
+    });
+  });
+})();
+</script>
+{% endif %}
+</body>
+</html>

@@ -28536,6 +28536,60 @@ def api_mc_docs():
     return jsonify({'docs': _mc_confirmation_docs(row)})
 
 
+@blueprint.route('/manual-confirmation/validate')
+def manual_confirmation_validate():
+    """A tela de validação de UMA confirmação: PDF ao lado, checklist da etapa e
+    o histórico das três mesas.
+
+    O Monitor abria a validação com um clique só, e um clique não é conferência:
+    quem carimba assina que olhou o documento. Esta é a mesma ideia da tela de
+    checklist do OTC no New Deals — e por isso ela mostra o PDF que foi (ou vai
+    ser) enviado ao cliente, não uma remontagem dele.
+
+    A confirmação é identificada pelas CHAVES do grupo, porque um documento cobre
+    várias operações: validar trade a trade faria a mesma folha ser conferida dez
+    vezes.
+    """
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    from apps.pages import manual_conf as _mc
+    keys = [k.strip() for k in (request.args.get('keys') or '').split(',') if k.strip()]
+    stage = (request.args.get('stage') or '').strip().upper()
+    if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
+        stage = _mc.STAGE_OTC
+    rows = [r for r in (_mc.find_row(k) for k in keys) if r is not None]
+    if not rows:
+        return render_template('confirmations/manual-validate.html',
+                               found=False, stage=stage, keys=keys), 404
+    row = rows[0]
+    sla = _mc.sla_state(row, stage)
+    # O grupo vale pela operação MAIS APERTADA — o documento é um só.
+    for r in rows[1:]:
+        s = _mc.sla_state(r, stage)
+        if _mc._SLA_ORDEM.index(s['level']) > _mc._SLA_ORDEM.index(sla['level']):
+            sla = s
+    col_data, _col_stamp = _mc.STAGE_COLUMNS[stage]
+    return render_template(
+        'confirmations/manual-validate.html',
+        found=True,
+        keys=keys, stage=stage,
+        cliente=row.get('Cliente', ''), tipo=_mc.confirmation_type(row.get('Produto'), row.get('LOB')),
+        lob=row.get('LOB', ''), ativo=row.get('Moeda', ''),
+        trade_date=row.get('Data Operação', ''),
+        legal_entity=row.get('Legal Entity', ''),
+        trades=[str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows],
+        checks=_mc.checklist_for(stage),
+        history=_mc.stage_history(row),
+        # `already` trava o botão: revalidar recarimbaria por cima de quem
+        # assinou antes, apagando o dono da conferência anterior.
+        already=bool(str(row.get(col_data, '') or '').strip()),
+        sla_level=sla['level'], sla_left=sla['left'],
+        sla_deadline=_mc.fmt_date(sla['deadline']),
+        sla_days=_mc.SLA_BIZDAYS.get(stage),
+        comment=row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), ''),
+        docs=_mc_confirmation_docs(row))
+
+
 @blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])
 def api_mc_upsert():
     """Grava uma linha (edição no modal, linha nova ou edição em massa)."""
@@ -28619,8 +28673,17 @@ def api_mc_validate():
     stage = str(payload.get('stage') or '').strip().upper()
     if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
         return jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
-    rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', '')) for k in keys)
-            if r is not None]
+    comment = str(payload.get('comment') or '').strip()
+    try:
+        rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
+                            for k in keys) if r is not None]
+    except _mc.SlaCommentRequired:
+        # 409 e não 400: o pedido está bem formado, o ESTADO é que exige mais um
+        # campo. A tela usa `sla_comment_required` para abrir o campo em vez de
+        # mostrar um erro genérico.
+        return jsonify({'success': False, 'sla_comment_required': True,
+                        'stage': stage,
+                        'message': 'Validação fora do prazo: informe o motivo do atraso.'}), 409
     if not rows:
         return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
