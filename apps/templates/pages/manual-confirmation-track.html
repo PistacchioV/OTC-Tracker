@@ -106,6 +106,9 @@
    digita nela — escondê-la faria perguntarem onde foi parar. O tom é o
    --ins-tertiary-bg; o secondary é BRANCO no tema claro, e a marca sumia. */
 #mc-table td.mc-derived { background: var(--ins-tertiary-bg, #f6f7fb); font-style: italic; }
+/* Dígitos de largura fixa na coluna de valor: sem isso as casas decimais não se
+   alinham entre as linhas e a coluna fica serrilhada. */
+#mc-table td.mc-num { font-variant-numeric: tabular-nums; }
 #mc-table td.mc-acts { white-space: nowrap; text-align: center; }
 /* Ações de linha no squircle padrão do app (spec .ops-row-act): 32×32, raio 10. */
 #mc-table td.mc-acts .btn {
@@ -428,6 +431,24 @@
         });
     }
 
+    // O número cru da célula. Aceita as duas escritas que convivem no banco: a do
+    // New Deals ('1500000') e a que veio da planilha ('1.500.000,00'). Célula
+    // vazia vira -Infinity, para todas irem para a mesma ponta na ordenação.
+    function num(v) {
+        var s = String(v == null ? '' : v).trim();
+        if (!s) return -Infinity;
+        if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+        else s = s.replace(/,/g, '');
+        var n = parseFloat(s);
+        return isNaN(n) ? -Infinity : n;
+    }
+
+    function fmtValor(v) {
+        var n = num(v);
+        if (n === -Infinity) return '';
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     function badge(p) {
         var m = { 'Pending OTC': 'text-bg-primary', 'Pending MO': 'text-bg-warning',
                   'Pending FO': 'text-bg-info', 'Pending MO/FO': 'text-bg-warning',
@@ -492,6 +513,16 @@
                 // tipos faria a coluna ordenar e filtrar pela classe CSS.
                 col.render = function (d, t) { return t === 'display' ? badge(d) : (d || ''); };
                 col.className = 'text-center';
+            } else if (name === 'Notional') {
+                // Valor em #,##0.00, e a formatação é ORTOGONAL: só o display. O
+                // sort sai pelo número CRU (senão '1,000.00' viria antes de
+                // '9.00', que é a ordem do texto) e o filtro pelo texto que está
+                // na tela, porque quem digita no campo copia o que vê.
+                col.render = function (d, t) {
+                    if (t === 'sort' || t === 'type') return num(d);
+                    return t === 'display' ? fmtValor(d) : (d == null ? '' : String(d));
+                };
+                col.className = 'mc-num text-center';
             } else if (isDerived(name)) {
                 col.className = 'mc-derived text-center';
             }
