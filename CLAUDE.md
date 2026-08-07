@@ -425,24 +425,55 @@ São **24** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto
   sem linha cai em OTC + MO e a tela **avisa** — em vez de deixar a confirmação
   parada num Pending que ninguém sabe de quem é (HANDOFF §217).
-  - A coluna **PRODUCT é um `select`** sobre `manual_conf.CONFIRMATION_TYPES`
-    (`NDF`, `NDF COMM`, `OPTION COMM`, `FXO`, `SWAP`) — **uma lista só**, a
-    mesma do *Confirmation Type* do upload do Electronic Inventory
-    (`routes._EI_CONFIRMATION_TYPES` aponta para ela) e do dropdown de Produto
-    do Track Confirmations. Eram três listas escritas à mão, e o cadastro dizia
-    `OPTION` onde a tela de upload dizia `FXO`: o mesmo documento com dois
-    nomes.
+  - A coluna **PRODUCT é um `select`** sobre `manual_conf.CONFIRMATION_TYPES` —
+    **uma lista só**, e ela tem QUATRO consumidores: o *Confirmation Type* do
+    upload do Electronic Inventory (`routes._EI_CONFIRMATION_TYPES` aponta para
+    ela), a **pasta** em que o documento é gravado (`TYPE_FOLDER`), este cadastro
+    e o dropdown de Produto do Track Confirmations. Eram listas escritas à mão, e
+    o cadastro dizia `OPTION` onde a tela de upload dizia `FXO`: o mesmo
+    documento com dois nomes. São **oito tipos, sempre em MAIÚSCULO** (é código,
+    não rótulo — a comparação entre as telas é feita sobre ele):
+
+    | Tipo | Pasta no Electronic Inventory |
+    |---|---|
+    | `NDF VANILLA` | `NDF Vanilla` |
+    | `NDF FWD START` | `NDF FWD Start` |
+    | `OTHER PUBLISHER` | `NDF Other Publisher` |
+    | `NDF COMM` | `NDF Commodities` |
+    | `OPTION COMM` | `Commodities Options` |
+    | `FXO` | `FX Options` |
+    | `SWAP` | `Swap` |
+    | `SWAP CORPORATE` | `Swap Corporate` |
+
+    As três páginas de NDF do New Deals gravam o mesmo Product Type e têm cada
+    uma o seu tipo aqui: o documento que sai de cada uma é diferente, e um `NDF`
+    genérico obrigava a adivinhar qual delas gerou a linha.
+  - **`TYPE_FOLDER` é a fonte única do nome da pasta**, para os dois jeitos de um
+    documento chegar ao share: o `save` do app e o **upload manual**. Eles
+    gravavam em pastas diferentes para o mesmo produto (`FXO` × `FX Options`), e
+    como o Monitor procura PDF só onde o app grava, a confirmação subida à mão
+    ficava invisível para ele com o arquivo lá. Os quatro nomes de pasta
+    históricos (`NDF Commodities`, `Commodities Options`, `FX Options`,
+    `NDF FWD Start`) **não podem mudar** — renomeá-los deixaria para trás tudo o
+    que já foi gravado.
   - Os dois lados da comparação passam por **`manual_conf.confirmation_type()`**,
-    que traduz a nomenclatura de quem criou a linha (`OPTION`, `NDF FWD START`,
-    e o `NDF` × LOB `COMMODITY` da planilha legada) para o nome único. Ele
-    classifica **pela pasta** (`_product_folder`) antes de aceitar um nome que
-    já está na lista — `NDF` × COMMODITY tem um produto que por acaso está lá, e
-    devolvê-lo direto o classificaria como termo de moeda.
-  - `OPTION EDG` **não era um produto**: era a opção de câmbio na LOB EDG. O
-    `upgrade` do cadastro a converte em `FXO` × LOB `EDG`, que é o desenho
-    Produto × LOB que a tabela sempre teve. Sem esse `upgrade` a instância que
-    já tem o arquivo em disco abriria o `select` sem a opção correspondente, e o
-    primeiro Save trocaria o produto da linha sem ninguém pedir.
+    que traduz a nomenclatura de quem criou a linha (`OPTION`, e o `NDF` × LOB
+    `COMMODITY` da planilha legada) para o nome único. Ele classifica **pela
+    pasta** (`_product_folder`) antes de aceitar um nome que já está na lista —
+    `NDF` × COMMODITY tem um produto que por acaso está lá, e devolvê-lo direto o
+    classificaria como termo de moeda.
+  - O **`upgrade` faz duas coisas**, e as duas são obrigatórias. Traduz os nomes
+    antigos (sem ele, a instância que já tem o arquivo em disco abriria o
+    `select` sem a opção correspondente, e o primeiro Save trocaria o produto da
+    linha sem ninguém pedir) e **completa o arquivo com os tipos que não têm
+    linha nenhuma**, a partir do `_MC_VALIDATION_SEED`. Sem a segunda, um tipo
+    novo cairia no `DEFAULT_RULE` (OTC + MO) — que para o `SWAP CORPORATE` é a
+    regra errada, porque nele o FO também valida. A completação é **por produto,
+    não por par Produto × LOB**: quem apagou a linha coringa e deixou só a da sua
+    LOB fez isso de propósito.
+  - `OPTION EDG` **não era um produto**: era a opção de câmbio na LOB EDG, e o
+    `upgrade` a converte em `FXO` × LOB `EDG` — o desenho Produto × LOB que a
+    tabela sempre teve.
 - **`swap-index`** — código de curva B3 → nome (`C00` → `VCP`). Aponta para o
   **mesmo `SwapIndex.json`** da página de Index Results (ver `file` acima), e
   toda tradução código→texto do módulo de Swap passa por registro:
