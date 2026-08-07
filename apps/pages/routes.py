@@ -442,15 +442,36 @@ def _ei_sanitize(name):
     return s.rstrip('. ')
 
 
+def _ei_match_key(name):
+    """Comparison key for a counterparty name: sanitized, uppercase and with the
+    PUNCTUATION dropped (dots, commas, hyphens, apostrophes).
+
+    The tolerant match already ignored case/whitespace/illegal chars, but kept
+    punctuation — and punctuation is exactly where the row and the folder
+    disagree: the DB says 'REFINARIA DE MATARIPE SA' (or 'S/A', whose slash the
+    sanitizer strips into 'SA'), the share folder says 'S.A'. Same counterparty,
+    zero matches — and the Monitor said 'no PDF' with the PDF sitting right
+    there. Two DIFFERENT counterparties whose names differ only in punctuation
+    do not exist in practice; the CNPJ comparison elsewhere makes the same bet
+    digits-only, for the same reason.
+
+    Letters and digits ONLY — not punctuation-swapped-for-space: 'S.A' must
+    equal 'SA' AND 'S A', and any spacing rule breaks one of the two. Accented
+    letters survive (\\w matches them in py3), so 'AÇOMINAS' keeps its Ç."""
+    s = _ei_sanitize(name).upper()
+    return re.sub(r'[\W_]+', '', s)
+
+
 def _ei_actual_dir_name(folder):
     """On-disk folder name matching the sanitized `folder`, tolerant to
-    case/whitespace/illegal-char differences. Falls back to `folder` itself.
+    case/whitespace/illegal-char/punctuation differences. Falls back to `folder`
+    itself.
 
     Consults the background share scan first (_EI_ROOT_CACHE). Listing the root
     directly costs one stat per counterparty folder over the network share, so a
     cache hit is the difference between instant and tens of seconds — that scan
     is exactly why the cache exists."""
-    key = folder.upper()
+    key = _ei_match_key(folder)
     try:
         with _EI_ROOT_CACHE_LOCK:
             complete = bool(_EI_ROOT_CACHE.get('complete'))
@@ -467,7 +488,7 @@ def _ei_actual_dir_name(folder):
         if os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
             for entry in os.listdir(ELECTRONIC_INVENTORY_ROOT):
                 if (os.path.isdir(os.path.join(ELECTRONIC_INVENTORY_ROOT, entry))
-                        and _ei_sanitize(entry).upper() == key):
+                        and _ei_match_key(entry) == key):
                     return entry
     except Exception:
         pass
@@ -29088,7 +29109,10 @@ def _ei_scan_root_worker():
                 for entry in it:
                     try:
                         if entry.is_dir():
-                            dirs[_ei_sanitize(entry.name).upper()] = entry.name
+                            # A chave do cache é a MESMA do lookup
+                            # (_ei_match_key): pontuação fora, senão a pasta
+                            # 'S.A' nunca casa com a linha 'SA'.
+                            dirs[_ei_match_key(entry.name)] = entry.name
                     except OSError:
                         continue
         ok = True
@@ -29136,7 +29160,7 @@ def api_ei_clients():
     spn_by_key = {}
     all_ref = _ei_refdata_clients()
     for name, spn in all_ref:
-        spn_by_key[_ei_sanitize(name).upper()] = (name, spn)
+        spn_by_key[_ei_match_key(name)] = (name, spn)
     # Cached, background-warmed share scan — never blocks on a slow network drive.
     root_exists, disk_dirs, complete = _ei_scan_root()
     clients = {}
@@ -29147,7 +29171,7 @@ def api_ei_clients():
     # running we don't know if the folder exists, so on_disk = None (unknown) and
     # the UI shows no badge; only a COMPLETE scan justifies a "no folder" badge.
     for name, spn in all_ref:
-        key = _ei_sanitize(name).upper()
+        key = _ei_match_key(name)
         if key not in clients:
             clients[key] = {'name': name, 'spn': spn,
                             'on_disk': (False if complete else None)}
