@@ -1,291 +1,636 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
 
-## Commands
+O OTC Tracker é uma aplicação Flask que cobre o ciclo de vida de derivativos de
+balcão: registro, economic affirmation, liquidação e documentos transacionais.
+É uma aplicação **interna do JPMorgan**, servida de um processo único para uma
+mesa inteira — o que explica quase todas as regras não óbvias abaixo.
 
-### Python / Flask
+---
+
+## 1. Comandos
 
 ```bash
-# Activate the virtual environment (Python 3.11)
+# Ambiente (o diretório chama-se .venv311 mas o Python é 3.12)
 source .venv311/bin/activate
-
-# Install Python dependencies
 pip install -r requirements.txt
 
-# Run in development mode (port 5000)
-flask run
+# Desenvolvimento — no macOS use 5005, NUNCA 5000 (ver §8)
+flask run --port=5005
 
-# Run on a specific port
-flask run --port=8050
-
-# Production (Gunicorn, binds to 0.0.0.0:5005)
+# Produção (Gunicorn, 0.0.0.0:5005)
 gunicorn --config gunicorn-cfg.py run:app
 ```
 
-Environment setup: copy `env.sample` to `.env` and set at minimum `FLASK_APP=run.py`. Debug mode is controlled by the `DEBUG` flag at the top of `run.py` (not the `.env` file).
-
-### Frontend / Assets
-
 ```bash
-# Install Node dependencies
-npm install   # or: bun install
-
-# Watch SCSS for changes (development)
-npm run dev   # runs: gulp
-
-# Compile SCSS to CSS (one-shot)
-npm run build # runs: gulp build
+# Front-end
+npm install          # ou bun install
+npm run dev          # gulp em watch: SCSS → CSS
+npm run build        # compilação única
 ```
 
-Gulp compiles `apps/static/scss/**/*.scss` → `apps/static/css/` and copies third-party plugin assets from `node_modules` into `apps/static/plugins/`.
+Copie `env.sample` para `.env` e defina no mínimo `FLASK_APP=run.py`. O modo
+debug **não** vem do `.env`: é a flag `DEBUG` no topo do `run.py`.
 
-## Architecture
+Gulp compila `apps/static/scss/**/*.scss` → `apps/static/css/` e copia os
+plugins de `node_modules` para `apps/static/plugins/`.
 
-### Request lifecycle
+---
 
-`run.py` reads `DEBUG` → selects `DebugConfig` or `ProductionConfig` from `apps/config.py` → calls `create_app()` in `apps/__init__.py`. That factory registers Flask extensions, then auto-discovers blueprints by iterating the `apps = ('pages',)` tuple and importing `apps.<name>.routes`.
+## 2. Regras da casa (as que não se negociam)
 
-There is **one blueprint** (`pages_blueprint`, defined in `apps/pages/__init__.py`) that owns all routes. All route logic lives in `apps/pages/routes.py` (~29.3k lines). Alongside it, `apps/pages/` holds helper modules imported by the routes — no blueprints of their own:
+- **A branch de trabalho é `visual-refresh`** (desde 26/07/2026; `apple-design`
+  foi incorporada e aposentada). Todo commit e push vai para lá — nunca presuma
+  `main`.
+- **Nunca fixe um de-para novo no código.** Qualquer coisa mapeável tem de ser
+  cadastrável pela tela `/mapping` — é regra permanente do usuário. Ver §6.
+- **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
+  repositório.** Ele é removido antes de cada commit. Se o único diff do
+  `routes.py` for esse bloco, basta não incluir o arquivo no `git add`.
+- **Mantenha um processo só.** Ver §4 — com mais de um, os locks não protegem
+  nada e os schedulers duplicam.
+- **Design: tokens `--vr-*` e `--ins-*`, jamais `--bs-*`.** O tema não define os
+  `--bs-*`, então eles caem no fallback claro e produzem cartão branco no tema
+  escuro. Ver §7.
+- **i18n: todo texto visível nasce em INGLÊS e é traduzido por `data-lang`**
+  (arquivos `apps/static/data/translations/{en,br,es}.json`) — em toda página,
+  SweetAlert incluído. O `I18nManager` do `app.js` traduz os `[data-lang]` UMA
+  vez, no load: **o que o JS insere depois nunca passa por ele**. Texto montado
+  dinamicamente (cards, itens de lista, SweetAlerts) sai de um mapa `_TRANS`
+  local com `t()`, lendo `localStorage['__OTC_TRACKER_LANG__']` — o padrão do
+  swapchar e do Confirmations Monitor. Texto de servidor que a tela exibe deve
+  vir **estruturado** (a lista, não a frase), para a frase ser montada no idioma
+  da aplicação.
+- **E-mail: o cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML.** O
+  `<v:rect>` do Outlook pintava o banner ora mais estreito que a célula (faixa
+  sólida à direita), ora na largura da janela inteira. Ver o comentário em
+  `partials/email-gradient-header.html`; `_attach_email_gradient` é no-op de
+  propósito.
 
-- `athena_api.py` — client for the Athena `getTrades` API (Kerberos/ADFS SSO; see below)
-- `confirmation_pdfs.py` — reportlab replicas of the Word confirmation documents. **FX Options is the exception and the pattern to follow for new documents**: `opcao_fx_pdf()` builds the PDF from the *rendered document HTML* (the same string that becomes the `.doc`) via `_WordHtmlToFlowables`, so the two outputs cannot drift apart — see HANDOFF §139.
-- `otc_boxparse.py` — parser for the booking-recap e-mail. **It is the second copy of a rule that also lives in the browser** (`static/js/pages/otc-fileupload.js`); the two must agree field by field, and `scripts/tests/check_boxparse.py` is what proves it (HANDOFF §157).
-- `otc_tickets.py` — Support Center JSON store (CRUD, sequential `#OTC-0001` ids, the six permission rules) — HANDOFF §161
-- `manual_conf.py` — the manual-confirmation trail (the two DuckDBs, the derived `Pending`/`Aging`, the
-  OTC → MO/FO order read from the `manual-conf-validation` mapping, and the grouping that makes an item
-  of the Monitor **one confirmation** instead of one trade) — HANDOFF §217/§218
-- `recon_fxo.py` — FXO reconciliation engine (DPOSICAO × Athena EOD), the page's replacement for the
-  desk's Excel script — HANDOFF §216
-- `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py`
+---
 
-### Authentication flow
+## 3. Arquitetura
 
-Authentication is SID-based (internal JPMorgan employees), not username/password:
+### Ciclo do request
 
-1. User submits their SID (format: 1 letter + 6 digits, e.g. `A123456`)
-2. `awmpy.get_phonebook_data(sid)` fetches name, email, and job title from the internal phonebook
-3. If the SID exists in the DB **and** the client IP matches the stored IP → session is set directly, user enters the app
-4. Otherwise → a 6-digit code is generated, stored in `verification_codes` table, emailed via SMTP, and user is sent to the 2FA page
-5. `/verify-2fa` validates the code (10-minute expiry) and sets `session['authenticated'] = True`
+`run.py` lê `DEBUG` → escolhe `DebugConfig` ou `ProductionConfig` de
+`apps/config.py` → chama `create_app()` em `apps/__init__.py`. A fábrica
+registra as extensões e descobre os blueprints iterando a tupla
+`apps = ('pages',)`, importando `apps.<nome>.routes`.
 
-Session keys set after auth: `authenticated`, `user_sid`, `user_name`, `user_email`, `user_role`.
+Existe **um único blueprint** (`pages_blueprint`, em `apps/pages/__init__.py`)
+que é dono de todas as rotas. A lógica vive em `apps/pages/routes.py`
+(~29,3 mil linhas). Ao lado dele, `apps/pages/` guarda módulos auxiliares
+importados pelas rotas — nenhum tem blueprint próprio:
 
-### Access control (roles + per-page/per-card)
+| Módulo | O que é |
+|---|---|
+| `athena_api.py` | cliente da API `getTrades` da Athena (SSO Kerberos/ADFS — §8) |
+| `confirmation_pdfs.py` | réplicas em reportlab dos documentos Word |
+| `manual_conf.py` | a esteira de confirmação manual (os dois DuckDBs, as derivadas, o agrupamento) |
+| `recon_fxo.py` | motor da reconciliação de FXO (DPOSICAO × Athena EOD) |
+| `otc_boxparse.py` | parser do e-mail de booking recap |
+| `otc_tickets.py` | store JSON do Support Center |
+| `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py` | — |
 
-Authorization lives in `apps/pages/routes.py` and is enforced in three layers (before_request, sidebar JS, notification feed):
+**`confirmation_pdfs.py` tem um padrão a seguir:** FX Options é a exceção
+correta. `opcao_fx_pdf()` monta o PDF a partir do *HTML já renderizado* do
+documento (a mesma string que vira o `.doc`), via `_WordHtmlToFlowables` — as
+duas saídas não têm como divergir. Documento novo deve nascer assim
+(HANDOFF §139).
 
-- **Roles.** `user_role` comes from the DB (`ADMIN`, `BO`, `MO`, `FO`, `INSTITUTIONAL`, `HUB`). **Master** is a superuser pinned by SID (`_MASTER_SIDS`, currently `E930179`) — it is *not* a grantable DB role, so it can't be assigned through user management. `_session_is_master()` is SID-based; `_session_is_admin()` = role `ADMIN` **or** master. Only the master can change an admin's (or another master's) page access; only the master is exempt from every page restriction.
-- **Per-page access.** Column `users.Page_Access` holds a JSON array of allowed sidebar URLs. Empty/absent = *unconfigured* = full access. `_load_nav_urls()` parses `partials/sidenav.html` for the set of controllable pages. `enforce_page_access` (before_request) redirects to `/dashboard` when a configured user hits a page not in their allowlist. `_ALWAYS_ALLOWED_PATHS` (dashboard, users-profile, page-access) is never restricted. Admins are enforced too *if the master configured them*; unconfigured users (incl. admins) keep full access.
-- **Per-card access (Control Panel).** The Control Panel is card-gated: allowlist tokens `"/control-panel#<id>"` (registry `_CONTROL_PANEL_CARDS`) grant individual routine cards. The page opens if ≥1 card is granted (`_cp_page_allowed`); `enforce_control_panel_cards` (before_request) blocks each routine's API endpoint unless its card is granted (`_CP_ENDPOINT_CARD`). A legacy whole-page `/control-panel` grant implies all cards.
-- **Admin UI.** `/page-access` (admin/master only) is the editor; `/api/page-access/<sid>` GET/POST persists the allowlist. The Page Access checklist is built client-side from the live sidebar DOM, grouped by full menu hierarchy, with Control Panel exploded into its own card section.
+**`otc_boxparse.py` é a segunda cópia de uma regra que também vive no
+navegador** (`static/js/pages/otc-fileupload.js`). As duas precisam concordar
+campo a campo, e `scripts/tests/check_boxparse.py` é o que prova
+(HANDOFF §157).
 
-### Mappings (lookup tables edited in the UI, not in code)
+### Herança de templates
 
-**Never hardcode a new de-para (lookup table) in the code** — the user's standing rule is that anything
-mappable must be registrable through the `/mapping` page. Add an entry to `_MAPPING_DEFS` in
-`apps/pages/routes.py` instead (`key → {label, columns, seed[, file, upgrade]}`) and an item to the
-`TYPES` array in `apps/templates/pages/mapping.html`.
+```
+layouts/base.html            ← esqueleto HTML
+  └── layouts/vertical.html  ← o único layout (menu à esquerda)
+        └── pages/*.html
+```
 
-- Files live in `apps/static/data/mappings/` (one JSON per mapping, versioned). `BaseMoeda.json` is there
-  too (moved in `f789d02` — the old `apps/static/data/BaseMoeda.json` path is gone).
-- `_mapping_rows(key)` seeds the file on first read and caches by mtime: **UI edits apply on the next
-  request, no restart** (unlike `routes.py` changes, which do need a restart on the team instance).
-- Seeds must carry **exactly** the values that were hardcoded, so behaviour is identical until someone
-  edits the table.
-- Generic API `/api/mappings/<key>` GET/POST. POST replaces the whole file. Values are **not trimmed** on
-  purpose (trailing space in B3 codes like `'C '` is part of the code).
-- Front-end consumers `fetch` the endpoint and keep the old literals as a fallback, so a failed fetch
-  degrades to the previous behaviour.
-- Optional per-mapping `upgrade` callable converts legacy row formats on read; optional per-column
-  `autofill` (on a `select`) makes the modal fill another column from the rows already registered.
-- Optional per-mapping **`file`** points the registry at an EXISTING JSON instead of
-  `mappings/<key>.json`. `swap-index` uses it to edit the very same `SwapIndex.json` the B3 Index Results
-  page edits — one file, two editors, no chance of the two diverging. When you do that, declare the
-  file's own extra columns (`STATUS`/`MAKER`/`CHECKER`) too: the `/mapping` POST rewrites the whole file
-  and would drop anything not declared (HANDOFF §188).
+`layouts/horizontal.html` e `partials/horizontal-nav.html` **foram apagados**
+(HANDOFF §175): eram a navegação de demonstração do template comprado.
+`partials/sidenav.html` é o único menu do app.
 
-Current mappings (24): `currency-base`, `interbook-ndf`, `publisher-ndf`, `le-accronym`, `le-spn`,
-`commodities-b3`, `bank-name`, `fxo-conv-rate`, `ndf-pdf-cpty`, `swap-curves`, `cetip-files`,
-`api-links`, `opb3-events`, `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
-`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`, `b3-omnibus-account`,
-`fxo-internal-cpty`, `manual-conf-validation`.
-See HANDOFF §131–§133 for the first twelve and §182/§188/§195–§197/§216 for the rest. Some carry rules
-that are easy to break from the UI:
+### Adicionar uma página
 
-- **`opb3-events`** — quais linhas do Operations B3 entram numa apuração de liquidação, e é a MESMA
-  resposta para o NDF Summary, o Other Products, os avisos e a mensageria. A linha é uma **regra** sobre
-  Tipo Título × Tipo Operação × Status B3, com **campo em branco = coringa** e `USE` = Consider /
-  Disregard. Precedência: Disregard vence; um Tipo Título com ao menos um Consider próprio vira lista
-  branca; Tipo Título sem Consider não é filtrado. Era o `swap-b3-events` (só o Tipo Operação do swap) —
-  ver HANDOFF §213, inclusive a mudança de semântica da tabela vazia.
+1. Rota em `apps/pages/routes.py` devolvendo
+   `render_template('pages/<nome>.html', segment='<nome>')`
+2. Template em `apps/templates/pages/<nome>.html` estendendo um layout
+3. Opcionalmente SCSS em `apps/static/scss/` (o Gulp pega todo `*.scss`)
+4. Se a página tem tabela, ela segue o **padrão de tabela** abaixo — sem exceção.
 
-- **`publisher-ndf`** — a row with **no Match Tokens matches only the complete text** (that is what lets
-  `PTAX` and `PTAX|BRR|PTAX` be independent registrations), and column **`NOTES = BACEN` is what routes
-  the deal to Vanilla** instead of Other Publisher. Clearing `BACEN` from the `PTAX` row sends plain PTAX
-  to Other Publisher — the single way to break the historical behaviour (HANDOFF §166).
-- **`commodities-b3`** and **`cetip-files`** — the registered text carries a **pattern**, not a literal:
-  `"MY"` between quotes is the B3 month letter + year (`X_"MY"` → `X Z7`), `_` is a literal space, and
-  `YYMMDD` in a CETIP file name is the card's Reference Date. The `MY` segment is highlighted in the
-  table so it reads apart from the fixed part (HANDOFF §164). `commodities-b3` also carries the
-  **B3 CODE FAR** (a linha `SPECIAL` do BRT_IPE leva DOIS códigos: `B3 CODE` = `CO"MY"` para o
-  contrato do mês seguinte e `B3 CODE FAR` = `CO1-2` para dois meses ou mais à frente da liquidação —
-  vanilla usa sempre o do mês; HANDOFF §212) e o
-  **Tipo de Cotação / Fonte de Informação** written into the Conecta files (`QUOTE TYPE NDF`,
-  `QUOTE TYPE OPT`, `INFO SOURCE`): the column holds the **layout code**, and there are two quote-type
-  columns because the Termo and Opção layouts use different domains (letter vs number) for the same
-  commodity. Blank column — or an underlying with no row — returns the historical value
-  (`_b3_quote_cfg`), which is also what the seed writes; the browser copy of the rule is the shared
-  `static/js/b3-quote-config.js`, and `check_quote_type.py` proves the two agree (HANDOFF §177).
-- **`api-links`** — the Athena endpoint, one row per **usage × product** (`New Deals` × NDF/FXO/
-  Commodities/Swaps, plus `Unwinds`), with `YYYYMMDD` marking the reference date. Product here is the
-  API's `product` parameter, **not the page**: NDF is one product feeding three pages (Vanilla, Other
-  Publisher, FWD Start), split by routing and not by address. A blank `PRODUCT` is a wildcard for that
-  usage. `date` is always rewritten; `product` only on the wildcard row — a product-specific row is used
-  as registered, since it was picked *by* product. The `Unwinds` row ships **empty on purpose** — with no
-  URL its consumer fails asking for registration, while `New Deals` falls back to the historical address
-  (HANDOFF §173). O uso **`Recon FXO`** é outro Athena — o relatório EOD do `bob-reports`, não o
-  `getTrades` — e a data dele fica no **caminho** (`AAAA-MM-DD`), que é justamente para o que o
-  placeholder serve.
+### O padrão de tabela (referência: `new_deals-ndf-vanilla.html`)
 
-- **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna **`INVERT DIRECTION`**
-  decide *quando* a regra vale: `No` renomeia sempre; `Yes` é a perna espelhada e só entra quando Ctpty
-  **e** JPM Dir estão os dois NOK — aplicá-la sempre inverteria a direção de operações que estavam
-  certas (HANDOFF §216). O Counterparty → CNPJ **não** tem cadastro: sai do Reference Data (nome, FX Cash
-  accronym e SPN levando ao mesmo Tax ID), porque um de-para paralelo seria uma segunda lista dos mesmos
-  clientes e envelheceria sozinho.
-- **`manual-conf-validation`** — quem valida a confirmação de cada produto (Produto × LOB → OTC / MO /
-  FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é coringa** do produto. MO e FO correm em **paralelo**,
-  não em fila. Produto sem linha cadastrada cai em OTC + MO e a tela **avisa** — em vez de deixar a
-  confirmação parada num Pending que ninguém sabe de quem é (HANDOFF §217).
+Todo o app segue o desenho das páginas de New Deals. Página nova com tabela
+nasce assim; página velha que divergir é bug de consistência (a varredura de
+2026-08-07 alinhou Reference Data, Index B3, Mapping, os dois Summaries, as
+Live Positions, o Track Confirmations e as três Recons).
 
-- **`swap-index`** — the B3 curve code → curve name (`C00` → `VCP`). It points at the **same
-  `SwapIndex.json`** the B3 Index Results page edits (see the `file` note above), and every code→text
-  translation of the Swap module now goes through a registry: `swap-funcionalidade`, `swap-amortizacao`
-  and `swap-code-labels` (Sinal Taxa and Sim/Não). Live Position **Termo and Opção have no de-para at
-  all** — only number/date formatting — so there is nothing to register there (HANDOFF §188).
-- **`ndfc-ir-exempt`** — who does NOT pay the 0,005% IR of the commodity forward. The **same list serves
-  the Settlement Advice and the Trade Level**: same tax, same trade, and two lists would diverge with one
-  screen withholding and the other not. The seed goes **beyond the spreadsheet formula** (which exempted
-  only LAWTON) because ATACAMA / BANCO / JPMorgan were asked for by name (HANDOFF §195).
-- **`ndfc-advice-split`** — counterparties that get **one notice per commodity** (seeded with `MONDELEZ`).
-  The split runs **after** the net-type split, so a Pay/Rec Mondelez comes out per direction *and* per
-  commodity (HANDOFF §196).
-- **`b3-omnibus-account`** — B3 accounts that do **not** identify the client (`73760.10-2`). On such a
-  row the name coming from B3 is the omnibus holder's; the client is resolved by **CNPJ** against
-  `RefData.json`. Both comparisons (CNPJ and account) are **digits-only** — the sides store them with
-  different punctuation, and a string compare silently matches nothing (HANDOFF §197).
+- **Tabela centralizada.** `th`: `text-align:center !important;
+  vertical-align:middle !important; font-size:.7rem` (quebra de linha
+  permitida no header). `td`: `text-align:center; vertical-align:middle;
+  font-size:.8rem; white-space:nowrap` (+ ellipsis nas colunas de dado).
+  Com `scrollX`, os clones `.dt-scroll-headInner` / `.dataTables_scrollHeadInner`
+  precisam das mesmas regras — o DataTables remove o id da tabela clonada.
+- **Linha de filtro por coluna** como 2ª linha do `<thead>`, montada **antes**
+  do `.DataTable()` com `orderCellsTop: true` (ver a armadilha em §7). Inputs
+  pequenos (12px/28px), texto centralizado, placeholder = nome da coluna.
+- **Botões de ação da linha**: **squircle** colorido — geometria única no app
+  inteiro (spec `.ops-row-act`): **32×32 travado com min/max** (nenhuma regra
+  de tema pode esticar um botão), `padding:0`, `border-radius:10px !important`,
+  ícone Tabler `1rem`, tooltip colorido (`data-bs-custom-class="tooltip-{cor}"`).
+  A classe `rounded-circle` ainda aparece no markup por história, mas **o CSS da
+  página fixa o squircle** — sem o override o raio do tema sai OVAL, porque
+  círculo só é círculo em botão já quadrado. Ordem e cores canônicas:
+  **Confirm** `ti-check`/success → **Edit** `ti-edit`/info → **Delete**
+  `ti-trash`/danger → **Send** `ti-brand-telegram`/primary; em modo edição,
+  **Save** `ti-device-floppy`/success + **Cancel** `ti-x`/secondary. Wrapper
+  `d-flex justify-content-center gap-1`.
+- **Toolbar** — todos os botões levam `.btn-toolbar-all` (`font-size:.75rem;
+  padding:.25rem .6rem`; hover `translateY(-1px)`, active `scale(.96)`), e as
+  cores são fixas por função: **Columns** = `btn-soft-primary` (dropdown de
+  checkboxes), **Add Row** = `btn-primary bg-gradient`, **Export** = `btn-info
+  bg-gradient` (dropdown com ao menos CSV e Copy; exporta o que está NA TELA —
+  filtros e ordenação aplicados, só colunas visíveis), **Import** = teal
+  `#4a849b`, **Mapping/refresh** = `btn-success bg-gradient`, **Clear
+  Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado.
+- **Alinhamento valor × coluna é parte do padrão.** Com `scrollX` o cabeçalho
+  vive numa tabela irmã do corpo, e as larguras das duas são calculadas em
+  momentos diferentes — carregar dados sem recalcular deixa os valores
+  **deslocados das colunas a que pertencem** (aconteceu na Recon FXO). Depois de
+  todo `rows.add(...).draw()` chame **`table.columns.adjust()`**, e repita num
+  handler de `resize`. Confira o alinhamento em TODA tela nova antes de dar por
+  pronta.
+- **Seleção de célula para copiar.** New Deals usa a extensão `select` do
+  DataTables (`items:'cell'`); todas as outras páginas usam o
+  **`static/js/table-std.js`**: `otcCellCopy('#id', { skip: [0, 1] })` (skip =
+  checkbox e Actions). Mesmo visual (azul `#b3d7ff`/`#0066cc`, hover
+  `cursor:cell`, flash verde ao copiar), Ctrl/Cmd+C copia com `\t`/`\n` (cola
+  no Excel), Esc limpa. O helper é idempotente e delega no nó da tabela, então
+  sobrevive a redraws.
+- **Status** sempre como badge pill `bg-gradient` (mapa de cores por status).
 
-`fxo-conv-rate` feeds
-the two Taxa de Conversão columns of the Asian FXO confirmation (Moeda Base → rate name + Venda /
-Compra) and ships seeded only with USD → USD PTAX / Venda — an unregistered currency raises a panel
-warning instead of printing blanks (HANDOFF §139).
+---
 
-### Database
+## 4. Bancos e concorrência
 
-Two separate databases are in use:
+São dois bancos:
 
-- **DuckDB** (`Users_OTCTracker.db`): stores `users` and `verification_codes` tables. Connection is managed manually via `get_db_connection()` / `conn.close()` in every function. `DB_PATH` is now a **relative** path (`apps/static/data/db/Users_OTCTracker.db`) resolved from the module dir — no longer a hardcoded Windows path, so it works cross-machine. If DuckDB refuses to open the DB after running under a different duckdb version (`INTERNAL Error … replaying WAL`), rename the stray `Users_OTCTracker.db.wal` aside; the main `.db` is intact.
-- **SQLite** (`apps/db.sqlite3`): managed by Flask-SQLAlchemy. Currently unused by application logic; `configure_database()` calls `db.create_all()` **once at app startup** (not per request).
+- **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
+  `DB_PATH` é **relativo**, resolvido a partir do diretório do módulo
+  (`apps/static/data/db/`), então funciona em qualquer máquina.
+- **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
+  lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
+  na subida**, não a cada request.
 
-**Concurrency — the app serves several users from a single process, so this matters:**
+> Se o DuckDB recusar abrir depois de rodar sob outra versão
+> (`INTERNAL Error … replaying WAL`), renomeie o `Users_OTCTracker.db.wal`
+> perdido para o lado — o `.db` principal está íntegro.
 
-- The users DuckDB is a **singleton connection behind a global lock** (`_duckdb_conn_lock`). `get_db_connection()` hands out a `_DuckDBHandle` that **holds that lock until `close()`**. Every caller must therefore be `conn = get_db_connection()` immediately followed by `try: … finally: conn.close()` — all 20 current callers are. Miss the `finally` and the lock is never released: the whole app hangs for **everyone**, not just the failing request.
-- **Never do slow work while holding it** (network, SMTP, file scans, template rendering). `_push_notify` is the model: it reads the subscriber list, closes, and only then sends the HTTP pushes. The topbar polls notifications every 8 s per open tab, so that lock is taken constantly.
-- Per-DB connections (pending-confirmation DuckDBs) are opened ad hoc with a retry/backoff loop and **must close in `finally`** — a leaked connection keeps DuckDB's write lock for the life of the process and takes the page down for all users.
-- JSON caches (New Deals day files, mappings, MTM) are read-modify-write, so they need `with _cache_lock:` around the **whole** read → change → `_atomic_write_json` cycle; the atomic write alone only prevents corruption, not lost updates. `_cache_lock` is a plain `Lock` (**not reentrant**): never call a locking helper from inside a locked block.
-- **Keep it single-process.** Production is waitress (`start-prod.bat`, default 4 threads) and `gunicorn-cfg.py` pins `workers = 1`. With more than one process the DuckDB singleton lock and `_cache_lock` protect nothing, the users DB fails to open in the second process, and each process starts its own API schedulers (duplicate pulls). Scale with threads, not workers.
+### A parte que quebra o app para todos
+
+O app serve vários usuários de **um processo só**, então isto importa mais do
+que parece:
+
+- O DuckDB de usuários é uma **conexão singleton atrás de um lock global**
+  (`_duckdb_conn_lock`). `get_db_connection()` devolve um `_DuckDBHandle` que
+  **segura o lock até o `close()`**. Todo chamador tem de ser
+  `conn = get_db_connection()` seguido de `try: … finally: conn.close()` — os
+  21 chamadores atuais são. Sem o `finally`, o lock nunca é liberado e **o app
+  inteiro trava para todo mundo**, não só para o request que falhou.
+- **Nunca faça trabalho lento segurando o lock** (rede, SMTP, varredura de
+  arquivos, renderização de template). `_push_notify` é o modelo: lê a lista de
+  inscritos, fecha, e só então dispara os HTTP pushes. A topbar consulta
+  notificações a cada 8 s por aba aberta — esse lock é tomado o tempo todo.
+- Conexões por banco (os DuckDBs do Pending Confirmation) são abertas sob
+  demanda com retry/backoff e **têm de fechar no `finally`**: uma conexão
+  vazada segura o lock de escrita pela vida do processo e derruba a página.
+- Caches JSON (arquivos-dia do New Deals, mappings, MTM) são
+  read-modify-write, então precisam de `with _cache_lock:` em volta do ciclo
+  **inteiro** (ler → alterar → `_atomic_write_json`). A escrita atômica sozinha
+  evita corrupção, não perda de atualização. `_cache_lock` é um `Lock` comum
+  (**não reentrante**): nunca chame um helper que trava de dentro de um bloco
+  travado.
+- **Escale com threads, não com workers.** Produção é waitress
+  (`start-prod.bat`, 4 threads) e o `gunicorn-cfg.py` fixa `workers = 1`. Com
+  mais de um processo o singleton e o `_cache_lock` não protegem nada, o banco
+  de usuários não abre no segundo processo e cada processo sobe os próprios
+  schedulers (pulls duplicados).
 
 ### SQL injection
 
-Reference: [`Docs/SQL_Injection_Prevention_Cheat_Sheet.md`](Docs/SQL_Injection_Prevention_Cheat_Sheet.md)
-— the OWASP cheat sheet, vendored into the repo (CC BY-SA 3.0, provenance header at the top; re-download
-it to update, don't hand-edit).
+Referência: [`Docs/SQL_Injection_Prevention_Cheat_Sheet.md`](Docs/SQL_Injection_Prevention_Cheat_Sheet.md)
+— o cheat sheet da OWASP, vendorizado no repo (CC BY-SA 3.0, cabeçalho de
+proveniência no topo; para atualizar, rebaixe o arquivo, não edite à mão).
 
-How it applies here — the codebase already follows the primary defense, and it must stay that way:
+O código já segue a defesa primária e precisa continuar assim:
 
-- **Every value that comes from a request, a session, a spreadsheet or an e-mail goes in as a `?`
-  parameter**, never interpolated: `conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid])`.
-  DuckDB's `execute` takes the parameter list as its second argument; `executemany` for batches.
-- The handful of `'...{}'.format(...)` queries are **DDL over code-owned identifiers** (`_PC_TABLE`,
-  columns from `_PC_COLUMNS`) — table and column names can't be bound as parameters, which is the one
-  case the cheat sheet allows string building for. Keep those lists as module constants: the moment a
-  table or column name can come from a request, it needs allow-list validation against a fixed tuple
-  (cheat sheet "Defense Option 3"), not escaping.
-- Login is by SID from the internal phonebook, but the SID still reaches the DB as a bound parameter —
-  don't "optimize" it into an f-string.
+- **Todo valor vindo de request, sessão, planilha ou e-mail entra como
+  parâmetro `?`**, nunca interpolado:
+  `conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid])`. No
+  DuckDB a lista de parâmetros é o segundo argumento do `execute`;
+  `executemany` para lotes.
+- As poucas queries com `'...{}'.format(...)` são **DDL sobre identificadores
+  do próprio código** (`_PC_TABLE`, colunas de `_PC_COLUMNS`) — nome de tabela
+  e de coluna não podem ser bindados, e é o único caso que o cheat sheet
+  permite montar string. Mantenha essas listas como constantes de módulo: no
+  instante em que um nome puder vir do request, ele precisa de validação
+  contra uma tupla fixa (a "Defense Option 3"), não de escape.
+- O login é por SID vindo do phonebook, mas o SID **ainda** chega ao banco como
+  parâmetro bindado — não "otimize" para f-string.
 
-### Template inheritance
+---
 
-```
-layouts/base.html          ← base HTML skeleton
-  └── layouts/vertical.html ← the only layout (sidebar on the left)
-        └── pages/*.html    ← individual page templates
-```
+## 5. Autenticação e autorização
 
-Partials (sidebar, header, topbar) are included inside the layout files. The `segment` variable passed from routes is used in templates to highlight the active nav item.
+### Login
 
-`layouts/horizontal.html` and `partials/horizontal-nav.html` were **deleted** (HANDOFF §175): the horizontal menu was the purchased template's demo navigation — it listed ~170 demo pages and was loaded by exactly one demo page. `partials/sidenav.html` is the app's only menu.
+Não há usuário/senha: a autenticação é por **SID** de funcionário.
 
-### Adding a new page
+1. O usuário informa o SID (1 letra + 6 dígitos, ex. `A123456`)
+2. `awmpy.get_phonebook_data(sid)` traz nome, e-mail e cargo do phonebook
+3. SID no banco **e** IP do cliente igual ao IP gravado → sessão direta
+4. Caso contrário → código de 6 dígitos gravado em `verification_codes`,
+   enviado por SMTP, e o usuário vai para a tela de 2FA
+5. `/verify-2fa` valida o código (10 min de validade) e marca
+   `session['authenticated'] = True`
 
-1. Add a route in `apps/pages/routes.py` returning `render_template('pages/<name>.html', segment='<name>')`
-2. Create the template in `apps/templates/pages/<name>.html` extending a layout
-3. Optionally add page-specific SCSS in `apps/static/scss/` (Gulp picks up all `*.scss` files automatically)
+Chaves de sessão: `authenticated`, `user_sid`, `user_name`, `user_email`,
+`user_role`.
 
-### Key non-obvious details
+### Papéis e acesso
 
-- **Working branch is `visual-refresh`** (since 2026-07-26; `apple-design` was merged in and is retired). All commits and pushes go there — never assume `main`. See HANDOFF §109/§114 for the visual-refresh design rules (tokens `--vr-*`/`--ins-*`, never `--bs-*`; i18n with English defaults + `data-lang`).
-- `awmpy` is an internal JPMorgan library and is not available on PyPI. The app will fail at login/register (phonebook lookup) if it is not installed. For **local dev off the JPM network**, a tiny `awmpy` stub in the venv lets the server boot — real SID login won't work, so use the `/dev-login` DEV BYPASS route instead (that block is stripped from `routes.py` before every commit; see HANDOFF).
-- `DB_PATH` for DuckDB is a **relative** path resolved from the module dir (see Database section above) — no per-machine editing needed.
-- **Local dev on macOS**: use `flask run --port=5005` — port 5000 is taken by the AirPlay Receiver (returns a 403 "AirTunes"). The venv here is Python 3.12 (`.venv311`); `duckdb` and `flask-minify` are required (both in `requirements.txt`).
-- `flask_login`, `flask_wtf`, and `flask_migrate` are in `requirements.txt` but are not actively used in the current codebase; the app manages sessions and DB directly.
-- SMTP delivery uses `mailhost.jpmchase.net` (internal relay, port 25, no auth) — email sending will silently fail outside the JPMorgan network.
-- **Athena `getTrades` API** (`apps/pages/athena_api.py`): imports New Deals for NDF/FXO (manual button + in-app schedulers, NDF every 20 min, FXO hourly). Needs the JPM network — off-network the scheduler fails silently (repeated errors demoted to `debug`). `build_session()` sets `trust_env=False` on purpose: inheriting the corporate proxy is what caused `WinError 10061` on the team's Windows box. Kerberos SSO on Windows needs `requests-negotiate-sspi`, which is **commented out** in `requirements.txt` (Windows-only) — install it on the JPM instance. The endpoint itself is no longer a constant: it comes from the `api-links` mapping (above), with `BASE_URL`/`TRADES_ENDPOINT` left as the New Deals fallback. **Only `isCancelled = true` means cancelled** — `isDead` is Athena's internal state and those records *are* imported (`_api_rec_is_cancelled`, HANDOFF §173).
-- **The counterparty comes from the End Counterparty accronym, never from the Settlement Location.** The order in `_ndf_ref_by_accronym` is: accronym (exact, then without the entity suffix) → **if the accronym is an internal leg**, the entity's own identity (`_ndf_le_refdata`: the `le-spn` **Reference Data Name** looked up by normalised name, then the LE's accronyms, then the LE's registered SPN) → **otherwise** the API's SPN → nothing. Three things to keep straight:
-  - the **Settlement Location is *our* leg**, not the counterparty's. Feeding it into the counterparty lookup made a client resolve to Banco J.P. Morgan. The `le` argument of `_ndf_ref_by_accronym` must be the entity of the *counterparty's own accronym* (`_ndf_le_from_accronym(end_cp)`), which is `None` unless the counterparty is an internal JPM leg (HANDOFF §147/§148);
-  - the API's `SPN` used to carry the Legal Entity's SPN; it now carries the counterparty's, so it is the **last** step — and it is never consulted for an internal leg, which would reintroduce the trap above by another route (HANDOFF §174);
-  - an **internal leg is resolved by the entity's legal name**, because a book name (`LM-FWDECOMBRR FXC`) has no accronym in Reference Data — that is what left those rows with empty SPN/Client/Tax ID. The row **keeps the API's accronym** (the book), and the badge only spares an internal leg that came back with an SPN.
-  Nothing matching = empty row + "Missing Counterparty" badge, which is the desired failure: it asks for registration instead of inventing a counterparty. On an **API amend** the counterparty is re-checked and applied (`SPN`/`Client`/`TaxID` left `_ND_AMEND_SKIP` in §176); the stored row is found by `(Deal, Client)` and, when the Client changed, **by Deal ID alone if it is unique in the day file** — otherwise the amend would land as a duplicate row. A `Success` deal only drops back to `Amend` when the **accronym** moved to another entity; a better lookup of the same accronym just highlights the cells. That badge is DOM-only, so the per-column filter boxes route the term `missing c…` (9+ chars, to stay clear of "Missing Index B3") through `missing-counterparty.js` instead of DataTables' own search.
-- **Scheduled jobs run on Brazil time, not the server's.** `_br_now()` (`zoneinfo` `America/Sao_Paulo`, falling back to a fixed `-03:00` when `tzdata` is missing — the Windows case) backs the 19:00/19:30 pending-action email and the 11:30 Pending Confirmation maintenance. `datetime.now()` is the server's local clock and silently fired them at the wrong hour. Because the instance is restarted several times a day, `_ndm_pending_catch_up()` also fires the day's already-passed slots at startup; the on-disk claim file is what keeps that from becoming a repeated e-mail.
-- **reportlab** (confirmation PDFs and the NDF Summary settlement sheet) is imported **lazily**: without the lib the email goes out *without* the attachment instead of failing.
-- **`Docs/` and `docs/` both exist in this repo** (21 tracked files under the capitalised one, 33 under the lowercase one — an artefact of a case-insensitive filesystem). Screenshots live under **lowercase `docs/sop-screenshots/`**, which is what `SOP_PROCESSAMENTO_OTC.md` and `GUIA_DO_USUARIO_OTC_TRACKER.md` reference. Since the on-disk directory is `Docs`, a plain `git add docs/...` records the path **capitalised** and the new files land in a different tree — invisible on macOS, broken images on Linux/Windows. Stage with `git -c core.ignorecase=false add docs/sop-screenshots/` and verify the casing in the index. Both documents are generated from their `.md` (the single source) by `scripts/build_sop_docx.py`, which takes the source file as an optional argument; see HANDOFF §155 for the screenshot-capture traps.
-- **One-off migration scripts** live in `scripts/` and must be run once on the team instance after a pull — `update_pending_confirmation_dbs.py` and `update_pending_confirmation_bankers.py` (both idempotent). See HANDOFF §128. `import_manual_confirmations.py` joins them: `apps/static/data/db/` is **gitignored**, so the two manual-confirmation DuckDBs do not travel with the pull — the script creates them and seeds the pending one from `MANUAIS.xlsx` (`--xlsx <caminho>`, `--schema-only` to just create them empty). Without that run the two Manual Confirmation pages open empty and nothing is wrong with the code.
-  `backfill_manual_confirmations.py` is the third: the mirror that puts a mapped deal into the trail
-  (`_mc_save_from_deal`) is a **forward hook** — it fires when the deal flips to `Success`, so everything
-  mapped *before* the trail existed fed Pending Confirmation and stopped there. The script sweeps the New
-  Deals cache and replays those deals through the **same** two functions the mapping calls
-  (`_pc_is_internal_counterparty` + `_mc_save_from_deal`) — restating the "does this owe a confirmation?"
-  rule here is how the two screens would start disagreeing. Idempotent (never overwrites a stamped
-  `Conferido OTC`), `--dry-run` to preview, `--source "NDF COMM"` to limit. Only the four families in
-  `_MC_CONFIRMATION_SOURCES` are swept, and **FWD Start is keyed by B3 ID, not Deal** — key it by Deal and
-  the next real mapping creates a *second* row for the same trade.
-- **Regression checks live in `scripts/tests/`** — self-contained scripts, no framework: each prints `ok`/`FAIL` per assertion and exits 0/1, resolves the repo root from its own path, and touches no real data (tickets go to a `tempfile`, the DuckDB is recreated in tmp, Outlook/SMTP are stubbed). [`scripts/tests/README.md`](scripts/tests/README.md) maps each script to the module it protects — run the matching one after touching that module. `check_boxparse.py` is the only one that needs an external binary (macOS `jsc`, to run the browser copy of the parser), so it does not run on the team's Windows box. See HANDOFF §163.
-- **Two armadilhas de tela que não dão erro no console** (custaram duas rodadas de correção — HANDOFF §218):
-  - **A linha de filtro por coluna tem de ser montada ANTES do `.DataTable()`**, com `orderCellsTop: true`.
-    Com `scrollX: true` o DataTables desenha o cabeçalho duas vezes (a cópia visível vai para
-    `.dt-scroll-headInner`, o `<thead>` real fica escondido no corpo rolável), e `api.table().node()`
-    devolve a tabela do **corpo** — acrescentar a linha no `initComplete` a deixa no DOM e invisível.
-  - **Não use `.card` para um widget seu.** `layouts/base.html` carrega o `extra_css` da página **antes**
-    do `head-css.html`, então o `.card` do tema (`background-color`, `border`, `border-radius`, `color`)
-    vence qualquer regra da página sem `!important`. O padrão da casa é um `<div>` com classe própria
-    (`.ndm-card` do New Deals Monitor, `.fxo-widget`, `.mc-card`), usando `--vr-card-*` e `--vr-grad`.
-- **One JS file drives FIVE pages.** `static/js/pages/live-position-swap-characteristics.js` is a generic
-  `{columns, rows}` viewer chosen by the page's `data-api`: Live Position Swap Characteristics, Other
-  Products Swap (Athena · Events · VCP) and the two Settlement Advice pages (Swap and NDF Commodities).
-  Its contract is the ids **`swapchar-page`** and **`swapchar-table`** plus `data-api` — renaming either
-  leaves the page **blank with no console error**. Anything page-specific (the Print Advice button) goes
-  in the page's own `<script>`, and anything added to the shared file must be **additive**: the per-row
-  `statuses` array and `window.scLoad` are opt-in, so the pages that send nothing behave exactly as before
-  (HANDOFF §184/§190).
-- **Other Products settlement family.** The Settlement Summary, the Trade Level and both Settlement
-  Advice pages read the SAME derived rows — the card counts what the table shows, and the notice prints
-  what the table shows. **`_ops_trade_rows(settle_ref)` is the single place that knows which product
-  families exist** (today SWAP + NDF Commodities); the page, the reconciliation cards and the TED e-mail
-  all call it. The TED endpoint used to rebuild the list itself and silently stopped asking for the
-  commodities TEDs the day NDF was added (HANDOFF §199). The notice status (`New → Generated → Sent`) lives once, in the day overlay
-  `other-products-summary_YYYYMMDD.json`, keyed by **counterparty × LOB × product**, and both screens read
-  that same key (HANDOFF §183/§189/§190).
-- **The team instance runs with the reloader off**: after a `git pull` that touched `routes.py` or a template, Flask must be **restarted** or the old code keeps serving. Several "it's not working" reports traced back to this. Mapping table edits made in the UI are the exception — they apply on the next request.
-- **`table.rows({search: 'none', page: 'all'})` is NOT "everything for the day".** It returns every row *loaded*, and the New Deals tables are frequently loaded from a server-side search (`/cache/search`, the filter chips in the top bar). Any action built by scanning the table therefore silently covers only the last search. The B3 return-file mapping was fixed by sending the **Reference Date** and letting the server build the list from the day file (`_generic_nd_mapping_candidates`, HANDOFF §152) — that also means the server persists to deals that are not on screen. The same limitation still applies to Opt FXO / Opt Commodities / NDF Commodities, which have their own mapping endpoints.
-- **Inserting a column into the New Deals NDF pages touches 14 places** (header `<th>`, filter-row `<th>`, `COL_TO_JSON_FIELD`, `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, hidden `columnDefs`, `columnLabels`, mass-edit options, `SF_COLS`, `SF_LABEL_TO_FIELD`, `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`). Stale indexes here have caused silent data corruption twice — see HANDOFF §132. The Maker column is reached through the `MAKER_COL_INDEX` constant; keep it that way.
+A autorização vive no `routes.py` e é aplicada em três camadas (before_request,
+JS do menu, feed de notificações).
+
+- **Papéis.** `user_role` vem do banco (`ADMIN`, `BO`, `MO`, `FO`,
+  `INSTITUTIONAL`, `HUB`). **Master** é superusuário fixado por SID
+  (`_MASTER_SIDS`, hoje `{'E930179'}`) — **não** é papel concedível, então não
+  se atribui pela gestão de usuários. `_session_is_master()` é por SID;
+  `_session_is_admin()` = papel `ADMIN` **ou** master. Só o master altera o
+  acesso de um admin (ou de outro master), e só ele escapa de toda restrição.
+- **Por página.** `users.Page_Access` guarda um array JSON de URLs permitidas.
+  Vazio/ausente = *não configurado* = acesso total. `_load_nav_urls()` extrai
+  de `partials/sidenav.html` o conjunto de páginas controláveis.
+  `enforce_page_access` (before_request) bloqueia quem tem allowlist
+  configurada. Admins também são barrados **se o master os configurou**;
+  não configurados (inclusive admins) mantêm acesso total.
+  - `_ALWAYS_ALLOWED_PATHS` é **apenas** `{'/users-profile', '/page-access'}`.
+    **O dashboard NÃO é sempre permitido** — ele virou concedível, e é por isso
+    que o bloqueio redireciona para `_safe_landing(allowed)` (uma página que a
+    pessoa realmente alcança, com `/users-profile` como último recurso) e não
+    para `/dashboard`, que ela pode não ter.
+  - Requests `/api/*` e `/static*` nunca são bloqueados aqui: têm a própria
+    autenticação.
+- **Por card (Control Panel).** A página é controlada por card: tokens
+  `"/control-panel#<id>"` (registro `_CONTROL_PANEL_CARDS`) liberam rotinas
+  individuais. A página abre com ≥1 card liberado (`_cp_page_allowed`);
+  `enforce_control_panel_cards` bloqueia o endpoint de cada rotina sem o card
+  (`_CP_ENDPOINT_CARD`). Uma concessão legada da página inteira implica todos
+  os cards.
+- **Tela de administração.** `/page-access` (admin/master) é o editor;
+  `/api/page-access/<sid>` GET/POST persiste. A checklist é montada no
+  navegador a partir do DOM vivo do menu, agrupada pela hierarquia completa,
+  com o Control Panel explodido em seção própria.
+
+---
+
+## 6. Mappings (os de-para que se editam na tela, não no código)
+
+**Nunca fixe um de-para novo no código.** Acrescente uma entrada em
+`_MAPPING_DEFS` no `routes.py` (`key → {label, columns, seed[, file, upgrade]}`)
+e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
+
+- Os arquivos ficam em `apps/static/data/mappings/` (um JSON por mapping,
+  versionado). `BaseMoeda.json` também está lá (movido em `f789d02` — o caminho
+  antigo `apps/static/data/BaseMoeda.json` não existe mais).
+- `_mapping_rows(key)` semeia o arquivo na primeira leitura e cacheia por
+  mtime: **edição na tela vale no request seguinte, sem restart** — ao
+  contrário de mudanças no `routes.py`, que exigem reinício na instância do
+  time.
+- O seed tem de carregar **exatamente** os valores que estavam fixos no código,
+  para o comportamento ser idêntico até alguém editar a tabela.
+- API genérica `/api/mappings/<key>` GET/POST. O POST **substitui o arquivo
+  inteiro**. Os valores **não são trimados** de propósito (o espaço no fim de
+  códigos B3 como `'C '` faz parte do código).
+- O front-end consome via `fetch` e mantém os literais antigos como fallback,
+  então um fetch que falha degrada para o comportamento anterior.
+- `upgrade` opcional converte formatos antigos na leitura; `autofill` opcional
+  numa coluna `select` faz o modal preencher outra coluna a partir das linhas
+  já cadastradas.
+- **`file`** opcional aponta o registro para um JSON **já existente** em vez de
+  `mappings/<key>.json`. `swap-index` usa isso para editar o mesmo
+  `SwapIndex.json` que a página de Index Results edita — um arquivo, dois
+  editores, sem chance de divergirem. Ao fazer isso, **declare também as
+  colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
+  arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
+
+São **24** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+`le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
+`ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
+`swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
+`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
+`b3-omnibus-account`, `fxo-internal-cpty`, `manual-conf-validation`.
+
+### Os que têm regra fácil de quebrar pela tela
+
+- **`opb3-events`** — quais linhas do Operations B3 entram numa apuração de
+  liquidação, e é a MESMA resposta para o NDF Summary, o Other Products, os
+  avisos e a mensageria. A linha é uma **regra** sobre Tipo Título × Tipo
+  Operação × Status B3, com **campo em branco = coringa** e `USE` = Consider /
+  Disregard. Precedência: Disregard vence; um Tipo Título com ao menos um
+  Consider próprio vira lista branca; Tipo Título sem Consider não é filtrado.
+  Era o `swap-b3-events` (só o Tipo Operação do swap) — HANDOFF §213, inclusive
+  a mudança de semântica da tabela vazia.
+- **`publisher-ndf`** — uma linha **sem** Match Tokens casa **só com o texto
+  completo** (é o que permite `PTAX` e `PTAX|BRR|PTAX` serem cadastros
+  independentes), e a coluna **`NOTES = BACEN` é o que roteia para Vanilla** em
+  vez de Other Publisher. Tirar o `BACEN` da linha `PTAX` manda PTAX puro para
+  Other Publisher — o único jeito de quebrar o comportamento histórico
+  (HANDOFF §166).
+- **`commodities-b3`** e **`cetip-files`** — o texto cadastrado carrega um
+  **padrão**, não um literal: `"MY"` entre aspas é letra do mês B3 + ano
+  (`X_"MY"` → `X Z7`), `_` é espaço literal, e `YYMMDD` num nome de arquivo
+  CETIP é a Reference Date do card. O trecho `MY` é destacado na tabela para
+  ler separado da parte fixa (HANDOFF §164). `commodities-b3` carrega ainda o
+  **B3 CODE FAR** (a linha `SPECIAL` do BRT_IPE leva DOIS códigos: `B3 CODE` =
+  `CO"MY"` para o contrato do mês seguinte e `B3 CODE FAR` = `CO1-2` para dois
+  meses ou mais à frente; vanilla usa sempre o do mês — HANDOFF §212) e o
+  **Tipo de Cotação / Fonte de Informação** escritos nos arquivos Conecta
+  (`QUOTE TYPE NDF`, `QUOTE TYPE OPT`, `INFO SOURCE`): a coluna guarda o
+  **código do layout**, e há duas colunas de tipo de cotação porque os layouts
+  de Termo e Opção usam domínios diferentes (letra vs número) para a mesma
+  mercadoria. Coluna em branco — ou subjacente sem linha — devolve o valor
+  histórico (`_b3_quote_cfg`), que é o que o seed grava; a cópia da regra no
+  navegador é o `static/js/b3-quote-config.js`, e `check_quote_type.py` prova
+  que as duas concordam (HANDOFF §177).
+- **`api-links`** — o endpoint da Athena, uma linha por **uso × produto**
+  (`New Deals` × NDF/FXO/Commodities/Swaps, mais `Unwinds`), com `YYYYMMDD`
+  marcando a data de referência. Produto aqui é o parâmetro `product` da API,
+  **não a página**: NDF é um produto alimentando três páginas (Vanilla, Other
+  Publisher, FWD Start), separadas por roteamento e não por endereço. `PRODUCT`
+  em branco é coringa daquele uso. `date` é sempre reescrito; `product` só na
+  linha coringa — linha específica de produto é usada como cadastrada, já que
+  foi escolhida *por* produto. A linha `Unwinds` vai **vazia de propósito**:
+  sem URL o consumidor falha pedindo cadastro, enquanto `New Deals` cai no
+  endereço histórico (HANDOFF §173). O uso **`Recon FXO`** é outra Athena — o
+  relatório EOD do `bob-reports`, não o `getTrades` — e a data dele fica no
+  **caminho** (`AAAA-MM-DD`), que é justamente para o que o placeholder serve.
+- **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna
+  **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
+  `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
+  NOK — aplicá-la sempre inverteria a direção de operações que estavam certas
+  (HANDOFF §216). O Counterparty → CNPJ **não tem cadastro**: sai do Reference
+  Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH ACCRONYM e SPN pelo mesmo
+  TAX ID), porque um de-para paralelo seria uma segunda lista dos mesmos
+  clientes e envelheceria sozinho.
+- **`manual-conf-validation`** — quem valida a confirmação de cada produto
+  (Produto × LOB → OTC / MO / FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é
+  coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto
+  sem linha cai em OTC + MO e a tela **avisa** — em vez de deixar a confirmação
+  parada num Pending que ninguém sabe de quem é (HANDOFF §217).
+- **`swap-index`** — código de curva B3 → nome (`C00` → `VCP`). Aponta para o
+  **mesmo `SwapIndex.json`** da página de Index Results (ver `file` acima), e
+  toda tradução código→texto do módulo de Swap passa por registro:
+  `swap-funcionalidade`, `swap-amortizacao` e `swap-code-labels`. Live Position
+  **Termo e Opção não têm de-para nenhum** — só formatação de número e data —,
+  então não há o que cadastrar lá (HANDOFF §188).
+- **`ndfc-ir-exempt`** — quem NÃO paga o IR de 0,005% do termo de mercadoria. A
+  **mesma lista serve o Settlement Advice e o Trade Level**: mesmo imposto,
+  mesma operação, e duas listas divergiriam com uma tela retendo e a outra não.
+  O seed vai **além da fórmula da planilha** (que isentava só LAWTON) porque
+  ATACAMA / BANCO / JPMorgan foram pedidos por nome (HANDOFF §195).
+- **`ndfc-advice-split`** — contrapartes que recebem **um aviso por mercadoria**
+  (semeado com `MONDELEZ`). O split roda **depois** do split por tipo de net,
+  então um Pay/Rec da Mondelez sai por direção *e* por mercadoria (§196).
+- **`b3-omnibus-account`** — contas B3 que **não** identificam o cliente
+  (`73760.10-2`). Nessas linhas o nome que vem da B3 é o do titular do omnibus;
+  o cliente é resolvido por **CNPJ** contra o `RefData.json`. As duas
+  comparações (CNPJ e conta) são **só de dígitos** — os lados guardam
+  pontuação diferente, e comparar string casa silenciosamente nada (§197).
+- **`fxo-conv-rate`** — alimenta as duas colunas de Taxa de Conversão da
+  confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
+  semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no
+  painel em vez de imprimir em branco (HANDOFF §139).
+
+---
+
+## 7. Armadilhas que não dão erro nenhum
+
+Esta seção é o que o código **não** conta. Cada item aqui custou pelo menos uma
+rodada de depuração.
+
+### A contraparte vem do accronym do End Counterparty, nunca do Settlement Location
+
+A ordem em `_ndf_ref_by_accronym` é: accronym (exato, depois sem o sufixo da
+entidade) → **se o accronym for perna interna**, a identidade da própria
+entidade (`_ndf_le_refdata`: o Reference Data Name do `le-spn` buscado por nome
+normalizado, depois os accronyms da LE, depois o SPN cadastrado) → **senão** o
+SPN da API → nada. Três coisas para não confundir:
+
+- o **Settlement Location é a *nossa* perna**, não a da contraparte. Jogá-lo no
+  lookup fez um cliente resolver para Banco J.P. Morgan. O argumento `le` de
+  `_ndf_ref_by_accronym` tem de ser a entidade do accronym *da própria
+  contraparte* (`_ndf_le_from_accronym(end_cp)`), que é `None` a menos que a
+  contraparte seja perna interna do JPM (HANDOFF §147/§148);
+- o `SPN` da API já carregou o SPN da Legal Entity; hoje carrega o da
+  contraparte, por isso é o **último** passo — e nunca é consultado para perna
+  interna, o que reintroduziria a armadilha acima por outro caminho (§174);
+- **perna interna resolve pelo nome legal da entidade**, porque nome de book
+  (`LM-FWDECOMBRR FXC`) não tem accronym no Reference Data — foi isso que
+  deixou essas linhas sem SPN/Client/Tax ID. A linha **mantém o accronym da
+  API** (o book), e o badge só poupa perna interna que voltou com SPN.
+
+Nada casando = linha vazia + badge "Missing Counterparty", que é a falha
+desejada: pede cadastro em vez de inventar contraparte. Num **amend da API** a
+contraparte é rechecada e aplicada; a linha gravada é achada por
+`(Deal, Client)` e, quando o Client mudou, **só pelo Deal ID se ele for único
+no arquivo-dia** — senão o amend entraria como linha duplicada. Um deal
+`Success` só volta para `Amend` quando o **accronym** mudou de entidade; um
+lookup melhor do mesmo accronym apenas realça as células. Esse badge é só DOM,
+por isso os filtros por coluna roteiam o termo `missing c…` (9+ caracteres,
+para não colidir com "Missing Index B3") pelo `missing-counterparty.js` em vez
+da busca do DataTables.
+
+### `table.rows({search:'none', page:'all'})` NÃO é "tudo do dia"
+
+Devolve as linhas **carregadas**, e as tabelas de New Deals são frequentemente
+carregadas de uma busca no servidor (`/cache/search`, os chips do topo).
+Qualquer ação montada varrendo a tabela cobre só a última busca. O mapping do
+arquivo de retorno da B3 foi corrigido mandando a **Reference Date** e deixando
+o servidor montar a lista a partir do arquivo-dia
+(`_generic_nd_mapping_candidates`, HANDOFF §152) — o que também significa que o
+servidor persiste em deals que não estão na tela. A limitação continua valendo
+para Opt FXO / Opt Commodities / NDF Commodities, que têm endpoints próprios.
+
+### Inserir uma coluna nas páginas de NDF do New Deals mexe em 14 lugares
+
+`<th>` do cabeçalho, `<th>` da linha de filtro, `COL_TO_JSON_FIELD`,
+`AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, `columnDefs` ocultas,
+`columnLabels`, opções da edição em massa, `SF_COLS`, `SF_LABEL_TO_FIELD`,
+`extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`. Índice desatualizado aqui já
+causou corrupção silenciosa de dados **duas vezes** (HANDOFF §132). A coluna
+Maker é alcançada pela constante `MAKER_COL_INDEX` — mantenha assim.
+
+### Duas armadilhas de tela que não aparecem no console (HANDOFF §218)
+
+- **A linha de filtro por coluna tem de ser montada ANTES do `.DataTable()`**,
+  com `orderCellsTop: true`. Com `scrollX: true` o DataTables desenha o
+  cabeçalho duas vezes (a cópia visível vai para `.dt-scroll-headInner`, o
+  `<thead>` real fica escondido no corpo rolável), e `api.table().node()`
+  devolve a tabela do **corpo** — acrescentar a linha no `initComplete` a deixa
+  no DOM e invisível.
+- **Não use `.card` para um widget seu.** O `layouts/base.html` carrega o
+  `extra_css` da página **antes** do `head-css.html`, então o `.card` do tema
+  (`background-color`, `border`, `border-radius`, `color`) vence qualquer regra
+  da página sem `!important`. O padrão da casa é um `<div>` com classe própria
+  (`.ndm-card`, `.fxo-widget`, `.mc-card`), usando `--vr-card-*` e `--vr-grad`.
+
+Complementando, no mesmo tema: a **animação padrão do ícone** (about → sidenav
+→ New Deals Monitor) é `transform: scale(1.1) rotate(-4deg)` com sombra mais
+funda no hover do card. Cor só de tema claro precisa do par
+`[data-bs-theme=dark]`, senão a marca some no escuro.
+
+### Um arquivo JS comanda CINCO páginas
+
+`static/js/pages/live-position-swap-characteristics.js` é um visualizador
+genérico `{columns, rows}` escolhido pelo `data-api` da página: Live Position
+Swap Characteristics, Other Products Swap (Athena · Events · VCP) e as duas de
+Settlement Advice (Swap e NDF Commodities). O contrato são os ids
+**`swapchar-page`** e **`swapchar-table`** mais o `data-api` — renomear
+qualquer um deixa a página **em branco, sem erro no console**. O que é
+específico de uma página (o botão Print Advice) vai no `<script>` dela, e o que
+for acrescentado ao arquivo compartilhado tem de ser **aditivo**: o array
+`statuses` por linha e o `window.scLoad` são opt-in, então as páginas que não
+mandam nada se comportam exatamente como antes (HANDOFF §184/§190).
+
+### A família de liquidação do Other Products lê as MESMAS linhas
+
+Settlement Summary, Trade Level e as duas de Settlement Advice leem as mesmas
+linhas derivadas — o card conta o que a tabela mostra, e o aviso imprime o que
+a tabela mostra. **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais
+famílias de produto existem** (hoje SWAP + NDF Commodities); a página, os cards
+de reconciliação e o e-mail de TED chamam todos ele. O endpoint de TED remontava
+a lista sozinho e silenciosamente parou de pedir os TEDs de commodities no dia
+em que NDF entrou (HANDOFF §199). O status do aviso (`New → Generated → Sent`)
+vive uma vez só, no overlay do dia
+`other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
+produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
+
+### A esteira de confirmação manual é um gancho para a frente
+
+`_mc_save_from_deal` espelha para Manual Confirmations a operação que acabou de
+ser mapeada, e é chamado **de dentro de `_pc_save_from_deal`** de propósito:
+quem decide se um deal vira confirmação de cliente (perna interna? intragrupo?)
+é aquela função, e repetir o teste criaria uma segunda resposta para a mesma
+pergunta. Ele dispara no instante em que o deal vira `Success` — **não
+retroage**. Tudo que foi mapeado antes de a esteira existir alimentou o Pending
+Confirmation e parou ali; é para isso que existe o
+`backfill_manual_confirmations.py` (§9). Só os produtos de
+`_MC_CONFIRMATION_SOURCES` geram documento: NDF Vanilla e Other Publisher
+ficam de fora de propósito.
+
+### Outras
+
+- **Jobs agendados rodam no horário do Brasil, não no do servidor.**
+  `_br_now()` (`zoneinfo` `America/Sao_Paulo`, caindo para `-03:00` fixo quando
+  falta `tzdata` — o caso Windows) sustenta o e-mail de pendências das 19:00/
+  19:30 e a manutenção das 11:30 do Pending Confirmation. `datetime.now()` é o
+  relógio local do servidor e disparava tudo na hora errada, em silêncio. Como
+  a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
+  dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
+  é o que impede isso de virar e-mail repetido.
+- **`reportlab` é importado preguiçosamente** (PDFs de confirmação e folha de
+  liquidação do NDF Summary): sem a lib o e-mail sai *sem* o anexo, em vez de
+  falhar.
+- **Só `isCancelled = true` significa cancelado** na Athena. `isDead` é estado
+  interno e esses registros *são* importados (`_api_rec_is_cancelled`, §173).
+- **`Docs/` e `docs/` coexistem** (3 arquivos versionados no capitalizado, 47
+  no minúsculo — artefato de filesystem case-insensitive). As capturas ficam em
+  **`docs/sop-screenshots/`** minúsculo, que é o que o `SOP_PROCESSAMENTO_OTC.md`
+  e o `GUIA_DO_USUARIO_OTC_TRACKER.md` referenciam. Como o diretório em disco é
+  `Docs`, um `git add docs/...` comum grava o caminho **capitalizado** e os
+  arquivos caem noutra árvore — invisível no macOS, imagem quebrada no
+  Linux/Windows. Use
+  `git -c core.ignorecase=false add docs/sop-screenshots/` e confira o índice.
+  Os dois documentos são gerados do `.md` (a fonte única) por
+  `scripts/build_sop_docx.py`, que aceita o arquivo de origem como argumento
+  opcional (§155 para as armadilhas de captura).
+
+---
+
+## 8. Ambiente local e instância do time
+
+- **`awmpy` é biblioteca interna do JPMorgan** e não está no PyPI. Sem ela o
+  app falha no login/registro (consulta ao phonebook). Para **dev fora da rede
+  JPM**, um stub mínimo de `awmpy` no venv deixa o servidor subir — login real
+  por SID não funciona, então use a rota `/dev-login` do DEV BYPASS (bloco que
+  é removido antes de todo commit — §2).
+- **macOS: use `flask run --port=5005`.** A porta 5000 é do AirPlay Receiver e
+  devolve 403 "AirTunes". O venv aqui é Python 3.12 (no diretório `.venv311`);
+  `duckdb` e `flask-minify` são obrigatórios (ambos no `requirements.txt`).
+- **SMTP** usa `mailhost.jpmchase.net` (relay interno, porta 25, sem auth) —
+  fora da rede JPM o envio falha silenciosamente.
+- **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
+  de NDF/FXO (botão manual + schedulers no app, NDF a cada 20 min, FXO de hora
+  em hora). Precisa da rede JPM — fora dela o scheduler falha em silêncio
+  (erros repetidos rebaixados para `debug`). `build_session()` marca
+  `trust_env=False` **de propósito**: herdar o proxy corporativo foi o que
+  causou o `WinError 10061` na máquina Windows do time. O SSO Kerberos no
+  Windows precisa de `requests-negotiate-sspi`, que está **comentado** no
+  `requirements.txt` (só Windows) — instale na instância do JPM. O endpoint em
+  si não é mais constante: vem do mapping `api-links`, com
+  `BASE_URL`/`TRADES_ENDPOINT` sobrando como fallback do New Deals.
+- **A instância do time roda com o reloader desligado**: depois de um
+  `git pull` que tocou `routes.py` ou um template, o Flask **tem de ser
+  reiniciado** ou o código velho continua servindo. Vários "não está
+  funcionando" vieram daí. Edição de mapping pela tela é a exceção — vale no
+  request seguinte.
+- `flask_login`, `flask_wtf` e `flask_migrate` estão no `requirements.txt` mas
+  **não são usados**; o app gerencia sessão e banco diretamente.
+
+---
+
+## 9. Scripts e testes
+
+### Migrações de uma vez só (`scripts/`)
+
+Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
+
+| Script | Para quê |
+|---|---|
+| `update_pending_confirmation_dbs.py` | migração de schema do Pending Confirmation (§128) |
+| `update_pending_confirmation_bankers.py` | idem, coluna de banker |
+| `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
+| `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
+
+> `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
+> pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual
+> Confirmation abrem vazias e **não há nada errado com o código** — é a mesma
+> classe de "não funciona" que as migrações do Pending Confirmation já
+> produziram.
+
+O `backfill_manual_confirmations.py` reusa as **mesmas** funções que o
+mapeamento chama (`_pc_is_internal_counterparty` + `_mc_save_from_deal`) em vez
+de reescrever a regra. Duas armadilhas dele: **FWD Start é chaveado pelo B3 ID,
+não pelo Deal** (chavear pelo Deal cria uma segunda linha para o mesmo trade no
+mapeamento seguinte), e o `--dry-run` precisa lembrar as chaves da própria
+passada — o mesmo Deal aparece em vários arquivos-dia, e sem isso ele prometia
+73 linhas onde o run real criava 39.
+
+### Testes de regressão (`scripts/tests/`)
+
+Scripts autocontidos, sem framework: cada um imprime `ok`/`FAIL` por asserção,
+sai 0/1, resolve a raiz do repo pelo próprio caminho e **não toca em dado real**
+(tickets vão para `tempfile`, o DuckDB é recriado em tmp, Outlook/SMTP são
+stubados). O [`scripts/tests/README.md`](scripts/tests/README.md) mapeia cada
+script ao módulo que ele protege — **rode o correspondente depois de mexer
+naquele módulo**. `check_boxparse.py` é o único que precisa de binário externo
+(o `jsc` do macOS, para rodar a cópia da regra que vive no navegador), então não
+roda na máquina Windows do time (§163).
