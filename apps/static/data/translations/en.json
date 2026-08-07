@@ -1320,7 +1320,7 @@
   "fxo-w-total": "Total",
   "fxo-w-ok": "Matched",
   "fxo-w-nok": "Partial",
-  "fxo-w-nomatch": "No match in Athena",
+  "fxo-w-nomatch": "Unmatched B3",
   "fxo-d-dup": "Duplicate key",
   "fxo-modal-title": "Manual upload",
   "fxo-modal-desc": "For the day the network share or the Athena report is unreachable. Both files are identified by their content, so the order does not matter.",
@@ -1642,5 +1642,7 @@
   "sw-edit-hint": "The correction applies to this day’s advice — on screen and in the printed document. The source files are not changed.",
   "sw-edit-cancel": "Cancel",
   "sw-edit-save": "Save",
-  "mc-reject-ph": "What needs to be fixed?"
+  "mc-reject-ph": "What needs to be fixed?",
+  "fxo-w-nomatch-ath": "Unmatched Athena",
+  "fxo-w-justified": "Justified"
 }

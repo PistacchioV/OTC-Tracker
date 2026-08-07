@@ -40,6 +40,7 @@ import json
 import logging
 import os
 import re
+import threading
 import unicodedata
 from datetime import datetime
 
@@ -621,8 +622,29 @@ CAMPOS = [
 
 STATUS_COLS = [c['rot_st'] for c in CAMPOS]
 
-# Colunas da tabela, na ordem em que aparecem na página.
-COLUMNS = (['Status', 'Código IF', 'Combinação de operações']
+# Os quatro estados da 1ª coluna, na ordem da gravidade.
+#   Unmatched B3     — a operação está na CETIP/B3 e não achou par na Athena
+#   Unmatched Athena — está na Athena e não achou par na B3
+#   Partial - campos — casou, mas algum campo diverge
+#   Matched          — fechou
+# `Justified` é ortogonal: é o que qualquer um dos três primeiros vira quando
+# alguém escreve um comentário explicando a divergência (ver `COMMENT_COLUMN`).
+ST_UNMATCHED_B3 = 'Unmatched B3'
+ST_UNMATCHED_ATH = 'Unmatched Athena'
+ST_MATCHED = 'Matched'
+ST_JUSTIFIED = 'Justified'
+
+# A coluna do comentário vem logo depois do Status porque é ela que o explica.
+COMMENT_COLUMN = 'Comentário'
+
+# O status ANTES da justificativa, guardado na linha e fora de `COLUMNS` (a tela
+# não o mostra). É ele que permite apagar um comentário e a linha voltar a dizer
+# 'Partial - Cntpy' em vez de ficar 'Justified' para sempre.
+STATUS_RAW_KEY = '_status'
+
+# Colunas da tabela, na ordem em que aparecem na página. O checkbox e o Actions
+# são da TELA (o padrão de tabela do app), não do motor — por isso não estão aqui.
+COLUMNS = (['Status', COMMENT_COLUMN, 'Código IF', 'Combinação de operações']
            + [x for c in CAMPOS for x in (c['rot_dp'], c['rot_at'], c['rot_st'])]
            + ['Match', 'Chave Duplicada'])
 
@@ -712,11 +734,21 @@ def reconcile(df_dp, df_at):
     df_anc['_chave_norm'] = chave_dp.values
     df_anc['alerta_chave_duplicada'] = (chave_dp.duplicated(keep=False)
                                         & chave_dp.notna()).values
+    # Marca de que a linha veio da B3. Depois do join ela é o que distingue a
+    # operação que a Athena não tem da operação que a B3 não tem — as duas saem
+    # do merge com metade das colunas vazias, e sem a marca seriam a mesma coisa.
+    df_anc['_veio_da_b3'] = True
 
     df_at = df_at.copy()
+    # OUTER, e não LEFT: o left só enxergava a B3 sem par na Athena. A operação
+    # que existe SÓ na Athena simplesmente não aparecia na tela — e é uma quebra
+    # de recon do mesmo tamanho, com a diferença de que ninguém a via.
     df_final = df_anc.merge(base_athena_para_match(df_at), on='_chave_norm',
-                            how='left', suffixes=('_dp', '_at'))
-    df_final['sem_correspondencia_athena'] = df_final['match_athena_por'].isna()
+                            how='outer', suffixes=('_dp', '_at'))
+    df_final['_veio_da_b3'] = df_final['_veio_da_b3'].fillna(False).astype(bool)
+    df_final['sem_correspondencia_athena'] = (df_final['match_athena_por'].isna()
+                                              & df_final['_veio_da_b3'])
+    df_final['sem_correspondencia_b3'] = ~df_final['_veio_da_b3']
 
     def col_dp(nome):
         if nome in df_final.columns:
@@ -753,7 +785,13 @@ def reconcile(df_dp, df_at):
 
     saida = pd.DataFrame()
     saida['Código IF'] = df_final[col_dp(COL_DP_CODIGO_IF)].values
-    saida['Combinação de operações'] = df_final[col_dp(COL_DP_CHAVE)].values
+    # A linha que só existe na Athena não tem chave da CETIP: a coluna recebe a
+    # chave do JOIN (o DealID). É a mesma coisa que a coluna sempre guardou — o
+    # identificador pelo qual os dois lados se procuram —, e deixá-la vazia daria
+    # uma linha sem nenhum jeito de dizer de que operação se está falando.
+    chave_saida = df_final[col_dp(COL_DP_CHAVE)].where(
+        df_final['_veio_da_b3'], df_final['_chave_norm'])
+    saida['Combinação de operações'] = chave_saida.values
 
     for m in CAMPOS:
         if m.get('derivacao') is not None:
@@ -814,36 +852,59 @@ def reconcile(df_dp, df_at):
         saida[m['rot_st']] = [comparar(a, b, m.get('tolerancia'), m.get('tipo'))
                               for a, b in zip(v_dp, v_at)]
 
-    _aplicar_perna_espelhada(saida, espelhadas)
+    # A perna espelhada é uma correção da comparação entre os DOIS lados; numa
+    # linha que só tem um lado não há o que espelhar, e a assinatura que ela
+    # procura (Ctpty e Dir os dois NOK) acontece ali por falta de par.
+    _aplicar_perna_espelhada(saida, espelhadas, df_final['_veio_da_b3'].values
+                             & ~df_final['sem_correspondencia_athena'].values)
 
-    saida['Match'] = df_final['match_athena_por'].fillna('Sem match').values
-    saida['Chave Duplicada'] = ['Sim' if x else ''
+    # `Match` diz POR ONDE a operação casou. Na linha que só existe na Athena ela
+    # sai vazia: aquela linha veio da base da Athena e por isso carrega o
+    # 'DealID' herdado do lado direito do join, mas não casou com nada — deixá-lo
+    # inflaria o chip de diagnóstico com operações que não tiveram match nenhum.
+    saida['Match'] = df_final['match_athena_por'].where(
+        df_final['_veio_da_b3'], '').fillna('').values
+    # `alerta_chave_duplicada` vem NaN nas linhas só-Athena (elas não estavam no
+    # df_anc), e `if nan` é VERDADEIRO — sem o teste explícito, toda operação
+    # órfã da Athena sairia marcada como chave duplicada. `pd.notna(x) and
+    # bool(x)`, e não `x is True`: depois do merge o valor é um `numpy.bool_`, e
+    # `numpy.True_ is True` é FALSO — o teste de identidade apagava a marca de
+    # TODAS as linhas, inclusive as duplicadas de verdade.
+    saida['Chave Duplicada'] = ['Sim' if (pd.notna(x) and bool(x)) else ''
                                for x in df_final['alerta_chave_duplicada'].values]
 
-    sem_match = df_final['sem_correspondencia_athena'].values
+    sem_ath = df_final['sem_correspondencia_athena'].values
+    sem_b3 = df_final['sem_correspondencia_b3'].values
     # O Status da linha DIZ o que não bateu: 'Matched' quando todos os campos
     # fecharam, 'Partial - Cntpy | Settlement Date' listando os campos NOK pelo
-    # nome comum. 'Sem match' vence tudo: sem a outra ponta, os onze NOK são
-    # consequência de um só problema.
+    # nome comum. Faltar um dos lados vence tudo: sem a outra ponta, os onze NOK
+    # são consequência de um só problema.
     nok_por_linha = [
         [c['campo'] for c in CAMPOS if saida[c['rot_st']].iat[i] == 'NOK']
         for i in range(len(saida))
     ]
     saida.insert(0, 'Status', [
-        'Sem match' if s else
-        ('Partial - ' + ' | '.join(f) if f else 'Matched')
-        for s, f in zip(sem_match, nok_por_linha)])
+        ST_UNMATCHED_B3 if a else (ST_UNMATCHED_ATH if b else
+                                   ('Partial - ' + ' | '.join(f) if f else ST_MATCHED))
+        for a, b, f in zip(sem_ath, sem_b3, nok_por_linha)])
+    # A coluna do comentário nasce vazia aqui e é preenchida por
+    # `aplicar_comentarios`, que é quem sabe o que já foi justificado antes.
+    saida.insert(1, COMMENT_COLUMN, '')
 
     rows = [{k: _cell(v) for k, v in rec.items()}
             for rec in saida.to_dict('records')]
+    aplicar_comentarios(rows)
     return rows, _contar(rows), avisos
 
 
-def _aplicar_perna_espelhada(saida, espelhadas):
+def _aplicar_perna_espelhada(saida, espelhadas, elegivel=None):
     """A perna interna que chega invertida: espelha a direção e renomeia.
 
     Só entra onde Ctpty E JPM Dir estão os DOIS NOK — a assinatura de que a linha
-    é a perna espelhada da mesa, e não uma divergência de verdade.
+    é a perna espelhada da mesa, e não uma divergência de verdade. `elegivel` é a
+    máscara das linhas que têm os DOIS lados; sem ela, uma linha órfã (que tem
+    todos os campos NOK por falta de par) seria "corrigida" para um par que não
+    existe.
     """
     if not espelhadas or saida.empty:
         return
@@ -851,6 +912,8 @@ def _aplicar_perna_espelhada(saida, espelhadas):
                'B3 Dir', 'B3 Cntpy'}
     if not precisa.issubset(saida.columns):
         return
+    base = (pd.Series(list(elegivel), index=saida.index)
+            if elegivel is not None else pd.Series(True, index=saida.index))
 
     def _flip(v):
         if pd.isna(v):
@@ -860,6 +923,7 @@ def _aplicar_perna_espelhada(saida, espelhadas):
 
     for nome_at, codigo in espelhadas:
         mask = (
+            base &
             (saida['Status Cntpy'] == 'NOK') & (saida['Status Dir'] == 'NOK') &
             saida['ATH Cntpy'].apply(
                 lambda x, n=nome_at: pd.notna(x) and str(x).strip().upper() == n)
@@ -893,9 +957,11 @@ def _contar(rows):
     sem ela, '40 linhas com NOK' não indica por onde começar."""
     counts = {
         'total': len(rows),
-        'ok': sum(1 for r in rows if r.get('Status') == 'Matched'),
+        'ok': sum(1 for r in rows if r.get('Status') == ST_MATCHED),
         'nok': sum(1 for r in rows if str(r.get('Status', '')).startswith('Partial')),
-        'no_match': sum(1 for r in rows if r.get('Status') == 'Sem match'),
+        'no_match': sum(1 for r in rows if r.get('Status') == ST_UNMATCHED_B3),
+        'no_match_ath': sum(1 for r in rows if r.get('Status') == ST_UNMATCHED_ATH),
+        'justified': sum(1 for r in rows if r.get('Status') == ST_JUSTIFIED),
         'match_dealid': sum(1 for r in rows if r.get('Match') == 'DealID'),
         'match_matching': sum(1 for r in rows if r.get('Match') == 'MatchingDealID'),
         'dup_key': sum(1 for r in rows if r.get('Chave Duplicada') == 'Sim'),
@@ -903,6 +969,98 @@ def _contar(rows):
     counts['nok_por_campo'] = {c: sum(1 for r in rows if r.get(c) == 'NOK')
                                for c in STATUS_COLS}
     return counts
+
+
+# =============================================================================
+# Comentários — a justificativa que atravessa as recons
+# =============================================================================
+#
+# O comentário pertence ao TRADE, não à execução do dia: quem explicou por que
+# aquela operação não casa não vai reescrever a explicação toda manhã. Por isso
+# ele mora fora do cache por data, e é reaplicado em toda leitura — inclusive nos
+# resultados que já estavam gravados antes de o comentário existir.
+#
+# A chave é a `Combinação de operações`, que é o identificador pelo qual os dois
+# lados se procuram (a chave da CETIP, ou o DealID nas linhas só-Athena). Chavear
+# por Código IF perderia as linhas da Athena, que não têm um.
+_COMMENTS_PATH = os.path.join(_DATA_DIR, 'recon-fxo-comments.json')
+_COMMENTS_LOCK = threading.Lock()
+
+# Os estados que uma justificativa cobre. `Matched` fica de fora de propósito:
+# comentar uma linha que fechou é uma anotação, não uma justificativa, e trocar o
+# status dela esconderia o único estado que não precisa de atenção nenhuma.
+_JUSTIFICAVEL = (ST_UNMATCHED_B3, ST_UNMATCHED_ATH)
+
+
+def _comment_key(row):
+    return str(row.get('Combinação de operações', '') or '').strip()
+
+
+def load_comments():
+    """{chave: comentário} do disco. Arquivo ausente ou ilegível = {}."""
+    try:
+        with open(_COMMENTS_PATH, encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if str(v or '').strip()}
+
+
+def save_comment(key, comment):
+    """Grava (ou apaga, com comentário vazio) a justificativa de um trade.
+
+    Ler-alterar-gravar sob lock: dois usuários comentando linhas diferentes ao
+    mesmo tempo gravariam o arquivo inteiro por cima um do outro, e o segundo
+    apagaria o comentário do primeiro.
+    """
+    k = str(key or '').strip()
+    if not k:
+        raise ValueError('Sem a chave da operação não há o que comentar.')
+    txt = str(comment or '').strip()
+    with _COMMENTS_LOCK:
+        data = load_comments()
+        if txt:
+            data[k] = txt
+        else:
+            data.pop(k, None)
+        try:
+            os.makedirs(os.path.dirname(_COMMENTS_PATH), exist_ok=True)
+            tmp = _COMMENTS_PATH + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as fh:
+                json.dump(data, fh, ensure_ascii=False, indent=1)
+            os.replace(tmp, _COMMENTS_PATH)
+        except Exception as exc:
+            _LOG.warning('[recon_fxo] não consegui gravar o comentário: %s', exc)
+            raise
+    return txt
+
+
+def aplicar_comentarios(rows, comments=None):
+    """Escreve o comentário em cada linha e promove o Status a `Justified`.
+
+    Roda na gravação E na leitura, e é idempotente: um comentário escrito hoje
+    aparece na recon de ontem que já está em cache, e apagá-lo devolve a linha ao
+    status que ela tinha.
+
+    Essa volta atrás só é possível porque o status original fica guardado em
+    `_status`, fora de `COLUMNS` (a tela não o mostra). Sobrescrever o `Status`
+    direto gravaria 'Justified' no cache, e a linha nunca mais saberia dizer o
+    que ela era antes de alguém justificá-la.
+    """
+    if comments is None:
+        comments = load_comments()
+    for r in rows:
+        # A linha vinda de um cache antigo não tem `_status`; o Status dela ainda
+        # é o cru, porque ela foi gravada antes de existir justificativa.
+        raw = str(r.get(STATUS_RAW_KEY) or r.get('Status', '') or '')
+        r[STATUS_RAW_KEY] = raw
+        txt = comments.get(_comment_key(r), '')
+        r[COMMENT_COLUMN] = txt
+        justificavel = raw in _JUSTIFICAVEL or raw.startswith('Partial')
+        r['Status'] = ST_JUSTIFIED if (txt and justificavel) else raw
+    return rows
 
 
 # =============================================================================
@@ -943,8 +1101,18 @@ def load_last(recon_date=''):
             payload = json.load(fh)
     except Exception:
         return vazio
-    payload.setdefault('columns', COLUMNS)
+    # As colunas são SEMPRE as de agora: um cache gravado antes da coluna de
+    # comentário existir traria a lista antiga, e a tela montaria a tabela sem
+    # ela — com os dados novos por baixo, e sem erro nenhum.
+    payload['columns'] = COLUMNS
     payload.setdefault('warnings', [])
+    # A justificativa é reaplicada na LEITURA: ela vale para o trade, não para a
+    # execução, então um comentário escrito hoje tem de aparecer na recon de
+    # ontem que já está gravada. As contagens saem daí, e não do que foi
+    # persistido, senão o card diria um número e a tabela mostraria outro.
+    linhas = payload.get('data') or []
+    aplicar_comentarios(linhas)
+    payload['counts'] = _contar(linhas)
     return payload
 
 
@@ -1010,8 +1178,10 @@ def run_fxo(recon_date, files=None, mode='auto'):
     }
     _persist(recon_date, payload)
     payload['success'] = True
-    payload['meta'] = '%d operações · %d Matched · %d Partial · %d sem match' % (
-        counts['total'], counts['ok'], counts['nok'], counts['no_match'])
+    payload['meta'] = ('%d operações · %d Matched · %d Partial · '
+                       '%d Unmatched B3 · %d Unmatched Athena' % (
+                           counts['total'], counts['ok'], counts['nok'],
+                           counts['no_match'], counts['no_match_ath']))
     return payload
 
 

@@ -73,6 +73,12 @@ apps/static/data/cache/reconciliation/payrec/**/*.json
 # Generated Pending Confirmation daily snapshots
 apps/static/data/cache/pending-confirmation/**/*.json
 
+# Resultado diário da recon de FXO + as justificativas escritas na tela. As duas
+# são dado de runtime de cada instância: versionar traria a recon da máquina de
+# dev para produção, e a justificativa de um trade da mesa para o repositório.
+apps/static/data/cache/reconciliation/fxo/**/*.json
+apps/static/data/recon-fxo-comments.json
+
 # Tickets do Support Center — dado de runtime de cada instância (o arquivo é
 # criado no primeiro ticket). Versionar traria os tickets da máquina de dev
 # para produção e ainda faria o contador de ID (#OTC-0001) andar para trás

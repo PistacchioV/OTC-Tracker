@@ -1320,7 +1320,7 @@
   "fxo-w-total": "Total",
   "fxo-w-ok": "Matched",
   "fxo-w-nok": "Partial",
-  "fxo-w-nomatch": "Sem match na Athena",
+  "fxo-w-nomatch": "Unmatched B3",
   "fxo-d-dup": "Chave duplicada",
   "fxo-modal-title": "Upload manual",
   "fxo-modal-desc": "Para o dia em que a rede ou o relatório da Athena não respondem. Os dois arquivos são identificados pelo conteúdo, então a ordem não importa.",
@@ -1642,5 +1642,7 @@
   "sw-edit-hint": "A correção vale para o aviso deste dia — na tela e no documento impresso. Os arquivos de origem não são alterados.",
   "sw-edit-cancel": "Cancelar",
   "sw-edit-save": "Salvar",
-  "mc-reject-ph": "O que precisa ser corrigido?"
+  "mc-reject-ph": "O que precisa ser corrigido?",
+  "fxo-w-nomatch-ath": "Unmatched Athena",
+  "fxo-w-justified": "Justificado"
 }

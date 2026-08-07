@@ -141,12 +141,19 @@ rows, counts, _w = run(
      dp_row(**{'Combinação de operações': 'CETIP_3', 'Parte (Conta)': '99999999'}),
      dp_row(**{'Combinação de operações': 'CETIP_4', 'Classe do ativo subjacente': 'TAXAS DE JUROS'})],
     [at_row(DealID='CETIP_%d' % i) for i in range(1, 5)])
-check('a conta como texto entra', 'CETIP_1' in [r['Combinação de operações'] for r in rows], True)
-check('a conta como número entra', 'CETIP_2' in [r['Combinação de operações'] for r in rows], True)
-check('outra conta fica de fora', 'CETIP_3' in [r['Combinação de operações'] for r in rows], False)
-check('outra classe de ativo fica de fora',
-      'CETIP_4' in [r['Combinação de operações'] for r in rows], False)
-check('   sobram duas', counts['total'], 2)
+st = {r['Combinação de operações']: r['Status'] for r in rows}
+check('a conta como texto entra', 'CETIP_1' in st, True)
+check('a conta como número entra', 'CETIP_2' in st, True)
+# A LINHA DA B3 continua fora da âncora — o que aparece agora é a operação da
+# ATHENA, que existe e não achou par na base ancorada. Ela sai como Unmatched
+# Athena, e não como uma linha comparada: as colunas B3 dela estão vazias.
+check('outra conta não entra pelo lado da B3', st.get('CETIP_3'), 'Unmatched Athena')
+check('outra classe de ativo idem', st.get('CETIP_4'), 'Unmatched Athena')
+check('   e as duas ancoradas casam', (st['CETIP_1'], st['CETIP_2']),
+      ('Matched', 'Matched'))
+check('   as colunas da B3 saem vazias na órfã da Athena',
+      [r['B3 Dir'] for r in rows if r['Combinação de operações'] == 'CETIP_3'], [''])
+check('   sobram duas ancoradas', counts['total'] - counts['no_match_ath'], 2)
 
 print('\n== 2. a chave: CETIP- ≡ CETIP_, e o DealID na frente ==')
 rows, counts, _w = run(
@@ -160,9 +167,14 @@ check('   e a chave sai normalizada', rows[0]['Combinação de operações'], 'C
 rows, counts, _w = run(
     [dp_row(**{'Combinação de operações': 'K1', 'Quantidade': '100'})],
     [at_row(DealID='K1', Quantity='100'), at_row(DealID='Z9', MatchingDealID='K1', Quantity='777')])
-check('o DealID ganha do MatchingDealID', rows[0]['Match'], 'DealID')
-check('   e o valor vem da linha certa', rows[0]['ATH Amt'], '100')
-check('   sem duplicar a operação', counts['total'], 1)
+por = {r['Combinação de operações']: r for r in rows}
+check('o DealID ganha do MatchingDealID', por['K1']['Match'], 'DealID')
+check('   e o valor vem da linha certa', por['K1']['ATH Amt'], '100')
+check('   sem duplicar a operação',
+      sum(1 for r in rows if r['Combinação de operações'] == 'K1'), 1)
+# Z9 é uma operação da Athena que a B3 não tem: ela entra na tabela como
+# Unmatched Athena. Antes o join era LEFT e ela simplesmente não aparecia.
+check('   e a operação só da Athena aparece', por['Z9']['Status'], 'Unmatched Athena')
 
 # Quando a chave NÃO existe em DealID nenhum, o MatchingDealID é usado.
 rows, counts, _w = run(
@@ -282,24 +294,59 @@ check('   e a data do ativo subjacente é ignorada na asiática',
       r['B3 Fix Date'] != '01/01/2026', True)
 check('Avg Rate Option = Asian dos dois lados', r['Status Style'], 'OK')
 
-print('\n== 6. sem match vence NOK ==')
+print('\n== 6. faltar um dos lados vence NOK ==')
 rows, counts, _w = run(
     [dp_row(**{'Combinação de operações': 'X1', 'Quantidade': '10'}),
      dp_row(**{'Combinação de operações': 'X2', 'Quantidade': '10'}),
      dp_row(**{'Combinação de operações': 'X2', 'Quantidade': '10'})],
-    [at_row(DealID='X2', Quantity='99')])
+    [at_row(DealID='X2', Quantity='99'), at_row(DealID='X9', Quantity='5')])
 por_chave = {r['Combinação de operações']: r for r in rows}
-check('a órfã sai como Sem match', por_chave['X1']['Status'], 'Sem match')
+check('a órfã da B3 sai como Unmatched B3', por_chave['X1']['Status'], 'Unmatched B3')
 check('   e não como NOK, mesmo com os onze status NOK',
       por_chave['X1']['Status Amt'], 'NOK')
+check('a órfã da Athena sai como Unmatched Athena',
+      por_chave['X9']['Status'], 'Unmatched Athena')
+check('   com o valor da Athena preenchido e o da B3 vazio',
+      (por_chave['X9']['ATH Amt'], por_chave['X9']['B3 Amt']), ('5', ''))
+check('   e sem marca de chave duplicada', por_chave['X9']['Chave Duplicada'], '')
 check('a que casou e diverge diz QUAL campo quebrou',
       por_chave['X2']['Status'], 'Partial - Amt')
 check('a chave repetida é sinalizada', por_chave['X2']['Chave Duplicada'], 'Sim')
 check('as contagens fecham',
       (counts['total'], counts['ok'], counts['nok'], counts['no_match'],
-       counts['dup_key'], counts['match_dealid']),
-      (3, 0, 2, 1, 2, 2))
-check('nok_por_campo diz qual campo quebrou', counts['nok_por_campo']['Status Amt'], 3)
+       counts['no_match_ath'], counts['dup_key'], counts['match_dealid']),
+      (4, 0, 2, 1, 1, 2, 2))
+check('nok_por_campo diz qual campo quebrou', counts['nok_por_campo']['Status Amt'], 4)
+
+print('\n== 6b. o comentário justifica a linha e atravessa as recons ==')
+R._COMMENTS_PATH = os.path.join(TMP, 'comentarios.json')
+R.save_comment('X1', 'operação cancelada na B3 no dia seguinte')
+R.aplicar_comentarios(rows)
+por_chave = {r['Combinação de operações']: r for r in rows}
+check('com comentário, o Unmatched vira Justified', por_chave['X1']['Status'], 'Justified')
+check('   e o comentário aparece na linha',
+      por_chave['X1']['Comentário'], 'operação cancelada na B3 no dia seguinte')
+check('   mas o status original fica guardado',
+      por_chave['X1'][R.STATUS_RAW_KEY], 'Unmatched B3')
+check('quem não foi comentado não muda', por_chave['X2']['Status'], 'Partial - Amt')
+# Matched com comentário é uma ANOTAÇÃO, não uma justificativa: promover a linha
+# que fechou esconderia o único estado que não precisa de atenção nenhuma.
+R.save_comment('X2', 'diferença de arredondamento aceita pela mesa')
+R.aplicar_comentarios(rows)
+check('o Partial comentado também vira Justified',
+      {r['Combinação de operações']: r['Status'] for r in rows}['X2'], 'Justified')
+# TRÊS: a chave X2 aparece duas vezes na posição (chave duplicada), e a
+# justificativa é do TRADE — as duas linhas da mesma operação a recebem juntas.
+check('as contagens acompanham', R._contar(rows)['justified'], 3)
+# Apagar o comentário devolve a linha ao que ela era — só possível porque o
+# status cru fica guardado fora de COLUMNS.
+R.save_comment('X1', '')
+R.aplicar_comentarios(rows)
+check('apagado o comentário, o status volta',
+      {r['Combinação de operações']: r['Status'] for r in rows}['X1'], 'Unmatched B3')
+check('o `_status` fica FORA das colunas da tela', R.STATUS_RAW_KEY in R.COLUMNS, False)
+check('a coluna do comentário vem logo depois do Status',
+      R.COLUMNS[:2], ['Status', R.COMMENT_COLUMN])
 
 print('\n== 7. o contrato com a página ==')
 check('a primeira coluna é o Status', R.COLUMNS[0], 'Status')

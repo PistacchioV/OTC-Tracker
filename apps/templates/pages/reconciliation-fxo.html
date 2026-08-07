@@ -63,8 +63,15 @@
 /* O status é a COR do chip, não a do cartão: o cartão inteiro tingido briga com
    a tabela abaixo e some no tema escuro. */
 #fxo-page .fxo-w-ok   .fxo-widget__ico { background: linear-gradient(100deg, #1a8a4a, #34c759); box-shadow: 0 4px 12px rgba(26,138,74,.28); }
-#fxo-page .fxo-w-nok  .fxo-widget__ico { background: linear-gradient(100deg, #c0392b, #ff5a5a); box-shadow: 0 4px 12px rgba(192,57,43,.28); }
-#fxo-page .fxo-w-none .fxo-widget__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+/* A cor é a da GRAVIDADE, e o card tem de contar a mesma história do badge da
+   1ª coluna: Partial em laranja (casou, algum campo diverge), Sem match em
+   vermelho (a operação nem existe do outro lado). Estavam trocados. */
+#fxo-page .fxo-w-nok  .fxo-widget__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+/* Os dois Unmatched são o MESMO vermelho: a gravidade é a mesma, o que muda é de
+   que lado falta a operação — e é o rótulo que diz isso, não a cor. */
+#fxo-page .fxo-w-none .fxo-widget__ico,
+#fxo-page .fxo-w-none-ath .fxo-widget__ico { background: linear-gradient(100deg, #c0392b, #ff5a5a); box-shadow: 0 4px 12px rgba(192,57,43,.28); }
+#fxo-page .fxo-w-just .fxo-widget__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
 
 #fxo-page .widget-lbl {
     font-size: .78rem; font-weight: 700; letter-spacing: -.01em;
@@ -83,6 +90,8 @@
     #fxo-page .col-fxo-w:nth-child(2) .fxo-widget { animation-delay: 45ms; }
     #fxo-page .col-fxo-w:nth-child(3) .fxo-widget { animation-delay: 90ms; }
     #fxo-page .col-fxo-w:nth-child(4) .fxo-widget { animation-delay: 135ms; }
+    #fxo-page .col-fxo-w:nth-child(5) .fxo-widget { animation-delay: 180ms; }
+    #fxo-page .col-fxo-w:nth-child(6) .fxo-widget { animation-delay: 225ms; }
     @keyframes fxoWIn { from { opacity:0; transform: translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
 }
 
@@ -115,13 +124,56 @@
 }
 #fxo-page .fxo-chip-nok:active { transform:scale(.97); }
 
-/* ── Tabela ──────────────────────────────────────────────────────── */
-#fxo-table th { white-space:nowrap; font-size:.68rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
+/* ── Tabela ──────────────────────────────────────────────────────────
+   As regras do cabeçalho valem para o `#fxo-table` E para o CLONE: com scrollX
+   o DataTables desenha o cabeçalho numa tabela irmã e **remove o id dela**, de
+   modo que `#fxo-table th` não alcança o cabeçalho que se vê. Sem as três linhas
+   abaixo o header ficava com a fonte e o padding do tema (maiores) enquanto o
+   corpo usava os desta página — as duas tabelas mediam larguras diferentes e os
+   valores saíam deslocados das colunas, com o erro acumulando para a direita.
+
+   E o header QUEBRA LINHA (`white-space:normal`): com nowrap uma coluna como
+   "Combinação de operações" impõe uma largura mínima que o corpo não tem, e a
+   largura de cada coluna volta a divergir por baixo. */
+#fxo-table th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    font-size:.68rem; padding:8px 10px;
+    text-align:center !important; vertical-align:middle !important;
+    white-space:normal !important; word-break:break-word; overflow-wrap:anywhere;
+    line-height:1.15;
+}
 #fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; text-align:center; }
 #fxo-table td.cell-status { text-align:center; }
 /* Alinhamento centralizado como todo o app (padrão New Deals); os dígitos de
    largura fixa continuam garantindo a comparação linha contra linha. */
 #fxo-table td.cell-num { text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* Ações da linha no squircle padrão do app (spec .ops-row-act): 32×32 travado
+   com min/max — sem o trava, uma regra de tema estica o botão e o `rounded` do
+   Bootstrap sai OVAL, porque círculo só é círculo em botão já quadrado. */
+#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; }
+#fxo-table td.fxo-acts .btn.ops-row-act {
+    width:32px; height:32px; min-width:32px; max-width:32px;
+    padding:0; flex:0 0 auto; border-radius:10px !important;
+    display:inline-flex; align-items:center; justify-content:center;
+    line-height:1; font-size:1rem;
+    transition: transform 140ms var(--fxo-ease), box-shadow 140ms var(--fxo-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #fxo-table td.fxo-acts .btn.ops-row-act:hover { transform: translateY(-1px) scale(1.08); }
+}
+#fxo-table td.fxo-acts .btn.ops-row-act:active { transform: scale(.94); }
+
+/* O comentário é texto livre e costuma ser longo: a célula tem largura máxima e
+   corta com reticências (o título no hover mostra o inteiro). Sem o limite, uma
+   justificativa de duas linhas empurraria as 38 colunas para fora da tela. */
+#fxo-table td.fxo-comment {
+    text-align:left; max-width:16rem;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+#fxo-table td.fxo-comment input { font-size:.72rem; min-width:12rem; }
 /* A busca própria do DataTables sai: a linha de filtro por coluna faz o mesmo
    trabalho com precisão, e as duas juntas se combinam em silêncio — um termo
    esquecido lá em cima escondia linhas que o filtro da coluna dizia mostrar. */
@@ -209,34 +261,53 @@
         </div>
     </div>
 
-    <!-- ── Cards de status ───────────────────────────────────────── -->
+    <!-- ── Cards de status ─────────────────────────────────────────
+         Os dois "Unmatched" são lados opostos da mesma pergunta e por isso são
+         dois cards, não um: **Unmatched B3** é a operação registrada na B3 que a
+         Athena não tem (falta bookar), **Unmatched Athena** é a bookada que não
+         chegou à B3 (falta registrar). Um número só somando as duas não diria a
+         quem endereçar. -->
     <div class="row g-2 mb-3">
-        <div class="col-6 col-lg-3 col-fxo-w">
+        <div class="col-6 col-lg col-fxo-w">
             <div class="fxo-widget fxo-w-total" data-status="">
                 <span class="fxo-widget__ico"><i class="ti ti-sum"></i></span>
                 <p class="widget-lbl" data-lang="fxo-w-total">Total</p>
                 <p class="widget-val" id="w-total">—</p>
             </div>
         </div>
-        <div class="col-6 col-lg-3 col-fxo-w">
+        <div class="col-6 col-lg col-fxo-w">
             <div class="fxo-widget fxo-w-ok" data-status="Matched">
                 <span class="fxo-widget__ico"><i class="ti ti-circle-check"></i></span>
                 <p class="widget-lbl" data-lang="fxo-w-ok">Matched</p>
                 <p class="widget-val" id="w-ok">—</p>
             </div>
         </div>
-        <div class="col-6 col-lg-3 col-fxo-w">
+        <div class="col-6 col-lg col-fxo-w">
             <div class="fxo-widget fxo-w-nok" data-status="Partial">
                 <span class="fxo-widget__ico"><i class="ti ti-alert-triangle"></i></span>
                 <p class="widget-lbl" data-lang="fxo-w-nok">Partial</p>
                 <p class="widget-val" id="w-nok">—</p>
             </div>
         </div>
-        <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="fxo-widget fxo-w-none" data-status="Sem match">
+        <div class="col-6 col-lg col-fxo-w">
+            <div class="fxo-widget fxo-w-none" data-status="Unmatched B3">
                 <span class="fxo-widget__ico"><i class="ti ti-unlink"></i></span>
-                <p class="widget-lbl" data-lang="fxo-w-nomatch">Sem match na Athena</p>
+                <p class="widget-lbl" data-lang="fxo-w-nomatch">Unmatched B3</p>
                 <p class="widget-val" id="w-nomatch">—</p>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-fxo-w">
+            <div class="fxo-widget fxo-w-none-ath" data-status="Unmatched Athena">
+                <span class="fxo-widget__ico"><i class="ti ti-plug-connected-x"></i></span>
+                <p class="widget-lbl" data-lang="fxo-w-nomatch-ath">Unmatched Athena</p>
+                <p class="widget-val" id="w-nomatch-ath">—</p>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-fxo-w">
+            <div class="fxo-widget fxo-w-just" data-status="Justified">
+                <span class="fxo-widget__ico"><i class="ti ti-message-check"></i></span>
+                <p class="widget-lbl" data-lang="fxo-w-justified">Justified</p>
+                <p class="widget-val" id="w-justified">—</p>
             </div>
         </div>
     </div>
@@ -384,6 +455,32 @@
     var activeStatus = '';     // filtro vindo dos cards
     var activeField = '';      // filtro vindo dos chips de NOK por campo
 
+    // Offsets fixos: 0 = checkbox, 1 = Actions; as colunas do servidor começam
+    // em 2. Toda chamada a `table.column(i)` desta página soma OFFSET.
+    var OFFSET = 2;
+    var COMMENT_COL = 'Comentário';
+    var editingKey = null;     // a linha em edição do comentário (só uma por vez)
+
+    // Texto montado em JS não passa pelo I18nManager (ele traduz [data-lang] uma
+    // vez, no load) — sai daqui, no idioma que o app guardou.
+    var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+                localStorage.getItem('language') || 'en').toLowerCase();
+    var _TRANS = {
+        en: { editComment: 'Comment', save: 'Save', cancel: 'Cancel',
+              commentPh: 'Why does this line not match?',
+              saveFail: 'Could not save the comment', copied: 'Copied',
+              empty: 'Run the reconciliation for the selected date.' },
+        br: { editComment: 'Comentário', save: 'Salvar', cancel: 'Cancelar',
+              commentPh: 'Por que esta linha não casa?',
+              saveFail: 'Não foi possível gravar o comentário', copied: 'Copiado',
+              empty: 'Rode a reconciliação para a data escolhida.' },
+        es: { editComment: 'Comentario', save: 'Guardar', cancel: 'Cancelar',
+              commentPh: '¿Por qué esta línea no coincide?',
+              saveFail: 'No se pudo guardar el comentario', copied: 'Copiado',
+              empty: 'Ejecute la reconciliación para la fecha elegida.' }
+    };
+    function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k; }
+
     function isStatusCol(name) { return /^Status /.test(name) || name === 'Status'; }
 
     // Colunas de valor. AMT e PREMIUM são dinheiro (duas casas, milhar separado);
@@ -403,12 +500,114 @@
 
     function badge(s) {
         if (!s) return '';
-        // 1ª coluna: Matched (verde) / Partial - campos (vermelho) / Sem match.
-        // Colunas por campo: OK / NOK.
+        // 1ª coluna, na ordem da gravidade: os dois Unmatched em vermelho (a
+        // operação não existe do outro lado), Partial - campos em laranja (casou,
+        // mas algum campo diverge), Justified em azul (diverge, e alguém já
+        // explicou por quê) e Matched em verde. Colunas por campo: OK / NOK.
         var cls = { 'OK': 'text-bg-success', 'Matched': 'text-bg-success',
-                    'NOK': 'text-bg-danger', 'Sem match': 'text-bg-warning' }[s]
-                  || (/^Partial/.test(s) ? 'text-bg-danger' : 'text-bg-secondary');
-        return '<span class="badge rounded-pill bg-gradient ' + cls + '">' + s + '</span>';
+                    'NOK': 'text-bg-danger',
+                    'Unmatched B3': 'text-bg-danger',
+                    'Unmatched Athena': 'text-bg-danger',
+                    'Justified': 'text-bg-primary' }[s]
+                  || (/^Partial/.test(s) ? 'text-bg-warning' : 'text-bg-secondary');
+        return '<span class="badge rounded-pill bg-gradient ' + cls + '">' + esc(s) + '</span>';
+    }
+
+    // A ordenação padrão da 1ª coluna é a da GRAVIDADE, não a alfabética: quem
+    // abre a tela quer ver primeiro o que não casou. Em ordem alfabética a
+    // sequência sairia Justified → Matched → Partial → Unmatched, ou seja,
+    // exatamente ao contrário do que se procura.
+    function statusRank(s) {
+        var v = String(s || '');
+        if (v === 'Unmatched B3') return '0';
+        if (v === 'Unmatched Athena') return '1';
+        if (/^Partial/.test(v)) return '2';
+        if (v === 'Justified') return '3';
+        if (v === 'Matched') return '4';
+        return '5';
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // ── A linha e a sua justificativa ───────────────────────────────────────
+    // A chave da linha é a `Combinação de operações`: é ela que identifica a
+    // operação dos dois lados (a chave da CETIP, ou o DealID nas linhas que só
+    // existem na Athena), e é por ela que o comentário é gravado.
+    function rowKey(d) { return String((d && d['Combinação de operações']) || ''); }
+
+    function rowIndexOf(key) {
+        var achado = null;
+        if (!table) return null;
+        table.rows().every(function (i) {
+            if (achado === null && rowKey(this.data()) === key) achado = i;
+        });
+        return achado;
+    }
+
+    function actionsHtml(key, editando) {
+        if (!editando) {
+            return '<div class="d-flex justify-content-center gap-1">' +
+                '<button class="btn btn-info btn-sm ops-row-act" data-fxo-edit="' + esc(key) + '" ' +
+                'title="' + esc(t('editComment')) + '"><i class="ti ti-edit"></i></button></div>';
+        }
+        // O par de edição do padrão do app: Save (disquete/verde) e Cancel
+        // (x/cinza). São exatamente o confirmar e o fechar desta linha.
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<button class="btn btn-success btn-sm ops-row-act" data-fxo-save="' + esc(key) + '" ' +
+            'title="' + esc(t('save')) + '"><i class="ti ti-device-floppy"></i></button>' +
+            '<button class="btn btn-secondary btn-sm ops-row-act" data-fxo-cancel="' + esc(key) + '" ' +
+            'title="' + esc(t('cancel')) + '"><i class="ti ti-x"></i></button></div>';
+    }
+
+    // Redesenha as DUAS células da linha (Actions e Comentário) sem redraw da
+    // tabela: um `draw()` reordenaria a linha para debaixo do dedo de quem está
+    // editando — a ordenação é pelo Status, que é justamente o que vai mudar.
+    function renderRow(key, editando) {
+        var i = rowIndexOf(key);
+        if (i === null) return;
+        var dados = table.row(i).data();
+        var idxCom = COLUMNS.indexOf(COMMENT_COL);
+        $(table.cell(i, 1).node()).html(actionsHtml(key, editando));
+        if (idxCom < 0) return;
+        var cel = table.cell(i, idxCom + OFFSET);
+        if (editando) {
+            $(cel.node()).html(
+                '<input type="text" class="form-control form-control-sm fxo-comment-input" ' +
+                'placeholder="' + esc(t('commentPh')) + '" value="' +
+                esc(dados[COMMENT_COL] || '') + '">');
+            $(cel.node()).find('input').trigger('focus');
+        } else {
+            cel.invalidate('data');
+            $(cel.node()).html(cel.render('display'));
+        }
+    }
+
+    function exitEdit(key) {
+        editingKey = null;
+        renderRow(key, false);
+    }
+
+    // Recontagem local: a justificativa move a linha de card sem uma nova ida ao
+    // servidor — os números saem da própria tabela, que é o que se está vendo.
+    function recount() {
+        if (!table) return;
+        var c = { total: 0, ok: 0, nok: 0, no_match: 0, no_match_ath: 0, justified: 0 };
+        table.rows().every(function () {
+            var s = String(this.data().Status || '');
+            c.total++;
+            if (s === 'Matched') c.ok++;
+            else if (s === 'Justified') c.justified++;
+            else if (s === 'Unmatched B3') c.no_match++;
+            else if (s === 'Unmatched Athena') c.no_match_ath++;
+            else if (s.indexOf('Partial') === 0) c.nok++;
+        });
+        $('#w-total').text(c.total); $('#w-ok').text(c.ok); $('#w-nok').text(c.nok);
+        $('#w-nomatch').text(c.no_match); $('#w-nomatch-ath').text(c.no_match_ath);
+        $('#w-justified').text(c.justified);
     }
 
     function buildTable(columns) {
@@ -417,15 +616,35 @@
 
         var thead = $('#fxo-table thead').empty();
         var head = $('<tr>').appendTo(thead);
+        head.append('<th><input type="checkbox" id="fxoAll" class="form-check-input"></th>');
+        head.append('<th>Actions</th>');
         columns.forEach(function (cn) { head.append($('<th>').text(cn)); });
 
-        // A 2ª linha do thead JÁ montada aqui: ver o comentário do CSS.
+        // A 2ª linha do thead JÁ montada aqui: ver o comentário do CSS. As duas
+        // primeiras colunas não filtram nada — o <th> vazio existe só para o
+        // alinhamento não escorregar uma coluna.
         var filters = $('<tr class="fxo-col-filters">').appendTo(thead);
+        filters.append('<th></th><th></th>');
         columns.forEach(function (cn) {
             filters.append($('<th>').append($('<input type="text">').attr('placeholder', cn)));
         });
 
-        var defs = columns.map(function (name, i) {
+        // Checkbox e Actions vêm ANTES das colunas do servidor — daí o OFFSET
+        // usado em todo `table.column(...)` desta página.
+        var defs = [{
+            data: null, orderable: false, searchable: false, className: 'text-center',
+            render: function (row) {
+                return '<input type="checkbox" class="form-check-input fxo-pick" value="' +
+                       esc(row['Combinação de operações'] || '') + '">';
+            }
+        }, {
+            data: null, orderable: false, searchable: false, className: 'fxo-acts',
+            // Só o Editar: a recon é derivada dos dois arquivos, e a única coisa
+            // que uma pessoa acrescenta a ela é a justificativa.
+            render: function (row) {
+                return actionsHtml(row['Combinação de operações'] || '', false);
+            }
+        }].concat(columns.map(function (name, i) {
             var col = {
                 // `data` como FUNÇÃO: os nomes das colunas têm ponto, barra e
                 // parênteses ('Ath_P/C', 'Combinação de operações'), que o
@@ -438,7 +657,15 @@
             // string do markup — a coluna passaria a ordenar por classe CSS, e o
             // filtro por coluna deixaria de achar o valor digitado.
             if (isStatusCol(name)) {
-                col.render = function (d, type) { return type === 'display' ? badge(d) : (d || ''); };
+                // `sort` sai pelo rank da gravidade; `filter` continua saindo
+                // pelo texto cru — é ele que os chips e a busca por coluna
+                // procuram ('^Partial', '^NOK$').
+                var isFirst = (i === 0);
+                col.render = function (d, type) {
+                    if (type === 'display') return badge(d);
+                    if (type === 'sort' && isFirst) return statusRank(d) + String(d || '');
+                    return d || '';
+                };
                 col.className = 'cell-status';
             } else if (isMoneyCol(name) || isRateCol(name)) {
                 var dec = isRateCol(name) ? 8 : 2, grp = !isRateCol(name);
@@ -455,9 +682,20 @@
                     };
                 })(dec, grp);
                 col.className = 'cell-num';
+            } else if (name === COMMENT_COL) {
+                // A célula do comentário é o único campo editável da tela, e o
+                // input só nasce quando o Editar da linha é clicado — ver
+                // `enterEdit`. Fora disso ela é texto, com o título completo no
+                // hover (a coluna é estreita e a justificativa costuma ser longa).
+                col.className = 'fxo-comment';
+                col.render = function (d, type) {
+                    if (type !== 'display') return d || '';
+                    var v = String(d || '');
+                    return v ? '<span title="' + esc(v) + '">' + esc(v) + '</span>' : '';
+                };
             }
             return col;
-        });
+        }));
 
         table = $('#fxo-table').DataTable({
             data: [],
@@ -466,14 +704,22 @@
             // Confirmation, Index B3): o scrollY é o que congela o cabeçalho,
             // e orderCellsTop deixa a ordenação na 1ª linha do thead — sem ele,
             // clicar no campo de filtro reordenaria a tabela.
+            // `autoWidth: true` é o que mantém valor e coluna alinhados: com ele
+            // o DataTables MEDE as duas tabelas (cabeçalho e corpo) e aplica a
+            // MESMA largura nas duas. Com `false` cada uma é dimensionada pelo
+            // navegador a partir do próprio conteúdo — e como o header carrega
+            // o nome longo e o campo de filtro, ele sempre fica mais largo, com
+            // o desencontro crescendo coluna a coluna.
             responsive: false, scrollX: true, scrollY: '60vh',
-            scrollCollapse: true, autoWidth: false, orderCellsTop: true,
+            scrollCollapse: true, autoWidth: true, orderCellsTop: true,
             // Só o comprimento da página e a tabela: a busca global do
             // DataTables sai daqui (a linha de filtro por coluna a substitui).
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: parseInt($('#fxoPageLength').val(), 10) || 50,
-            order: [[0, 'asc']],
-            language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: 'Rode a reconciliação para a data escolhida.' }
+            // Ordena pela 1ª coluna DE DADOS (o Status), que com o checkbox e o
+            // Actions à frente é a de índice OFFSET.
+            order: [[OFFSET, 'asc']],
+            language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: t('empty') }
         });
 
         // Menu Columns — as colunas VÊM DO SERVIDOR, então o menu é remontado
@@ -483,13 +729,23 @@
             $('<li>').append(
                 $('<label class="dropdown-item d-flex align-items-center gap-2 mb-0">')
                     .append($('<input type="checkbox" class="form-check-input m-0" checked>')
-                        .on('change', function () { table.column(i).visible(this.checked); }))
+                        .on('change', function () { table.column(i + OFFSET).visible(this.checked); }))
                     .append($('<span>').text(name))
             ).appendTo(menu);
         });
 
-        // Seleção de célula + Ctrl+C — padrão New Deals
-        if (window.otcCellCopy) otcCellCopy('#fxo-table');
+        // Seleção de célula + Ctrl+C — padrão New Deals (checkbox e Actions fora)
+        if (window.otcCellCopy) otcCellCopy('#fxo-table', { skip: [0, 1] });
+    }
+
+    // Recalcula as larguras das DUAS tabelas (cabeçalho e corpo). O `draw(false)`
+    // redesenha sem perder página nem ordenação — é o mesmo remédio do
+    // new_deals-ndf-vanilla, e o atraso existe porque a primeira medida acontece
+    // antes de fontes e badges terem o tamanho final.
+    function fixWidths() {
+        if (!table) return;
+        table.columns.adjust();
+        setTimeout(function () { if (table) table.columns.adjust().draw(false); }, 150);
     }
 
     function paint(payload) {
@@ -498,6 +754,8 @@
         $('#w-ok').text(counts.ok || 0);
         $('#w-nok').text(counts.nok || 0);
         $('#w-nomatch').text(counts.no_match || 0);
+        $('#w-nomatch-ath').text(counts.no_match_ath || 0);
+        $('#w-justified').text(counts.justified || 0);
         $('#d-dealid').text(counts.match_dealid || 0);
         $('#d-matching').text(counts.match_matching || 0);
         $('#d-dup').text(counts.dup_key || 0);
@@ -529,24 +787,33 @@
                             cols.some(function (c, i) { return c !== COLUMNS[i]; }))) {
             buildTable(cols);
         }
-        if (table) { table.clear().rows.add(payload.data || []).draw(); }
+        if (table) {
+            // Um redraw derruba o input aberto sem gravar nada — melhor sair do
+            // modo de edição do que deixar um campo órfão numa linha que já não
+            // é a mesma.
+            editingKey = null;
+            table.clear().rows.add(payload.data || []).draw();
+            $('#fxoAll').prop('checked', false);
+        }
         applyFilters();
         // Com scrollX o cabeçalho vive numa tabela irmã: depois de carregar
         // dados é OBRIGATÓRIO recalcular as larguras, senão os valores ficam
-        // deslocados das colunas a que pertencem.
-        if (table) table.columns.adjust();
+        // deslocados das colunas a que pertencem. O segundo passe atrasado é o
+        // do padrão New Deals: no primeiro, a fonte dos badges e dos números
+        // ainda pode não ter sido aplicada, e a medida sai da largura errada.
+        fixWidths();
     }
 
     function applyFilters() {
         if (!table) return;
         // Partial é PREFIXO ('Partial - Amt | …'), os outros são exatos.
-        table.column(0).search(
+        table.column(OFFSET).search(
             !activeStatus ? '' :
             (activeStatus === 'Partial' ? '^Partial' : '^' + activeStatus + '$'),
             true, false);
         COLUMNS.forEach(function (name, i) {
             if (i && isStatusCol(name)) {
-                table.column(i).search(activeField === name ? '^NOK$' : '', true, false);
+                table.column(i + OFFSET).search(activeField === name ? '^NOK$' : '', true, false);
             }
         });
         table.draw();
@@ -647,7 +914,7 @@
         // só colunas visíveis — mesmo contrato do Track Confirmations.
         function fxoMatrix() {
             var cols = [];
-            COLUMNS.forEach(function (c, i) { if (table.column(i).visible()) cols.push(i); });
+            COLUMNS.forEach(function (c, i) { if (table.column(i + OFFSET).visible()) cols.push(i); });
             var out = [cols.map(function (i) { return COLUMNS[i]; })];
             table.rows({ search: 'applied', order: 'applied' }).every(function () {
                 var r = this.data();
@@ -697,6 +964,66 @@
             var f = $(this).attr('data-field') || '';
             activeField = (activeField === f) ? '' : f;
             applyFilters();
+        });
+
+        // ── Comentário: a justificativa da linha ────────────────────────────
+        // Edição INLINE, e não num modal: é um campo só, e um modal para um campo
+        // faz a pessoa perder de vista a linha que está justificando. O Editar da
+        // linha vira o par Save/Cancel enquanto o input está aberto — o mesmo par
+        // que todas as tabelas do app usam em modo de edição.
+        $(document).on('click', '#fxoAll', function () {
+            $('#fxo-table').find('.fxo-pick').prop('checked', this.checked);
+        });
+
+        $(document).on('click', '[data-fxo-edit]', function () {
+            var key = $(this).attr('data-fxo-edit');
+            // Uma linha por vez: dois inputs abertos deixariam o Save ambíguo.
+            if (editingKey && editingKey !== key) exitEdit(editingKey);
+            editingKey = key;
+            renderRow(key, true);
+        });
+
+        $(document).on('click', '[data-fxo-cancel]', function () {
+            // Cancelar não grava nada e não mexe na linha — o valor volta a ser o
+            // que já estava nos dados, que nunca foram tocados.
+            exitEdit($(this).attr('data-fxo-cancel'));
+        });
+
+        $(document).on('keydown', '.fxo-comment-input', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); $('[data-fxo-save]').first().trigger('click'); }
+            if (e.key === 'Escape') { e.preventDefault(); $('[data-fxo-cancel]').first().trigger('click'); }
+        });
+
+        $(document).on('click', '[data-fxo-save]', function () {
+            var key = $(this).attr('data-fxo-save');
+            var txt = String($('.fxo-comment-input').first().val() || '').trim();
+            var linha = rowIndexOf(key);
+            if (linha === null) { exitEdit(key); return; }
+            var dados = table.row(linha).data();
+            fetch('/reconciliation-fxo/comment', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: key, comment: txt,
+                                       status: dados.Status,
+                                       status_raw: dados._status || dados.Status })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                if (!j.success) {
+                    Swal.fire({ icon: 'error', title: t('saveFail'), text: j.error || '' });
+                    return;
+                }
+                // O Status novo vem do SERVIDOR — é ele que sabe a regra
+                // "comentário preenchido vira Justified", e recalculá-la aqui
+                // criaria uma segunda resposta para a mesma pergunta.
+                dados[COMMENT_COL] = j.comment;
+                dados.Status = j.status;
+                dados._status = j.status_raw;
+                table.row(linha).data(dados);
+                exitEdit(key);
+                // Os cards contam por Status, então eles mudam junto.
+                recount();
+                applyFilters();
+            }).catch(function () {
+                Swal.fire({ icon: 'error', title: t('saveFail') });
+            });
         });
 
         ['fxo-file-dpos', 'fxo-file-athena'].forEach(function (id, i) {
