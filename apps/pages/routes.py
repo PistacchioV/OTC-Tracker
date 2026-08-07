@@ -18022,6 +18022,18 @@ _API_LINKS_SEED = (
 )
 
 
+# O `upgrade` do cadastro da recon de FXO mora no `recon_fxo`, e não aqui, pelo
+# mesmo motivo do cadastro da esteira: quem lê aquele arquivo a cada run é o
+# motor da recon, e enquanto o upgrade vivesse só nesta tela ele veria o JSON
+# cru — a coluna nova não existiria para quem nunca abriu o /mapping.
+def _fxo_internal_cpty_upgrade(rows):
+    # Import preguiçoso, como os demais usos do `recon_fxo` aqui: aquele módulo
+    # carrega o pandas, e a tela de /mapping não é motivo para arrastá-lo para a
+    # subida do app.
+    from apps.pages import recon_fxo as _rf
+    return _rf.internal_cpty_upgrade(rows)
+
+
 def _api_links_upgrade(rows):
     """Traz para o formato com PRODUCT os arquivos gravados antes da coluna.
 
@@ -18594,20 +18606,27 @@ _MAPPING_DEFS = {
     #           essa sempre inverteria a direção de operações que estavam certas.
     'fxo-internal-cpty': {
         'label': 'FXO Recon — Internal Counterparty',
+        'upgrade': _fxo_internal_cpty_upgrade,
         'columns': [
             {'key': 'ATHENA NAME', 'label': 'Nome na Athena'},
             {'key': 'CETIP CODE', 'label': 'Código na CETIP'},
             {'key': 'INVERT DIRECTION', 'label': 'Perna espelhada (inverte Buy/Sell)',
              'type': 'select', 'options': ['No', 'Yes']},
+            # `Disregard` tira do batimento as linhas da Athena com aquele
+            # CounterpartyName, ANTES do match. É para a perna interna que não
+            # tem par na CETIP: mantida, ela vira `Unmatched Athena` todo dia.
+            {'key': 'USE', 'label': 'No batimento', 'type': 'select',
+             'options': ['Consider', 'Disregard']},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
             {'ATHENA NAME': 'LAWTON MULTIMERCADO EXCLUSIVO FUNDO DE INVESTIMENTO - LABAY LAWTON',
              'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No',
-             'NOTES': 'Nome do fundo por extenso na Athena'},
+             'USE': 'Consider', 'NOTES': 'Nome do fundo por extenso na Athena'},
             {'ATHENA NAME': 'BCO J.P. MORGAN S.A. 2768 - GEM BR - EXPENSES & CASH MGMT',
              'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes',
-             'NOTES': 'Conta interna GEM — a perna chega com a direção invertida'},
+             'USE': 'Disregard',
+             'NOTES': 'Conta interna GEM — sai do batimento, não tem par na CETIP'},
         ],
     },
     # Quais linhas do Operations B3 entram numa apuração de liquidação — de

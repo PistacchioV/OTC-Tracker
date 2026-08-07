@@ -90,6 +90,7 @@ COL_DP_FIX_ADATIVO = 'Data de fixing do ativo subjacente'
 COL_AT_CHAVE = 'DealID'
 COL_AT_MATCHING = 'MatchingDealID'
 COL_AT_OPTIONSTYLE = 'OptionStyle'
+COL_AT_CPTY_NAME = 'CounterpartyName'
 
 # Bloco de datas de fixing (colunas CC..ES da DPOSICAO, por POSIÇÃO). É onde a
 # opção asiática lista as datas de verificação; ele não tem cabeçalho próprio,
@@ -231,7 +232,37 @@ def _mapping_rows(key):
             rows = json.load(fh)
     except Exception:
         return []
-    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    # O `upgrade` é aplicado AQUI, e não só na tela de /mapping. Eram dois
+    # leitores do mesmo arquivo, e este via o JSON CRU: numa instância que nunca
+    # abriu o /mapping (ou abriu e não salvou), a coluna nova simplesmente não
+    # existiria e a regra dela nunca valeria. É o mesmo tropeço que o cadastro da
+    # esteira já custou uma vez.
+    return internal_cpty_upgrade(rows) if key == 'fxo-internal-cpty' else rows
+
+
+# A conta interna que a mesa pediu para tirar do batimento. Fica aqui, ao lado da
+# regra que a usa, e é o **default do seed** — não um literal no meio do motor:
+# quem manda é o cadastro, e esta constante só decide o valor inicial da coluna.
+GEM_ACCOUNT = 'BCO J.P. MORGAN S.A. 2768 - GEM BR - EXPENSES & CASH MGMT'
+
+
+def internal_cpty_upgrade(rows):
+    """Traz a coluna `USE` para os arquivos gravados antes de ela existir.
+
+    Roda na LEITURA — a instância que já tem o arquivo em disco nunca receberia o
+    seed de outro jeito — e só preenche o que **não existe**: linha sem a chave é
+    anterior à coluna, então ninguém teve como opinar sobre ela. Ela recebe
+    `Consider` (o comportamento de sempre) e, no caso da conta GEM, `Disregard`,
+    que é a perna interna sem par na CETIP e enchia a recon de `Unmatched
+    Athena`. Com a chave presente, nada é tocado: o cadastro é de quem edita.
+    """
+    alvo = _nome_cru(GEM_ACCOUNT)
+    for r in rows:
+        if isinstance(r, dict) and 'USE' not in r:
+            r['USE'] = ('Disregard' if _nome_cru(r.get('ATHENA NAME')) == alvo
+                        else 'Consider')
+    return rows
 
 
 def lookup_cnpj():
@@ -325,13 +356,45 @@ def internal_cpty_rules():
     for r in _mapping_rows('fxo-internal-cpty'):
         nome = str(r.get('ATHENA NAME') or '').strip()
         codigo = str(r.get('CETIP CODE') or '').strip()
-        if not nome or not codigo:
+        if not nome or not codigo or _linha_disregard(r):
+            # `USE = Disregard` tira a linha do batimento (ver
+            # `ignored_cpty_names`): renomear ou espelhar um nome que não vai
+            # chegar ao match seriam duas leituras do mesmo cadastro.
             continue
         if str(r.get('INVERT DIRECTION') or '').strip().lower().startswith(('y', 's')):
             espelhadas.append((nome.upper(), codigo))
         else:
             diretas[nome.upper()] = codigo
     return diretas, espelhadas
+
+
+def _linha_disregard(r):
+    return str(r.get('USE') or '').strip().lower().startswith('d')
+
+
+def ignored_cpty_names():
+    """Os `CounterpartyName` da Athena que saem ANTES do batimento.
+
+    Coluna `USE = Disregard` no cadastro `fxo-internal-cpty` — em branco vale
+    `Consider`, que é o comportamento de sempre. São pernas internas que não têm
+    par na CETIP: mantidas, elas caem em `Unmatched Athena` e enchem a tela de
+    quebra que não é quebra.
+
+    O corte é ANTES do merge de propósito. Depois dele não adiantaria: o DealID
+    dessas linhas já teria ocupado a chave em `base_athena_para_match` e poderia
+    ter roubado o par de uma operação de verdade.
+
+    Compara só o `CounterpartyName`, e não o `MatchingCounterpartyName`: quem é a
+    perna interna é o dono da linha, e o Matching é a contraparte do outro lado
+    da mesma operação — cortar por ele derrubaria a operação do cliente.
+    """
+    out = set()
+    for r in _mapping_rows('fxo-internal-cpty'):
+        if _linha_disregard(r):
+            chave = _nome_cru(r.get('ATHENA NAME'))
+            if chave:
+                out.add(chave)
+    return out
 
 
 # =============================================================================
@@ -407,6 +470,18 @@ def _chave_lookup(v):
     s = ''.join(c for c in unicodedata.normalize('NFKD', s)
                 if not unicodedata.combining(c))
     return re.sub(r'\s+', ' ', s).upper()
+
+
+def _nome_cru(v):
+    """Chave de comparação de NOME cega a pontuação e a espaço.
+
+    Os dois lados escrevem o mesmo nome com pontuação diferente
+    ('BCO J.P. MORGAN S.A. 2768' × 'BCO J.P MORGAN S.A 2768'), e comparar o texto
+    literal casa silenciosamente NADA — o mesmo tropeço das pastas gêmeas do
+    Electronic Inventory.
+    """
+    s = _chave_lookup(v)
+    return re.sub(r'[^A-Z0-9]+', '', s) or None if s else None
 
 
 def _texto_vazio_para_na(v):
@@ -740,6 +815,25 @@ def reconcile(df_dp, df_at):
     df_anc['_veio_da_b3'] = True
 
     df_at = df_at.copy()
+
+    # As pernas internas cadastradas como `Disregard` saem AQUI, antes do match.
+    # O aviso não é decoração: linha que some sem dizer nada vira "sumiu uma
+    # operação da recon" no dia em que alguém marcar o nome errado.
+    ignorados = ignored_cpty_names()
+    if ignorados:
+        if COL_AT_CPTY_NAME not in df_at.columns:
+            avisos.append('O relatório da Athena veio sem a coluna %s — as '
+                          'contrapartes marcadas como Disregard não puderam ser '
+                          'retiradas.' % COL_AT_CPTY_NAME)
+        else:
+            fora = df_at[COL_AT_CPTY_NAME].apply(_nome_cru).isin(ignorados)
+            n_fora = int(fora.sum())
+            if n_fora:
+                df_at = df_at[~fora].copy()
+                avisos.append('%d linha(s) da Athena ficaram fora do batimento por '
+                              'cadastro (Mapping › FXO Recon — Internal Counterparty, '
+                              'coluna USE = Disregard).' % n_fora)
+
     # OUTER, e não LEFT: o left só enxergava a B3 sem par na Athena. A operação
     # que existe SÓ na Athena simplesmente não aparecia na tela — e é uma quebra
     # de recon do mesmo tamanho, com a diferença de que ninguém a via.

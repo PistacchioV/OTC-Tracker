@@ -417,10 +417,21 @@ São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
   `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
   NOK — aplicá-la sempre inverteria a direção de operações que estavam certas
-  (HANDOFF §216). O Counterparty → CNPJ **não tem cadastro**: sai do Reference
-  Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH ACCRONYM e SPN pelo mesmo
-  TAX ID), porque um de-para paralelo seria uma segunda lista dos mesmos
-  clientes e envelheceria sozinho.
+  (HANDOFF §216). A coluna **`USE`** decide se a linha entra: `Disregard` tira
+  do batimento, **antes do merge**, as linhas da Athena cujo `CounterpartyName`
+  casa com o nome cadastrado — é a perna interna que não tem par na CETIP e
+  viraria `Unmatched Athena` todo dia (a conta GEM é a semeada assim). Cortar
+  depois do merge não adiantaria: o DealID dela já teria ocupado a chave em
+  `base_athena_para_match` e poderia roubar o par de uma operação de verdade. O
+  corte é **cego a pontuação** (`_nome_cru`) e **avisado** no painel — linha que
+  some sem dizer nada vira "sumiu uma operação da recon". Uma linha `Disregard`
+  deixa de valer como renomeação/espelho: uma linha, uma decisão. O `upgrade`
+  mora no **`recon_fxo`**, e não no `routes`, porque quem lê esse cadastro a cada
+  run é o motor — com ele só na tela de /mapping, a instância que nunca abriu
+  aquela tela leria o JSON cru, sem a coluna. O Counterparty → CNPJ **não tem
+  cadastro**: sai do Reference Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH
+  ACCRONYM e SPN pelo mesmo TAX ID), porque um de-para paralelo seria uma segunda
+  lista dos mesmos clientes e envelheceria sozinho.
 - **`manual-conf-validation`** — quem valida a confirmação de cada produto
   (Produto × LOB → OTC / MO / FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é
   coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto

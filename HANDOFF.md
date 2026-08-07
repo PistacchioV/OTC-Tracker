@@ -10244,3 +10244,41 @@ Duas armadilhas: o Buttons precisa ser criado **sob demanda e re-vinculado**, po
 destrói e recria a DataTable quando as colunas chegam do servidor — um Buttons preso à instância
 anterior morre junto, **sem erro no console**, deixando um menu que não faz nada. E o PDF sai em **A3
 paisagem, fonte 6 e larguras proporcionais**: em retrato as colunas estouram a folha em silêncio.
+
+
+## §224 — Recon FXO: a perna interna que só produzia quebra
+
+A conta interna **GEM** (`BCO J.P. MORGAN S.A. 2768 - GEM BR - EXPENSES & CASH MGMT`) chega ao relatório
+da Athena com dezenas de linhas por dia e **não tem par na CETIP**. Ela entrava no batimento e saía como
+`Unmatched Athena` — quebra que não é quebra, todo dia, empurrando para baixo o que precisa de atenção.
+
+O cadastro `fxo-internal-cpty` ganhou a coluna **`USE`** (`Consider` / `Disregard`). `Disregard` tira do
+batimento as linhas da Athena cujo `CounterpartyName` casa com o nome cadastrado.
+
+Quatro decisões, e nenhuma é cosmética:
+
+- **O corte é ANTES do merge.** Depois não adiantaria: o `DealID` dessas linhas já teria ocupado a chave
+  em `base_athena_para_match` e poderia ter roubado o par de uma operação de verdade.
+- **Compara só o `CounterpartyName`**, nunca o `MatchingCounterpartyName`. Quem é a perna interna é o
+  dono da linha; o Matching é a contraparte do outro lado da MESMA operação, e cortar por ele derrubaria
+  a operação do cliente.
+- **A comparação é cega a pontuação** (`_nome_cru`). O cadastro escreve `S.A.` e o arquivo pode vir
+  `S.A` — comparar o texto literal casa silenciosamente nada, o mesmo tropeço das pastas gêmeas do
+  Electronic Inventory (§219).
+- **O corte é avisado no painel**, com a contagem. Linha que some sem dizer nada vira "sumiu uma operação
+  da recon" no dia em que alguém marcar o nome errado.
+
+Uma linha `Disregard` **deixa de valer como renomeação ou perna espelhada** — uma linha, uma decisão. Na
+prática a GEM saiu do `INVERT DIRECTION = Yes`: a regra continua existindo e testada, mas hoje não há
+linha usando-a.
+
+### O upgrade mora no motor, não na tela
+
+O `upgrade` que traz a coluna `USE` para os arquivos antigos fica no **`recon_fxo`**, e o `routes` só
+aponta para ele. É o mesmo tropeço que o cadastro da esteira já custou uma vez (§217): esse arquivo tem
+**dois leitores**, e o motor da recon lê o JSON cru a cada run. Com o upgrade só na tela de /mapping, a
+instância que nunca abriu aquela tela rodaria sem a coluna — e a regra nova simplesmente não valeria.
+
+Ele só preenche o que **não existe**: linha sem a chave é anterior à coluna, então ninguém teve como
+opinar sobre ela, e ela recebe o padrão do produto (`Consider` para todas, `Disregard` para a GEM). Com a
+chave presente, nada é tocado — o cadastro é de quem edita.

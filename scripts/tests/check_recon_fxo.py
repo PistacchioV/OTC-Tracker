@@ -74,10 +74,16 @@ R._refdata_rows = lambda: [
     {'COUNTERPARTY': 'Açúcar   Brasil  S.A.', 'TAX ID': '01.234.567/0001-89',
      'FX CASH ACCRONYM': 'ACUBRA', 'SPN': '9001'},
 ]
-write_map('fxo-internal-cpty', [
-    {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No'},
-    {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes'},
-])
+# `USE` é declarado nas duas linhas: com a coluna presente o `upgrade` não mexe
+# em nada, e a perna espelhada da GEM continua sendo exercitada abaixo. O corte
+# por `Disregard` tem o seu próprio bloco (§3.e).
+CAD_PADRAO = [
+    {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No',
+     'USE': 'Consider'},
+    {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes',
+     'USE': 'Consider'},
+]
+write_map('fxo-internal-cpty', CAD_PADRAO)
 
 # ── A DPOSICAO sintética ─────────────────────────────────────────────────────
 # O bloco de fixing é POSICIONAL (colunas 80..148), então o arquivo precisa ser
@@ -216,10 +222,45 @@ rows, _c, avisos = run(
     [dp_row(**{'Combinação de operações': 'G3', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO'})],
     [at_row(DealID='G3', CounterpartyName=GEM)])
 check('sem cadastro, o nome da Athena fica como veio', rows[0]['ATH Cntpy'], GEM)
+write_map('fxo-internal-cpty', CAD_PADRAO)
+
+# (e) USE = Disregard: as linhas da Athena com aquele CounterpartyName saem ANTES
+# do batimento. É a perna interna sem par na CETIP — mantida, ela vira
+# `Unmatched Athena` todo dia e enche a tela de quebra que não é quebra.
 write_map('fxo-internal-cpty', [
-    {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No'},
-    {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes'},
+    {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No',
+     'USE': 'Consider'},
+    {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes',
+     'USE': 'Disregard'},
 ])
+rows, _c, avisos = run(
+    [dp_row(**{'Combinação de operações': 'D1', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO'})],
+    [at_row(DealID='D1', CounterpartyName=GEM, TransactionType='Buy'),
+     at_row(DealID='D9', CounterpartyName=GEM, TransactionType='Sell'),
+     at_row(DealID='X1', CounterpartyName='CLIENTE DE VERDADE S.A.')])
+chaves = sorted(r['Combinação de operações'] for r in rows)
+check('a linha da GEM sai do batimento', 'D9' in chaves, False)
+check('   e a da B3 que dependia dela vira Unmatched B3',
+      [r['Status'] for r in rows if r['Combinação de operações'] == 'D1'], ['Unmatched B3'])
+check('   a operação de cliente continua na recon', 'X1' in chaves, True)
+check('   e o corte é avisado, não silencioso',
+      any('Disregard' in a for a in avisos), True)
+
+# Pontuação diferente é o MESMO nome: o cadastro escreve 'S.A.' e o arquivo pode
+# vir 'S.A' — comparar o texto literal casaria silenciosamente nada.
+write_map('fxo-internal-cpty', [
+    {'ATHENA NAME': 'BCO J.P MORGAN S.A 2768 - GEM BR - EXPENSES & CASH MGMT',
+     'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes', 'USE': 'Disregard'},
+])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'D2'})],
+    [at_row(DealID='D2', CounterpartyName=GEM)])
+check('o corte é cego a pontuação', [r['Status'] for r in rows], ['Unmatched B3'])
+
+# E a linha cortada deixa de valer como renomeação/espelho: uma linha, uma decisão.
+check('Disregard tira a linha das regras de renomeação',
+      R.internal_cpty_rules(), ({}, []))
+write_map('fxo-internal-cpty', CAD_PADRAO)
 
 print('\n== 4. os tipos de comparação ==')
 # Direção, Put/Call e o de-para de CNPJ (com acento e espaço duplo no nome).
