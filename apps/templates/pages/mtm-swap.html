@@ -465,6 +465,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
@@ -784,6 +785,11 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
             }
         });
         dtInst[tableId] = dt;
+        // Seleção de célula + Ctrl+C — o padrão do New Deals (table-std.js). Fora
+        // da seleção: checkbox e Actions. Aqui a chamada é POR TABELA: a página
+        // monta uma tabela por LOB, com id próprio, e um seletor fixo pegaria só
+        // a primeira. O helper marca o nó, então rebuild não duplica handler.
+        if (window.otcCellCopy) otcCellCopy('#' + tableId, { skip: [0, 1] });
         buildExport(card, dt, lob, n);
         dt.on('draw.acc', function () {
             if (window.lucide) lucide.createIcons();

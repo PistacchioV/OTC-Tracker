@@ -175,6 +175,12 @@
       }],
     });
 
+    // Seleção de célula + Ctrl+C — o padrão do New Deals para qualquer tabela
+    // (static/js/table-std.js). Fora da seleção: checkbox e Actions. O helper é
+    // idempotente e delega no nó da tabela, então sobrevive aos redraws e ao
+    // rebuild que este `buildTable` faz a cada carga.
+    if (window.otcCellCopy) otcCellCopy('#nop-table', { skip: [0, 1] });
+
     var expWrap = document.querySelector('.nopExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
 
