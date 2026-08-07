@@ -1,51 +1,36 @@
 {# ============================================================================
-   Bulletproof gradient e-mail header (OTC Tracker).
-   Renders the full <tr>…</tr> header row.
+   Cabeçalho dos e-mails do OTC Tracker (renderiza o <tr>…</tr> completo).
 
-   Params (set with {% set %} before the {% include %}):
-     • header_title        — title text (required)
-     • header_subtitle     — subtitle HTML (optional; rendered |safe)
-     • header_logo_height  — logo px height (optional, default 60)
+   Params ({% set %} antes do {% include %}):
+     • header_title        — título (obrigatório)
+     • header_subtitle     — HTML do subtítulo (opcional; sai |safe)
+     • header_logo_height  — altura do logo em px (opcional, default 60)
 
-   Requires `grad_url` in context (injected app-wide by the context processor;
-   the daily-metric route also passes it explicitly). It is always the inline
-   `cid:otc_gradient` attachment — never a remote URL, which Outlook can block or
-   download only in part. Gradient shows via:
-     • Outlook desktop → VML rect filled with the gradient IMAGE (type=frame).
-     • Modern clients  → CSS linear-gradient + <td background> image.
-     • Images blocked  → solid #4f8ae2.
-   The rect carries `mso-width-percent:1000` on purpose: with the px width alone
-   Outlook could paint it narrower than the cell and leave a flat #4f8ae2 band on
-   the right of the banner (CETIP Files Saved, 03/08/2026).
-   Content sits in a <center> + fixed-width table so it centres in every client.
+   POR QUE NÃO HÁ MAIS IMAGEM DE GRADIENTE NEM VML AQUI (definitivo):
+   o banner era um <v:rect> preenchido com a imagem `cid:otc_gradient`, e o
+   Word do Outlook pintava o retângulo ora MAIS ESTREITO que a célula — sobrava
+   uma faixa de #4f8ae2 sólido à direita (CETIP Files Saved, 03/08) —, ora,
+   com `mso-width-percent:1000`, na largura da JANELA inteira, estourando os
+   820px do cartão e desalinhando o conteúdo (Daily Metric, 05/08). Não existe
+   ajuste fino que segure um shape VML exatamente na largura da célula em todas
+   as versões do Outlook.
+
+   Uma COR SÓLIDA não tem como desalinhar: o <td> é célula da tabela de 820px,
+   termina exatamente onde o cartão termina, e centraliza sozinho. O gradiente
+   continua existindo para os clientes que entendem CSS (`background-image`
+   na style); o Outlook usa o bgcolor sólido — que é o fallback que ele já
+   mostrava quando bloqueava a imagem.
    ========================================================================== #}
 <tr>
-    <td background="{{ grad_url }}" bgcolor="#4f8ae2" valign="top"
-        style="background:#4f8ae2 url('{{ grad_url }}') no-repeat center center / cover;
-               background:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);padding:0;">
-        <!--[if gte mso 9]>
-        <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:{{ header_width|default(820) }}px;height:190px;mso-width-percent:1000;">
-            <v:fill type="frame" src="{{ grad_url }}" color="#4f8ae2" />
-            <v:textbox inset="0,0,0,0">
-        <![endif]-->
-        <center style="width:100%;">
-        <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" width="{{ header_width|default(820) }}"
-               style="width:{{ header_width|default(820) }}px;max-width:{{ header_width|default(820) }}px;margin:0 auto;">
-            <tr>
-                <td align="center" valign="middle" style="padding:30px 28px 22px;text-align:center;">
-                    <img src="cid:otc_logo" alt="OTC Tracker" height="{{ header_logo_height|default(60) }}" width="auto"
-                         style="height:{{ header_logo_height|default(60) }}px;width:auto;display:inline-block;margin:0 0 12px;border:0;"/>
-                    <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
-                        {{ header_title }}</p>
-                    {% if header_subtitle %}<p style="color:rgba(255,255,255,0.92);font-size:12px;margin:0;">
-                        {{ header_subtitle|safe }}</p>{% endif %}
-                </td>
-            </tr>
-        </table>
-        </center>
-        <!--[if gte mso 9]>
-            </v:textbox>
-        </v:rect>
-        <![endif]-->
+    <td bgcolor="#4f8ae2" align="center" valign="middle"
+        style="background-color:#4f8ae2;
+               background-image:linear-gradient(135deg,#6aa2ea 0%,#4f8ae2 45%,#3f63c9 100%);
+               padding:30px 28px 22px;text-align:center;">
+        <img src="cid:otc_logo" alt="OTC Tracker" height="{{ header_logo_height|default(60) }}" width="auto"
+             style="height:{{ header_logo_height|default(60) }}px;width:auto;display:inline-block;margin:0 0 12px;border:0;"/>
+        <p style="color:#ffffff;font-size:18px;font-weight:700;margin:0 0 3px;letter-spacing:0.2px;">
+            {{ header_title }}</p>
+        {% if header_subtitle %}<p style="color:rgba(255,255,255,0.92);font-size:12px;margin:0;">
+            {{ header_subtitle|safe }}</p>{% endif %}
     </td>
 </tr>

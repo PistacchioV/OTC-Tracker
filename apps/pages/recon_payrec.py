@@ -1492,21 +1492,6 @@ def send_payrec_email(recon_date):
     except Exception:
         pass
 
-    # Header gradient — inline so it renders every day regardless of send origin
-    # (referenced as cid:otc_gradient by the shared header partial).
-    try:
-        for gp in [os.path.join(current_app.root_path, 'static', 'images', 'email-header-gradient.png'),
-                   os.path.normpath(os.path.join(current_app.root_path, '..', 'static', 'images', 'email-header-gradient.png'))]:
-            if os.path.exists(gp):
-                with open(gp, 'rb') as f:
-                    gimg = MIMEImage(f.read())
-                    gimg.add_header('Content-ID', '<otc_gradient>')
-                    gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
-                    msg.attach(gimg)
-                break
-    except Exception:
-        pass
-
     try:
         with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
             server.sendmail(_SHARED_MAILBOX, [_MAILBOX] + _CC, msg.as_string())
