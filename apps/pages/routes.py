@@ -28444,7 +28444,52 @@ def _mc_counts(rows):
     }
 
 
-def _mc_confirmation_docs(row):
+# Listagem de uma pasta do share, memorizada por caminho. O Monitor pede os
+# documentos de N confirmações e cada pedido custava um `isdir` + um `listdir`
+# sobre o share de rede — e agora são DUAS pastas por linha (a do tipo e a
+# antiga). Como várias confirmações do mesmo cliente no mesmo dia caem na MESMA
+# pasta, a maior parte dessas idas era repetida.
+#
+# TTL curto de propósito: a pasta do dia recebe documento enquanto a mesa
+# trabalha, e um cache longo esconderia a confirmação que acabou de ser gerada.
+# 60 s é mais do que o suficiente para cobrir o carregamento da tela inteira e um
+# refresh em seguida, que é onde a espera aparecia.
+_MC_DOCS_TTL = 60.0
+_MC_DOCS_CACHE = {}
+_MC_DOCS_LOCK = threading.Lock()
+
+
+def _mc_folder_pdfs(folder):
+    """Os PDFs de uma pasta do Electronic Inventory, em ordem. [] se não existe.
+
+    Pasta inexistente também entra no cache: a pasta de nome antigo não existe
+    para a maioria das linhas, e é justamente ela que dobraria o número de idas
+    ao share se cada chamada tivesse de descobrir isso de novo.
+    """
+    agora = time.time()
+    with _MC_DOCS_LOCK:
+        hit = _MC_DOCS_CACHE.get(folder)
+        if hit and (agora - hit[0]) < _MC_DOCS_TTL:
+            return hit[1]
+    try:
+        long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
+        nomes = (sorted(n for n in os.listdir(long_folder) if n.lower().endswith('.pdf'))
+                 if os.path.isdir(long_folder) else [])
+    except Exception:
+        # Share fora do ar não pode virar cache: guardar [] aqui faria a tela
+        # dizer "sem PDF" pelo minuto seguinte, com os arquivos lá.
+        return []
+    with _MC_DOCS_LOCK:
+        _MC_DOCS_CACHE[folder] = (agora, nomes)
+        # Poda simples: a tela toca dezenas de pastas por dia, não milhares.
+        if len(_MC_DOCS_CACHE) > 500:
+            for k, v in list(_MC_DOCS_CACHE.items()):
+                if (agora - v[0]) >= _MC_DOCS_TTL:
+                    _MC_DOCS_CACHE.pop(k, None)
+    return nomes
+
+
+def _mc_confirmation_docs(row, trades=None):
     """Os PDFs da confirmação daquela linha, no Electronic Inventory.
 
     A pasta é DERIVADA da linha (cliente × produto × data da operação) e não de
@@ -28469,12 +28514,7 @@ def _mc_confirmation_docs(row):
         out, vistos = [], set()
         for rel in rels:
             folder = os.path.join(base, *rel.split('/'))
-            long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
-            if not os.path.isdir(long_folder):
-                continue
-            for name in sorted(os.listdir(long_folder)):
-                if not name.lower().endswith('.pdf'):
-                    continue
+            for name in _mc_folder_pdfs(folder):
                 # O mesmo documento pode ter sido copiado para as duas pastas na
                 # transição. Mostrar duas vezes o que se abre igual só faria a
                 # pessoa conferir duas vezes o mesmo papel.
@@ -28484,10 +28524,22 @@ def _mc_confirmation_docs(row):
                 out.append({'name': os.path.splitext(name)[0],
                             'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
                                     '&rel=' + quote(rel + '/' + name))})
-        # A pasta do dia tem UM PDF por commodity (MATARIPE - OLEO - …,
-        # MATARIPE - PLATTS - …). Quando a linha sabe o Ativo, só os dele são a
-        # confirmação exata; se nenhum nome carrega o Ativo (câmbio: USD), a
-        # lista inteira continua valendo.
+        # A pasta do dia tem UM PDF por confirmação (MATARIPE - OLEO - … nº
+        # DBH-1OJ8L5, MATARIPE - PLATTS - … nº DBH-1OJAXM), e o filtro tem de
+        # escolher os do grupo.
+        #
+        # O **Trade ID no nome do arquivo** é o critério exato: o documento traz
+        # o número da operação que ele confirma. Ele vem antes do Ativo porque a
+        # linha nem sempre sabe o Ativo — as importadas da planilha legada
+        # trazem a MOEDA nessa coluna (`USD`), e aí o filtro por Ativo não casa
+        # com nada e a tela oferecia a pasta inteira do dia.
+        ids = [str(k).strip().upper() for k in (trades or []) if str(k or '').strip()]
+        if ids:
+            proprios = [d for d in out if any(i in d['name'].upper() for i in ids)]
+            if proprios:
+                return proprios
+        # Sem Trade ID no nome (documento que cobre várias operações, nomeado
+        # pela data), o Ativo ainda separa OLEO de PLATTS.
         ativo = str(row.get('Moeda', '') or '').strip().upper()
         if ativo and len(ativo) >= 3:
             proprios = [d for d in out if ativo in d['name'].upper()]
@@ -28533,7 +28585,40 @@ def api_mc_docs():
            'LOB': request.args.get('lob', ''),
            'Moeda': request.args.get('ativo', ''),
            'Data Operação': request.args.get('data', '')}
-    return jsonify({'docs': _mc_confirmation_docs(row)})
+    trades = [t.strip() for t in (request.args.get('trades') or '').split(',') if t.strip()]
+    return jsonify({'docs': _mc_confirmation_docs(row, trades)})
+
+
+@blueprint.route('/api/manual-confirmation/docs', methods=['POST'])
+def api_mc_docs_batch():
+    """Os PDFs de VÁRIAS confirmações de uma vez.
+
+    O Monitor pedia um GET por item. Cada um esperava a sua vez numa fila de 4
+    threads (waitress) e ia sozinho ao share, então a última confirmação da tela
+    só aparecia depois de todas as anteriores — e o navegador ainda limita as
+    conexões simultâneas por host. Numa chamada só, o servidor resolve a lista em
+    sequência com o cache de pasta quente: as confirmações do mesmo cliente no
+    mesmo dia dividem a MESMA pasta e custam uma ida só.
+
+    A resposta vem na ORDEM em que os itens chegaram — é assim que a tela casa
+    cada lista com o seu item, sem precisar de identificador.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    itens = (request.get_json(silent=True) or {}).get('items') or []
+    if not isinstance(itens, list):
+        return jsonify({'error': 'items must be a list'}), 400
+    out = []
+    for it in itens[:200]:
+        if not isinstance(it, dict):
+            out.append([])
+            continue
+        out.append(_mc_confirmation_docs({
+            'Cliente': it.get('cliente', ''), 'Produto': it.get('produto', ''),
+            'LOB': it.get('lob', ''), 'Moeda': it.get('ativo', ''),
+            'Data Operação': it.get('data', '')},
+            it.get('trades') or []))
+    return jsonify({'docs': out})
 
 
 @blueprint.route('/manual-confirmation/validate')
@@ -28590,7 +28675,7 @@ def manual_confirmation_validate():
         sla_deadline=_mc.fmt_date(sla['deadline']),
         sla_days=_mc.SLA_BIZDAYS.get(stage),
         comment=row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), ''),
-        docs=_mc_confirmation_docs(row))
+        docs=_mc_confirmation_docs(row, [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]))
 
 
 @blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])

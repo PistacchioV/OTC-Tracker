@@ -140,32 +140,53 @@
 [data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: #f2a417; color: #2a1c00; border-color: #ffbb3d; }
 [data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: #e5484d; color: #2a0508; border-color: #ff6166; }
 
-/* O item se tinge junto — moldura, sombra e uma tarja na lateral. O `ok` fica
-   NEUTRO de propósito: pintar de verde o que está dentro do prazo é pintar quase
-   a fila inteira, e aí o vermelho some no meio — só o que pede atenção ganha
-   cor. A tarja é o que faz a cor sobreviver ao scroll: a moldura sozinha some
-   entre os itens vizinhos, e é ela que se lê de relance. */
-#mc-monitor .mc-item.mc-sla-warn,
-#mc-monitor .mc-item.mc-sla-late { border-left-width: 4px; }
+/* A luz fica ATRÁS do item, na receita dos cards do New Deals Monitor: sombra em
+   CAMADAS (contato + média + halo largo) e a moldura quase neutra. O item
+   continua branco — tarja lateral e fundo em degradê pesavam a fila inteira e
+   competiam com o texto, quando o que se quer ler de relance é só o estado.
+
+   O `ok` fica NEUTRO de propósito: pintar de verde o que está dentro do prazo é
+   pintar quase a fila inteira, e aí o vermelho some no meio. */
 #mc-monitor .mc-item.mc-sla-warn {
-    border-color: rgba(217,138,0,.75); border-left-color: #d98a00;
-    background: linear-gradient(90deg, rgba(217,138,0,.10), rgba(217,138,0,.02) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
-    box-shadow: 0 1px 3px rgba(217,138,0,.18), 0 8px 20px rgba(217,138,0,.24);
+    border-color: rgba(217,138,0,.34);
+    box-shadow: 0 2px 5px rgba(217,138,0,.16),
+                0 8px 18px rgba(217,138,0,.32),
+                0 16px 34px rgba(217,138,0,.22);
 }
 #mc-monitor .mc-item.mc-sla-late {
-    border-color: rgba(211,47,47,.8); border-left-color: #d32f2f;
-    background: linear-gradient(90deg, rgba(211,47,47,.11), rgba(211,47,47,.02) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
-    box-shadow: 0 1px 3px rgba(211,47,47,.20), 0 8px 20px rgba(211,47,47,.28);
+    border-color: rgba(211,47,47,.36);
+    box-shadow: 0 2px 5px rgba(211,47,47,.18),
+                0 8px 18px rgba(211,47,47,.36),
+                0 16px 34px rgba(211,47,47,.24);
 }
 [data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-warn {
-    border-color: rgba(242,164,23,.7); border-left-color: #f2a417;
-    background: linear-gradient(90deg, rgba(242,164,23,.16), rgba(242,164,23,.03) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
-    box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 20px rgba(242,164,23,.20);
+    border-color: rgba(242,164,23,.42);
+    box-shadow: 0 2px 6px rgba(242,164,23,.20),
+                0 10px 22px rgba(242,164,23,.34),
+                0 20px 42px rgba(242,164,23,.22);
 }
 [data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-late {
-    border-color: rgba(229,72,77,.78); border-left-color: #e5484d;
-    background: linear-gradient(90deg, rgba(229,72,77,.18), rgba(229,72,77,.03) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
-    box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 20px rgba(229,72,77,.24);
+    border-color: rgba(229,72,77,.44);
+    box-shadow: 0 2px 6px rgba(229,72,77,.22),
+                0 10px 22px rgba(229,72,77,.38),
+                0 20px 42px rgba(229,72,77,.24);
+}
+/* O hover do item (azul) vem antes destas regras e tem a MESMA especificidade,
+   então elas já o venciam — o item aceso ficava inerte sob o cursor. A luz
+   apenas se aprofunda, que é o que o New Deals Monitor faz. */
+@media (hover: hover) and (pointer: fine) {
+    #mc-monitor .mc-item.mc-sla-warn:hover {
+        border-color: rgba(217,138,0,.46);
+        box-shadow: 0 4px 10px rgba(217,138,0,.20),
+                    0 12px 26px rgba(217,138,0,.40),
+                    0 22px 46px rgba(217,138,0,.26);
+    }
+    #mc-monitor .mc-item.mc-sla-late:hover {
+        border-color: rgba(211,47,47,.48);
+        box-shadow: 0 4px 10px rgba(211,47,47,.22),
+                    0 12px 26px rgba(211,47,47,.44),
+                    0 22px 46px rgba(211,47,47,.28);
+    }
 }
 #mc-monitor .mc-item__acts .btn {
     font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
@@ -328,7 +349,11 @@
                    'data-docs-produto="' + esc(it.Produto || '') + '" ' +
                    'data-docs-lob="' + esc(it.LOB || '') + '" ' +
                    'data-docs-ativo="' + esc(it.Moeda || '') + '" ' +
-                   'data-docs-data="' + esc(it['Data Operação'] || '') + '">' +
+                   'data-docs-data="' + esc(it['Data Operação'] || '') + '" ' +
+                   // Os Trade IDs do grupo: o nome do PDF traz o número da
+                   // operação, e é ele que escolhe o documento exato quando a
+                   // pasta do dia tem vários.
+                   'data-docs-trades="' + esc((it.keys || []).join(',')) + '">' +
                    '<i class="ti ti-loader-2 me-1"></i>' + esc(t('docsLoading')) + '</span>';
 
         // O card tem UM botão só. Validar e Rejeitar são as duas respostas à
@@ -373,31 +398,41 @@
             '</div></div>';
     }
 
-    // Busca os PDFs de cada item DEPOIS de os cards estarem na tela.
+    // Busca os PDFs DEPOIS de os cards estarem na tela, e numa chamada só.
+    //
+    // Era um GET por item. Cada um esperava a sua vez na fila de threads do
+    // servidor e ia sozinho ao share de rede, então o último item da tela só
+    // aparecia depois de todos os anteriores — e o navegador ainda limita as
+    // conexões simultâneas por host. Em lote, o servidor ainda reaproveita a
+    // varredura: confirmações do mesmo cliente no mesmo dia dividem a pasta.
     function loadDocs() {
-        $('#mc-cards [id^="mc-docs-"]').each(function () {
-            var el = $(this);
-            var q = '?cliente=' + encodeURIComponent(el.attr('data-docs-cliente')) +
-                    '&produto=' + encodeURIComponent(el.attr('data-docs-produto')) +
-                    '&lob=' + encodeURIComponent(el.attr('data-docs-lob')) +
-                    '&ativo=' + encodeURIComponent(el.attr('data-docs-ativo')) +
-                    '&data=' + encodeURIComponent(el.attr('data-docs-data'));
-            fetch('/api/manual-confirmation/docs' + q)
-                .then(function (r) { return r.json(); })
-                .then(function (j) {
-                    var docs = (j && j.docs) || [];
-                    if (!docs.length) {
-                        el.html(esc(t('nolink')));
-                        return;
-                    }
-                    el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {
-                        return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
-                               esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
-                               esc(d.name) + '</a>';
-                    }).join('') + '</div>');
-                })
-                .catch(function () { el.html(esc(t('nolink'))); });
+        var els = $('#mc-cards [id^="mc-docs-"]').toArray().map(function (n) { return $(n); });
+        if (!els.length) return;
+        var itens = els.map(function (el) {
+            return { cliente: el.attr('data-docs-cliente'), produto: el.attr('data-docs-produto'),
+                     lob: el.attr('data-docs-lob'), ativo: el.attr('data-docs-ativo'),
+                     data: el.attr('data-docs-data'),
+                     trades: (el.attr('data-docs-trades') || '').split(',').filter(Boolean) };
         });
+        function pinta(el, docs) {
+            if (!docs || !docs.length) { el.html(esc(t('nolink'))); return; }
+            el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {
+                return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
+                       esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
+                       esc(d.name) + '</a>';
+            }).join('') + '</div>');
+        }
+        fetch('/api/manual-confirmation/docs', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: itens })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                var listas = (j && j.docs) || [];
+                // A resposta vem na ORDEM em que os itens foram enviados.
+                els.forEach(function (el, i) { pinta(el, listas[i]); });
+            })
+            .catch(function () { els.forEach(function (el) { el.html(esc(t('nolink'))); }); });
     }
 
     function card(c) {
