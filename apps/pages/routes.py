@@ -37,6 +37,13 @@ from apps.pages import otc_boxparse
 # Armazenamento dos tickets do Support Center (camada de dados pura — sessão,
 # notificação e e-mail ficam aqui, nas rotas).
 from apps.pages import otc_tickets
+# Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
+# alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
+# Produto × LOB de `manual-conf-validation` e o dropdown de Produto do Track
+# Confirmations. Import no topo (e não preguiçoso como os demais usos de
+# `manual_conf`) porque `_MAPPING_DEFS` precisa dela em tempo de importação.
+from apps.pages import manual_conf as _mc_mod
+_CONFIRMATION_TYPES = _mc_mod.CONFIRMATION_TYPES
 
 # ==============================================================================
 # LOGGING CONFIG
@@ -17879,6 +17886,42 @@ def _le_spn_upgrade(rows):
     return rows
 
 
+def _mc_validation_upgrade(rows):
+    """Traz o cadastro da esteira para os nomes do Electronic Inventory.
+
+    Roda na LEITURA, e é obrigatório: a instância que já abriu a tela de mapping
+    tem o arquivo em disco e nunca mais receberia o seed novo. Sem isto, a coluna
+    PRODUCT — que agora é um `select` — abriria um cadastro 'OPTION' com o
+    primeiro item da lista selecionado, e o primeiro Save do usuário trocaria o
+    produto da linha sem ninguém pedir.
+
+    Duas conversões, e a segunda é a que não pode se perder: 'OPTION EDG' não é
+    um produto, é a opção de câmbio **na LOB EDG**. Ela vira PRODUCT 'FXO' com
+    LOB 'EDG' — que é o desenho Produto × LOB que a tabela sempre teve, e o
+    único jeito de a regra "EDG também passa pelo FO" continuar existindo.
+    """
+    out, vistos = [], set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        prod = _mc_mod.upper_norm(r.get('PRODUCT'))
+        lob = str(r.get('LOB') or '').strip()
+        if prod == 'OPTION EDG':
+            prod, lob = 'FXO', (lob or 'EDG')
+        r['PRODUCT'] = _mc_mod.confirmation_type(prod, lob)
+        r['LOB'] = lob
+        # A tradução pode encostar duas linhas na mesma chave (o arquivo antigo
+        # tinha 'OPTION' e poderia ganhar 'FXO'). A primeira ganha: descartar a
+        # segunda é o que evita duas regras concorrentes para o mesmo par.
+        chave = (r['PRODUCT'].upper(), lob.upper())
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        out.append(r)
+    return out
+
+
 # Valor do campo "Tipo de Cotação" no arquivo de Opção. Era o literal '5' nos
 # dois builders (servidor e navegador); vira o default da coluna QUOTE TYPE OPT.
 _B3_QUOTE_OPT_DEFAULT = '5'
@@ -18320,27 +18363,34 @@ _MAPPING_DEFS = {
     # confirmação só fecha quando as duas pedidas responderem.
     'manual-conf-validation': {
         'label': 'Manual Confirmations — Validation Trail',
+        'upgrade': _mc_validation_upgrade,
         'columns': [
-            {'key': 'PRODUCT', 'label': 'Produto'},
+            {'key': 'PRODUCT', 'label': 'Produto', 'type': 'select',
+             'options': list(_CONFIRMATION_TYPES)},
             {'key': 'LOB', 'label': 'LOB (blank = any)'},
             {'key': 'OTC', 'label': 'OTC', 'type': 'select', 'options': _MAP_MC_VALIDATION},
             {'key': 'MO', 'label': 'MO', 'type': 'select', 'options': _MAP_MC_VALIDATION},
             {'key': 'FO', 'label': 'FO', 'type': 'select', 'options': _MAP_MC_VALIDATION},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
+        # Os produtos são os TIPOS DE CONFIRMAÇÃO (`_CONFIRMATION_TYPES`), os
+        # mesmos do Confirmation Type do Electronic Inventory. O NDF cobre também
+        # o FWD Start (é um NDF; o que muda é a pasta), e a opção de EDG é a
+        # linha FXO × LOB EDG — o que era 'OPTION EDG', um produto que nenhuma
+        # linha do banco jamais teve.
         'seed': [
+            {'PRODUCT': 'NDF', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': 'Termo de moeda (inclui FWD Start)'},
             {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
              'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
             {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
              'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
-            {'PRODUCT': 'OPTION', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio (FXO)'},
-            {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': ''},
+            {'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio'},
+            {'PRODUCT': 'FXO', 'LOB': 'EDG', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+             'FO': 'REQUESTED', 'NOTES': 'Opção de EDG — o FO também valida'},
             {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
              'FO': 'REQUESTED', 'NOTES': ''},
-            {'PRODUCT': 'OPTION EDG', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'REQUESTED', 'NOTES': 'Opção de EDG'},
         ],
     },
     # Reconciliação de FXO: a perna INTERNA. Ela chega à Athena com o
@@ -28324,7 +28374,13 @@ def manual_confirmation_track():
                            mc_labels=_mc.COLUMN_LABELS,
                            mc_dates=_mc.DATE_COLUMNS,
                            mc_derived=_mc.DERIVED_COLUMNS,
-                           mc_key=_mc.KEY_COLUMN)
+                           mc_key=_mc.KEY_COLUMN,
+                           # Colunas de domínio fechado: a tela monta um <select>
+                           # em vez de um campo livre. Produto digitado à mão era
+                           # o que fazia a linha nascer com um nome que nem o
+                           # cadastro de validação nem a pasta do Electronic
+                           # Inventory reconheciam.
+                           mc_options={'Produto': list(_mc.CONFIRMATION_TYPES)})
 
 
 @blueprint.route('/api/manual-confirmation/data')
@@ -28628,6 +28684,41 @@ def reconciliation_fxo_run():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@blueprint.route('/reconciliation-fxo/comment', methods=['POST'])
+def reconciliation_fxo_comment():
+    """Grava (ou apaga) a justificativa de uma operação.
+
+    O comentário pertence ao TRADE e não à execução do dia: ele volta em toda
+    recon daquela operação até alguém alterá-lo. Por isso o endpoint não recebe
+    data nenhuma — e por isso ele devolve o Status já recalculado, para a tela
+    trocar o badge sem precisar recarregar a tabela inteira.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
+    key = str(payload.get('key', '') or '').strip()
+    comment = str(payload.get('comment', '') or '').strip()
+    if not key:
+        return jsonify({'success': False,
+                        'error': 'Sem a chave da operação não há o que comentar.'}), 400
+    try:
+        from apps.pages import recon_fxo as _rf
+        _rf.save_comment(key, comment)
+        # O status novo sai do MESMO código que a tabela usa — reproduzir aqui a
+        # regra "com comentário vira Justified" criaria uma segunda resposta.
+        linha = {'Combinação de operações': key,
+                 'Status': str(payload.get('status', '') or ''),
+                 _rf.STATUS_RAW_KEY: str(payload.get('status_raw', '') or
+                                         payload.get('status', '') or '')}
+        _rf.aplicar_comentarios([linha])
+        return jsonify({'success': True, 'comment': comment,
+                        'status': linha['Status'],
+                        'status_raw': linha[_rf.STATUS_RAW_KEY]})
+    except Exception as e:
+        log.error('[recon_fxo_comment] %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @blueprint.route('/reconciliation-payrec/end-process', methods=['POST'])
 def reconciliation_payrec_end():
     if not session.get('authenticated'):
@@ -28670,7 +28761,10 @@ def reconciliation_payrec_end():
 _EI_TRANSACTIONAL_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
 # Confirmations are filed per trade product, under
 # Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>.
-_EI_CONFIRMATION_TYPES = ('NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP')
+# A MESMA lista do cadastro da esteira e do dropdown do Track Confirmations —
+# ver o import no topo. Uma cópia literal aqui foi o que deixou o upload falando
+# 'FXO' e o cadastro de validação falando 'OPTION' para o mesmo documento.
+_EI_CONFIRMATION_TYPES = _CONFIRMATION_TYPES
 _EI_PREVIEWABLE = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.txt'}
 _EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
                       '.png', '.jpg', '.jpeg', '.gif', '.txt', '.zip'}

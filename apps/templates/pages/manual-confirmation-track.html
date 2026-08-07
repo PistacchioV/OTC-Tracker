@@ -83,8 +83,23 @@
     @keyframes mcWIn { from { opacity:0; transform: translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
 }
 
-/* ── Tabela ──────────────────────────────────────────────────────── */
-#mc-table th { white-space:nowrap; font-size:.66rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
+/* ── Tabela ──────────────────────────────────────────────────────────
+   As regras do cabeçalho valem para o `#mc-table` E para o CLONE: com scrollX o
+   DataTables desenha o cabeçalho numa tabela irmã e **remove o id dela**, então
+   `#mc-table th` não alcança o cabeçalho que se vê. Sem isso o header ficava com
+   a fonte e o padding do tema (maiores) e o corpo com os desta página — larguras
+   diferentes nas duas tabelas, valores deslocados das colunas. O header quebra
+   linha porque um nome longo com nowrap impõe uma largura mínima que o corpo
+   não tem. */
+#mc-table th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    font-size:.66rem; padding:8px 10px;
+    text-align:center !important; vertical-align:middle !important;
+    white-space:normal !important; word-break:break-word; overflow-wrap:anywhere;
+    line-height:1.15;
+}
 #mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; text-align:center; }
 #mc-table_filter { display:none !important; }
 /* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
@@ -273,7 +288,10 @@
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
                     <i data-lucide="edit-3" style="width:18px;height:18px;" class="text-primary"></i>
-                    <span data-lang="mc-edit-title">Editar confirmação</span>
+                    <!-- O título é trocado pelo JS (nova × edição), então ele não
+                         leva data-lang: o I18nManager traduz uma vez no load e
+                         sobrescreveria o texto certo pelo da chave. -->
+                    <span id="mcEditTitle">Edit confirmation</span>
                     <span class="badge bg-secondary-subtle text-secondary" id="mcEditKey"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -308,16 +326,41 @@
     var DATES   = {{ mc_dates   | tojson }};
     var DERIVED = {{ mc_derived | tojson }};
     var KEY     = {{ mc_key     | tojson }};
+    // Colunas de domínio fechado → <select>. O Produto é a única hoje, e a lista
+    // é a MESMA do Confirmation Type do Electronic Inventory e do cadastro
+    // Produto × LOB da esteira: digitado à mão, ele nascia com um nome que nem o
+    // cadastro de validação nem a pasta do documento reconheciam.
+    var OPTIONS = {{ mc_options | tojson }};
+
+    // Texto montado em JS não passa pelo I18nManager (ele traduz [data-lang] uma
+    // vez, no load) — sai daqui, no idioma que o app guardou.
+    var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+                localStorage.getItem('language') || 'en').toLowerCase();
+    var _TRANS = {
+        en: { addTitle: 'New confirmation', editTitle: 'Edit confirmation',
+              keyNeeded: 'Trade ID is required', keyWhy: 'It is the key of the row.',
+              keyDup: 'This Trade ID already exists', keyDupWhy: 'Edit the existing row instead.' },
+        br: { addTitle: 'Nova confirmação', editTitle: 'Editar confirmação',
+              keyNeeded: 'Falta o Trade ID', keyWhy: 'É ele que identifica a linha.',
+              keyDup: 'Este Trade ID já existe', keyDupWhy: 'Edite a linha que já está na tabela.' },
+        es: { addTitle: 'Nueva confirmación', editTitle: 'Editar confirmación',
+              keyNeeded: 'Falta el Trade ID', keyWhy: 'Es la clave de la fila.',
+              keyDup: 'Este Trade ID ya existe', keyDupWhy: 'Edite la fila que ya está en la tabla.' }
+    };
+    function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k; }
 
     // Offsets fixos: 0 = checkbox, 1 = Actions, as colunas de dado começam em 2.
     var OFFSET = 2;
 
-    var table = null, rows = [], activePending = '', editing = null;
+    var table = null, rows = [], activePending = '', editing = null, adding = false;
 
     function label(c) { return LABELS[c] || c; }
     function isDate(c) { return DATES.indexOf(c) !== -1; }
     function isDerived(c) { return DERIVED.indexOf(c) !== -1; }
-    function editable(c) { return !isDerived(c) && c !== KEY; }
+    // A chave é travada na EDIÇÃO e livre na criação: trocá-la numa linha que já
+    // existe não renomearia a linha, criaria uma segunda. Numa linha nova ela é
+    // justamente o que precisa ser digitado.
+    function editable(c) { return !isDerived(c) && (c !== KEY || adding); }
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -401,8 +444,12 @@
             // Confirmation, Index B3): o scrollY é o que congela o cabeçalho, e
             // orderCellsTop deixa a ordenação na 1ª linha do thead — sem ele,
             // clicar no campo de filtro reordenaria a tabela.
+            // `autoWidth: true` é o que mantém valor e coluna alinhados: com ele
+            // o DataTables mede as duas tabelas (cabeçalho e corpo) e aplica a
+            // MESMA largura nas duas; com `false` cada uma é dimensionada pelo
+            // próprio conteúdo e o desencontro cresce coluna a coluna.
             responsive: false, scrollX: true, scrollY: '60vh',
-            scrollCollapse: true, autoWidth: false, orderCellsTop: true,
+            scrollCollapse: true, autoWidth: true, orderCellsTop: true,
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: 50, order: [[OFFSET, 'asc']],
             language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: 'Nenhuma confirmação registrada.' }
@@ -448,11 +495,36 @@
         return i;
     }
 
+    // O campo de uma coluna: <select> quando o domínio é fechado, campo de data
+    // com flatpickr quando é data, texto no resto. Um só lugar para os três, para
+    // o modal e a edição em massa não oferecerem entradas diferentes da mesma
+    // coluna.
+    function fieldFor(col, value) {
+        var f;
+        if (OPTIONS && OPTIONS[col]) {
+            f = $('<select class="form-select form-select-sm">');
+            // A opção vazia existe para a linha nova (nada escolhido ainda) e
+            // para um valor legado fora da lista não ser trocado em silêncio.
+            f.append($('<option>').val('').text('—'));
+            OPTIONS[col].forEach(function (o) { f.append($('<option>').val(o).text(o)); });
+            var v = String(value == null ? '' : value);
+            if (v && OPTIONS[col].indexOf(v) === -1) {
+                f.append($('<option>').val(v).text(v + ' (legado)'));
+            }
+            f.val(v);
+        } else {
+            f = isDate(col) ? dateInput()
+                            : $('<input type="text" class="form-control form-control-sm">');
+            f.val(value == null ? '' : value);
+        }
+        return f;
+    }
+
     function buildMassValueField(col) {
         var wrap = $('#mcMassValueWrap').empty();
         if (!col) { $('#mcMassApply').prop('disabled', true); return; }
-        var input = isDate(col) ? dateInput()
-                                : $('<input type="text" class="form-control form-control-sm" placeholder="novo valor">');
+        var input = fieldFor(col, '');
+        if (!OPTIONS[col] && !isDate(col)) input.attr('placeholder', 'novo valor');
         input.attr('id', 'mcMassValue');
         wrap.append(input);
         updateApply();
@@ -507,8 +579,11 @@
         applyPendingFilter();
         updateApply();
         // Com scrollX o cabeçalho vive numa tabela irmã: recalcular as larguras
-        // depois de carregar é o que mantém valor e coluna alinhados.
+        // depois de carregar é o que mantém valor e coluna alinhados. O segundo
+        // passe atrasado é o do padrão New Deals — a primeira medida acontece
+        // antes de fontes e badges terem o tamanho final.
         table.columns.adjust();
+        setTimeout(function () { if (table) table.columns.adjust().draw(false); }, 150);
     }
 
     function load() {
@@ -608,36 +683,60 @@
         });
 
         // ── Actions ─────────────────────────────────────────────────────
-        $(document).on('click', '[data-mc-edit]', function () {
-            var k = $(this).attr('data-mc-edit');
-            var row = rowByKey(k);
-            if (!row) return;
-            editing = k;
-            $('#mcEditKey').text(k);
+        // `k == null` → linha nova. É o MESMO modal: uma segunda tela para criar
+        // teria de repetir as 27 colunas e envelheceria na primeira coluna nova.
+        function openEditor(k) {
+            adding = (k == null);
+            var row = adding ? {} : rowByKey(k);
+            if (!adding && !row) return;
+            editing = adding ? '' : k;
+            $('#mcEditTitle').text(t(adding ? 'addTitle' : 'editTitle'));
+            $('#mcEditKey').text(adding ? '' : k);
             var grid = $('#mcEditGrid').empty();
             COLUMNS.forEach(function (c) {
                 var col = $('<div class="col-12 col-md-4 col-xl-3">');
                 $('<label>').text(label(c) === c ? c : label(c) + ' (' + c + ')').appendTo(col);
-                var inp = isDate(c) ? dateInput()
-                        : $('<input type="text" class="form-control form-control-sm">');
-                inp.val(row[c] || '').attr('data-col', c);
-                // Derivadas e a chave ficam visíveis mas travadas: escondê-las
-                // faria perguntarem onde foram parar; deixá-las editáveis criaria
-                // um valor que a próxima gravação desfaz.
-                if (!editable(c)) inp.prop('readonly', true).addClass('mc-locked');
+                var inp = fieldFor(c, row[c] || '').attr('data-col', c);
+                // Derivadas (e a chave, na edição) ficam visíveis mas travadas:
+                // escondê-las faria perguntarem onde foram parar; deixá-las
+                // editáveis criaria um valor que a próxima gravação desfaz.
+                // `readonly` não existe em <select> — nele o jeito é `disabled`,
+                // e por isso o save lê `[data-col]` e não `input[data-col]`.
+                if (!editable(c)) {
+                    inp.addClass('mc-locked');
+                    if (inp.is('select')) inp.prop('disabled', true);
+                    else inp.prop('readonly', true);
+                }
                 inp.appendTo(col);
                 grid.append(col);
             });
             new bootstrap.Modal(document.getElementById('mcEditModal')).show();
+        }
+
+        $(document).on('click', '[data-mc-edit]', function () {
+            openEditor($(this).attr('data-mc-edit'));
         });
+        $('#mcAddRow').on('click', function () { openEditor(null); });
 
         $('#mcEditSave').on('click', function () {
-            if (!editing) return;
-            var o = {}; o[KEY] = editing;
-            $('#mcEditGrid input[data-col]').each(function () {
+            var o = {};
+            $('#mcEditGrid [data-col]').each(function () {
                 var c = $(this).attr('data-col');
                 if (editable(c)) o[c] = $(this).val() || '';
             });
+            if (!adding) o[KEY] = editing;
+            var key = String(o[KEY] || '').trim();
+            // O Trade ID é a CHAVE: sem ele o servidor recusa, e com um já usado
+            // a gravação sobrescreveria a linha existente sem avisar ninguém.
+            if (!key) {
+                Swal.fire({ icon: 'warning', title: t('keyNeeded'), text: t('keyWhy') });
+                return;
+            }
+            if (adding && rowByKey(key)) {
+                Swal.fire({ icon: 'warning', title: t('keyDup'), text: t('keyDupWhy') });
+                return;
+            }
+            o[KEY] = key;
             save([o]).then(function (ok) {
                 if (ok) bootstrap.Modal.getInstance(document.getElementById('mcEditModal')).hide();
             });

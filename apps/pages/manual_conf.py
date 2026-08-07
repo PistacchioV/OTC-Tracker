@@ -136,6 +136,18 @@ DERIVED_COLUMNS = ['Pending', 'Aging Confirmação']
 # reencontra a linha e que o delete apaga uma só.
 KEY_COLUMN = 'Trade ID'
 
+# ── Os tipos de confirmação ─────────────────────────────────────────────────
+# UMA lista, três consumidores: o **Confirmation Type** do upload do Electronic
+# Inventory (`routes._EI_CONFIRMATION_TYPES`), o cadastro Produto × LOB da
+# esteira (`manual-conf-validation`) e o dropdown de Produto do Track
+# Confirmations. Eram três listas escritas à mão, e por isso o cadastro falava
+# 'OPTION' onde a tela de upload falava 'FXO' — o mesmo documento com dois nomes,
+# e uma regra de validação que nunca casava com a linha que ela deveria reger.
+#
+# Ela mora aqui, e não no `routes.py`, porque este módulo não importa aquele (o
+# contrário seria circular) e porque é aqui que a esteira compara produtos.
+CONFIRMATION_TYPES = ('NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP')
+
 # Os três estágios, na ordem em que a esteira anda.
 STAGE_OTC, STAGE_MO, STAGE_FO = 'OTC', 'MO', 'FO'
 PENDING_OTC = 'Pending OTC'
@@ -155,6 +167,17 @@ EXEMPT = 'EXEMPT'
 def norm(s):
     s = unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
     return re.sub(r'[^a-z0-9]', '', s.lower())
+
+
+def upper_norm(v):
+    """MAIÚSCULO com o espaço preservado ('NDF COMM').
+
+    Não é o `norm()`: aquele minusculiza e cola tudo ('ndfcomm'), e comparar
+    nome de produto com nome de pasta exige o espaço de volta.
+    """
+    t = unicodedata.normalize('NFKD', str(v or ''))
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r'\s+', ' ', t).strip().upper()
 
 
 def parse_date(v):
@@ -212,10 +235,16 @@ def validation_rules():
     A busca é por Produto **e** LOB, caindo para a linha do produto com LOB em
     branco. LOB em branco é coringa: a maioria dos produtos valida igual em toda
     LOB, e obrigar uma linha por LOB faria a tela pedir cadastro a cada LOB nova.
+
+    Os dois lados da comparação passam pelo `confirmation_type()`: o cadastro é
+    feito com os nomes do Electronic Inventory ('FXO'), e as linhas do banco
+    carregam a nomenclatura de quem as criou ('OPTION', 'NDF' × COMMODITY). Sem o
+    tradutor, cada uma dessas linhas caía no DEFAULT_RULE — com um aviso de
+    "produto sem cadastro" para um produto que estava cadastrado.
     """
     exact, wildcard = {}, {}
     for r in _mapping_rows('manual-conf-validation'):
-        prod = norm(r.get('PRODUCT'))
+        prod = norm(confirmation_type(r.get('PRODUCT'), r.get('LOB')))
         if not prod:
             continue
         rule = {stage: norm(r.get(stage)).startswith('requested')
@@ -234,7 +263,7 @@ DEFAULT_RULE = {STAGE_OTC: True, STAGE_MO: True, STAGE_FO: False}
 def rule_for(produto, lob, rules=None):
     """(regra, achou_cadastro) do par Produto × LOB."""
     exact, wildcard = rules if rules is not None else validation_rules()
-    prod, l = norm(produto), norm(lob)
+    prod, l = norm(confirmation_type(produto, lob)), norm(lob)
     if (prod, l) in exact:
         return exact[(prod, l)], True
     if prod in wildcard:
@@ -530,6 +559,11 @@ PRODUCT_FOLDER = {
     'NDF COMM': 'NDF Commodities',
     'OPTION COMM': 'Commodities Options',
     'OPTION': 'FX Options',
+    # 'FXO' é o mesmo produto que 'OPTION' com o nome do Electronic Inventory.
+    # Agora que o Track grava o nome do cadastro, a linha nova chega assim — sem
+    # esta entrada ela ficaria sem pasta e o Monitor diria "nenhum PDF" com o PDF
+    # lá dentro.
+    'FXO': 'FX Options',
     'NDF FWD START': 'NDF FWD Start',
 }
 
@@ -547,12 +581,8 @@ def _product_folder(row):
     """
     # norm() aqui NÃO serve: ela minusculiza e cola tudo ('ndfcomm'), e nem o
     # lookup nem os startswith casariam. A pasta compara em MAIÚSCULO com espaço.
-    def _up(v):
-        t = unicodedata.normalize('NFKD', str(v or ''))
-        t = ''.join(c for c in t if not unicodedata.combining(c))
-        return re.sub(r'\s+', ' ', t).strip().upper()
-    prod = _up(row.get('Produto'))
-    lob = _up(row.get('LOB'))
+    prod = upper_norm(row.get('Produto'))
+    lob = upper_norm(row.get('LOB'))
     direto = PRODUCT_FOLDER.get(prod)
     if direto:
         return direto
@@ -564,6 +594,46 @@ def _product_folder(row):
     if prod.startswith(('OPCAO', 'OPTION', 'OPT')):
         return 'Commodities Options' if e_comm else 'FX Options'
     return None
+
+
+# Pasta → tipo de confirmação. A pasta JÁ é a classificação do produto (é ela
+# que separa termo de opção e câmbio de mercadoria), então o tipo sai dela em vez
+# de repetir a mesma árvore de decisão com outro nome — duas respostas para a
+# mesma pergunta é exatamente o que separou 'OPTION' de 'FXO'.
+_FOLDER_TYPE = {
+    'NDF Commodities': 'NDF COMM',
+    'Commodities Options': 'OPTION COMM',
+    'FX Options': 'FXO',
+    'NDF FWD Start': 'NDF',      # FWD Start é um NDF; o que muda é a pasta
+}
+
+
+def confirmation_type(produto, lob=''):
+    """O tipo de confirmação da linha, um dos `CONFIRMATION_TYPES`.
+
+    É o tradutor entre as nomenclaturas que convivem no banco ('OPTION' do New
+    Deals, 'NDF' × COMMODITY da planilha legada, 'NDF FWD START') e o nome único
+    que as três telas mostram. Produto que não se sabe traduzir volta como veio,
+    em maiúsculo: melhor um nome estranho na tela do que um produto reclassificado
+    à força para a regra de validação errada.
+    """
+    prod = upper_norm(produto)
+    if not prod:
+        return ''
+    # A pasta vem ANTES do nome já canônico, e a ordem importa: a linha legada
+    # 'NDF' × COMMODITY tem um produto que POR ACASO está na lista, e devolvê-lo
+    # direto a classificaria como termo de moeda — que é outro documento, outra
+    # pasta e outra regra de validação.
+    folder = _product_folder({'Produto': produto, 'LOB': lob})
+    if folder in _FOLDER_TYPE:
+        return _FOLDER_TYPE[folder]
+    if prod in CONFIRMATION_TYPES:
+        return prod
+    if 'SWAP' in prod:
+        return 'SWAP'
+    if prod.startswith('NDF'):
+        return 'NDF'
+    return prod
 
 
 def confirmation_folder(row):
@@ -643,8 +713,12 @@ def monitor_payload(docs_for=None):
         for r in rows:
             rule, found = rule_for(r.get('Produto'), r.get('LOB'), rules)
             if not found:
-                sem_cadastro.add('%s · %s' % (str(r.get('Produto') or '—'),
-                                              str(r.get('LOB') or '—')))
+                # O aviso nomeia o TIPO, que é o nome que a pessoa vai procurar
+                # no cadastro — dizer 'OPTION' mandaria procurar por uma opção
+                # que a tela de mapping não oferece mais.
+                sem_cadastro.add('%s · %s' % (
+                    confirmation_type(r.get('Produto'), r.get('LOB')) or '—',
+                    str(r.get('LOB') or '—')))
             if not rule[stage]:
                 continue
             p = r.get('Pending')
@@ -654,6 +728,10 @@ def monitor_payload(docs_for=None):
             item = grupos.get(gk)
             if item is None:
                 item = {k: r.get(k, '') for k in MONITOR_FIELDS}
+                # `Produto` continua CRU no item — é ele que resolve a pasta do
+                # Electronic Inventory em /docs. `Tipo` é o nome que a tela
+                # mostra, o mesmo do cadastro e do Confirmation Type do upload.
+                item['Tipo'] = confirmation_type(r.get('Produto'), r.get('LOB'))
                 item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
                 # Os documentos são resolvidos UMA vez por grupo: eles são do
                 # grupo, não do trade — a pasta é a mesma para todos eles.

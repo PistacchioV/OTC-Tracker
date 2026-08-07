@@ -65,11 +65,12 @@ def write_map(rows):
         json.dump(rows, fh, ensure_ascii=False)
 
 
-write_map([
+MAPA = [
     {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'EXEMPT'},
     {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'REQUESTED'},
     {'PRODUCT': 'SWAP', 'LOB': 'EDG', 'OTC': 'EXEMPT', 'MO': 'REQUESTED', 'FO': 'REQUESTED'},
-])
+]
+write_map(MAPA)
 
 
 def novo(key, produto='NDF COMM', lob='CEM', **kw):
@@ -177,7 +178,14 @@ check('   e não no card do OTC (ela já passou / é isenta)',
       any(i['key'] == 'T3' for i in por_label[M.PENDING_OTC]['items']), False)
 check('o item traz o que identifica a confirmação sem abrir',
       sorted(por_label[M.PENDING_OTC]['items'][0].keys()),
-      sorted(list(M.MONITOR_FIELDS) + ['key', 'keys', 'trades', 'count', 'stage', 'docs']))
+      sorted(list(M.MONITOR_FIELDS) +
+             ['Tipo', 'key', 'keys', 'trades', 'count', 'stage', 'docs']))
+# `Tipo` é o produto no nome do Confirmation Type; `Produto` continua CRU no
+# item porque é ele que resolve a pasta do Electronic Inventory em /docs.
+check('   com o Tipo ao lado do Produto cru',
+      (por_label[M.PENDING_OTC]['items'][0]['Produto'],
+       por_label[M.PENDING_OTC]['items'][0]['Tipo']),
+      ('NDF COMM', 'NDF COMM'))
 
 # ── O item do card é a CONFIRMAÇÃO, não o trade ──────────────────────────────
 # O documento é emitido por contraparte × produto × data e cobre todas as
@@ -215,8 +223,35 @@ cli, rel = M.confirmation_folder({'Cliente': 'ACME S.A.', 'Produto': 'NDF COMM',
 check('a pasta da confirmação vem da linha', (cli, rel),
       ('ACME S.A.', 'Confirmations/2026/08. August/05/NDF Commodities'))
 check('   e o nome da pasta é o mesmo que o save grava',
-      sorted(M.PRODUCT_FOLDER.values()),
+      sorted(set(M.PRODUCT_FOLDER.values())),
       ['Commodities Options', 'FX Options', 'NDF Commodities', 'NDF FWD Start'])
+# 'OPTION' (New Deals) e 'FXO' (Electronic Inventory / cadastro) são o MESMO
+# produto com dois nomes, e têm de cair na mesma pasta — a linha criada pelo
+# Track vem com o segundo, e sem esta entrada ela ficaria sem PDF.
+check('   e FXO é a mesma pasta de OPTION',
+      (M.PRODUCT_FOLDER.get('FXO'), M.PRODUCT_FOLDER.get('OPTION')),
+      ('FX Options', 'FX Options'))
+
+print('\n== 7b. o tipo de confirmação é UMA lista só ==')
+check('os cinco tipos', list(M.CONFIRMATION_TYPES),
+      ['NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP'])
+check('o nome do New Deals vira o do Electronic Inventory',
+      [M.confirmation_type('OPTION'), M.confirmation_type('NDF FWD START')],
+      ['FXO', 'NDF'])
+# A linha legada tem Produto 'NDF' — que POR ACASO está na lista — e é o LOB que
+# diz que ela é de mercadoria. Devolver 'NDF' direto a classificaria como termo
+# de moeda: outro documento, outra pasta, outra regra de validação.
+check('   e a planilha legada é lida pelo par Produto × LOB',
+      M.confirmation_type('NDF', 'COMMODITY'), 'NDF COMM')
+check('produto que não se sabe traduzir volta como veio',
+      M.confirmation_type('Coisa Nova'), 'COISA NOVA')
+# O cadastro é feito com 'FXO'; a linha do banco carrega 'OPTION'. Sem o tradutor
+# nos DOIS lados, ela caía no DEFAULT_RULE com aviso de "produto sem cadastro".
+write_map([{'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'EXEMPT', 'FO': 'REQUESTED'}])
+check('a regra cadastrada como FXO rege a linha gravada como OPTION',
+      M.rule_for('OPTION', 'CEM'),
+      ({'OTC': True, 'MO': False, 'FO': True}, True))
+write_map(MAPA)      # o cadastro do teste de volta — as seções seguintes leem dele
 check('a nomenclatura da planilha legada resolve a MESMA pasta',
       M.confirmation_folder({'Cliente': 'REFINARIA', 'Produto': 'NDF',
                              'LOB': 'COMMODITY', 'Data Operação': '03/08/2026'})[1],

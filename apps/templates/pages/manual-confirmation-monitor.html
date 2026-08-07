@@ -297,7 +297,11 @@
     var _docSeq = 0;
 
     function item(it, stage) {
-        var meta = [it['Data Operação'], it.Produto, it.LOB, it.Moeda].filter(Boolean).map(esc).join(' · ');
+        // `Tipo` é o produto no nome do Confirmation Type do Electronic Inventory
+        // — o mesmo do cadastro de validação e do dropdown do Track. `Produto`
+        // (cru) segue no data-attribute abaixo porque é ele que acha a pasta.
+        var meta = [it['Data Operação'], it.Tipo || it.Produto, it.LOB, it.Moeda]
+            .filter(Boolean).map(esc).join(' · ');
         var age = it['Aging Confirmação'];
         var keys = JSON.stringify(it.keys || []).replace(/"/g, '&quot;');
 
