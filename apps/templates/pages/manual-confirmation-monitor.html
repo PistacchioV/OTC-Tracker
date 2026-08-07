@@ -145,8 +145,22 @@
    continua branco — tarja lateral e fundo em degradê pesavam a fila inteira e
    competiam com o texto, quando o que se quer ler de relance é só o estado.
 
-   O `ok` fica NEUTRO de propósito: pintar de verde o que está dentro do prazo é
-   pintar quase a fila inteira, e aí o vermelho some no meio. */
+   O verde entra TAMBÉM (pedido da mesa): a fila vira um semáforo completo —
+   verde no prazo, âmbar na véspera, vermelho estourado — em vez de cor só no
+   que dói. Um degrau mais suave que o âmbar/vermelho, para o que pede ação
+   continuar na frente. */
+#mc-monitor .mc-item.mc-sla-ok {
+    border-color: rgba(22,163,74,.32);
+    box-shadow: 0 2px 5px rgba(22,163,74,.14),
+                0 8px 18px rgba(22,163,74,.26),
+                0 16px 34px rgba(22,163,74,.18);
+}
+[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-ok {
+    border-color: rgba(48,199,110,.4);
+    box-shadow: 0 2px 6px rgba(48,199,110,.18),
+                0 10px 22px rgba(48,199,110,.28),
+                0 20px 42px rgba(48,199,110,.18);
+}
 #mc-monitor .mc-item.mc-sla-warn {
     border-color: rgba(217,138,0,.34);
     box-shadow: 0 2px 5px rgba(217,138,0,.16),
@@ -187,7 +201,25 @@
                     0 12px 26px rgba(211,47,47,.44),
                     0 22px 46px rgba(211,47,47,.28);
     }
+    #mc-monitor .mc-item.mc-sla-ok:hover {
+        border-color: rgba(22,163,74,.44);
+        box-shadow: 0 4px 10px rgba(22,163,74,.18),
+                    0 12px 26px rgba(22,163,74,.34),
+                    0 22px 46px rgba(22,163,74,.22);
+    }
 }
+
+/* O spinner do "procurando os PDFs": o ícone gira enquanto a busca corre. Um
+   ícone parado ao lado de "looking…" lia-se como um estado morto — e era
+   exatamente a queixa quando uma aba antiga ficava sem resposta. */
+#mc-monitor .mc-docs-spin {
+    display: inline-block;
+    animation: mcSpin 800ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    #mc-monitor .mc-docs-spin { animation: none; }
+}
+@keyframes mcSpin { to { transform: rotate(360deg); } }
 #mc-monitor .mc-item__acts .btn {
     font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
     transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
@@ -354,7 +386,7 @@
                    // operação, e é ele que escolhe o documento exato quando a
                    // pasta do dia tem vários.
                    'data-docs-trades="' + esc((it.keys || []).join(',')) + '">' +
-                   '<i class="ti ti-loader-2 me-1"></i>' + esc(t('docsLoading')) + '</span>';
+                   '<i class="ti ti-loader-2 me-1 mc-docs-spin"></i>' + esc(t('docsLoading')) + '</span>';
 
         // O card tem UM botão só. Validar e Rejeitar são as duas respostas à
         // mesma pergunta — o documento está certo? — e as duas exigem tê-lo
@@ -422,9 +454,15 @@
                        esc(d.name) + '</a>';
             }).join('') + '</div>');
         }
+        // Timeout de 30 s: sem ele, uma resposta que nunca chega (o servidor
+        // reiniciando embaixo da aba) deixava o spinner girando para sempre —
+        // "procurando" eterno é pior que dizer que não achou.
+        var ctl = ('AbortController' in window) ? new AbortController() : null;
+        var timer = ctl && setTimeout(function () { ctl.abort(); }, 30000);
         fetch('/api/manual-confirmation/docs', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: itens })
+            body: JSON.stringify({ items: itens }),
+            signal: ctl ? ctl.signal : undefined
         })
             .then(function (r) { return r.json(); })
             .then(function (j) {
@@ -432,7 +470,8 @@
                 // A resposta vem na ORDEM em que os itens foram enviados.
                 els.forEach(function (el, i) { pinta(el, listas[i]); });
             })
-            .catch(function () { els.forEach(function (el) { el.html(esc(t('nolink'))); }); });
+            .catch(function () { els.forEach(function (el) { el.html(esc(t('nolink'))); }); })
+            .finally(function () { if (timer) clearTimeout(timer); });
     }
 
     function card(c) {
