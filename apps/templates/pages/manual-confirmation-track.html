@@ -85,16 +85,20 @@
 
 /* ── Tabela ──────────────────────────────────────────────────────── */
 #mc-table th { white-space:nowrap; font-size:.66rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
-#mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; }
+#mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; text-align:center; }
 #mc-table_filter { display:none !important; }
 /* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
    digita nela — escondê-la faria perguntarem onde foi parar. O tom é o
    --ins-tertiary-bg; o secondary é BRANCO no tema claro, e a marca sumia. */
 #mc-table td.mc-derived { background: var(--ins-tertiary-bg, #f6f7fb); font-style: italic; }
 #mc-table td.mc-acts { white-space: nowrap; text-align: center; }
+/* Ações de linha no squircle padrão do app (spec .ops-row-act): 32×32, raio 10. */
 #mc-table td.mc-acts .btn {
-    padding: .1rem .35rem; line-height: 1.2; font-size: .78rem;
-    transition: transform 140ms var(--mc-ease), color 140ms var(--mc-ease);
+    width: 32px; height: 32px; min-width: 32px; max-width: 32px;
+    padding: 0; flex: 0 0 auto; border-radius: 10px !important;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; font-size: 1rem;
+    transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
 }
 @media (hover: hover) and (pointer: fine) {
     #mc-table td.mc-acts .btn:hover { transform: translateY(-1px) scale(1.08); }
@@ -290,6 +294,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (function () {
@@ -359,15 +364,16 @@
             data: null, orderable: false, searchable: false, className: 'mc-acts',
             render: function (row) {
                 var k = esc(row[KEY]);
-                // O botão de abrir só existe quando a linha sabe ONDE está o
+                // Botões no padrão do New Deals: redondos e coloridos.
+                // O de abrir só existe quando a linha sabe ONDE está o
                 // documento: um botão que abre nada parece defeito.
                 var open = row['Confirmation Link']
-                    ? '<a class="btn btn-link text-primary p-0 me-1" title="Abrir confirmação" target="_blank" rel="noopener" href="' +
+                    ? '<a class="btn btn-primary btn-sm rounded-circle me-1" title="Abrir confirmação" target="_blank" rel="noopener" href="' +
                       esc(row['Confirmation Link']) + '"><i class="ti ti-external-link"></i></a>'
                     : '';
                 return open +
-                    '<button class="btn btn-link text-secondary p-0 me-1" title="Editar" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
-                    '<button class="btn btn-link text-danger p-0" title="Excluir" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
+                    '<button class="btn btn-info btn-sm rounded-circle me-1" title="Editar" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
+                    '<button class="btn btn-danger btn-sm rounded-circle" title="Excluir" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
             }
         }];
         COLUMNS.forEach(function (name) {
@@ -399,7 +405,7 @@
             scrollCollapse: true, autoWidth: false, orderCellsTop: true,
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: 50, order: [[OFFSET, 'asc']],
-            language: { emptyTable: 'Nenhuma confirmação registrada.' }
+            language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: 'Nenhuma confirmação registrada.' }
         });
     }
 
@@ -500,6 +506,9 @@
         table.clear().rows.add(rows).draw();
         applyPendingFilter();
         updateApply();
+        // Com scrollX o cabeçalho vive numa tabela irmã: recalcular as larguras
+        // depois de carregar é o que mantém valor e coluna alinhados.
+        table.columns.adjust();
     }
 
     function load() {
@@ -533,6 +542,9 @@
         buildColumnMenu();
         buildMassColumnSelect();
         load();
+
+        // Seleção de célula + Ctrl+C — padrão New Deals (checkbox e Actions fora)
+        if (window.otcCellCopy) otcCellCopy('#mc-table', { skip: [0, 1] });
 
         $('#mcPageLength').on('change', function () {
             table.page.len(parseInt(this.value, 10)).draw();
@@ -648,6 +660,8 @@
                 }).then(function (x) { return x.json(); }).then(load);
             });
         });
+
+        $(window).on('resize', function () { if (table) table.columns.adjust(); });
 
         if (window.lucide) lucide.createIcons();
     });

@@ -69,9 +69,10 @@
     box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
 }
 /* Row action buttons — solid circular (project standard, matches Intrag). */
-#opb3-table td .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
-  font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; box-sizing: border-box; }
+#opb3-table td .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; padding: 0;
+  min-width: 32px; max-width: 32px;
+  font-size: 1rem; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px !important; box-sizing: border-box; } /* squircle padrão (spec .ops-row-act) */
 /* Toolbar buttons — compact project standard (keeps Add row, Columns, Export and
    Clear filters uniform instead of the taller btn-sm default). */
 #operations-b3-page .ob-toolbar .btn {

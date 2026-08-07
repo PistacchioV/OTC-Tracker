@@ -341,6 +341,14 @@ table.dt-acc tbody tr.acc-row-sel td { background: rgba(0,102,204,.06) !importan
     .acc-stat, .acc-stat.is-pop, .acc-stat.is-pop .acc-stat__icon, .acc-stat.is-pop .acc-stat__value { animation: none; opacity:1; transform:none; }
     .acc-stat:hover, .acc-drop:active, .acc-btn:active, .acc-act:active, .acc-load-btn:active { transform:none; }
 }
+/* Ações de linha no squircle padrão do app (spec .ops-row-act) — sem isto o
+   rounded-circle do tema sai OVAL (o raio só é círculo em botão quadrado). */
+td .btn-sm.rounded-circle {
+    width: 32px; height: 32px; min-width: 32px; max-width: 32px;
+    padding: 0; flex: 0 0 auto; display: inline-flex; align-items: center;
+    justify-content: center; line-height: 1; border-radius: 10px !important;
+}
+td .btn-sm.rounded-circle i { font-size: 1rem; }
 </style>
 {% endblock extra_css %}
 

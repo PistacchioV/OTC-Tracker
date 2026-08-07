@@ -13,10 +13,16 @@
     .col-search-row th { padding:4px 6px; }
     .col-search-row input { font-size:11px; height:26px; padding:2px 6px; }
     .table-responsive { overflow-x:auto; }
-    #tblSubjacente th, #tblVCP th, #tblDominio th {
+    /* Alinhamento centralizado — padrão New Deals (as 4 tabelas, th e td) */
+    #tblSubjacente th, #tblVCP th, #tblDominio th, #tblSwapIndex th {
         white-space:nowrap; font-size:0.7rem; text-transform:uppercase; padding:8px 10px;
+        text-align:center !important; vertical-align:middle !important;
     }
-    #tblSubjacente td, #tblVCP td, #tblDominio td { white-space:nowrap; font-size:0.8rem; }
+    #tblSubjacente td, #tblVCP td, #tblDominio td, #tblSwapIndex td {
+        white-space:nowrap; font-size:0.8rem; text-align:center; vertical-align:middle;
+    }
+    .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+    .dataTables_scrollHeadInner thead th { text-align:center !important; vertical-align:middle !important; }
     #noDataBanner { display:none; }
     /* inline edit cells */
     td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
@@ -24,7 +30,10 @@
     .edit-actions-wrap { display:flex; gap:4px; }
     .pill-badge { font-size:0.68rem; }
     /* action buttons */
-    .btn-act { width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+    /* Squircle padrão do app (spec .ops-row-act): 32×32, raio 10 */
+    .btn-act { width:32px; height:32px; min-width:32px; max-width:32px; padding:0; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; line-height:1; border-radius:10px !important; }
+    .btn-act i { font-size:1rem; }
+    .edit-actions-wrap { display:flex; gap:4px; justify-content:center; }
     /* Add Row button (matches new_deals style) */
     .btn-toolbar-addrow { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
 
@@ -514,6 +523,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 
 <script>
 $(document).ready(function () {
@@ -598,11 +608,13 @@ $(document).ready(function () {
         return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
     }
 
+    // Botões de ação no padrão do New Deals (NDF Vanilla): redondos, coloridos,
+    // Confirm=verde primeiro, Edit=info, Delete=danger.
     function actionBtns(tableKey, idx, maker) {
         return '<div class="edit-actions-wrap">' +
-            '<button class="btn btn-info btn-sm btn-act btn-edit" title="Edit" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-edit fs-13"></i></button>' +
-            '<button class="btn btn-success btn-sm btn-act btn-confirm" title="Confirm/Approve" data-table="' + tableKey + '" data-idx="' + idx + '" data-maker="' + (maker||'') + '"><i class="ti ti-check fs-13"></i></button>' +
-            '<button class="btn btn-danger btn-sm btn-act btn-delete" title="Delete" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-trash fs-13"></i></button>' +
+            '<button class="btn btn-success btn-sm rounded-circle btn-act btn-confirm" title="Confirm/Approve" data-table="' + tableKey + '" data-idx="' + idx + '" data-maker="' + (maker||'') + '"><i class="ti ti-check fs-13"></i></button>' +
+            '<button class="btn btn-info btn-sm rounded-circle btn-act btn-edit" title="Edit" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-edit fs-13"></i></button>' +
+            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-delete" title="Delete" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-trash fs-13"></i></button>' +
             '</div>';
     }
 
@@ -650,7 +662,7 @@ $(document).ready(function () {
 
     function makeDom() {
         return "<'d-md-flex justify-content-between align-items-center mt-3 mb-2'" +
-               "<'columnToggleWrapper me-2'><'addRowWrapper me-2'>B<'ms-auto'>" +
+               "<'columnToggleWrapper me-2'><'addRowWrapper me-2'>B<'clearFiltersWrapper ms-2'><'ms-auto'>" +
                ">" +
                "<'row'<'col-sm-12'tr>>" +
                "<'d-md-flex justify-content-between align-items-center mt-2'ip>";
@@ -701,6 +713,23 @@ $(document).ready(function () {
         $(wrapper).find('ul').on('change', function(e) {
             if ($(e.target).hasClass('toggle-vis')) dtInstance.column(+e.target.dataset.column).visible(e.target.checked);
         });
+    }
+
+    // Clear Filters — padrão New Deals (outline-secondary): limpa a linha de
+    // filtro por coluna e as buscas do DataTables numa tacada.
+    function wireClearFilters(dtInstance, srId) {
+        var container = dtInstance.table().container();
+        var wrapper   = container.querySelector('.clearFiltersWrapper');
+        if (!wrapper) return;
+        var btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+        btn.innerHTML = '<i class="ti ti-filter-off me-1"></i>Clear Filters';
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('#' + srId + ' input').forEach(function (i) { i.value = ''; });
+            dtInstance.columns().search('');
+            dtInstance.search('').draw();
+        });
+        wrapper.appendChild(btn);
     }
 
     function wireAddRow(dtInstance, tableKey, addFn) {
@@ -1249,6 +1278,8 @@ $(document).ready(function () {
             wireColSearch('srSubj', api);
             wireColToggle(['Status','Class','Asset Code','Exchange','Apprec.Index','IF Type','Currency','Exp.Month','Exp.Year','Ticker','Calc.','Quot.Type','Conv.Factor','Unit Neg.','Commodity'], api, 1);
             wireAddRow(api, 'subj', function(dt){ subjAddRow(dt); });
+            wireClearFilters(api, 'srSubj');
+            if (window.otcCellCopy) otcCellCopy('#tblSubjacente', { skip: [0, 1] });
         }
     });
     $('#pageLenSubj').on('change', function(){ dtSubj.page.len(+this.value).draw(); });
@@ -1282,6 +1313,8 @@ $(document).ready(function () {
                 wireColSearch('srVCP', api);
                 wireColToggle(['Status','Qual.ID','Description','Add.Description','Level1 Class.','Product'], api, 1);
                 wireAddRow(api, 'vcp', function(dt){ vcpAddRow(dt); });
+                wireClearFilters(api, 'srVCP');
+                if (window.otcCellCopy) otcCellCopy('#tblVCP', { skip: [0, 1] });
             }
         });
         $('#pageLenVCP').on('change', function(){ dtVCP.page.len(+this.value).draw(); });
@@ -1307,6 +1340,8 @@ $(document).ready(function () {
                 wireColSearch('srDom', api);
                 wireColToggle(['Status','Group','Subgroup','IF Type Code','Qual.ID','Description','Classification'], api, 1);
                 wireAddRow(api, 'dominio', function(dt){ domAddRow(dt); });
+                wireClearFilters(api, 'srDom');
+                if (window.otcCellCopy) otcCellCopy('#tblDominio', { skip: [0, 1] });
             }
         });
         $('#pageLenDom').on('change', function(){ dtDom.page.len(+this.value).draw(); });
@@ -1332,6 +1367,8 @@ $(document).ready(function () {
                 wireColSearch('srSwap', api);
                 wireColToggle(['Status','External Ref Code','Curve Name','Category'], api, 1);
                 wireAddRow(api, 'swapindex', function(dt){ swapAddRow(dt); });
+                wireClearFilters(api, 'srSwap');
+                if (window.otcCellCopy) otcCellCopy('#tblSwapIndex', { skip: [0, 1] });
             }
         });
         $('#pageLenSwap').on('change', function(){ dtSwap.page.len(+this.value).draw(); });

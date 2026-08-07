@@ -251,6 +251,14 @@ h1, h2, h3, h4, h5,
   padding-block: 0.62rem;
   transition: background-color 0.2s var(--vr-ease), color 0.2s var(--vr-ease);
 }
+/* Nome COMPLETO no menu, sempre: o tema corta com ellipsis ("Pending Confir…")
+   e item nenhum pode aparecer pela metade — quebra de linha em vez de "…". */
+.side-nav .side-nav-item .side-nav-link .menu-text {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.25;
+}
 .side-nav .side-nav-item .side-nav-link:hover {
   background: var(--vr-card-bg);
 }

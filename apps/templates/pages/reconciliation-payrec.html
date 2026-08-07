@@ -104,11 +104,11 @@
    quadrado arredondado ~28px, sem padding, ícone 13px centralizado
    (o mesmo estilo de #deals-processing-table .btn-sm.rounded-circle). */
 #payrec-page table.pr-table .pr-actions-cell .btn {
-    width: 28px; height: 28px; padding: 0; font-size: 13px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 7px !important;
+    width: 32px; height: 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem;
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    line-height: 1; border-radius: 10px !important;   /* squircle padrão (spec .ops-row-act) */
 }
-#payrec-page table.pr-table .pr-actions-cell .btn i { font-size: 13px; }
+#payrec-page table.pr-table .pr-actions-cell .btn i { font-size: 1rem; }
 
 #payrec-page .ti-spin { animation: pr-spin 700ms linear infinite; }
 @keyframes pr-spin { to { transform: rotate(360deg); } }
@@ -282,5 +282,15 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/reconciliation-payrec.js?v=20260805a"></script>
+<script>
+// Seleção de célula + Ctrl+C — padrão New Deals. Delegação no nó da tabela,
+// então sobrevive aos rebuilds do tbody a cada reconciliação.
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.otcCellCopy) {
+        document.querySelectorAll('#payrec-page table.pr-table').forEach(function (t) { otcCellCopy(t); });
+    }
+});
+</script>
 {% endblock extra_javascript %}

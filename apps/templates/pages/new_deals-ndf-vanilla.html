@@ -585,18 +585,22 @@
 
   /* Action buttons adjustments for rounding */
   #deals-processing-table .btn-sm.rounded-circle {
-      width: 28px;
-      height: 28px;
+      /* Squircle padrão do app (spec .ops-row-act): 32×32, raio 10 —
+         min/max travam o tamanho contra qualquer min-width do tema. */
+      width: 32px;
+      height: 32px;
+      min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
       padding: 0;
-      font-size: 13px;
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 999px;
+      line-height: 1;
+      border-radius: 10px !important;
   }
 
   #deals-processing-table .btn-sm.rounded-circle i {
-      font-size: 13px;
+      font-size: 1rem;
   }
 
   /* Column search inputs styling */

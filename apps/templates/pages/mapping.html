@@ -36,9 +36,27 @@
     [data-bs-theme=dark] #mapping-page .map-type-item.is-active .map-type-badge { background: #2997ff; }
     #mapping-page .map-type-hint { font-size: .72rem; color: var(--ins-secondary-color); }
 
-    /* Tabela do mapping selecionado */
-    #mapping-page tbody td { font-size: 0.8rem; }
-    #mapping-page thead th { white-space: nowrap; }
+    /* Tabela do mapping selecionado — alinhamento centralizado, padrão New Deals */
+    #mapping-page #mapTable tbody td { font-size: 0.8rem; text-align: center; vertical-align: middle; }
+    #mapping-page #mapTable thead th { white-space: nowrap; text-align: center !important; vertical-align: middle !important; }
+    /* Botões da toolbar — mesmo dimensionamento do New Deals */
+    #mapping-page .btn-toolbar-all {
+        font-size: .75rem !important; padding: .25rem .6rem !important;
+        height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
+        transition: transform 100ms ease-out;
+    }
+    #mapping-page .btn-toolbar-all:active { transform: scale(.96) !important; }
+    @media (hover: hover) and (pointer: fine) {
+        #mapping-page .btn-toolbar-all:hover { transform: translateY(-1px); }
+    }
+    /* Ações de linha no squircle padrão do app (spec .ops-row-act) — sem isto o
+       rounded-circle do tema sai OVAL (o raio só é círculo em botão quadrado). */
+    #mapping-page #mapTable .btn.rounded-circle {
+        width: 32px; height: 32px; min-width: 32px; max-width: 32px;
+        padding: 0; flex: 0 0 auto; display: inline-flex; align-items: center;
+        justify-content: center; line-height: 1; border-radius: 10px !important;
+    }
+    #mapping-page #mapTable .btn.rounded-circle i { font-size: 1rem; }
     /* espaço significativo no fim de códigos B3 (ex.: 'C ') fica visível */
     #mapping-page td.map-code { white-space: pre; }
 
@@ -119,11 +137,11 @@
                             </select>
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="map-entries">entries</label>
                         </div>
-                        <button class="btn btn-sm btn-primary bg-gradient" type="button" id="mapAddBtn">
+                        <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" type="button" id="mapAddBtn">
                             <i class="ti ti-plus me-1"></i><span data-lang="map-add">Add</span>
                         </button>
                         <div class="dropdown mapExportWrapper">
-                            <button class="btn btn-sm btn-info bg-gradient dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <button class="btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown">
                                 <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
                             </button>
                             <ul class="dropdown-menu">
@@ -131,7 +149,7 @@
                                 <li><a class="dropdown-item" href="#" id="mapExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
                             </ul>
                         </div>
-                        <button class="btn btn-sm btn-soft-secondary" type="button" id="mapClearFilters">
+                        <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" type="button" id="mapClearFilters">
                             <i class="ti ti-filter-off me-1"></i><span data-lang="map-clear-filters">Clear filters</span>
                         </button>
                     </div>
@@ -149,11 +167,11 @@
                             <span data-lang="map-showing">Showing</span> <span id="mapShown">0</span> <span data-lang="map-rows">rows</span>
                         </span>
                         <nav class="d-flex align-items-center gap-1" id="mapPager">
-                            <button class="btn btn-sm btn-soft-secondary" id="mapPgFirst" title="First"><i class="ti ti-chevrons-left"></i></button>
-                            <button class="btn btn-sm btn-soft-secondary" id="mapPgPrev" title="Previous"><i class="ti ti-chevron-left"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="mapPgFirst" title="First"><i class="ti ti-chevrons-left"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="mapPgPrev" title="Previous"><i class="ti ti-chevron-left"></i></button>
                             <span class="fs-xs text-muted px-2" id="mapPgInfo">1/1</span>
-                            <button class="btn btn-sm btn-soft-secondary" id="mapPgNext" title="Next"><i class="ti ti-chevron-right"></i></button>
-                            <button class="btn btn-sm btn-soft-secondary" id="mapPgLast" title="Last"><i class="ti ti-chevrons-right"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="mapPgNext" title="Next"><i class="ti ti-chevron-right"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" id="mapPgLast" title="Last"><i class="ti ti-chevrons-right"></i></button>
                         </nav>
                     </div>
                 </div>
@@ -184,6 +202,7 @@
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
 (function () {
     'use strict';
@@ -583,6 +602,8 @@
         renderHeader();
         // carrega todos: os badges do rail mostram a contagem de cada mapping
         TYPES.forEach(function (tp) { load(tp.key); });
+        // Seleção de célula + Ctrl+C — padrão New Deals (coluna 0 = Actions fora)
+        if (window.otcCellCopy) otcCellCopy('#mapTable', { skip: [0] });
         if (window.lucide && lucide.createIcons) lucide.createIcons();
     });
 }());

@@ -178,6 +178,13 @@
       lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
       order: [],
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
+      // Paginação no padrão New Deals: setas em caixinhas, sem texto
+      language: { paginate: {
+        first: '<i class="ti ti-chevrons-left"></i>',
+        previous: '<i class="ti ti-chevron-left"></i>',
+        next: '<i class="ti ti-chevron-right"></i>',
+        last: '<i class="ti ti-chevrons-right"></i>'
+      } },
       buttons: [{
         extend: 'collection',
         text: '<i class="ti ti-download me-1"></i> Export',
@@ -194,6 +201,12 @@
     // Place export dropdown into its wrapper.
     var expWrap = document.querySelector('.scExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
+
+    // Seleção de célula + Ctrl+C — padrão New Deals. Opt-in e ADITIVO: só age
+    // nas páginas que incluem o table-std.js; nas demais é um no-op.
+    if (window.otcCellCopy) {
+      window.otcCellCopy('#swapchar-table', { skip: ACTIONS ? [0, 1] : [0] });
+    }
 
     // Per-column filter row → column search (debounced by keyup/change).
     jQuery('#swapchar-table thead').off('keyup.sccol change.sccol')

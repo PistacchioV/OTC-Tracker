@@ -75,7 +75,7 @@
     white-space:nowrap; font-size:0.68rem; padding:8px 10px;
     text-align:center !important; vertical-align:middle !important;
 }
-#recon-table td { font-size:0.72rem; padding:6px 10px; vertical-align:middle; }
+#recon-table td { font-size:0.72rem; padding:6px 10px; vertical-align:middle; text-align:center; }
 #recon-table td.score-cell {
     text-align:center; font-weight:600;
     box-shadow: none !important;
@@ -87,13 +87,13 @@
     box-shadow:0 24px 60px rgba(0,0,0,.15);
 }
 .upload-zone {
-    border:2px dashed var(--bs-border-color); border-radius:12px; padding:.9rem 1rem;
-    text-align:center; background:var(--bs-tertiary-bg); cursor:pointer;
+    border:2px dashed var(--ins-border-color); border-radius:12px; padding:.9rem 1rem;
+    text-align:center; background:var(--ins-tertiary-bg, #f6f7fb); cursor:pointer;
     transition:border-color 160ms, background 160ms;
 }
-.upload-zone:hover, .upload-zone.dragover { border-color:#0d6efd; background:var(--bs-secondary-bg); }
+.upload-zone:hover, .upload-zone.dragover { border-color:var(--vr-accent-1, #0066cc); background:var(--ins-secondary-bg, #fff); }
 .upload-zone input[type=file] { display:none; }
-.upload-zone .fn { font-size:.72rem; color:#0d6efd; font-weight:600; margin-top:.3rem; }
+.upload-zone .fn { font-size:.72rem; color:var(--vr-accent-1, #0066cc); font-weight:600; margin-top:.3rem; }
 
 /* ── Column filters (second thead row via headerCallback) ────────── */
 #recon-table thead .recon-col-filters th,
@@ -393,6 +393,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 /* ── Score → gradient RGB ────────────────────────────────────────── */
@@ -675,6 +676,9 @@ $(document).ready(function() {
 
                 // Place the export buttons into the toolbar container (dom has no 'B')
                 api.buttons().container().appendTo('#reconExportWrap');
+
+                // Seleção de célula + Ctrl+C — padrão New Deals
+                if (window.otcCellCopy) otcCellCopy('#recon-table');
 
                 api.columns.adjust();
                 lucide.createIcons();

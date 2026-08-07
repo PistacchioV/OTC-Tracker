@@ -98,6 +98,13 @@
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
       pageLength: 50, lengthMenu: [[25, 50, 100, 200, -1], [25, 50, 100, 200, 'All']], order: [],
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
+      // Paginação no padrão New Deals: setas em caixinhas, sem texto
+      language: { paginate: {
+        first: '<i class="ti ti-chevrons-left"></i>',
+        previous: '<i class="ti ti-chevron-left"></i>',
+        next: '<i class="ti ti-chevron-right"></i>',
+        last: '<i class="ti ti-chevrons-right"></i>'
+      } },
       buttons: [{
         extend: 'collection',
         text: '<i class="ti ti-download me-1"></i> Export',
@@ -112,6 +119,9 @@
 
     var expWrap = document.querySelector('.lnExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
+
+    // Selecao de celula + Ctrl+C — padrao New Deals; opt-in via table-std.js
+    if (window.otcCellCopy) { window.otcCellCopy('#lnndf-table', { skip: [0] }); }
 
     jQuery('#lnndf-table thead').off('keyup.lncol change.lncol')
       .on('keyup.lncol change.lncol', '.ln-col-filter', function () {
