@@ -222,9 +222,19 @@ cli, rel = M.confirmation_folder({'Cliente': 'ACME S.A.', 'Produto': 'NDF COMM',
                                   'Data Operação': '05/08/2026'})
 check('a pasta da confirmação vem da linha', (cli, rel),
       ('ACME S.A.', 'Confirmations/2026/08. August/05/NDF Commodities'))
+# As quatro pastas que JÁ EXISTEM no share não podem mudar de nome — renomeá-las
+# deixaria para trás tudo o que já foi gravado nelas.
+check('   e as pastas históricas continuam com o mesmo nome',
+      [M.TYPE_FOLDER[t] for t in ('NDF COMM', 'OPTION COMM', 'FXO', 'NDF FWD START')],
+      ['NDF Commodities', 'Commodities Options', 'FX Options', 'NDF FWD Start'])
 check('   e o nome da pasta é o mesmo que o save grava',
       sorted(set(M.PRODUCT_FOLDER.values())),
-      ['Commodities Options', 'FX Options', 'NDF Commodities', 'NDF FWD Start'])
+      sorted(set(M.TYPE_FOLDER.values())))
+# TYPE_FOLDER é bijetora: duas pastas com o mesmo nome fundiriam dois tipos, e
+# `_FOLDER_TYPE` (que é o inverso dela) devolveria só um deles.
+check('   e cada tipo tem uma pasta só sua',
+      (len(M.TYPE_FOLDER), len(set(M.TYPE_FOLDER.values())), len(M._FOLDER_TYPE)),
+      (len(M.CONFIRMATION_TYPES), len(M.CONFIRMATION_TYPES), len(M.CONFIRMATION_TYPES)))
 # 'OPTION' (New Deals) e 'FXO' (Electronic Inventory / cadastro) são o MESMO
 # produto com dois nomes, e têm de cair na mesma pasta — a linha criada pelo
 # Track vem com o segundo, e sem esta entrada ela ficaria sem PDF.
@@ -233,11 +243,22 @@ check('   e FXO é a mesma pasta de OPTION',
       ('FX Options', 'FX Options'))
 
 print('\n== 7b. o tipo de confirmação é UMA lista só ==')
-check('os cinco tipos', list(M.CONFIRMATION_TYPES),
-      ['NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP'])
+check('os oito tipos', list(M.CONFIRMATION_TYPES),
+      ['NDF VANILLA', 'NDF FWD START', 'OTHER PUBLISHER', 'NDF COMM',
+       'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE'])
+# São CÓDIGOS, não rótulos: a comparação entre as telas é feita sobre eles, e um
+# 'Ndf Vanilla' cadastrado pela tela não casaria com o 'NDF VANILLA' do banco.
+check('   todos em maiúsculo', [t for t in M.CONFIRMATION_TYPES if t != t.upper()], [])
 check('o nome do New Deals vira o do Electronic Inventory',
       [M.confirmation_type('OPTION'), M.confirmation_type('NDF FWD START')],
-      ['FXO', 'NDF'])
+      ['FXO', 'NDF FWD START'])
+# As três páginas de NDF gravam o mesmo Product Type e têm cada uma o seu tipo:
+# o documento que sai de cada uma é diferente.
+check('   e o NDF de moeda sem quebra é o Vanilla',
+      M.confirmation_type('NDF'), 'NDF VANILLA')
+check('o swap corporativo é um tipo próprio',
+      [M.confirmation_type('SWAP'), M.confirmation_type('SWAP CORPORATIVO')],
+      ['SWAP', 'SWAP CORPORATE'])
 # A linha legada tem Produto 'NDF' — que POR ACASO está na lista — e é o LOB que
 # diz que ela é de mercadoria. Devolver 'NDF' direto a classificaria como termo
 # de moeda: outro documento, outra pasta, outra regra de validação.
@@ -290,6 +311,42 @@ check('e só o FWD Start tem source de confirmação',
       R._GENERIC_ND_MC_SOURCE, {'fwd-start': 'NDF FWD START'})
 check('   que é um dos quatro',
       R._GENERIC_ND_MC_SOURCE['fwd-start'] in R._MC_CONFIRMATION_SOURCES, True)
+# O upload manual do Electronic Inventory e o `save` do app gravavam em pastas
+# DIFERENTES para o mesmo produto ('FXO' × 'FX Options'), e o Monitor procura só
+# onde o app grava — a confirmação subida à mão ficava invisível para ele.
+check('o Confirmation Type do upload é a MESMA lista',
+      list(R._EI_CONFIRMATION_TYPES), list(M.CONFIRMATION_TYPES))
+check('   e todo tipo do upload sabe em que pasta gravar',
+      [t for t in R._EI_CONFIRMATION_TYPES if t not in M.TYPE_FOLDER], [])
+check('o seed cobre todos os tipos',
+      sorted({s['PRODUCT'] for s in R._MC_VALIDATION_SEED}),
+      sorted(M.CONFIRMATION_TYPES))
+
+print('\n== 9b. o upgrade do cadastro de validação ==')
+ANTIGO = [
+    {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'EXEMPT'},
+    {'PRODUCT': 'OPTION', 'LOB': '', 'OTC': 'EXEMPT', 'MO': 'REQUESTED', 'FO': 'EXEMPT'},
+    {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'EXEMPT'},
+    {'PRODUCT': 'OPTION EDG', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'REQUESTED'},
+]
+mig = R._mc_validation_upgrade([dict(r) for r in ANTIGO])
+por_par = {(r['PRODUCT'], r['LOB']): r for r in mig}
+check('o nome do New Deals vira o tipo', ('FXO', '') in por_par, True)
+# 'OPTION EDG' nunca foi um produto: era a opção de câmbio NA LOB EDG. Sem esta
+# conversão a regra "no EDG o FO também valida" não regeria linha nenhuma.
+check('OPTION EDG vira FXO × LOB EDG', ('FXO', 'EDG') in por_par, True)
+check('   e mantém o FO pedido', por_par[('FXO', 'EDG')]['FO'], 'REQUESTED')
+# A edição feita na tela tem de sobreviver ao upgrade, senão o cadastro brigaria
+# com o usuário a cada leitura.
+check('a regra editada à mão é preservada', por_par[('FXO', '')]['OTC'], 'EXEMPT')
+# Tipo sem linha nenhuma entra com a do seed: sem isso ele cairia no DEFAULT_RULE
+# (OTC + MO), que para o SWAP CORPORATE é a regra ERRADA — nele o FO valida.
+check('tipo sem linha ganha a do seed',
+      sorted({r['PRODUCT'] for r in mig}), sorted(M.CONFIRMATION_TYPES))
+check('   com a regra certa no SWAP CORPORATE',
+      por_par.get(('SWAP CORPORATE', ''), {}).get('FO'), 'REQUESTED')
+check('e o upgrade é idempotente',
+      R._mc_validation_upgrade([dict(r) for r in mig]), mig)
 check('o FWD Start é chaveado pelo B3 ID, os outros pelo Deal',
       (R._mc_conf_trade_keys([({'Deal': 'D1', 'B3_ID': 'B1'}, None)], 'ndf-fwdstart'),
        R._mc_conf_trade_keys([({'Deal': 'D1', 'B3_ID': 'B1'}, None)], 'ndf-comm')),

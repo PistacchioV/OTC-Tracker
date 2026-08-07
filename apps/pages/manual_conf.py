@@ -137,16 +137,27 @@ DERIVED_COLUMNS = ['Pending', 'Aging Confirmação']
 KEY_COLUMN = 'Trade ID'
 
 # ── Os tipos de confirmação ─────────────────────────────────────────────────
-# UMA lista, três consumidores: o **Confirmation Type** do upload do Electronic
-# Inventory (`routes._EI_CONFIRMATION_TYPES`), o cadastro Produto × LOB da
-# esteira (`manual-conf-validation`) e o dropdown de Produto do Track
-# Confirmations. Eram três listas escritas à mão, e por isso o cadastro falava
-# 'OPTION' onde a tela de upload falava 'FXO' — o mesmo documento com dois nomes,
-# e uma regra de validação que nunca casava com a linha que ela deveria reger.
+# UMA lista, quatro consumidores: o **Confirmation Type** do upload do Electronic
+# Inventory (`routes._EI_CONFIRMATION_TYPES`), a PASTA em que o documento é
+# gravado (`TYPE_FOLDER`), o cadastro Produto × LOB da esteira
+# (`manual-conf-validation`) e o dropdown de Produto do Track Confirmations.
+# Eram listas escritas à mão, e por isso o cadastro falava 'OPTION' onde a tela
+# de upload falava 'FXO' — o mesmo documento com dois nomes, e uma regra de
+# validação que nunca casava com a linha que ela deveria reger.
+#
+# TUDO EM MAIÚSCULO, sempre: o tipo é um código, não um rótulo, e a comparação
+# entre as telas é feita sobre ele.
+#
+# As três páginas de NDF do New Deals (Vanilla, FWD Start, Other Publisher)
+# gravam o mesmo Product Type e têm cada uma o seu tipo de confirmação aqui: o
+# documento que sai de cada uma é diferente, e um 'NDF' genérico obrigava a
+# adivinhar qual delas gerou a linha.
 #
 # Ela mora aqui, e não no `routes.py`, porque este módulo não importa aquele (o
 # contrário seria circular) e porque é aqui que a esteira compara produtos.
-CONFIRMATION_TYPES = ('NDF', 'NDF COMM', 'OPTION COMM', 'FXO', 'SWAP')
+CONFIRMATION_TYPES = ('NDF VANILLA', 'NDF FWD START', 'OTHER PUBLISHER',
+                      'NDF COMM', 'OPTION COMM', 'FXO',
+                      'SWAP', 'SWAP CORPORATE')
 
 # Os três estágios, na ordem em que a esteira anda.
 STAGE_OTC, STAGE_MO, STAGE_FO = 'OTC', 'MO', 'FO'
@@ -552,20 +563,33 @@ def reject(key, stage, sid, comment):
 # Onde o documento foi gravado
 # =============================================================================
 
-# Produto → pasta do Electronic Inventory. É o MESMO nome que os quatro `save`
-# de confirmação usam ao gravar; um segundo nome aqui faria a pasta existir e o
-# Monitor procurar noutra.
-PRODUCT_FOLDER = {
-    'NDF COMM': 'NDF Commodities',
-    'OPTION COMM': 'Commodities Options',
-    'OPTION': 'FX Options',
-    # 'FXO' é o mesmo produto que 'OPTION' com o nome do Electronic Inventory.
-    # Agora que o Track grava o nome do cadastro, a linha nova chega assim — sem
-    # esta entrada ela ficaria sem pasta e o Monitor diria "nenhum PDF" com o PDF
-    # lá dentro.
-    'FXO': 'FX Options',
-    'NDF FWD START': 'NDF FWD Start',
+# Tipo de confirmação → PASTA do Electronic Inventory. Fonte única do nome da
+# pasta, para os dois jeitos de um documento chegar lá: o `save` que o app faz ao
+# gerar a confirmação e o **upload manual** da tela de Electronic Inventory.
+#
+# Eles gravavam em pastas DIFERENTES para o mesmo produto: o upload usava o nome
+# do tipo cru ('FXO') e o app o nome da pasta ('FX Options'). O Monitor procura
+# PDF só onde o app grava, então a confirmação subida à mão ficava invisível para
+# ele, com o arquivo lá no share.
+#
+# Os quatro primeiros nomes são os que JÁ EXISTEM no share e não podem mudar —
+# renomeá-los deixaria para trás tudo o que já foi gravado.
+TYPE_FOLDER = {
+    'NDF VANILLA':     'NDF Vanilla',
+    'NDF FWD START':   'NDF FWD Start',
+    'OTHER PUBLISHER': 'NDF Other Publisher',
+    'NDF COMM':        'NDF Commodities',
+    'OPTION COMM':     'Commodities Options',
+    'FXO':             'FX Options',
+    'SWAP':            'Swap',
+    'SWAP CORPORATE':  'Swap Corporate',
 }
+
+# Produto (o que está gravado na linha) → pasta. É o TYPE_FOLDER mais os apelidos
+# que o New Deals usa ao criar a linha: 'OPTION' é o nome dele para o FXO.
+PRODUCT_FOLDER = dict(TYPE_FOLDER, **{
+    'OPTION': 'FX Options',
+})
 
 _MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
              6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October',
@@ -588,24 +612,25 @@ def _product_folder(row):
         return direto
     if prod.startswith('NDF FWD'):
         return 'NDF FWD Start'
+    if 'SWAP' in prod:
+        return 'Swap Corporate' if 'CORP' in prod else 'Swap'
     e_comm = 'COMMODIT' in lob or 'COMM' in prod
     if prod.startswith('NDF'):
-        return 'NDF Commodities' if e_comm else None
+        # NDF que não é de mercadoria é o termo de moeda das páginas de Vanilla /
+        # Other Publisher. Antes isto devolvia None, e a linha ficava sem pasta —
+        # ou seja, sem chance de o Monitor achar o documento dela.
+        return 'NDF Commodities' if e_comm else 'NDF Vanilla'
     if prod.startswith(('OPCAO', 'OPTION', 'OPT')):
         return 'Commodities Options' if e_comm else 'FX Options'
     return None
 
 
-# Pasta → tipo de confirmação. A pasta JÁ é a classificação do produto (é ela
-# que separa termo de opção e câmbio de mercadoria), então o tipo sai dela em vez
-# de repetir a mesma árvore de decisão com outro nome — duas respostas para a
-# mesma pergunta é exatamente o que separou 'OPTION' de 'FXO'.
-_FOLDER_TYPE = {
-    'NDF Commodities': 'NDF COMM',
-    'Commodities Options': 'OPTION COMM',
-    'FX Options': 'FXO',
-    'NDF FWD Start': 'NDF',      # FWD Start é um NDF; o que muda é a pasta
-}
+# Pasta → tipo de confirmação, o inverso exato do TYPE_FOLDER. A pasta JÁ é a
+# classificação do produto (é ela que separa termo de opção e câmbio de
+# mercadoria), então o tipo sai dela em vez de repetir a mesma árvore de decisão
+# com outro nome — duas respostas para a mesma pergunta é exatamente o que
+# separou 'OPTION' de 'FXO'.
+_FOLDER_TYPE = {pasta: tipo for tipo, pasta in TYPE_FOLDER.items()}
 
 
 def confirmation_type(produto, lob=''):
@@ -630,9 +655,9 @@ def confirmation_type(produto, lob=''):
     if prod in CONFIRMATION_TYPES:
         return prod
     if 'SWAP' in prod:
-        return 'SWAP'
+        return 'SWAP CORPORATE' if 'CORP' in prod else 'SWAP'
     if prod.startswith('NDF'):
-        return 'NDF'
+        return 'NDF VANILLA'
     return prod
 
 

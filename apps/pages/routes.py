@@ -17895,6 +17895,32 @@ def _le_spn_upgrade(rows):
     return rows
 
 
+# Quem valida a confirmação de cada tipo. Uma linha por tipo, na ordem da lista.
+# Constante de módulo (e não literal dentro do `_MAPPING_DEFS`) porque o `upgrade`
+# também precisa dela: ele completa o arquivo já existente com os tipos que ainda
+# não têm linha nenhuma.
+_MC_VALIDATION_SEED = (
+    {'PRODUCT': 'NDF VANILLA', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda'},
+    {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com início futuro'},
+    {'PRODUCT': 'OTHER PUBLISHER', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com publicador não-BACEN'},
+    {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
+    {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
+    {'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio'},
+    {'PRODUCT': 'FXO', 'LOB': 'EDG', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': 'Opção de EDG — o FO também valida'},
+    {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': ''},
+    {'PRODUCT': 'SWAP CORPORATE', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'REQUESTED', 'NOTES': ''},
+)
+
+
 def _mc_validation_upgrade(rows):
     """Traz o cadastro da esteira para os nomes do Electronic Inventory.
 
@@ -17904,10 +17930,15 @@ def _mc_validation_upgrade(rows):
     primeiro item da lista selecionado, e o primeiro Save do usuário trocaria o
     produto da linha sem ninguém pedir.
 
-    Duas conversões, e a segunda é a que não pode se perder: 'OPTION EDG' não é
+    Três conversões, e a primeira é a que não pode se perder: 'OPTION EDG' não é
     um produto, é a opção de câmbio **na LOB EDG**. Ela vira PRODUCT 'FXO' com
     LOB 'EDG' — que é o desenho Produto × LOB que a tabela sempre teve, e o
     único jeito de a regra "EDG também passa pelo FO" continuar existindo.
+
+    A terceira é o 'NDF' genérico, que existiu entre dois commits do mesmo dia e
+    podia significar tanto Vanilla quanto FWD Start. Ele vira 'NDF VANILLA', e a
+    ambiguidade não custa nada: as duas linhas nascem do seed com a MESMA regra
+    (OTC + MO), então as duas leituras dão no mesmo resultado.
     """
     out, vistos = [], set()
     for r in rows:
@@ -17918,6 +17949,8 @@ def _mc_validation_upgrade(rows):
         lob = str(r.get('LOB') or '').strip()
         if prod == 'OPTION EDG':
             prod, lob = 'FXO', (lob or 'EDG')
+        elif prod == 'NDF':
+            prod = 'NDF VANILLA'
         r['PRODUCT'] = _mc_mod.confirmation_type(prod, lob)
         r['LOB'] = lob
         # A tradução pode encostar duas linhas na mesma chave (o arquivo antigo
@@ -17928,6 +17961,20 @@ def _mc_validation_upgrade(rows):
             continue
         vistos.add(chave)
         out.append(r)
+
+    # Tipo que ainda não tem linha NENHUMA entra com a do seed. Sem isto, o
+    # arquivo de uma instância que já abriu a tela de mapping ficaria sem os
+    # tipos novos, e eles cairiam no DEFAULT_RULE (OTC + MO) — o que para o
+    # SWAP CORPORATE é a regra ERRADA, porque nele o FO também valida.
+    #
+    # O teste é pelo PRODUTO, não pelo par Produto × LOB: quem apagou a linha
+    # coringa de um produto e deixou só a da sua LOB fez isso de propósito, e
+    # ressuscitar a coringa mudaria o comportamento de toda LOB não cadastrada.
+    com_linha = {p for p, _l in vistos}
+    for s in _MC_VALIDATION_SEED:
+        if s['PRODUCT'].upper() not in com_linha:
+            out.append(dict(s))
+            com_linha.add(s['PRODUCT'].upper())
     return out
 
 
@@ -18383,24 +18430,14 @@ _MAPPING_DEFS = {
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         # Os produtos são os TIPOS DE CONFIRMAÇÃO (`_CONFIRMATION_TYPES`), os
-        # mesmos do Confirmation Type do Electronic Inventory. O NDF cobre também
-        # o FWD Start (é um NDF; o que muda é a pasta), e a opção de EDG é a
-        # linha FXO × LOB EDG — o que era 'OPTION EDG', um produto que nenhuma
-        # linha do banco jamais teve.
-        'seed': [
-            {'PRODUCT': 'NDF', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': 'Termo de moeda (inclui FWD Start)'},
-            {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
-            {'PRODUCT': 'OPTION COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': 'Opção de mercadoria'},
-            {'PRODUCT': 'FXO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'EXEMPT', 'NOTES': 'Opção de câmbio'},
-            {'PRODUCT': 'FXO', 'LOB': 'EDG', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'REQUESTED', 'NOTES': 'Opção de EDG — o FO também valida'},
-            {'PRODUCT': 'SWAP', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-             'FO': 'REQUESTED', 'NOTES': ''},
-        ],
+        # mesmos do Confirmation Type do Electronic Inventory — uma linha por
+        # tipo, na ordem da lista. As três páginas de NDF têm cada uma a sua:
+        # elas geram documentos diferentes, e um 'NDF' genérico obrigava a
+        # adivinhar qual delas produziu a confirmação.
+        #
+        # A opção de EDG é a linha FXO × LOB EDG — o que era 'OPTION EDG', um
+        # produto que nenhuma linha do banco jamais teve.
+        'seed': [dict(s) for s in _MC_VALIDATION_SEED],
     },
     # Reconciliação de FXO: a perna INTERNA. Ela chega à Athena com o
     # nome da mesa (o book), enquanto a CETIP registra o código do fundo — sem
@@ -29116,8 +29153,16 @@ def api_ei_upload():
         # Confirmations: Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>. The
         # product folder keeps a busy trading day readable instead of dumping
         # every product's PDFs side by side.
+        #
+        # A pasta sai do `TYPE_FOLDER`, que é o MESMO nome que o app usa ao gravar
+        # a confirmação que ele gera. Antes daqui saía o nome do tipo cru, e o
+        # upload de um FXO ia para `.../FXO/` enquanto o app gravava em
+        # `.../FX Options/` — dois lugares para o mesmo produto, e o Monitor
+        # procurando PDF só no segundo: a confirmação subida à mão ficava
+        # invisível para ele, com o arquivo lá no share.
         prefix = (_ei_sanitize(subtype).upper() or 'CONFIRMATION')
-        product_dir = _ei_sanitize(subtype) or 'Other'
+        pasta = _mc_mod.TYPE_FOLDER.get(_mc_mod.upper_norm(subtype))
+        product_dir = _ei_sanitize(pasta or subtype) or 'Other'
         target_dir = os.path.join(base, 'Confirmations', yyyy, _ei_month_folder(mm), dd, product_dir)
     elif doctype == 'SSI':
         target_dir = os.path.join(base, 'SSI')
