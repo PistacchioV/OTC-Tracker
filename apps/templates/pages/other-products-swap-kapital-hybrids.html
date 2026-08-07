@@ -150,6 +150,11 @@
 }
 #swapchar-page .toggle-vis + label { cursor: pointer; }
 #swapchar-page .btn:active { transform: scale(0.97); }
+
+/* Respiro entre a barra de ferramentas e o cabeçalho da tabela. O `mb-2` da
+   barra sozinho encostava os botões na primeira linha do <thead>, e as duas
+   faixas liam como uma só — o `Add row` parecia parte do cabeçalho. */
+#swapchar-page .card-body > .table-responsive { padding-top: .85rem; }
 @media (prefers-reduced-motion: reduce) {
     #swapchar-page * { transition: none !important; animation: none !important; }
     #swapchar-page .btn:active { transform: none; }
