@@ -341,6 +341,28 @@ h1, h2, h3, h4, h5,
   font-weight: 600;
 }
 
+/* ── Linha de filtro por coluna: texto e placeholder CENTRALIZADOS ──────────
+   Regra do padrão de tabela do app, aqui e não em cada página: o placeholder é
+   o nome da coluna e o cabeçalho acima dele é centralizado, então o campo
+   alinhado à esquerda quebra a coluna visual. Cada tela batiza a classe do
+   próprio campo (`cog-col-filter`, `sc-col-filter`, `acc-th-filter input`, …),
+   e era essa repetição que fazia a tela nova nascer sem a regra.
+
+   O seletor é ESTRUTURAL de propósito. Neste app, um <input> de texto dentro de
+   um <th> do <thead> é sempre um campo da linha de filtro por coluna — não há
+   outro uso. E com `scrollX` o DataTables clona o cabeçalho para uma tabela
+   irmã e REMOVE o id dela, então uma regra presa ao id da tabela não alcançaria
+   justamente o campo que se vê.
+
+   Este arquivo é carregado DEPOIS do extra_css das páginas (ver base.html), o
+   que faz a regra valer sem !important — a mesma ordem que torna o `.card` do
+   tema difícil de sobrescrever. */
+table thead th input[type="text"],
+table thead th input[type="search"],
+table thead th input:not([type]) {
+  text-align: center;
+}
+
 /* ── BOTÕES: estilo moderno unificado (Linear/Vercel) ─────────────────────── */
 .btn {
   --vr-btn-radius: 10px;
