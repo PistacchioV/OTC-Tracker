@@ -72,12 +72,26 @@
 #ndm-page .ndm-chip--approved { background: rgba(94, 92, 230, .16);   color: #5e5ce6; }
 #ndm-page .ndm-chip--sent     { background: rgba(0, 102, 204, .14);   color: #0066cc; }
 #ndm-page .ndm-chip--success  { background: rgba(26, 138, 74, .16);   color: #1a8a4a; }
+/* As etapas da ESTEIRA de confirmação, que continuam o ciclo depois do
+   documento gerado. As cores são as MESMAS do Confirmations Monitor (OTC azul,
+   MO âmbar, FO ciano, Ok verde): as duas telas mostram a mesma fila, e cores
+   diferentes fariam parecer estados diferentes. */
+#ndm-page .ndm-chip--pending-otc   { background: rgba(0, 102, 204, .14);  color: #0066cc; }
+#ndm-page .ndm-chip--pending-mo,
+#ndm-page .ndm-chip--pending-mo-fo { background: rgba(247, 184, 75, .20); color: #8a6100; }
+#ndm-page .ndm-chip--pending-fo    { background: rgba(67, 191, 229, .16); color: #1d7ea8; }
+#ndm-page .ndm-chip--ok            { background: rgba(26, 138, 74, .16);  color: #1a8a4a; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--new      { color: #7fd4f2; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--generated{ color: #c4b5fd; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--pending  { color: #ffd54f; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--approved { color: #a5a3ff; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--sent     { color: #7db4f5; }
 [data-bs-theme=dark] #ndm-page .ndm-chip--success  { color: #7ed6a2; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--pending-otc   { color: #7db4f5; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--pending-mo,
+[data-bs-theme=dark] #ndm-page .ndm-chip--pending-mo-fo { color: #ffd54f; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--pending-fo    { color: #7fd4f2; }
+[data-bs-theme=dark] #ndm-page .ndm-chip--ok            { color: #7ed6a2; }
 
 /* Barra proporcional por status (leitura instantânea do que falta) */
 #ndm-page .ndm-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--ins-tertiary-bg, #eef0f4); }
@@ -88,6 +102,11 @@
 #ndm-page .ndm-bar .sg-approved { background: #5e5ce6; }
 #ndm-page .ndm-bar .sg-sent     { background: #0066cc; }
 #ndm-page .ndm-bar .sg-success  { background: #1a8a4a; }
+#ndm-page .ndm-bar .sg-pending-otc   { background: #0066cc; }
+#ndm-page .ndm-bar .sg-pending-mo,
+#ndm-page .ndm-bar .sg-pending-mo-fo { background: #f7b84b; }
+#ndm-page .ndm-bar .sg-pending-fo    { background: #43bfe5; }
+#ndm-page .ndm-bar .sg-ok            { background: #1a8a4a; }
 #ndm-page .ndm-bar .sg-other    { background: #8a969c; }
 
 /* Subitens por LE (JPM / MGT / LAW / ATA) — contagem por entidade do card */
@@ -322,7 +341,12 @@
         'intrag-option':      'ti-briefcase'
     };
     // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
-    var STATUS_ORDER = ['New', 'Pending', 'Generated', 'Approved', 'Sent', 'Success'];
+    // O ciclo inteiro da confirmação numa ordem só: o documento (New →
+    // Generated → … → Success) e, depois dele, as mesas da esteira. Um grupo que
+    // já entrou na esteira aparece na etapa dela, nunca mais em 'Generated' — é
+    // o passo seguinte do MESMO ciclo, não outro.
+    var STATUS_ORDER = ['New', 'Pending', 'Generated', 'Approved', 'Sent', 'Success',
+                        'Pending OTC', 'Pending MO/FO', 'Pending MO', 'Pending FO', 'Ok'];
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -333,7 +357,11 @@
         var el = document.querySelector('[data-lang="' + key + '"]');
         return (el && el.textContent.trim()) || fallback;
     }
-    function slug(status) { return String(status).toLowerCase(); }
+    // 'Pending MO/FO' → 'pending-mo-fo'. Só minusculizar deixava espaço e barra
+    // no nome da classe, e o chip saía sem cor nenhuma.
+    function slug(status) {
+        return String(status).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
     function known(status) { return STATUS_ORDER.indexOf(status) !== -1; }
 
     /* ── Anel de progresso do card ────────────────────────────────────────────
@@ -342,7 +370,10 @@
        por status, não só "é Success ou não" — assim a cor já se move quando as
        operações avançam para Sent/Approved. Status desconhecido pesa 0 (ainda
        não está pronto), o que mantém o vermelho honesto. */
-    var STATUS_WEIGHT = { 'New': 0, 'Pending': 0.25, 'Generated': 0.4, 'Approved': 0.6, 'Sent': 0.8, 'Success': 1 };
+    // A esteira pesa DEPOIS do documento: gerar não é confirmar, e o anel só
+    // fecha em verde quando a confirmação foi assinada por todas as mesas.
+    var STATUS_WEIGHT = { 'New': 0, 'Pending': 0.25, 'Generated': 0.4, 'Approved': 0.6, 'Sent': 0.8, 'Success': 1,
+                          'Pending OTC': 0.5, 'Pending MO/FO': 0.7, 'Pending MO': 0.75, 'Pending FO': 0.75, 'Ok': 1 };
     var PROG_STOPS = [[220, 53, 69], [247, 184, 75], [26, 138, 74]];  // #dc3545 → #f7b84b → #1a8a4a
     function progressOf(c) {
         if (!c.total) return null;

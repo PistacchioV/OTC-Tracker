@@ -24,6 +24,8 @@ var PAGE_URL = {
     'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
     'Recon FXO': '/reconciliation-fxo',
     'Reconciliation': '/reconciliation-payrec', 'Pending Confirmation': '/pending-confirmation',
+    // A esteira de confirmacao manual.
+    'Confirmation': '/manual-confirmation/monitor',
     'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',

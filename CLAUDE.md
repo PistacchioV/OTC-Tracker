@@ -640,6 +640,25 @@ esconderia o único estado que não pede atenção). O status cru fica em `_stat
 **fora de `COLUMNS`** — é ele que permite apagar o comentário e a linha voltar a
 dizer `Partial - Cntpy` em vez de ficar `Justified` para sempre.
 
+### O card de Confirmations do New Deals Monitor mostra UM ciclo só
+
+Do documento até a assinatura: `New → Generated → … → Success` é a geração, e
+`Pending OTC → Pending MO/FO → Ok` é a esteira. Quando o grupo já tem linha na
+esteira, a etapa dela **vence** o status do documento (mostrar `Generated` numa
+confirmação já em Pending MO é parar o relógio na metade), e o anel de progresso
+só fecha em verde no `Ok`.
+
+O join é pelos **Trade IDs** (`_conf_segregate` coleta `Deal` e `B3_ID` de cada
+grupo), nunca por contraparte × mercadoria: os dois lados normalizam nome e
+mercadoria de jeitos diferentes, e um de-para por texto casaria errado em
+silêncio. Os dois identificadores vão juntos porque a chave da esteira é o Deal
+para quase todo produto e o **B3 ID** para o FWD Start. O grupo vale pela
+operação **menos avançada** (`_CONF_STAGE_ORDER`) — dizer `Ok` porque uma das dez
+foi validada esconderia as nove restantes —, e operação que ainda não entrou na
+esteira não conta, senão um documento recém-gerado nasceria vermelho. O índice é
+lido **uma vez por request** e passado aos quatro cards: dentro do
+`_conf_stage_counts` ele abriria os dois DuckDB oito vezes na mesma tela.
+
 ### A esteira de confirmação manual é um gancho para a frente
 
 `_mc_save_from_deal` espelha para Manual Confirmations a operação que acabou de

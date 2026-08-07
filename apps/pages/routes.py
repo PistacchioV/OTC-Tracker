@@ -225,6 +225,10 @@ _NOTIF_PAGE_URL = {
     'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
     'Reconciliation': '/reconciliation-payrec',
     'Pending Confirmation': '/pending-confirmation',
+    # A esteira de confirmação manual. O rótulo é 'Confirmation' (e não
+    # 'Manual Confirmation') porque é o que as notificações já gravadas
+    # carregam: renomear deixaria o histórico do sino sem destino.
+    'Confirmation': '/manual-confirmation/monitor',
     'Support': '/tickets-list',
 }
 
@@ -4105,6 +4109,34 @@ def _pc_bar_series(items, keyfield, labelfn, maxpx=60):
              'h': max(3, int(round((it.get('volume') or 0) * maxpx / hi)))} for it in items]
 
 
+def _pc_metrics_stamp_now(series, key, periodo, total):
+    """Carimba a leitura de AGORA no ponto do período em curso e refaz o `pct`.
+
+    A série de história sai dos SNAPSHOTS em disco (o último de cada mês/dia) e o
+    e-mail é gerado ao vivo. Sem isto o cartão dizia 177 e a última barra dizia
+    167: quem lia não tinha como saber se o +9% ia de 153 para 167 ou para 177.
+
+    Mês e dia em curso não estão fechados — o valor deles é o de agora, que é
+    exatamente o que este e-mail reporta, e é o mesmo número que a tabela por
+    grupo econômico logo abaixo soma. O `pct` é recalculado contra o ponto
+    anterior; sem isso a barra subiria e a variação continuaria a do snapshot,
+    trocando uma incoerência por outra.
+
+    Sem ponto para o período em curso a série ganha um — o e-mail do dia 1º de um
+    mês novo mostrava a última barra do mês anterior como se fosse a de hoje.
+    """
+    out = [dict(p) for p in series]
+    anterior = out[-2]['volume'] if len(out) >= 2 else None
+    if out and out[-1].get(key) == periodo:
+        out[-1]['volume'] = total
+    else:
+        anterior = out[-1]['volume'] if out else None
+        out.append({key: periodo, 'volume': total, 'pct': None})
+    out[-1]['pct'] = (None if anterior in (None, 0)
+                      else int(round((total - anterior) * 100.0 / anterior)))
+    return out
+
+
 def _fmt_month_lbl(period):     # "2025-07" -> "Jul/25"
     try:
         y, m = period.split('-')
@@ -4133,8 +4165,12 @@ def _build_daily_metric_eml(ref, to_list, cc_list, bcc_list):
         rows, source = _pc_latest_snapshot_rows()
         pivot, totals = _pc_metrics_pivot(rows)
         hist = _pc_metrics_history().get('gt30') or {}
-        monthly = hist.get('monthly') or []
-        daily = hist.get('daily') or []
+        # O mês e o dia CORRENTES valem pela leitura de agora — que é o número do
+        # cartão e o mesmo que a tabela abaixo soma. Ver `_pc_metrics_stamp_now`.
+        monthly = _pc_metrics_stamp_now(hist.get('monthly') or [], 'period',
+                                        ref.strftime('%Y-%m'), totals['total'])
+        daily = _pc_metrics_stamp_now(hist.get('daily') or [], 'date',
+                                      ref.strftime('%Y-%m-%d'), totals['total'])
         recent_m = monthly[-13:]
         month_bars = _pc_bar_series(recent_m, 'period', _fmt_month_lbl)
         day_bars = _pc_bar_series(daily, 'date', _fmt_day_lbl)
@@ -24187,9 +24223,18 @@ def _conf_segregate(deals, family_fn, merc_fn=None):
         key = (acr, merc, fam)
         g = groups.setdefault(key, {
             'acronym': acr, 'client': client, 'mercadoria': merc, 'family': fam,
-            'count': 0, 'eligible': 0,
+            'count': 0, 'eligible': 0, 'trades': [],
         })
         g['count'] += 1
+        # Os identificadores das operações do grupo. É por eles que o Monitor
+        # acha a confirmação na esteira: `Trade ID` de lá é o Deal para quase
+        # todo produto e o B3 ID para o FWD Start, então os dois vão juntos.
+        # Casar por contraparte × mercadoria seria um de-para por texto entre
+        # dois cadastros que normalizam nomes de jeitos diferentes.
+        for _c in ('Deal', 'B3_ID'):
+            _v = str(deal.get(_c) or '').strip()
+            if _v:
+                g['trades'].append(_v)
         if not g['client'] and client:
             g['client'] = client
         if st == _CONF_GEN_ELIGIBLE_STATUS:
@@ -24203,6 +24248,82 @@ def _conf_segregate(deals, family_fn, merc_fn=None):
 
 def _conf_ndfcomm_groups(ref):
     return _conf_segregate(_conf_load_ndfcomm(ref), _conf_deal_family)
+
+
+# A esteira continua o ciclo do documento. Depois do New → Generated → Success da
+# geração vêm as três mesas (Pending OTC → Pending MO e/ou FO → Ok), e é isso que
+# o card do Monitor mostra: um ciclo só, do documento até a assinatura.
+#
+# Ordem da MENOS avançada para a mais: um grupo do New Deals cobre várias
+# operações, e o grupo vale pela que está mais atrás — dizer 'Ok' porque UMA das
+# dez foi validada esconderia as nove que faltam.
+_CONF_STAGE_ORDER = ('Pending OTC', 'Pending MO/FO', 'Pending MO', 'Pending FO', 'Ok')
+
+
+def _conf_esteira_stages():
+    """Trade ID → etapa da esteira, de TODAS as linhas (pendentes e concluídas).
+
+    Uma leitura só por request: o Monitor tem quatro cards de confirmação e
+    dezenas de grupos, e um `find_row` por operação abriria o DuckDB uma vez por
+    trade. Falha em silêncio devolvendo {} — sem a esteira o card volta a mostrar
+    o status do documento, que é o que ele mostrava antes.
+    """
+    out = {}
+    try:
+        from apps.pages import manual_conf as _mc
+        for base in ('pending', 'ok'):
+            for r in _mc.load_rows(base):
+                tid = str(r.get(_mc.KEY_COLUMN, '') or '').strip()
+                if tid:
+                    out[tid] = str(r.get('Pending', '') or '') or _mc.STATUS_OK
+    except Exception:
+        log.warning('[deals-monitor] não consegui ler a esteira:\n%s', traceback.format_exc())
+    return out
+
+
+def _conf_group_stage(group, stages):
+    """A etapa da esteira de UM grupo, ou None se nenhuma operação dele chegou lá.
+
+    Vale a operação MENOS avançada (ver `_CONF_STAGE_ORDER`). Operação que ainda
+    não entrou na esteira não conta: o grupo do New Deals nasce antes dela, e
+    tratá-la como 'atrasada' pintaria de vermelho um documento recém-gerado.
+    """
+    def rank(s):
+        # Etapa fora da lista fica no fim: uma etapa nova que ninguém mapeou aqui
+        # não pode segurar o grupo inteiro no vermelho.
+        return _CONF_STAGE_ORDER.index(s) if s in _CONF_STAGE_ORDER else len(_CONF_STAGE_ORDER)
+
+    pior = None
+    for tid in (group.get('trades') or ()):
+        st = stages.get(tid)
+        if not st:
+            continue
+        if pior is None or rank(st) < rank(pior):
+            pior = st
+    return pior
+
+
+def _conf_stage_counts(groups, doc_state, key_fn=None, stages=None):
+    """Os chips do card: um por grupo, na etapa em que ele está.
+
+    A etapa da esteira VENCE o status do documento quando existe — ela é o passo
+    seguinte do mesmo ciclo, e mostrar 'Generated' numa confirmação que já está
+    em Pending MO seria parar o relógio na metade.
+
+    `stages` vem de fora porque o Monitor monta QUATRO cards por request: lido
+    aqui dentro, o índice da esteira abriria os dois DuckDB oito vezes na mesma
+    tela.
+    """
+    if stages is None:
+        stages = _conf_esteira_stages() if any(g.get('trades') for g in groups) else {}
+    counts = Counter()
+    for g in groups:
+        st = _conf_group_stage(g, stages)
+        if not st:
+            entry = (doc_state.get(key_fn(g)) if key_fn else None) or {}
+            st = entry.get('status') or 'New'
+        counts[st] += 1
+    return dict(counts)
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/confirmations')
@@ -26379,14 +26500,15 @@ def _ndm_monitor_snapshot(ref):
     # fluxo completo; os demais produtos só contam a segregação.
     conf_groups, _deal_statuses, _conf_deal_total = _conf_ndfcomm_groups(ref)
     conf_state = _conf_state_load(ref)
-    conf_statuses = Counter()
-    for g in conf_groups:
-        entry = conf_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
-        conf_statuses[entry.get('status') or 'New'] += 1
+    # UMA leitura da esteira para os quatro cards de confirmação.
+    conf_stages = _conf_esteira_stages()
+    conf_statuses = _conf_stage_counts(
+        conf_groups, conf_state,
+        lambda g: _conf_key(g['acronym'], g['mercadoria'], g['family']), conf_stages)
     conf_cards = [{
         'key': 'conf-ndf-commodities', 'label': 'NDF Commodities',
         'url': '/new_deals-ndf-commodities', 'soon': False,
-        'total': len(conf_groups), 'statuses': dict(conf_statuses),
+        'total': len(conf_groups), 'statuses': conf_statuses,
         'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
                     'family': g['family'], 'count': g['count']} for g in conf_groups],
     }]
@@ -26415,13 +26537,18 @@ def _ndm_monitor_snapshot(ref):
                     continue
                 acr = str(d.get('Acronym') or '').strip() or client or '(sem contraparte)'
                 merc = str(d.get('Commodities') or '').strip().upper() if by_commodity else ''
-                g = groups.setdefault((acr, merc), {'acronym': acr, 'mercadoria': merc, 'count': 0})
+                g = groups.setdefault((acr, merc), {'acronym': acr, 'mercadoria': merc,
+                                                    'count': 0, 'trades': []})
                 g['count'] += 1
+                for c in ('Deal', 'B3_ID'):
+                    v = str(d.get(c) or '').strip()
+                    if v:
+                        g['trades'].append(v)
         ordered = sorted(groups.values(), key=lambda g: (g['acronym'], g['mercadoria']))
         return {
             'key': key, 'label': label, 'url': url, 'soon': False,
             'total': len(ordered),
-            'statuses': ({'New': len(ordered)} if ordered else {}),
+            'statuses': _conf_stage_counts(ordered, {}, None, conf_stages),
             'groups': [{'label': ('{} · {}'.format(g['acronym'], g['mercadoria'])
                                   if g['mercadoria'] else g['acronym']),
                         'count': g['count']} for g in ordered],
@@ -26438,14 +26565,13 @@ def _ndm_monitor_snapshot(ref):
     # Commodities Options: ciclo próprio da confirmação, igual ao NDF Comm.
     opt_groups, _opt_deal_statuses, _opt_total = _conf_optcomm_groups(ref)
     opt_state = _conf_state_load(ref, 'opt-comm')
-    opt_statuses = Counter()
-    for g in opt_groups:
-        entry = opt_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
-        opt_statuses[entry.get('status') or 'New'] += 1
+    opt_statuses = _conf_stage_counts(
+        opt_groups, opt_state,
+        lambda g: _conf_key(g['acronym'], g['mercadoria'], g['family']), conf_stages)
     conf_cards.append({
         'key': 'conf-opt-commodities', 'label': 'Commodities Options',
         'url': '/new_deals-opt-commodities', 'soon': False,
-        'total': len(opt_groups), 'statuses': dict(opt_statuses),
+        'total': len(opt_groups), 'statuses': opt_statuses,
         'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
                     'family': g['family'], 'count': g['count']} for g in opt_groups],
     })
@@ -26453,14 +26579,13 @@ def _ndm_monitor_snapshot(ref):
     # ao Commodities Options — a segregação aqui é por contraparte × moeda base.
     fxo_groups, _fxo_deal_statuses, _fxo_total = _conf_optfxo_groups(ref)
     fxo_state = _conf_state_load(ref, 'opt-fxo')
-    fxo_statuses = Counter()
-    for g in fxo_groups:
-        entry = fxo_state.get(_conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
-        fxo_statuses[entry.get('status') or 'New'] += 1
+    fxo_statuses = _conf_stage_counts(
+        fxo_groups, fxo_state,
+        lambda g: _conf_key(g['acronym'], g['mercadoria'], g['family']), conf_stages)
     conf_cards.append({
         'key': 'conf-opt-fxo', 'label': 'FX Options',
         'url': '/new_deals-opt-fxo', 'soon': False,
-        'total': len(fxo_groups), 'statuses': dict(fxo_statuses),
+        'total': len(fxo_groups), 'statuses': fxo_statuses,
         'groups': [{'label': '{} · {}'.format(g['acronym'], g['mercadoria']),
                     'family': g['family'], 'count': g['count']} for g in fxo_groups],
     })
@@ -28935,7 +29060,11 @@ def api_mc_validate():
         return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
-                         'Validada pelo {} · {}{}'.format(
+                         # Em INGLÊS como todo o resto do sino: o detalhe é
+                         # gravado no banco e o feed o mostra cru, então texto de
+                         # servidor em português aparecia em português com a tela
+                         # em inglês.
+                         'Validated by {} · {}{}'.format(
                              stage, rows[0].get('Cliente', '') or keys[0],
                              ' (%d ops)' % len(rows) if len(rows) > 1 else ''))
     return jsonify({'success': True, 'row': rows[0], 'rows': rows})
@@ -28984,7 +29113,11 @@ def api_mc_reject():
         log.warning('[manual-conf] aviso de reject falhou:\n%s', traceback.format_exc())
     _create_notification(sid, session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
-                         'Rejeitada pelo {} · {}'.format(stage, before.get('Cliente', '') or key))
+                         # `keys[0]`, não `key`: essa variável nunca existiu nesta
+                         # função — a linha só não estourava porque o `or` à
+                         # esquerda quase sempre tem o Cliente preenchido.
+                         'Rejected by {} · {}'.format(
+                             stage, before.get('Cliente', '') or (keys[0] if keys else '')))
     return jsonify({'success': True, 'emailed': bool(emailed)})
 
 
