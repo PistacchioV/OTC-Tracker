@@ -28521,12 +28521,12 @@ def _mc_confirmation_docs(row, trades=None):
         if not cliente:
             # Sem log não há como distinguir "linha incompleta" de "pasta não
             # achada" olhando a tela — os dois viram o mesmo "no PDF".
-            log.info('[manual-conf] docs: linha sem pasta derivável — Cliente=%r Produto=%r Data=%r',
+            log.warning('[manual-conf] docs: linha sem pasta derivável — Cliente=%r Produto=%r Data=%r',
                      row.get('Cliente'), row.get('Produto'), row.get('Data Operação'))
             return []
         nomes_disco = _ei_client_dir_names(cliente)
         if not nomes_disco:
-            log.info('[manual-conf] docs: cliente %r não resolveu para pasta nenhuma', cliente)
+            log.warning('[manual-conf] docs: cliente %r não resolveu para pasta nenhuma', cliente)
             return []
         # TODAS as gêmeas de pontuação da contraparte ('S.A' e 'SA'), não só a
         # vencedora do scan: os documentos ficaram repartidos entre elas na
@@ -28549,12 +28549,15 @@ def _mc_confirmation_docs(row, trades=None):
         if not out:
             # O diagnóstico que faltava: qual caminho o servidor tentou, e se a
             # pasta do cliente sequer existe — é a diferença entre "o nome da
-            # pasta não bate" e "o documento não está lá".
+            # pasta não bate" e "o documento não está lá". WARNING de propósito:
+            # a instância do time só imprime INFO do logger de requests; o dos
+            # módulos sai a partir de WARNING, e um diagnóstico que o console
+            # descarta não diagnostica nada.
             estados = ', '.join(
                 '%s (%s)' % (b, 'existe' if os.path.isdir(
                     _ei_long_path(os.path.normpath(os.path.abspath(b)))) else 'NAO EXISTE')
                 for b in bases)
-            log.info('[manual-conf] docs: nenhum PDF para %r — pasta(s) do cliente: %s; tentadas: %s',
+            log.warning('[manual-conf] docs: nenhum PDF para %r — pasta(s) do cliente: %s; tentadas: %s',
                      cliente, estados, ' | '.join(rels))
             return []
         # A pasta do dia tem UM PDF por confirmação (MATARIPE - OLEO - … nº
