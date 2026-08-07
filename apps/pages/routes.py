@@ -142,8 +142,8 @@ _CSP_REPORT_ONLY = (
     "object-src 'none'; "
     "frame-ancestors 'self'; "
     "img-src 'self' data:; "
-    "font-src 'self' data: https://fonts.gstatic.com; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
     "script-src 'self' 'unsafe-inline' "
     "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://apexcharts.com; "
     "connect-src 'self'; "
@@ -28482,9 +28482,14 @@ def _mc_confirmation_docs(row, trades=None):
         from apps.pages import manual_conf as _mc
         cliente, rels = _mc.confirmation_folders(row)
         if not cliente:
+            # Sem log não há como distinguir "linha incompleta" de "pasta não
+            # achada" olhando a tela — os dois viram o mesmo "no PDF".
+            log.info('[manual-conf] docs: linha sem pasta derivável — Cliente=%r Produto=%r Data=%r',
+                     row.get('Cliente'), row.get('Produto'), row.get('Data Operação'))
             return []
         base = _ei_resolve_client_dir(cliente)
         if not base:
+            log.info('[manual-conf] docs: cliente %r não resolveu para pasta nenhuma', cliente)
             return []
         out, vistos = [], set()
         for rel in rels:
@@ -28499,6 +28504,15 @@ def _mc_confirmation_docs(row, trades=None):
                 out.append({'name': os.path.splitext(name)[0],
                             'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
                                     '&rel=' + quote(rel + '/' + name))})
+        if not out:
+            # O diagnóstico que faltava: qual caminho o servidor tentou, e se a
+            # pasta do cliente sequer existe — é a diferença entre "o nome da
+            # pasta não bate" e "o documento não está lá".
+            base_existe = os.path.isdir(_ei_long_path(os.path.normpath(os.path.abspath(base))))
+            log.info('[manual-conf] docs: nenhum PDF para %r — pasta do cliente %s (%s); tentadas: %s',
+                     cliente, base, 'existe' if base_existe else 'NAO EXISTE',
+                     ' | '.join(rels))
+            return []
         # A pasta do dia tem UM PDF por confirmação (MATARIPE - OLEO - … nº
         # DBH-1OJ8L5, MATARIPE - PLATTS - … nº DBH-1OJAXM), e o filtro tem de
         # escolher os do grupo.
