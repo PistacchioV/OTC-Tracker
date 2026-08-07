@@ -199,6 +199,12 @@ Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tr
 
 ![Conciliação — Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 
+#### Conciliação — FXO
+
+Concilia a posição de opções de câmbio registrada na CETIP (DPOSICAO) com a base interna (Athena), campo a campo: direção, Put/Call, contraparte, quantidade, prêmio, strike, datas de negociação e vencimento, fixings e estilo (Asian/European). A **Reference date** abre em D-1 pelo calendário ANBIMA. Os cards contam Total / OK / NOK / Sem match e filtram a tabela, e a faixa de chips indica qual campo está divergindo. A célula em divergência vem destacada.
+
+![Conciliação — FXO](docs/sop-screenshots/reconciliation-fxo.png)
+
 ### Documentação (Documentation)
 
 #### Pending Confirmation
@@ -206,6 +212,18 @@ Concilia os valores a pagar e a receber (Pay/Rec), apontando as diferenças a tr
 Fila das operações com confirmação pendente, para o operador acompanhar e tratar o que ainda não foi confirmado pela contraparte/câmara.
 
 ![Pending Confirmation](docs/sop-screenshots/pending-confirmation.png)
+
+#### Manual Confirmation — Confirmations Monitor
+
+Fila de validação da confirmação manual, na ordem **OTC → MO e/ou FO → Ok** (quem valida cada produto sai do cadastro *Manual Confirmations — Validation Trail*, em Mapping). Cada item é **uma confirmação** — contraparte × produto × LOB × data de negociação —, e não uma operação: o botão *Abrir* mostra o PDF gravado no Electronic Inventory, *Validar* carimba a etapa com data, hora e SPN, e *Rejeitar* (MO/FO) pede comentário, avisa o Brazil OTC Ops e devolve a confirmação ao OTC.
+
+![Manual Confirmation — Confirmations Monitor](docs/sop-screenshots/manual-confirmation_monitor.png)
+
+#### Manual Confirmation — Track Confirmations
+
+Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira.
+
+![Manual Confirmation — Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 
 ### Regulatório (Regulatory)
 
@@ -305,7 +323,7 @@ Abertura de um novo chamado de suporte interno.
 
 ### 5.99. Módulos pendentes (a desenvolver) 🔧
 
-Os 29 módulos abaixo estão previstos no menu lateral mas **ainda não foram desenvolvidos** no código (as rotas retornam 404). Conforme cada um for entregue: (1) recapture a tela — veja a seção 8; (2) marque o item como concluído `- [x]`; (3) mova-o para a seção 5 correspondente usando o bloco-modelo da seção 8.
+Os módulos abaixo estão previstos no menu lateral mas **ainda não foram desenvolvidos** no código (as rotas retornam 404). Conforme cada um for entregue: (1) recapture a tela — veja a seção 8; (2) marque o item como concluído `- [x]`; (3) mova-o para a seção 5 correspondente usando o bloco-modelo da seção 8.
 
 **Aplicações — Daily Settlement (Apps)**
 
@@ -319,7 +337,6 @@ Os 29 módulos abaixo estão previstos no menu lateral mas **ainda não foram de
 **Documentação (Documentation)**
 
 - [ ] **Metrics** — `/metrics`
-- [ ] **Manual Confirmation** — `/manual-confirmation`
 - [ ] **CGD** — `/cgd`
 
 **Regulatório (Regulatory)**

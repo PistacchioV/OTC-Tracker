@@ -256,7 +256,29 @@ Caminho no menu: **Documentation → Pending Confirmation**.
 
 ---
 
-### 3.11. Reference Data — cadastrar contrapartes
+### 3.11. Manual Confirmation — validar antes de enviar ao cliente
+
+Caminho no menu: **Documentation → Manual Confirmation → Confirmations Monitor** (e **Track Confirmations**).
+
+![Confirmations Monitor](docs/sop-screenshots/manual-confirmation_monitor.png)
+
+A confirmação passa por uma esteira antes de sair: **OTC → MO e/ou FO → Ok**. Quem valida cada produto está cadastrado em **Mapping → Manual Confirmations — Validation Trail** (Produto × LOB); MO e FO validam em paralelo, não em fila.
+
+1. O **Confirmations Monitor** tem um card por etapa (Pending OTC, Pending MO, Pending FO) com a fila de cada mesa.
+2. Cada item da fila é **uma confirmação**, não uma operação: o documento cobre todas as operações da mesma contraparte, produto, LOB e data de negociação, e o item diz quantas são.
+3. **Abrir** mostra o PDF que está gravado no Electronic Inventory — o papel que vai ao cliente.
+4. **Validar** carimba a etapa com a data, a hora e o SPN de quem validou, e a confirmação passa para a etapa seguinte.
+5. **Rejeitar** (MO e FO) pede um comentário, avisa o Brazil OTC Ops por e-mail e devolve a confirmação para o OTC. As validações já dadas são apagadas: o documento vai ser refeito.
+
+![Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
+
+A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa.
+
+> As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, quando a confirmação é gerada no New Deals.
+
+---
+
+### 3.12. Reference Data — cadastrar contrapartes
 
 Caminho no menu: **Data Base → Reference Data**.
 
@@ -270,7 +292,7 @@ Caminho no menu: **Data Base → Reference Data**.
 
 ---
 
-### 3.12. Mapping — cadastrar de-para
+### 3.13. Mapping — cadastrar de-para
 
 Caminho no menu: **Data Base → Mapping**.
 
@@ -299,7 +321,7 @@ Tipos disponíveis:
 
 ---
 
-### 3.13. Index B3 — cadastrar ativos
+### 3.14. Index B3 — cadastrar ativos
 
 Caminho no menu: **Data Base → Index B3**.
 
@@ -309,7 +331,7 @@ Aqui ficam os ativos subjacentes aceitos pela B3. Um ativo não cadastrado imped
 
 ---
 
-### 3.14. Control Panel — rotinas e destinatários de e-mail
+### 3.15. Control Panel — rotinas e destinatários de e-mail
 
 Caminho no menu: **Apps → Control Panel**.
 
@@ -334,7 +356,7 @@ Rotinas disponíveis:
 
 ---
 
-### 3.15. Live Position — conferir a posição em custódia
+### 3.16. Live Position — conferir a posição em custódia
 
 Caminho no menu: **Live Position → NDF** (e demais produtos).
 
@@ -346,7 +368,7 @@ Caminho no menu: **Live Position → NDF** (e demais produtos).
 
 ---
 
-### 3.16. Reconciliations — conciliar
+### 3.17. Reconciliations — conciliar
 
 Caminho no menu: **Reconciliations**.
 
@@ -354,9 +376,12 @@ Caminho no menu: **Reconciliations**.
 
 ![Conciliação Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
 
+![Conciliação de FXO](docs/sop-screenshots/reconciliation-fxo.png)
+
 1. **Comitente** — confronta a posição por comitente.
 2. **Pay/Rec** — confronta pagamentos e recebimentos.
-3. As divergências aparecem destacadas na própria tabela.
+3. **FXO** — confronta a posição da CETIP com a Athena, campo a campo. A **Reference date** abre em D-1 pelo calendário ANBIMA; os cards contam Total, OK, NOK e Sem match e filtram a tabela ao clique, e a faixa de chips diz **qual campo** está divergindo.
+4. As divergências aparecem destacadas na própria tabela.
 
 ---
 
