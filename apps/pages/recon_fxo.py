@@ -996,6 +996,20 @@ def _comment_key(row):
     return str(row.get('Combinação de operações', '') or '').strip()
 
 
+# Status que já foram gravados em cache com outro nome. A recon é persistida por
+# data, e o arquivo de ontem continua sendo lido depois de o nome mudar — sem
+# esta tradução na leitura, a linha antiga fica com o rótulo velho, o badge cai
+# no cinza de "desconhecido", a ordenação por gravidade a joga para o fim e o
+# card correspondente conta ZERO com as linhas ali na tela.
+_STATUS_ANTIGOS = {
+    'Sem match': ST_UNMATCHED_B3,
+}
+
+
+def _status_atual(s):
+    return _STATUS_ANTIGOS.get(str(s or '').strip(), str(s or ''))
+
+
 def load_comments():
     """{chave: comentário} do disco. Arquivo ausente ou ilegível = {}."""
     try:
@@ -1053,8 +1067,9 @@ def aplicar_comentarios(rows, comments=None):
         comments = load_comments()
     for r in rows:
         # A linha vinda de um cache antigo não tem `_status`; o Status dela ainda
-        # é o cru, porque ela foi gravada antes de existir justificativa.
-        raw = str(r.get(STATUS_RAW_KEY) or r.get('Status', '') or '')
+        # é o cru, porque ela foi gravada antes de existir justificativa. E o
+        # nome pode ser o de antes ('Sem match'), daí o `_status_atual`.
+        raw = _status_atual(r.get(STATUS_RAW_KEY) or r.get('Status', ''))
         r[STATUS_RAW_KEY] = raw
         txt = comments.get(_comment_key(r), '')
         r[COMMENT_COLUMN] = txt

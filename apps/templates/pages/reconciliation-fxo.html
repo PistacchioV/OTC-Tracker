@@ -153,7 +153,14 @@
 /* Ações da linha no squircle padrão do app (spec .ops-row-act): 32×32 travado
    com min/max — sem o trava, uma regra de tema estica o botão e o `rounded` do
    Bootstrap sai OVAL, porque círculo só é círculo em botão já quadrado. */
-#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; }
+/* A coluna de Actions tem largura mínima: sem ela o DataTables a espremia até a
+   largura do botão, e o cabeçalho quebrava em "ACTION" / "S". O `th` precisa da
+   mesma regra porque com scrollX ele vive noutra tabela. */
+#fxo-table td.fxo-acts { white-space:nowrap; text-align:center; min-width:74px; }
+#fxo-table thead th:nth-child(2),
+.dt-scroll-head thead th:nth-child(2),
+.dt-scroll-headInner thead th:nth-child(2),
+.dataTables_scrollHeadInner thead th:nth-child(2) { min-width:74px; }
 #fxo-table td.fxo-acts .btn.ops-row-act {
     width:32px; height:32px; min-width:32px; max-width:32px;
     padding:0; flex:0 0 auto; border-radius:10px !important;
@@ -187,12 +194,16 @@
    as duas linhas juntas, e `orderCellsTop` mantém a ordenação na primeira. */
 #fxo-table thead .fxo-col-filters th,
 .dt-scroll-headInner thead .fxo-col-filters th,
-.dataTables_scrollHeadInner thead .fxo-col-filters th { padding:3px 4px; }
+.dataTables_scrollHeadInner thead .fxo-col-filters th { padding:.3rem .4rem .5rem; }
+/* Mesma caixa das demais páginas do app (Cognos, Live Position, OTM…): 30px de
+   altura e .72rem. A versão anterior (.62rem / padding 2px) saía visivelmente
+   mais fina que a de todas as outras telas. */
 #fxo-table thead .fxo-col-filters input,
 .dt-scroll-headInner thead .fxo-col-filters input,
 .dataTables_scrollHeadInner thead .fxo-col-filters input {
-    width:100%; font-size:.62rem; padding:2px 4px; border-radius:6px;
-    border:1px solid var(--ins-border-color); background:var(--ins-secondary-bg);
+    width:100%; min-width:90px; height:30px; font-size:.72rem; font-weight:400;
+    padding:3px 9px; border-radius:8px;
+    border:1px solid var(--ins-border-color); background:var(--ins-tertiary-bg, #f8f9fa);
     color:var(--ins-body-color);
 }
 #fxo-page .fxo-col-filters input::placeholder { color:var(--ins-secondary-color); opacity:.6; }
