@@ -258,6 +258,28 @@ def lookup_cnpj():
     return mapa
 
 
+def refdata_indexes():
+    """(SPN → nome, CNPJ → nome), os dois só-dígitos, do Reference Data.
+
+    É a identidade da contraparte para a recon: a Athena aponta o cliente pelo
+    **MatchingCounterpartySPN** e a CETIP pelo **CNPJ**, e os dois campos levam à
+    MESMA linha do Reference Data — comparar o NOME registrado dos dois lados é
+    o que faz um par correto fechar mesmo com grafias diferentes nos arquivos.
+    """
+    por_spn, por_cnpj = {}, {}
+    for r in _refdata_rows():
+        nome = texto_simples(r.get('COUNTERPARTY'))
+        if not nome:
+            continue
+        spn = so_digitos(r.get('SPN'))
+        cnpj = so_digitos(r.get('TAX ID'))
+        if spn:
+            por_spn.setdefault(spn, nome)
+        if cnpj:
+            por_cnpj.setdefault(cnpj, nome)
+    return por_spn, por_cnpj
+
+
 _REFDATA_CACHE = {'mtime': None, 'rows': []}
 
 
@@ -506,60 +528,95 @@ def deriv_primeiro_fix(row, ctx):
 # Os campos comparados
 # =============================================================================
 
+def deriv_cntpy_b3(row, ctx):
+    """Quem é o cliente no arquivo da CETIP/B3.
+
+    1º o CNPJ (só dígitos — a B3 grava sem pontuação, o RefData com), traduzido
+    para o NOME do Reference Data; sem CNPJ ou sem cadastro, cai no Nome
+    simplificado do próprio arquivo — a regra que já valia.
+    """
+    cnpj = so_digitos(row.get(ctx['col_cnpj_dp']))
+    if cnpj:
+        nome = ctx['por_cnpj'].get(cnpj)
+        if nome:
+            return nome
+    return texto_simples(row.get(ctx['col_nome_dp']))
+
+
+def deriv_cntpy_ath(row, ctx):
+    """Quem é a contraparte no arquivo da Athena.
+
+    1º o MatchingCounterpartySPN (a coluna Z do CSV) → nome do Reference Data.
+    SPN vazio ou sem cadastro → regra anterior: o MatchingCounterpartyName,
+    traduzido para o nome canônico quando o cadastro o conhece, senão como veio;
+    por último o CounterpartyName.
+    """
+    if ctx.get('col_spn_at'):
+        spn = so_digitos(row.get(ctx['col_spn_at']))
+        if spn:
+            nome = ctx['por_spn'].get(spn)
+            if nome:
+                return nome
+    v = texto_simples(row.get(ctx['col_nome_at']))
+    if v is not None:
+        cnpj = ctx['mapa_cnpj'].get(_chave_lookup(v))
+        if cnpj:
+            canonico = ctx['por_cnpj'].get(cnpj)
+            if canonico:
+                return canonico
+        return v
+    return texto_simples(row.get(ctx['col_nome_at2']))
+
+
+# Cada campo tem um NOME COMUM (`campo`) e os três rótulos saem dele:
+# `B3 <campo>` / `ATH <campo>` / `Status <campo>`. É o nome comum que a coluna
+# Status usa na lista do Partial.
+def _rots(campo):
+    return {'rot_dp': 'B3 ' + campo, 'rot_at': 'ATH ' + campo,
+            'rot_st': 'Status ' + campo, 'campo': campo}
+
+
 CAMPOS = [
-    {'nome': 'JPM_Dir', 'dp': 'Posição da Parte', 'at': 'TransactionType',
-     'rot_dp': 'CET JPM Dir', 'rot_at': 'ATH JPM Dir', 'rot_st': 'Status JPM Dir',
-     'subst_dp': {'TITULAR': 'Buy', 'LANCADOR': 'Sell'}},
+    dict({'nome': 'JPM_Dir', 'dp': 'Posição da Parte', 'at': 'TransactionType',
+          'subst_dp': {'TITULAR': 'Buy', 'LANCADOR': 'Sell'}}, **_rots('Dir')),
 
-    {'nome': 'P_C', 'dp': 'Tipo de Opção', 'at': 'OptionType',
-     'rot_dp': 'CET P / C', 'rot_at': 'Ath_P/C', 'rot_st': 'Status P/C',
-     'subst_at': {'Put on USD': 'PUT', 'Call on USD': 'CALL'}},
+    dict({'nome': 'P_C', 'dp': 'Tipo de Opção', 'at': 'OptionType',
+          'subst_at': {'Put on USD': 'PUT', 'Call on USD': 'CALL'}}, **_rots('P/C')),
 
-    {'nome': 'Ctpty', 'dp': 'CPF/CNPJ Cliente Contraparte', 'at': 'MatchingCounterpartyName',
-     'rot_dp': 'CET Ctpty', 'rot_at': 'ATH Client Ext', 'rot_st': 'Status Ctpty',
-     # A Athena traz o NOME; a CETIP, o CNPJ. O cadastro traduz um no outro, e
-     # quando não há tradução os dois caem no nome simplificado — comparar nome
-     # com nome erra menos do que comparar nome com CNPJ, que erraria sempre.
-     'lookup_at': True, 'tipo': 'digitos',
-     'fallback_dp': 'Contraparte (Nome simplificado)',
-     'fallback_at': 'CounterpartyName'},
+    # A identidade da contraparte sai do Reference Data pelos DOIS lados:
+    # SPN (Athena, coluna Z) e CNPJ (CETIP) apontam a mesma linha, e o que se
+    # compara é o NOME registrado — ver deriv_cntpy_b3 / deriv_cntpy_ath.
+    dict({'nome': 'Ctpty', 'dp': None, 'at': None,
+          'derivacao': deriv_cntpy_b3, 'derivacao_at': deriv_cntpy_ath,
+          'tipo': 'texto'}, **_rots('Cntpy')),
 
-    {'nome': 'Amt', 'dp': 'Quantidade', 'at': 'Quantity',
-     'rot_dp': 'CET Amt', 'rot_at': 'ATH Amt', 'rot_st': 'Status Amt',
-     'abs_at': True, 'tipo': 'valor'},
+    dict({'nome': 'Amt', 'dp': 'Quantidade', 'at': 'Quantity',
+          'abs_at': True, 'tipo': 'valor'}, **_rots('Amt')),
 
-    {'nome': 'Premium', 'dp': 'Valor financeiro total do prêmio', 'at': 'Premium',
-     'rot_dp': 'CET Premium', 'rot_at': 'ATH Premium', 'rot_st': 'Status Premium',
-     # Tolerância de 0,67: o prêmio da CETIP é arredondado no registro, e a
-     # diferença de centavos não é quebra de recon.
-     'abs_at': True, 'arred': 2, 'tolerancia': 0.67, 'tipo': 'valor'},
+    dict({'nome': 'Premium', 'dp': 'Valor financeiro total do prêmio', 'at': 'Premium',
+          # Tolerância de 0,67: o prêmio da CETIP é arredondado no registro, e a
+          # diferença de centavos não é quebra de recon.
+          'abs_at': True, 'arred': 2, 'tolerancia': 0.67, 'tipo': 'valor'}, **_rots('Premium')),
 
-    {'nome': 'Strike', 'dp': 'Strike (valor)', 'at': 'Strike',
-     'rot_dp': 'CET Strike', 'rot_at': 'ATH Strike', 'rot_st': 'Status Strike',
-     'tipo': 'valor'},
+    dict({'nome': 'Strike', 'dp': 'Strike (valor)', 'at': 'Strike',
+          'tipo': 'valor'}, **_rots('Strike')),
 
-    {'nome': 'TD', 'dp': 'Data Registro', 'at': 'TradeDate',
-     'rot_dp': 'CET TD', 'rot_at': 'ATH TD', 'rot_st': 'Status TD',
-     'tipo': 'data', 'fmt': '%d/%m/%Y'},
+    dict({'nome': 'TD', 'dp': 'Data Registro', 'at': 'TradeDate',
+          'tipo': 'data', 'fmt': '%d/%m/%Y'}, **_rots('Trade Date')),
 
-    {'nome': 'VD', 'dp': 'Data Vencimento', 'at': 'SettlementDate',
-     'rot_dp': 'CET VD', 'rot_at': 'ATH VD', 'rot_st': 'Status VD',
-     'tipo': 'data', 'fmt': '%d/%m/%Y'},
+    dict({'nome': 'VD', 'dp': 'Data Vencimento', 'at': 'SettlementDate',
+          'tipo': 'data', 'fmt': '%d/%m/%Y'}, **_rots('Settlement Date')),
 
-    {'nome': 'Fix_Date', 'dp': None, 'at': 'FixingDate',
-     'rot_dp': 'CET Fix Date', 'rot_at': 'ATH Fix Date', 'rot_st': 'Status Fix Date',
-     'tipo': 'data', 'derivacao': deriv_fix_date, 'fmt': '%d/%m/%Y'},
+    dict({'nome': 'Fix_Date', 'dp': None, 'at': 'FixingDate',
+          'tipo': 'data', 'derivacao': deriv_fix_date, 'fmt': '%d/%m/%Y'}, **_rots('Fix Date')),
 
-    {'nome': 'Primeiro_Fix', 'dp': None, 'at': 'FirstFixingDate',
-     'rot_dp': 'CET 1º Fix', 'rot_at': 'ATH 1º Fix', 'rot_st': 'Status 1º Fix',
-     'tipo': 'data', 'derivacao': deriv_primeiro_fix, 'fmt': '%d/%m/%Y'},
+    dict({'nome': 'Primeiro_Fix', 'dp': None, 'at': 'FirstFixingDate',
+          'tipo': 'data', 'derivacao': deriv_primeiro_fix, 'fmt': '%d/%m/%Y'}, **_rots('1st Fix')),
 
-    {'nome': 'Asian_European', 'dp': 'Média Asiática', 'at': 'OptionStyle',
-     'rot_dp': 'Asian / European CET', 'rot_at': 'Asian / European ATH',
-     'rot_st': 'Status Asian/European',
-     'subst_dp': {'SIMPLES_DATAS': 'Asian'},
-     'subst_at': {'Vanilla Option': '', 'Avg Rate Option': 'Asian', 'European': ''},
-     'tipo': 'texto'},
+    dict({'nome': 'Asian_European', 'dp': 'Média Asiática', 'at': 'OptionStyle',
+          'subst_dp': {'SIMPLES_DATAS': 'Asian'},
+          'subst_at': {'Vanilla Option': '', 'Avg Rate Option': 'Asian', 'European': ''},
+          'tipo': 'texto'}, **_rots('Style')),
 ]
 
 STATUS_COLS = [c['rot_st'] for c in CAMPOS]
@@ -675,10 +732,24 @@ def reconcile(df_dp, df_at):
             return '%s_at' % nome
         raise KeyError('Não encontrei a coluna Athena %r na base final.' % nome)
 
+    por_spn, por_cnpj = refdata_indexes()
     ctx = {'col_media': col_dp(COL_DP_MEDIA_ASIAT),
            'col_fix_ad': col_dp(COL_DP_FIX_ADATIVO),
            'cols_bloco': [col_dp(c) for c in cols_bloco],
-           'valor_datas': VALOR_MEDIA_ASIATICA_DATAS}
+           'valor_datas': VALOR_MEDIA_ASIATICA_DATAS,
+           # Identidade da contraparte (ver deriv_cntpy_*)
+           'por_spn': por_spn, 'por_cnpj': por_cnpj, 'mapa_cnpj': mapa_cnpj,
+           'col_cnpj_dp': col_dp('CPF/CNPJ Cliente Contraparte'),
+           'col_nome_dp': col_dp('Contraparte (Nome simplificado)'),
+           'col_nome_at': col_at('MatchingCounterpartyName'),
+           'col_nome_at2': col_at('CounterpartyName'),
+           'col_spn_at': None}
+    try:
+        ctx['col_spn_at'] = col_at('MatchingCounterpartySPN')
+    except KeyError:
+        avisos.append('O relatório da Athena veio sem a coluna '
+                      'MatchingCounterpartySPN — a contraparte segue pela regra '
+                      'anterior (nome), sem o SPN.')
 
     saida = pd.DataFrame()
     saida['Código IF'] = df_final[col_dp(COL_DP_CODIGO_IF)].values
@@ -689,7 +760,10 @@ def reconcile(df_dp, df_at):
             v_dp = df_final.apply(lambda row, f=m['derivacao']: f(row, ctx), axis=1)
         else:
             v_dp = df_final[col_dp(m['dp'])]
-        v_at = df_final[col_at(m['at'])]
+        if m.get('derivacao_at') is not None:
+            v_at = df_final.apply(lambda row, f=m['derivacao_at']: f(row, ctx), axis=1)
+        else:
+            v_at = df_final[col_at(m['at'])]
 
         if m.get('lookup_at'):
             v_at = aplicar_lookup(v_at, mapa_cnpj)
@@ -747,11 +821,18 @@ def reconcile(df_dp, df_at):
                                for x in df_final['alerta_chave_duplicada'].values]
 
     sem_match = df_final['sem_correspondencia_athena'].values
-    tem_nok = saida[STATUS_COLS].eq('NOK').any(axis=1).values if STATUS_COLS else []
-    # 'Sem match' vence 'NOK': sem a outra ponta, os onze NOK são consequência de
-    # um só problema, e contá-la como divergência de campo esconde o que houve.
-    saida.insert(0, 'Status', ['Sem match' if s else ('NOK' if n else 'OK')
-                              for s, n in zip(sem_match, tem_nok)])
+    # O Status da linha DIZ o que não bateu: 'Matched' quando todos os campos
+    # fecharam, 'Partial - Cntpy | Settlement Date' listando os campos NOK pelo
+    # nome comum. 'Sem match' vence tudo: sem a outra ponta, os onze NOK são
+    # consequência de um só problema.
+    nok_por_linha = [
+        [c['campo'] for c in CAMPOS if saida[c['rot_st']].iat[i] == 'NOK']
+        for i in range(len(saida))
+    ]
+    saida.insert(0, 'Status', [
+        'Sem match' if s else
+        ('Partial - ' + ' | '.join(f) if f else 'Matched')
+        for s, f in zip(sem_match, nok_por_linha)])
 
     rows = [{k: _cell(v) for k, v in rec.items()}
             for rec in saida.to_dict('records')]
@@ -766,8 +847,8 @@ def _aplicar_perna_espelhada(saida, espelhadas):
     """
     if not espelhadas or saida.empty:
         return
-    precisa = {'Status Ctpty', 'Status JPM Dir', 'ATH Client Ext', 'ATH JPM Dir',
-               'CET JPM Dir', 'CET Ctpty'}
+    precisa = {'Status Cntpy', 'Status Dir', 'ATH Cntpy', 'ATH Dir',
+               'B3 Dir', 'B3 Cntpy'}
     if not precisa.issubset(saida.columns):
         return
 
@@ -779,20 +860,20 @@ def _aplicar_perna_espelhada(saida, espelhadas):
 
     for nome_at, codigo in espelhadas:
         mask = (
-            (saida['Status Ctpty'] == 'NOK') & (saida['Status JPM Dir'] == 'NOK') &
-            saida['ATH Client Ext'].apply(
+            (saida['Status Cntpy'] == 'NOK') & (saida['Status Dir'] == 'NOK') &
+            saida['ATH Cntpy'].apply(
                 lambda x, n=nome_at: pd.notna(x) and str(x).strip().upper() == n)
         )
         if not mask.any():
             continue
-        saida.loc[mask, 'ATH JPM Dir'] = saida.loc[mask, 'ATH JPM Dir'].apply(_flip)
-        saida.loc[mask, 'Status JPM Dir'] = [
-            comparar(a, b) for a, b in zip(saida.loc[mask, 'CET JPM Dir'],
-                                           saida.loc[mask, 'ATH JPM Dir'])]
-        saida.loc[mask, 'ATH Client Ext'] = codigo
-        saida.loc[mask, 'Status Ctpty'] = [
-            comparar(a, b) for a, b in zip(saida.loc[mask, 'CET Ctpty'],
-                                           saida.loc[mask, 'ATH Client Ext'])]
+        saida.loc[mask, 'ATH Dir'] = saida.loc[mask, 'ATH Dir'].apply(_flip)
+        saida.loc[mask, 'Status Dir'] = [
+            comparar(a, b) for a, b in zip(saida.loc[mask, 'B3 Dir'],
+                                           saida.loc[mask, 'ATH Dir'])]
+        saida.loc[mask, 'ATH Cntpy'] = codigo
+        saida.loc[mask, 'Status Cntpy'] = [
+            comparar(a, b) for a, b in zip(saida.loc[mask, 'B3 Cntpy'],
+                                           saida.loc[mask, 'ATH Cntpy'])]
         _LOG.info('[recon_fxo] perna espelhada %s: %d linha(s) ajustada(s)',
                   nome_at, int(mask.sum()))
 
@@ -812,8 +893,8 @@ def _contar(rows):
     sem ela, '40 linhas com NOK' não indica por onde começar."""
     counts = {
         'total': len(rows),
-        'ok': sum(1 for r in rows if r.get('Status') == 'OK'),
-        'nok': sum(1 for r in rows if r.get('Status') == 'NOK'),
+        'ok': sum(1 for r in rows if r.get('Status') == 'Matched'),
+        'nok': sum(1 for r in rows if str(r.get('Status', '')).startswith('Partial')),
         'no_match': sum(1 for r in rows if r.get('Status') == 'Sem match'),
         'match_dealid': sum(1 for r in rows if r.get('Match') == 'DealID'),
         'match_matching': sum(1 for r in rows if r.get('Match') == 'MatchingDealID'),
@@ -929,7 +1010,7 @@ def run_fxo(recon_date, files=None, mode='auto'):
     }
     _persist(recon_date, payload)
     payload['success'] = True
-    payload['meta'] = '%d operações · %d OK · %d NOK · %d sem match' % (
+    payload['meta'] = '%d operações · %d Matched · %d Partial · %d sem match' % (
         counts['total'], counts['ok'], counts['nok'], counts['no_match'])
     return payload
 

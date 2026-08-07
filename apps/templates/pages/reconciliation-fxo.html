@@ -117,11 +117,11 @@
 
 /* ── Tabela ──────────────────────────────────────────────────────── */
 #fxo-table th { white-space:nowrap; font-size:.68rem; padding:8px 10px; text-align:center !important; vertical-align:middle !important; }
-#fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; }
+#fxo-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; text-align:center; }
 #fxo-table td.cell-status { text-align:center; }
-/* Números alinhados à direita e com dígitos de largura fixa: é assim que uma
-   coluna de valor se compara de relance, linha contra linha. */
-#fxo-table td.cell-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* Alinhamento centralizado como todo o app (padrão New Deals); os dígitos de
+   largura fixa continuam garantindo a comparação linha contra linha. */
+#fxo-table td.cell-num { text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }
 /* A busca própria do DataTables sai: a linha de filtro por coluna faz o mesmo
    trabalho com precisão, e as duas juntas se combinam em silêncio — um termo
    esquecido lá em cima escondia linhas que o filtro da coluna dizia mostrar. */
@@ -219,16 +219,16 @@
             </div>
         </div>
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="fxo-widget fxo-w-ok" data-status="OK">
+            <div class="fxo-widget fxo-w-ok" data-status="Matched">
                 <span class="fxo-widget__ico"><i class="ti ti-circle-check"></i></span>
-                <p class="widget-lbl" data-lang="fxo-w-ok">OK</p>
+                <p class="widget-lbl" data-lang="fxo-w-ok">Matched</p>
                 <p class="widget-val" id="w-ok">—</p>
             </div>
         </div>
         <div class="col-6 col-lg-3 col-fxo-w">
-            <div class="fxo-widget fxo-w-nok" data-status="NOK">
+            <div class="fxo-widget fxo-w-nok" data-status="Partial">
                 <span class="fxo-widget__ico"><i class="ti ti-alert-triangle"></i></span>
-                <p class="widget-lbl" data-lang="fxo-w-nok">NOK</p>
+                <p class="widget-lbl" data-lang="fxo-w-nok">Partial</p>
                 <p class="widget-val" id="w-nok">—</p>
             </div>
         </div>
@@ -280,6 +280,21 @@
         </div>
 
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns me-1"></i><span data-lang="mc-columns">Columns</span>
+                </button>
+                <ul class="dropdown-menu" id="fxoColMenu" style="max-height:20rem;overflow-y:auto;"></ul>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" id="fxoExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="#" id="fxoExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                </ul>
+            </div>
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters">
                 <i data-lucide="x-circle" style="width:12px;height:12px;"></i>
                 <span data-lang="recon-btn-clear">Clear Filters</span>
@@ -355,6 +370,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (function () {
@@ -386,10 +402,13 @@
     }
 
     function badge(s) {
-        var m = { 'OK': 'text-bg-success', 'NOK': 'text-bg-danger', 'Sem match': 'text-bg-warning' };
         if (!s) return '';
-        return '<span class="badge rounded-pill bg-gradient ' +
-               (m[s] || 'text-bg-secondary') + '">' + s + '</span>';
+        // 1ª coluna: Matched (verde) / Partial - campos (vermelho) / Sem match.
+        // Colunas por campo: OK / NOK.
+        var cls = { 'OK': 'text-bg-success', 'Matched': 'text-bg-success',
+                    'NOK': 'text-bg-danger', 'Sem match': 'text-bg-warning' }[s]
+                  || (/^Partial/.test(s) ? 'text-bg-danger' : 'text-bg-secondary');
+        return '<span class="badge rounded-pill bg-gradient ' + cls + '">' + s + '</span>';
     }
 
     function buildTable(columns) {
@@ -454,8 +473,23 @@
             dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
             pageLength: parseInt($('#fxoPageLength').val(), 10) || 50,
             order: [[0, 'asc']],
-            language: { emptyTable: 'Rode a reconciliação para a data escolhida.' }
+            language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' }, emptyTable: 'Rode a reconciliação para a data escolhida.' }
         });
+
+        // Menu Columns — as colunas VÊM DO SERVIDOR, então o menu é remontado
+        // a cada rebuild com a lista atual.
+        var menu = $('#fxoColMenu').empty();
+        COLUMNS.forEach(function (name, i) {
+            $('<li>').append(
+                $('<label class="dropdown-item d-flex align-items-center gap-2 mb-0">')
+                    .append($('<input type="checkbox" class="form-check-input m-0" checked>')
+                        .on('change', function () { table.column(i).visible(this.checked); }))
+                    .append($('<span>').text(name))
+            ).appendTo(menu);
+        });
+
+        // Seleção de célula + Ctrl+C — padrão New Deals
+        if (window.otcCellCopy) otcCellCopy('#fxo-table');
     }
 
     function paint(payload) {
@@ -497,11 +531,19 @@
         }
         if (table) { table.clear().rows.add(payload.data || []).draw(); }
         applyFilters();
+        // Com scrollX o cabeçalho vive numa tabela irmã: depois de carregar
+        // dados é OBRIGATÓRIO recalcular as larguras, senão os valores ficam
+        // deslocados das colunas a que pertencem.
+        if (table) table.columns.adjust();
     }
 
     function applyFilters() {
         if (!table) return;
-        table.column(0).search(activeStatus ? '^' + activeStatus + '$' : '', true, false);
+        // Partial é PREFIXO ('Partial - Amt | …'), os outros são exatos.
+        table.column(0).search(
+            !activeStatus ? '' :
+            (activeStatus === 'Partial' ? '^Partial' : '^' + activeStatus + '$'),
+            true, false);
         COLUMNS.forEach(function (name, i) {
             if (i && isStatusCol(name)) {
                 table.column(i).search(activeField === name ? '^NOK$' : '', true, false);
@@ -601,6 +643,42 @@
             e.stopPropagation();
         });
 
+        // Export do que está NA TELA (filtros e ordenação aplicados),
+        // só colunas visíveis — mesmo contrato do Track Confirmations.
+        function fxoMatrix() {
+            var cols = [];
+            COLUMNS.forEach(function (c, i) { if (table.column(i).visible()) cols.push(i); });
+            var out = [cols.map(function (i) { return COLUMNS[i]; })];
+            table.rows({ search: 'applied', order: 'applied' }).every(function () {
+                var r = this.data();
+                out.push(cols.map(function (i) {
+                    var v = r[COLUMNS[i]];
+                    return v == null ? '' : String(v);
+                }));
+            });
+            return out;
+        }
+        $('#fxoExportCsv').on('click', function (e) {
+            e.preventDefault();
+            if (!table) return;
+            var csv = fxoMatrix().map(function (l) {
+                return l.map(function (v) { return '"' + v.replace(/"/g, '""') + '"'; }).join(';');
+            }).join('\r\n');
+            var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'recon-fxo.csv';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
+        $('#fxoExportCopy').on('click', function (e) {
+            e.preventDefault();
+            if (!table) return;
+            var txt = fxoMatrix().map(function (l) { return l.join('\t'); }).join('\n');
+            (window.otcCopyText ? otcCopyText(txt) : navigator.clipboard.writeText(txt))
+                .then(function () { Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false }); });
+        });
+
         $('#btnClearFilters').on('click', function () {
             activeStatus = activeField = '';
             $('.fxo-col-filters input').val('');
@@ -628,6 +706,9 @@
                 }
             });
         });
+
+        // O mesmo recálculo no resize da janela.
+        $(window).on('resize', function () { if (table) table.columns.adjust(); });
 
         if (window.lucide) lucide.createIcons();
     });

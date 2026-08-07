@@ -110,7 +110,8 @@ def make_dposicao(rows):
 
 
 AT_COLS = ['DealID', 'MatchingDealID', 'OptionStyle', 'TransactionType', 'OptionType',
-           'MatchingCounterpartyName', 'CounterpartyName', 'Quantity', 'Premium',
+           'MatchingCounterpartyName', 'CounterpartyName', 'MatchingCounterpartySPN',
+           'Quantity', 'Premium',
            'Strike', 'TradeDate', 'SettlementDate', 'FixingDate', 'FirstFixingDate']
 
 
@@ -175,34 +176,34 @@ rows, _c, _w = run(
     [dp_row(**{'Combinação de operações': 'L1', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO',
                'Posição da Parte': 'TITULAR'})],
     [at_row(DealID='L1', CounterpartyName=LAWTON, TransactionType='Buy')])
-check('LAWTON vira o código da CETIP', rows[0]['ATH Client Ext'], 'INTRAGLAWTONFDO')
-check('   e o status fecha', rows[0]['Status Ctpty'], 'OK')
+check('LAWTON vira o código da CETIP', rows[0]['ATH Cntpy'], 'INTRAGLAWTONFDO')
+check('   e o status fecha', rows[0]['Status Cntpy'], 'OK')
 
 # (b) INVERT = Yes com os DOIS status NOK: espelha e renomeia.
 rows, _c, _w = run(
     [dp_row(**{'Combinação de operações': 'G1', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO',
                'Posição da Parte': 'TITULAR'})],
     [at_row(DealID='G1', CounterpartyName=GEM, TransactionType='Sell')])
-check('a perna GEM inverte a direção', rows[0]['ATH JPM Dir'], 'Buy')
-check('   e o status de direção fecha', rows[0]['Status JPM Dir'], 'OK')
-check('   e a contraparte também', rows[0]['Status Ctpty'], 'OK')
-check('   a linha inteira fica OK', rows[0]['Status'], 'OK')
+check('a perna GEM inverte a direção', rows[0]['ATH Dir'], 'Buy')
+check('   e o status de direção fecha', rows[0]['Status Dir'], 'OK')
+check('   e a contraparte também', rows[0]['Status Cntpy'], 'OK')
+check('   a linha inteira fica Matched', rows[0]['Status'], 'Matched')
 
 # (c) INVERT = Yes com a direção JÁ certa: NÃO pode inverter.
 rows, _c, _w = run(
     [dp_row(**{'Combinação de operações': 'G2', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO',
                'Posição da Parte': 'TITULAR'})],
     [at_row(DealID='G2', CounterpartyName=GEM, TransactionType='Buy')])
-check('direção certa NÃO é espelhada', rows[0]['ATH JPM Dir'], 'Buy')
+check('direção certa NÃO é espelhada', rows[0]['ATH Dir'], 'Buy')
 check('   e a contraparte segue divergente (é o que se quer ver)',
-      rows[0]['Status Ctpty'], 'NOK')
+      rows[0]['Status Cntpy'], 'NOK')
 
 # (d) Cadastro vazio: nada é renomeado, e a tela avisa.
 write_map('fxo-internal-cpty', [])
 rows, _c, avisos = run(
     [dp_row(**{'Combinação de operações': 'G3', 'Contraparte (Nome simplificado)': 'INTRAGLAWTONFDO'})],
     [at_row(DealID='G3', CounterpartyName=GEM)])
-check('sem cadastro, o nome da Athena fica como veio', rows[0]['ATH Client Ext'], GEM)
+check('sem cadastro, o nome da Athena fica como veio', rows[0]['ATH Cntpy'], GEM)
 write_map('fxo-internal-cpty', [
     {'ATHENA NAME': LAWTON, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'No'},
     {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes'},
@@ -223,20 +224,21 @@ rows, _c, _w = run(
             SettlementDate='2026-09-01', FixingDate='2026-08-28',
             OptionStyle='Vanilla Option')])
 r = rows[0]
-check('LANCADOR = Sell', (r['CET JPM Dir'], r['Status JPM Dir']), ('Sell', 'OK'))
-check('Put on USD = PUT', (r['Ath_P/C'], r['Status P/C']), ('PUT', 'OK'))
-check('o CNPJ vem do cadastro, com acento e espaço duplo no nome',
-      (r['ATH Client Ext'], r['Status Ctpty']), ('1234567000189', 'OK'))
+check('LANCADOR = Sell', (r['B3 Dir'], r['Status Dir']), ('Sell', 'OK'))
+check('Put on USD = PUT', (r['ATH P/C'], r['Status P/C']), ('PUT', 'OK'))
+check('os dois lados resolvem para o NOME do Reference Data',
+      (r['B3 Cntpy'], r['ATH Cntpy'], r['Status Cntpy']),
+      ('Açúcar   Brasil  S.A.', 'Açúcar   Brasil  S.A.', 'OK'))
 check('quantidade em formato BR, em valor absoluto', r['Status Amt'], 'OK')
 check('prêmio dentro da tolerância de 0,67', r['Status Premium'], 'OK')
 check('strike com vírgula ≡ strike com ponto', r['Status Strike'], 'OK')
-check('AAAAMMDD ≡ ISO na data de registro', (r['CET TD'], r['Status TD']),
+check('AAAAMMDD ≡ ISO na data de registro', (r['B3 Trade Date'], r['Status Trade Date']),
       ('01/07/2026', 'OK'))
-check('   e no vencimento', r['Status VD'], 'OK')
+check('   e no vencimento', r['Status Settlement Date'], 'OK')
 check('europeia: o fixing é o do ativo subjacente', r['Status Fix Date'], 'OK')
-check('   e não tem primeiro fixing', (r['CET 1º Fix'], r['Status 1º Fix']), ('', 'OK'))
-check('Vanilla Option ≡ vazio no estilo', r['Status Asian/European'], 'OK')
-check('a linha inteira fecha', r['Status'], 'OK')
+check('   e não tem primeiro fixing', (r['B3 1st Fix'], r['Status 1st Fix']), ('', 'OK'))
+check('Vanilla Option ≡ vazio no estilo', r['Status Style'], 'OK')
+check('a linha inteira fecha', r['Status'], 'Matched')
 # CONSEQUÊNCIA CONHECIDA: na europeia o de-para só traduz 'SIMPLES_DATAS'. Se a
 # DPOSICAO escrever 'NAO' em vez de deixar em branco, a coluna acusa NOK — o
 # classificador que absorveria 'NAO'/'N'/'NONE' existe no script original e foi
@@ -245,13 +247,24 @@ check('a linha inteira fecha', r['Status'], 'OK')
 rows, _c, _w = run(
     [dp_row(**{'Combinação de operações': 'T3', 'Média Asiática': 'NAO'})],
     [at_row(DealID='T3', OptionStyle='Vanilla Option')])
-check("um 'NAO' literal no arquivo acusaria", rows[0]['Status Asian/European'], 'NOK')
+check("um 'NAO' literal no arquivo acusaria", rows[0]['Status Style'], 'NOK')
 
 # O prêmio FORA da tolerância tem de acusar.
 rows, _c, _w = run(
     [dp_row(**{'Combinação de operações': 'T2', 'Valor financeiro total do prêmio': '7.415,50'})],
     [at_row(DealID='T2', Premium='-7416.90')])
 check('prêmio fora da tolerância acusa', rows[0]['Status Premium'], 'NOK')
+
+# O SPN (coluna Z) tem prioridade sobre o nome: com ele preenchido, a Athena
+# resolve direto pela linha do Reference Data — mesmo que o nome viesse errado.
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'S1',
+               'CPF/CNPJ Cliente Contraparte': '01234567000189'})],
+    [at_row(DealID='S1', MatchingCounterpartySPN='9001',
+            MatchingCounterpartyName='NOME QUE NAO EXISTE')])
+check('o SPN resolve pelo Reference Data e ganha do nome',
+      (rows[0]['ATH Cntpy'], rows[0]['Status Cntpy']),
+      ('Açúcar   Brasil  S.A.', 'OK'))
 
 print('\n== 5. a opção asiática: o fixing sai do cronograma ==')
 rows, _c, _w = run(
@@ -262,12 +275,12 @@ rows, _c, _w = run(
             FixingDate='2026-08-28', FirstFixingDate='2026-08-10')])
 r = rows[0]
 check('o último fixing é a última data do cronograma',
-      (r['CET Fix Date'], r['Status Fix Date']), ('28/08/2026', 'OK'))
-check('o primeiro fixing é a primeira', (r['CET 1º Fix'], r['Status 1º Fix']),
+      (r['B3 Fix Date'], r['Status Fix Date']), ('28/08/2026', 'OK'))
+check('o primeiro fixing é a primeira', (r['B3 1st Fix'], r['Status 1st Fix']),
       ('10/08/2026', 'OK'))
 check('   e a data do ativo subjacente é ignorada na asiática',
-      r['CET Fix Date'] != '01/01/2026', True)
-check('Avg Rate Option = Asian dos dois lados', r['Status Asian/European'], 'OK')
+      r['B3 Fix Date'] != '01/01/2026', True)
+check('Avg Rate Option = Asian dos dois lados', r['Status Style'], 'OK')
 
 print('\n== 6. sem match vence NOK ==')
 rows, counts, _w = run(
@@ -279,7 +292,8 @@ por_chave = {r['Combinação de operações']: r for r in rows}
 check('a órfã sai como Sem match', por_chave['X1']['Status'], 'Sem match')
 check('   e não como NOK, mesmo com os onze status NOK',
       por_chave['X1']['Status Amt'], 'NOK')
-check('a que casou e diverge sai como NOK', por_chave['X2']['Status'], 'NOK')
+check('a que casou e diverge diz QUAL campo quebrou',
+      por_chave['X2']['Status'], 'Partial - Amt')
 check('a chave repetida é sinalizada', por_chave['X2']['Chave Duplicada'], 'Sim')
 check('as contagens fecham',
       (counts['total'], counts['ok'], counts['nok'], counts['no_match'],
