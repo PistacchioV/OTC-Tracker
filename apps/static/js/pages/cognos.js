@@ -19,6 +19,7 @@
 
   var dt = null;
   var COLS = [];               // current data columns (for the Add/Edit modal)
+  var VALUE_COLS = [];         // colunas de valor — vêm do servidor (_COG_VALUE_COLS)
   var CURRENT_ROWS = [];       // last-loaded rows (each: [...18 data..., status, maker, checker, id])
   var EDIT_ID = null;          // id of the row being edited (null → Add mode)
 
@@ -60,6 +61,7 @@
         setVal('cog-w-call', w.call || 0); setVal('cog-w-put', w.put || 0);
         setVal('cog-w-total', w.total || 0);
         setVal('cog-updated', d.updated ? (t('updated') + ' ' + d.updated) : '');
+        VALUE_COLS = d.value_columns || [];
         buildTable(d.columns || [], d.rows || []);
       })
       .catch(function () {});
@@ -78,6 +80,17 @@
     return { status: r[n], maker: r[n + 1], checker: r[n + 2], id: r[n + 3] };
   }
 
+  // Valor no formato #,##0.00 (3225782.55 → 3,225,782.55). O que NÃO for número
+  // passa intacto: a coluna vem da planilha e uma célula com texto ('N/A', um
+  // traço) viraria 'NaN' se fosse convertida à força.
+  function fmtValue(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (s === '') return '';
+    var n = Number(s.replace(/\s/g, ''));
+    if (!isFinite(n)) return v;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   // Action buttons — standard rounded-square format (global head-css) via btn-row-* classes.
   function actionsHtml(id) {
     return '<div class="d-inline-flex gap-1">' +
@@ -85,6 +98,17 @@
       '<button class="btn btn-success btn-sm rounded-circle btn-row-confirm" data-id="' + esc(id) + '" title="' + esc(t('confirm')) + '"><i class="ti ti-check"></i></button>' +
       '<button class="btn btn-danger btn-sm rounded-circle btn-row-delete" data-id="' + esc(id) + '" title="' + esc(t('del')) + '"><i class="ti ti-trash"></i></button>' +
       '</div>';
+  }
+
+  // Índices de tabela das colunas de valor. As três primeiras colunas são da
+  // TELA (checkbox, Actions, Status), então a coluna `i` do servidor é a `i + 3`
+  // do DataTables.
+  function colunasDeValor(columns) {
+    var out = [];
+    columns.forEach(function (c, i) {
+      if (VALUE_COLS.indexOf(c) !== -1) out.push(i + 3);
+    });
+    return out;
   }
 
   function buildTable(columns, rows) {
@@ -120,7 +144,23 @@
       columnDefs: [
         { orderable: false, className: 'text-center', targets: 0 },
         { orderable: false, searchable: false, className: 'text-center', targets: 1 },
-      ],
+        // As colunas de valor saem em #,##0.00. Ortogonal: só o `display` é
+        // formatado. Devolver o texto formatado também no `sort` faria
+        // '1,000.00' vir antes de '9.00' (ordenação de string), e é por isso que
+        // o `sort` sai pelo número cru — o `filter` fica com o texto que está NA
+        // TELA, porque quem digita no filtro copia o que está vendo.
+      ].concat(colunasDeValor(columns).map(function (idx) {
+        return {
+          targets: idx, className: 'text-center cog-num',
+          render: function (d, type) {
+            if (type === 'sort' || type === 'type') {
+              var n = Number(String(d == null ? '' : d).replace(/\s/g, ''));
+              return isFinite(n) ? n : 0;
+            }
+            return fmtValue(d);
+          },
+        };
+      })),
       // No scrollX: one table → header/body never misalign; .table-responsive scrolls.
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
       pageLength: 200, order: [],
@@ -136,6 +176,12 @@
         ],
       }],
     });
+
+    // Seleção de célula + Ctrl+C — o padrão do New Deals para qualquer tabela
+    // (static/js/table-std.js). Fora da seleção: checkbox e Actions. O helper é
+    // idempotente e delega no nó da tabela, então sobrevive aos redraws e ao
+    // rebuild que este `buildTable` faz a cada carga.
+    if (window.otcCellCopy) otcCellCopy('#cog-table', { skip: [0, 1] });
 
     var expWrap = document.querySelector('.cogExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }

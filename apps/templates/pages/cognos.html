@@ -91,6 +91,9 @@
     text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
 }
 #cog-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
+/* Colunas de valor (#,##0.00): dígitos de largura fixa, para os milhares se
+   alinharem de uma linha para a outra e a comparação visual valer. */
+#cog-table tbody td.cog-num { font-variant-numeric: tabular-nums; }
 
 /* Control columns fixed; the 37 FXO data columns share a generic min-width.
    nth-child(1)=checkbox (2)=actions (3)=Status (4+)=dados (_COG_COLUMNS). */
@@ -287,5 +290,6 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/cognos.js?v=20260706"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/cognos.js?v=20260807a"></script>
 {% endblock extra_javascript %}

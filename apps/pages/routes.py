@@ -10567,6 +10567,14 @@ _COG_COLUMNS = [
 _COG_DUP_HEADER = {'Client Type 2': 'Client Type'}
 _COG_DATE_COLS = {'PRM DUE DT', 'Expiry Date From', 'Expiry Date To', 'TRN DT', 'Trade Date',
                   'Event Trade Date', 'OPT STRT DT', 'OPT END DT', 'OPT SET DT'}
+# Colunas de VALOR: a tela as imprime como #,##0.00. A lista vai no payload para
+# a página não manter uma segunda cópia — coluna acrescentada aqui e esquecida
+# lá apareceria como número cru, sem erro nenhum.
+#
+# `Strike Rate` fica de fora de propósito: é TAXA, não valor. Duas casas fariam
+# dois strikes diferentes aparecerem iguais na tela, que é o mesmo cuidado que a
+# recon de FXO já toma com esse campo.
+_COG_VALUE_COLS = {'Call Amount', 'Put Amount', 'USD Amount', 'PRM Amount', 'ATH SET AMT'}
 _COG_META_KEYS = ('_cg_status', '_cg_maker', '_cg_checker', '_cg_id')
 
 
@@ -10751,6 +10759,7 @@ def _cog_collect(ref):
                 widgets['put'] += 1
         widgets['total'] = len(data)
     return {'widgets': widgets, 'columns': _COG_COLUMNS, 'rows': rows_out,
+            'value_columns': sorted(_COG_VALUE_COLS),
             'updated': _ds_read_updated(jp)}
 
 
