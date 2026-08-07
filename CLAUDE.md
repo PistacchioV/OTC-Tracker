@@ -160,13 +160,26 @@ Live Positions, o Track Confirmations e as três Recons).
   filtros e ordenação aplicados, só colunas visíveis), **Import** = teal
   `#4a849b`, **Mapping/refresh** = `btn-success bg-gradient`, **Clear
   Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado.
-- **Alinhamento valor × coluna é parte do padrão.** Com `scrollX` o cabeçalho
-  vive numa tabela irmã do corpo, e as larguras das duas são calculadas em
-  momentos diferentes — carregar dados sem recalcular deixa os valores
-  **deslocados das colunas a que pertencem** (aconteceu na Recon FXO). Depois de
-  todo `rows.add(...).draw()` chame **`table.columns.adjust()`**, e repita num
-  handler de `resize`. Confira o alinhamento em TODA tela nova antes de dar por
-  pronta.
+- **Alinhamento valor × coluna é parte do padrão**, e são TRÊS coisas — a Recon
+  FXO saiu desalinhada duas vezes por ter só a primeira. Com `scrollX` o
+  cabeçalho vive numa tabela irmã do corpo:
+  1. depois de todo `rows.add(...).draw()` chame **`table.columns.adjust()`**,
+     mais um segundo passe atrasado (`setTimeout(…, 150)` com
+     `.adjust().draw(false)`) e um handler de `resize`;
+  2. **`autoWidth: true`**. Com `false` o DataTables não mede nada e cada tabela
+     é dimensionada pelo navegador a partir do próprio conteúdo — o cabeçalho
+     carrega o nome longo e o campo de filtro, fica sempre mais largo, e o
+     desencontro **cresce coluna a coluna**;
+  3. as regras de `th` valem para o CLONE também. O DataTables **remove o id**
+     da tabela do cabeçalho, então `#minha-tabela th` não alcança o cabeçalho
+     que se vê: repita o seletor em `.dt-scroll-head thead th`,
+     `.dt-scroll-headInner thead th` e `.dataTables_scrollHeadInner thead th`.
+     Sem isso o header fica com a fonte e o padding do tema e o corpo com os da
+     página, e as duas tabelas medem larguras diferentes. O header vai com
+     `white-space: normal` — com `nowrap`, um nome longo impõe uma largura
+     mínima que o corpo não tem.
+
+  Confira o alinhamento em TODA tela nova antes de dar por pronta.
 - **Seleção de célula para copiar.** New Deals usa a extensão `select` do
   DataTables (`items:'cell'`); todas as outras páginas usam o
   **`static/js/table-std.js`**: `otcCellCopy('#id', { skip: [0, 1] })` (skip =
@@ -395,6 +408,24 @@ São **24** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto
   sem linha cai em OTC + MO e a tela **avisa** — em vez de deixar a confirmação
   parada num Pending que ninguém sabe de quem é (HANDOFF §217).
+  - A coluna **PRODUCT é um `select`** sobre `manual_conf.CONFIRMATION_TYPES`
+    (`NDF`, `NDF COMM`, `OPTION COMM`, `FXO`, `SWAP`) — **uma lista só**, a
+    mesma do *Confirmation Type* do upload do Electronic Inventory
+    (`routes._EI_CONFIRMATION_TYPES` aponta para ela) e do dropdown de Produto
+    do Track Confirmations. Eram três listas escritas à mão, e o cadastro dizia
+    `OPTION` onde a tela de upload dizia `FXO`: o mesmo documento com dois
+    nomes.
+  - Os dois lados da comparação passam por **`manual_conf.confirmation_type()`**,
+    que traduz a nomenclatura de quem criou a linha (`OPTION`, `NDF FWD START`,
+    e o `NDF` × LOB `COMMODITY` da planilha legada) para o nome único. Ele
+    classifica **pela pasta** (`_product_folder`) antes de aceitar um nome que
+    já está na lista — `NDF` × COMMODITY tem um produto que por acaso está lá, e
+    devolvê-lo direto o classificaria como termo de moeda.
+  - `OPTION EDG` **não era um produto**: era a opção de câmbio na LOB EDG. O
+    `upgrade` do cadastro a converte em `FXO` × LOB `EDG`, que é o desenho
+    Produto × LOB que a tabela sempre teve. Sem esse `upgrade` a instância que
+    já tem o arquivo em disco abriria o `select` sem a opção correspondente, e o
+    primeiro Save trocaria o produto da linha sem ninguém pedir.
 - **`swap-index`** — código de curva B3 → nome (`C00` → `VCP`). Aponta para o
   **mesmo `SwapIndex.json`** da página de Index Results (ver `file` acima), e
   toda tradução código→texto do módulo de Swap passa por registro:
@@ -522,6 +553,43 @@ em que NDF entrou (HANDOFF §199). O status do aviso (`New → Generated → Sen
 vive uma vez só, no overlay do dia
 `other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
 produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
+
+### A Recon FXO tem DOIS lados órfãos, e o join precisa ser `outer`
+
+O status da 1ª coluna tem quatro estados, na ordem da gravidade — que é também a
+ordenação padrão da tabela (por rank, não alfabética):
+
+| Status | O que é | Cor |
+|---|---|---|
+| `Unmatched B3` | está na CETIP/B3, não achou par na Athena (falta bookar) | vermelho |
+| `Unmatched Athena` | está na Athena, não achou par na B3 (falta registrar) | vermelho |
+| `Partial - <campos>` | casou, e os campos listados divergem | laranja |
+| `Matched` | fechou | verde |
+
+O `Unmatched Athena` **só existe porque o merge é `outer`**. Com o `left`
+anterior, a operação que existia só na Athena simplesmente não aparecia na tela —
+uma quebra do mesmo tamanho, com a diferença de que ninguém a via. Três coisas
+quebram junto quando se mexe nisso:
+
+- `df_anc['_veio_da_b3'] = True` antes do merge é o que distingue as duas
+  órfãs depois dele: as duas saem com metade das colunas vazias;
+- `alerta_chave_duplicada` vem `NaN` na linha só-Athena, e **`if nan` é
+  verdadeiro** — o teste é `pd.notna(x) and bool(x)`. E não `x is True`: depois
+  do merge o valor é um `numpy.bool_`, e `numpy.True_ is True` é **falso**, o que
+  apagava a marca de todas as linhas;
+- `_aplicar_perna_espelhada` recebe a máscara das linhas com os dois lados. A
+  assinatura que ela procura (Ctpty e Dir os dois NOK) acontece por falta de par
+  numa órfã, e ela "corrigiria" a linha para um par que não existe.
+
+**A justificativa é do TRADE, não da execução.** O comentário fica em
+`apps/static/data/recon-fxo-comments.json` (fora do cache por data, no
+`.gitignore`), chaveado pela `Combinação de operações`, e `aplicar_comentarios()`
+roda na gravação **e na leitura** — um comentário escrito hoje aparece na recon
+de ontem que já está em cache. Com comentário, `Unmatched`/`Partial` viram
+`Justified`; `Matched` não (comentar o que fechou é anotação, e promovê-lo
+esconderia o único estado que não pede atenção). O status cru fica em `_status`,
+**fora de `COLUMNS`** — é ele que permite apagar o comentário e a linha voltar a
+dizer `Partial - Cntpy` em vez de ficar `Justified` para sempre.
 
 ### A esteira de confirmação manual é um gancho para a frente
 
