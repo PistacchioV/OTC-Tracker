@@ -160,7 +160,7 @@ KEY_COLUMN = 'Trade ID'
 #
 # Ela mora aqui, e não no `routes.py`, porque este módulo não importa aquele (o
 # contrário seria circular) e porque é aqui que a esteira compara produtos.
-CONFIRMATION_TYPES = ('NDF VANILLA', 'NDF FWD START', 'OTHER PUBLISHER',
+CONFIRMATION_TYPES = ('NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER',
                       'NDF COMM', 'OPTION COMM', 'FXO',
                       'SWAP', 'SWAP CORPORATE')
 
@@ -795,27 +795,40 @@ def reject(key, stage, sid, comment):
 # gerar a confirmação e o **upload manual** da tela de Electronic Inventory.
 #
 # Eles gravavam em pastas DIFERENTES para o mesmo produto: o upload usava o nome
-# do tipo cru ('FXO') e o app o nome da pasta ('FX Options'). O Monitor procura
+# do tipo cru ('FXO') e o app um nome bonito ('FX Options'). O Monitor procura
 # PDF só onde o app grava, então a confirmação subida à mão ficava invisível para
 # ele, com o arquivo lá no share.
 #
-# Os quatro primeiros nomes são os que JÁ EXISTEM no share e não podem mudar —
-# renomeá-los deixaria para trás tudo o que já foi gravado.
-TYPE_FOLDER = {
-    'NDF VANILLA':     'NDF Vanilla',
-    'NDF FWD START':   'NDF FWD Start',
-    'OTHER PUBLISHER': 'NDF Other Publisher',
-    'NDF COMM':        'NDF Commodities',
-    'OPTION COMM':     'Commodities Options',
-    'FXO':             'FX Options',
-    'SWAP':            'Swap',
-    'SWAP CORPORATE':  'Swap Corporate',
+# **A pasta É o código do tipo**, e é por isso que este mapa é a identidade: o
+# share já está cheio de pastas com o nome do tipo ('NDF COMM'), que é como o
+# upload manual sempre gravou, e é esse o nome que o time reconhece. Ter um
+# segundo nome só para a escrita do app recriava a divergência pela outra ponta.
+# O mapa continua existindo — em vez de o chamador escrever a string — porque é
+# ele que garante que os quatro consumidores digam a mesma coisa.
+TYPE_FOLDER = {t: t for t in CONFIRMATION_TYPES}
+
+# As pastas que o app usou ANTES de a pasta virar o código do tipo. São só de
+# LEITURA: o documento novo vai para o nome do tipo, mas tudo o que já foi
+# gravado continua nelas, e o Monitor tem de achar. Sem isto, unificar o nome
+# apagaria da tela todas as confirmações antigas — com os arquivos intactos no
+# share, que é a pior forma de sumir.
+TYPE_FOLDER_LEGACY = {
+    'NDF VANILLA':         ('NDF Vanilla',),
+    'NDF FWD START':       ('NDF FWD Start',),
+    'NDF OTHER PUBLISHER': ('NDF Other Publisher', 'OTHER PUBLISHER'),
+    'NDF COMM':            ('NDF Commodities',),
+    'OPTION COMM':         ('Commodities Options',),
+    'FXO':                 ('FX Options',),
+    'SWAP':                ('Swap',),
+    'SWAP CORPORATE':      ('Swap Corporate',),
 }
 
 # Produto (o que está gravado na linha) → pasta. É o TYPE_FOLDER mais os apelidos
-# que o New Deals usa ao criar a linha: 'OPTION' é o nome dele para o FXO.
+# que o New Deals usa ao criar a linha ('OPTION' é o nome dele para o FXO) e o
+# nome antigo do Other Publisher, que ficou em cadastros já salvos.
 PRODUCT_FOLDER = dict(TYPE_FOLDER, **{
-    'OPTION': 'FX Options',
+    'OPTION':          'FXO',
+    'OTHER PUBLISHER': 'NDF OTHER PUBLISHER',
 })
 
 _MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
@@ -838,17 +851,17 @@ def _product_folder(row):
     if direto:
         return direto
     if prod.startswith('NDF FWD'):
-        return 'NDF FWD Start'
+        return 'NDF FWD START'
     if 'SWAP' in prod:
-        return 'Swap Corporate' if 'CORP' in prod else 'Swap'
+        return 'SWAP CORPORATE' if 'CORP' in prod else 'SWAP'
     e_comm = 'COMMODIT' in lob or 'COMM' in prod
     if prod.startswith('NDF'):
         # NDF que não é de mercadoria é o termo de moeda das páginas de Vanilla /
         # Other Publisher. Antes isto devolvia None, e a linha ficava sem pasta —
         # ou seja, sem chance de o Monitor achar o documento dela.
-        return 'NDF Commodities' if e_comm else 'NDF Vanilla'
+        return 'NDF COMM' if e_comm else 'NDF VANILLA'
     if prod.startswith(('OPCAO', 'OPTION', 'OPT')):
-        return 'Commodities Options' if e_comm else 'FX Options'
+        return 'OPTION COMM' if e_comm else 'FXO'
     return None
 
 
@@ -898,16 +911,33 @@ def confirmation_folder(row):
     precisa procurar.
 
     (None, None) quando falta o que forma o caminho.
+
+    É a pasta de ESCRITA — a do nome do tipo. Para procurar um documento use
+    `confirmation_folders`, que devolve também as pastas antigas.
+    """
+    cliente, rels = confirmation_folders(row)
+    return (cliente, rels[0]) if rels else (None, None)
+
+
+def confirmation_folders(row):
+    """(cliente, [caminhos relativos]) onde o documento daquela linha pode estar.
+
+    O primeiro é o de sempre — a pasta com o nome do tipo, que é onde o app
+    grava. Os demais são as pastas de nome antigo (`TYPE_FOLDER_LEGACY`), que
+    continuam cheias no share: quem procura o PDF tem de olhar nas duas, ou a
+    unificação do nome faria as confirmações de antes sumirem da tela.
+
+    (None, []) quando falta o que forma o caminho.
     """
     cliente = str(row.get('Cliente', '') or '').strip()
     produto = _product_folder(row)
     d = parse_date(row.get('Data Operação'))
     if not (cliente and produto and d):
-        return None, None
-    rel = '/'.join(['Confirmations', '%04d' % d.year,
-                    '%02d. %s' % (d.month, _MONTH_EN[d.month]),
-                    '%02d' % d.day, produto])
-    return cliente, rel
+        return None, []
+    prefixo = ['Confirmations', '%04d' % d.year,
+               '%02d. %s' % (d.month, _MONTH_EN[d.month]), '%02d' % d.day]
+    pastas = [produto] + [p for p in TYPE_FOLDER_LEGACY.get(produto, ()) if p != produto]
+    return cliente, ['/'.join(prefixo + [p]) for p in pastas]
 
 
 # =============================================================================

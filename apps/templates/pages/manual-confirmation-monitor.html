@@ -91,7 +91,8 @@
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--ins-border-color);
     border-radius: 12px; padding: .8rem .9rem; margin-bottom: .5rem;
-    transition: border-color 200ms var(--mc-ease), box-shadow 200ms var(--mc-ease);
+    transition: border-color 200ms var(--mc-ease), box-shadow 200ms var(--mc-ease),
+                background 200ms var(--mc-ease);
 }
 #mc-monitor .mc-item:last-child { margin-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
@@ -128,26 +129,44 @@
     font-size: .64rem; font-weight: 800; letter-spacing: .02em;
     padding: .14rem .5rem; border-radius: 999px; border: 1px solid transparent;
 }
-#mc-monitor .mc-sla-ok   .mc-item__sla { background: rgba(26,138,74,.12);  color: #1a8a4a; border-color: rgba(26,138,74,.28); }
-#mc-monitor .mc-sla-warn .mc-item__sla { background: rgba(176,117,0,.14);  color: #8a6100; border-color: rgba(176,117,0,.30); }
-#mc-monitor .mc-sla-late .mc-item__sla { background: rgba(192,57,43,.12);  color: #b71c1c; border-color: rgba(192,57,43,.32); }
-[data-bs-theme=dark] #mc-monitor .mc-sla-ok   .mc-item__sla { background: rgba(52,199,89,.16);  color: #7ed6a2; border-color: rgba(52,199,89,.32); }
-[data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: rgba(247,184,75,.16); color: #f7c56b; border-color: rgba(247,184,75,.32); }
-[data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: rgba(244,67,54,.18);  color: #ef9a9a; border-color: rgba(244,67,54,.35); }
+/* O chip é SÓLIDO, não pastel. A versão de fundo translúcido lia-se como uma
+   etiqueta a mais no meio das outras — e a luz do prazo tem de ser a primeira
+   coisa que se vê ao correr o olho pela fila, não a última. Texto branco sobre
+   cor cheia é o que sobrevive à distância de leitura de uma coluna inteira. */
+#mc-monitor .mc-sla-ok   .mc-item__sla { background: #1a8a4a; color: #fff; border-color: #157a41; }
+#mc-monitor .mc-sla-warn .mc-item__sla { background: #d98a00; color: #fff; border-color: #b87700; }
+#mc-monitor .mc-sla-late .mc-item__sla { background: #d32f2f; color: #fff; border-color: #b71c1c; }
+[data-bs-theme=dark] #mc-monitor .mc-sla-ok   .mc-item__sla { background: #22a35a; color: #06210f; border-color: #2fbd6c; }
+[data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: #f2a417; color: #2a1c00; border-color: #ffbb3d; }
+[data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: #e5484d; color: #2a0508; border-color: #ff6166; }
 
-/* O item se tinge junto. O `ok` fica NEUTRO de propósito: pintar de verde o que
-   está dentro do prazo é pintar quase a fila inteira, e aí o vermelho some no
-   meio — só o que pede atenção ganha cor. */
+/* O item se tinge junto — moldura, sombra e uma tarja na lateral. O `ok` fica
+   NEUTRO de propósito: pintar de verde o que está dentro do prazo é pintar quase
+   a fila inteira, e aí o vermelho some no meio — só o que pede atenção ganha
+   cor. A tarja é o que faz a cor sobreviver ao scroll: a moldura sozinha some
+   entre os itens vizinhos, e é ela que se lê de relance. */
+#mc-monitor .mc-item.mc-sla-warn,
+#mc-monitor .mc-item.mc-sla-late { border-left-width: 4px; }
 #mc-monitor .mc-item.mc-sla-warn {
-    border-color: rgba(176,117,0,.45);
-    box-shadow: 0 1px 3px rgba(176,117,0,.10), 0 6px 16px rgba(176,117,0,.16);
+    border-color: rgba(217,138,0,.75); border-left-color: #d98a00;
+    background: linear-gradient(90deg, rgba(217,138,0,.10), rgba(217,138,0,.02) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
+    box-shadow: 0 1px 3px rgba(217,138,0,.18), 0 8px 20px rgba(217,138,0,.24);
 }
 #mc-monitor .mc-item.mc-sla-late {
-    border-color: rgba(192,57,43,.5);
-    box-shadow: 0 1px 3px rgba(192,57,43,.12), 0 6px 16px rgba(192,57,43,.20);
+    border-color: rgba(211,47,47,.8); border-left-color: #d32f2f;
+    background: linear-gradient(90deg, rgba(211,47,47,.11), rgba(211,47,47,.02) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
+    box-shadow: 0 1px 3px rgba(211,47,47,.20), 0 8px 20px rgba(211,47,47,.28);
 }
-[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-warn { border-color: rgba(247,184,75,.42); }
-[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-late { border-color: rgba(244,67,54,.48); }
+[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-warn {
+    border-color: rgba(242,164,23,.7); border-left-color: #f2a417;
+    background: linear-gradient(90deg, rgba(242,164,23,.16), rgba(242,164,23,.03) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
+    box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 20px rgba(242,164,23,.20);
+}
+[data-bs-theme=dark] #mc-monitor .mc-item.mc-sla-late {
+    border-color: rgba(229,72,77,.78); border-left-color: #e5484d;
+    background: linear-gradient(90deg, rgba(229,72,77,.18), rgba(229,72,77,.03) 42%), var(--vr-card-bg, var(--ins-secondary-bg));
+    box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 20px rgba(229,72,77,.24);
+}
 #mc-monitor .mc-item__acts .btn {
     font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
     transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
@@ -181,14 +200,6 @@
 [data-bs-theme=dark] #mc-monitor .mc-age-2 { color: #ff8a80; }
 
 #mc-monitor .mc-empty { padding: 1.6rem 1rem; text-align: center; font-size: .75rem; color: var(--ins-secondary-color); }
-
-/* O modal fica no MESMO raio e na mesma moldura dos cards. Ele nasce fora do
-   #mc-monitor (o container fecha antes dele), por isso o seletor é o id. */
-#mcRejectModal .modal-content {
-    border-radius: var(--vr-card-radius, 18px);
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
-}
 
 /* Entrada escalonada — 40ms entre itens, curta o bastante para não atrasar a
    leitura da fila. Nada nasce de scale(0). */
@@ -226,35 +237,6 @@
     <div class="row g-3" id="mc-cards"></div>
 </div>
 
-<!-- ── Reject: o comentário é o conteúdo do aviso ─────────────────── -->
-<div class="modal fade" id="mcRejectModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
-                    <i data-lucide="corner-up-left" style="width:18px;height:18px;" class="text-danger"></i>
-                    <span data-lang="mc-reject-title">Reject confirmation</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body pt-2">
-                <p class="text-muted small mb-2" id="mcRejectWho"></p>
-                <p class="text-muted small mb-2" data-lang="mc-reject-desc">
-                    The confirmation goes back to <b>Pending OTC</b> and the validations
-                    already given are cleared — the document will be redone. The comment
-                    below goes in the notice to brazil.otc.ops@jpmorgan.com.
-                </p>
-                <textarea class="form-control" id="mcRejectComment" rows="4"
-                          data-lang-placeholder="mc-reject-ph"
-                          placeholder="What needs to be fixed?"></textarea>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
-                <button class="btn btn-sm btn-danger" id="mcRejectConfirm" data-lang="mc-reject-send">Reject and notify</button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_javascript %}
@@ -269,7 +251,6 @@
         MO:  { cls: 'mc-c-mo',  icon: 'ti-checkup-list' },
         FO:  { cls: 'mc-c-fo',  icon: 'ti-briefcase' }
     };
-    var pending = { keys: [], stage: '' };
 
     // ── i18n dos textos montados em JS ──────────────────────────────────
     // O I18nManager do app traduz [data-lang] UMA vez, no load — o que este
@@ -281,51 +262,33 @@
         en: { ops: 'op(s)', opsLong: 'operation(s)', none: '—',
               slaOk: '{n}d left', slaWarn: 'due tomorrow', slaToday: 'due today',
               slaLate: '{n}d overdue',
-              validate: 'Validate', reject: 'Reject',
+              validate: 'Validate',
               empty: 'Nothing pending at this stage.',
               nolink: 'no PDF in the confirmation folder',
               docsLoading: 'looking for the PDFs…',
-              stageWho: 'Stage: {s} · {n} operation(s): {k}',
               warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
               failTitle: 'Could not load the queue',
-              failText: 'Refresh the page; if it persists the server may be restarting.',
-              valFail: 'Could not validate', rejFail: 'Could not reject',
-              commentMissing: 'Comment is required', commentWhy: 'It is what tells OTC what to redo.',
-              rejOkTitle: 'Confirmation returned to OTC',
-              rejOkMail: 'The notice was sent to brazil.otc.ops@jpmorgan.com.',
-              rejOkNoMail: 'The e-mail notice did not go out (relay unavailable), but the confirmation is already back in Pending OTC.' },
+              failText: 'Refresh the page; if it persists the server may be restarting.' },
         br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
               slaOk: 'faltam {n}d', slaWarn: 'vence amanhã', slaToday: 'vence hoje',
               slaLate: '{n}d de atraso',
-              validate: 'Validar', reject: 'Rejeitar',
+              validate: 'Validar',
               empty: 'Nada pendente nesta etapa.',
               nolink: 'nenhum PDF na pasta da confirmação',
               docsLoading: 'procurando os PDFs…',
-              stageWho: 'Etapa: {s} · {n} operação(ões): {k}',
               warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
               failTitle: 'Não foi possível carregar a esteira',
-              failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.',
-              valFail: 'Não foi possível validar', rejFail: 'Não foi possível rejeitar',
-              commentMissing: 'Falta o comentário', commentWhy: 'É ele que diz ao OTC o que refazer.',
-              rejOkTitle: 'Confirmação devolvida ao OTC',
-              rejOkMail: 'O aviso foi enviado para brazil.otc.ops@jpmorgan.com.',
-              rejOkNoMail: 'O aviso por e-mail não saiu (relay indisponível), mas a confirmação já voltou para Pending OTC.' },
+              failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.' },
         es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
               slaOk: 'faltan {n}d', slaWarn: 'vence mañana', slaToday: 'vence hoy',
               slaLate: '{n}d de retraso',
-              validate: 'Validar', reject: 'Rechazar',
+              validate: 'Validar',
               empty: 'Nada pendiente en esta etapa.',
               nolink: 'ningún PDF en la carpeta de la confirmación',
               docsLoading: 'buscando los PDFs…',
-              stageWho: 'Etapa: {s} · {n} operación(es): {k}',
               warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
               failTitle: 'No se pudo cargar la cola',
-              failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.',
-              valFail: 'No se pudo validar', rejFail: 'No se pudo rechazar',
-              commentMissing: 'Falta el comentario', commentWhy: 'Es lo que le dice a OTC qué rehacer.',
-              rejOkTitle: 'Confirmación devuelta a OTC',
-              rejOkMail: 'El aviso fue enviado a brazil.otc.ops@jpmorgan.com.',
-              rejOkNoMail: 'El aviso por e-mail no salió (relay no disponible), pero la confirmación ya volvió a Pending OTC.' }
+              failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.' }
     };
     function t(k, vars) {
         var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
@@ -354,7 +317,6 @@
         var meta = [it['Data Operação'], it.Tipo || it.Produto, it.LOB, it.Moeda]
             .filter(Boolean).map(esc).join(' · ');
         var age = it['Aging Confirmação'];
-        var keys = JSON.stringify(it.keys || []).replace(/"/g, '&quot;');
 
         // Os PDFs vêm da PASTA da confirmação no Electronic Inventory — que é um
         // share de rede. Resolver isso no payload do Monitor era o que fazia a
@@ -369,9 +331,10 @@
                    'data-docs-data="' + esc(it['Data Operação'] || '') + '">' +
                    '<i class="ti ti-loader-2 me-1"></i>' + esc(t('docsLoading')) + '</span>';
 
-        var reject = (stage === 'OTC') ? '' :
-            '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + keys + '" data-stage="' + stage + '">' +
-            '<i class="ti ti-corner-up-left me-1"></i>' + esc(t('reject')) + '</button>';
+        // O card tem UM botão só. Validar e Rejeitar são as duas respostas à
+        // mesma pergunta — o documento está certo? — e as duas exigem tê-lo
+        // aberto. Elas moraram aqui e a de rejeitar ficava a um clique de quem
+        // nunca viu o papel; agora as duas vivem na tela de validação.
 
         // A luz do prazo (OTC D+3, MO D+4, FO D+6 do trade date, em dias úteis).
         // Mesma leitura das luzes do New Deals Monitor: verde com folga, âmbar na
@@ -407,7 +370,6 @@
                 'href="/manual-confirmation/validate?stage=' + encodeURIComponent(stage) +
                 '&keys=' + encodeURIComponent((it.keys || []).join(',')) + '">' +
                 '<i class="ti ti-checkup-list me-1"></i>' + esc(t('validate')) + '</a>' +
-                reject +
             '</div></div>';
     }
 
@@ -494,13 +456,6 @@
             });
     }
 
-    function post(url, body) {
-        return fetch(url, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        }).then(function (r) { return r.json(); });
-    }
-
     // A tela de validação abre em aba nova e chama isto ao carimbar: sem ele a
     // fila continuaria mostrando uma confirmação que já saiu dela.
     window.mcReload = load;
@@ -508,46 +463,8 @@
     $(document).ready(function () {
         load();
 
-        // O Validate virou um <a> para /manual-confirmation/validate — não há
-        // mais carimbo no clique. Ver o comentário em `item()`.
-
-        $(document).on('click', '[data-mc-reject]', function () {
-            pending.keys = JSON.parse($(this).attr('data-mc-reject'));
-            pending.stage = $(this).attr('data-stage');
-            $('#mcRejectComment').val('');
-            $('#mcRejectWho').text(t('stageWho', { s: pending.stage,
-                                                   n: pending.keys.length,
-                                                   k: pending.keys.join(', ') }));
-            new bootstrap.Modal(document.getElementById('mcRejectModal')).show();
-        });
-
-        $('#mcRejectConfirm').on('click', function () {
-            var comment = $('#mcRejectComment').val().trim();
-            if (!comment) {
-                Swal.fire({ icon: 'warning', title: t('commentMissing'),
-                            text: t('commentWhy') });
-                return;
-            }
-            post('/api/manual-confirmation/reject', {
-                keys: pending.keys, stage: pending.stage, comment: comment
-            }).then(function (j) {
-                bootstrap.Modal.getInstance(document.getElementById('mcRejectModal')).hide();
-                if (!j.success) {
-                    Swal.fire({ icon: 'error', title: t('rejFail'), text: j.message || '' });
-                    return;
-                }
-                load();
-                // O reject foi gravado mesmo se o e-mail não saiu — dizer isso é o
-                // que evita alguém rejeitar de novo achando que não funcionou.
-                Swal.fire({
-                    icon: j.emailed ? 'success' : 'warning',
-                    title: t('rejOkTitle'),
-                    text: j.emailed ? t('rejOkMail') : t('rejOkNoMail'),
-                    timer: j.emailed ? 2600 : undefined,
-                    showConfirmButton: !j.emailed
-                });
-            });
-        });
+        // Validar e Rejeitar não acontecem aqui: o Validate é um <a> para
+        // /manual-confirmation/validate, e é lá que estão os dois botões.
 
         if (window.lucide) lucide.createIcons();
     });

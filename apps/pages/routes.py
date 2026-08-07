@@ -17904,7 +17904,7 @@ _MC_VALIDATION_SEED = (
      'FO': 'EXEMPT', 'NOTES': 'Termo de moeda'},
     {'PRODUCT': 'NDF FWD START', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com início futuro'},
-    {'PRODUCT': 'OTHER PUBLISHER', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+    {'PRODUCT': 'NDF OTHER PUBLISHER', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'EXEMPT', 'NOTES': 'Termo de moeda com publicador não-BACEN'},
     {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'EXEMPT', 'NOTES': 'Termo de mercadoria'},
@@ -24639,19 +24639,15 @@ def _mc_stamp_generated(picked, product, link=''):
         log.warning('[manual-conf] carimbo de geração falhou:\n%s', traceback.format_exc())
 
 
-def _mc_stamp_otc_validated(picked, product, sid):
-    """Confirmação validada no checklist → Conferido OTC + Time Stamp (hora e SPN).
-
-    O SPN vem da sessão de quem clicou; a validação do OTC acontece na MESMA tela
-    de checklist que já existia, e não numa segunda tela paralela — duas telas de
-    validação do mesmo documento acabariam divergindo sobre o que foi conferido.
-    """
-    try:
-        from apps.pages import manual_conf as _mc
-        for k in _mc_conf_trade_keys(picked, product):
-            _mc.mark_validated(k, _mc.STAGE_OTC, sid)
-    except Exception:
-        log.warning('[manual-conf] carimbo de validação falhou:\n%s', traceback.format_exc())
+# A validação do OTC na esteira NÃO acontece mais aqui. O checklist do New Deals
+# fecha o ciclo do DOCUMENTO (New → Generated → Success): ele diz que o papel foi
+# gerado e conferido por quem o montou. Carimbá-lo também como a validação do OTC
+# fazia a confirmação nascer já na mesa seguinte, e a fila do OTC no Monitor
+# ficava vazia por construção — a mesa não tinha onde conferir o que ela mesma
+# acabara de emitir, com o prazo de D+3 correndo em silêncio.
+#
+# Gerar é gravar. A etapa do OTC é carimbada uma vez só, em
+# `/manual-confirmation/validate`, aberto pelo Monitor.
 
 
 def _conf_pc_set_fepweb(trade_numbers, numero):
@@ -24745,10 +24741,12 @@ def api_conf_ndfcomm_save():
     # Pasta da contraparte no Electronic Inventory — mesma árvore que o upload
     # manual da página (<Cliente>\Confirmations\YYYY\mm. Month\dd\<produto>),
     # para a confirmação aparecer no browse do EI junto dos demais documentos.
+    # O nome do produto sai do TYPE_FOLDER (a pasta É o código do tipo): escrito
+    # à mão aqui, ele voltava a divergir do upload manual no primeiro ajuste.
     client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
-                            ref.strftime('%d'), 'NDF Commodities')
+                            ref.strftime('%d'), _mc_mod.TYPE_FOLDER['NDF COMM'])
     # Nome no padrão legado, mantendo o prefixo contraparte × mercadoria.
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
@@ -24922,11 +24920,9 @@ def api_conf_ndfcomm_validate():
         state[key] = entry
         _conf_state_save(ref, state)
     acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
-    # A validação do checklist É a validação do OTC: carimba Conferido OTC
-    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
-    # cobre. As operações saem do MESMO recorte que gerou o documento.
-    _mc_stamp_otc_validated(_conf_pick_ndfcomm(ref, acr, merc, fam or 'strike-usd'),
-                            'ndf-comm', session.get('user_sid', ''))
+    # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
+    # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
+    # `_mc_stamp_otc_validated` existia.
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'NDF Comm', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -25177,7 +25173,7 @@ def api_conf_optcomm_save():
     client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
-                            ref.strftime('%d'), 'Commodities Options')
+                            ref.strftime('%d'), _mc_mod.TYPE_FOLDER['OPTION COMM'])
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -25328,11 +25324,9 @@ def api_conf_optcomm_validate():
         state[key] = entry
         _conf_state_save(ref, state, 'opt-comm')
     acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
-    # A validação do checklist É a validação do OTC: carimba Conferido OTC
-    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
-    # cobre. As operações saem do MESMO recorte que gerou o documento.
-    _mc_stamp_otc_validated(_conf_pick_optcomm(ref, acr, merc, fam or 'strike-usd'),
-                            'opt-comm', session.get('user_sid', ''))
+    # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
+    # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
+    # `_mc_stamp_otc_validated` existia.
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'Opt Comm', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -25596,7 +25590,7 @@ def api_conf_optfxo_save():
     client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
-                            ref.strftime('%d'), 'FX Options')
+                            ref.strftime('%d'), _mc_mod.TYPE_FOLDER['FXO'])
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -25747,11 +25741,9 @@ def api_conf_optfxo_validate():
         state[key] = entry
         _conf_state_save(ref, state, 'opt-fxo')
     acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
-    # A validação do checklist É a validação do OTC: carimba Conferido OTC
-    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
-    # cobre. As operações saem do MESMO recorte que gerou o documento.
-    _mc_stamp_otc_validated(_conf_pick_optfxo(ref, acr, merc, fam or 'strike-usd'),
-                            'opt-fxo', session.get('user_sid', ''))
+    # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
+    # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
+    # `_mc_stamp_otc_validated` existia.
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'Opt FXO', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -26021,7 +26013,7 @@ def api_conf_fwdstart_save():
     client_dir = _ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _ei_month_folder(ref.strftime('%m')),
-                            ref.strftime('%d'), 'NDF FWD Start')
+                            ref.strftime('%d'), _mc_mod.TYPE_FOLDER['NDF FWD START'])
     if len(rows) == 1 and str(rows[0].get('num') or '').strip():
         base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
             acr, merc, str(rows[0]['num']).strip())
@@ -26168,11 +26160,9 @@ def api_conf_fwdstart_validate():
         state[key] = entry
         _conf_state_save(ref, state, 'ndf-fwdstart')
     acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
-    # A validação do checklist É a validação do OTC: carimba Conferido OTC
-    # e o Time Stamp (hora + SPN de quem clicou) nas linhas que a confirmação
-    # cobre. As operações saem do MESMO recorte que gerou o documento.
-    _mc_stamp_otc_validated(_conf_pick_fwdstart(ref, acr, merc, fam or 'strike-usd'),
-                            'ndf-fwdstart', session.get('user_sid', ''))
+    # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
+    # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
+    # `_mc_stamp_otc_validated` existia.
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Confirmation Validated', 'NDF FWD Start', '{} · {}'.format(acr, merc))
     return jsonify({'success': True, 'status': 'Success'})
@@ -28464,26 +28454,36 @@ def _mc_confirmation_docs(row):
 
     Só PDF: é o que abre em preview no navegador. O .doc baixaria, e o .xml é do
     FepWeb — nenhum dos dois é o que se confere na tela.
+
+    A busca varre TODAS as pastas candidatas da linha: a do nome do tipo (onde o
+    app grava hoje) e as de nome antigo, que continuam cheias no share.
     """
     try:
         from apps.pages import manual_conf as _mc
-        cliente, rel = _mc.confirmation_folder(row)
+        cliente, rels = _mc.confirmation_folders(row)
         if not cliente:
             return []
         base = _ei_resolve_client_dir(cliente)
         if not base:
             return []
-        folder = os.path.join(base, *rel.split('/'))
-        long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
-        if not os.path.isdir(long_folder):
-            return []
-        out = []
-        for name in sorted(os.listdir(long_folder)):
-            if not name.lower().endswith('.pdf'):
+        out, vistos = [], set()
+        for rel in rels:
+            folder = os.path.join(base, *rel.split('/'))
+            long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
+            if not os.path.isdir(long_folder):
                 continue
-            out.append({'name': os.path.splitext(name)[0],
-                        'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
-                                '&rel=' + quote(rel + '/' + name))})
+            for name in sorted(os.listdir(long_folder)):
+                if not name.lower().endswith('.pdf'):
+                    continue
+                # O mesmo documento pode ter sido copiado para as duas pastas na
+                # transição. Mostrar duas vezes o que se abre igual só faria a
+                # pessoa conferir duas vezes o mesmo papel.
+                if name.lower() in vistos:
+                    continue
+                vistos.add(name.lower())
+                out.append({'name': os.path.splitext(name)[0],
+                            'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
+                                    '&rel=' + quote(rel + '/' + name))})
         # A pasta do dia tem UM PDF por commodity (MATARIPE - OLEO - …,
         # MATARIPE - PLATTS - …). Quando a linha sabe o Ativo, só os dele são a
         # confirmação exata; se nenhum nome carrega o Ativo (câmbio: USD), a
@@ -28583,6 +28583,9 @@ def manual_confirmation_validate():
         # `already` trava o botão: revalidar recarimbaria por cima de quem
         # assinou antes, apagando o dono da conferência anterior.
         already=bool(str(row.get(col_data, '') or '').strip()),
+        # Rejeitar é devolver ao OTC — que é quem monta o documento. O próprio
+        # OTC não tem para quem devolver, então o botão não existe na etapa dele.
+        can_reject=(stage != _mc.STAGE_OTC),
         sla_level=sla['level'], sla_left=sla['left'],
         sla_deadline=_mc.fmt_date(sla['deadline']),
         sla_days=_mc.SLA_BIZDAYS.get(stage),

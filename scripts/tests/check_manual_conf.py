@@ -266,12 +266,23 @@ check('   e ignora pontuação do nome',
 cli, rel = M.confirmation_folder({'Cliente': 'ACME S.A.', 'Produto': 'NDF COMM',
                                   'Data Operação': '05/08/2026'})
 check('a pasta da confirmação vem da linha', (cli, rel),
-      ('ACME S.A.', 'Confirmations/2026/08. August/05/NDF Commodities'))
-# As quatro pastas que JÁ EXISTEM no share não podem mudar de nome — renomeá-las
-# deixaria para trás tudo o que já foi gravado nelas.
-check('   e as pastas históricas continuam com o mesmo nome',
-      [M.TYPE_FOLDER[t] for t in ('NDF COMM', 'OPTION COMM', 'FXO', 'NDF FWD START')],
-      ['NDF Commodities', 'Commodities Options', 'FX Options', 'NDF FWD Start'])
+      ('ACME S.A.', 'Confirmations/2026/08. August/05/NDF COMM'))
+# A pasta É o código do tipo. O share já está cheio de pastas com esse nome (é
+# como o upload manual sempre gravou), e ter um segundo nome só para a escrita
+# do app recriava pela outra ponta a divergência que a unificação resolveu.
+check('   e a pasta é o próprio código do tipo',
+      [M.TYPE_FOLDER[t] for t in M.CONFIRMATION_TYPES], list(M.CONFIRMATION_TYPES))
+# As pastas de nome antigo continuam CHEIAS no share. Quem procura o documento
+# tem de olhar nelas também — senão unificar o nome apagaria da tela toda
+# confirmação anterior, com os arquivos intactos lá.
+cli2, rels = M.confirmation_folders({'Cliente': 'ACME S.A.', 'Produto': 'NDF COMM',
+                                     'Data Operação': '05/08/2026'})
+check('   e a busca cobre também a pasta antiga', rels,
+      ['Confirmations/2026/08. August/05/NDF COMM',
+       'Confirmations/2026/08. August/05/NDF Commodities'])
+check('   com a pasta de ESCRITA sempre em primeiro', rels[0], rel)
+check('   e todo tipo com o seu histórico declarado',
+      sorted(M.TYPE_FOLDER_LEGACY), sorted(M.CONFIRMATION_TYPES))
 check('   e o nome da pasta é o mesmo que o save grava',
       sorted(set(M.PRODUCT_FOLDER.values())),
       sorted(set(M.TYPE_FOLDER.values())))
@@ -285,12 +296,17 @@ check('   e cada tipo tem uma pasta só sua',
 # Track vem com o segundo, e sem esta entrada ela ficaria sem PDF.
 check('   e FXO é a mesma pasta de OPTION',
       (M.PRODUCT_FOLDER.get('FXO'), M.PRODUCT_FOLDER.get('OPTION')),
-      ('FX Options', 'FX Options'))
+      ('FXO', 'FXO'))
 
 print('\n== 7b. o tipo de confirmação é UMA lista só ==')
 check('os oito tipos', list(M.CONFIRMATION_TYPES),
-      ['NDF VANILLA', 'NDF FWD START', 'OTHER PUBLISHER', 'NDF COMM',
+      ['NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER', 'NDF COMM',
        'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE'])
+# O nome antigo ficou em cadastros já salvos e em pastas já gravadas. Traduzi-lo
+# é o que impede o `select` do mapping de abrir sem a opção da linha — e o
+# primeiro Save trocaria o produto dela sem ninguém pedir.
+check('   e o nome antigo do Other Publisher ainda traduz',
+      M.confirmation_type('OTHER PUBLISHER'), 'NDF OTHER PUBLISHER')
 # São CÓDIGOS, não rótulos: a comparação entre as telas é feita sobre eles, e um
 # 'Ndf Vanilla' cadastrado pela tela não casaria com o 'NDF VANILLA' do banco.
 check('   todos em maiúsculo', [t for t in M.CONFIRMATION_TYPES if t != t.upper()], [])
@@ -321,7 +337,7 @@ write_map(MAPA)      # o cadastro do teste de volta — as seções seguintes le
 check('a nomenclatura da planilha legada resolve a MESMA pasta',
       M.confirmation_folder({'Cliente': 'REFINARIA', 'Produto': 'NDF',
                              'LOB': 'COMMODITY', 'Data Operação': '03/08/2026'})[1],
-      'Confirmations/2026/08. August/03/NDF Commodities')
+      'Confirmations/2026/08. August/03/NDF COMM')
 check('sem produto conhecido nao inventa pasta',
       M.confirmation_folder({'Cliente': 'X', 'Produto': '?', 'Data Operação': '05/08/2026'}),
       (None, None))
@@ -419,6 +435,23 @@ check('o item antigo do menu leva ao Monitor',
       cl.get('/manual-confirmation').status_code, 302)
 check('o Monitor abre', cl.get('/manual-confirmation/monitor').status_code, 200)
 check('o Track abre', cl.get('/manual-confirmation/track').status_code, 200)
+
+# ── Gerar é gravar ──────────────────────────────────────────────────────────
+# O checklist do New Deals fecha o ciclo do DOCUMENTO (New → Generated →
+# Success); ele NÃO carimba a etapa do OTC na esteira. Carimbando, a confirmação
+# nascia já na mesa seguinte e a fila do OTC no Monitor ficava vazia por
+# construção — a mesa não tinha onde conferir o que ela mesma acabara de emitir.
+check('a geração no New Deals não valida o OTC da esteira',
+      hasattr(R, '_mc_stamp_otc_validated'), False)
+check('   mas continua carimbando que o documento saiu',
+      hasattr(R, '_mc_stamp_generated'), True)
+
+# Os dois botões vivem na TELA DE VALIDAÇÃO, não no card: validar e rejeitar são
+# as duas respostas à mesma pergunta, e as duas exigem ter aberto o documento.
+MON = cl.get('/manual-confirmation/monitor').data.decode('utf-8')
+check('o card do Monitor não rejeita', 'data-mc-reject' in MON, False)
+check('   e o Validate abre a tela de validação',
+      '/manual-confirmation/validate?stage=' in MON, True)
 HTML = cl.get('/manual-confirmation/track').data.decode('utf-8')
 check('a tela recebe as colunas do servidor', 'var COLUMNS = [' in HTML, True)
 check('   e não tem uma lista própria', "'Conferido OTC'" in HTML, False)

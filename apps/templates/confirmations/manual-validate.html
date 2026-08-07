@@ -81,6 +81,29 @@
                   font-weight: bold; margin-top: 6px; }
   #btn-validate:disabled { background: #2a2a3a; color: #707080; cursor: not-allowed; }
   #vstatus { font-size: 9pt; margin-top: 10px; min-height: 16px; }
+
+  /* ── Devolver ao OTC ─────────────────────────────────────────────────────
+     Fica AQUI e não no card do Monitor: rejeitar é dizer que o documento está
+     errado, e para dizer isso é preciso tê-lo aberto. No card, o botão ficava
+     a um clique de distância de quem nunca viu o papel. */
+  #btn-reject { width: 100%; background: transparent; border: 1px solid #5a2a35;
+                color: #f19aa2; padding: 9px; border-radius: 6px; cursor: pointer;
+                font-size: 9.5pt; margin-top: 8px; }
+  #btn-reject:hover { background: rgba(220,53,69,.12); border-color: #dc3545; }
+  #rejbox { display: none; margin-top: 8px; border: 1px solid #5a2a35;
+            border-radius: 6px; padding: 10px; background: #0d0d1a; }
+  #rejbox label { display: block; font-size: 8.5pt; color: #f19aa2;
+                  margin-bottom: 4px; font-weight: bold; }
+  #rejbox textarea { width: 100%; background: #12121f; border: 1px solid #3a2a35;
+                     border-radius: 6px; color: #e0e0e0; padding: 8px; font-size: 9pt;
+                     font-family: inherit; resize: vertical; min-height: 62px; }
+  #rejbox textarea:focus { outline: none; border-color: #dc3545; }
+  #rejbox .row { display: flex; gap: 8px; margin-top: 8px; }
+  #rejbox button { flex: 1 1 0; padding: 8px; border-radius: 6px; cursor: pointer;
+                   font-size: 9pt; border: none; }
+  #rej-send { background: #a02330; color: #fff; }
+  #rej-send:disabled { background: #2a2a3a; color: #707080; cursor: not-allowed; }
+  #rej-cancel { background: #2a2a3a; color: #c0c0d0; }
   .already { background: #12432a; border: 1px solid #1a8a4a; color: #7ed6a2;
              border-radius: 6px; padding: 10px; font-size: 9.5pt; margin-bottom: 12px; }
 
@@ -156,6 +179,23 @@
   </div>
 
   <button id="btn-validate" disabled data-t="btnValidate">Validate</button>
+
+  {# Rejeitar devolve a confirmação ao OTC e avisa por e-mail. Só as mesas
+     seguintes rejeitam: o OTC é quem monta o documento, e devolvê-lo a si mesmo
+     não tem para quem. #}
+  {% if can_reject and not already %}
+  <button id="btn-reject" data-t="btnReject">↩ Send back to OTC</button>
+  <div id="rejbox">
+    <label data-t="rejLabel">What is wrong with the document? (required)</label>
+    <textarea id="rej-text" data-t-ph="rejPlaceholder"
+              placeholder="This text is the body of the notice sent to the OTC desk."></textarea>
+    <div class="row">
+      <button id="rej-send" data-t="rejSend">Reject and notify</button>
+      <button id="rej-cancel" data-t="rejCancel">Cancel</button>
+    </div>
+  </div>
+  {% endif %}
+
   <div id="vstatus"></div>
 </div>
 
@@ -200,6 +240,13 @@
       whyPlaceholder: 'Why was this validated after the deadline?',
       whyMissing: 'The reason for the delay is required.',
       okMsg: 'Stage validated.', failMsg: 'Validation failed.',
+      btnReject: '↩ Send back to OTC', rejLabel: 'What is wrong with the document? (required)',
+      rejPlaceholder: 'This text is the body of the notice sent to the OTC desk.',
+      rejSend: 'Reject and notify', rejCancel: 'Cancel', rejSending: 'Rejecting…',
+      rejMissing: 'Say what is wrong — the text is the notice itself.',
+      rejOk: 'Confirmation sent back to the OTC desk.',
+      rejOkNoMail: 'Sent back to the OTC desk, but the e-mail did not go out.',
+      rejFail: 'Could not reject.',
       chk: { counterparty: 'Counterparty and Tax ID match the Reference Data',
              cgd: 'CGD date matches the registered contract',
              operations: 'Reference Table trades match (deal, amount, rate, direction)',
@@ -225,6 +272,13 @@
       whyPlaceholder: 'Por que esta validação saiu depois do prazo?',
       whyMissing: 'O motivo do atraso é obrigatório.',
       okMsg: 'Etapa validada.', failMsg: 'Falha na validação.',
+      btnReject: '↩ Devolver ao OTC', rejLabel: 'O que está errado no documento? (obrigatório)',
+      rejPlaceholder: 'Este texto é o corpo do aviso enviado à mesa de OTC.',
+      rejSend: 'Rejeitar e avisar', rejCancel: 'Cancelar', rejSending: 'Rejeitando…',
+      rejMissing: 'Diga o que está errado — o texto é o próprio aviso.',
+      rejOk: 'Confirmação devolvida à mesa de OTC.',
+      rejOkNoMail: 'Devolvida à mesa de OTC, mas o e-mail não saiu.',
+      rejFail: 'Não consegui rejeitar.',
       chk: { counterparty: 'Contraparte e CNPJ conferem com o Reference Data',
              cgd: 'Data do CGD confere com o contrato cadastrado',
              operations: 'Operações da Tabela de Referência conferem (deal, quantidade, taxa, direção)',
@@ -250,6 +304,13 @@
       whyPlaceholder: '¿Por qué se validó después del plazo?',
       whyMissing: 'El motivo del retraso es obligatorio.',
       okMsg: 'Etapa validada.', failMsg: 'Falló la validación.',
+      btnReject: '↩ Devolver al OTC', rejLabel: '¿Qué está mal en el documento? (obligatorio)',
+      rejPlaceholder: 'Este texto es el cuerpo del aviso enviado a la mesa de OTC.',
+      rejSend: 'Rechazar y avisar', rejCancel: 'Cancelar', rejSending: 'Rechazando…',
+      rejMissing: 'Diga qué está mal — el texto es el propio aviso.',
+      rejOk: 'Confirmación devuelta a la mesa de OTC.',
+      rejOkNoMail: 'Devuelta a la mesa de OTC, pero el correo no salió.',
+      rejFail: 'No se pudo rechazar.',
       chk: { counterparty: 'Contraparte y CNPJ coinciden con el Reference Data',
              cgd: 'La fecha del CGD coincide con el contrato registrado',
              operations: 'Operaciones de la Tabla de Referencia coinciden (deal, cantidad, tasa, dirección)',
@@ -384,6 +445,66 @@
       vs.textContent = '✖ ' + e.message;
     });
   });
+
+  /* ── Devolver ao OTC ──────────────────────────────────────────────────────
+     Mesmo endpoint que o Monitor chamava; o que mudou é o lugar de onde se
+     clica. O comentário é o CORPO do aviso, então ele é obrigatório — um
+     "rejeitado" sem texto obriga a mesa de OTC a adivinhar o que refazer. */
+  var btnRej = document.getElementById('btn-reject');
+  if (btnRej) {
+    var rejbox = document.getElementById('rejbox');
+    var rejText = document.getElementById('rej-text');
+    var rejSend = document.getElementById('rej-send');
+
+    btnRej.addEventListener('click', function () {
+      rejbox.style.display = 'block';
+      btnRej.style.display = 'none';
+      rejText.focus();
+    });
+    document.getElementById('rej-cancel').addEventListener('click', function () {
+      rejbox.style.display = 'none';
+      btnRej.style.display = '';
+      vs.textContent = '';
+    });
+
+    rejSend.addEventListener('click', function () {
+      var motivo = String(rejText.value || '').trim();
+      if (!motivo) {
+        vs.style.color = '#f19aa2'; vs.textContent = '✖ ' + t('rejMissing');
+        rejText.focus();
+        return;
+      }
+      rejSend.disabled = true; rejSend.textContent = t('rejSending');
+      fetch('/api/manual-confirmation/reject', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: V.keys, stage: V.stage, comment: motivo })
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        rejSend.disabled = false; rejSend.textContent = t('rejSend');
+        if (!res.success) {
+          vs.style.color = '#f19aa2';
+          vs.textContent = '✖ ' + (res.message || t('rejFail'));
+          return;
+        }
+        /* Rejeitada, a confirmação saiu desta etapa: travar a tela é o que evita
+           validar logo em seguida o documento que se acabou de recusar. */
+        rejbox.style.display = 'none';
+        btn.disabled = true;
+        boxes.forEach(function (b) { b.disabled = true; });
+        /* O aviso pode não ter saído (fora da rede JPM o SMTP falha calado), e a
+           rejeição foi gravada do mesmo jeito — dizer isso é o que evita alguém
+           rejeitar de novo achando que não funcionou. */
+        vs.style.color = res.emailed ? '#7ed6a2' : '#f7c56b';
+        vs.textContent = (res.emailed ? '✔ ' : '⚠ ') + t(res.emailed ? 'rejOk' : 'rejOkNoMail');
+        if (window.opener && window.opener.mcReload) window.opener.mcReload();
+      })
+      .catch(function (e) {
+        rejSend.disabled = false; rejSend.textContent = t('rejSend');
+        vs.style.color = '#f19aa2'; vs.textContent = '✖ ' + e.message;
+      });
+    });
+  }
 })();
 </script>
 {% endif %}
