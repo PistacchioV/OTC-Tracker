@@ -1428,28 +1428,13 @@ def _get_email_asset(filename):
 
 
 def _attach_email_gradient(container):
-    """Attach the header gradient PNG as an inline cid:otc_gradient part — the
-    shared e-mail header partial's Outlook/VML fallback (daily-metric pattern,
-    now standard for every HTML e-mail). Works with or without an app context
-    (threaded senders resolve the path relative to this module). Best-effort."""
-    from email.mime.image import MIMEImage
-    try:
-        path = _get_email_asset('email-header-gradient.png')
-    except Exception:                     # no app context (background thread)
-        path = os.path.normpath(os.path.join(
-            os.path.dirname(__file__), '..', 'static', 'images', 'email-header-gradient.png'))
-        if not os.path.exists(path):
-            path = None
-    if not path:
-        return
-    try:
-        with open(path, 'rb') as f:
-            gimg = MIMEImage(f.read())
-        gimg.add_header('Content-ID', '<otc_gradient>')
-        gimg.add_header('Content-Disposition', 'inline', filename='email-header-gradient.png')
-        container.attach(gimg)
-    except Exception:
-        log.warning('[email] could not attach header gradient:\n%s', traceback.format_exc())
+    """No-op mantido pelos ~10 call sites. O cabeçalho dos e-mails NÃO usa mais
+    a imagem de gradiente: o <v:rect> do Outlook a pintava ora mais estreito que
+    a célula (faixa sólida à direita), ora na largura da janela inteira — o
+    partial agora é bgcolor sólido + gradiente CSS (ver
+    partials/email-gradient-header.html). Anexar o PNG sem nada referenciando o
+    cid faria o Outlook listá-lo como anexo solto em todo e-mail do sistema."""
+    return
 
 
 @blueprint.app_context_processor
@@ -16435,9 +16420,13 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             'LOB': 'CEM',
             'Trade ID': key,
             'Cetip ID': first('B3_ID'),
-            # Notional e moeda têm nome diferente em cada produto; a cadeia
-            # evita um ramo por página, que envelheceria a cada coluna nova.
-            'Moeda': first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency'),
+            # O campo é o ATIVO da confirmação: nas commodities entra a
+            # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e
+            # acha o PDF exato); no câmbio, a moeda. A cadeia evita um ramo
+            # por página, que envelheceria a cada coluna nova.
+            'Moeda': (first('Commodities', 'UnderlyingAsset')
+                      if source in ('NDF COMM', 'OPTION COMM')
+                      else first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency')),
             'Notional': first('Notional', 'TotalNotional'),
             'Data Operação': td.strftime('%d/%m/%Y') if td else first('TradeDate'),
             'Data de vencimento': md.strftime('%d/%m/%Y') if md else first('SettlementDate'),
@@ -28393,6 +28382,15 @@ def _mc_confirmation_docs(row):
             out.append({'name': os.path.splitext(name)[0],
                         'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
                                 '&rel=' + quote(rel + '/' + name))})
+        # A pasta do dia tem UM PDF por commodity (MATARIPE - OLEO - …,
+        # MATARIPE - PLATTS - …). Quando a linha sabe o Ativo, só os dele são a
+        # confirmação exata; se nenhum nome carrega o Ativo (câmbio: USD), a
+        # lista inteira continua valendo.
+        ativo = str(row.get('Moeda', '') or '').strip().upper()
+        if ativo and len(ativo) >= 3:
+            proprios = [d for d in out if ativo in d['name'].upper()]
+            if proprios:
+                return proprios
         return out
     except Exception:
         log.warning('[manual-conf] não consegui listar a pasta da confirmação:\n%s',
@@ -28402,14 +28400,38 @@ def _mc_confirmation_docs(row):
 
 @blueprint.route('/api/manual-confirmation/monitor')
 def api_mc_monitor():
+    """Os cards do Monitor — SEM os documentos.
+
+    Resolver a pasta de cada confirmação no Electronic Inventory custa uma
+    varredura do share de rede POR GRUPO; feito aqui dentro, o Monitor levava
+    a soma de todas elas para abrir. O payload sai na hora e a página busca os
+    PDFs de cada item em paralelo no endpoint /docs abaixo.
+    """
     if not session.get('authenticated'):
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
-        return jsonify(_mc.monitor_payload(docs_for=_mc_confirmation_docs))
+        return jsonify(_mc.monitor_payload())
     except Exception as e:
         log.error('[manual-conf] monitor: %s', e)
         return jsonify({'error': str(e)}), 500
+
+
+@blueprint.route('/api/manual-confirmation/docs')
+def api_mc_docs():
+    """Os PDFs de UMA confirmação (cliente × produto × data da operação).
+
+    Chamado pelo Monitor item a item, depois de os cards já estarem na tela —
+    é o que deixa a lista abrir na hora mesmo com o share de rede lento.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    row = {'Cliente': request.args.get('cliente', ''),
+           'Produto': request.args.get('produto', ''),
+           'LOB': request.args.get('lob', ''),
+           'Moeda': request.args.get('ativo', ''),
+           'Data Operação': request.args.get('data', '')}
+    return jsonify({'docs': _mc_confirmation_docs(row)})
 
 
 @blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])

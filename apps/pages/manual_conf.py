@@ -113,6 +113,10 @@ COLUMN_LABELS = {
     'Time Stamp OTC': 'Time Stamp',
     'Time Stamp MO': 'Time Stamp',
     'Time Stamp FO': 'Time Stamp',
+    # Moeda virou ATIVO: para câmbio segue a moeda (USD), para commodities entra
+    # a commodity da confirmação (OLEO, PLATTS…) — é ela que separa os
+    # documentos de um mesmo cliente×dia e acha a confirmação EXATA na pasta.
+    'Moeda': 'Ativo',
 }
 
 # Colunas de data (a tela usa máscara nelas, e o import normaliza para dd/mm/aaaa).
@@ -534,6 +538,34 @@ _MONTH_EN = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
              11: 'November', 12: 'December'}
 
 
+def _product_folder(row):
+    """A subpasta de produto do Electronic Inventory para a linha.
+
+    Duas nomenclaturas convivem no banco: a do New Deals ('NDF COMM' × CEM) e a
+    da planilha legada ('NDF' × COMMODITY). A pasta é a mesma — e resolver só a
+    primeira deixava as confirmações antigas 'sem PDF' com o PDF lá.
+    """
+    # norm() aqui NÃO serve: ela minusculiza e cola tudo ('ndfcomm'), e nem o
+    # lookup nem os startswith casariam. A pasta compara em MAIÚSCULO com espaço.
+    def _up(v):
+        t = unicodedata.normalize('NFKD', str(v or ''))
+        t = ''.join(c for c in t if not unicodedata.combining(c))
+        return re.sub(r'\s+', ' ', t).strip().upper()
+    prod = _up(row.get('Produto'))
+    lob = _up(row.get('LOB'))
+    direto = PRODUCT_FOLDER.get(prod)
+    if direto:
+        return direto
+    if prod.startswith('NDF FWD'):
+        return 'NDF FWD Start'
+    e_comm = 'COMMODIT' in lob or 'COMM' in prod
+    if prod.startswith('NDF'):
+        return 'NDF Commodities' if e_comm else None
+    if prod.startswith(('OPCAO', 'OPTION', 'OPT')):
+        return 'Commodities Options' if e_comm else 'FX Options'
+    return None
+
+
 def confirmation_folder(row):
     """(cliente, caminho relativo da pasta) do documento daquela confirmação.
 
@@ -546,7 +578,7 @@ def confirmation_folder(row):
     (None, None) quando falta o que forma o caminho.
     """
     cliente = str(row.get('Cliente', '') or '').strip()
-    produto = PRODUCT_FOLDER.get(str(row.get('Produto', '') or '').strip().upper())
+    produto = _product_folder(row)
     d = parse_date(row.get('Data Operação'))
     if not (cliente and produto and d):
         return None, None
@@ -569,8 +601,8 @@ MONITOR_STAGES = (
 
 # Os campos que o item da lista do card mostra. É o mínimo para reconhecer a
 # confirmação sem abrir: quando, de quem, o quê.
-MONITOR_FIELDS = ('Data Operação', 'Cliente', 'Produto', 'LOB', 'Trade ID',
-                  'Aging Confirmação')
+MONITOR_FIELDS = ('Data Operação', 'Cliente', 'Produto', 'LOB', 'Moeda',
+                  'Trade ID', 'Aging Confirmação')
 
 
 # O que define UMA confirmação. O documento é emitido por contraparte × produto ×
@@ -578,7 +610,10 @@ MONITOR_FIELDS = ('Data Operação', 'Cliente', 'Produto', 'LOB', 'Trade ID',
 # então o Monitor tem de mostrar UM item por documento, não um por trade. Uma
 # lista com dez linhas do mesmo cliente no mesmo dia é uma confirmação só, e
 # validar dez vezes o mesmo papel é o erro que isso evita.
-GROUP_FIELDS = ('LOB', 'Cliente', 'Produto', 'Data Operação')
+# O Ativo entra na chave: OLEO e PLATTS do mesmo cliente no mesmo dia são DUAS
+# confirmações, com dois documentos — agrupá-las faria um Validar dar baixa nas
+# duas de uma vez.
+GROUP_FIELDS = ('LOB', 'Cliente', 'Produto', 'Data Operação', 'Moeda')
 
 
 def group_key(row):
@@ -644,9 +679,13 @@ def monitor_payload(docs_for=None):
                       'count': len(itens),
                       'trades': sum(i['count'] for i in itens),
                       'items': itens})
+    # A frase do aviso é montada NA TELA, no idioma selecionado — o servidor só
+    # diz QUAIS produtos estão sem cadastro. `warnings` (em PT) permanece para
+    # qualquer consumidor antigo.
+    faltantes = sorted(sem_cadastro)
     warnings = []
-    if sem_cadastro:
+    if faltantes:
         warnings.append(
-            'Sem cadastro de validação para: ' + ', '.join(sorted(sem_cadastro)) +
+            'Sem cadastro de validação para: ' + ', '.join(faltantes) +
             '. Enquanto isso essas confirmações seguem por OTC e MO.')
-    return {'cards': cards, 'warnings': warnings}
+    return {'cards': cards, 'warnings': warnings, 'missing_validation': faltantes}

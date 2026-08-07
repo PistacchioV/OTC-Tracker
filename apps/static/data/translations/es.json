@@ -1317,8 +1317,8 @@
   "nav-recon-fxo": "FXO",
   "recon-fxo-title": "Conciliación de FXO",
   "fxo-w-total": "Total",
-  "fxo-w-ok": "OK",
-  "fxo-w-nok": "NOK",
+  "fxo-w-ok": "Matched",
+  "fxo-w-nok": "Partial",
   "fxo-w-nomatch": "Sin match en Athena",
   "fxo-d-dup": "Clave duplicada",
   "fxo-modal-title": "Carga manual",
@@ -1640,5 +1640,6 @@
   "sw-edit-title": "Editar línea del aviso",
   "sw-edit-hint": "La corrección vale para el aviso de este día — en la pantalla y en el documento impreso. Los archivos de origen no se alteran.",
   "sw-edit-cancel": "Cancelar",
-  "sw-edit-save": "Guardar"
+  "sw-edit-save": "Guardar",
+  "mc-reject-ph": "¿Qué hay que corregir?"
 }

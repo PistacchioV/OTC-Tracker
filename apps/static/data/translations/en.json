@@ -1318,8 +1318,8 @@
   "nav-recon-fxo": "FXO",
   "recon-fxo-title": "FXO Reconciliation",
   "fxo-w-total": "Total",
-  "fxo-w-ok": "OK",
-  "fxo-w-nok": "NOK",
+  "fxo-w-ok": "Matched",
+  "fxo-w-nok": "Partial",
   "fxo-w-nomatch": "No match in Athena",
   "fxo-d-dup": "Duplicate key",
   "fxo-modal-title": "Manual upload",
@@ -1641,5 +1641,6 @@
   "sw-edit-title": "Edit advice row",
   "sw-edit-hint": "The correction applies to this day’s advice — on screen and in the printed document. The source files are not changed.",
   "sw-edit-cancel": "Cancel",
-  "sw-edit-save": "Save"
+  "sw-edit-save": "Save",
+  "mc-reject-ph": "What needs to be fixed?"
 }

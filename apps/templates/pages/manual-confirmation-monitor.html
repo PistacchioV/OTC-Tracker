@@ -71,13 +71,16 @@
    empurrar os outros dois para fora da tela — os três se leem lado a lado. */
 #mc-monitor .mc-list {
     background: var(--ins-tertiary-bg, #eef0f4);
-    max-height: 27rem; overflow-y: auto; padding: .4rem;
+    /* Cards maiores (pedido da mesa): a fila cresce com a janela e o mínimo
+       garante presença mesmo com pouca coisa pendente. */
+    min-height: 24rem;
+    max-height: calc(100vh - 21rem); overflow-y: auto; padding: .5rem;
     border-top: 1px solid var(--ins-border-color);
 }
 #mc-monitor .mc-item {
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--ins-border-color);
-    border-radius: 12px; padding: .6rem .7rem; margin-bottom: .4rem;
+    border-radius: 12px; padding: .8rem .9rem; margin-bottom: .5rem;
     transition: border-color 200ms var(--mc-ease), box-shadow 200ms var(--mc-ease);
 }
 #mc-monitor .mc-item:last-child { margin-bottom: 0; }
@@ -88,9 +91,9 @@
     }
 }
 #mc-monitor .mc-item__top { display: flex; align-items: baseline; gap: .4rem; }
-#mc-monitor .mc-item__cli { font-size: .8rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
-#mc-monitor .mc-item__age { margin-left: auto; font-size: .68rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-#mc-monitor .mc-item__meta { font-size: .68rem; color: var(--ins-secondary-color); margin-top: .1rem; }
+#mc-monitor .mc-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
+#mc-monitor .mc-item__age { margin-left: auto; font-size: .74rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#mc-monitor .mc-item__meta { font-size: .74rem; color: var(--ins-secondary-color); margin-top: .1rem; }
 /* Quantas operações a confirmação cobre. Uma folha com dez trades é UMA
    confirmação — sem esta marca o item parece uma operação solta. */
 #mc-monitor .mc-item__ops {
@@ -101,7 +104,7 @@
 }
 #mc-monitor .mc-item__acts { display: flex; gap: .3rem; margin-top: .55rem; flex-wrap: wrap; align-items: center; }
 #mc-monitor .mc-item__acts .btn {
-    font-size: .68rem; padding: .18rem .55rem; line-height: 1.5;
+    font-size: .74rem; padding: .24rem .65rem; line-height: 1.5;
     transition: transform 140ms var(--mc-ease), box-shadow 140ms var(--mc-ease);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -185,23 +188,24 @@
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
                     <i data-lucide="corner-up-left" style="width:18px;height:18px;" class="text-danger"></i>
-                    <span data-lang="mc-reject-title">Rejeitar confirmação</span>
+                    <span data-lang="mc-reject-title">Reject confirmation</span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body pt-2">
                 <p class="text-muted small mb-2" id="mcRejectWho"></p>
                 <p class="text-muted small mb-2" data-lang="mc-reject-desc">
-                    A confirmação volta para <b>Pending OTC</b> e as validações já dadas são
-                    limpas — o documento vai ser refeito. O comentário abaixo vai no aviso
-                    para brazil.otc.ops@jpmorgan.com.
+                    The confirmation goes back to <b>Pending OTC</b> and the validations
+                    already given are cleared — the document will be redone. The comment
+                    below goes in the notice to brazil.otc.ops@jpmorgan.com.
                 </p>
                 <textarea class="form-control" id="mcRejectComment" rows="4"
-                          placeholder="O que precisa ser corrigido?"></textarea>
+                          data-lang-placeholder="mc-reject-ph"
+                          placeholder="What needs to be fixed?"></textarea>
             </div>
             <div class="modal-footer border-0 pt-0">
                 <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
-                <button class="btn btn-sm btn-danger" id="mcRejectConfirm" data-lang="mc-reject-send">Rejeitar e avisar</button>
+                <button class="btn btn-sm btn-danger" id="mcRejectConfirm" data-lang="mc-reject-send">Reject and notify</button>
             </div>
         </div>
     </div>
@@ -222,6 +226,62 @@
     };
     var pending = { keys: [], stage: '' };
 
+    // ── i18n dos textos montados em JS ──────────────────────────────────
+    // O I18nManager do app traduz [data-lang] UMA vez, no load — o que este
+    // script insere depois nunca passaria por ele. Todo texto dinâmico sai
+    // deste mapa, no idioma que o app guardou (default: inglês).
+    var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+                localStorage.getItem('language') || 'en').toLowerCase();
+    var _TRANS = {
+        en: { ops: 'op(s)', opsLong: 'operation(s)', none: '—',
+              validate: 'Validate', reject: 'Reject',
+              empty: 'Nothing pending at this stage.',
+              nolink: 'no PDF in the confirmation folder',
+              docsLoading: 'looking for the PDFs…',
+              stageWho: 'Stage: {s} · {n} operation(s): {k}',
+              warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
+              failTitle: 'Could not load the queue',
+              failText: 'Refresh the page; if it persists the server may be restarting.',
+              valFail: 'Could not validate', rejFail: 'Could not reject',
+              commentMissing: 'Comment is required', commentWhy: 'It is what tells OTC what to redo.',
+              rejOkTitle: 'Confirmation returned to OTC',
+              rejOkMail: 'The notice was sent to brazil.otc.ops@jpmorgan.com.',
+              rejOkNoMail: 'The e-mail notice did not go out (relay unavailable), but the confirmation is already back in Pending OTC.' },
+        br: { ops: 'op(s)', opsLong: 'operação(ões)', none: '—',
+              validate: 'Validar', reject: 'Rejeitar',
+              empty: 'Nada pendente nesta etapa.',
+              nolink: 'nenhum PDF na pasta da confirmação',
+              docsLoading: 'procurando os PDFs…',
+              stageWho: 'Etapa: {s} · {n} operação(ões): {k}',
+              warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
+              failTitle: 'Não foi possível carregar a esteira',
+              failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.',
+              valFail: 'Não foi possível validar', rejFail: 'Não foi possível rejeitar',
+              commentMissing: 'Falta o comentário', commentWhy: 'É ele que diz ao OTC o que refazer.',
+              rejOkTitle: 'Confirmação devolvida ao OTC',
+              rejOkMail: 'O aviso foi enviado para brazil.otc.ops@jpmorgan.com.',
+              rejOkNoMail: 'O aviso por e-mail não saiu (relay indisponível), mas a confirmação já voltou para Pending OTC.' },
+        es: { ops: 'op(s)', opsLong: 'operación(es)', none: '—',
+              validate: 'Validar', reject: 'Rechazar',
+              empty: 'Nada pendiente en esta etapa.',
+              nolink: 'ningún PDF en la carpeta de la confirmación',
+              docsLoading: 'buscando los PDFs…',
+              stageWho: 'Etapa: {s} · {n} operación(es): {k}',
+              warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
+              failTitle: 'No se pudo cargar la cola',
+              failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.',
+              valFail: 'No se pudo validar', rejFail: 'No se pudo rechazar',
+              commentMissing: 'Falta el comentario', commentWhy: 'Es lo que le dice a OTC qué rehacer.',
+              rejOkTitle: 'Confirmación devuelta a OTC',
+              rejOkMail: 'El aviso fue enviado a brazil.otc.ops@jpmorgan.com.',
+              rejOkNoMail: 'El aviso por e-mail no salió (relay no disponible), pero la confirmación ya volvió a Pending OTC.' }
+    };
+    function t(k, vars) {
+        var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
+        if (vars) Object.keys(vars).forEach(function (v) { s = s.replace('{' + v + '}', vars[v]); });
+        return s;
+    }
+
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -234,54 +294,83 @@
         return d >= 10 ? 'mc-age-2' : (d >= 5 ? 'mc-age-1' : 'mc-age-0');
     }
 
+    var _docSeq = 0;
+
     function item(it, stage) {
-        var meta = [it['Data Operação'], it.Produto, it.LOB].filter(Boolean).map(esc).join(' · ');
+        var meta = [it['Data Operação'], it.Produto, it.LOB, it.Moeda].filter(Boolean).map(esc).join(' · ');
         var age = it['Aging Confirmação'];
         var keys = JSON.stringify(it.keys || []).replace(/"/g, '&quot;');
 
-        // Os PDFs vêm da PASTA da confirmação no Electronic Inventory, resolvida
-        // pelo cliente × produto × data — não de um link gravado. É o que faz o
-        // Abrir funcionar também nas confirmações anteriores ao carimbo, que são
-        // justamente as que alguém precisa procurar.
-        var docs = (it.docs || []).length
-            ? '<div class="mc-docs">' + it.docs.map(function (d) {
-                  return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
-                         esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
-                         esc(d.name) + '</a>';
-              }).join('') + '</div>'
-            : '<span class="text-muted" style="font-size:.64rem" data-lang="mc-nolink">' +
-              'nenhum PDF na pasta da confirmação</span>';
+        // Os PDFs vêm da PASTA da confirmação no Electronic Inventory — que é um
+        // share de rede. Resolver isso no payload do Monitor era o que fazia a
+        // tela demorar uma varredura POR GRUPO para abrir: agora cada item nasce
+        // com um placeholder e busca os seus PDFs em /docs, em paralelo.
+        var docId = 'mc-docs-' + (++_docSeq);
+        var docs = '<span class="text-muted" style="font-size:.64rem" id="' + docId + '" ' +
+                   'data-docs-cliente="' + esc(it.Cliente || '') + '" ' +
+                   'data-docs-produto="' + esc(it.Produto || '') + '" ' +
+                   'data-docs-lob="' + esc(it.LOB || '') + '" ' +
+                   'data-docs-ativo="' + esc(it.Moeda || '') + '" ' +
+                   'data-docs-data="' + esc(it['Data Operação'] || '') + '">' +
+                   '<i class="ti ti-loader-2 me-1"></i>' + esc(t('docsLoading')) + '</span>';
 
         var reject = (stage === 'OTC') ? '' :
             '<button class="btn btn-sm btn-outline-danger" data-mc-reject="' + keys + '" data-stage="' + stage + '">' +
-            '<i class="ti ti-corner-up-left me-1"></i><span data-lang="mc-reject">Rejeitar</span></button>';
+            '<i class="ti ti-corner-up-left me-1"></i>' + esc(t('reject')) + '</button>';
 
         return '<div class="mc-item">' +
             '<div class="mc-item__top">' +
-                '<span class="mc-item__cli">' + esc(it.Cliente || '—') + '</span>' +
+                '<span class="mc-item__cli">' + esc(it.Cliente || t('none')) + '</span>' +
                 '<span class="mc-item__age ' + ageClass(age) + '">' +
                     (age === '' || age == null ? '' : esc(age) + 'd') + '</span>' +
             '</div>' +
             '<div class="mc-item__meta">' + meta +
                 ' <span class="mc-item__ops"><i class="ti ti-layers-subtract"></i>' +
-                (it.count || 1) + ' op' + ((it.count || 1) === 1 ? '' : 's') + '</span>' +
+                (it.count || 1) + ' ' + esc(t('ops')) + '</span>' +
             '</div>' +
             '<div class="mc-item__acts">' + docs +
                 '<button class="btn btn-sm btn-success ms-auto" data-mc-validate="' + keys + '" data-stage="' + stage + '">' +
-                '<i class="ti ti-check me-1"></i><span data-lang="mc-validate">Validar</span></button>' +
+                '<i class="ti ti-check me-1"></i>' + esc(t('validate')) + '</button>' +
                 reject +
             '</div></div>';
+    }
+
+    // Busca os PDFs de cada item DEPOIS de os cards estarem na tela.
+    function loadDocs() {
+        $('#mc-cards [id^="mc-docs-"]').each(function () {
+            var el = $(this);
+            var q = '?cliente=' + encodeURIComponent(el.attr('data-docs-cliente')) +
+                    '&produto=' + encodeURIComponent(el.attr('data-docs-produto')) +
+                    '&lob=' + encodeURIComponent(el.attr('data-docs-lob')) +
+                    '&ativo=' + encodeURIComponent(el.attr('data-docs-ativo')) +
+                    '&data=' + encodeURIComponent(el.attr('data-docs-data'));
+            fetch('/api/manual-confirmation/docs' + q)
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    var docs = (j && j.docs) || [];
+                    if (!docs.length) {
+                        el.html(esc(t('nolink')));
+                        return;
+                    }
+                    el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {
+                        return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
+                               esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
+                               esc(d.name) + '</a>';
+                    }).join('') + '</div>');
+                })
+                .catch(function () { el.html(esc(t('nolink'))); });
+        });
     }
 
     function card(c) {
         var st = STAGE_STYLE[c.stage] || STAGE_STYLE.OTC;
         var body = c.items.length
             ? c.items.map(function (it) { return item(it, c.stage); }).join('')
-            : '<div class="mc-empty" data-lang="mc-empty">Nada pendente nesta etapa.</div>';
+            : '<div class="mc-empty">' + esc(t('empty')) + '</div>';
         // O número grande conta CONFIRMAÇÕES (documentos); o subtítulo conta as
         // operações que elas cobrem. Contar trades no número grande faria a fila
         // parecer três vezes maior do que o trabalho que ela é.
-        var sub = c.trades ? (c.trades + ' opera' + (c.trades === 1 ? 'ção' : 'ções')) : '—';
+        var sub = c.trades ? (c.trades + ' ' + t('opsLong')) : t('none');
         return '<div class="col-12 col-lg-4">' +
             '<div class="mc-card ' + st.cls + '">' +
               '<div class="mc-card__head">' +
@@ -315,16 +404,17 @@
             .then(function (j) {
                 if (j.error) { fail(j.error); return; }
                 $('#mc-cards').html((j.cards || []).map(card).join(''));
+                loadDocs();
+                // O servidor manda só a LISTA de produtos sem cadastro; a frase
+                // é montada aqui, no idioma da aplicação.
                 var w = $('#mc-warnings');
-                if ((j.warnings || []).length) {
-                    w.removeClass('d-none').html(j.warnings.map(function (x) {
-                        return '<div>' + esc(x) + '</div>';
-                    }).join(''));
+                var faltando = j.missing_validation || [];
+                if (faltando.length) {
+                    w.removeClass('d-none').text(t('warnMissing', { p: faltando.join(', ') }));
                 } else { w.addClass('d-none').empty(); }
             })
             .catch(function () {
-                fail('Não foi possível carregar a esteira. Atualize a página; ' +
-                     'se persistir, o servidor pode estar reiniciando.');
+                fail(t('failTitle') + '. ' + t('failText'));
             });
     }
 
@@ -344,7 +434,7 @@
                 keys: JSON.parse(btn.attr('data-mc-validate')), stage: btn.attr('data-stage')
             }).then(function (j) {
                 if (!j.success) {
-                    Swal.fire({ icon: 'error', title: 'Não foi possível validar', text: j.message || '' });
+                    Swal.fire({ icon: 'error', title: t('valFail'), text: j.message || '' });
                     return;
                 }
                 load();
@@ -355,17 +445,17 @@
             pending.keys = JSON.parse($(this).attr('data-mc-reject'));
             pending.stage = $(this).attr('data-stage');
             $('#mcRejectComment').val('');
-            $('#mcRejectWho').text('Etapa: ' + pending.stage + ' · ' + pending.keys.length +
-                                   ' opera' + (pending.keys.length === 1 ? 'ção' : 'ções') +
-                                   ': ' + pending.keys.join(', '));
+            $('#mcRejectWho').text(t('stageWho', { s: pending.stage,
+                                                   n: pending.keys.length,
+                                                   k: pending.keys.join(', ') }));
             new bootstrap.Modal(document.getElementById('mcRejectModal')).show();
         });
 
         $('#mcRejectConfirm').on('click', function () {
             var comment = $('#mcRejectComment').val().trim();
             if (!comment) {
-                Swal.fire({ icon: 'warning', title: 'Falta o comentário',
-                            text: 'É ele que diz ao OTC o que refazer.' });
+                Swal.fire({ icon: 'warning', title: t('commentMissing'),
+                            text: t('commentWhy') });
                 return;
             }
             post('/api/manual-confirmation/reject', {
@@ -373,7 +463,7 @@
             }).then(function (j) {
                 bootstrap.Modal.getInstance(document.getElementById('mcRejectModal')).hide();
                 if (!j.success) {
-                    Swal.fire({ icon: 'error', title: 'Não foi possível rejeitar', text: j.message || '' });
+                    Swal.fire({ icon: 'error', title: t('rejFail'), text: j.message || '' });
                     return;
                 }
                 load();
@@ -381,9 +471,8 @@
                 // que evita alguém rejeitar de novo achando que não funcionou.
                 Swal.fire({
                     icon: j.emailed ? 'success' : 'warning',
-                    title: 'Confirmação devolvida ao OTC',
-                    text: j.emailed ? 'O aviso foi enviado para brazil.otc.ops@jpmorgan.com.'
-                                    : 'O aviso por e-mail não saiu (relay indisponível), mas a confirmação já voltou para Pending OTC.',
+                    title: t('rejOkTitle'),
+                    text: j.emailed ? t('rejOkMail') : t('rejOkNoMail'),
                     timer: j.emailed ? 2600 : undefined,
                     showConfirmButton: !j.emailed
                 });

@@ -199,8 +199,10 @@ check('   e as operações à parte',
       p['cards'][0]['trades'], sum(i['count'] for i in p['cards'][0]['items']))
 # A LOB entra na chave: mesma contraparte e dia em LOBs diferentes são dois
 # documentos, e juntá-los faria uma validação carimbar a folha da outra mesa.
-check('a chave do grupo é LOB × Cliente × Produto × Data',
-      M.GROUP_FIELDS, ('LOB', 'Cliente', 'Produto', 'Data Operação'))
+# O ATIVO idem: OLEO e PLATTS do mesmo dia são dois papéis — agrupados, um
+# Validar daria baixa nos dois.
+check('a chave do grupo é LOB × Cliente × Produto × Data × Ativo',
+      M.GROUP_FIELDS, ('LOB', 'Cliente', 'Produto', 'Data Operação', 'Moeda'))
 check('   e ignora pontuação do nome',
       M.group_key({'LOB': 'CEM', 'Cliente': 'ACME  S.A.', 'Produto': 'NDF COMM',
                    'Data Operação': '05/08/2026'}) ==
@@ -215,6 +217,10 @@ check('a pasta da confirmação vem da linha', (cli, rel),
 check('   e o nome da pasta é o mesmo que o save grava',
       sorted(M.PRODUCT_FOLDER.values()),
       ['Commodities Options', 'FX Options', 'NDF Commodities', 'NDF FWD Start'])
+check('a nomenclatura da planilha legada resolve a MESMA pasta',
+      M.confirmation_folder({'Cliente': 'REFINARIA', 'Produto': 'NDF',
+                             'LOB': 'COMMODITY', 'Data Operação': '03/08/2026'})[1],
+      'Confirmations/2026/08. August/03/NDF Commodities')
 check('sem produto conhecido nao inventa pasta',
       M.confirmation_folder({'Cliente': 'X', 'Produto': '?', 'Data Operação': '05/08/2026'}),
       (None, None))
@@ -230,8 +236,8 @@ check('o Trade ID repetido do arquivo virou uma só',
 check('os três Time Stamp têm nome próprio no banco',
       [c for c in M.COLUMNS if c.startswith('Time Stamp')],
       ['Time Stamp OTC', 'Time Stamp MO', 'Time Stamp FO'])
-check('   e o rótulo curto na tela',
-      sorted(set(M.COLUMN_LABELS.values())), ['Time Stamp'])
+check('   e o rótulo curto na tela (e Moeda exibida como Ativo)',
+      sorted(set(M.COLUMN_LABELS.values())), ['Ativo', 'Time Stamp'])
 check('o link do documento fica FORA da tabela',
       ('Confirmation Link' in M.DB_COLUMNS, 'Confirmation Link' in M.COLUMNS),
       (True, False))
