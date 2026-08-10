@@ -1706,11 +1706,17 @@
   "fi-key-exists": "Ya existe una plantilla con ese nombre",
   "fi-del-title": "¿Eliminar esta plantilla?",
   "fi-del-text": "La definición del layout se eliminará del registro.",
-  "fi-discard-sources": "¿Descartar las ediciones de origen no guardadas?",
+  "fi-discard-sources": "Los cambios no guardados en las columnas de Origen se perderán.",
   "fi-rail-pages": "Páginas",
   "fi-rail-library": "Biblioteca de Plantillas",
   "fi-template": "Plantilla",
   "fi-blank": "en blanco",
   "fi-fixed-ph": "valor…",
-  "fi-note-ph": "nota (opcional)"
+  "fi-note-ph": "nota (opcional)",
+  "fi-page-columns": "Columnas de la Página",
+  "fi-cols-title": "Columnas de esta página",
+  "fi-cols-hint": "Una columna por línea, exactamente como la muestra el encabezado de la tabla de la página. Son las opciones del dropdown de Origen de esta página.",
+  "fi-discard-title": "¿Descartar ediciones de origen?",
+  "fi-discard-yes": "Sí, descartar",
+  "fi-del-yes": "Sí, eliminar"
 }

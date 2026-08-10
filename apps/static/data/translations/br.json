@@ -1707,11 +1707,17 @@
   "fi-key-exists": "Já existe um template com esse nome",
   "fi-del-title": "Excluir este template?",
   "fi-del-text": "A definição do layout será removida do cadastro.",
-  "fi-discard-sources": "Descartar as edições de origem não salvas?",
+  "fi-discard-sources": "As alterações não salvas nas colunas de Origem serão perdidas.",
   "fi-rail-pages": "Páginas",
   "fi-rail-library": "Biblioteca de Templates",
   "fi-template": "Template",
   "fi-blank": "em branco",
   "fi-fixed-ph": "valor…",
-  "fi-note-ph": "observação (opcional)"
+  "fi-note-ph": "observação (opcional)",
+  "fi-page-columns": "Colunas da Página",
+  "fi-cols-title": "Colunas desta página",
+  "fi-cols-hint": "Uma coluna por linha, exatamente como o cabeçalho da tabela da página mostra. São as opções do dropdown de Origem desta página.",
+  "fi-discard-title": "Descartar edições de origem?",
+  "fi-discard-yes": "Sim, descartar",
+  "fi-del-yes": "Sim, excluir"
 }

@@ -1707,11 +1707,17 @@
   "fi-key-exists": "A template with this name already exists",
   "fi-del-title": "Delete this template?",
   "fi-del-text": "The layout definition will be removed from the registry.",
-  "fi-discard-sources": "Discard unsaved source edits?",
+  "fi-discard-sources": "Unsaved changes to the Source columns will be lost.",
   "fi-rail-pages": "Pages",
   "fi-rail-library": "Template Library",
   "fi-template": "Template",
   "fi-blank": "blank",
   "fi-fixed-ph": "value…",
-  "fi-note-ph": "note (optional)"
+  "fi-note-ph": "note (optional)",
+  "fi-page-columns": "Page Columns",
+  "fi-cols-title": "Columns of this page",
+  "fi-cols-hint": "One column per line, exactly as the page's table header shows it. These are the options of the Source dropdown for this page.",
+  "fi-discard-title": "Discard source edits?",
+  "fi-discard-yes": "Yes, discard",
+  "fi-del-yes": "Yes, delete"
 }

@@ -297,6 +297,9 @@
                             <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" type="button" id="fiLinkBtn">
                                 <i class="ti ti-link me-1"></i><span data-lang="fi-link-pages">Link Pages</span>
                             </button>
+                            <button class="btn btn-sm btn-soft-primary btn-toolbar-all" type="button" id="fiColsBtn" style="display:none;">
+                                <i class="ti ti-columns-3 me-1"></i><span data-lang="fi-page-columns">Page Columns</span>
+                            </button>
                             <button class="btn btn-sm btn-soft-primary btn-toolbar-all" type="button" id="fiSrcEditBtn">
                                 <i class="ti ti-pencil me-1"></i><span data-lang="fi-edit-sources">Edit Sources</span>
                             </button>
@@ -351,6 +354,29 @@
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
                     <button type="button" class="btn btn-sm btn-success" id="fiLinkSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ Modal: colunas da página (opções do dropdown de origem) ══════════ -->
+    <div class="modal fade" id="fiColsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-columns-3 me-1"></i><span data-lang="fi-cols-title">Columns of this page</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="fs-xs fw-semibold mb-2" id="fiColsPage"></div>
+                    <textarea class="form-control form-control-sm font-monospace" id="fiColsText" rows="14" spellcheck="false"></textarea>
+                    <div class="text-muted fs-xxs mt-2" data-lang="fi-cols-hint">
+                        One column per line, exactly as the page's table header shows it. These are the options of the Source dropdown for this page.
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="fiColsSave" title="Save"><i class="ti ti-device-floppy"></i></button>
                 </div>
             </div>
         </div>
@@ -583,37 +609,53 @@
         if (dl) dl.innerHTML = cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
     }
 
-    function guardSrcEdit() {
-        if (SRC_EDIT && !confirm(t('fi-discard-sources', 'Discard unsaved source edits?'))) return false;
-        SRC_EDIT = false;
-        return true;
+    // Com edição de origem pendente, pergunta antes de navegar — SweetAlert no
+    // padrão da casa (o confirm() nativo destoava). `proceed` roda ao confirmar
+    // (ou direto, sem edição); `onCancel` desfaz o gesto que disparou o guard.
+    function guardSrcEdit(proceed, onCancel) {
+        if (!SRC_EDIT) { proceed(); return; }
+        Swal.fire({
+            icon: 'warning',
+            title: t('fi-discard-title', 'Discard source edits?'),
+            text: t('fi-discard-sources', 'Unsaved changes to the Source columns will be lost.'),
+            showCancelButton: true,
+            confirmButtonText: t('fi-discard-yes', 'Yes, discard'),
+            cancelButtonText: t('fi-cancel', 'Cancel'),
+            confirmButtonColor: '#dc3545'
+        }).then(function (r) {
+            if (!r.isConfirmed) { if (onCancel) onCancel(); return; }
+            SRC_EDIT = false;
+            proceed();
+        });
     }
     function selectTpl(key) {
-        if (!guardSrcEdit()) return;
-        CUR_PAGE = null;
-        CUR_KEY = key;
-        apiGet(key).then(function (tpl) {
-            if (!tpl) return;
-            CUR_TPL = tpl;
-            buildRail();
-            renderTemplate(tpl);
+        guardSrcEdit(function () {
+            CUR_PAGE = null;
+            CUR_KEY = key;
+            apiGet(key).then(function (tpl) {
+                if (!tpl) return;
+                CUR_TPL = tpl;
+                buildRail();
+                renderTemplate(tpl);
+            });
         });
     }
     function selectPage(url, label, keepKey) {
-        if (!guardSrcEdit()) return;
-        CUR_PAGE = url;
-        var entry = pagesFromList().filter(function (p) { return p.url === url; })[0];
-        if (!entry) return;
-        if (label) entry.label = label;
-        // A página pode usar mais de um template: mantém o atual se ele serve,
-        // senão carrega o primeiro. O switcher no cabeçalho troca entre eles.
-        var key = (keepKey && entry.tpls.indexOf(keepKey) !== -1) ? keepKey : entry.tpls[0];
-        CUR_KEY = key;
-        apiGet(key).then(function (tpl) {
-            if (!tpl) return;
-            CUR_TPL = tpl;
-            buildRail();
-            renderTemplate(tpl);
+        guardSrcEdit(function () {
+            CUR_PAGE = url;
+            var entry = pagesFromList().filter(function (p) { return p.url === url; })[0];
+            if (!entry) return;
+            if (label) entry.label = label;
+            // A página pode usar mais de um template: mantém o atual se ele serve,
+            // senão carrega o primeiro. O switcher no cabeçalho troca entre eles.
+            var key = (keepKey && entry.tpls.indexOf(keepKey) !== -1) ? keepKey : entry.tpls[0];
+            CUR_KEY = key;
+            apiGet(key).then(function (tpl) {
+                if (!tpl) return;
+                CUR_TPL = tpl;
+                buildRail();
+                renderTemplate(tpl);
+            });
         });
     }
 
@@ -732,14 +774,20 @@
         });
         var sw = document.getElementById('fiTplSwitch');
         if (sw) sw.addEventListener('change', function () {
-            if (!guardSrcEdit()) { renderTemplate(CUR_TPL); return; }
-            CUR_KEY = sw.value;
-            apiGet(sw.value).then(function (tp) { if (tp) { CUR_TPL = tp; renderTemplate(tp); } });
+            guardSrcEdit(function () {
+                CUR_KEY = sw.value;
+                apiGet(sw.value).then(function (tp) { if (tp) { CUR_TPL = tp; renderTemplate(tp); } });
+            }, function () { sw.value = CUR_KEY; });
         });
 
         var notes = document.getElementById('fiCurNotes');
         if (tpl.notes) { notes.style.display = ''; notes.innerHTML = '<i class="ti ti-alert-triangle me-1"></i>' + esc(tpl.notes); }
         else notes.style.display = 'none';
+
+        // Editor das colunas da página — só faz sentido na visão de página,
+        // e é o que alimenta o dropdown de origem daquela página.
+        document.getElementById('fiColsBtn').style.display =
+            (CUR_PAGE && (tpl.linked_pages || []).some(function (p) { return p.url === CUR_PAGE; })) ? '' : 'none';
 
         renderBlocks(tpl);
         updateSrcBar();
@@ -787,7 +835,8 @@
                 thNames.map(function (n) { return '<th>' + n + '</th>'; }).join('') +
                 '</tr><tr>' +
                 thNames.map(function (n, ci) {
-                    return '<th class="fi-flt-cell"><input class="fi-flt" data-c="' + ci +
+                    return '<th class="fi-flt-cell"><input type="text" class="form-control form-control-sm ' +
+                           'bg-light-subtle border-light fi-flt" data-c="' + ci +
                            '" placeholder="' + esc(n) + '"></th>';
                 }).join('') +
                 '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
@@ -905,6 +954,7 @@
     function updateSrcBar() {
         document.getElementById('fiSrcBar').style.setProperty('display', SRC_EDIT ? 'flex' : 'none', 'important');
         document.getElementById('fiSrcEditBtn').disabled = SRC_EDIT;
+        document.getElementById('fiColsBtn').disabled = SRC_EDIT;
     }
     document.getElementById('fiSrcEditBtn').addEventListener('click', enterSrcEdit);
     document.getElementById('fiSrcCancel').addEventListener('click', function () {
@@ -913,7 +963,7 @@
     document.getElementById('fiSrcSave').addEventListener('click', function () {
         collectSrcEdit();
         apiSave(CUR_TPL).then(function (j) {
-            if (!j.success) return Swal.fire({ icon: 'error', title: 'Error', text: j.error || 'Save failed' });
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
             SRC_EDIT = false;
             toast(t('fi-saved', 'Template saved'));
             selectTplFresh();
@@ -924,8 +974,7 @@
     }
     function refreshList() { apiList().then(buildRail); }
     function toast(msg) {
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: msg,
-                    showConfirmButton: false, timer: 1800, timerProgressBar: true });
+        Swal.fire({ icon: 'success', title: msg, timer: 1300, showConfirmButton: false });
     }
 
     // ── Colheita das páginas do menu (mesma fonte viva do Page Access) ───────
@@ -949,6 +998,37 @@
         });
         return out;
     }
+
+    // ── Modal de colunas da página (cadastráveis — nada de coluna fixa no JS) ──
+    var colsModal;
+    function colsEntry() {
+        return ((CUR_TPL && CUR_TPL.linked_pages) || [])
+            .filter(function (p) { return p.url === CUR_PAGE; })[0] || null;
+    }
+    document.getElementById('fiColsBtn').addEventListener('click', function () {
+        var entry = colsEntry();
+        if (!entry) return;
+        document.getElementById('fiColsPage').textContent = entry.label || CUR_PAGE;
+        document.getElementById('fiColsText').value = (entry.columns || []).join('\n');
+        colsModal = colsModal || new bootstrap.Modal(document.getElementById('fiColsModal'));
+        colsModal.show();
+    });
+    document.getElementById('fiColsSave').addEventListener('click', function () {
+        var entry = colsEntry();
+        if (!entry) return;
+        var seen = {}, cols = [];
+        document.getElementById('fiColsText').value.split('\n').forEach(function (line) {
+            var v = line.trim();
+            if (v && !seen[v]) { seen[v] = true; cols.push(v); }
+        });
+        entry.columns = cols;
+        apiSave(CUR_TPL).then(function (j) {
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
+            colsModal.hide();
+            toast(t('fi-saved', 'Template saved'));
+            selectTplFresh();
+        });
+    });
 
     // ── Modal Add Template / Link Pages ──────────────────────────────────────
     var linkModal, builderModal;
@@ -986,14 +1066,20 @@
         var key = document.getElementById('fiLinkTpl').value;
         apiGet(key).then(function (tpl) {
             if (!tpl) return;
+            // Preserva o que a página já tem cadastrado (as colunas dela) —
+            // remontar só com {label,url} apagava o dropdown de origem da página.
+            var prev = {};
+            (tpl.linked_pages || []).forEach(function (p) { prev[p.url] = p; });
             var pages = [];
             document.querySelectorAll('#fiLinkPicker input:checked').forEach(function (cb) {
-                pages.push({ label: cb.getAttribute('data-label'), url: cb.value });
+                var entry = { label: cb.getAttribute('data-label'), url: cb.value };
+                if (prev[cb.value] && prev[cb.value].columns) entry.columns = prev[cb.value].columns;
+                pages.push(entry);
             });
             tpl.linked_pages = pages;
             tpl.status = pages.length ? 'active' : 'library';
             apiSave(tpl).then(function (j) {
-                if (!j.success) return Swal.fire({ icon: 'error', title: 'Error', text: j.error || 'Save failed' });
+                if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
                 linkModal.hide();
                 toast(t('fi-saved', 'Template saved'));
                 refreshList();
@@ -1131,7 +1217,7 @@
             })
         };
         apiSave(tpl).then(function (j) {
-            if (!j.success) return Swal.fire({ icon: 'error', title: 'Error', text: j.error || 'Save failed' });
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
             builderModal.hide();
             toast(t('fi-saved', 'Template saved'));
             CUR_KEY = key;
@@ -1144,13 +1230,16 @@
         Swal.fire({
             icon: 'warning', title: t('fi-del-title', 'Delete this template?'),
             text: t('fi-del-text', 'The layout definition will be removed from the registry.'),
-            showCancelButton: true, confirmButtonColor: '#d33'
+            showCancelButton: true,
+            confirmButtonText: t('fi-del-yes', 'Yes, delete'),
+            cancelButtonText: t('fi-cancel', 'Cancel'),
+            confirmButtonColor: '#dc3545'
         }).then(function (res) {
             if (!res.isConfirmed) return;
             fetch('/api/file-interface/templates/' + encodeURIComponent(key), { method: 'DELETE' })
                 .then(function (r) { return r.json(); })
                 .then(function (j) {
-                    if (!j.success) return Swal.fire({ icon: 'error', title: 'Error', text: j.error || 'Delete failed' });
+                    if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Delete failed' });
                     builderModal.hide();
                     CUR_KEY = null; CUR_TPL = null;
                     document.getElementById('fiHeadCard').style.display = 'none';

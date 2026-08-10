@@ -8,7 +8,7 @@
   "manual_version": "10/08/2026",
   "description": "Layout used to update curves referenced in VCP, for Libor with FX variation expressed in other currencies, to report the FX variation expressed in other currencies of the TJMI, for Forward Contracts (valid only for entries made from the registration date up to D-1 of the contract start) and for Cupom Limpo on curves referenced in MOEDA.",
   "file_name_rule": "ACCRUAL_<VIEW>-<LOB>.txt (VIEW = BANCO / LAWTON / ATACAMA; LOB = CEM / EDG / HYB / COMM), unique-suffixed, written to the Batch Conecta folder and (best-effort) to the Regulatory Accrual evidence folder of the day",
-  "notes": "Also to be implemented for Daily Settlements · Other Products · Swap · VCP (/other-products-swap-vcp) — not wired yet. One accrual row generates 1/2/4 records — one per updater view (BANCO always; LAWTON/ATACAMA added when the group counterparty account belongs to them) × VCP leg; records are split by view into separate files. The generator assigns role/curve '01' to the LARGER account number and '00' to the smaller, while the manual states the participant with the SMALLER account is ponta 01. Only the Fator is sent — the PU field is written blank (22 spaces).",
+  "notes": "The VCP page is linked with its own columns; the automatic file generation currently runs from the Accrual page only. One accrual row generates 1/2/4 records — one per updater view (BANCO always; LAWTON/ATACAMA added when the group counterparty account belongs to them) × VCP leg; records are split by view into separate files. The generator assigns role/curve '01' to the LARGER account number and '00' to the smaller, while the manual states the participant with the SMALLER account is ponta 01. Only the Fator is sent — the PU field is written blank (22 spaces).",
   "file_type": "positional",
   "separator": null,
   "record_length": 77,
@@ -30,6 +30,21 @@
         "Fator Parte",
         "Fator Contraparte",
         "Comments"
+      ]
+    },
+    {
+      "label": "Daily Settlement · Other Products · Swap · VCP",
+      "url": "/other-products-swap-vcp",
+      "columns": [
+        "Contraparte",
+        "Código do Contrato",
+        "PARTE / Conta",
+        "PARTE / Indexador",
+        "PARTE / Fator",
+        "CONTRAPARTE / Conta",
+        "CONTRAPARTE / CPF/CNPJ",
+        "CONTRAPARTE / Indexador",
+        "CONTRAPARTE/ Fator"
       ]
     }
   ],
@@ -152,7 +167,14 @@
           "description": "Código identificador do instrumento financeiro a ser atualizado.",
           "source": "Page",
           "source_detail": "Código IF",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {
+            "/other-products-swap-vcp": {
+              "source": "Page",
+              "source_detail": "Código do Contrato",
+              "source_note": ""
+            }
+          }
         },
         {
           "seq": "5",
@@ -236,7 +258,14 @@
           "description": "Fator para atualização da curva",
           "source": "Page",
           "source_detail": "Fator Parte",
-          "source_note": "'Fator Contraparte' when the record is the CONTRAPARTE leg; absolute value"
+          "source_note": "'Fator Contraparte' when the record is the CONTRAPARTE leg; absolute value",
+          "source_by_page": {
+            "/other-products-swap-vcp": {
+              "source": "Page",
+              "source_detail": "PARTE / Fator",
+              "source_note": "'CONTRAPARTE/ Fator' when the record is the CONTRAPARTE leg; absolute value"
+            }
+          }
         }
       ]
     }
