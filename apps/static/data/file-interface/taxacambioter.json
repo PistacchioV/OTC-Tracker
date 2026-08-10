@@ -7,15 +7,29 @@
   "manual_pages": "651",
   "manual_version": "10/08/2026",
   "description": "Layout used to register the exchange rate for the valuation of Termo (forward) contracts. Structure: Header, Registro – Dados Fixos and Registro – Dados Variáveis — the variable-data line is used only for contracts of the Termo de Moedas Asiático modality.",
+  "file_name_rule": "TAXA_BANCO.txt (and TAXA_LAWTON.txt for the mirrored Lawton-side lines), unique-suffixed, written to the Batch Conecta New folder",
+  "notes": "Rows against the Lawton account (C.Parte 00041007) are mirrored into a second file (TAXA_LAWTON.txt) with Participante and C.Parte swapped — the Lawton-side view of the same trade. The generator writes Contrato left-justified to 10 characters, one short of the manual's X(11) 38-48, so the produced record is 86 characters against the manual's 87.",
   "file_type": "positional",
   "separator": null,
   "record_length": 87,
-  "file_name_rule": "TAXA_BANCO.txt (and TAXA_LAWTON.txt for the mirrored Lawton-side lines), unique-suffixed, written to the Batch Conecta New folder",
   "status": "active",
   "linked_pages": [
-    {"label": "Daily Settlement · NDF Other Publisher", "url": "/ndf-other-publisher"}
+    {
+      "label": "Daily Settlement · NDF Other Publisher",
+      "url": "/ndf-other-publisher",
+      "columns": [
+        "CLIENT",
+        "B3 ID",
+        "ATHENA ID",
+        "CCY FC",
+        "TX PARIDADE",
+        "CCY LC",
+        "TX COTADA",
+        "CONTA PARTE",
+        "CONTA CONTRAPARTE"
+      ]
+    }
   ],
-  "notes": "Rows against the Lawton account (C.Parte 00041007) are mirrored into a second file (TAXA_LAWTON.txt) with Participante and C.Parte swapped — the Lawton-side view of the same trade. The generator writes Contrato left-justified to 10 characters, one short of the manual's X(11) 38-48, so the produced record is 86 characters against the manual's 87.",
   "blocks": [
     {
       "id": "header",
@@ -31,7 +45,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
-          "source_detail": "Literal 'TER' + 2 spaces"
+          "source_detail": "TER",
+          "source_note": ""
         },
         {
           "seq": "02",
@@ -42,7 +57,8 @@
           "content": "0",
           "description": "Tipo de linha Header = 0",
           "source": "Fixed",
-          "source_detail": "Literal '0'"
+          "source_detail": "0",
+          "source_note": ""
         },
         {
           "seq": "03",
@@ -53,7 +69,8 @@
           "content": "0015",
           "description": "Código da operação: 0015 – Taxa de Cambio TER",
           "source": "Fixed",
-          "source_detail": "Literal '0015'"
+          "source_detail": "0015",
+          "source_note": ""
         },
         {
           "seq": "04",
@@ -63,8 +80,9 @@
           "required": "",
           "content": "",
           "description": "Nome Simplificado do Emissor",
-          "source": "Fixed",
-          "source_detail": "'JPMORGANBM' (Banco file) or 'INTRAGLAWTONFDO' (Lawton file), space-padded to 20"
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Per-view: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton)"
         },
         {
           "seq": "05",
@@ -75,7 +93,8 @@
           "content": "",
           "description": "Data da operação. Formato: AAAAMMDD.",
           "source": "Calculated",
-          "source_detail": "Send date (today, YYYYMMDD)"
+          "source_detail": "",
+          "source_note": "System date"
         },
         {
           "seq": "06",
@@ -86,7 +105,8 @@
           "content": "00001",
           "description": "Versão de Layout.",
           "source": "Fixed",
-          "source_detail": "Literal '00001'"
+          "source_detail": "00001",
+          "source_note": ""
         }
       ]
     },
@@ -104,7 +124,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
-          "source_detail": "Literal 'TER' + 2 spaces"
+          "source_detail": "TER",
+          "source_note": ""
         },
         {
           "seq": "02",
@@ -115,7 +136,8 @@
           "content": "1",
           "description": "Tipo Linha \"Dados Fixos\"",
           "source": "Fixed",
-          "source_detail": "Literal '1'"
+          "source_detail": "1",
+          "source_note": ""
         },
         {
           "seq": "03",
@@ -126,7 +148,8 @@
           "content": "0015",
           "description": "Código da operação: 0015 - Código identificador da operação.",
           "source": "Fixed",
-          "source_detail": "Literal '0015'"
+          "source_detail": "0015",
+          "source_note": ""
         },
         {
           "seq": "04",
@@ -137,7 +160,8 @@
           "content": "",
           "description": "Número de Controle Interno.",
           "source": "Calculated",
-          "source_detail": "Random 10-digit internal control number"
+          "source_detail": "",
+          "source_note": "Random 10 digits"
         },
         {
           "seq": "05",
@@ -148,7 +172,8 @@
           "content": "",
           "description": "Código do Participante para o qual está sendo realizado o lançamento. Sem ponto e traço",
           "source": "Fixed",
-          "source_detail": "Bank account '73760009' (swapped with C.Parte on the Lawton mirror file)"
+          "source_detail": "73760009",
+          "source_note": "Swapped with C.Parte in the Lawton mirror file"
         },
         {
           "seq": "06",
@@ -159,7 +184,8 @@
           "content": "",
           "description": "Vazio.",
           "source": "Fixed",
-          "source_detail": "Single space (empty)"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "07",
@@ -170,7 +196,8 @@
           "content": "",
           "description": "Código do Participante que representa a contraparte do lançamento. Sem ponto e traço.",
           "source": "Page",
-          "source_detail": "Column 'CONTA CONTRAPARTE', digits only, zero-padded to 8 (swapped with Participante on the Lawton mirror file)"
+          "source_detail": "CONTA CONTRAPARTE",
+          "source_note": "Digits only, zero-padded to 8; swapped with Participante in the Lawton mirror file"
         },
         {
           "seq": "08",
@@ -181,7 +208,8 @@
           "content": "",
           "description": "Código de identificação do contrato.",
           "source": "Page",
-          "source_detail": "Column 'B3 ID', left-justified to 10 characters (see notes)"
+          "source_detail": "B3 ID",
+          "source_note": "Left-justified to 10 characters (see notes)"
         },
         {
           "seq": "09",
@@ -192,7 +220,8 @@
           "content": "",
           "description": "Valor da cotação da taxa de câmbio. Quando Cross rating, lançar cotação do DOLAR.",
           "source": "Fixed",
-          "source_detail": "12 spaces (not sent)"
+          "source_detail": "",
+          "source_note": "Blank (not sent)"
         },
         {
           "seq": "10",
@@ -203,7 +232,8 @@
           "content": "",
           "description": "Valor da cotação da Paridade moeda Base (Referência)",
           "source": "Page",
-          "source_detail": "Column 'TX PARIDADE', 4-digit integer + 8-digit decimals, no separator"
+          "source_detail": "TX PARIDADE",
+          "source_note": ""
         },
         {
           "seq": "11",
@@ -214,7 +244,8 @@
           "content": "",
           "description": "Valor da cotação da Paridade da Moeda Cotada",
           "source": "Page",
-          "source_detail": "Column 'TX COTADA', 4-digit integer + 8-digit decimals, no separator"
+          "source_detail": "TX COTADA",
+          "source_note": ""
         },
         {
           "seq": "12",
@@ -225,7 +256,8 @@
           "content": "Obrigatório",
           "description": "Quantidade de Datas de Verificação: Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor: 000",
           "source": "Fixed",
-          "source_detail": "Literal '000' (no verification dates sent)"
+          "source_detail": "000",
+          "source_note": "No verification dates sent"
         }
       ]
     },
@@ -243,7 +275,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "02",
@@ -254,7 +287,8 @@
           "content": "2",
           "description": "Tipo Linha \"Dados Variáveis\"",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "03",
@@ -265,7 +299,8 @@
           "content": "0015",
           "description": "Código da operação: Antecipação TER",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "04",
@@ -276,7 +311,8 @@
           "content": "",
           "description": "Data de verificação do contrato (asiático). Formato: AAAAMMDD.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "05",
@@ -287,7 +323,8 @@
           "content": "",
           "description": "Valor da Cotação da Paridade base / cotada.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     }

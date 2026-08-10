@@ -7,13 +7,13 @@
   "manual_pages": "521-522",
   "manual_version": "10/08/2026",
   "description": "Allows participants to perform the partial or total early settlement (antecipação) of a swap contract (operation 0014).",
+  "file_name_rule": "",
+  "notes": "The manual prints 'Tamanho do Registro: 99 caracteres', but the field positions run to 103 (header Filler) and 111 (Registro field 13) — transcribed as printed.",
   "file_type": "positional",
   "separator": null,
   "record_length": 99,
-  "file_name_rule": "",
   "status": "library",
   "linked_pages": [],
-  "notes": "The manual prints 'Tamanho do Registro: 99 caracteres', but the field positions run to 103 (header Filler) and 111 (Registro field 13) — transcribed as printed.",
   "blocks": [
     {
       "id": "header",
@@ -29,7 +29,8 @@
           "content": "SWAP",
           "description": "",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -40,7 +41,8 @@
           "content": "0",
           "description": "Linha de Header",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -51,7 +53,8 @@
           "content": "0014",
           "description": "Código identificador da operação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -62,7 +65,8 @@
           "content": "",
           "description": "Nome Simplificado do Participante que gerou o arquivo",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -73,7 +77,8 @@
           "content": "",
           "description": "Data da operação. Formato: AAAAMMDD.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "6",
@@ -84,7 +89,8 @@
           "content": "00001",
           "description": "",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "7",
@@ -95,7 +101,8 @@
           "content": "",
           "description": "Reservado para futuras implementações",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     },
@@ -113,7 +120,8 @@
           "content": "SWAP",
           "description": "",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -124,7 +132,8 @@
           "content": "1",
           "description": "Linha de Dados",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -135,7 +144,8 @@
           "content": "0014",
           "description": "Código identificador da operação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -146,7 +156,8 @@
           "content": "",
           "description": "Código identificador do instrumento financeiro a ser antecipado.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -157,7 +168,8 @@
           "content": "00 (Ponta 1) e 01 (Ponta 2)",
           "description": "Possíveis valores.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "6",
@@ -168,7 +180,8 @@
           "content": "",
           "description": "Código de controle atribuído pelo Participante",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "7",
@@ -179,7 +192,8 @@
           "content": "",
           "description": "Fator para Antecipação (Ponta 1)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "8",
@@ -190,7 +204,8 @@
           "content": "",
           "description": "Fator para Antecipação (Ponta 2)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "9",
@@ -201,7 +216,8 @@
           "content": "",
           "description": "Data da antecipação do Contrato. Formato: AAAAMMDD",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "10",
@@ -212,7 +228,8 @@
           "content": "",
           "description": "Banco Liquidante",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "11",
@@ -223,7 +240,8 @@
           "content": "",
           "description": "Valor a ser antecipado.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "12",
@@ -234,7 +252,8 @@
           "content": "00 (sim) e 01 (não)",
           "description": "Indica se após antecipação os prêmios deverão ser mantidos. Esse campo é obrigatório em caso de antecipação parcial. Não deve ser preenchido em caso de antecipação total.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "13",
@@ -245,7 +264,8 @@
           "content": "",
           "description": "Indica a data para agendamento da liquidação da antecipação, permitido até D+1 da “Data de Antecipação”. Campo de preenchimento opcional. Formato: AAAAMMDD.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     }

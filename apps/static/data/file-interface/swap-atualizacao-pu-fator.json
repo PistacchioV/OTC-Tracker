@@ -7,15 +7,32 @@
   "manual_pages": "523-524",
   "manual_version": "10/08/2026",
   "description": "Layout used to update curves referenced in VCP, for Libor with FX variation expressed in other currencies, to report the FX variation expressed in other currencies of the TJMI, for Forward Contracts (valid only for entries made from the registration date up to D-1 of the contract start) and for Cupom Limpo on curves referenced in MOEDA.",
+  "file_name_rule": "ACCRUAL_<VIEW>-<LOB>.txt (VIEW = BANCO / LAWTON / ATACAMA; LOB = CEM / EDG / HYB / COMM), unique-suffixed, written to the Batch Conecta folder and (best-effort) to the Regulatory Accrual evidence folder of the day",
+  "notes": "Also to be implemented for Daily Settlements · Other Products · Swap · VCP (/other-products-swap-vcp) — not wired yet. One accrual row generates 1/2/4 records — one per updater view (BANCO always; LAWTON/ATACAMA added when the group counterparty account belongs to them) × VCP leg; records are split by view into separate files. The generator assigns role/curve '01' to the LARGER account number and '00' to the smaller, while the manual states the participant with the SMALLER account is ponta 01. Only the Fator is sent — the PU field is written blank (22 spaces).",
   "file_type": "positional",
   "separator": null,
   "record_length": 77,
-  "file_name_rule": "ACCRUAL_<VIEW>-<LOB>.txt (VIEW = BANCO / LAWTON / ATACAMA; LOB = CEM / EDG / HYB / COMM), unique-suffixed, written to the Batch Conecta folder and (best-effort) to the Regulatory Accrual evidence folder of the day",
   "status": "active",
   "linked_pages": [
-    {"label": "Regulatory · Accrual Swap", "url": "/accrual-swap"}
+    {
+      "label": "Regulatory · Accrual Swap",
+      "url": "/accrual-swap",
+      "columns": [
+        "Código IF",
+        "Data Início",
+        "Data Vencimento",
+        "PARTE / Conta",
+        "PARTE / Nome Simplificado",
+        "PARTE / Indexador",
+        "CONTRAPARTE / Conta",
+        "CONTRAPARTE / Nome Simplificado",
+        "CONTRAPARTE / Indexador",
+        "Fator Parte",
+        "Fator Contraparte",
+        "Comments"
+      ]
+    }
   ],
-  "notes": "Also to be implemented for Daily Settlements · Other Products · Swap · VCP (/other-products-swap-vcp) — not wired yet. One accrual row generates 1/2/4 records — one per updater view (BANCO always; LAWTON/ATACAMA added when the group counterparty account belongs to them) × VCP leg; records are split by view into separate files. The generator assigns role/curve '01' to the LARGER account number and '00' to the smaller, while the manual states the participant with the SMALLER account is ponta 01. Only the Fator is sent — the PU field is written blank (22 spaces).",
   "blocks": [
     {
       "id": "header",
@@ -31,7 +48,8 @@
           "content": "SWAP",
           "description": "",
           "source": "Fixed",
-          "source_detail": "Literal 'SWAP '"
+          "source_detail": "SWAP",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -42,7 +60,8 @@
           "content": "0",
           "description": "Linha de Header = 0",
           "source": "Fixed",
-          "source_detail": "Literal '0'"
+          "source_detail": "0",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -53,7 +72,8 @@
           "content": "0015",
           "description": "Código identificador da operação. Operação 0015.",
           "source": "Fixed",
-          "source_detail": "Literal '0015'"
+          "source_detail": "0015",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -64,7 +84,8 @@
           "content": "",
           "description": "Nome Simplificado do Participante que gerou o arquivo",
           "source": "Calculated",
-          "source_detail": "Per-view participant name: JPMORGANBM (Banco) / INTRAGLAWTONFDO / INTRAGATACAMAFDO, space-padded to 20"
+          "source_detail": "",
+          "source_note": "Per-view: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton) / INTRAGATACAMAFDO (Atacama)"
         },
         {
           "seq": "5",
@@ -75,7 +96,8 @@
           "content": "",
           "description": "Data da operação. Formato: AAAAMMDD.",
           "source": "Calculated",
-          "source_detail": "System date (today), YYYYMMDD"
+          "source_detail": "",
+          "source_note": "System date"
         }
       ]
     },
@@ -93,7 +115,8 @@
           "content": "SWAP",
           "description": "",
           "source": "Fixed",
-          "source_detail": "Literal 'SWAP '"
+          "source_detail": "SWAP",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -104,7 +127,8 @@
           "content": "1",
           "description": "Linha de Dados = 1",
           "source": "Fixed",
-          "source_detail": "Literal '1'"
+          "source_detail": "1",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -115,7 +139,8 @@
           "content": "0015",
           "description": "Código identificador da operação. Operação 0015.",
           "source": "Fixed",
-          "source_detail": "Literal '0015'"
+          "source_detail": "0015",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -126,7 +151,8 @@
           "content": "",
           "description": "Código identificador do instrumento financeiro a ser atualizado.",
           "source": "Page",
-          "source_detail": "Column 'Código IF' of the accrual row"
+          "source_detail": "Código IF",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -137,7 +163,8 @@
           "content": "00 (Ponta 1) e 01 (Ponta 2)",
           "description": "O critério para definir quem é ponta 01 ou ponta 02 na operação está relacionado a conta dos Participantes. A conta do participante que tiver o MENOR número será a ponta 01.",
           "source": "Calculated",
-          "source_detail": "Role of the updater: PARTE/CONTRAPARTE accounts compared, larger account number = '01', smaller = '00'"
+          "source_detail": "",
+          "source_note": "Updater role: larger of 'PARTE / Conta' and 'CONTRAPARTE / Conta' = 01, smaller = 00 (see notes)"
         },
         {
           "seq": "6",
@@ -148,7 +175,8 @@
           "content": "01 (Contrato a Termo), 15 (Dólar – Cupom Limpo), 00 (Curva VCP), 27 (Libor – variação cambial outros) ou 29 (TJMI – variação cambial outros)",
           "description": "Possíveis valores.",
           "source": "Fixed",
-          "source_detail": "Literal '00' (Curva VCP)"
+          "source_detail": "00",
+          "source_note": "Curva VCP"
         },
         {
           "seq": "7",
@@ -159,7 +187,8 @@
           "content": "00 (Ponta 1) e 01 (Ponta 2)",
           "description": "",
           "source": "Calculated",
-          "source_detail": "Role of the VCP leg being updated (same larger-account rule as Papel); one record per VCP leg"
+          "source_detail": "",
+          "source_note": "Role of the VCP leg (Indexador = VCP), same larger-account rule; one record per leg"
         },
         {
           "seq": "8",
@@ -170,7 +199,8 @@
           "content": "",
           "description": "Formato: AAAAMMDD.",
           "source": "Calculated",
-          "source_detail": "System date (today), YYYYMMDD"
+          "source_detail": "",
+          "source_note": "System date"
         },
         {
           "seq": "9",
@@ -181,7 +211,8 @@
           "content": "",
           "description": "Código de controle atribuído pelo Participante",
           "source": "Calculated",
-          "source_detail": "Random 10-digit control number"
+          "source_detail": "",
+          "source_note": "Random 10 digits"
         },
         {
           "seq": "10",
@@ -192,7 +223,8 @@
           "content": "",
           "description": "PU para atualização da curva",
           "source": "Fixed",
-          "source_detail": "Blank — 22 spaces (only the factor is sent)"
+          "source_detail": "",
+          "source_note": "Blank (only the factor is sent)"
         },
         {
           "seq": "11",
@@ -203,7 +235,8 @@
           "content": "",
           "description": "Fator para atualização da curva",
           "source": "Page",
-          "source_detail": "Column 'Fator Parte' / 'Fator Contraparte' of the VCP leg — absolute value, 2 integer + 8 decimal digits, no separator"
+          "source_detail": "Fator Parte",
+          "source_note": "'Fator Contraparte' when the record is the CONTRAPARTE leg; absolute value"
         }
       ]
     }

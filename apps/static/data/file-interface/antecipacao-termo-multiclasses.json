@@ -7,13 +7,13 @@
   "manual_pages": "648-650",
   "manual_version": "10/08/2026",
   "description": "Layout that lets the parties anticipate (early-terminate) Termo de Moedas contracts or other asset classes in the Termo module (Termo21).",
+  "file_name_rule": "",
+  "notes": "",
   "file_type": "positional",
   "separator": null,
   "record_length": 133,
-  "file_name_rule": "",
   "status": "library",
   "linked_pages": [],
-  "notes": "",
   "blocks": [
     {
       "id": "header",
@@ -29,7 +29,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -40,7 +41,8 @@
           "content": "0",
           "description": "Tipo de linha do Header = 0",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -51,7 +53,8 @@
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -62,7 +65,8 @@
           "content": "PARTICIPANTE",
           "description": "Nome Simplificado do Emissor",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -73,7 +77,8 @@
           "content": "20230223",
           "description": "Data da operação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "6",
@@ -84,7 +89,8 @@
           "content": "00002",
           "description": "Versão de Layout.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     },
@@ -102,7 +108,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -113,7 +120,8 @@
           "content": "1",
           "description": "Tipo Linha \"Dados Fixos\"",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -124,7 +132,8 @@
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -135,7 +144,8 @@
           "content": "1001000100",
           "description": "Código de controle atribuído pelo participante",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -146,7 +156,8 @@
           "content": "55555005",
           "description": "Código da Instituição lançadora da operação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "6",
@@ -157,7 +168,8 @@
           "content": "0 = Comprador ou, 1 = Vendedor",
           "description": "Posição do participante.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "7",
@@ -168,7 +180,8 @@
           "content": "55555005",
           "description": "Código da contraparte na operação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "8",
@@ -179,7 +192,8 @@
           "content": "23010001100",
           "description": "Código de identificação do contrato.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "9",
@@ -190,7 +204,8 @@
           "content": "0000000000100050",
           "description": "Valor base a Antecipar. Não utilizar ',' (virgula) ou '.' (ponto)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "10",
@@ -201,7 +216,8 @@
           "content": "20230223",
           "description": "Data Antecipação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "11",
@@ -212,7 +228,8 @@
           "content": "20230224",
           "description": "Data da liquidação da antecipação. Pode ser indicada até D+1 da data da antecipação. Se não informado, será considerado a Data da Antecipação.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "12",
@@ -223,7 +240,8 @@
           "content": "00000000000505000000 ou \"          505000000\"",
           "description": "Valor da cotação de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "13",
@@ -234,7 +252,8 @@
           "content": "0100000010",
           "description": "Valor da taxa de juros de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "14",
@@ -245,7 +264,8 @@
           "content": "",
           "description": "Valor da cotação de reversão da moeda cotada. Não utilizar ',' (virgula) ou '.' (ponto).",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "15",
@@ -256,7 +276,8 @@
           "content": "55555005",
           "description": "Código do liquidante para o qual está sendo realizado o lançamento.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "16",
@@ -267,7 +288,8 @@
           "content": "",
           "description": "Quantidade de Datas de Verificação: Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor: 000.",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     },
@@ -285,7 +307,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -296,7 +319,8 @@
           "content": "2",
           "description": "Tipo Linha \"Dados Variáveis\"",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -307,7 +331,8 @@
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -318,7 +343,8 @@
           "content": "20230224",
           "description": "Data de Verificação (Asiático).",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         },
         {
           "seq": "5",
@@ -329,7 +355,8 @@
           "content": "0000000000010050",
           "description": "Valor Referencia (Asiático com média Ponderada). Para contratos com média aritmética simples, preencher com zeros. Não utilizar ',' (virgula) ou '.' (ponto)",
           "source": "",
-          "source_detail": ""
+          "source_detail": "",
+          "source_note": ""
         }
       ]
     }

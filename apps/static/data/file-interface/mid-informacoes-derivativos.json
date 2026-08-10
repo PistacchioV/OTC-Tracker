@@ -7,15 +7,29 @@
   "manual_pages": "530-532",
   "manual_version": "10/08/2026",
   "description": "Layout exclusive to Swap contracts in which at least one of the curves is VCP. It lets the Participant register and update the Mark-to-Market information and indicate the Minimum and Maximum Notional percentages.",
+  "file_name_rule": "MtM_<VIEW>-<BOOK>.txt (MtM_BANCO-CEM / MtM_BANCO-EDG / MtM_BANCO-HYB always; mirror file MtM_ATACAMA-EDG or MtM_LAWTON-CEM / MtM_LAWTON-HYB for intragroup contracts), Latin-1, CRLF, written to the Batch Conecta folder and the day's MTM source folder",
+  "notes": "Every swap book generates the BANCO view file; contracts whose counterparty account is Lawton (00041.00-7) or Atacama (85398.00-5) also emit a mirror record with the OPPOSITE sign in the counterparty view file (EDG→Atacama, CEM/Hybrids→Lawton). Data rows use the page's reference date (datepicker); the header uses the system date. A zero MtM is sent as 0.01 — B3 rejects zero.",
   "file_type": "positional",
   "separator": null,
   "record_length": 93,
-  "file_name_rule": "MtM_<VIEW>-<BOOK>.txt (MtM_BANCO-CEM / MtM_BANCO-EDG / MtM_BANCO-HYB always; mirror file MtM_ATACAMA-EDG or MtM_LAWTON-CEM / MtM_LAWTON-HYB for intragroup contracts), Latin-1, CRLF, written to the Batch Conecta folder and the day's MTM source folder",
   "status": "active",
   "linked_pages": [
-    {"label": "Regulatory · MtM Swap", "url": "/mtm-swap"}
+    {
+      "label": "Regulatory · MtM Swap",
+      "url": "/mtm-swap",
+      "columns": [
+        "Código IF",
+        "Data Início",
+        "PARTE / Conta",
+        "Nome Simplificado Parte",
+        "CONTRAPARTE / Conta",
+        "Nome Simplificado Contraparte",
+        "Data Vencimento",
+        "Valor MTM",
+        "Comments"
+      ]
+    }
   ],
-  "notes": "Every swap book generates the BANCO view file; contracts whose counterparty account is Lawton (00041.00-7) or Atacama (85398.00-5) also emit a mirror record with the OPPOSITE sign in the counterparty view file (EDG→Atacama, CEM/Hybrids→Lawton). Data rows use the page's reference date (datepicker); the header uses the system date. A zero MtM is sent as 0.01 — B3 rejects zero.",
   "blocks": [
     {
       "id": "header",
@@ -31,7 +45,8 @@
           "content": "MID",
           "description": "",
           "source": "Fixed",
-          "source_detail": "Literal 'MID' + 2 spaces"
+          "source_detail": "MID",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -42,7 +57,8 @@
           "content": "0",
           "description": "Linha de Header = 0",
           "source": "Fixed",
-          "source_detail": "Literal '0'"
+          "source_detail": "0",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -53,7 +69,8 @@
           "content": "0848",
           "description": "Código identificador da operação.",
           "source": "Fixed",
-          "source_detail": "Literal '0848'"
+          "source_detail": "0848",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -64,7 +81,8 @@
           "content": "",
           "description": "Nome simplificado do Participante que gerou o arquivo.",
           "source": "Calculated",
-          "source_detail": "Per-view participant name: JPMORGANBM (Banco) / INTRAGLAWTONFDO / INTRAGATACAMAFDO, space-padded to 20"
+          "source_detail": "",
+          "source_note": "Per-view: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton) / INTRAGATACAMAFDO (Atacama)"
         },
         {
           "seq": "5",
@@ -75,7 +93,8 @@
           "content": "",
           "description": "Data da operação. Formato: AAAAMMDD.",
           "source": "Calculated",
-          "source_detail": "System date (today), YYYYMMDD"
+          "source_detail": "",
+          "source_note": "System date"
         }
       ]
     },
@@ -93,7 +112,8 @@
           "content": "MID",
           "description": "",
           "source": "Fixed",
-          "source_detail": "Literal 'MID' + 2 spaces"
+          "source_detail": "MID",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -104,7 +124,8 @@
           "content": "1",
           "description": "Linha de Dados = 1",
           "source": "Fixed",
-          "source_detail": "Literal '1'"
+          "source_detail": "1",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -115,7 +136,8 @@
           "content": "0848",
           "description": "Código identificador da operação.",
           "source": "Fixed",
-          "source_detail": "Literal '0848'"
+          "source_detail": "0848",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -126,7 +148,8 @@
           "content": "",
           "description": "Código de controle atribuído pelo Participante.",
           "source": "Calculated",
-          "source_detail": "Random 10-digit control number"
+          "source_detail": "",
+          "source_note": "Random 10 digits"
         },
         {
           "seq": "5",
@@ -137,7 +160,8 @@
           "content": "",
           "description": "Código do Contrato.",
           "source": "Page",
-          "source_detail": "Column 'Código IF' of the MtM book row"
+          "source_detail": "Código IF",
+          "source_note": ""
         },
         {
           "seq": "6",
@@ -148,7 +172,8 @@
           "content": "",
           "description": "Nome Simplificado Parte.",
           "source": "Calculated",
-          "source_detail": "Per-view party name: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton) / INTRAGATACAMAFDO (Atacama), space-padded to 20"
+          "source_detail": "",
+          "source_note": "Per-view: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton) / INTRAGATACAMAFDO (Atacama)"
         },
         {
           "seq": "7",
@@ -159,7 +184,8 @@
           "content": "",
           "description": "Codigo da conta da Parte.",
           "source": "Calculated",
-          "source_detail": "Per-view account: 73760009 (Banco) / 00041007 (Lawton) / 85398005 (Atacama)"
+          "source_detail": "",
+          "source_note": "Per-view account: 73760009 (Banco) / 00041007 (Lawton) / 85398005 (Atacama)"
         },
         {
           "seq": "8",
@@ -170,7 +196,8 @@
           "content": "00 (+) e 01 (-)",
           "description": "Sinal da marcação a mercado.",
           "source": "Calculated",
-          "source_detail": "'00' when Valor MTM >= 0, '01' when negative; inverted in the mirror (Lawton/Atacama) file"
+          "source_detail": "Valor MTM",
+          "source_note": "'00' when >= 0, '01' when negative; sign inverted in the mirror file"
         },
         {
           "seq": "9",
@@ -181,7 +208,8 @@
           "content": "",
           "description": "Valor de marcação a mercado.",
           "source": "Page",
-          "source_detail": "Column 'Valor MTM' of the book row — absolute value, 12 digits with implicit 2 decimals; zero is sent as 0.01"
+          "source_detail": "Valor MTM",
+          "source_note": "Absolute value; zero sent as 0.01"
         },
         {
           "seq": "10",
@@ -192,7 +220,8 @@
           "content": "",
           "description": "Valor Notional Máximo em percentual",
           "source": "Fixed",
-          "source_detail": "Blank — 6 spaces (not used)"
+          "source_detail": "",
+          "source_note": "Blank (not used)"
         },
         {
           "seq": "11",
@@ -203,7 +232,8 @@
           "content": "",
           "description": "Valor Notional Máximo em percentual",
           "source": "Fixed",
-          "source_detail": "Blank — 6 spaces (not used)"
+          "source_detail": "",
+          "source_note": "Blank (not used)"
         },
         {
           "seq": "12",
@@ -213,8 +243,9 @@
           "required": "",
           "content": "",
           "description": "Data de Referência da marcação a mercado. Caso não seja informada é considerada a data de registro da operação. No formato AAAAMMDD",
-          "source": "Page",
-          "source_detail": "The page's reference date (datepicker), YYYYMMDD"
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Page reference date (datepicker)"
         }
       ]
     }

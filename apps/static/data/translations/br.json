@@ -1677,7 +1677,7 @@
   "fi-th-content": "Conteúdo",
   "fi-th-description": "Descrição",
   "fi-th-source": "Origem",
-  "fi-th-source-detail": "Detalhe da Origem",
+  "fi-th-source-detail": "Campo / Valor de Origem",
   "fi-positional": "Posicional",
   "fi-delimited": "Por Separador",
   "fi-link-title": "Vincular um template B3 às páginas do OTC Tracker",
@@ -1707,5 +1707,11 @@
   "fi-key-exists": "Já existe um template com esse nome",
   "fi-del-title": "Excluir este template?",
   "fi-del-text": "A definição do layout será removida do cadastro.",
-  "fi-discard-sources": "Descartar as edições de origem não salvas?"
+  "fi-discard-sources": "Descartar as edições de origem não salvas?",
+  "fi-rail-pages": "Páginas",
+  "fi-rail-library": "Biblioteca de Templates",
+  "fi-template": "Template",
+  "fi-blank": "em branco",
+  "fi-fixed-ph": "valor…",
+  "fi-note-ph": "observação (opcional)"
 }

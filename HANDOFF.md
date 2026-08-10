@@ -10649,3 +10649,35 @@ Decisões e armadilhas:
 - **Opções Flexíveis é por separador** (`;`, com token vazio no fim — 62 campos, 63 tokens), os
   demais são posicionais; o chip da página mostra qual é qual, e `9(12)V9(8)` ganha a leitura
   humana ("12 inteiros + 8 decimais") na própria coluna de formato.
+
+## §236 — File Interface por página, e a origem virou seleção
+
+Dois ajustes de desenho no File Interface (§235), pedidos na primeira revisão de tela:
+
+- **O rail esquerdo abre pelas PÁGINAS, não pelos templates.** Uma entrada por página que
+  gera arquivo; clicar mostra o template linkado com as colunas de Origem dizendo só o que
+  AQUELA página faz. O template com 4 páginas (TER) tinha três comportamentos numa célula
+  só. O mecanismo é o `source_by_page` por campo: o texto comum fica no
+  `source`/`source_detail` plano e cada página só ganha entrada própria onde diverge —
+  editar na visão de página grava o override daquela página (e igualar ao comum remove o
+  override). A Template Library continua abaixo, para os 9 sem página e para editar o
+  template "puro".
+- **`source_detail` deixou de ser prosa.** Fixed = o valor em si (sem "Literal");
+  Page/Calculated = o NOME EXATO de uma coluna da página, escolhido em dropdown; Mapping =
+  a chave do registro, em dropdown com os 25 mappings (endpoint
+  `/api/file-interface/options`). Condição/transformação foi para a **`source_note`**
+  opcional (subtexto). As opções do dropdown de coluna vêm de **`linked_pages[].columns`**
+  do próprio template — cadastráveis, semeadas dos cabeçalhos reais das 9 páginas
+  (inclusive as montadas por JS: Other Publisher = `_NDFOP_COLUMNS`, Accrual =
+  `_ACC_FIXED_HEADERS`, MtM = `_MTM_FIXED_HEADERS`). Asserção que protege o formato: toda
+  origem `Page` bate com uma coluna da lista, e nenhum `source_detail` contém frase de
+  lógica.
+
+Armadilhas encontradas ao separar por página: **o NDF Vanilla não gera o TER de fato** (o
+endpoint genérico devolve 404 para `vanilla`; o registro é feito por outra ferramenta — o
+vínculo ficou, com a realidade anotada) e, no Other Publisher, o gerador lê
+`StrikeSetDate`/`StrikeSetOffset`, colunas que só existem na página de FWD Start — esses
+campos são `Calculated` com nota, não `Page`, senão apontariam para coluna que a tela não
+tem. Os rótulos de coluna diferem por página para o mesmo dado (`FixingStartDate` na de
+commodities, `First Fixing Date` nas genéricas; `Total Notional` × `Notional`): o dropdown
+usa o rótulo DAQUELA página, é isso que o usuário vê na tela dele.

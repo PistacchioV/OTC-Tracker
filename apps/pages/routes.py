@@ -19671,7 +19671,8 @@ _FILE_INTERFACE_DIR = os.path.normpath(os.path.join(
 _FI_KEY_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,63}$')
 
 _FI_FIELD_KEYS = ('seq', 'field', 'format', 'position', 'required',
-                  'content', 'description', 'source', 'source_detail')
+                  'content', 'description', 'source', 'source_detail',
+                  'source_note')
 _FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
                  'manual_pages', 'manual_version', 'description',
                  'file_name_rule', 'notes')
@@ -19720,8 +19721,14 @@ def _fi_clean_template(key, payload):
     pages = []
     for p in (payload.get('linked_pages') or []):
         if isinstance(p, dict) and str(p.get('url', '') or '').startswith('/'):
-            pages.append({'label': str(p.get('label', '') or '').strip(),
-                          'url': str(p['url']).strip()})
+            entry = {'label': str(p.get('label', '') or '').strip(),
+                     'url': str(p['url']).strip()}
+            # As COLUNAS da página vivem aqui (cadastráveis, nada fixo no
+            # código): são as opções do dropdown de Origem quando Source=Page.
+            cols = [str(c) for c in (p.get('columns') or []) if str(c).strip()]
+            if cols:
+                entry['columns'] = cols
+            pages.append(entry)
     out['linked_pages'] = pages
     blocks = []
     for b in (payload.get('blocks') or []):
@@ -19729,8 +19736,24 @@ def _fi_clean_template(key, payload):
             continue
         fields = []
         for f in (b.get('fields') or []):
-            if isinstance(f, dict):
-                fields.append({k: str(f.get(k, '') or '') for k in _FI_FIELD_KEYS})
+            if not isinstance(f, dict):
+                continue
+            fld = {k: str(f.get(k, '') or '') for k in _FI_FIELD_KEYS}
+            # Origem POR PÁGINA: quando o mesmo template serve páginas que
+            # preenchem o campo de jeitos diferentes, o texto de cada página
+            # vive aqui e o source/source_detail plano fica como o comum.
+            sbp = f.get('source_by_page')
+            if isinstance(sbp, dict):
+                clean_sbp = {}
+                for url, ov in sbp.items():
+                    if isinstance(ov, dict) and str(url).startswith('/'):
+                        clean_sbp[str(url)] = {
+                            'source': str(ov.get('source', '') or ''),
+                            'source_detail': str(ov.get('source_detail', '') or ''),
+                            'source_note': str(ov.get('source_note', '') or '')}
+                if clean_sbp:
+                    fld['source_by_page'] = clean_sbp
+            fields.append(fld)
         blocks.append({'id': str(b.get('id', '') or '').strip() or 'block-%d' % (len(blocks) + 1),
                        'title': str(b.get('title', '') or '').strip() or 'Block',
                        'note': str(b.get('note', '') or ''),
@@ -19744,6 +19767,17 @@ def file_interface_page():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/file-interface.html', segment='file-interface')
+
+
+@blueprint.route('/api/file-interface/options', methods=['GET'])
+def api_file_interface_options():
+    """Opções dos dropdowns de Origem: os mappings existentes no registro.
+    As colunas de página não saem daqui — vivem em `linked_pages[].columns`
+    de cada template, cadastráveis pela própria tela."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, 'mappings': [
+        {'key': k, 'label': d.get('label', k)} for k, d in sorted(_MAPPING_DEFS.items())]})
 
 
 @blueprint.route('/api/file-interface/templates', methods=['GET'])

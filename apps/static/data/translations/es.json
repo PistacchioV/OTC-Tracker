@@ -1676,7 +1676,7 @@
   "fi-th-content": "Contenido",
   "fi-th-description": "Descripción",
   "fi-th-source": "Origen",
-  "fi-th-source-detail": "Detalle del Origen",
+  "fi-th-source-detail": "Campo / Valor de Origen",
   "fi-positional": "Posicional",
   "fi-delimited": "Por Separador",
   "fi-link-title": "Vincular una plantilla B3 a las páginas del OTC Tracker",
@@ -1706,5 +1706,11 @@
   "fi-key-exists": "Ya existe una plantilla con ese nombre",
   "fi-del-title": "¿Eliminar esta plantilla?",
   "fi-del-text": "La definición del layout se eliminará del registro.",
-  "fi-discard-sources": "¿Descartar las ediciones de origen no guardadas?"
+  "fi-discard-sources": "¿Descartar las ediciones de origen no guardadas?",
+  "fi-rail-pages": "Páginas",
+  "fi-rail-library": "Biblioteca de Plantillas",
+  "fi-template": "Plantilla",
+  "fi-blank": "en blanco",
+  "fi-fixed-ph": "valor…",
+  "fi-note-ph": "nota (opcional)"
 }

@@ -1677,7 +1677,7 @@
   "fi-th-content": "Content",
   "fi-th-description": "Description",
   "fi-th-source": "Source",
-  "fi-th-source-detail": "Source Detail",
+  "fi-th-source-detail": "Source Field / Value",
   "fi-positional": "Positional",
   "fi-delimited": "Delimited",
   "fi-link-title": "Link a B3 template to OTC Tracker pages",
@@ -1707,5 +1707,11 @@
   "fi-key-exists": "A template with this name already exists",
   "fi-del-title": "Delete this template?",
   "fi-del-text": "The layout definition will be removed from the registry.",
-  "fi-discard-sources": "Discard unsaved source edits?"
+  "fi-discard-sources": "Discard unsaved source edits?",
+  "fi-rail-pages": "Pages",
+  "fi-rail-library": "Template Library",
+  "fi-template": "Template",
+  "fi-blank": "blank",
+  "fi-fixed-ph": "value…",
+  "fi-note-ph": "note (optional)"
 }

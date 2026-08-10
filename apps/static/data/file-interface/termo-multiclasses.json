@@ -16,19 +16,132 @@
   "linked_pages": [
     {
       "label": "New Deals · NDF Vanilla",
-      "url": "/new_deals-ndf-vanilla"
+      "url": "/new_deals-ndf-vanilla",
+      "columns": [
+        "LE",
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "First Fixing Date",
+        "Last Fixing Date",
+        "Intrument",
+        "Trade Type",
+        "Direction",
+        "FX Pair",
+        "Quantity Currency",
+        "Other Quantity Currency",
+        "Publisher",
+        "Notional",
+        "Rate",
+        "Is BRR Fixed?",
+        "TradingBook",
+        "Other Book",
+        "Settlement Location"
+      ]
     },
     {
       "label": "New Deals · NDF FWD Start",
-      "url": "/new_deals-ndf-fwdstart"
+      "url": "/new_deals-ndf-fwdstart",
+      "columns": [
+        "LE",
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "First Fixing Date",
+        "Last Fixing Date",
+        "Strike Set Date",
+        "Strike Set Offset",
+        "Strike",
+        "Intrument",
+        "Trade Type",
+        "Direction",
+        "FX Pair",
+        "Quantity Currency",
+        "Other Quantity Currency",
+        "Publisher",
+        "Notional",
+        "Rate",
+        "Is BRR Fixed?",
+        "TradingBook",
+        "Other Book",
+        "Settlement Location"
+      ]
     },
     {
       "label": "New Deals · NDF Other Publisher",
-      "url": "/new_deals-ndf-otherpublisher"
+      "url": "/new_deals-ndf-otherpublisher",
+      "columns": [
+        "LE",
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "First Fixing Date",
+        "Last Fixing Date",
+        "Intrument",
+        "Trade Type",
+        "Direction",
+        "FX Pair",
+        "Quantity Currency",
+        "Other Quantity Currency",
+        "Publisher",
+        "Notional",
+        "Rate",
+        "Is BRR Fixed?",
+        "TradingBook",
+        "Other Book",
+        "Settlement Location"
+      ]
     },
     {
       "label": "New Deals · NDF Commodities",
-      "url": "/new_deals-ndf-commodities"
+      "url": "/new_deals-ndf-commodities",
+      "columns": [
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "Trade Type",
+        "Market",
+        "Underlying Asset",
+        "Commodities",
+        "FX Holiday Schedule",
+        "Total Notional",
+        "Instrument",
+        "Contract",
+        "Strike",
+        "Strike Currency",
+        "Direction",
+        "Spot FXRate",
+        "FXConvDate",
+        "FixingStartDate",
+        "FixingEndDate",
+        "TradingBook",
+        "OtherBook",
+        "Quoted in Cents?"
+      ]
     }
   ],
   "blocks": [
@@ -46,7 +159,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
-          "source_detail": "Literal 'TER'"
+          "source_detail": "TER",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -57,7 +171,8 @@
           "content": "0",
           "description": "Tipo de linha Header = 0",
           "source": "Fixed",
-          "source_detail": "Literal '0'"
+          "source_detail": "0",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -68,7 +183,8 @@
           "content": "1",
           "description": "Código da operação: 0001 - Registro TER",
           "source": "Fixed",
-          "source_detail": "Literal '0001'"
+          "source_detail": "0001",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -79,7 +195,25 @@
           "content": "",
           "description": "Nome Simplificado do Emissor",
           "source": "Calculated",
-          "source_detail": "Per output file: 'JPMORGANBM' (Banco), 'INTRAGLAWTONFDO' (Lawton leg), 'MORGANBC' (MGT, generic NDF only)"
+          "source_detail": "",
+          "source_note": "Simplified issuer name of the entity that owns the output file",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "JPMORGANBM (TCO_BANCO), INTRAGLAWTONFDO (TCO_LAWTON) per output file"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+            }
+          }
         },
         {
           "seq": "5",
@@ -90,7 +224,8 @@
           "content": "20232302",
           "description": "Data da operação.",
           "source": "Calculated",
-          "source_detail": "File generation date (today), YYYYMMDD"
+          "source_detail": "",
+          "source_note": "File generation date (today)"
         },
         {
           "seq": "6",
@@ -101,7 +236,8 @@
           "content": "00003",
           "description": "Versão de Layout.",
           "source": "Fixed",
-          "source_detail": "Literal '00003'"
+          "source_detail": "00003",
+          "source_note": ""
         }
       ]
     },
@@ -119,7 +255,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
-          "source_detail": "Literal 'TER'"
+          "source_detail": "TER",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -130,7 +267,8 @@
           "content": "1",
           "description": "Tipo Linha \"Dados Fixos\"",
           "source": "Fixed",
-          "source_detail": "Literal '1'"
+          "source_detail": "1",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -141,7 +279,8 @@
           "content": "0001",
           "description": "Código da operação: Registro TER",
           "source": "Fixed",
-          "source_detail": "Literal '0001'"
+          "source_detail": "0001",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -152,7 +291,8 @@
           "content": "0000000001",
           "description": "Número de identificação do lançamento realizado pelo Participante. Não é necessário que o número de controle interno seja o mesmo da contraparte.",
           "source": "Calculated",
-          "source_detail": "Random 10-digit number generated per line"
+          "source_detail": "",
+          "source_note": "Random 10-digit number per line"
         },
         {
           "seq": "5",
@@ -163,7 +303,25 @@
           "content": "55555555",
           "description": "Código da Conta NoMe do Participante que está registrando a operação.",
           "source": "Calculated",
-          "source_detail": "Entity account from deal LE/Client: generic NDF picks 73760009 (Banco) / 00041007 (Lawton leg) / 04880006 (MGT); NDF Comm: 00041007 when Client is J.P. Morgan, else 73760009"
+          "source_detail": "",
+          "source_note": "Entity NoMe account of the file's leg, from the deal's LE/Client",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Client",
+              "source_note": "J.P. Morgan → 00041007 (Lawton file), else 73760009 (Banco)"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE or J.P. Morgan client → 00041007 (Lawton file); MGT LE → 04880006; else 73760009 (Banco)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE or J.P. Morgan client → 00041007 (Lawton file); MGT LE → 04880006; else 73760009 (Banco)"
+            }
+          }
         },
         {
           "seq": "6",
@@ -174,7 +332,8 @@
           "content": "0 – Comprador, ou 1 - Vendedor",
           "description": "Papel da parte na operação",
           "source": "Calculated",
-          "source_detail": "Column 'Direction' of the deal row: BUY → 0, else 1"
+          "source_detail": "Direction",
+          "source_note": "BUY → 0, else 1"
         },
         {
           "seq": "7",
@@ -185,7 +344,8 @@
           "content": "000001234567890",
           "description": "CPF/CNPJ da Parte.",
           "source": "Fixed",
-          "source_detail": "Blank-filled (not produced by either generator)"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "8",
@@ -196,7 +356,25 @@
           "content": "55555555",
           "description": "Código da Conta NoMe do Participante que é contraparte na operação.",
           "source": "Calculated",
-          "source_detail": "Counterparty NoMe account from Client/LE matrix: 73760102 (client omnibus), 00041007 (Lawton), 73760009 (Banco), 04880006/04880109 (MGT legs, generic NDF); NDF Comm: Lawton → 00041007, JPM → 73760009, else 73760102"
+          "source_detail": "",
+          "source_note": "Counterparty NoMe account from the deal's Client/LE; internal legs get the entity account, clients 73760102 (omnibus)",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Client",
+              "source_note": "Lawton → 00041007, J.P. Morgan → 73760009, else 73760102 (client omnibus)"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE → 73760009; J.P. Morgan client → 73760009 (04880006 when LE = MGT); Lawton client → 00041007; MGT LE → 04880109; MGT client → 04880006; else 73760102 (client omnibus)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE → 73760009; J.P. Morgan client → 73760009 (04880006 when LE = MGT); Lawton client → 00041007; MGT LE → 04880109; MGT client → 04880006; else 73760102 (client omnibus)"
+            }
+          }
         },
         {
           "seq": "9",
@@ -207,7 +385,8 @@
           "content": "000001234567890",
           "description": "CPF/CNPJ da Contraparte.",
           "source": "Page",
-          "source_detail": "Column 'TaxID' of the deal row, digits only; blank for internal legs (JPM/Lawton/MGT)"
+          "source_detail": "Tax ID",
+          "source_note": "digits only; blank for internal legs"
         },
         {
           "seq": "10",
@@ -218,7 +397,8 @@
           "content": "S - Sim, ou N - Não",
           "description": "Indicação informativa se o contrato registrado é amparado pelo Contrato Global de Derivativos.",
           "source": "Fixed",
-          "source_detail": "Literal 'S'"
+          "source_detail": "S",
+          "source_note": ""
         },
         {
           "seq": "11",
@@ -229,7 +409,25 @@
           "content": "02 = TAXAS DE CAMBIO, ou 04 = COMMODITIES",
           "description": "Indica a Classe do Ativo Subjacente do Contrato. Para contratos de Termo de Moedas, informar \"TAXAS DE CÂMBIO\". Preencher com ESPAÇOS os campos à esquerda e o código à direita.",
           "source": "Fixed",
-          "source_detail": "Generic NDF: literal '2' (Taxas de Câmbio) right-aligned; NDF Comm: literal '4' (Commodities)"
+          "source_detail": "",
+          "source_note": "Asset-class code, right-aligned in 20",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "4",
+              "source_note": "Commodities, right-aligned in 20"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "2",
+              "source_note": "Taxas de Câmbio, right-aligned in 20"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "2",
+              "source_note": "Taxas de Câmbio, right-aligned in 20"
+            }
+          }
         },
         {
           "seq": "12",
@@ -240,7 +438,30 @@
           "content": "0 = SISBACEN, ou 1 = FEEDER, ou 2 = SPOT, ou 3 = SISBACEN/FEEDER",
           "description": "Indica a Fonte a ser utilizada para captura da cotação do ativo subjacente. Preencher com ESPAÇOS os espaços vazios: \"    0\". Para os demais domínios, consultar o arquivo público \"AAAAMMDD_Dominios_DERIVATIVOS_COE.txt\".",
           "source": "Mapping",
-          "source_detail": "Generic NDF: mapping publisher-ndf → FONTE INFO (no row = '1'; PTAX/BACEN = '0'); NDF Comm: mapping commodities-b3 → INFO SOURCE (blank column falls back to 340/358 by FIXED QUOTE)"
+          "source_detail": "",
+          "source_note": "publisher-ndf (generic NDF) or commodities-b3 (commodities)",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Mapping",
+              "source_detail": "commodities-b3",
+              "source_note": "INFO SOURCE column; blank falls back to 340/358 by FIXED QUOTE"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "FONTE INFO column for the deal's Publisher; no row = '1', PTAX/BACEN = '0'"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "FONTE INFO column for the deal's Publisher; no row = '1', PTAX/BACEN = '0'"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "PTAX/BACEN = SISBACEN '0'; the app does not write the TER file from this page"
+            }
+          }
         },
         {
           "seq": "13",
@@ -251,7 +472,25 @@
           "content": "220 = DOLAR DOS EUA, ou 790 = REAIS",
           "description": "Código da moeda base negociada pelos Participantes, utilizada para apuração do contrato. Obrigatório para \"Fonte de Informação\" = SISBACEN, SISBACEN/FEEDER, SPOT ou FEEDER; não pode ser preenchido para as demais. Demais domínios no arquivo público \"AAAAMMDD_Indexadores_TERMO.txt\".",
           "source": "Mapping",
-          "source_detail": "Generic NDF: column 'QuantityCurrency' ISO → mapping currency-base (SIMBOLO → CODIGO DE CADASTRO); swapped with Moeda Cotada when IsBRRFixed = YES (Other Publisher). NDF Comm: blank"
+          "source_detail": "currency-base",
+          "source_note": "CODIGO DE CADASTRO by SIMBOLO, base currency of the pair",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Quantity Currency ISO (CODIGO DE CADASTRO by SIMBOLO)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Quantity Currency ISO; swapped with Moeda Cotada when Is BRR Fixed? = YES"
+            }
+          }
         },
         {
           "seq": "14",
@@ -262,7 +501,25 @@
           "content": "220 = DOLAR DOS EUA, ou 790 = REAIS",
           "description": "Código da moeda cotada da operação. Obrigatório para \"Fontes de Informação\" = SISBACEN, SISBACEN/FEEDER, SPOT ou FEEDER; não pode ser preenchido para as demais.",
           "source": "Mapping",
-          "source_detail": "Generic NDF: column 'OtherQuantityCurrency' ISO → mapping currency-base (SIMBOLO → CODIGO DE CADASTRO); swapped with Moeda de Referência when IsBRRFixed = YES. NDF Comm: blank"
+          "source_detail": "currency-base",
+          "source_note": "CODIGO DE CADASTRO by SIMBOLO, quoted currency of the pair",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Other Quantity Currency ISO (CODIGO DE CADASTRO by SIMBOLO)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Other Quantity Currency ISO; swapped with Moeda de Referência when Is BRR Fixed? = YES"
+            }
+          }
         },
         {
           "seq": "15",
@@ -273,7 +530,25 @@
           "content": "0 – D-0, ou 1 - D-1, ou 2 - D-2, ou 3 - D-3, ou 4 - D-4, ou 5 - D-5",
           "description": "Deslocamento aplicado na data de vencimento do contrato para captura da cotação final. Informar apenas para as \"Fontes de Informação\" = SISBACEN e SISBACEN/FEEDER.",
           "source": "Calculated",
-          "source_detail": "FWD Start: ANBIMA business-day gap LastFixingDate → SettlementDate (1 digit); Other Publisher and NDF Comm: blank"
+          "source_detail": "",
+          "source_note": "Quote-capture offset at maturity, when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "Last Fixing Date",
+              "source_note": "ANBIMA business days to Settlement Date"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "16",
@@ -284,7 +559,25 @@
           "content": "0000000000010050",
           "description": "Valor do contrato expresso em quantidade de moeda de referência para contratos de Termo de Moeda, ou Quantidade do contrato, expresso na unidade da moeda cotada do ativo subjacente para os demais contratos de Termo. Até 14 inteiros e 2 decimais. Preencher com ZEROS os espaços vazios.",
           "source": "Page",
-          "source_detail": "Column 'Notional' (generic NDF) / 'TotalNotional' (NDF Comm), rounded to integer, zero-padded to 14 digits + '00'"
+          "source_detail": "Notional",
+          "source_note": "rounded to integer, zero-padded to 14 digits + '00'",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Total Notional",
+              "source_note": "rounded to integer, zero-padded to 14 digits + '00'"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Page",
+              "source_detail": "Notional",
+              "source_note": "rounded to integer, zero-padded to 14 digits + '00' (TotalNotional also accepted)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Notional",
+              "source_note": "rounded to integer, zero-padded to 14 digits + '00' (TotalNotional also accepted)"
+            }
+          }
         },
         {
           "seq": "17",
@@ -295,7 +588,25 @@
           "content": "Consultar o arquivo público \"AAAAMMDD_Ativos_Subjacentes.txt\"",
           "description": "Código da Paridade ou do Ativo Subjacente do contrato. Obrigatório para as fontes Bloomberg, Bloomberg/Sisbacen, Banco Central; não pode ser informado para Sisbacen, Sisbacen/Feeder, Feeder, Spot.",
           "source": "Page",
-          "source_detail": "NDF Comm: column 'UnderlyingAsset' (B3 code) right-aligned; generic NDF: blank"
+          "source_detail": "Underlying Asset",
+          "source_note": "B3 code, right-aligned in 10; blank for currency forwards",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Underlying Asset",
+              "source_note": "B3 code, right-aligned in 10"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "18",
@@ -306,7 +617,25 @@
           "content": "000501200000",
           "description": "Valor da Taxa a Termo fixada no contrato. Termo de Moeda: até 4 inteiros e 6 decimais (USD) ou 4 inteiros e 8 decimais (demais moedas). Demais contratos: até 12 inteiros e 8 decimais. Preencher com ZEROS os espaços vazios.",
           "source": "Page",
-          "source_detail": "Other Publisher: column 'Rate' (inverted 1/rate for weak currencies, decimals from currency-base INV DECIMALS); NDF Comm: column 'Strike' (÷100 when QuotedInCents = YES); FWD Start: blank (rate set later)"
+          "source_detail": "Rate",
+          "source_note": "forward rate / strike, zero-padded 12 int + 8 dec digits",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Strike",
+              "source_note": "÷100 when Quoted in Cents? = YES"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank (the rate is fixed later, Termo a Termo)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Rate",
+              "source_note": "weak currencies inverted (1/rate) with decimals from currency-base INV DECIMALS"
+            }
+          }
         },
         {
           "seq": "19",
@@ -317,7 +646,25 @@
           "content": "20230305",
           "description": "Data de fixing da paridade/ativo subjacente do contrato (data efetiva da captura da cotação, sem deslocamento). Maior que a data de início e menor ou igual à data de vencimento; para commodity, menor que o vencimento.",
           "source": "Page",
-          "source_detail": "FWD Start: single fixing date (LastFixingDate) when not Asian; NDF Comm: FixingStartDate when equal to FixingEndDate; Other Publisher: always blank; Asian window: blank (dates go on line type 2)"
+          "source_detail": "Last Fixing Date",
+          "source_note": "single-fixing deals only; blank for an Asian window",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "FixingStartDate",
+              "source_note": "single fixing only (equal to FixingEndDate); blank for an Asian window (dates go on line type 2)"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Page",
+              "source_detail": "Last Fixing Date",
+              "source_note": "single-fixing deals only; blank for an Asian window"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "20",
@@ -328,7 +675,8 @@
           "content": "20230223",
           "description": "Data em que o Participante contratou a operação. Pode ser informada com até D-2 da data do registro, quando o contrato for com cliente (contas 10 e 20).",
           "source": "Page",
-          "source_detail": "Column 'TradeDate' of the deal row, as YYYYMMDD"
+          "source_detail": "Trade Date",
+          "source_note": ""
         },
         {
           "seq": "21",
@@ -339,7 +687,8 @@
           "content": "20240223",
           "description": "Data de vencimento do contrato. Pode ser indicada em dia não útil, exceto finais de semana; nesse cenário a liquidação será no D+1 útil do sistema.",
           "source": "Page",
-          "source_detail": "Column 'SettlementDate' of the deal row, as YYYYMMDD"
+          "source_detail": "Settlement Date",
+          "source_note": ""
         },
         {
           "seq": "22",
@@ -350,7 +699,25 @@
           "content": "3 – 18:00 Fechamento",
           "description": "Indica o relatório utilizado para atualização do contrato, caso o tipo seja SISBACEN e SISBACEN/FEEDER. Obrigatório apenas para contratos de Termo de Moedas.",
           "source": "Calculated",
-          "source_detail": "FWD Start: '3' when Fonte de Informação = '0' (PTAX), else '1'; Other Publisher and NDF Comm: blank"
+          "source_detail": "",
+          "source_note": "Update bulletin, when the information source is SISBACEN",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "'3' (18:00 Fechamento) when Fonte de Informação = '0' (PTAX), else '1'"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "23",
@@ -361,7 +728,25 @@
           "content": "Em branco, ou A = Ajuste, ou F = Fechamento, ou M = Máximo, ou N = Mínimo, ou D = Média",
           "description": "Indica o tipo de cotação a ser capturada no vencimento do contrato. Obrigatório apenas para contratos de Termo de Mercadorias.",
           "source": "Mapping",
-          "source_detail": "NDF Comm: mapping commodities-b3 → QUOTE TYPE NDF (blank column falls back to 'F'/'A' by FIXED QUOTE); generic NDF: blank"
+          "source_detail": "commodities-b3",
+          "source_note": "commodity forwards only",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Mapping",
+              "source_detail": "commodities-b3",
+              "source_note": "QUOTE TYPE NDF column; blank falls back to 'F'/'A' by FIXED QUOTE"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "24",
@@ -372,7 +757,25 @@
           "content": "20240223",
           "description": "Para contratos de Termo de MultiClasses, indica a data de fixing da moeda do ativo subjacente. Se não indicado, assume a mesma data da \"Data de Fixing do Ativo Subjacente\". Qualquer data não útil, exceto finais de semana, de D+1 do início até D0 do vencimento.",
           "source": "Page",
-          "source_detail": "NDF Comm: column 'FXConvDate' (blank when Strike Currency is BRL); generic NDF: blank"
+          "source_detail": "FXConvDate",
+          "source_note": "blank when Strike Currency is BRL",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "FXConvDate",
+              "source_note": "blank when Strike Currency is BRL"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "25",
@@ -383,7 +786,8 @@
           "content": "Em branco, ou 0 – Não, ou 1 - Sim",
           "description": "Indica se possui cross-rate na apuração da cotação final para contratos de Termo de Moedas. Não permitido se uma das moedas for USD ou quando \"Fonte de Informação\" = SISBACEN; não permitido para os demais contratos de Termo.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "26",
@@ -394,7 +798,25 @@
           "content": "0 - REUTERS, ou 1 - BROADCAST, ou 2 - BLOOMBERG, ou 3 - SPOT, ou 4 - BCE, ou 5 - OUTROS",
           "description": "Nome da fonte utilizada para apuração da cotação da moeda. Informar apenas para as \"Fontes de Informação\" = SPOT, FEEDER e SISBACEN/FEEDER.",
           "source": "Mapping",
-          "source_detail": "Other Publisher: mapping publisher-ndf → FONTE CONSULTA; FWD Start and NDF Comm: blank"
+          "source_detail": "publisher-ndf",
+          "source_note": "FONTE CONSULTA column, when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "FONTE CONSULTA column for the deal's Publisher; no row = blank"
+            }
+          }
         },
         {
           "seq": "27",
@@ -405,7 +827,25 @@
           "content": "Consultar o arquivo público \"AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt\"",
           "description": "Nome da função de consulta ou código da tela disponibilizada pelo Feeder, utilizada pelos Participantes para cotação. Informar apenas para as \"Fontes de Informação\" = SPOT, FEEDER e SISBACEN/FEEDER.",
           "source": "Mapping",
-          "source_detail": "Other Publisher: mapping publisher-ndf → TELA CONSULTA, right-aligned; FWD Start and NDF Comm: blank"
+          "source_detail": "publisher-ndf",
+          "source_note": "TELA CONSULTA column, when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "TELA CONSULTA column for the deal's Publisher, right-aligned"
+            }
+          }
         },
         {
           "seq": "28",
@@ -416,7 +856,8 @@
           "content": "Consultar o arquivo público \"AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt\"",
           "description": "Local de negociação da moeda de referência.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "29",
@@ -427,7 +868,8 @@
           "content": "Consultar o arquivo público \"AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt\"",
           "description": "Horário de verificação da taxa de câmbio.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "30",
@@ -438,7 +880,25 @@
           "content": "0 - Compra, ou 1 - Venda, ou 2 - Média",
           "description": "Cotação da taxa de câmbio utilizada para avaliação. Informar quando a \"Fonte de Informação\" = FEEDER ou SPOT. Média – média entre as cotações de compra e venda.",
           "source": "Fixed",
-          "source_detail": "Other Publisher: literal '1' (Venda); FWD Start and NDF Comm: blank"
+          "source_detail": "",
+          "source_note": "FX-quote side, when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "1",
+              "source_note": "Venda"
+            }
+          }
         },
         {
           "seq": "31",
@@ -449,7 +909,25 @@
           "content": "0 - Compra, ou 1 - Venda, ou 2 - Média, ou 3 - Nenhum",
           "description": "Tipo de cotação da moeda do Cross-rate, quando houver no contrato. FEEDER/SPOT: Venda, Compra ou Média; SISBACEN/FEEDER: Venda ou Compra. Sem Cross Rate, informar \"NENHUM\".",
           "source": "Fixed",
-          "source_detail": "Other Publisher: literal '3' (Nenhum); FWD Start and NDF Comm: blank"
+          "source_detail": "",
+          "source_note": "Cross-rate quote side, when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "3",
+              "source_note": "Nenhum"
+            }
+          }
         },
         {
           "seq": "32",
@@ -460,7 +938,25 @@
           "content": "20230305",
           "description": "Data pactuada entre as partes para avaliação do contrato mediante informação da taxa de câmbio e paridade. Informar para as \"Fontes de Informação\" = SISBACEN/FEEDER, FEEDER ou SPOT.",
           "source": "Page",
-          "source_detail": "Other Publisher: column 'LastFixingDate'; FWD Start and NDF Comm: blank"
+          "source_detail": "Last Fixing Date",
+          "source_note": "when the information source requires one",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Last Fixing Date",
+              "source_note": ""
+            }
+          }
         },
         {
           "seq": "33",
@@ -471,7 +967,8 @@
           "content": "Consultar o arquivo público \"AAAAMMDD_Ativos_Subjacentes.txt\"",
           "description": "Código da Paridade a ser utilizada no Cross-rate do contrato.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "34",
@@ -482,7 +979,8 @@
           "content": "20230305",
           "description": "Data de fixing da paridade cross do contrato (data efetiva da captura da cotação, sem deslocamento). Maior que a data de início e menor ou igual à data de vencimento.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "35",
@@ -493,7 +991,25 @@
           "content": "S = SIM, ou N = NÃO",
           "description": "Indica se a Taxa a Termo do contrato será apurada numa data futura. Se SIM, pode também haver atualização do Valor Base / Quantidade do contrato.",
           "source": "Calculated",
-          "source_detail": "FWD Start: 'S'; Other Publisher: 'N'; NDF Comm: 'S' when Instrument starts with 'TAS', else 'N'"
+          "source_detail": "",
+          "source_note": "Whether the forward rate is fixed at a future date",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Instrument",
+              "source_note": "'S' when it starts with 'TAS', else 'N'"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "S",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N",
+              "source_note": ""
+            }
+          }
         },
         {
           "seq": "36",
@@ -504,7 +1020,25 @@
           "content": "20230305",
           "description": "Para contrato Termo a Termo, data em que o contrato terá início e a apuração da Taxa a Termo.",
           "source": "Calculated",
-          "source_detail": "Generic NDF: column 'StrikeSetDate' advanced by the ANBIMA business-day gap LastFixingDate → SettlementDate; NDF Comm: TradeDate for TAS deals, else blank"
+          "source_detail": "",
+          "source_note": "Start / rate-fixing date, for Termo a Termo contracts",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Trade Date",
+              "source_note": "TAS deals only, else blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "Strike Set Date",
+              "source_note": "advanced by the ANBIMA business-day gap Last Fixing Date → Settlement Date; blank when empty"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "deal's StrikeSetDate (not shown on this page) advanced by the ANBIMA gap Last Fixing Date → Settlement Date; blank when empty"
+            }
+          }
         },
         {
           "seq": "37",
@@ -515,7 +1049,25 @@
           "content": "P - Percentual, ou V - Valor",
           "description": "Forma de Atualização da taxa inicial a ser apurada na data de início do contrato.",
           "source": "Fixed",
-          "source_detail": "FWD Start: literal 'V'; NDF Comm: 'V' for TAS deals; else blank"
+          "source_detail": "",
+          "source_note": "Update form, for Termo a Termo contracts",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Instrument",
+              "source_note": "'V' when it starts with 'TAS', else blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Fixed",
+              "source_detail": "V",
+              "source_note": "Valor"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "38",
@@ -526,7 +1078,25 @@
           "content": "000050000000",
           "description": "Valor ou percentual negociado para ser aplicado na data de início do contrato.",
           "source": "Page",
-          "source_detail": "Generic NDF: column 'StrikeSetOffset' (4 int + 8 dec digits; Other Publisher only when filled); NDF Comm: blank"
+          "source_detail": "Strike Set Offset",
+          "source_note": "4 int + 8 dec digits, Termo a Termo contracts",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Page",
+              "source_detail": "Strike Set Offset",
+              "source_note": "'0' when empty, 4 int + 8 dec digits"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "deal's StrikeSetOffset (not shown on this page) when filled, 4 int + 8 dec digits, else blank"
+            }
+          }
         },
         {
           "seq": "39",
@@ -537,7 +1107,25 @@
           "content": "0 = D0, ou 1 = D-1, ou 2 = D-2, ou 3 = D-3, ou 4 = D-4, ou 5 = D-5",
           "description": "Deslocamento aplicado na \"Data de Fixação\" para captura da cotação do ativo para formação da Taxa a Termo. Para \"Atualizar Valor Base?\" = SIM, também indica o deslocamento para a cotação final da atualização do valor base.",
           "source": "Calculated",
-          "source_detail": "FWD Start: ANBIMA business-day gap LastFixingDate → SettlementDate (same digit as field 15); Other Publisher and NDF Comm: blank"
+          "source_detail": "",
+          "source_note": "Quote offset applied on the Data de Fixação, for Termo a Termo contracts",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "Last Fixing Date",
+              "source_note": "ANBIMA business days to Settlement Date (same digit as field 15)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            }
+          }
         },
         {
           "seq": "40",
@@ -548,7 +1136,8 @@
           "content": "Em branco, ou S = SIM, ou N = NÃO",
           "description": "Indica se o valor base do contrato será atualizado no período a termo. Só possível SIM quando \"Termo a Termo\" = SIM.",
           "source": "Fixed",
-          "source_detail": "Literal 'N'"
+          "source_detail": "N",
+          "source_note": ""
         },
         {
           "seq": "41",
@@ -559,7 +1148,8 @@
           "content": "000505000000",
           "description": "Para contrato Termo a Termo com atualização do valor base, cotação inicial da paridade utilizada para a atualização do valor base no período a termo.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "42",
@@ -570,7 +1160,8 @@
           "content": "S = SIM, ou N = NÃO",
           "description": "Indica se o contrato possui Shift, ou seja, atualização da taxa a termo do contrato.",
           "source": "Fixed",
-          "source_detail": "Literal 'N'"
+          "source_detail": "N",
+          "source_note": ""
         },
         {
           "seq": "43",
@@ -581,7 +1172,8 @@
           "content": "C = Comprador, ou V = Vendedor, ou A - Ambos",
           "description": "Parâmetro que indica qual a ponta autorizada a realizar a alteração da taxa no período estipulado.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "44",
@@ -592,7 +1184,8 @@
           "content": "20230305",
           "description": "Indica o início do período estipulado para o ajuste de taxa pelo Participante indicado.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "45",
@@ -603,7 +1196,8 @@
           "content": "20230306",
           "description": "Indica o final do período estipulado para o ajuste de taxa pelo Participante indicado.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "46",
@@ -614,7 +1208,8 @@
           "content": "Em branco, ou S = Superior, ou I = Inferior, ou A = Ambos",
           "description": "Indica que o contrato conta com limitadores de variação superior e/ou inferior de valorização do contrato.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "47",
@@ -625,7 +1220,8 @@
           "content": "00000505000000",
           "description": "Limite superior aplicado na apuração do resultado.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "48",
@@ -636,7 +1232,8 @@
           "content": "00000405000000",
           "description": "Limite inferior aplicado na apuração do resultado.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "49",
@@ -647,7 +1244,8 @@
           "content": "20230305",
           "description": "Indica a data em que será liquidado o prêmio informado. Pode ser de D0 do registro até D0 do vencimento do contrato.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "50",
@@ -658,7 +1256,8 @@
           "content": "Em branco, C = Comprador, ou V - Vendedor",
           "description": "Necessário para indicar a modalidade pela qual a operação de pagamento de prêmio cursará.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "51",
@@ -669,7 +1268,8 @@
           "content": "0000000000001050",
           "description": "Valor do prêmio, em reais, a ser pago no contrato.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "52",
@@ -680,7 +1280,8 @@
           "content": "B - Bilateral, ou R - Bruta, ou S = Sem Modalidade",
           "description": "Para contratos a mercado, indica a modalidade de liquidação do prêmio liquidado em D0 do registro (BILATERAL ou BRUTA). Prêmio agendado: SEM MODALIDADE. Contratos a cliente (conta 10): SEM MODALIDADE.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "53",
@@ -691,7 +1292,8 @@
           "content": "Em branco, ou S = SIM, ou N = NÃO",
           "description": "Indica se o prêmio informado no campo \"Valor do Prêmio\" está expresso na moeda do ativo subjacente (moeda estrangeira).",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "54",
@@ -702,7 +1304,8 @@
           "content": "20230305",
           "description": "Se o Prêmio em Moeda Estrangeira = SIM, informar a data de fixing da moeda para conversão do prêmio para BRL.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "55",
@@ -713,7 +1316,25 @@
           "content": "Em branco, ou S = SIM",
           "description": "Indica se a Taxa a Termo do contrato está expressa em reais, para contratos em que o ativo subjacente é cotado em Moeda Estrangeira.",
           "source": "Calculated",
-          "source_detail": "Generic NDF: 'S' when IsBRRFixed = YES; NDF Comm: 'S' when StrikeCurrency = BRL; else blank"
+          "source_detail": "",
+          "source_note": "'S' when the forward rate is expressed in BRL, else blank",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "Strike Currency",
+              "source_note": "'S' when BRL, else blank"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "Is BRR Fixed?",
+              "source_note": "'S' when YES, else blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "Is BRR Fixed?",
+              "source_note": "'S' when YES, else blank"
+            }
+          }
         },
         {
           "seq": "56",
@@ -724,7 +1345,8 @@
           "content": "OBSERVAÇÃO ADICIONAL",
           "description": "Campo tipo texto para indicar observações adicionais ao contrato.",
           "source": "Fixed",
-          "source_detail": "Blank-filled"
+          "source_detail": "",
+          "source_note": "Blank"
         },
         {
           "seq": "57",
@@ -735,7 +1357,25 @@
           "content": "",
           "description": "Código interno do participante para identificação do contrato.",
           "source": "Page",
-          "source_detail": "Column 'Deal' (Athena deal id), right-aligned in 14 (generic NDF: last 14 chars)"
+          "source_detail": "Deal",
+          "source_note": "right-aligned in 14",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Deal",
+              "source_note": "right-aligned in 14"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Page",
+              "source_detail": "Deal",
+              "source_note": "last 14 characters, right-aligned"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Deal",
+              "source_note": "last 14 characters, right-aligned"
+            }
+          }
         },
         {
           "seq": "58",
@@ -746,7 +1386,25 @@
           "content": "Em branco, ou A = Aritmértica simples, ou P = Aritmétrica Ponderada, ou M = Média x Média",
           "description": "Tipo de média para contrato Asiático.",
           "source": "Calculated",
-          "source_detail": "'A' when the deal has an Asian fixing window, 'N' for single fixing. Generic NDF derives it from First/LastFixingDate being different; NDF Comm from FixingStartDate ≠ FixingEndDate"
+          "source_detail": "",
+          "source_note": "'A' for an Asian fixing window, 'N' for single fixing",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "'N' when FixingStartDate equals FixingEndDate (single fixing), else 'A'"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "'A' when First Fixing Date and Last Fixing Date are both filled and different, else 'N'"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "'A' when First Fixing Date and Last Fixing Date are both filled and different, else 'N'"
+            }
+          }
         },
         {
           "seq": "59",
@@ -757,7 +1415,25 @@
           "content": "000",
           "description": "Quantidade de Datas de Verificação para contrato com média asiática. Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor 000.",
           "source": "Calculated",
-          "source_detail": "Generic NDF: ANBIMA business days FirstFixingDate → LastFixingDate + 1; NDF Comm: weekdays in the fixing window minus FXHolidaySchedule holidays; '000' for vanilla"
+          "source_detail": "",
+          "source_note": "Count of Asian verification dates; '000' when none",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "weekdays FixingStartDate → FixingEndDate minus FX Holiday Schedule holidays; '000' for single fixing"
+            },
+            "/new_deals-ndf-fwdstart": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "ANBIMA business days First Fixing Date → Last Fixing Date + 1 when Asian, else '000'"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "ANBIMA business days First Fixing Date → Last Fixing Date + 1 when Asian, else '000'"
+            }
+          }
         }
       ]
     },
@@ -775,7 +1451,8 @@
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
-          "source_detail": "Literal 'TER'"
+          "source_detail": "TER",
+          "source_note": ""
         },
         {
           "seq": "2",
@@ -786,7 +1463,8 @@
           "content": "2",
           "description": "Tipo Linha \"Dados Variáveis\"",
           "source": "Fixed",
-          "source_detail": "Literal '2'"
+          "source_detail": "2",
+          "source_note": ""
         },
         {
           "seq": "3",
@@ -797,7 +1475,8 @@
           "content": "1",
           "description": "Código da operação: Registro TER",
           "source": "Fixed",
-          "source_detail": "Literal '0001'"
+          "source_detail": "0001",
+          "source_note": ""
         },
         {
           "seq": "4",
@@ -808,7 +1487,20 @@
           "content": "",
           "description": "Data de Verificação (Asiático). Formato AAAAMMDD. Devem ser indicadas, pelo menos, uma data de verificação e no máximo 999.",
           "source": "Calculated",
-          "source_detail": "NDF Comm: one row per weekday of the FixingStartDate → FixingEndDate window, excluding FXHolidaySchedule holidays"
+          "source_detail": "",
+          "source_note": "One row per weekday of the FixingStartDate → FixingEndDate window, excluding FX Holiday Schedule holidays",
+          "source_by_page": {
+            "/new_deals-ndf-fwdstart": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            }
+          }
         },
         {
           "seq": "5",
@@ -819,7 +1511,20 @@
           "content": "",
           "description": "Preenchimento obrigatório. Valor Referência (Asiático com média Ponderada). Para contratos com média aritmética simples, preencher com zeros.",
           "source": "Fixed",
-          "source_detail": "Zeros (simple arithmetic average, no weighting)"
+          "source_detail": "0000000000000000",
+          "source_note": "Zeros (simple arithmetic average, no weighting)",
+          "source_by_page": {
+            "/new_deals-ndf-fwdstart": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            }
+          }
         },
         {
           "seq": "6",
@@ -830,7 +1535,20 @@
           "content": "",
           "description": "Data de Fixing da Moeda, para contratos com Taxa a Termo em Reais = SIM e com Média Asiática. Formato AAAAMMDD. Preencher com ESPAÇOS os campos à esquerda e a data à direita.",
           "source": "Calculated",
-          "source_detail": "NDF Comm: the same verification date when Strike Currency is BRL, else blank (row is padded with trailing spaces)"
+          "source_detail": "",
+          "source_note": "Same verification date when Strike Currency is BRL, else blank (row padded with trailing spaces)",
+          "source_by_page": {
+            "/new_deals-ndf-fwdstart": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            }
+          }
         }
       ]
     }
