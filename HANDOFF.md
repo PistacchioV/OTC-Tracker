@@ -10681,3 +10681,42 @@ campos são `Calculated` com nota, não `Page`, senão apontariam para coluna qu
 tem. Os rótulos de coluna diferem por página para o mesmo dado (`FixingStartDate` na de
 commodities, `First Fixing Date` nas genéricas; `Total Notional` × `Notional`): o dropdown
 usa o rótulo DAQUELA página, é isso que o usuário vê na tela dele.
+
+## §237 — File Interface: independência real por página, colunas cadastráveis e o padrão da casa
+
+Terceira rodada de revisão de tela do File Interface (§235/§236), em dois commits
+(`329e537`, `f4b83ed`):
+
+- **As tabelas de bloco entraram no padrão da casa**: linha de filtro por coluna (uma POR
+  tabela — filtrar o Header não esconde linhas do Registro; handler delegado no
+  `#fiBlocks`, então sobrevive ao re-render e ao modo de edição) e conteúdo todo centrado.
+  Os inputs do filtro usam as classes padrão (`form-control form-control-sm
+  bg-light-subtle border-light`) — a primeira versão usou classe própria e saiu sem os
+  cantos arredondados das demais páginas. A centralização do texto vem da regra
+  estrutural do `visual-refresh.css` (input dentro de `th` do `thead`), de graça.
+- **Nomes dos templates padronizados como "Nome (SIGLA)"** — TER/OPC/SWAP/MID — sem os
+  prefixos "Swap –"/"Opções Flexíveis –" (a categoria já agrupa). O TAXACAMBIOTER perdeu
+  o bloco "Registro – Dados Variáveis": o Tracker nunca gera a linha tipo 2 (manda sempre
+  `000` datas de verificação), e o bloco documentava um trecho de arquivo que não existe.
+- **O VCP entrou vinculado ao template de Atualização de PU/Fator** — o caso concreto de
+  "mesmo template, duas páginas": Accrual e VCP geram o mesmo arquivo, mas cada página
+  tem as próprias colunas, e o mesmo campo puxa de coluna com nome diferente em cada uma
+  (`Código IF` × `Código do Contrato`; `Fator Parte` × `PARTE / Fator`). O mecanismo já
+  era o `source_by_page` do §236; o que faltava era o dado do VCP (9 colunas de
+  `_VCP_COLUMNS` + os dois overrides). A geração automática continua saindo só do Accrual
+  — o vínculo documenta o formato, e a nota do template diz isso.
+- **Bug que apagava as colunas em silêncio**: o Save do modal Link Pages remontava
+  `linked_pages` só com `{label, url}` — salvar qualquer vínculo descartava as `columns`
+  de TODAS as páginas já vinculadas, e os dropdowns de origem daquele template abriam
+  vazios. Agora o save preserva a entrada existente da página que continua marcada.
+- **Page Columns**: botão na visão de página que abre as colunas daquela página num modal
+  (uma por linha, editáveis). É o que permite a uma página recém-vinculada ganhar as
+  opções do dropdown sem tocar em código — as colunas são cadastro do par
+  template × página, não lista fixa no JS.
+- **SweetAlerts no padrão**: o guard de navegação com edição pendente saiu do `confirm()`
+  nativo para o Swal de warning com botões traduzidos — e como Swal é assíncrono,
+  `guardSrcEdit` virou continuação (`guardSrcEdit(proceed, onCancel)`); o `onCancel` do
+  switcher de template devolve o `select` ao valor anterior em vez de re-renderizar (o
+  re-render matava os inputs da edição em curso). Delete com "Yes, delete"/"Cancel"
+  traduzidos e `#dc3545`; erros com título "File Interface" (não "Error"); sucesso no
+  formato do Mapping (ícone, 1,3 s, sem botão) em vez de toast de canto.
