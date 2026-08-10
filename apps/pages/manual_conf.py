@@ -76,14 +76,16 @@ COLUMNS = [
     'E-mail Subject',
     'Produto',
     'LOB',
+    # `Trade ID` é a CHAVE da linha, e ela não é sempre a mesma coisa: o FWD
+    # Start é chaveado pelo B3 ID (chaveá-lo pelo Deal criaria uma segunda linha
+    # para o mesmo trade no mapeamento seguinte), os demais pelo Deal da Athena.
+    #
+    # Havia um `Athena ID` ao lado, e ele foi RETIRADO da tela: para os produtos
+    # chaveados pelo Deal ele repetia o Trade ID, e no FWD Start vinha vazio — ou
+    # seja, não acrescentava nada em linha nenhuma. A coluna continua existindo no
+    # banco (o `ensure_db` só ACRESCENTA), então o dado antigo está lá e voltar
+    # atrás é devolver o nome a esta lista.
     'Trade ID',
-    # Os dois identificadores da operação, lado a lado. `Trade ID` é a CHAVE da
-    # linha, e ela não é sempre a mesma coisa: o FWD Start é chaveado pelo B3 ID
-    # (chaveá-lo pelo Deal criaria uma segunda linha para o mesmo trade no
-    # mapeamento seguinte), os demais pelo Deal da Athena. Sem uma coluna
-    # própria, o Deal daquelas linhas simplesmente não existia na tela — e é por
-    # ele que se procura a operação na Athena.
-    'Athena ID',
     'Cetip ID',
     'Moeda',
     'Notional',

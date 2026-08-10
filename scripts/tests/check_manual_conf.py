@@ -347,13 +347,13 @@ p = M.monitor_payload()
 check('produto sem cadastro vira aviso', any('PRODUTO NOVO' in w for w in p['warnings']), True)
 
 print('\n== 8. as colunas ==')
-check('31 colunas na tela', len(M.COLUMNS), 31)
-# Os DOIS identificadores, sempre os dois. A chave da linha não é sempre a mesma
-# coisa — FWD Start é chaveado pelo B3 ID, o resto pelo Deal —, e sem a coluna
-# própria o Deal daquelas linhas não existia na tela.
-check('   o Athena ID ao lado da chave',
-      M.COLUMNS[M.COLUMNS.index('Trade ID') + 1:M.COLUMNS.index('Trade ID') + 3],
-      ['Athena ID', 'Cetip ID'])
+check('30 colunas na tela', len(M.COLUMNS), 30)
+# O `Athena ID` SAIU: para os produtos chaveados pelo Deal ele repetia o Trade ID
+# e no FWD Start vinha vazio — não acrescentava nada em linha nenhuma. A coluna
+# continua no banco (`ensure_db` só acrescenta), então o dado antigo está lá.
+check('   o Athena ID não está mais na tela', 'Athena ID' in M.COLUMNS, False)
+check('   e o B3 ID vem logo depois da chave',
+      M.COLUMNS[M.COLUMNS.index('Trade ID') + 1], 'Cetip ID')
 # O nome da coluna é da planilha legada; o que o código escreve nela é o B3_ID.
 check('   e o rótulo do Cetip ID diz o que está lá',
       M.COLUMN_LABELS.get('Cetip ID'), 'B3 ID')
