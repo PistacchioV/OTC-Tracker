@@ -47,7 +47,13 @@ self.addEventListener('push', function (event) {
                     title = n.actor_name || n.actor_sid || 'OTC Tracker';
                     body = (n.action || '') + ' in ' + (n.page || '') +
                            (detail ? ' — ' + detail : '');
-                    url = PAGE_URL[n.page] || '/dashboard';
+                    // A Recon FXO nasceu gravada com a página do Pay/Rec; as
+                    // notificações antigas ainda carregam esse par. Mesma
+                    // tradução do topbar.html e do `_notif_page_url`, senão o
+                    // clique do push cai numa recon e o clique do sino noutra.
+                    var nPage = (n.page === 'Reconciliation' && n.action === 'Recon FXO')
+                                ? 'Recon FXO' : n.page;
+                    url = PAGE_URL[nPage] || '/dashboard';
                 }
                 return self.registration.showNotification(title, {
                     body: body,

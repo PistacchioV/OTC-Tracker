@@ -103,5 +103,32 @@ blk = SRC.split("@blueprint.route('/api/ndf-other-publisher/data')", 1)[1] \
 check('as notificacoes da tela usam a constante', blk.count('_NOTIF_DS_OTHERPUB'), 4)
 check('   e nenhuma usa o rotulo do New Deals', "'NDF Other Publisher'," in blk, False)
 
+print('\n== 5. cada notificacao grava o par (acao, pagina) certo ==')
+# `page` e o DESTINO do clique, nao o assunto. A Recon FXO gravava
+# ('Recon FXO', 'Reconciliation') -- e 'Reconciliation' e a pagina do Pay/Rec,
+# entao o sino levava para a recon errada.
+blk = SRC.split("def reconciliation_fxo_run", 1)[1].split('\n@blueprint', 1)[0]
+check('a Recon FXO grava a pagina dela', "'Recon Generated', 'Recon FXO'" in blk, True)
+check('   e nao a do Pay/Rec', "'Reconciliation'," in blk, False)
+blk = SRC.split("def reconciliation_payrec_run", 1)[1].split('\n@blueprint', 1)[0]
+check('o Pay/Rec continua com a dele', "'Reconciliation'," in blk, True)
+
+print('\n== 6. as notificacoes JA GRAVADAS ainda acham a pagina ==')
+# O que esta no banco nao se reescreve: a traducao do par antigo tem de existir
+# nos TRES lugares, senao o clique do sino, o do push e o filtro de acesso
+# discordam sobre a mesma notificacao.
+check('routes traduz o par antigo',
+      R._notif_page_url('Reconciliation', 'Recon FXO'), '/reconciliation-fxo')
+check('   e o Pay/Rec continua no lugar',
+      R._notif_page_url('Reconciliation', 'Pay/Rec Reconciliation'), '/reconciliation-payrec')
+check('   o par novo tambem resolve', R._notif_page_url('Recon FXO'), '/reconciliation-fxo')
+for arq, rot in (('apps/templates/partials/topbar.html', 'o topbar'),
+                 ('apps/static/js/sw-push.js', 'o service worker')):
+    src = read(arq)
+    check('%s traduz o par antigo' % rot,
+          "n.page === 'Reconciliation' && n.action === 'Recon FXO'" in src, True)
+    check('   e usa a chave traduzida no lookup' if rot == 'o topbar'
+          else '   e usa a chave traduzida no lookup ', 'PAGE_URL[nPage]' in src, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

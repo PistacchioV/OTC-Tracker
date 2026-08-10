@@ -267,6 +267,24 @@ _NOTIF_PAGE_URL = {
 }
 
 
+def _notif_page_url(page, action=''):
+    """Destino do clique de uma notificação.
+
+    O par (ação, página) da Recon FXO nasceu trocado — a ação era 'Recon FXO' e a
+    página 'Reconciliation', que é a do Pay/Rec —, então o sino levava para a
+    recon errada. O cadastro foi corrigido na origem, mas as notificações **já
+    gravadas** carregam o par antigo: sem esta tradução, o histórico do sino
+    continuaria abrindo o Pay/Rec para sempre. Mesma razão do rótulo
+    'Confirmation' logo acima — o que está no banco não se reescreve.
+
+    A cópia desta regra vive no `partials/topbar.html` (é lá que o clique
+    acontece); as duas têm de dizer a mesma coisa.
+    """
+    if page == 'Reconciliation' and action == 'Recon FXO':
+        return _NOTIF_PAGE_URL['Recon FXO']
+    return _NOTIF_PAGE_URL.get(page)
+
+
 def _load_nav_urls():
     """Parse the sidebar template once for every side-nav-link href — the set of
     controllable pages. Robust to markup changes (matches the href only)."""
@@ -28740,7 +28758,7 @@ def api_get_notifications():
         configured, allowed = _get_page_access(session.get('user_sid', ''))
         if configured:
             def _visible(n):
-                url = _NOTIF_PAGE_URL.get(n.get('page', ''))
+                url = _notif_page_url(n.get('page', ''), n.get('action', ''))
                 if not url or url not in _NAV_URLS:
                     return True
                 if url == '/control-panel':
@@ -29568,9 +29586,13 @@ def reconciliation_fxo_run():
         files = request.files.getlist('files') if mode == 'manual' else None
         result = run_fxo(recon_date, files=files, mode=mode)
         if result.get('success'):
+            # `page` é o DESTINO do clique, não o assunto: 'Reconciliation' é a
+            # do Pay/Rec, e era para lá que o sino levava. O par certo é o mesmo
+            # da Recon Comitente — ação 'Recon Generated' (que tem ícone) e
+            # página 'Recon FXO'.
             _create_notification(
                 session.get('user_sid', ''), session.get('user_name', ''),
-                'Recon FXO', 'Reconciliation',
+                'Recon Generated', 'Recon FXO',
                 result.get('meta', '') + (' (' + recon_date + ')' if recon_date else '')
             )
         return jsonify(result)

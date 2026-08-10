@@ -589,7 +589,15 @@
                 var detail   = rawDetail ? ' &mdash; ' + esc(rawDetail) : '';
                 var imgSrc   = '/static/images/users/' + esc((n.actor_sid || '').toLowerCase()) + '.jpg';
                 var initials = getInitials(n.actor_name || n.actor_sid);
-                var pageUrl  = PAGE_URL[n.page] || null;
+                // O par (ação, página) da Recon FXO nasceu trocado — página
+                // 'Reconciliation', que é a do Pay/Rec —, e o sino levava para a
+                // recon errada. A origem foi corrigida, mas as notificações JÁ
+                // GRAVADAS carregam o par antigo: sem esta tradução o histórico
+                // continuaria abrindo o Pay/Rec. Mesma regra do `_notif_page_url`
+                // no routes.py — as duas têm de dizer a mesma coisa.
+                var nPage    = (n.page === 'Reconciliation' && n.action === 'Recon FXO')
+                               ? 'Recon FXO' : n.page;
+                var pageUrl  = PAGE_URL[nPage] || null;
                 // Reference Data banking notifications deep-link to the SPN (parsed
                 // from "SPN <spn> · …" in the detail) so approval lands pre-filtered.
                 if (pageUrl && n.page === 'Reference Data') {

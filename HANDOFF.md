@@ -10437,3 +10437,23 @@ seed) e o nome que chega dos arquivos é o da conta por extenso — `ATACAMA FUN
 ele, a perna interna só seria reconhecida depois de alguém preencher a razão social na tela, e até lá
 geraria aviso. Só tokens de **4+ caracteres** entram: `JPM` e `MGT` são curtos demais e apareceriam no
 meio de um nome de cliente por acaso.
+
+## §230 — O sino da Recon FXO levava para a recon do Pay/Rec
+
+`_create_notification(actor_sid, actor_name, **action**, **page**, detail)` — e a chamada da Recon FXO
+passava `('Recon FXO', 'Reconciliation')`. O rótulo `Reconciliation` é o do **Pay/Rec**
+(`/reconciliation-payrec`) no `_NOTIF_PAGE_URL`, então o clique abria a recon errada. O `page` é o
+**destino**, não o assunto: quem escreveu a linha copiou a do Pay/Rec e trocou só o texto da esquerda.
+
+O par certo é o mesmo da Recon Comitente: ação **`Recon Generated`** (que já tem ícone no sino —
+shield-check verde; `Recon FXO` não tinha nenhum e caía no genérico) e página **`Recon FXO`**.
+
+**As notificações já gravadas continuam com o par antigo**, e o que está no banco não se reescreve.
+`_notif_page_url(page, action)` traduz `('Reconciliation', 'Recon FXO')` → `/reconciliation-fxo`; sem
+isso o histórico do sino abriria o Pay/Rec para sempre. É a mesma razão pela qual o rótulo da esteira
+continua sendo `Confirmation` e não `Manual Confirmation`.
+
+A tradução vive em **três lugares**, e os três têm de dizer a mesma coisa — `routes._notif_page_url`
+(o filtro de acesso por página), `partials/topbar.html` (o clique do sino) e `static/js/sw-push.js` (o
+clique da notificação do celular). Com um deles fora, a mesma notificação abre uma recon pelo sino e
+outra pelo push. `check_notif_page_url.py` prende os três.
