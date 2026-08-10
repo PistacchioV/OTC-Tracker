@@ -257,6 +257,24 @@ rows, _c, _w = run(
     [at_row(DealID='D2', CounterpartyName=GEM)])
 check('o corte é cego a pontuação', [r['Status'] for r in rows], ['Unmatched B3'])
 
+# O outro lado da MESMA operação intragrupo: ali a conta interna não é a dona da
+# linha, é o MatchingCounterpartyName — e é dele que a coluna ATH Cntpy da tela
+# sai. Cortando só pelo CounterpartyName, metade do par ficava na recon como
+# `Unmatched Athena` exibindo o nome que o cadastro mandou tirar.
+write_map('fxo-internal-cpty', [
+    {'ATHENA NAME': GEM, 'CETIP CODE': 'INTRAGLAWTONFDO', 'INVERT DIRECTION': 'Yes',
+     'USE': 'Disregard'},
+])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'M1'})],
+    [at_row(DealID='M1', CounterpartyName='LM-FWDECOMBRR FXC', MatchingCounterpartyName=GEM),
+     at_row(DealID='M2', CounterpartyName='CLIENTE DE VERDADE S.A.',
+            MatchingCounterpartyName='OUTRO CLIENTE S.A.')])
+chaves = sorted(r['Combinação de operações'] for r in rows)
+check('a perna cuja CONTRAPARTE é a conta marcada também sai',
+      [r['Status'] for r in rows if r['Combinação de operações'] == 'M1'], ['Unmatched B3'])
+check('   e a operação entre dois clientes fica', 'M2' in chaves, True)
+
 # E a linha cortada deixa de valer como renomeação/espelho: uma linha, uma decisão.
 check('Disregard tira a linha das regras de renomeação',
       R.internal_cpty_rules(), ({}, []))

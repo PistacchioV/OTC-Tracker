@@ -91,6 +91,14 @@ COL_AT_CHAVE = 'DealID'
 COL_AT_MATCHING = 'MatchingDealID'
 COL_AT_OPTIONSTYLE = 'OptionStyle'
 COL_AT_CPTY_NAME = 'CounterpartyName'
+# As colunas que dizem QUEM É A CONTRAPARTE da linha da Athena. As duas entram no
+# corte por `USE = Disregard` (ver `ignored_cpty_names`): a perna interna chega ao
+# relatório ora como dona da linha (`CounterpartyName`), ora como contraparte da
+# linha do outro lado da MESMA operação intragrupo (`MatchingCounterpartyName`) —
+# e é esta segunda que a coluna ATH Cntpy da tela mostra, porque é dela que
+# `deriv_cntpy_ath` parte.
+COLS_AT_CPTY_DISREGARD = ('MatchingCounterpartyName', COL_AT_CPTY_NAME)
+COL_AT_MATCH_SPN = 'MatchingCounterpartySPN'
 
 # Bloco de datas de fixing (colunas CC..ES da DPOSICAO, por POSIÇÃO). É onde a
 # opção asiática lista as datas de verificação; ele não tem cabeçalho próprio,
@@ -373,7 +381,7 @@ def _linha_disregard(r):
 
 
 def ignored_cpty_names():
-    """Os `CounterpartyName` da Athena que saem ANTES do batimento.
+    """As contrapartes da Athena que saem ANTES do batimento.
 
     Coluna `USE = Disregard` no cadastro `fxo-internal-cpty` — em branco vale
     `Consider`, que é o comportamento de sempre. São pernas internas que não têm
@@ -384,9 +392,19 @@ def ignored_cpty_names():
     dessas linhas já teria ocupado a chave em `base_athena_para_match` e poderia
     ter roubado o par de uma operação de verdade.
 
-    Compara só o `CounterpartyName`, e não o `MatchingCounterpartyName`: quem é a
-    perna interna é o dono da linha, e o Matching é a contraparte do outro lado
-    da mesma operação — cortar por ele derrubaria a operação do cliente.
+    O nome é procurado nas DUAS colunas de contraparte
+    (`COLS_AT_CPTY_DISREGARD`), e não só no `CounterpartyName`. Uma operação
+    intragrupo chega ao relatório pelos dois lados: numa linha a conta interna é a
+    dona (`CounterpartyName`), na outra ela é a contraparte
+    (`MatchingCounterpartyName`) — e é ESTA que a tela mostra na coluna
+    ATH Cntpy, porque é dela que `deriv_cntpy_ath` parte. Cortando só pela
+    primeira, metade do par continuava na recon como `Unmatched Athena`, com o
+    nome cadastrado à vista na tela: exatamente o que o cadastro dizia para tirar.
+
+    Não é a mesma coisa que derrubar a operação do cliente. A conta marcada
+    `Disregard` é interna e a linha em que ela aparece como contraparte é a perna
+    de dentro da mesma operação — o cliente está do outro lado do SEU próprio par,
+    numa linha cujas duas contrapartes são ele e a mesa.
     """
     out = set()
     for r in _mapping_rows('fxo-internal-cpty'):
@@ -821,12 +839,15 @@ def reconcile(df_dp, df_at):
     # operação da recon" no dia em que alguém marcar o nome errado.
     ignorados = ignored_cpty_names()
     if ignorados:
-        if COL_AT_CPTY_NAME not in df_at.columns:
-            avisos.append('O relatório da Athena veio sem a coluna %s — as '
+        cols_cpty = [c for c in COLS_AT_CPTY_DISREGARD if c in df_at.columns]
+        if not cols_cpty:
+            avisos.append('O relatório da Athena veio sem as colunas %s — as '
                           'contrapartes marcadas como Disregard não puderam ser '
-                          'retiradas.' % COL_AT_CPTY_NAME)
+                          'retiradas.' % ' / '.join(COLS_AT_CPTY_DISREGARD))
         else:
-            fora = df_at[COL_AT_CPTY_NAME].apply(_nome_cru).isin(ignorados)
+            fora = pd.Series(False, index=df_at.index)
+            for c in cols_cpty:
+                fora = fora | df_at[c].apply(_nome_cru).isin(ignorados)
             n_fora = int(fora.sum())
             if n_fora:
                 df_at = df_at[~fora].copy()
