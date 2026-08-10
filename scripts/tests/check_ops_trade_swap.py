@@ -317,5 +317,51 @@ check('   e o omnibus por CNPJ segue como segunda tentativa',
 check('   e o SPN da linha vem do OTM quando existe',
       "otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')" in blk, True)
 
+print('\n== O nome da contraparte do arquivo do Athena sai do REFERENCE DATA ==')
+# O arquivo traz texto livre da mesa ('S T E S A L') e, ao lado, o SPN. O SPN e
+# identificador: e ele que resolve o nome, pelo cadastro `le-spn` quando e
+# entidade nossa e pelo Reference Data quando e cliente. Uma coleta so serve a
+# pagina Swap Athena, o Settlement Advice e o Trade Level -- se cada uma
+# resolvesse por conta, as tres mostrariam nomes diferentes do mesmo cliente.
+_real = (R._refdata_by_spn, R._mapping_rows, R._ds_display_collect)
+try:
+    R._refdata_by_spn = lambda: {'1808267': 'SASCAR TECNOLOGIA E SEGURANCA AUTOMOTIVA LTDA'}
+    R._mapping_rows = (lambda k: [{'LE': 'JPM', 'NAME': 'BANCO J.P MORGAN S.A', 'SPN': '37862'}]
+                       if k == 'le-spn' else [])
+    R._ds_display_collect = lambda ref, key, cols, vals=None: {
+        'columns': list(R._ATHENA_COLUMNS),
+        'rows': [['C1', 'K9', 'LE', 'S T E S A L', '1808267', '', '', '', 'Pay'],
+                 # zero a esquerda dos DOIS lados: o arquivo escreve '0037862' e o
+                 # cadastro '37862' -- comparar a string nao casaria.
+                 ['C2', 'K8', 'LE', 'LAWTON ... - GEM BR - RATES', '0037862', '', '', '', 'Rec'],
+                 ['C3', 'K7', 'LE', 'NOME SEM CADASTRO', '9999999', '', '', '', 'Pay'],
+                 ['C4', 'K6', 'LE', 'NOME SEM SPN', '', '', '', '', 'Pay']],
+        'widgets': {}, 'updated': ''}
+    pay = R._athena_settlements(datetime(2026, 7, 27))
+    ci = pay['columns'].index('CounterParty')
+    nomes = [r[ci] for r in pay['rows']]
+    check('cliente: o nome vem do Reference Data pelo SPN',
+          nomes[0], 'SASCAR TECNOLOGIA E SEGURANCA AUTOMOTIVA LTDA')
+    check('   entidade nossa: o nome vem do le-spn', nomes[1], 'BANCO J.P MORGAN S.A')
+    check('   e o zero a esquerda nao atrapalha', nomes[1] != 'LAWTON ... - GEM BR - RATES', True)
+    check('SPN sem cadastro mantem o nome do arquivo', nomes[2], 'NOME SEM CADASTRO')
+    check('   e sem SPN tambem', nomes[3], 'NOME SEM SPN')
+finally:
+    (R._refdata_by_spn, R._mapping_rows, R._ds_display_collect) = _real
+
+# As TRES telas leem a mesma coleta -- e o que impede a pagina, o aviso e o
+# Trade Level de mostrarem nomes diferentes da mesma operacao.
+for alvo, rotulo in (('def api_swap_athena_data', 'a pagina Swap Athena'),
+                     ('def _swadv_collect', 'o Settlement Advice de Swap'),
+                     ('def _ops_swap_trade_rows', 'o Trade Level')):
+    blk = SRC.split(alvo, 1)[1].split('\ndef ', 1)[0]
+    check('%s usa a coleta com o nome resolvido' % rotulo,
+          '_athena_settlements(' in blk and "_ds_display_collect(ref, 'br-onshore" not in blk, True)
+
+# E o OTM Settlements mostra o mesmo nome, pelo Cpty SPN da propria linha.
+blk = SRC.split('def _otm_collect', 1)[1].split('\ndef ', 1)[0]
+check('o OTM resolve o Cpty Name pelo Cpty SPN',
+      "_otm_cpty_name(rec.get('Cpty SPN'" in blk, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

@@ -5844,8 +5844,11 @@ def _ops_swap_trade_rows(settle_ref):
     tipo_maps = _opb3_tipo_maps(ref_dt)                       # Título → identificador (LOB)
     terms = _ops_swap_pos_terms(ref_dt)                       # Contrato → (dt op, dt venc)
 
-    athena = _ds_display_collect(ref_dt, 'br-onshore-settlements', _ATHENA_COLUMNS,
-                                 _ATHENA_VALUE_COLS)
+    # Mesma coleta da página Swap Athena e do aviso, com o CounterParty já
+    # resolvido pelo SPN — aqui ele é o ÚLTIMO recurso do nome (o Cpty SPN do OTM
+    # vem antes), e mesmo assim tem de ser o nome do cadastro: é por ele que a
+    # alíquota de IR é procurada no `swap-ir-client`.
+    athena = _athena_settlements(ref_dt)
     ai = {c: i for i, c in enumerate(athena.get('columns') or [])}
     by_cetip = {}
     for row in athena.get('rows') or []:
@@ -7343,6 +7346,20 @@ def _otm_collect(ref):
                     v = d.strftime('%d/%m/%Y') if d else (v or '')
                 elif c == 'Amount':
                     v = _swapchar_fmt_value(v)
+                elif c == 'Cpty Name':
+                    # O nome mostrado é o do REFERENCE DATA, resolvido pelo
+                    # **Cpty SPN** da própria linha (`_otm_cpty_name`: entidade
+                    # nossa pelo `le-spn`, o resto pelo Reference Data, ignorando
+                    # zeros à esquerda). O do arquivo é texto livre do OTM e
+                    # divergia do cadastro — é o mesmo nome que o Settlement
+                    # Summary usa para agrupar, então mostrar outro fazia a tela
+                    # e a apuração falarem de clientes diferentes.
+                    #
+                    # Resolvido na LEITURA, não na importação: corrigir o
+                    # Reference Data passa a valer na hora, sem reimportar o dia.
+                    # Sem SPN ou sem cadastro fica o nome do arquivo, para a linha
+                    # não sair anônima.
+                    v = _otm_cpty_name(rec.get('Cpty SPN', '')) or v
                 row.append('' if v is None else v)
             # Append maker/checker meta as the row tail: [...18 data..., status, maker, checker, id]
             row += [rec.get('_ot_status', 'OK'), rec.get('_ot_maker', ''),
@@ -7482,6 +7499,37 @@ _ATHENA_COLUMNS = ['CETIP ID', 'Kapital ID', 'Owner Legal Entity', 'CounterParty
 _ATHENA_VALUE_COLS = {'Owner curve', 'Counterparty curve', 'BRL Net Amount'}
 
 
+def _athena_settlements(ref):
+    """O BrazilOnshoreSettlements do dia com o **CounterParty resolvido pelo SPN**.
+
+    O nome que vem no arquivo é texto livre do Athena ('S T E S A L', apelido de
+    mesa), e era ele que aparecia na tela e no aviso que vai ao cliente. Ao lado
+    dele vem o SPN, que é identificador: `_otm_cpty_name` o resolve pelo cadastro
+    `le-spn` quando é entidade nossa e pelo Reference Data quando é cliente,
+    ignorando zeros à esquerda dos dois lados.
+
+    UMA função para a página Swap Athena e para o Settlement Advice de Swap. As
+    duas mostram a mesma contraparte da mesma operação, e resolver o nome em dois
+    lugares é exatamente como elas passariam a discordar — que é o problema que
+    esta função existe para não ter.
+
+    SPN em branco ou sem cadastro mantém o nome do arquivo: a linha não pode sair
+    anônima só porque o cadastro está incompleto.
+    """
+    payload = _ds_display_collect(ref, 'br-onshore-settlements',
+                                  _ATHENA_COLUMNS, _ATHENA_VALUE_COLS)
+    cols = payload.get('columns') or []
+    if 'CounterParty' not in cols or 'SPN' not in cols:
+        return payload
+    ci, si = cols.index('CounterParty'), cols.index('SPN')
+    for row in (payload.get('rows') or []):
+        if si < len(row) and ci < len(row):
+            nome = _otm_cpty_name(row[si])
+            if nome:
+                row[ci] = nome
+    return payload
+
+
 @blueprint.route('/other-products-swap-athena')
 def other_products_swap_athena():
     if not session.get('authenticated'):
@@ -7500,9 +7548,10 @@ def api_swap_athena_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    payload = _ds_display_collect(ref, 'br-onshore-settlements',
-                                  _ATHENA_COLUMNS, _ATHENA_VALUE_COLS)
-    # Sort by CounterParty A→Z (accent-insensitive); blank names go last.
+    payload = _athena_settlements(ref)
+    # Sort by CounterParty A→Z (accent-insensitive); blank names go last. Vem
+    # DEPOIS da resolução do nome: ordenar pelo texto do arquivo deixaria a lista
+    # fora de ordem alfabética assim que o nome mudasse na tela.
     if 'CounterParty' in payload['columns']:
         ci = payload['columns'].index('CounterParty')
         payload['rows'].sort(key=lambda r: (str(r[ci]).strip() == '', _fcst_norm(str(r[ci]))))
@@ -7570,8 +7619,9 @@ def _swadv_collect(ref):
     tipo_maps = _opb3_tipo_maps(ref)
     terms = _ops_swap_pos_terms(ref)
 
-    athena = _ds_display_collect(ref, 'br-onshore-settlements', _ATHENA_COLUMNS,
-                                 _ATHENA_VALUE_COLS)
+    # Mesma coleta da página Swap Athena, com o CounterParty já resolvido pelo
+    # SPN — o nome do aviso que vai ao cliente é o do Reference Data.
+    athena = _athena_settlements(ref)
     ai = {c: i for i, c in enumerate(athena.get('columns') or [])}
     by_cetip = {}
     for row in athena.get('rows') or []:
@@ -16619,11 +16669,10 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             'Produto': source,
             'LOB': _lob_for_source(source),
             'Trade ID': key,
-            # Os dois identificadores, sempre os dois. A CHAVE (`Trade ID`) é o
-            # Deal para quase todo produto e o B3 ID para o FWD Start — então sem
-            # a coluna própria o Deal daquelas linhas não existia na tela, e é
-            # por ele que se acha a operação na Athena.
-            'Athena ID': first('Deal'),
+            # O `Athena ID` saiu da esteira (repetia o Trade ID em quase todo
+            # produto e vinha vazio no FWD Start), e por isso não é mais gravado:
+            # o `blank_row` descartaria a chave em silêncio, e um campo que se
+            # escreve para nada é dívida esperando alguém procurá-lo.
             'Cetip ID': first('B3_ID'),
             # O campo é o ATIVO da confirmação: nas commodities entra a
             # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e

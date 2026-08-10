@@ -10282,3 +10282,52 @@ instância que nunca abriu aquela tela rodaria sem a coluna — e a regra nova s
 Ele só preenche o que **não existe**: linha sem a chave é anterior à coluna, então ninguém teve como
 opinar sobre ela, e ela recebe o padrão do produto (`Consider` para todas, `Disregard` para a GEM). Com a
 chave presente, nada é tocado — o cadastro é de quem edita.
+
+
+## §225 — O nome da contraparte vinha do arquivo; passa a vir do Reference Data
+
+O `br-onshore-settlements` do Athena traz o `CounterParty` como **texto livre da mesa** — `S T E S A L`
+para a SASCAR, `LAWTON MULTIMERCADO EXCLUSIVO 2786 - GEM BR - RATES` para a nossa própria perna. Era
+esse texto que a página **Swap Athena** mostrava, que o **Settlement Advice** imprimia e que ia no aviso
+ao cliente. No **OTM Settlements** valia o mesmo: o `Cpty Name` era o do arquivo.
+
+Ao lado do nome, os dois arquivos trazem o **SPN**, que é identificador e não apelido. `_otm_cpty_name`
+já sabia resolvê-lo — cadastro `le-spn` quando é entidade nossa (entidade própria não está no Reference
+Data como contraparte, então procurá-la lá devolveria vazio) e Reference Data quando é cliente, com
+`_spn_key` ignorando zeros à esquerda e o rabo `.0` das planilhas. O que faltava era usá-lo.
+
+`_athena_settlements(ref)` passa a ser **a** coleta do arquivo do Athena, com o `CounterParty` já
+trocado. As três telas que o leem chamam ela:
+
+| Tela | O que muda |
+|---|---|
+| Swap Athena | a coluna `COUNTERPARTY` |
+| Settlement Advice de Swap | o nome do cliente na tela **e no aviso impresso/enviado** |
+| Trade Level / Settlement Summary | o último recurso do nome (o `Cpty SPN` do OTM continua vindo antes) |
+
+Uma coleta, e não uma resolução por tela, porque é exatamente assim que elas passariam a mostrar
+clientes diferentes para a mesma operação. E porque o nome não é só rótulo: é por ele que a alíquota é
+procurada no `swap-ir-client` — mostrar um nome e casar o IR por outro deixaria quem edita o cadastro
+digitando o texto que vê, sem efeito nenhum.
+
+No OTM a resolução é feita **na leitura** (`_otm_collect`), não na importação: corrigir o Reference Data
+passa a valer na hora, sem reimportar o dia. E a ordenação alfabética da Swap Athena vem **depois** da
+troca — ordenar pelo texto do arquivo deixaria a lista fora de ordem assim que o nome mudasse na tela.
+
+Sem SPN, ou com SPN que não está em cadastro nenhum, o nome do arquivo fica: a linha não pode sair
+anônima porque o cadastro está incompleto.
+
+
+## §226 — Track Confirmations: o Athena ID saiu
+
+A coluna existia para mostrar o **Deal** das linhas de FWD Start, que são chaveadas pelo B3 ID e por
+isso não têm o Deal no `Trade ID` (§217). Na prática ela nunca cumpriu isso: nos produtos chaveados pelo
+Deal ela **repetia** o Trade ID, e nas linhas de FWD Start vinha **vazia** — no banco da instância local,
+33 linhas iguais ao Trade ID, 10 vazias, e nenhuma acrescentando informação (as 10 diferentes eram as
+linhas de demonstração criadas para as capturas do SOP).
+
+Ela saiu de `COLUMNS` e o `_mc_save_from_deal` deixou de gravá-la — `blank_row` descarta chave
+desconhecida em silêncio, e campo que se escreve para nada é dívida esperando alguém procurá-lo.
+
+**O dado não foi perdido**: `ensure_db` só ACRESCENTA coluna, então a coluna física continua no DuckDB
+com o que já estava lá. Voltar atrás é devolver o nome à lista.

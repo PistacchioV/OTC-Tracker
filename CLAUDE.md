@@ -614,6 +614,19 @@ vive uma vez só, no overlay do dia
 `other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
 produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
 
+**O nome da contraparte sai do SPN, nunca do texto do arquivo.** O
+`br-onshore-settlements` traz o `CounterParty` como texto livre da mesa
+(`S T E S A L`) e o `SPN` ao lado; `_athena_settlements(ref)` troca um pelo
+outro via `_otm_cpty_name` — cadastro `le-spn` quando é entidade nossa, Reference
+Data quando é cliente, ignorando zeros à esquerda dos dois lados. É **uma coleta
+só** para a página Swap Athena, o Settlement Advice de Swap e o Trade Level:
+resolver o nome em cada tela é como elas passariam a mostrar clientes diferentes
+para a mesma operação — e é por esse nome que a alíquota do `swap-ir-client` é
+procurada. O OTM Settlements faz o mesmo pelo **`Cpty SPN`** da própria linha, e
+**na leitura**, não na importação: corrigir o Reference Data vale na hora, sem
+reimportar o dia. Sem SPN ou sem cadastro, o nome do arquivo fica — a linha não
+pode sair anônima.
+
 ### A Recon FXO tem DOIS lados órfãos, e o join precisa ser `outer`
 
 O status da 1ª coluna tem quatro estados, na ordem da gravidade — que é também a
