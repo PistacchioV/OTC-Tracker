@@ -2428,6 +2428,18 @@ table.MsoTableGrid
     <input type="text" id="inp_cgd_date" value="" oninput="update()">
   </div>
 
+  <div class="section-header">Identificação da Parte A (JPMorgan)</div>
+
+  <div class="field-group">
+    <label>Nome da Parte A (pela LE da operação: JPM/MGT)</label>
+    <input type="text" id="inp_partea_nome" value="" oninput="update()">
+  </div>
+
+  <div class="field-group">
+    <label>CNPJ da Parte A</label>
+    <input type="text" id="inp_partea_cnpj" value="" oninput="update()">
+  </div>
+
   <div class="section-header">Identificação da Contraparte</div>
 
   <div class="field-group">
@@ -2560,11 +2572,9 @@ taxa, índice ou preço utilizado como referência em uma Operação de Derivati
 <p class="MsoNormal" style="text-align: justify; margin-right: -2.25pt;"><span lang="EN-US"><o:p>&nbsp;</o:p></span></p>
 
 <p class="MsoNormal" style="margin: 0cm -2.25pt 0pt 144pt; text-align: justify; text-indent: -126pt; mso-list: l3 level1 lfo12; tab-stops: 31.5pt;"><!--[if !supportLists]--><b style="mso-bidi-font-weight: normal;"><span style="mso-ansi-language: PT-BR;"><span style="mso-list: Ignore;">a.<span style='font: 7pt/normal "Times New Roman"; font-size-adjust: none; font-stretch: normal;'>&nbsp;&nbsp;
-</span></span></span></b><!--[endif]--><b><span lang="EN-US">Parte A</span></b><span lang="EN-US">:<span style="mso-tab-count: 1;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>&lt;<b>BANCO
-J.P. MORGAN S.A.&gt; <a name="_Hlk61596541">OR &lt;J.P. Morgan Chase Bank, N.A.
-– Filial Brasileira&gt;</a></b><span style="mso-bookmark: _Hlk61596541;"></span></span></p>
+</span></span></span></b><!--[endif]--><b><span lang="EN-US">Parte A</span></b><span lang="EN-US">:<span style="mso-tab-count: 1;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><b><span class="dyn" id="out_partea_nome">{{ conf.partea_nome }}</span></b></span></p>
 
-<p class="MsoNormal" style="margin: 0cm -2.25pt 0pt 144pt; text-align: justify; tab-stops: 31.5pt;"><span lang="EN-US">CNPJ/MF:<span style="mso-tab-count: 1;">&nbsp; </span><span style="mso-bidi-font-weight: bold;">33.172.537/0001–98 OR &lt;<a name="_Hlk61596730">46.518.205/0001-64</a>&gt;</span></span><span lang="IT" style="mso-ansi-language: IT;"><o:p></o:p></span></p>
+<p class="MsoNormal" style="margin: 0cm -2.25pt 0pt 144pt; text-align: justify; tab-stops: 31.5pt;"><span lang="EN-US">CNPJ/MF:<span style="mso-tab-count: 1;">&nbsp; </span><span style="mso-bidi-font-weight: bold;"><span class="dyn" id="out_partea_cnpj">{{ conf.partea_cnpj }}</span></span></span><span lang="IT" style="mso-ansi-language: IT;"><o:p></o:p></span></p>
 
 <p class="MsoNormal" style="margin: 0cm -2.25pt 0pt 144pt; text-align: justify; tab-stops: 31.5pt;"><span lang="IT" style="mso-ansi-language: IT;"><span style="mso-tab-count: 1;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></span></p>
 
@@ -3023,7 +3033,7 @@ Derivativo]<o:p></o:p></span></i></p>
   </xml><![endif]--></span><!--[if supportFields]><span lang=EN-US><span
   style='mso-element:field-end'></span></span><![endif]--><span style="mso-ansi-language: PT-BR;">.<o:p></o:p></span></p>
   <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><span style="mso-ansi-language: PT-BR;"><o:p>&nbsp;</o:p></span></p>
-  <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><b style="mso-bidi-font-weight: normal;"><span style="mso-ansi-language: PT-BR;">BANCO J.P. MORGAN S.A.<o:p></o:p></span></b></p>
+  <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><b style="mso-bidi-font-weight: normal;"><span style="mso-ansi-language: PT-BR;"><span class="dyn" id="out_partea_nome_assin">{{ conf.partea_nome }}</span><o:p></o:p></span></b></p>
   <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><b style="mso-bidi-font-weight: normal;"><span style="mso-ansi-language: PT-BR;"><o:p>&nbsp;</o:p></span></b></p>
   <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><span lang="EN-US">Por: _______________________________</span></p>
   <p class="MsoNormal" style="text-align: justify; -ms-text-autospace:; mso-layout-grid-align: none;"><span lang="EN-US">Nome:</span></p>
@@ -3729,12 +3739,15 @@ function removeRow(idx) {
 }
 
 function update() {
-  ['num_conf', 'cgd_date', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (id) {
+  ['num_conf', 'cgd_date', 'partea_nome', 'partea_cnpj', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (id) {
     var inp = document.getElementById('inp_' + id);
     var out = document.getElementById('out_' + id);
     if (inp && out) out.textContent = inp.value;
   });
-  // assinatura da contraparte espelha o nome da Parte B
+  // as assinaturas espelham os nomes das duas Partes
+  var nomeA = document.getElementById('inp_partea_nome');
+  var assinA = document.getElementById('out_partea_nome_assin');
+  if (nomeA && assinA) assinA.textContent = nomeA.value;
   var nomeB = document.getElementById('inp_parteb_nome');
   var assinB = document.getElementById('out_parteb_nome_assin');
   if (nomeB && assinB) assinB.textContent = nomeB.value;
@@ -3744,10 +3757,21 @@ function update() {
 function saveToInventory(btn) {
   var st = document.getElementById('save-status');
   var vals = {};
-  ['num_conf', 'cgd_date', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (k) {
+  ['num_conf', 'cgd_date', 'partea_nome', 'partea_cnpj', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (k) {
     var inp = document.getElementById('inp_' + k);
     vals[k] = inp ? inp.value : '';
   });
+  // A Parte A em branco (LE ausente/mista no grupo) sairia num documento
+  // assinado sem dizer quem assina. O servidor recusa do mesmo jeito; aqui o
+  // aviso é imediato e o foco vai para o campo.
+  if (!String(vals.partea_nome || '').trim()) {
+    st.style.color = '#ee6666';
+    st.textContent = '✖ Parte A em branco — a Legal Entity das operações não a define. '
+      + 'Preencha o nome (e o CNPJ) da Parte A acima antes de salvar.';
+    var pAInp = document.getElementById('inp_partea_nome');
+    if (pAInp) { pAInp.style.borderColor = '#ee6666'; pAInp.focus(); }
+    return;
+  }
   // Sem CGD o documento sai com a data do contrato em branco na cláusula de
   // abertura — e é o PDF que vai para a contraparte. O servidor recusa do
   // mesmo jeito; aqui o aviso é imediato e o foco vai para o campo.
@@ -3821,10 +3845,12 @@ document.addEventListener('keydown', function (e) {
 // faria a confirmação sair com uma data plausível e errada.
 (function initFromConf() {
   if (!__CONF__) return;
-  ['num_conf', 'cgd_date', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (k) {
+  ['num_conf', 'cgd_date', 'partea_nome', 'partea_cnpj', 'parteb_nome', 'parteb_cnpj', 'data_neg', 'data_extenso'].forEach(function (k) {
     var inp = document.getElementById('inp_' + k);
     if (!inp) return;
-    if (k === 'cgd_date') inp.value = __CONF__[k] || '';
+    // Parte A segue o servidor mesmo VAZIA (LE ausente/mista): manter um texto
+    // de exemplo afirmaria uma entidade que a operação não diz.
+    if (k === 'cgd_date' || k === 'partea_nome' || k === 'partea_cnpj') inp.value = __CONF__[k] || '';
     else if (__CONF__[k]) inp.value = __CONF__[k];
   });
   update();

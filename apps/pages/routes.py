@@ -26847,6 +26847,41 @@ _CONF_FWDSTART_FAMILY_TEMPLATES = {
                   '/confirmation/ndf-fwdstart/strike-me'),
 }
 
+# Parte A do documento — a entidade JPM da operação. Os dois textos são os que o
+# Word imprimia lado a lado com "OR" (o documento saía pedindo para riscar um à
+# mão); a escolha é pela LE do deal, que as páginas genéricas de NDF carregam
+# (campo `LE`, resolvido do Settlement Location pelo `le-accronym`). A grafia é
+# a do documento assinado, não a do Reference Data (`le-spn` guarda a do
+# RefData) — por isso o texto vive aqui, ao lado do template, e não num mapping.
+_CONF_FWDSTART_PARTEA = {
+    'JPM': ('BANCO J.P. MORGAN S.A.', '33.172.537/0001-98'),
+    'MGT': ('J.P. Morgan Chase Bank, N.A. – Filial Brasileira', '46.518.205/0001-64'),
+}
+
+
+def _conf_fwdstart_partea(picked, warnings):
+    """(nome, cnpj) da Parte A pelo campo LE dos deals do grupo.
+
+    Em branco + aviso quando a LE falta, é mista no grupo ou não é JPM/MGT —
+    em branco pede preenchimento no painel; um default afirmaria uma entidade
+    errada num documento que vai assinado para a contraparte."""
+    les = {str(d.get('LE') or '').strip().upper() for d, _s in picked}
+    les.discard('')
+    if len(les) == 1:
+        nome, cnpj = _CONF_FWDSTART_PARTEA.get(next(iter(les)), ('', ''))
+        if nome:
+            return nome, cnpj
+    if len(les) > 1:
+        warnings.append('Operações de Legal Entities diferentes no mesmo grupo ({}) — '
+                        'preencha a Parte A no painel.'.format(', '.join(sorted(les))))
+    elif les:
+        warnings.append('Legal Entity {} sem Parte A definida — preencha o nome e o '
+                        'CNPJ da Parte A no painel.'.format(next(iter(les))))
+    else:
+        warnings.append('Operações sem Legal Entity — preencha o nome e o CNPJ da '
+                        'Parte A no painel.')
+    return '', ''
+
 
 def _conf_load_ndffwdstart(ref):
     """Deals do day-file de NDF FWD Start da reference date."""
@@ -27017,6 +27052,8 @@ def confirmation_fwdstart_strike_me():
     if not cgd_txt:
         warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
 
+    partea_nome, partea_cnpj = _conf_fwdstart_partea(picked, warnings)
+
     trade_date = first.get('TradeDate') or ref
     conf = {
         'ref_date':     ref.strftime('%Y-%m-%d'),
@@ -27025,6 +27062,8 @@ def confirmation_fwdstart_strike_me():
         # daria à confirmação o número de uma das operações que ela contém.
         'num_conf':     rows[0]['num'] if len(rows) == 1 else '',
         'cgd_date':     cgd_txt,
+        'partea_nome':  partea_nome,
+        'partea_cnpj':  partea_cnpj,
         'parteb_nome':  str(first.get('Client') or '').strip(),
         'parteb_cnpj':  _conf_fmt_cnpj(first.get('TaxID')),
         'data_neg':     _conf_fmt_date(trade_date),
@@ -27056,6 +27095,14 @@ def api_conf_fwdstart_save():
                         'message': 'Data do CGD não cadastrada para esta contraparte. '
                                    'Cadastre o CGD no Reference Data (ou preencha o campo '
                                    'Data do CGD no painel) antes de salvar a confirmação.'}), 400
+    # A Parte A em branco sairia num documento assinado sem dizer QUEM assina —
+    # a rota da página só a deixa vazia quando a LE do grupo não a define
+    # (ausente/mista), e aí o painel é onde a mesa decide.
+    if not str(fields.get('partea_nome') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_partea',
+                        'message': 'Parte A em branco — a Legal Entity das operações não a '
+                                   'define. Preencha o nome (e o CNPJ) da Parte A no painel '
+                                   'antes de salvar a confirmação.'}), 400
 
     acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
     merc = str(payload.get('mercadoria') or '').strip()
@@ -27063,6 +27110,8 @@ def api_conf_fwdstart_save():
         'ref_date':     str(payload.get('date') or '').strip(),
         'num_conf':     str(fields.get('num_conf') or '').strip(),
         'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'partea_nome':  str(fields.get('partea_nome') or '').strip(),
+        'partea_cnpj':  str(fields.get('partea_cnpj') or '').strip(),
         'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
         'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
         'data_neg':     str(fields.get('data_neg') or '').strip(),
