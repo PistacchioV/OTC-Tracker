@@ -4268,6 +4268,37 @@ $(document).ready(function() {
        `B3Quote.cfg` devolve os mesmos F/A e 340/358 de antes. */
     B3Quote.load();
 
+    /* File Interface: o cadastro (/file-interface) comanda a lista de campos
+       do preview de duplo clique — GET page-spec no load, template
+       `termo-multiclasses` (fallback templates[0]). Fetch que falha degrada
+       para a lista fixa CONECTA_FIELD_NAMES, como nos mappings. */
+    var FI_SPEC = null;
+    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            var tpls = (d && d.success && d.templates) || [];
+            FI_SPEC = tpls.filter(function (t) { return t && t.key === 'termo-multiclasses'; })[0] || tpls[0] || null;
+        })
+        .catch(function () { FI_SPEC = null; });
+    function _fiBlock(id) {
+        var bs = (FI_SPEC && FI_SPEC.blocks) || [];
+        for (var i = 0; i < bs.length; i++) { if (bs[i].id === id) return bs[i]; }
+        return null;
+    }
+    /* Fixed do cadastro padded pela largura — a mesma regra do motor do
+       servidor (_fi_build_line): 9(n) com valor → zeros à esquerda; o resto
+       (inclusive Fixed vazio) → espaços à direita. O preview mostra o que o
+       arquivo leva. */
+    function _fiFixedValue(fd) {
+        var v = String(fd.source_detail == null ? '' : fd.source_detail);
+        if (fd.width && v.length < fd.width) {
+            v = (v && String(fd.format || '').charAt(0) === '9')
+                ? v.padStart(fd.width, '0')
+                : v.padEnd(fd.width, ' ');
+        }
+        return v;
+    }
+
     function buildConectaFields(deal, bizDayCount) {
         function _date(val) {
             val = _sh(val);
@@ -4374,6 +4405,19 @@ $(document).ready(function() {
             f[58] = bizDayCount !== undefined ? String(bizDayCount).padStart(3, '0') : '';
         }
 
+        /* Cadastro do File Interface no comando: nomes, ordem e Fixed saem do
+           bloco Dados Fixos do template (já resolvidos para esta página); os
+           valores calculados acima entram pelo seq (f[i] ↔ seq i+1 — o
+           cadastro foi transcrito deste preview). Sem FI_SPEC, a lista fixa
+           antiga segue de fallback. */
+        var _blk = _fiBlock('registro-dados-fixos');
+        if (_blk && _blk.fields && _blk.fields.length) {
+            return _blk.fields.map(function (fd) {
+                if (fd.source === 'Fixed') return { name: fd.field, value: _fiFixedValue(fd) };
+                var idx = parseInt(fd.seq, 10) - 1;
+                return { name: fd.field, value: (idx >= 0 && f[idx] !== undefined) ? f[idx] : '' };
+            });
+        }
         return CONECTA_FIELD_NAMES.map(function(name, i) {
             return { name: name, value: f[i] };
         });
@@ -4471,17 +4515,25 @@ $(document).ready(function() {
                         '</td>' +
                     '</tr>';
                 }).join('');
+                /* Cabeçalhos das linhas de verificação (tipo 2): bloco Dados
+                   Variáveis do cadastro quando ele mapeia direto nas 6 colunas
+                   (nome de campo é dado B3 — sem tradução); senão o cabeçalho
+                   fixo antigo. */
+                var _vb = _fiBlock('registro-dados-variaveis');
+                var _fxHead = (_vb && _vb.fields && _vb.fields.length === 6)
+                    ? _vb.fields.map(function (fd, ix) {
+                        return '<th style="padding:5px 8px;text-align:' + (ix === 1 ? 'center' : 'left') + ';font-weight:600">' + fd.field + '</th>';
+                      }).join('')
+                    : '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">System ID</span></th>' +
+                      '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">Line Type ID</span></th>' +
+                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-op-code">Operation Code</span></th>' +
+                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Underlying Asset Fixing Date</span></th>' +
+                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Reference Quantity</span></th>' +
+                      '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>';
                 tableHtml +=
                     '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                    '<thead><tr style="background:#495057;color:#fff">' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">System ID</span></th>' +
-                    '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">Line Type ID</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-op-code">Operation Code</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Underlying Asset Fixing Date</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Reference Quantity</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>' +
-                    '</tr></thead>' +
+                    '<thead><tr style="background:#495057;color:#fff">' + _fxHead + '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
                     '</table></div>';
             }

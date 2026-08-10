@@ -1022,6 +1022,50 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         return recs;
     }
 
+    // ── File Interface: o cadastro comanda o preview de duplo clique ─────────
+    // Prefetch no load do spec do template (tela /file-interface); a lista de
+    // campos do preview sai do bloco de registro do cadastro — rótulo = `field`,
+    // Fixed = `source_detail` padded pela largura (regra do motor: X → espaços à
+    // direita, 9 → zeros à esquerda; Fixed vazio = espaços), não-Fixed = valor
+    // calculado mapeado pela seq do template. Sem o spec (fetch falhou), o
+    // preview degrada para a lista fixa histórica — mesmo padrão dos mappings.
+    var FI_SPEC = null;
+    fetch('/api/file-interface/page-spec?url=/accrual-swap')
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+            var tps = (j && j.templates) || [];
+            FI_SPEC = tps.filter(function (tp) { return tp.key === 'swap-atualizacao-pu-fator'; })[0] || tps[0] || null;
+        })
+        .catch(function () { FI_SPEC = null; });
+
+    function _accFiSeq(s) {                          // '04' ≡ '4', como no motor
+        s = String(s == null ? '' : s).trim();
+        return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, '') : s;
+    }
+
+    // Campos de UM registro na ordem do bloco `registro` do template; null sem
+    // FI_SPEC (o chamador cai na lista fixa). Nenhum cálculo de valor vive aqui.
+    function accRecordFields(r) {
+        var block = FI_SPEC && (FI_SPEC.blocks || []).filter(function (b) { return b.id === 'registro'; })[0];
+        if (!block || !(block.fields || []).length) return null;
+        // seq do template → valor calculado deste preview (1:1 com o gerador do servidor)
+        var bySeq = { '4': r.codContrato, '5': r.papel, '7': r.curva,
+                      '8': r.dataPuFator, '9': r.meuNumero, '11': r.fatorAtual };
+        return block.fields.map(function (f) {
+            var w = f.width, v;
+            if (f.source === 'Fixed') {
+                v = String(f.source_detail == null ? '' : f.source_detail);
+                if (w != null && v.length < w)
+                    v = (v && /^9/.test(String(f.format || ''))) ? v.padStart(w, '0') : v.padEnd(w, ' ');
+            } else {
+                v = bySeq[_accFiSeq(f.seq)];
+                v = v == null ? '' : String(v);
+                if (w != null && v.length < w) v = v.padEnd(w, ' ');
+            }
+            return { name: f.field, value: v };
+        });
+    }
+
     var ACC_REC_HEADERS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Código do Contrato',
         'Papel', 'Tipo de Atualização', 'Curva', 'Data PU / Fator', 'Meu Número', 'PU para Atualização', 'Fator para Atualização'];
     var ACC_REC_KEYS = ['sistema', 'tipoLinha', 'codOper', 'codContrato', 'papel', 'tipoAtual', 'curva',
@@ -1043,15 +1087,25 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
                 return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
                     (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
             }).join('') + '</tr>';
-        var tbody = ACC_REC_KEYS.map(function (k, fi) {
+        // Lista de campos do cadastro (rótulos, ordem e Fixed padded); sem o
+        // spec, a lista fixa histórica.
+        var fieldsPer = recs.map(function (r) {
+            return accRecordFields(r) || ACC_REC_KEYS.map(function (k, i) {
+                return { name: ACC_REC_HEADERS[i], value: r[k] };
+            });
+        });
+        var tbody = fieldsPer[0].map(function (f0, fi) {
             var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
-            var cells = recs.map(function (r) {
-                var disp = (k === 'puAtual') ? '<span style="color:#bbb">' + '·'.repeat(22) + '</span>' : esc(r[k]);
+            var cells = fieldsPer.map(function (fl) {
+                var raw = String(fl[fi].value == null ? '' : fl[fi].value);
+                var disp = (raw !== '' && raw.trim() === '')       // padding todo em branco → pontos cinza
+                    ? '<span style="color:#bbb">' + '·'.repeat(raw.length) + '</span>'
+                    : esc(raw);
                 return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
             }).join('');
             return '<tr style="background:' + bg + '">' +
                 '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
-                    (fi + 1) + '. ' + esc(ACC_REC_HEADERS[fi]) + '</td>' + cells + '</tr>';
+                    (fi + 1) + '. ' + esc(f0.name) + '</td>' + cells + '</tr>';
         }).join('');
         var html =
             '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
@@ -1075,6 +1129,8 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
     // "SWAP "(5) + tipoLinha(1) + codOper(4) + códContrato + papel(2) + tipoAtual(2) +
     // curva(2) + data(8) + meuNúmero(10) + PU(22 spaces) + fator(10).
     function accRecordLine(r) {
+        var fl = accRecordFields(r);                 // cadastro presente → a linha é o concat dos campos
+        if (fl) return fl.map(function (f) { return f.value; }).join('');
         return String(r.sistema).padEnd(5) + r.tipoLinha + r.codOper + r.codContrato +
                r.papel + r.tipoAtual + r.curva + r.dataPuFator + r.meuNumero + r.puAtual + r.fatorAtual;
     }

@@ -4328,6 +4328,46 @@ $(document).ready(function() {
         'Trigger Proporção'
     ];
 
+    // ── File Interface: o preview lê o cadastro (/file-interface). Prefetch
+    //    único no load — buildConectaFields segue síncrona. Se o fetch falhar,
+    //    FI_SPEC fica null e a lista fixa acima continua valendo (mesmo padrão
+    //    dos mappings: degrada para o comportamento anterior).
+    var FI_SPEC = null;
+    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) {
+            var tpls = (d && d.templates) || [];
+            for (var i = 0; i < tpls.length; i++) {
+                if (tpls[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = tpls[i]; return; }
+            }
+            FI_SPEC = tpls.length ? tpls[0] : null;
+        })
+        .catch(function() { FI_SPEC = null; });
+
+    function fiBlock(id) {
+        var blocks = (FI_SPEC && FI_SPEC.blocks) || [];
+        for (var i = 0; i < blocks.length; i++) {
+            if (blocks[i].id === id) return blocks[i];
+        }
+        return null;
+    }
+
+    /* Fixed do cadastro padded pela largura do format — mesma regra do motor
+       (X(n) → espaços à direita, 9(n) → zeros à esquerda; vazio → espaços),
+       para o preview mostrar o que o arquivo leva. */
+    function fiFixedValue(fld) {
+        var v = String(fld.source_detail || '');
+        var w = fld.width;
+        if (typeof w !== 'number' || w <= 0 || v.length >= w) return v;
+        if (v && String(fld.format || '').charAt(0) === '9') return v.padStart(w, '0');
+        return v.padEnd(w, ' ');
+    }
+
+    function fiSeqKey(seq) {
+        var s = String(seq === undefined || seq === null ? '' : seq).trim();
+        return /^\d+$/.test(s) ? (s.replace(/^0+/, '') || '0') : s;
+    }
+
     /* Count weekdays (Mon-Fri) not in holidays between two dd/mm/yyyy dates, inclusive */
     function _bizParseDate(s) {
         if (!s) return null;
@@ -4480,6 +4520,21 @@ $(document).ready(function() {
             f[48] = bizDayCount !== undefined ? String(bizDayCount) : '';
         }
 
+        // File Interface: a lista de campos sai do cadastro quando o prefetch
+        // deu certo; os VALORES continuam sendo os calculados acima (f[i] ↔
+        // seq i+1 do bloco Registro — a transcrição do template foi feita
+        // deste preview, a ordem bate um a um).
+        var blk = fiBlock('registro');
+        if (blk && blk.fields && blk.fields.length) {
+            var valuesBySeq = {};
+            for (var vi = 0; vi < f.length; vi++) valuesBySeq[String(vi + 1)] = f[vi];
+            return blk.fields.map(function(fld) {
+                var val = fld.source === 'Fixed'
+                    ? fiFixedValue(fld)
+                    : (valuesBySeq[fiSeqKey(fld.seq)] || '');
+                return { name: fld.field, value: val };
+            });
+        }
         return CONECTA_FIELD_NAMES.map(function(name, i) {
             return { name: name, value: f[i] };
         });
@@ -4576,15 +4631,28 @@ $(document).ready(function() {
                         '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;color:#aaa">&mdash;</td>' +
                     '</tr>';
                 }).join('');
+                // Cabeçalho direto do bloco tipo 2 do cadastro quando ele
+                // existe (nomes de campo B3, não traduzidos de propósito);
+                // sem cadastro fica o cabeçalho fixo de sempre.
+                var fxBlk = fiBlock('registro-media-asiatica');
+                var fxHead;
+                if (fxBlk && fxBlk.fields && fxBlk.fields.length === 5) {
+                    fxHead = fxBlk.fields.map(function(fld, fi) {
+                        return '<th style="padding:5px 8px;text-align:' + (fi === 1 ? 'center' : 'left') + ';font-weight:600">' + fld.field + '</th>';
+                    }).join('');
+                } else {
+                    fxHead =
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">System ID</span></th>' +
+                        '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">Line Type ID</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Underlying Asset Fixing Date</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Quantidade de refer&ecirc;ncia</span></th>';
+                }
                 tableHtml +=
                     '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
                     '<thead><tr style="background:#495057;color:#fff">' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">System ID</span></th>' +
-                    '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">Line Type ID</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Underlying Asset Fixing Date</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Quantidade de refer&ecirc;ncia</span></th>' +
+                    fxHead +
                     '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
                     '</table></div>';

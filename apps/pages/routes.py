@@ -10957,23 +10957,25 @@ def api_ndfop_row_delete():
 
 
 # ── Send to Conecta (Batch Conecta TAXA files) ────────────────────────────────
-#  One positional line per row, the ops spreadsheet's columns A..L concatenated
-#  (each field already fixed-width, so the concat IS the record). Ported from the
-#  Excel column formulas: constants TER  /1/0015, random 10-digit internal number
-#  (MID(RAND();3;10)), bank participant 73760009, counterparty account normalised
-#  to 8 digits (41007 → 00041007), rates as 4-digit integer + 8-digit decimals.
-#  Rows against Lawton (C.Parte 00041007) are mirrored into a second file with
-#  Participante ↔ C.Parte swapped — the Lawton-side view of the same trade:
+#  One positional line per row. The record layout (field order, labels, widths
+#  and the fixed literals TER/1/0015/000) lives in the File Interface template
+#  `taxacambioter` — editing it on /file-interface changes the file and the
+#  double-click preview without touching code. This code only computes the
+#  per-row values, ported from the Excel column formulas: random 10-digit
+#  internal number (MID(RAND();3;10)), bank participant 73760009, counterparty
+#  account normalised to 8 digits (41007 → 00041007), rates as 4-digit integer
+#  + 8-digit decimals. Rows against Lawton (C.Parte 00041007) are mirrored into
+#  a second file with Participante ↔ C.Parte swapped — the Lawton-side view of
+#  the same trade:
 #    TAXA_BANCO.txt  — header TER  00015JPMORGANBM··········yyyymmdd00001 + lines
 #    TAXA_LAWTON.txt — header TER  00015INTRAGLAWTONFDO·····yyyymmdd00001 + the
 #                      swapped lines (TCO_LAWTON-style participant header)
 #  Both written to CONECTA_NEW_PATH like the New Deals send-conecta files.
-_NDFOP_CONECTA_LABELS = ['Id do sistema', 'Id tipo linha', 'Código operação',
-                         'N Contr Interno', 'Participante', 'Pap. Participante',
-                         'C.Parte', 'Contrato', 'Tx Câmbio', 'Tx Paridade',
-                         'Tx Cotada', 'Quantidade de Datas de Verificação']
+_NDFOP_FI_KEY = 'taxacambioter'   # File Interface template key
+_NDFOP_FI_PAGE = '/ndf-other-publisher'
 _NDFOP_PARTICIPANT = '73760009'   # bank participant account
 _NDFOP_LAWTON = '00041007'        # Lawton account → triggers the mirrored file
+_NDFOP_FI_ERROR = 'File Interface template missing/invalid — check /file-interface'
 
 
 def _ndfop_acct8(v):
@@ -10993,23 +10995,55 @@ def _ndfop_rate12(v):
     return (ip.zfill(4) + dec) if len(ip) <= 4 else ''
 
 
+def _ndfop_fi_block(block_id):
+    """One block of the `taxacambioter` File Interface template. Missing
+    template/block raises ValueError — a B3 file must never fall back to a
+    hardcoded layout in silence."""
+    tpl = _fi_tpl_cached(_NDFOP_FI_KEY)
+    for b in (tpl or {}).get('blocks', []):
+        if b.get('id') == block_id:
+            return b
+    raise ValueError('file-interface template missing: {}/{}'.format(_NDFOP_FI_KEY, block_id))
+
+
 def _ndfop_conecta_fields(cells, swap=False):
     """[(label, value)] of one Conecta line for a display row (indexed by
     _NDFOP_COLUMNS). swap=True builds the Lawton-side view: Participante and
-    C.Parte trade places, everything else identical."""
+    C.Parte trade places, everything else identical.
+
+    The line itself comes from `_fi_build_line` over the `registro` block —
+    labels, order, widths and fixed literals are the template's. The pairs are
+    sliced BACK from that line (field width each; a generator value longer
+    than its format keeps its own length — the engine never truncates), so the
+    preview shows exactly the bytes the file gets."""
     idx = {c: i for i, c in enumerate(_NDFOP_COLUMNS)}
     part, cparte = _NDFOP_PARTICIPANT, _ndfop_acct8(cells[idx['CONTA CONTRAPARTE']])
     if swap:
         part, cparte = cparte, part
-    vals = ['TER  ', '1', '0015',
-            ''.join(random.choices('0123456789', k=10)),
-            part, ' ', cparte,
-            str(cells[idx['B3 ID']] or '').strip().ljust(10),
-            ' ' * 12,
-            _ndfop_rate12(cells[idx['TX PARIDADE']]),
-            _ndfop_rate12(cells[idx['TX COTADA']]),
-            '000']
-    return list(zip(_NDFOP_CONECTA_LABELS, vals))
+    values = {'4': ''.join(random.choices('0123456789', k=10)),
+              '5': part,
+              '7': cparte,
+              '8': str(cells[idx['B3 ID']] or '').strip(),
+              '10': _ndfop_rate12(cells[idx['TX PARIDADE']]),
+              '11': _ndfop_rate12(cells[idx['TX COTADA']])}
+    line = _fi_build_line(_NDFOP_FI_KEY, 'registro', values, page_url=_NDFOP_FI_PAGE)
+    fields, pos = [], 0
+    for f in _ndfop_fi_block('registro').get('fields', []):
+        w = _fi_width(f.get('format')) or 0
+        if str(_fi_field_src(f, _NDFOP_FI_PAGE).get('source', '')) != 'Fixed':
+            w = max(w, len(values.get(_fi_seq_key(f.get('seq')), '')))
+        fields.append((f.get('field', ''), line[pos:pos + w]))
+        pos += w
+    return fields
+
+
+def _ndfop_conecta_header(participant):
+    """File header (line type 0) via the template's `header` block —
+    participant name per view (JPMORGANBM / INTRAGLAWTONFDO), system date."""
+    return _fi_build_line(_NDFOP_FI_KEY, 'header',
+                          {'4': participant,
+                           '5': datetime.today().strftime('%Y%m%d')},
+                          page_url=_NDFOP_FI_PAGE)
 
 
 def _ndfop_rows_by_id(ref):
@@ -11034,11 +11068,15 @@ def api_ndfop_row_preview():
     if cells is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     lawton = _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON
-    views = [{'title': 'Banco × Lawton' if lawton else 'Banco',
-              'fields': _ndfop_conecta_fields(cells)}]
-    if lawton:
-        views.append({'title': 'Lawton × Banco',
-                      'fields': _ndfop_conecta_fields(cells, swap=True)})
+    try:
+        views = [{'title': 'Banco × Lawton' if lawton else 'Banco',
+                  'fields': _ndfop_conecta_fields(cells)}]
+        if lawton:
+            views.append({'title': 'Lawton × Banco',
+                          'fields': _ndfop_conecta_fields(cells, swap=True)})
+    except ValueError:
+        log.error('[ndf-other-publisher] preview failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': _NDFOP_FI_ERROR}), 500
     return jsonify({'success': True, 'id': rid, 'views': views})
 
 
@@ -11070,16 +11108,19 @@ def api_ndfop_send():
         return jsonify({'success': False,
                         'error': 'TX PARIDADE missing/invalid: ' + ', '.join(bad)}), 400
     banco_lines, lawton_lines = [], []
-    for rid in ids:
-        cells = by_id[rid]
-        banco_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells)))
-        if _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON:
-            lawton_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells, swap=True)))
-    # Headers differ by participant name, TCO_* style: both padded to 20 chars
-    # (JPMORGANBM = 10 + 10 spaces, INTRAGLAWTONFDO = 15 + 5 spaces).
-    today = datetime.today().strftime('%Y%m%d')
-    banco_header = 'TER  00015' + 'JPMORGANBM' + ' ' * 10 + today + '00001'
-    lawton_header = 'TER  00015' + 'INTRAGLAWTONFDO' + ' ' * 5 + today + '00001'
+    try:
+        for rid in ids:
+            cells = by_id[rid]
+            banco_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells)))
+            if _ndfop_acct8(cells[_NDFOP_COLUMNS.index('CONTA CONTRAPARTE')]) == _NDFOP_LAWTON:
+                lawton_lines.append(''.join(v for _, v in _ndfop_conecta_fields(cells, swap=True)))
+        # Headers differ by participant name, TCO_* style: the template's X(20)
+        # pads both (JPMORGANBM = 10 + 10 spaces, INTRAGLAWTONFDO = 15 + 5).
+        banco_header = _ndfop_conecta_header('JPMORGANBM')
+        lawton_header = _ndfop_conecta_header('INTRAGLAWTONFDO')
+    except ValueError:
+        log.error('[ndf-other-publisher] send failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': _NDFOP_FI_ERROR}), 500
     files = []
     try:
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
@@ -14204,12 +14245,25 @@ _MTM_GEN_BOOK_SUFFIX = {'EDG': 'EDG', 'CEM': 'CEM', 'Hybrids': 'HYB'}
 # Fixed counterparty file per book: EDG→Atacama, CEM/Hybrids→Lawton
 # (MtM_ATACAMA-EDG, MtM_LAWTON-CEM, MtM_LAWTON-HYB).
 _MTM_GEN_BOOK_CPTY = {'EDG': 'ATACAMA', 'CEM': 'LAWTON', 'Hybrids': 'LAWTON'}
-_MTM_GEN_SWAP_COLS = ['ID do Sistema', 'ID Tipo de Linha', 'Código da Operação', 'Meu Número',
-                      'Código do Contrato', 'Nome Simplificado Parte', 'Código Conta Parte',
-                      'Sinal Valor MTM', 'Valor MTM', 'Notional Mínimo', 'Notional Máximo',
-                      'Data de Referência MTM']
+# A ESTRUTURA da linha MID (ordem, larguras e os literais Fixed — MID, tipos de
+# linha, 0848 e os Notionals em branco) sai do cadastro do File Interface via
+# _fi_build_line; aqui ficam só os valores calculados, e os rótulos do preview
+# vêm dos `field` do template. Template quebrado → ValueError (nada de arquivo
+# meio montado). O COE (0475) ainda não tem cadastro e segue montado à mão.
+_MTM_FI_KEY = 'mid-informacoes-derivativos'
 _MTM_GEN_COE_COLS  = ['Tipo IF', 'Tipo de Linha', 'Código operação', 'Código do Instrumento Financeiro',
                       'Conta do Emissor', 'Data Referência', 'Valor MTM', 'Débito/Crédito']
+
+
+def _mtm_fi_registro_fields():
+    """Campos do bloco de registro do cadastro MID — rótulos (preview) e
+    larguras (fatiar a linha pronta de volta em células)."""
+    tpl = _fi_tpl_cached(_MTM_FI_KEY)
+    block = next((b for b in (tpl or {}).get('blocks', [])
+                  if b.get('id') == 'registro-emissao'), None)
+    if block is None:
+        raise ValueError('file-interface template missing: {}/registro-emissao'.format(_MTM_FI_KEY))
+    return block.get('fields', [])
 
 
 def _mtm_gen_min_value(v):
@@ -14240,19 +14294,24 @@ def _mtm_cpty_of(row):
     return None
 
 
-def _mtm_swap_fields(cid, party_key, sinal, v, ymd):
-    return {
-        'ID do Sistema': 'MID  ', 'ID Tipo de Linha': '1', 'Código da Operação': '0848',
-        'Meu Número': _mtm_rand_meunum(), 'Código do Contrato': str(cid or ''),
-        'Nome Simplificado Parte': _MTM_GEN_PARTY[party_key],
-        'Código Conta Parte': _MTM_GEN_PARTY_ACCT[party_key],
-        'Sinal Valor MTM': sinal, 'Valor MTM': _mtm_valor_fixed(_mtm_gen_min_value(v), 10),
-        'Notional Mínimo': ' ' * 6, 'Notional Máximo': ' ' * 6, 'Data de Referência MTM': ymd,
-    }
+def _mtm_swap_line(cid, party_key, sinal, v, ymd):
+    """UMA linha de registro (tipo 1): literais Fixed saem do cadastro; os
+    valores calculados entram por seq e são usados verbatim — byte a byte o
+    que sempre foi enviado."""
+    return _fi_build_line(_MTM_FI_KEY, 'registro-emissao', {
+        '4': _mtm_rand_meunum(), '5': str(cid or ''),
+        '6': _MTM_GEN_PARTY[party_key], '7': _MTM_GEN_PARTY_ACCT[party_key],
+        '8': sinal, '9': _mtm_valor_fixed(_mtm_gen_min_value(v), 10),
+        '12': ymd,
+    }, page_url='/mtm-swap')
 
 
 def _mtm_swap_header(party_key, today):
-    return 'MID' + '  ' + '0' + '0848' + _MTM_GEN_PARTY[party_key] + today
+    """Linha de header (tipo 0) — literais e larguras do cadastro; participante
+    e data entram por seq."""
+    return _fi_build_line(_MTM_FI_KEY, 'header',
+                          {'4': _MTM_GEN_PARTY[party_key], '5': today},
+                          page_url='/mtm-swap')
 
 
 def _mtm_coe_header(today):
@@ -14269,19 +14328,19 @@ def _mtm_generate_book(book_key, rows, ymd):
     book_cpty = _MTM_GEN_BOOK_CPTY.get(book_key)     # ATACAMA (EDG) / LAWTON (CEM,HYB)
     today = datetime.now().strftime('%Y%m%d')
     banco = 'MtM_BANCO-' + suffix
-    files = {banco: {'view': 'BANCO', 'cols': _MTM_GEN_SWAP_COLS,
-                     'header': _mtm_swap_header('BANCO', today), 'rows': []}}
+    files = {banco: {'view': 'BANCO',
+                     'header': _mtm_swap_header('BANCO', today), 'lines': []}}
     for row in rows:
         v = _mtm_parse_num(row[7]) or 0.0            # Valor MTM (display) → float
         cid = row[0]
         sinal = '00' if v >= 0 else '01'
-        files[banco]['rows'].append(_mtm_swap_fields(cid, 'BANCO', sinal, v, ymd))
+        files[banco]['lines'].append(_mtm_swap_line(cid, 'BANCO', sinal, v, ymd))
         # Mirror only the rows whose counterparty matches the book's fixed side.
         if book_cpty and _mtm_cpty_of(row) == book_cpty:
             fn = 'MtM_' + book_cpty + '-' + suffix
-            files.setdefault(fn, {'view': book_cpty, 'cols': _MTM_GEN_SWAP_COLS,
-                                  'header': _mtm_swap_header(book_cpty, today), 'rows': []})
-            files[fn]['rows'].append(_mtm_swap_fields(cid, book_cpty, '01' if v >= 0 else '00', v, ymd))
+            files.setdefault(fn, {'view': book_cpty,
+                                  'header': _mtm_swap_header(book_cpty, today), 'lines': []})
+            files[fn]['lines'].append(_mtm_swap_line(cid, book_cpty, '01' if v >= 0 else '00', v, ymd))
     return files
 
 
@@ -14300,6 +14359,8 @@ def _mtm_generate_coe(rows, ymd):
 
 
 def _mtm_file_lines(fdata):
+    if 'lines' in fdata:                             # MID: linha pronta pelo cadastro
+        return [fdata['header']] + fdata['lines']
     return [fdata['header']] + [''.join(r[c] for c in fdata['cols']) for r in fdata['rows']]
 
 
@@ -14323,10 +14384,26 @@ def _mtm_write_gen_files(files, ymd):
 
 
 def _mtm_gen_preview(files):
-    """Preview payload: per file, the parsed columns/rows for the modal table."""
-    return [{'filename': fn + '.txt', 'view': fd['view'], 'cols': fd['cols'],
-             'header': fd['header'], 'rows': [[r[c] for c in fd['cols']] for r in fd['rows']]}
-            for fn, fd in files.items()]
+    """Preview payload: per file, the parsed columns/rows for the modal table.
+    Arquivos MID são fatiados de volta da linha PRONTA pelas larguras do
+    cadastro — os rótulos vêm dos `field` do template, então renomear/editar
+    pela tela muda o preview no próximo duplo clique."""
+    out = []
+    for fn, fd in files.items():
+        if 'lines' in fd:
+            cols, cuts, pos = [], [], 0
+            for f in _mtm_fi_registro_fields():
+                w = _fi_width(f.get('format')) or 0
+                cols.append(f.get('field', ''))
+                cuts.append((pos, pos + w))
+                pos += w
+            rows = [[ln[a:b] for a, b in cuts] for ln in fd['lines']]
+        else:
+            cols = fd['cols']
+            rows = [[r[c] for c in fd['cols']] for r in fd['rows']]
+        out.append({'filename': fn + '.txt', 'view': fd['view'], 'cols': cols,
+                    'header': fd['header'], 'rows': rows})
+    return out
 
 
 @blueprint.route('/api/mtm-swap/send-batch', methods=['POST'])
@@ -14345,6 +14422,10 @@ def api_mtm_send_batch():
         return jsonify({'success': False, 'error': 'No rows in this book to generate.'}), 400
     try:
         files = _mtm_generate_coe(rows, ymd) if lob == 'COE' else _mtm_generate_book(lob, rows, ymd)
+    except ValueError:
+        log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -14379,6 +14460,10 @@ def api_mtm_row_preview():
         return jsonify({'success': False, 'error': 'missing_mtm'}), 400
     try:
         files = _mtm_generate_coe([row], ymd) if lob == 'COE' else _mtm_generate_book(lob, [row], ymd)
+    except ValueError:
+        log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -15370,9 +15455,16 @@ def api_accrual_row_send():
 
 # ── CETIP SWAP "Atualização de PU/Fator" — batch file generation ─────────────
 #  One accrual row → 1/2/4 fixed-width records (per updater × VCP leg). Larger
-#  account = role/curve "01", smaller = "00". Updaters = our own group participants
-#  (prefixes below); an external bank counterparty is not an updater (bank view only).
-#  Records are split by VIEW into ACCRUAL_<VIEW>-<LOB>.txt in the Batch Conecta folder.
+#  account = role/curve "01", smaller = "00" — divergência do manual mantida de
+#  propósito (produção fica como está; documentada no notes do cadastro).
+#  Updaters = our own group participants (prefixes below); an external bank
+#  counterparty is not an updater (bank view only). Records are split by VIEW
+#  into ACCRUAL_<VIEW>-<LOB>.txt in the Batch Conecta folder.
+#  A ESTRUTURA da linha (ordem, larguras e os literais Fixed — SWAP, tipos de
+#  linha, 0015, Tipo de Atualização 00 e o PU em branco de 22 espaços) sai do
+#  cadastro do File Interface via _fi_build_line; aqui ficam só os valores
+#  calculados. Template quebrado → ValueError (nada de arquivo meio montado).
+_ACC_FI_KEY = 'swap-atualizacao-pu-fator'            # cadastro do File Interface
 _ACC_VIEW_BY_PREFIX = {'73760': 'BANCO', '04880': 'BANCO', '85398': 'ATACAMA', '00041': 'LAWTON'}
 _ACC_VIEW_PART_NAME = {'BANCO': 'JPMORGANBM', 'LAWTON': 'INTRAGLAWTONFDO', 'ATACAMA': 'INTRAGATACAMAFDO'}
 _ACC_LOB_TAG = {'CEM': 'CEM', 'EDG': 'EDG', 'Hybrids': 'HYB', 'Commodities': 'COMM'}
@@ -15389,7 +15481,11 @@ def _acc_swap_fator(f):
 
 
 def _acc_swap_header(view, today):
-    return 'SWAP 00015' + _ACC_VIEW_PART_NAME.get(view, view).ljust(20) + today
+    """Linha de header (tipo 0) — literais e larguras do cadastro; participante
+    e data entram por seq."""
+    return _fi_build_line(_ACC_FI_KEY, 'header',
+                          {'4': _ACC_VIEW_PART_NAME.get(view, view), '5': today},
+                          page_url='/accrual-swap')
 
 
 def _acc_swap_records(row, today):
@@ -15418,8 +15514,11 @@ def _acc_swap_records(row, today):
             continue
         for curva, fat in legs:
             meu = ''.join(random.choice('0123456789') for _ in range(10))
-            line = ('SWAP ' + '1' + '0015' + codigo + papel + '00' + curva +
-                    today + meu + (' ' * 22) + _acc_swap_fator(fat))
+            line = _fi_build_line(_ACC_FI_KEY, 'registro',
+                                  {'4': codigo, '5': papel, '7': curva,
+                                   '8': today, '9': meu,
+                                   '11': _acc_swap_fator(fat)},
+                                  page_url='/accrual-swap')
             out.append({'view': view, 'line': line})
     return out
 
@@ -15541,6 +15640,10 @@ def api_accrual_send_batch():
     try:
         generated = _acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'),
                                            evidence_dir=_accrual_source_dir(ymd))
+    except ValueError:
+        log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -15579,6 +15682,10 @@ def api_accrual_validation():
         for lob in ('CEM', 'EDG', 'Hybrids', 'Commodities'):
             if lob in (data.get('tables') or {}):
                 generated.extend(_acc_write_batch_files(data, lob, today, evidence_dir=evidence_dir))
+    except ValueError:
+        log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -19762,11 +19869,145 @@ def _fi_clean_template(key, payload):
     return out, None
 
 
+# ── O cadastro COMANDA previews e geração ────────────────────────────────────
+#  O template do File Interface é a autoridade da ESTRUTURA da linha: ordem dos
+#  campos, largura (format) e os literais dos campos Fixed. O código continua
+#  dono dos VALORES calculados — o gerador entrega strings já formatadas por
+#  seq, usadas VERBATIM, para a troca ser byte a byte idêntica ao que sempre
+#  foi enviado à B3 (as excentricidades históricas ficam no gerador, não no
+#  motor). Editar um Fixed, reordenar ou acrescentar campo pela tela muda o
+#  arquivo e o preview sem tocar em código.
+
+_fi_tpl_cache = {}   # key -> (mtime, dict) — edição na tela vale no request seguinte
+
+
+def _fi_tpl_cached(key):
+    """Template com cache por mtime, como os mappings — geradores e previews
+    leem a cada request e o arquivo só é reparseado quando muda."""
+    path = _fi_path(key)
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _fi_tpl_cache.get(key)
+    if hit and hit[0] == mt:
+        return hit[1]
+    data = _fi_load(key)
+    if data is not None:
+        _fi_tpl_cache[key] = (mt, data)
+    return data
+
+
+def _fi_width(fmt):
+    """Largura em caracteres de um formato do manual: X(n)/9(n) → n,
+    9(a)V9(b) → a+b (o V é decimal implícito, não ocupa posição).
+    None = formato que o motor não sabe medir."""
+    m = re.fullmatch(r'9\((\d+)\)V9\((\d+)\)', str(fmt or ''))
+    if m:
+        return int(m.group(1)) + int(m.group(2))
+    m = re.fullmatch(r'[X9]\((\d+)\)', str(fmt or ''))
+    return int(m.group(1)) if m else None
+
+
+def _fi_field_src(field, page_url=None):
+    """source/source_detail/source_note efetivos: o override da página
+    (source_by_page) vence o texto comum do campo."""
+    ov = (field.get('source_by_page') or {}).get(page_url or '')
+    return ov if ov else field
+
+
+def _fi_seq_key(seq):
+    s = str(seq or '').strip()
+    return s.lstrip('0') or '0' if s.isdigit() else s
+
+
+def _fi_build_line(key, block_id, values, page_url=None):
+    """Monta UMA linha do arquivo a partir do cadastro do File Interface.
+
+    `values` = {seq: string JÁ formatada} dos campos não-Fixed ('4' e '04'
+    valem o mesmo). Fixed sai do cadastro (override por página vence) padded
+    pela largura do format (X → espaços à direita, 9 → zeros à esquerda;
+    Fixed vazio = campo em branco na largura). Valor de gerador é usado
+    verbatim, apenas completado com espaços se vier mais curto que o format —
+    nunca truncado nem reformatado. Posicional concatena; delimitado junta
+    com o separator do template e fecha com token vazio (padrão OPC).
+    Template/bloco ausente levanta ValueError: arquivo para a B3 não pode
+    sair meio montado em silêncio."""
+    tpl = _fi_tpl_cached(key)
+    block = None
+    for b in (tpl or {}).get('blocks', []):
+        if b.get('id') == block_id:
+            block = b
+            break
+    if tpl is None or block is None:
+        raise ValueError('file-interface template missing: {}/{}'.format(key, block_id))
+    positional = tpl.get('file_type') != 'delimited'
+    vals = {_fi_seq_key(k): ('' if v is None else str(v)) for k, v in (values or {}).items()}
+    parts = []
+    for f in block.get('fields', []):
+        src = _fi_field_src(f, page_url)
+        fixed = str(src.get('source', '')) == 'Fixed'
+        val = str(src.get('source_detail', '')) if fixed \
+            else vals.get(_fi_seq_key(f.get('seq')), '')
+        if positional:
+            w = _fi_width(f.get('format'))
+            if w is not None and len(val) < w:
+                if fixed and val and str(f.get('format', '')).startswith('9'):
+                    val = val.rjust(w, '0')
+                else:
+                    val = val.ljust(w)
+        parts.append(val)
+    if positional:
+        return ''.join(parts)
+    sep = tpl.get('separator') or ';'
+    return sep.join(parts) + sep
+
+
 @blueprint.route('/file-interface')
 def file_interface_page():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/file-interface.html', segment='file-interface')
+
+
+@blueprint.route('/api/file-interface/page-spec', methods=['GET'])
+def api_file_interface_page_spec():
+    """Spec dos templates vinculados a UMA página — o que o preview de duplo
+    clique consome: ordem e rótulo dos campos, largura e os literais Fixed já
+    resolvidos para aquela página. Editar o template pela tela muda o preview
+    no próximo duplo clique, sem tocar em código."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    url = (request.args.get('url') or '').strip()
+    out = []
+    try:
+        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+    except OSError:
+        names = []
+    for fn in names:
+        if not fn.endswith('.json'):
+            continue
+        tpl = _fi_tpl_cached(fn[:-5])
+        if not tpl or not any(p.get('url') == url for p in tpl.get('linked_pages', [])):
+            continue
+        blocks = []
+        for b in tpl.get('blocks', []):
+            fields = []
+            for f in b.get('fields', []):
+                src = _fi_field_src(f, url)
+                fields.append({'seq': f.get('seq', ''), 'field': f.get('field', ''),
+                               'format': f.get('format', ''),
+                               'width': _fi_width(f.get('format')),
+                               'content': f.get('content', ''),
+                               'source': src.get('source', ''),
+                               'source_detail': src.get('source_detail', ''),
+                               'source_note': src.get('source_note', '')})
+            blocks.append({'id': b.get('id', ''), 'title': b.get('title', ''),
+                           'note': b.get('note', ''), 'fields': fields})
+        out.append({'key': tpl.get('key'), 'name': tpl.get('name'),
+                    'file_type': tpl.get('file_type'),
+                    'separator': tpl.get('separator'), 'blocks': blocks})
+    return jsonify({'success': True, 'url': url, 'templates': out})
 
 
 @blueprint.route('/api/file-interface/options', methods=['GET'])
@@ -20413,11 +20654,15 @@ def api_fxo_import_xlsx():
 def api_fxo_send_conecta():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    """B3 Conecta file for FXO. Same layout as opt-commodities with the FXO tweaks:
-    Tipo Indicador (f[2])='4', Tipo de Cotação (f[17])='2',
-    'Data de fixing do ativo subjacente' (f[19]) = last fixing date when VANILLA (blank ASIAN),
-    'Data de fixing da moeda do ativo subjacente' (f[20]) always blank.
-    Asian fixing-date count uses the ANBIMA calendar (FXHolidaySchedule)."""
+    """B3 Conecta file for FXO. Same layout as opt-commodities with the FXO tweaks
+    (all in the File Interface template 'opcoes-flexiveis-vcp', page overrides):
+    Tipo Indicador (seq 3)='4', Tipo de Cotação (seq 18)='1' (an older docstring
+    said '2', but production always wrote '1' — the cadastro documents the real byte),
+    'Data de fixing do ativo subjacente' (seq 20) = last fixing date when VANILLA
+    (blank ASIAN), 'Data de fixing da moeda do ativo subjacente' (seq 21) always
+    blank. Asian fixing-date count uses the ANBIMA calendar (FXHolidaySchedule).
+    A montagem das linhas é do cadastro (_fi_build_line): ordem, larguras e
+    literais Fixed saem do template; aqui ficam só os valores calculados."""
     from decimal import Decimal
     import datetime as _dt
     import json as _json
@@ -20426,6 +20671,14 @@ def api_fxo_send_conecta():
     deals = data.get('deals', [])
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+
+    # O cadastro é a autoridade da linha: sem template (ou sem os blocos), o
+    # arquivo NÃO sai meio montado — erro claro pedindo o /file-interface.
+    _tpl = _fi_tpl_cached('opcoes-flexiveis-vcp')
+    if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
+            b.get('id') for b in _tpl.get('blocks', [])}:
+        return jsonify({'ok': False, 'error': 'File Interface template missing/invalid '
+                                              '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
 
     today = _dt.datetime.today().strftime('%Y%m%d')
 
@@ -20536,63 +20789,56 @@ def api_fxo_send_conecta():
             except Exception:
                 pass
 
-        f = [''] * 63
-        f[0]  = 'OPC  00002'
-        f[1]  = '1'
-        f[2]  = '4'                                   # FXO: Tipo Indicador
-        f[3]  = _cli(client)
-        f[4]  = dir_code
-        f[6]  = _cpty(client)
-        f[7]  = _taxid(client, taxid)
-        f[8]  = opt
-        f[9]  = _date(deal.get('TradeDate', ''))
-        f[10] = _date(deal.get('SettlementDate', ''))
-        f[11] = _sh(deal.get('UnderlyingAsset', ''))
-        f[12] = _qty(deal.get('TotalNotional', ''))
-        f[13] = _num(deal.get('Strike', ''))
-        f[14] = '1'
-        f[16] = '2'
-        f[17] = '1'                                   # FXO: Tipo de Cotação
-        f[18] = 'S' if brl else ''
-        f[19] = fix_end if vanilla else ''            # FXO: data fixing ativo subjacente = last fixing (VANILLA)
-        f[20] = ''                                    # FXO: data fixing moeda sempre em branco
-        f[23] = str(random.randint(1000000000, 9999999999))
-        f[24] = _sh(deal.get('Deal', ''))
-        f[26] = _num(deal.get('PremiumPerUnit', ''))
+        # Só os campos não-Fixed, por seq do cadastro; os literais ('OPC  00002',
+        # Tipo Indicador '4', Tipo de Cotação '1', Tipo de Exercício '2'…)
+        # saem do template — byte a byte o que sempre foi enviado.
+        trade_date = _date(deal.get('TradeDate', ''))
         _spot_date = _date(deal.get('SpotDate', ''))
         _is_bank_or_lawton = ('LAWTON' in client.upper() or 'BANCO J.P MORGAN' in client.upper()
                               or 'JP MORGAN' in client.upper())
-        if _is_bank_or_lawton:
-            f[28] = '2' if f[9] == _spot_date else '3'
-        else:
-            f[28] = '1'
-        f[32] = _spot_date
-
-        if vanilla:
-            f[47] = ''
-            f[48] = '0'
-        else:
-            f[47] = '1'
-            f[48] = str(_biz) if _biz else ''
+        vals = {
+            '4':  _cli(client),
+            '5':  dir_code,
+            '7':  _cpty(client),
+            '8':  _taxid(client, taxid),
+            '9':  opt,
+            '10': trade_date,
+            '11': _date(deal.get('SettlementDate', '')),
+            '12': _sh(deal.get('UnderlyingAsset', '')),
+            '13': _qty(deal.get('TotalNotional', '')),
+            '14': _num(deal.get('Strike', '')),
+            '19': 'S' if brl else '',
+            '20': fix_end if vanilla else '',         # FXO: fixing do ativo = last fixing (VANILLA)
+            '24': str(random.randint(1000000000, 9999999999)),
+            '25': _sh(deal.get('Deal', '')),
+            '27': _num(deal.get('PremiumPerUnit', '')),
+            '29': ('2' if trade_date == _spot_date else '3') if _is_bank_or_lawton else '1',
+            '33': _spot_date,
+            '48': '' if vanilla else '1',
+            '49': '0' if vanilla else (str(_biz) if _biz else ''),
+        }
 
         deal_count += 1
-        all_lines.append(';'.join(f))
+        all_lines.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
+                                        page_url='/new_deals-opt-fxo'))
 
         # Asian — one fixing line (line type 2) per business day in the window
         if asian and fix_start and fix_end:
             try:
                 _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
                 _e2 = _dt.datetime.strptime(fix_end, '%Y%m%d').date()
-                _cur2 = _s2
-                while _cur2 <= _e2:
-                    if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                        _d = _cur2.strftime('%Y%m%d')
-                        all_lines.append('OPC  00002;2;{};;;'.format(_d))
-                    _cur2 += _dt.timedelta(days=1)
             except Exception:
-                pass
+                _s2 = _e2 = None
+            _cur2 = _s2
+            while _s2 and _cur2 <= _e2:
+                if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
+                    all_lines.append(_fi_build_line(
+                        'opcoes-flexiveis-vcp', 'registro-media-asiatica',
+                        {'3': _cur2.strftime('%Y%m%d')}, page_url='/new_deals-opt-fxo'))
+                _cur2 += _dt.timedelta(days=1)
 
-    header  = 'OPC  00002;0;JPMORGANBM;{};00002;'.format(today)
+    header  = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
+                             page_url='/new_deals-opt-fxo')
     content = '\n'.join([header] + all_lines)
 
     try:
@@ -22505,19 +22751,20 @@ def api_ndf_bulk_patch_deal_cache():
     return jsonify({"success": True, "updated": updated})
 
 
-@blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
-def api_ndf_send_conecta():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+# A montagem final das linhas TER passou a sair do cadastro do File Interface
+# (template termo-multiclasses): a ordem dos campos e os literais Fixed vêm do
+# JSON, com os overrides da página /new_deals-ndf-commodities resolvidos pelo
+# motor (_fi_build_line). Os valores continuam calculados aqui, já na largura
+# exata de sempre — o motor não reformata nada. Template/bloco ausente vira
+# erro claro no endpoint, nunca arquivo montado do jeito velho em silêncio.
+def _ndf_comm_ter_lines(deal):
+    """Linhas TER de UM deal de NDF Commodities: a tipo 1 (Dados Fixos) e,
+    para asiático, as tipo 2 (datas de verificação da janela de fixing).
+    Devolve (is_jpmorgan, [linhas]) — is_jpmorgan decide o arquivo
+    (TCO_LAWTON × TCO_BANCO). Template/bloco ausente levanta ValueError."""
     from decimal import Decimal
     import datetime as _dt
-
-    data  = request.get_json(silent=True) or {}
-    deals = data.get('deals', [])
-    if not deals:
-        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
-
-    today = _dt.datetime.today().strftime('%Y%m%d')
+    import json as _json
 
     def _sh(v):
         return re.sub(r'<[^>]+>', '', str(v or '')).strip()
@@ -22532,20 +22779,6 @@ def api_ndf_send_conecta():
             except ValueError:
                 continue
         return ''
-
-    def _num(val, div100=False):
-        val = _sh(str(val or ''))
-        if not val:
-            return ''
-        clean = val.replace(',', '')
-        try:
-            d = Decimal(clean)
-            if div100:
-                d = d / Decimal('100')
-            s = format(d.normalize(), 'f')
-            return s.replace('.', ',')
-        except Exception:
-            return clean.replace('.', ',')
 
     def _cpty(client):
         c = client.upper()
@@ -22583,197 +22816,180 @@ def api_ndf_send_conecta():
         except Exception:
             return '0' * (int_digits + dec_digits)
 
-    import json as _json
+    client           = _sh(deal.get('Client', ''))
+    taxid            = _sh(deal.get('TaxID', ''))
+    direction        = _sh(deal.get('Direction', ''))
+    trade_type       = _sh(deal.get('TradeType', '')).upper()
+    strike_ccy       = _sh(deal.get('StrikeCurrency', '')).upper()
+    underlying       = _sh(deal.get('UnderlyingAsset', '')).upper()
+    instrument       = _sh(deal.get('Instrument', '')).upper()
+    _cu              = client.upper()
+    is_jpmorgan      = bool(re.search(r'J\.?P\.?\s*MORGAN', _cu))
+    part_account     = '00041007' if is_jpmorgan else '73760009'
+    fx_holiday_sched = _sh(deal.get('FXHolidaySchedule', ''))
+    qic              = _sh(deal.get('QuotedInCents', 'NO')).upper() == 'YES'
+    asian            = trade_type == 'ASIAN'
+    vanilla          = trade_type == 'VANILLA'
+    brl              = strike_ccy == 'BRL'
+    is_tas           = instrument.startswith('TAS')
+
+    dir_code   = '0' if direction.upper() == 'BUY' else '1'
+    fix_start  = _date(deal.get('FixingStartDate', ''))
+    fix_end    = _date(deal.get('FixingEndDate', ''))
+    fxconv     = _date(deal.get('FXConvDate', ''))
+    trade_date = _date(deal.get('TradeDate', ''))
+    settl_date = _date(deal.get('SettlementDate', ''))
+    deal_id    = _sh(deal.get('Deal', ''))
+    notional   = _sh(deal.get('TotalNotional', ''))
+    # Quoted in Cents divide por 100 SEMPRE que o ativo é cotado em cents —
+    # a moeda do strike não entra na conta. A regra é do ativo (Fator
+    # Conversão 0,01 no Subjacente), não do par de moedas, então excetuar o
+    # BRL fazia o mesmo ativo sair com strike 100× diferente conforme a
+    # moeda do deal. §172
+    strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)
+
+    # Notional: integer right-justified to 14 chars + '00' = 16 chars total
+    try:
+        qty_int = int(round(float(notional.replace(',', ''))))
+        qty_str = str(qty_int).rjust(14, '0') + '00'
+    except Exception:
+        qty_str = '0' * 16
+
+    # Cadastro (Commodities × B3): coluna vazia devolve o 'F'/'A' e o
+    # 340/358 de sempre — ver `_b3_quote_cfg`. §177
+    _q           = _b3_quote_cfg(underlying)
+    tipo_cotacao = _q['ndf']
+    fonte_info   = _q['source']
+
+    fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
+    tipo_media = 'N' if fix_single else 'A'
+
+    _deal_holidays = set()
+    if not vanilla and fx_holiday_sched:
+        # Strip anything but word chars so a crafted FXHolidaySchedule
+        # (e.g. '../../secret') can't escape the data dir (path traversal).
+        _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
+        holiday_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..', 'static', 'data', f'{_sched_file}.json'
+        ) if _sched_file else None
+        try:
+            with open(holiday_path, encoding='utf-8') as _hf:
+                _raw = _json.load(_hf)
+            _deal_holidays = set(
+                item['date'] if isinstance(item, dict) else item
+                for item in _raw
+            )
+        except Exception:
+            pass
+
+    biz_count = 0
+    if not vanilla and fix_start and fix_end:
+        try:
+            _s = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
+            _e = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
+            _cur = _s
+            while _cur <= _e:
+                if _cur.weekday() < 5 and _cur.strftime('%Y-%m-%d') not in _deal_holidays:
+                    biz_count += 1
+                _cur += _dt.timedelta(days=1)
+        except Exception:
+            pass
+
+    if vanilla:
+        biz_str = '000'
+    else:
+        biz_str = str(biz_count).zfill(3)
+    my_number = str(random.randint(1000000000, 9999999999))
+
+    # Posicional (largura fixa, sem delimitador) — layout TER do cadastro.
+    # Só os campos não-Fixed entram em `values` (seq do template); os
+    # literais e os brancos saem do JSON.
+    values = {
+        '4': _pos(my_number, 10),                     # Nº Controle Interno
+        '5': _pos(part_account, 8),                   # Lançamento do Participante
+        '6': _pos(dir_code, 1),                       # Papel
+        '8': _pos(_cpty(client), 8),                  # Contraparte
+        '9': _pos(_taxid(client, taxid), 14),         # CPF/CNPJ Contraparte
+        '12': _pos(' ' + fonte_info, 4),              # Fonte de Informação
+        '16': _pos(qty_str, 16),                      # Valor Base / Quantidade
+        '17': _pos(underlying, 10, 'right'),          # Código do Ativo Subjacente
+        '18': _pos(strike_str, 20),                   # Taxa a Termo (R$/Moeda)
+        '19': _pos(fix_single, 8),                    # Data de Fixing do Ativo Subjacente
+        '20': _pos(trade_date, 8),                    # Data de Operação
+        '21': _pos(settl_date, 8),                    # Data de Vencimento
+        '23': _pos(tipo_cotacao, 1),                  # Tipo de Cotação
+        '24': _pos('' if brl else fxconv, 8),         # Data de Fixing da Moeda
+        '35': _pos('S' if is_tas else 'N', 1),        # Termo a Termo
+        '36': _pos(trade_date if is_tas else '', 8),  # Data de Fixação
+        '37': _pos('V' if is_tas else '', 1),         # Forma de Atualização
+        '55': _pos('S' if brl else '', 1),            # Taxa a Termo em Reais
+        '57': _pos(deal_id, 14, 'right'),             # Código Identificador
+        '58': _pos(tipo_media, 1),                    # Tipo Média Asiático
+        '59': _pos(biz_str, 3),                       # Quantidade de Datas de Verificação
+    }
+    lines = [_fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
+                            page_url='/new_deals-ndf-commodities')]
+
+    # Asian fixing date rows (line type 2) — também pelo motor. O parse das
+    # datas fica num try próprio: um ValueError do template tem de SUBIR até
+    # o endpoint, não ser engolido junto com uma data malformada.
+    if asian and fix_start and fix_end:
+        try:
+            _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
+            _e2 = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
+        except ValueError:
+            _s2 = _e2 = None
+        _cur2 = _s2
+        while _cur2 is not None and _cur2 <= _e2:
+            if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
+                _d  = _cur2.strftime('%Y%m%d')
+                _fx = _d if brl else ''
+                lines.append(_fi_build_line(
+                    _TER_FI_KEY, 'registro-dados-variaveis',
+                    {'4': _pos(_d, 8),                    # Data Verificação
+                     '6': _pos(_fx, 8) + _pos('', 10)},   # Data de Verificação da Moeda + filler
+                    page_url='/new_deals-ndf-commodities'))
+            _cur2 += _dt.timedelta(days=1)
+    return is_jpmorgan, lines
+
+
+@blueprint.route('/api/new-deals/ndf-commodities/send-conecta', methods=['POST'])
+def api_ndf_send_conecta():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    import datetime as _dt
+
+    data  = request.get_json(silent=True) or {}
+    deals = data.get('deals', [])
+    if not deals:
+        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+
+    today = _dt.datetime.today().strftime('%Y%m%d')
+
     lawton_lines = []
     banco_lines  = []
     lawton_count = 0
     banco_count  = 0
 
-    for deal in deals:
-        client           = _sh(deal.get('Client', ''))
-        taxid            = _sh(deal.get('TaxID', ''))
-        direction        = _sh(deal.get('Direction', ''))
-        trade_type       = _sh(deal.get('TradeType', '')).upper()
-        strike_ccy       = _sh(deal.get('StrikeCurrency', '')).upper()
-        underlying       = _sh(deal.get('UnderlyingAsset', '')).upper()
-        instrument       = _sh(deal.get('Instrument', '')).upper()
-        _cu              = client.upper()
-        is_jpmorgan      = bool(re.search(r'J\.?P\.?\s*MORGAN', _cu))
-        part_account     = '00041007' if is_jpmorgan else '73760009'
-        fx_holiday_sched = _sh(deal.get('FXHolidaySchedule', ''))
-        qic              = _sh(deal.get('QuotedInCents', 'NO')).upper() == 'YES'
-        asian            = trade_type == 'ASIAN'
-        vanilla          = trade_type == 'VANILLA'
-        brl              = strike_ccy == 'BRL'
-        is_tas           = instrument.startswith('TAS')
-
-        dir_code   = '0' if direction.upper() == 'BUY' else '1'
-        fix_start  = _date(deal.get('FixingStartDate', ''))
-        fix_end    = _date(deal.get('FixingEndDate', ''))
-        fxconv     = _date(deal.get('FXConvDate', ''))
-        trade_date = _date(deal.get('TradeDate', ''))
-        settl_date = _date(deal.get('SettlementDate', ''))
-        deal_id    = _sh(deal.get('Deal', ''))
-        notional   = _sh(deal.get('TotalNotional', ''))
-        # Quoted in Cents divide por 100 SEMPRE que o ativo é cotado em cents —
-        # a moeda do strike não entra na conta. A regra é do ativo (Fator
-        # Conversão 0,01 no Subjacente), não do par de moedas, então excetuar o
-        # BRL fazia o mesmo ativo sair com strike 100× diferente conforme a
-        # moeda do deal. §172
-        strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)
-
-        # Notional: integer right-justified to 14 chars + '00' = 16 chars total
-        try:
-            qty_int = int(round(float(notional.replace(',', ''))))
-            qty_str = str(qty_int).rjust(14, '0') + '00'
-        except Exception:
-            qty_str = '0' * 16
-
-        # Cadastro (Commodities × B3): coluna vazia devolve o 'F'/'A' e o
-        # 340/358 de sempre — ver `_b3_quote_cfg`. §177
-        _q           = _b3_quote_cfg(underlying)
-        tipo_cotacao = _q['ndf']
-        fonte_info   = _q['source']
-
-        fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
-        tipo_media = 'N' if fix_single else 'A'
-
-        _deal_holidays = set()
-        if not vanilla and fx_holiday_sched:
-            # Strip anything but word chars so a crafted FXHolidaySchedule
-            # (e.g. '../../secret') can't escape the data dir (path traversal).
-            _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
-            holiday_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                '..', 'static', 'data', f'{_sched_file}.json'
-            ) if _sched_file else None
-            try:
-                with open(holiday_path, encoding='utf-8') as _hf:
-                    _raw = _json.load(_hf)
-                _deal_holidays = set(
-                    item['date'] if isinstance(item, dict) else item
-                    for item in _raw
-                )
-            except Exception:
-                pass
-
-        biz_count = 0
-        if not vanilla and fix_start and fix_end:
-            try:
-                _s = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
-                _e = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
-                _cur = _s
-                while _cur <= _e:
-                    if _cur.weekday() < 5 and _cur.strftime('%Y-%m-%d') not in _deal_holidays:
-                        biz_count += 1
-                    _cur += _dt.timedelta(days=1)
-            except Exception:
-                pass
-
-        if vanilla:
-            biz_str = '000'
-        else:
-            biz_str = str(biz_count).zfill(3)
-        my_number = str(random.randint(1000000000, 9999999999))
-
-        # Positional (fixed-width, no delimiter) — TER format
-        line = (
-            _pos('TER  ', 5)                        +  # ID do Sistema
-            _pos('1', 1)                             +  # ID Tipo de Linha
-            _pos('0001', 4)                          +  # Código Operação
-            _pos(my_number, 10)                      +  # Meu Número
-            _pos(part_account, 8)                    +  # Lançamento do Participante
-            _pos(dir_code, 1)                        +  # Papel
-            _pos('', 14)                             +  # CPF/CNPJ Cliente Parte
-            _pos(_cpty(client), 8)                   +  # Contraparte
-            _pos(_taxid(client, taxid), 14)          +  # CPF/CNPJ Contraparte
-            _pos('S', 1)                             +  # Contrato Global
-            _pos('4', 20, 'right')                   +  # Classe do Ativo Subjacente
-            _pos(' ' + fonte_info, 4)                +  # Fonte de Informação
-            _pos('', 3)                              +  # Moeda de Referência
-            _pos('', 3)                              +  # Moeda Cotada
-            _pos('', 1)                              +  # Cotação para o Vencimento
-            _pos(qty_str, 16)                        +  # Valor Base / Quantidade
-            _pos(underlying, 10, 'right')            +  # Código do Ativo Subjacente
-            _pos(strike_str, 20)                     +  # Taxa a Termo (R$/Moeda)
-            _pos(fix_single, 8)                      +  # Data de Fixing do Ativo Subjacente
-            _pos(trade_date, 8)                      +  # Data de Operação
-            _pos(settl_date, 8)                      +  # Data de Vencimento
-            _pos('', 1)                              +  # Boletim
-            _pos(tipo_cotacao, 1)                    +  # Tipo de Cotação
-            _pos('' if brl else fxconv, 8)           +  # Data de Fixing da Moeda
-            _pos('', 1)                              +  # Cross Rate na Avaliação?
-            _pos('', 1)                              +  # Fonte de Consulta
-            _pos('', 8)                              +  # Tela ou Função de Consulta
-            _pos('', 8)                              +  # Praça de Negociação
-            _pos('', 8)                              +  # Horário de Consulta
-            _pos('', 1)                              +  # Cotação Taxa de Câmbio R$/USD
-            _pos('', 1)                              +  # Cotação Paridade
-            _pos('', 8)                              +  # Data de Avaliação
-            _pos('', 10)                             +  # Código da Paridade Cross
-            _pos('', 8)                              +  # Data de Fixing da Paridade Cross
-            _pos('S' if is_tas else 'N', 1)          +  # Termo a Termo
-            _pos(trade_date if is_tas else '', 8)    +  # Data de Fixação
-            _pos('V' if is_tas else '', 1)           +  # Forma de Atualização
-            _pos('', 12)                             +  # Valor / Percentual Negociado
-            _pos('', 1)                              +  # Cotação para Fixing
-            _pos('N', 1)                             +  # Atualizar Valor Base?
-            _pos('', 12)                             +  # Cotação Inicial
-            _pos('N', 1)                             +  # Ajustar Taxa
-            _pos('', 1)                              +  # Responsável pelo Ajuste da Taxa
-            _pos('', 8)                              +  # Data Inicial para Ajuste da Taxa
-            _pos('', 8)                              +  # Data Final para Ajuste da Taxa
-            _pos('', 1)                              +  # Limites
-            _pos('', 14)                             +  # Superior (Paridade)
-            _pos('', 14)                             +  # Inferior (Paridade)
-            _pos('', 8)                              +  # Data de Liquidação do Prêmio
-            _pos('', 1)                              +  # Prêmio a ser Pago Pelo
-            _pos('', 16)                             +  # Valor do Prêmio
-            _pos('', 1)                              +  # Modalidade de Liquidação
-            _pos('', 1)                              +  # Prêmio em Moeda Estrangeira
-            _pos('', 8)                              +  # Data de Fixing da Moeda do Prêmio
-            _pos('S' if brl else '', 1)              +  # Taxa a Termo em Reais
-            _pos('', 280)                            +  # Observação
-            _pos(deal_id, 14, 'right')               +  # Código Identificador
-            _pos(tipo_media, 1)                      +  # Tipo Média Asiático
-            _pos(biz_str, 3)                            # Quantidade de Datas de Verificação
-        )
-        dest = lawton_lines if is_jpmorgan else banco_lines
-        dest.append(line)
-        if is_jpmorgan:
-            lawton_count += 1
-        else:
-            banco_count += 1
-
-        # Asian fixing date rows (line type 2)
-        if asian and fix_start and fix_end:
-            try:
-                _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
-                _e2 = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
-                _cur2 = _s2
-                while _cur2 <= _e2:
-                    if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                        _d  = _cur2.strftime('%Y%m%d')
-                        _fx = _d if brl else ''
-                        fix_line = (
-                            _pos('TER  ', 5)   +  # ID do Sistema
-                            _pos('2', 1)        +  # ID Tipo de Linha
-                            _pos('0001', 4)     +  # Código Operação
-                            _pos(_d, 8)         +  # Data de Fixing do Ativo Subjacente
-                            _pos('0' * 16, 16)  +  # Quantidade de Referência
-                            _pos(_fx, 8)        +  # Data de Fixing da Moeda
-                            _pos('', 10)           # Padding
-                        )
-                        dest.append(fix_line)
-                    _cur2 += _dt.timedelta(days=1)
-            except Exception:
-                pass
-
-    # Headers differ by counterparty type; trailer code is 00003
-    lawton_header = (_pos('TER  ', 5) + _pos('0', 1) + _pos('0001', 4) +
-                     'INTRAGLAWTONFDO' + '     ' + today + '00003')
-    banco_header  = (_pos('TER  ', 5) + _pos('0', 1) + _pos('0001', 4) +
-                     'JPMORGANBM' + '          ' + today + '00003')
+    try:
+        for deal in deals:
+            is_jpmorgan, ter_lines = _ndf_comm_ter_lines(deal)
+            if is_jpmorgan:
+                lawton_lines.extend(ter_lines)
+                lawton_count += 1
+            else:
+                banco_lines.extend(ter_lines)
+                banco_count += 1
+        # Headers differ by counterparty type; layout version is 00003 — tudo
+        # do bloco `header` do cadastro, só o participante e a data são daqui.
+        lawton_header = _ter_file_header('INTRAGLAWTONFDO', today,
+                                         '/new_deals-ndf-commodities')
+        banco_header  = _ter_file_header('JPMORGANBM', today,
+                                         '/new_deals-ndf-commodities')
+    except ValueError as exc:
+        log.error('[NDF COMM] send-conecta sem template: %s', exc)
+        return jsonify({'ok': False, 'error': _TER_FI_ERROR}), 500
 
     output_dir = CONECTA_NEW_PATH
     generated  = []
@@ -23555,6 +23771,16 @@ def api_send_conecta():
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
+    # O cadastro do File Interface (opcoes-flexiveis-vcp) comanda a montagem
+    # das linhas — ordem, larguras e literais Fixed saem do template; aqui
+    # ficam só os valores calculados. Sem template/blocos, erro claro: nunca
+    # arquivo para a B3 meio montado em silêncio.
+    _tpl = _fi_tpl_cached('opcoes-flexiveis-vcp')
+    if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
+            b.get('id') for b in _tpl.get('blocks', [])}:
+        return jsonify({'ok': False, 'error': 'File Interface template missing/invalid '
+                                              '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
+
     today = _dt.datetime.today().strftime('%Y%m%d')
 
     def _sh(v):
@@ -23674,64 +23900,60 @@ def api_send_conecta():
             except Exception:
                 pass
 
-        f = [''] * 63
-        f[0]  = 'OPC  00002'
-        f[1]  = '1'
-        f[2]  = '3'
-        f[3]  = _cli(client)
-        f[4]  = dir_code
-        f[6]  = _cpty(client)
-        f[7]  = _taxid(client, taxid)
-        f[8]  = opt
-        f[9]  = _date(deal.get('TradeDate', ''))
-        f[10] = _date(deal.get('SettlementDate', ''))
-        f[11] = _sh(deal.get('UnderlyingAsset', ''))
-        f[12] = _qty(deal.get('TotalNotional', ''))
-        f[13] = _num(deal.get('Strike', ''), div100=qic)
-        f[14] = '1'
-        f[16] = '2'
-        # Tipo de Cotação: cadastro (Commodities × B3 › Tipo de Cotação —
-        # Opção). Sem linha, ou coluna vazia, sai o '5' de sempre. §177
-        f[17] = _b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt']
-        f[18] = 'S' if brl else ''
-        f[19] = fix_start if vanilla else ''
-        f[20] = fxconv if (not brl or vanilla) else ''
-        f[23] = str(random.randint(1000000000, 9999999999))
-        f[24] = _sh(deal.get('Deal', ''))
-        f[26] = _num(deal.get('PremiumPerUnit', ''), div100=qic)
+        # Só os campos não-Fixed, por seq do cadastro; os literais ('OPC  00002',
+        # Tipo Indicador '3', Tipo de Exercício '2'…) saem do template —
+        # byte a byte o que sempre foi enviado.
+        trade_date = _date(deal.get('TradeDate', ''))
         _spot_date = _date(deal.get('SpotDate', ''))
         _is_bank_or_lawton = 'LAWTON' in client.upper() or 'BANCO J.P MORGAN' in client.upper() or 'JP MORGAN' in client.upper()
-        if _is_bank_or_lawton:
-            f[28] = '2' if f[9] == _spot_date else '3'
-        else:
-            f[28] = '1'
-        f[32] = _spot_date
-
-        if vanilla:
-            f[47] = ''
-            f[48] = '0'
-        else:
-            f[47] = '1'
-            f[48] = str(_biz) if _biz else ''
+        vals = {
+            '4':  _cli(client),
+            '5':  dir_code,
+            '7':  _cpty(client),
+            '8':  _taxid(client, taxid),
+            '9':  opt,
+            '10': trade_date,
+            '11': _date(deal.get('SettlementDate', '')),
+            '12': _sh(deal.get('UnderlyingAsset', '')),
+            '13': _qty(deal.get('TotalNotional', '')),
+            '14': _num(deal.get('Strike', ''), div100=qic),
+            # Tipo de Cotação: cadastro (Commodities × B3 › Tipo de Cotação —
+            # Opção). Sem linha, ou coluna vazia, sai o '5' de sempre. §177
+            '18': _b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt'],
+            '19': 'S' if brl else '',
+            '20': fix_start if vanilla else '',
+            '21': fxconv if (not brl or vanilla) else '',
+            '24': str(random.randint(1000000000, 9999999999)),
+            '25': _sh(deal.get('Deal', '')),
+            '27': _num(deal.get('PremiumPerUnit', ''), div100=qic),
+            '29': ('2' if trade_date == _spot_date else '3') if _is_bank_or_lawton else '1',
+            '33': _spot_date,
+            '48': '' if vanilla else '1',
+            '49': '0' if vanilla else (str(_biz) if _biz else ''),
+        }
 
         deal_count += 1
-        all_lines.append(';'.join(f))
+        all_lines.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
+                                        page_url='/new_deals-opt-commodities'))
 
         if asian and fix_start and fix_end:
             try:
                 _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
                 _e2 = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
-                _cur2 = _s2
-                while _cur2 <= _e2:
-                    if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                        _d = _cur2.strftime('%Y%m%d')
-                        _fx = _d if brl else ''
-                        all_lines.append(f'OPC  00002;2;{_d};{_fx};;')
-                    _cur2 += _dt.timedelta(days=1)
             except Exception:
-                pass
+                _s2 = _e2 = None
+            _cur2 = _s2
+            while _s2 and _cur2 <= _e2:
+                if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
+                    _d = _cur2.strftime('%Y%m%d')
+                    all_lines.append(_fi_build_line(
+                        'opcoes-flexiveis-vcp', 'registro-media-asiatica',
+                        {'3': _d, '4': _d if brl else ''},
+                        page_url='/new_deals-opt-commodities'))
+                _cur2 += _dt.timedelta(days=1)
 
-    header  = f'OPC  00002;0;JPMORGANBM;{today};00002;'
+    header  = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
+                             page_url='/new_deals-opt-commodities')
     content = '\n'.join([header] + all_lines)
 
     output_dir = CONECTA_NEW_PATH
@@ -28197,21 +28419,37 @@ def _anbima_add_biz(start_dt, n):
     return cur
 
 
-@blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
-def api_generic_nd_send_conecta(product):
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    if product not in ('fwd-start', 'other-publishers'):
-        return jsonify({'ok': False, 'error': 'send-conecta not available for this product'}), 404
-    is_fwd = product == 'fwd-start'
-    prefix = 'FWDSTART' if is_fwd else 'OTHERPUBLISHER'
+# A montagem final das linhas passou a sair do cadastro do File Interface
+# (template termo-multiclasses): a ordem dos campos e os literais Fixed vêm
+# do JSON, com os overrides por página (page_url) resolvidos pelo motor. Os
+# valores calculados continuam aqui, já na largura exata de sempre — o motor
+# não reformata nada. Template/bloco ausente vira erro claro no endpoint,
+# nunca arquivo montado do jeito velho em silêncio.
+_TER_FI_KEY = 'termo-multiclasses'
+_TER_FI_ERROR = 'File Interface template missing/invalid — check /file-interface'
+_TER_PARTICIPANT_NAME = {
+    'BANCO': 'JPMORGANBM',
+    'LAWTON': 'INTRAGLAWTONFDO',
+    'MGT': 'MORGANBC',
+}
 
-    deals = (request.get_json(silent=True) or {}).get('deals', [])
-    if not deals:
-        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
-    today = datetime.today().strftime('%Y%m%d')
+def _ter_file_header(participant, today, page_url):
+    """Header (linha tipo 0) de um arquivo TER, pelo bloco `header` do
+    cadastro — só o Nome Simplificado do participante e a data são do
+    gerador; 'TER', tipo de linha, código de operação e versão de layout
+    saem do JSON."""
+    return _fi_build_line(_TER_FI_KEY, 'header',
+                          {'4': participant, '5': today}, page_url=page_url)
 
+
+def _generic_ndf_ter_line(deal, is_fwd):
+    """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
+    Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
+    None para deal cancelado. Os valores continuam calculados aqui, na
+    largura exata de sempre; a ordem dos campos e os literais Fixed saem do
+    cadastro (page_url decide os overrides de cada página). Template/bloco
+    ausente levanta ValueError."""
     def _s(v):
         return re.sub(r'<[^>]+>', '', str(v or '')).strip()
 
@@ -28243,206 +28481,194 @@ def api_generic_nd_send_conecta(product):
     def _is_lawton(c):
         return 'LAWTON' in c.upper()
 
+    if str(deal.get('Status', '') or '').strip() == 'Canceled':
+        return None                     # cancelado via API: fora dos arquivos
+    client   = _s(deal.get('Client', ''))
+    le       = _s(deal.get('LE', '')).upper()
+    deal_id  = _s(deal.get('Deal', ''))
+    publisher = _s(deal.get('Publisher', ''))
+    qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
+    oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
+    # O flag de asiático NÃO vem do TradeType: ele é derivado das datas de
+    # fixing logo abaixo (asian_fix), para o arquivo não depender de um
+    # rótulo que pode ter vindo do XLSX ou de uma edição manual.
+
+    # Entity bucket + participant / counterparty accounts
+    if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
+        bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
+    elif _is_jpm(client):                     # Lawton-side mirror leg
+        bucket, participant = 'LAWTON', '00041007'
+        cpty = '04880006' if le == 'MGT' else '73760009'
+    else:
+        bucket = 'MGT' if le == 'MGT' else 'BANCO'
+        participant = '04880006' if le == 'MGT' else '73760009'
+        if _is_lawton(client):
+            cpty = '00041007'
+        elif le == 'MGT':
+            cpty = '73760009' if _is_jpm(client) else '04880109'
+        else:
+            cpty = '04880006' if _is_mgt(client) else '73760102'
+    taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
+        else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
+
+    last_fix_dt = _parse_date_any(_s(deal.get('LastFixingDate', '')))
+    settl_dt    = _parse_date_any(_s(deal.get('SettlementDate', '')))
+    biz_diff    = _anbima_biz_diff(last_fix_dt, settl_dt)
+
+    strike_set_dt = _parse_date_any(_s(deal.get('StrikeSetDate', '')))
+    fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
+
+    # Fonte de Informação: coluna do mapping publisher-ndf (PTAX puro = 0,
+    # demais feeders = 1). Boletim: no OP sai em branco; no FWD Start segue
+    # a fonte (0 → 3, senão 1).
+    fonte_info = _ndf_publisher_fonte_info(publisher)
+    boletim    = ('3' if fonte_info.strip() == '0' else '1') if is_fwd else ' '
+
+    # Valor Base / Quantidade: inteiro alinhado à direita em 14 + '00'. Estas
+    # páginas mandam a coluna como Notional (só o NDF Comm usa TotalNotional)
+    # — aceita os dois. O valor gravado é US ('{:,.2f}'), mas uma edição
+    # manual pode chegar em BR; quando os dois separadores aparecem, quem
+    # define o decimal é o que vem por último. Sem isso, '5.158.000,00' não
+    # parseia e o campo sai com 16 zeros em silêncio.
+    notional_s = (_s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))).replace(' ', '')
+    if ',' in notional_s and '.' in notional_s:
+        notional_s = (notional_s.replace('.', '').replace(',', '.')
+                      if notional_s.rfind(',') > notional_s.rfind('.')
+                      else notional_s.replace(',', ''))
+    elif notional_s.count('.') > 1:
+        notional_s = notional_s.replace('.', '')     # 5.158.000 — dois pontos só podem ser milhar
+    else:
+        notional_s = notional_s.replace(',', '')     # US, o formato que a aplicação grava
+    try:
+        qty_int = int(round(float(notional_s)))
+        qty_str = str(qty_int).rjust(14, '0') + '00'
+    except Exception:
+        qty_str = '0' * 16
+
+    fix_start = _d8(deal.get('FirstFixingDate', ''))
+    fix_end   = _d8(deal.get('LastFixingDate', ''))
+    # Asiático exige JANELA de fixing: primeira E última preenchidas e
+    # DIFERENTES. First fixing vazio (fixing único) ou datas iguais = vanilla.
+    # A regra antiga só testava a igualdade das duas, então o first vazio
+    # caía em 'A' — um fixing único ia para a B3 como média asiática.
+    asian_fix  = bool(fix_start and fix_end and fix_start != fix_end)
+    # Vanilla: Data de Fixing do Ativo Subjacente = a data do fixing único
+    # (a última preenchida). Asiático deixa em branco — as datas da janela
+    # vão nas linhas de verificação.
+    fix_single = '' if asian_fix else (fix_end or fix_start)
+    # Other Publisher: a Data de Fixing do Ativo Subjacente vai SEMPRE em
+    # branco (as 8 posições do campo preenchidas com espaço) — no cadastro o
+    # campo 19 é Fixed em branco para a página. Só o FWD Start continua
+    # mandando a data do fixing único. `tipo_media` não depende deste campo —
+    # sai de `asian_fix` —, então zerar aqui não muda a classificação.
+    if not is_fwd:
+        fix_single = ''
+    tipo_media = 'A' if asian_fix else 'N'
+
+    if is_fwd:
+        taxa_termo   = _pos('', 20)
+        cot_venc     = str(biz_diff)[:1] or '0'
+        fonte_cons   = ''
+        tela_cons    = ''
+        data_aval    = ''
+        valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
+    else:
+        # Weak currencies quote inverted vs BRL: 1/rate arredondado pelas
+        # casas da aba Currency Codes (Inverse Decimals) da tela Mapping.
+        rate_raw = _fxo_num(_s(deal.get('Rate', '')))
+        _inv = _mapping_ccy_maps()[2]
+        if rate_raw and qty_ccy in _inv:
+            rate_val = round(1.0 / rate_raw, _inv[qty_ccy])
+        else:
+            rate_val = rate_raw
+        taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
+        cot_venc     = ' '
+        pub = _ndf_publisher_codes(publisher)
+        fonte_cons   = pub.get('consulta', '')
+        tela_cons    = pub.get('info', '')
+        data_aval    = _d8(deal.get('LastFixingDate', ''))
+        valor_perc   = (_znum(_s(deal.get('StrikeSetOffset', '')), 4, 8)
+                        if _s(deal.get('StrikeSetOffset', '')) else _pos('', 12))
+
+    dir_code = '0' if _s(deal.get('Direction', '')).upper() == 'BUY' else '1'
+    my_number = str(random.randint(1000000000, 9999999999))
+
+    # OP com BRL fixed: inverte as moedas — a estrangeira vira a Moeda de
+    # Referência e o BRL a Moeda Cotada.
+    brl_fixed = (not is_fwd) and _s(deal.get('IsBRRFixed', '')).upper() == 'YES'
+    moeda_ref, moeda_cot = (oth_ccy, qty_ccy) if brl_fixed else (qty_ccy, oth_ccy)
+
+    # Só os campos não-Fixed entram em `values` (seq do template). O que
+    # antes era literal na concatenação — Contrato Global 'S', Classe do
+    # Ativo '2', Cotação R$/USD '1' e Paridade '3' do OP, Termo a Termo
+    # S/N, Forma de Atualização 'V', 'N' de Atualizar/Ajustar, os brancos —
+    # agora sai do cadastro, por página.
+    values = {
+        '4': _pos(my_number, 10),                    # Nº Controle Interno
+        '5': _pos(participant, 8),                   # Lançamento do Participante
+        '6': _pos(dir_code, 1),                      # Papel
+        '8': _pos(cpty, 8),                          # Contraparte
+        '9': _pos(taxid, 14),                        # CPF/CNPJ Contraparte
+        '12': _pos(fonte_info, 4),                   # Fonte de Informação
+        '13': _pos(_moeda_num_code(moeda_ref), 3),   # Moeda de Referência
+        '14': _pos(_moeda_num_code(moeda_cot), 3),   # Moeda Cotada
+        '15': _pos(cot_venc, 1),                     # Cotação para o Vencimento (FWD)
+        '16': _pos(qty_str, 16),                     # Valor Base / Quantidade
+        '18': _pos(taxa_termo, 20),                  # Taxa a Termo (OP)
+        '19': _pos(fix_single, 8),                   # Data de Fixing do Ativo (FWD)
+        '20': _pos(_d8(deal.get('TradeDate', '')), 8),       # Data de Operação
+        '21': _pos(_d8(deal.get('SettlementDate', '')), 8),  # Data de Vencimento
+        '22': _pos(boletim, 1),                      # Boletim (FWD)
+        '26': _pos(fonte_cons, 1),                   # Fonte de Consulta (OP)
+        '27': _pos(tela_cons, 8, 'right'),           # Tela ou Função de Consulta (OP)
+        '32': _pos(data_aval, 8),                    # Data de Avaliação (OP)
+        '36': _pos(fixacao_dt.strftime('%Y%m%d') if fixacao_dt else '', 8),  # Data de Fixação
+        '38': _pos(valor_perc, 12),                  # Valor / Percentual Negociado
+        '39': _pos((str(biz_diff)[:1] or '0') if is_fwd else ' ', 1),  # Cotação para Fixing (FWD)
+        '55': _pos('S' if _s(deal.get('IsBRRFixed', '')).upper() == 'YES' else '', 1),  # Taxa a Termo em Reais
+        '57': _pos(deal_id[-14:], 14, 'right'),      # Código Identificador (right 14 of Deal)
+        '58': _pos(tipo_media, 1),                   # Tipo Média Asiático
+        '59': _pos(str(_anbima_biz_diff(
+            _parse_date_any(_s(deal.get('FirstFixingDate', ''))),
+            _parse_date_any(_s(deal.get('LastFixingDate', ''))))
+            + 1).zfill(3) if asian_fix else '000', 3),   # Qtde Datas Verificação
+    }
+    page_url = '/new_deals-ndf-fwdstart' if is_fwd else '/new_deals-ndf-otherpublisher'
+    return bucket, _fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
+                                  page_url=page_url)
+
+
+@blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
+def api_generic_nd_send_conecta(product):
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    if product not in ('fwd-start', 'other-publishers'):
+        return jsonify({'ok': False, 'error': 'send-conecta not available for this product'}), 404
+    is_fwd = product == 'fwd-start'
+    prefix = 'FWDSTART' if is_fwd else 'OTHERPUBLISHER'
+    page_url = '/new_deals-ndf-fwdstart' if is_fwd else '/new_deals-ndf-otherpublisher'
+
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    if not deals:
+        return jsonify({'ok': False, 'error': 'No deals provided'}), 400
+
+    today = datetime.today().strftime('%Y%m%d')
+
     buckets = {'BANCO': [], 'LAWTON': [], 'MGT': []}
     counts = Counter()
-    for deal in deals:
-        if str(deal.get('Status', '') or '').strip() == 'Canceled':
-            continue                    # cancelado via API: fora dos arquivos
-        client   = _s(deal.get('Client', ''))
-        le       = _s(deal.get('LE', '')).upper()
-        deal_id  = _s(deal.get('Deal', ''))
-        publisher = _s(deal.get('Publisher', ''))
-        qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
-        oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
-        # O flag de asiático NÃO vem do TradeType: ele é derivado das datas de
-        # fixing logo abaixo (asian_fix), para o arquivo não depender de um
-        # rótulo que pode ter vindo do XLSX ou de uma edição manual.
-
-        # Entity bucket + participant / counterparty accounts
-        if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
-            bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
-        elif _is_jpm(client):                     # Lawton-side mirror leg
-            bucket, participant = 'LAWTON', '00041007'
-            cpty = '04880006' if le == 'MGT' else '73760009'
-        else:
-            bucket = 'MGT' if le == 'MGT' else 'BANCO'
-            participant = '04880006' if le == 'MGT' else '73760009'
-            if _is_lawton(client):
-                cpty = '00041007'
-            elif le == 'MGT':
-                cpty = '73760009' if _is_jpm(client) else '04880109'
-            else:
-                cpty = '04880006' if _is_mgt(client) else '73760102'
-        taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
-            else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
-
-        last_fix_dt = _parse_date_any(_s(deal.get('LastFixingDate', '')))
-        settl_dt    = _parse_date_any(_s(deal.get('SettlementDate', '')))
-        biz_diff    = _anbima_biz_diff(last_fix_dt, settl_dt)
-
-        strike_set_dt = _parse_date_any(_s(deal.get('StrikeSetDate', '')))
-        fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
-
-        # Fonte de Informação: coluna do mapping publisher-ndf (PTAX puro = 0,
-        # demais feeders = 1). Boletim: no OP sai em branco; no FWD Start segue
-        # a fonte (0 → 3, senão 1).
-        fonte_info = _ndf_publisher_fonte_info(publisher)
-        boletim    = ('3' if fonte_info.strip() == '0' else '1') if is_fwd else ' '
-
-        # Valor Base / Quantidade: inteiro alinhado à direita em 14 + '00'. Estas
-        # páginas mandam a coluna como Notional (só o NDF Comm usa TotalNotional)
-        # — aceita os dois. O valor gravado é US ('{:,.2f}'), mas uma edição
-        # manual pode chegar em BR; quando os dois separadores aparecem, quem
-        # define o decimal é o que vem por último. Sem isso, '5.158.000,00' não
-        # parseia e o campo sai com 16 zeros em silêncio.
-        notional_s = (_s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))).replace(' ', '')
-        if ',' in notional_s and '.' in notional_s:
-            notional_s = (notional_s.replace('.', '').replace(',', '.')
-                          if notional_s.rfind(',') > notional_s.rfind('.')
-                          else notional_s.replace(',', ''))
-        elif notional_s.count('.') > 1:
-            notional_s = notional_s.replace('.', '')     # 5.158.000 — dois pontos só podem ser milhar
-        else:
-            notional_s = notional_s.replace(',', '')     # US, o formato que a aplicação grava
-        try:
-            qty_int = int(round(float(notional_s)))
-            qty_str = str(qty_int).rjust(14, '0') + '00'
-        except Exception:
-            qty_str = '0' * 16
-
-        fix_start = _d8(deal.get('FirstFixingDate', ''))
-        fix_end   = _d8(deal.get('LastFixingDate', ''))
-        # Asiático exige JANELA de fixing: primeira E última preenchidas e
-        # DIFERENTES. First fixing vazio (fixing único) ou datas iguais = vanilla.
-        # A regra antiga só testava a igualdade das duas, então o first vazio
-        # caía em 'A' — um fixing único ia para a B3 como média asiática.
-        asian_fix  = bool(fix_start and fix_end and fix_start != fix_end)
-        # Vanilla: Data de Fixing do Ativo Subjacente = a data do fixing único
-        # (a última preenchida). Asiático deixa em branco — as datas da janela
-        # vão nas linhas de verificação.
-        fix_single = '' if asian_fix else (fix_end or fix_start)
-        # Other Publisher: a Data de Fixing do Ativo Subjacente vai SEMPRE em
-        # branco (as 8 posições do campo preenchidas com espaço). Só o FWD Start
-        # continua mandando a data do fixing único. `tipo_media` não depende
-        # deste campo — sai de `asian_fix` —, então zerar aqui não muda a
-        # classificação da operação.
-        if not is_fwd:
-            fix_single = ''
-        tipo_media = 'A' if asian_fix else 'N'
-
-        if is_fwd:
-            taxa_termo   = _pos('', 20)
-            cot_venc     = str(biz_diff)[:1] or '0'
-            fonte_cons   = ''
-            tela_cons    = ''
-            cot_rs_usd   = ''
-            cot_paridade = ''
-            data_aval    = ''
-            termo_flag   = 'S'
-            forma_atu    = 'V'
-            valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
-        else:
-            # Weak currencies quote inverted vs BRL: 1/rate arredondado pelas
-            # casas da aba Currency Codes (Inverse Decimals) da tela Mapping.
-            rate_raw = _fxo_num(_s(deal.get('Rate', '')))
-            _inv = _mapping_ccy_maps()[2]
-            if rate_raw and qty_ccy in _inv:
-                rate_val = round(1.0 / rate_raw, _inv[qty_ccy])
-            else:
-                rate_val = rate_raw
-            taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
-            cot_venc     = ' '
-            pub = _ndf_publisher_codes(publisher)
-            fonte_cons   = pub.get('consulta', '')
-            tela_cons    = pub.get('info', '')
-            cot_rs_usd   = '1'
-            cot_paridade = '3'
-            data_aval    = _d8(deal.get('LastFixingDate', ''))
-            termo_flag   = 'N'
-            forma_atu    = ' '
-            valor_perc   = (_znum(_s(deal.get('StrikeSetOffset', '')), 4, 8)
-                            if _s(deal.get('StrikeSetOffset', '')) else _pos('', 12))
-
-        dir_code = '0' if _s(deal.get('Direction', '')).upper() == 'BUY' else '1'
-        my_number = str(random.randint(1000000000, 9999999999))
-
-        # OP com BRL fixed: inverte as moedas — a estrangeira vira a Moeda de
-        # Referência e o BRL a Moeda Cotada.
-        brl_fixed = (not is_fwd) and _s(deal.get('IsBRRFixed', '')).upper() == 'YES'
-        moeda_ref, moeda_cot = (oth_ccy, qty_ccy) if brl_fixed else (qty_ccy, oth_ccy)
-
-        line = (
-            _pos('TER  ', 5)                         +  # ID do Sistema
-            _pos('1', 1)                             +  # ID Tipo de Linha
-            _pos('0001', 4)                          +  # Código Operação
-            _pos(my_number, 10)                      +  # Meu Número
-            _pos(participant, 8)                     +  # Lançamento do Participante
-            _pos(dir_code, 1)                        +  # Papel
-            _pos('', 14)                             +  # CPF/CNPJ Cliente Parte
-            _pos(cpty, 8)                            +  # Contraparte
-            _pos(taxid, 14)                          +  # CPF/CNPJ Contraparte
-            _pos('S', 1)                             +  # Contrato Global
-            _pos('2', 20, 'right')                   +  # Classe do Ativo Subjacente
-            _pos(fonte_info, 4)                      +  # Fonte de Informação
-            _pos(_moeda_num_code(moeda_ref), 3)      +  # Moeda de Referência
-            _pos(_moeda_num_code(moeda_cot), 3)      +  # Moeda Cotada
-            _pos(cot_venc, 1)                        +  # Cotação para o Vencimento
-            _pos(qty_str, 16)                        +  # Valor Base / Quantidade
-            _pos('', 10)                             +  # Código do Ativo Subjacente
-            _pos(taxa_termo, 20)                     +  # Taxa a Termo (R$/Moeda)
-            _pos(fix_single, 8)                      +  # Data de Fixing do Ativo Subjacente
-            _pos(_d8(deal.get('TradeDate', '')), 8)  +  # Data de Operação
-            _pos(_d8(deal.get('SettlementDate', '')), 8) +  # Data de Vencimento
-            _pos(boletim, 1)                         +  # Boletim
-            _pos(' ', 1)                             +  # Tipo de Cotação
-            _pos('', 8)                              +  # Data de Fixing da Moeda
-            _pos('', 1)                              +  # Cross Rate na Avaliação?
-            _pos(fonte_cons, 1)                      +  # Fonte de Consulta
-            _pos(tela_cons, 8, 'right')              +  # Tela ou Função de Consulta
-            _pos('', 8)                              +  # Praça de Negociação
-            _pos('', 8)                              +  # Horário de Consulta
-            _pos(cot_rs_usd, 1)                      +  # Cotação Taxa de Câmbio R$/USD
-            _pos(cot_paridade, 1)                    +  # Cotação Paridade
-            _pos(data_aval, 8)                       +  # Data de Avaliação
-            _pos('', 10)                             +  # Código da Paridade Cross
-            _pos('', 8)                              +  # Data de Fixing da Paridade Cross
-            _pos(termo_flag, 1)                      +  # Termo a Termo
-            _pos(fixacao_dt.strftime('%Y%m%d') if fixacao_dt else '', 8) +  # Data de Fixação
-            _pos(forma_atu, 1)                       +  # Forma de Atualização
-            _pos(valor_perc, 12)                     +  # Valor / Percentual Negociado
-            _pos((str(biz_diff)[:1] or '0') if is_fwd else ' ', 1) +  # Cotação para Fixing (OP: em branco)
-            _pos('N', 1)                             +  # Atualizar Valor Base?
-            _pos('', 12)                             +  # Cotação Inicial
-            _pos('N', 1)                             +  # Ajustar Taxa
-            _pos('', 1)                              +  # Responsável pelo Ajuste da Taxa
-            _pos('', 8)                              +  # Data Inicial para Ajuste da Taxa
-            _pos('', 8)                              +  # Data Final para Ajuste da Taxa
-            _pos('', 1)                              +  # Limites
-            _pos('', 14)                             +  # Superior (Paridade)
-            _pos('', 14)                             +  # Inferior (Paridade)
-            _pos('', 8)                              +  # Data de Liquidação do Prêmio
-            _pos('', 1)                              +  # Prêmio a ser Pago Pelo
-            _pos('', 16)                             +  # Valor do Prêmio
-            _pos('', 1)                              +  # Modalidade de Liquidação
-            _pos('', 1)                              +  # Prêmio em Moeda Estrangeira
-            _pos('', 8)                              +  # Data de Fixing da Moeda do Prêmio
-            _pos('S' if _s(deal.get('IsBRRFixed', '')).upper() == 'YES' else '', 1) +  # Taxa a Termo em Reais
-            _pos('', 280)                            +  # Observação
-            _pos(deal_id[-14:], 14, 'right')         +  # Código Identificador (right 14 of Deal)
-            _pos(tipo_media, 1)                      +  # Tipo Média Asiático
-            _pos(str(_anbima_biz_diff(
-                _parse_date_any(_s(deal.get('FirstFixingDate', ''))),
-                _parse_date_any(_s(deal.get('LastFixingDate', ''))))
-                 + 1).zfill(3) if asian_fix else '000', 3)  # Qtde Datas Verificação
-        )
-        buckets[bucket].append(line)
-        counts[bucket] += 1
-
-    headers = {
-        'BANCO':  _pos('TER  ', 5) + '0' + '0001' + 'JPMORGANBM' + ' ' * 10 + today + '00003',
-        'LAWTON': _pos('TER  ', 5) + '0' + '0001' + 'INTRAGLAWTONFDO' + ' ' * 5 + today + '00003',
-        'MGT':    _pos('TER  ', 5) + '0' + '0001' + 'MORGANBC' + ' ' * 12 + today + '00003',
-    }
+    try:
+        for deal in deals:
+            made = _generic_ndf_ter_line(deal, is_fwd)
+            if made is None:
+                continue
+            bucket, line = made
+            buckets[bucket].append(line)
+            counts[bucket] += 1
+        headers = {b: _ter_file_header(_TER_PARTICIPANT_NAME[b], today, page_url)
+                   for b, lines in buckets.items() if lines}
+    except ValueError as exc:
+        log.error('[ND %s] send-conecta sem template: %s', product, exc)
+        return jsonify({'ok': False, 'error': _TER_FI_ERROR}), 500
 
     generated = []
     try:

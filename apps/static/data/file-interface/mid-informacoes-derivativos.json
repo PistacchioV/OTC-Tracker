@@ -8,7 +8,7 @@
   "manual_version": "10/08/2026",
   "description": "Layout exclusive to Swap contracts in which at least one of the curves is VCP. It lets the Participant register and update the Mark-to-Market information and indicate the Minimum and Maximum Notional percentages.",
   "file_name_rule": "MtM_<VIEW>-<BOOK>.txt (MtM_BANCO-CEM / MtM_BANCO-EDG / MtM_BANCO-HYB always; mirror file MtM_ATACAMA-EDG or MtM_LAWTON-CEM / MtM_LAWTON-HYB for intragroup contracts), Latin-1, CRLF, written to the Batch Conecta folder and the day's MTM source folder",
-  "notes": "Every swap book generates the BANCO view file; contracts whose counterparty account is Lawton (00041.00-7) or Atacama (85398.00-5) also emit a mirror record with the OPPOSITE sign in the counterparty view file (EDG→Atacama, CEM/Hybrids→Lawton). Data rows use the page's reference date (datepicker); the header uses the system date. A zero MtM is sent as 0.01 — B3 rejects zero.",
+  "notes": "Every swap book generates the BANCO view file; contracts whose counterparty account is Lawton (00041.00-7) or Atacama (85398.00-5) also emit a mirror record with the OPPOSITE sign in the counterparty view file (EDG→Atacama, CEM/Hybrids→Lawton). Data rows use the page's reference date (datepicker); the header uses the system date. A zero MtM is sent as 0.01 — B3 rejects zero. Generation and preview run through the File Interface engine (_fi_build_line): the Fixed literals (MID, line types, 0848, blank Notionals) come from this template — editing them changes the file, and the preview labels come from the field names.",
   "file_type": "positional",
   "separator": null,
   "record_length": 93,
@@ -202,38 +202,38 @@
         {
           "seq": "9",
           "field": "Valor MTM",
-          "format": "9(10)v9(02)",
+          "format": "9(10)V9(02)",
           "position": "62-73",
           "required": "",
           "content": "",
           "description": "Valor de marcação a mercado.",
           "source": "Page",
           "source_detail": "Valor MTM",
-          "source_note": "Absolute value; zero sent as 0.01"
+          "source_note": "Absolute value; zero sent as 0.01. Manual 4.3.1 (pp. 530-532) prints the format as 9(10)v9(02); uppercased V so the width parser can measure it."
         },
         {
           "seq": "10",
           "field": "Notional Mínimo",
-          "format": "9(04)v9(02)",
+          "format": "9(04)V9(02)",
           "position": "74-79",
           "required": "",
           "content": "",
           "description": "Valor Notional Máximo em percentual",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank (not used)"
+          "source_note": "Blank (not used) — the engine pads the empty Fixed to the 6 spaces production writes. Manual 4.3.1 prints the format as 9(04)v9(02); uppercased V so the width parser can measure it."
         },
         {
           "seq": "11",
           "field": "Notional Máximo",
-          "format": "9(04)v9(02)",
+          "format": "9(04)V9(02)",
           "position": "80-85",
           "required": "",
           "content": "",
           "description": "Valor Notional Máximo em percentual",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank (not used)"
+          "source_note": "Blank (not used) — the engine pads the empty Fixed to the 6 spaces production writes. Manual 4.3.1 prints the format as 9(04)v9(02); uppercased V so the width parser can measure it."
         },
         {
           "seq": "12",

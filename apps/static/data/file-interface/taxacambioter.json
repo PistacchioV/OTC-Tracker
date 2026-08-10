@@ -8,10 +8,10 @@
   "manual_version": "10/08/2026",
   "description": "Layout used to register the exchange rate for the valuation of Termo (forward) contracts. Structure: Header, Registro – Dados Fixos and Registro – Dados Variáveis — the variable-data line is used only for contracts of the Termo de Moedas Asiático modality.",
   "file_name_rule": "TAXA_BANCO.txt (and TAXA_LAWTON.txt for the mirrored Lawton-side lines), unique-suffixed, written to the Batch Conecta New folder",
-  "notes": "Rows against the Lawton account (C.Parte 00041007) are mirrored into a second file (TAXA_LAWTON.txt) with Participante and C.Parte swapped — the Lawton-side view of the same trade. The generator writes Contrato left-justified to 10 characters, one short of the manual's X(11) 38-48, so the produced record is 86 characters against the manual's 87.",
+  "notes": "Rows against the Lawton account (C.Parte 00041007) are mirrored into a second file (TAXA_LAWTON.txt) with Participante and C.Parte swapped — the Lawton-side view of the same trade. The template follows PRODUCTION, not the manual, where they diverge: Contrato is written left-justified to 10 characters where the manual's 4.10.4 asks X(11) 38-48, so the produced record is 86 characters against the manual's 87 (positions from Tx Câmbio on are shifted one left). The Dados Variáveis block of the manual is omitted on purpose: the Tracker always sends 000 verification dates.",
   "file_type": "positional",
   "separator": null,
-  "record_length": 87,
+  "record_length": 86,
   "status": "active",
   "linked_pages": [
     {
@@ -171,9 +171,9 @@
           "required": "",
           "content": "",
           "description": "Código do Participante para o qual está sendo realizado o lançamento. Sem ponto e traço",
-          "source": "Fixed",
-          "source_detail": "73760009",
-          "source_note": "Swapped with C.Parte in the Lawton mirror file"
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Bank participant 73760009; swapped with C.Parte in the Lawton mirror file (TAXA_LAWTON.txt)"
         },
         {
           "seq": "06",
@@ -202,20 +202,20 @@
         {
           "seq": "08",
           "field": "Contrato",
-          "format": "X(11)",
-          "position": "38-48",
+          "format": "X(10)",
+          "position": "38-47",
           "required": "",
           "content": "",
           "description": "Código de identificação do contrato.",
           "source": "Page",
           "source_detail": "B3 ID",
-          "source_note": "Left-justified to 10 characters (see notes)"
+          "source_note": "Manual asks X(11) 38-48; production writes the B3 ID left-justified to 10 characters — template follows production (record 86, see notes)"
         },
         {
           "seq": "09",
           "field": "Tx Câmbio",
           "format": "9(04)V9(08)",
-          "position": "49-60",
+          "position": "48-59",
           "required": "",
           "content": "",
           "description": "Valor da cotação da taxa de câmbio. Quando Cross rating, lançar cotação do DOLAR.",
@@ -227,7 +227,7 @@
           "seq": "10",
           "field": "Tx Paridade",
           "format": "9(04)V9(08)",
-          "position": "61-72",
+          "position": "60-71",
           "required": "",
           "content": "",
           "description": "Valor da cotação da Paridade moeda Base (Referência)",
@@ -239,7 +239,7 @@
           "seq": "11",
           "field": "Tx Cotada",
           "format": "9(04)V9(08)",
-          "position": "73-84",
+          "position": "72-83",
           "required": "",
           "content": "",
           "description": "Valor da cotação da Paridade da Moeda Cotada",
@@ -251,7 +251,7 @@
           "seq": "12",
           "field": "Quantidade de Datas de Verificação",
           "format": "9(03)",
-          "position": "85-87",
+          "position": "84-86",
           "required": "",
           "content": "Obrigatório",
           "description": "Quantidade de Datas de Verificação: Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor: 000",

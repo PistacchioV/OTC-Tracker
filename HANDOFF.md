@@ -10720,3 +10720,65 @@ Terceira rodada de revisão de tela do File Interface (§235/§236), em dois com
   re-render matava os inputs da edição em curso). Delete com "Yes, delete"/"Cancel"
   traduzidos e `#dc3545`; erros com título "File Interface" (não "Error"); sucesso no
   formato do Mapping (ícone, 1,3 s, sem botão) em vez de toast de canto.
+
+## §238 — File Interface v3: o cadastro passou a COMANDAR a geração e os previews
+
+Até aqui o File Interface (§235–§237) era documentação viva: os layouts existiam em três
+cópias independentes — o gerador no servidor (o que vale), o preview de duplo clique de
+cada página (espelho em JS) e o cadastro. Agora as três são uma: **o template é a
+autoridade da ESTRUTURA da linha** (ordem dos campos, larguras do `format`, literais dos
+campos Fixed — com override por página), e **o código continua dono dos VALORES
+calculados**. Editar um Fixed, reordenar ou acrescentar campo pela tela muda o arquivo
+real e o preview no request seguinte, sem restart.
+
+O desenho, e por que ele é assim:
+
+- **Motor** (`routes.py`, seção FILE INTERFACE): `_fi_tpl_cached` (cache por mtime, como
+  os mappings), `_fi_width` (`X(n)`/`9(n)` → n; `9(a)V9(b)` → a+b, o V não ocupa
+  posição), `_fi_field_src` (override `source_by_page` vence) e **`_fi_build_line(key,
+  block_id, values, page_url)`** — `values` é `{seq do template: string JÁ formatada}`
+  dos campos não-Fixed, usada **verbatim** (só ljust-espaços se vier curta; nunca trunca
+  nem reformata). Fixed sai do cadastro padded pela largura (X → espaços à direita, 9 →
+  zeros à esquerda; Fixed vazio = campo em branco). Posicional concatena; delimitado
+  junta com o `separator` e fecha com token vazio (padrão OPC). Template/bloco ausente →
+  `ValueError`, e os endpoints devolvem 500 com "check /file-interface" — **sem fallback
+  para a montagem antiga**: arquivo para a B3 não sai meio montado em silêncio.
+- **Por que o valor não vem do cadastro**: as excentricidades históricas (Contrato em 10
+  chars onde o manual pede 11, número com vírgula, alinhamento à direita em campo X)
+  vivem no gerador, e reformatar no motor mudaria bytes enviados à B3. A troca foi
+  provada **byte a byte**: cinco checks novos (`check_fi_{ter,opc,taxacambioter,accrual,
+  mid}.py`) carregam cópias `_legacy_` da montagem antiga e comparam linha a linha em
+  todos os ramos (pernas Lawton/Atacama, asiáticos, campos vazios, espelhos do MID,
+  views do Accrual), mais um e2e de arquivo inteiro no OPC.
+- **Onde o cadastro foi corrigido para a PRODUÇÃO** (manual citado no
+  `source_note`/`notes`): TAXACAMBIOTER com Contrato `X(10)` 38-47 e linha de **86**
+  chars (o manual pede 87 — divergência histórica preservada); Classe do Ativo do TER
+  como Fixed com o alinhamento à direita embutido (19 espaços + código, porque o motor
+  faz ljust em X); campo 6 do bloco tipo 2 em `X(18)` 35-52 (produção escreve a data à
+  esquerda + filler); formatos `v` minúsculo → `V` nos templates de Swap/MID (o `_fi_width`
+  não media, e os Fixed em branco colapsariam para largura zero). O COE (0475) do MtM
+  **não tem cadastro** e continua montado à mão, anotado no código.
+- **Sete geradores** passam pelo motor: TER genérico (`_generic_ndf_ter_line`, com
+  `page_url` por produto — os overrides por página valem), TER do NDF Commodities
+  (`_ndf_comm_ter_lines`), OPC do FXO e do Opt Commodities, TAXACAMBIOTER
+  (`_ndfop_conecta_fields`, que também fatia a linha pronta para o preview — o preview
+  mostra exatamente os bytes do arquivo), Accrual e MID. Os headers de arquivo também
+  saem do bloco `header` do cadastro.
+- **Previews**: API `GET /api/file-interface/page-spec?url=<página>` devolve os blocos
+  com Fixed resolvido por página. As 6 páginas de New Deals + o Accrual fazem prefetch
+  no load (`FI_SPEC`) e montam a lista do template — Fixed padded como o motor,
+  não-Fixed mapeado por seq (`'04' ≡ '4'`); **fetch que falha degrada para a lista fixa
+  antiga**, o padrão dos mappings. Cabeçalhos da tabela tipo 2 idem. MtM e o Daily
+  Settlement Other Publisher já eram servidos e saem com os rótulos do template.
+- **Dois previews mentiam e agora dizem o byte**: o Vanilla mostrava Classe do Ativo
+  `'4'` (resquício da cópia do NDF Commodities — errado para termo de moeda; hoje sai em
+  branco, e se quiserem `'2'` como no FWD Start é um override de página cadastrável pela
+  tela), e o Other Publisher mostrava uma Data de Fixing da Moeda que o arquivo nunca
+  levou (o gerador escreve em branco).
+- **Duas varreduras de fonte foram atualizadas**, não enfraquecidas: `check_quoted_in_cents`
+  e `check_quote_type` procuravam o desenho antigo (`f[13] = …`); a regra agora vive como
+  values por seq (`'14': …`) e os padrões acompanharam.
+
+Armadilha aprendida no processo: rodar 7 subagentes pesados em paralelo estourou o limite
+de sessão no meio do trabalho — as retomadas preservaram o contexto, mas o certo é
+escalonar em ondas.

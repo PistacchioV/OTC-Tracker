@@ -4097,6 +4097,43 @@ $(document).ready(function() {
        `B3Quote.cfg` devolve os mesmos F/A e 340/358 de antes. */
     B3Quote.load();
 
+    /* File Interface: o cadastro (/file-interface) passa a comandar a LISTA de
+       campos do preview de duplo clique — ordem, rótulo e literais Fixed vêm do
+       template 'termo-multiclasses' via page-spec (Fixed já resolvido para esta
+       página). Fetch uma vez no load; se falhar, FI_SPEC fica null e o preview
+       degrada para a lista fixa antiga — o mesmo padrão dos mappings. */
+    var FI_SPEC = null;
+    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+            var tpls = (d && d.success && d.templates) || [];
+            for (var i = 0; i < tpls.length; i++) {
+                if (tpls[i].key === 'termo-multiclasses') { FI_SPEC = tpls[i]; return; }
+            }
+            FI_SPEC = tpls.length ? tpls[0] : null;
+        })
+        .catch(function () { FI_SPEC = null; });
+
+    function fiBlock(id) {
+        var bs = (FI_SPEC && FI_SPEC.blocks) || [];
+        for (var i = 0; i < bs.length; i++) {
+            if (bs[i].id === id) return bs[i];
+        }
+        return null;
+    }
+
+    /* Fixed do cadastro padded pela largura do format — a MESMA regra do motor
+       (_fi_build_line): X → espaços à direita, 9 não-vazio → zeros à esquerda,
+       Fixed vazio → espaços. O preview mostra o que o arquivo leva. */
+    function fiFixedValue(fd) {
+        var val = String(fd.source_detail == null ? '' : fd.source_detail);
+        var w = fd.width;
+        if (w && val.length < w) {
+            val = (val && /^9/.test(String(fd.format || ''))) ? val.padStart(w, '0') : val.padEnd(w, ' ');
+        }
+        return val;
+    }
+
     function buildConectaFields(deal, bizDayCount) {
         function _date(val) {
             val = _sh(val);
@@ -4224,8 +4261,25 @@ $(document).ready(function() {
             f[58] = bizDayCount !== undefined ? String(bizDayCount).padStart(3, '0') : '';
         }
 
-        return CONECTA_FIELD_NAMES.map(function(name, i) {
-            return { name: name, value: f[i] };
+        // ── Lista de campos pelo cadastro do File Interface: a ordem e o rótulo
+        //    vêm do bloco 'Registro — Dados Fixos' do template; Fixed sai do
+        //    cadastro (padded como no arquivo) e o resto entra pelo seq — o
+        //    índice i acima é exatamente seq-1 (a transcrição foi feita deste
+        //    preview). Sem FI_SPEC (fetch falhou), a lista fixa antiga vale.
+        var block = fiBlock('registro-dados-fixos');
+        if (!block) {
+            return CONECTA_FIELD_NAMES.map(function(name, i) {
+                return { name: name, value: f[i] };
+            });
+        }
+        var valuesBySeq = {};
+        for (var vi = 0; vi < f.length; vi++) valuesBySeq[String(vi + 1)] = f[vi];
+        return (block.fields || []).map(function(fd) {
+            var seq = String(fd.seq || '').replace(/^0+(?=\d)/, '');   // '04' ≡ '4'
+            var value = fd.source === 'Fixed'
+                ? fiFixedValue(fd)
+                : (valuesBySeq[seq] !== undefined ? valuesBySeq[seq] : '');
+            return { name: fd.field, value: value };
         });
     }
 
@@ -4297,7 +4351,7 @@ $(document).ready(function() {
                         (i + 1) + '. ' + f.name +
                     '</td>' +
                     '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
-                        (f.value !== '' ? f.value : '<span style="color:#aaa">&mdash;</span>') +
+                        (String(f.value).trim() !== '' ? f.value : '<span style="color:#aaa">&mdash;</span>') +
                     '</td>' +
                 '</tr>';
             }).join('');
@@ -4326,16 +4380,30 @@ $(document).ready(function() {
                         '</td>' +
                     '</tr>';
                 }).join('');
+                // Cabeçalhos da tabela de linhas de verificação (tipo 2): direto
+                // do bloco 'Registro — Dados Variáveis' do cadastro (as 6 colunas
+                // batem 1:1 com os 6 campos, na ordem). Nome de campo do template
+                // é dado B3 — sem tradução de propósito. Sem cadastro, o
+                // cabeçalho fixo antigo (com data-lang) continua valendo.
+                var vblock = fiBlock('registro-dados-variaveis');
+                var fxHeadCells;
+                if (vblock && (vblock.fields || []).length === 6) {
+                    fxHeadCells = vblock.fields.map(function(fd, hi) {
+                        return '<th style="padding:5px 8px;text-align:' + (hi === 1 ? 'center' : 'left') + ';font-weight:600">' + fd.field + '</th>';
+                    }).join('');
+                } else {
+                    fxHeadCells =
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">ID do Sistema</span></th>' +
+                        '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">ID Tipo de Linha</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-op-code">Código Operação</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Data de Fixing do Ativo Subjacente</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Qtd. de Refer&ecirc;ncia</span></th>' +
+                        '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Data de Fixing da Moeda</span></th>';
+                }
                 tableHtml +=
                     '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                    '<thead><tr style="background:#495057;color:#fff">' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-sys-id">ID do Sistema</span></th>' +
-                    '<th style="padding:5px 8px;text-align:center;font-weight:600"><span data-lang="nd-preview-col-line-type">ID Tipo de Linha</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-op-code">Código Operação</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fix-date">Data de Fixing do Ativo Subjacente</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Qtd. de Refer&ecirc;ncia</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Data de Fixing da Moeda</span></th>' +
+                    '<thead><tr style="background:#495057;color:#fff">' + fxHeadCells +
                     '</tr></thead>' +
                     '<tbody>' + fxRows + '</tbody>' +
                     '</table></div>';

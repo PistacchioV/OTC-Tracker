@@ -414,18 +414,18 @@
           "source_by_page": {
             "/new_deals-ndf-commodities": {
               "source": "Fixed",
-              "source_detail": "4",
-              "source_note": "Commodities, right-aligned in 20"
+              "source_detail": "                   4",
+              "source_note": "Commodities — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
             },
             "/new_deals-ndf-fwdstart": {
               "source": "Fixed",
-              "source_detail": "2",
-              "source_note": "Taxas de Câmbio, right-aligned in 20"
+              "source_detail": "                   2",
+              "source_note": "Taxas de Câmbio — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
             },
             "/new_deals-ndf-otherpublisher": {
               "source": "Fixed",
-              "source_detail": "2",
-              "source_note": "Taxas de Câmbio, right-aligned in 20"
+              "source_detail": "                   2",
+              "source_note": "Taxas de Câmbio — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
             }
           }
         },
@@ -1529,14 +1529,14 @@
         {
           "seq": "6",
           "field": "Data de Verificação da Moeda",
-          "format": "X(16)",
-          "position": "35-51",
+          "format": "X(18)",
+          "position": "35-52",
           "required": "SIM, condicional ao campo \"Taxa a Termo em Reais\"",
           "content": "",
           "description": "Data de Fixing da Moeda, para contratos com Taxa a Termo em Reais = SIM e com Média Asiática. Formato AAAAMMDD. Preencher com ESPAÇOS os campos à esquerda e a data à direita.",
           "source": "Calculated",
           "source_detail": "",
-          "source_note": "Same verification date when Strike Currency is BRL, else blank (row padded with trailing spaces)",
+          "source_note": "Same verification date when Strike Currency is BRL, else blank. DIVERGES FROM THE MANUAL: the manual asks X(16) at 35-51 with the date right-aligned; production has always written the date LEFT-aligned in 8 chars plus a 10-space filler (18 chars, 35-52) and B3 accepts it — kept as production sends it",
           "source_by_page": {
             "/new_deals-ndf-fwdstart": {
               "source": "",

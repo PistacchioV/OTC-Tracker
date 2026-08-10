@@ -100,10 +100,12 @@ check('Opt Comm -> Intrag',
       '_cents = lambda v: (v / 100.0) if qic else v' in src, True)
 check('NDF Comm -> Conecta',
       "strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)" in src, True)
+# Desde o File Interface v3 a montagem e por seq do template (values dict),
+# nao mais por indice de lista — a regra continua a mesma.
 check('Opt Comm -> Conecta (strike)',
-      "f[13] = _num(deal.get('Strike', ''), div100=qic)" in src, True)
+      "'14': _num(deal.get('Strike', ''), div100=qic)" in src, True)
 check('Opt Comm -> Conecta (premio/unidade)',
-      "f[26] = _num(deal.get('PremiumPerUnit', ''), div100=qic)" in src, True)
+      "'27': _num(deal.get('PremiumPerUnit', ''), div100=qic)" in src, True)
 js_ndf = io.open('apps/templates/pages/new_deals-ndf-commodities.html', encoding='utf-8').read()
 js_opt = io.open('apps/templates/pages/new_deals-opt-commodities.html', encoding='utf-8').read()
 check('NDF Comm -> Conecta (navegador)', "f[17] = _num(deal.Strike || '', qic);" in js_ndf, True)
