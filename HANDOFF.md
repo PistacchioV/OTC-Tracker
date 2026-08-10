@@ -10535,3 +10535,83 @@ Fica um buraco conhecido, e ele é anterior a isto: `sla_state` devolve `ok` qua
 `Data Operação`** — sem data de operação não há prazo a calcular, e chamar isso de `late` seria afirmar
 um atraso que ninguém mediu. Essas linhas validam sem justificativa. O conserto é preencher a data de
 operação, não afrouxar a régua.
+
+## §233 — A toolbar encostava no cabeçalho da tabela, e o `mb-2` media zero
+
+Nas páginas **Operations B3** e **Latam Desk Position** a fila de botões (Show · Add row · Columns ·
+Export · Clear filters) ficava colada na primeira linha do `<thead>`. O wrapper já tinha `mb-2`, e é
+por isso que o problema não saltava ao ler o markup: medido na tela, o espaço era **0 px**. O
+DataTables desenha a própria caixa (o `.dt-container` / `.dataTables_wrapper`) encostada no elemento
+anterior e come a margem do irmão de cima. `mb-3` devolve 12 px — medidos nas duas páginas, não
+supostos.
+
+O comentário fica no template, ao lado da classe: sem ele, a próxima pessoa lê `mb-3` como um número
+escolhido a esmo e o "arruma" de volta para o `mb-2` que o resto do arquivo usa.
+
+**O mesmo `mb-2` está em outras dez telas** com o wrapper idêntico
+(`d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2`): `cognos`, `ndf-cockpit`,
+`ndf-other-publisher`, `otm-settlements`, `other-products-swap-athena`, `-events`, `-vcp`,
+`-kapital-hybrids`, `-settlement-advice` e `other-products-ndf-settlement-advice`. Foram deixadas
+como estavam **de propósito** — o pedido nomeou duas páginas, e trocar espaçamento em dez telas de uma
+vez é uma varredura própria, que se faz olhando cada uma. Fica registrado aqui para a varredura não
+depender de alguém reparar de novo.
+
+## §234 — Equity: o Type em branco e a perna interna que sumiu da tela
+
+Duas sobras do §227/§229, as duas com o mesmo formato — a linha existia, mas a tela não contava tudo
+sobre ela.
+
+### O Type em branco nas operações de EDG
+
+O Type de equity é o **ativo subjacente** (§227), e ele saía de `Underlying_Name` → `UNDERLYING_RIC` do
+Latam → `Underlying` do OTM. As três vêm **vazias no swap de equity**: são colunas de derivativo
+*sobre* um ativo (opção, barreira, rebate), e no swap o próprio **instrumento é a ação**. Resultado: a
+linha aparecia com Internal ID, contraparte, Settlement e IR — tudo certo — e a coluna Type em branco,
+sem nada na tela dizendo por quê.
+
+A cadeia ganhou três degraus, do mais específico para o mais genérico:
+
+```
+Underlying_Name → UNDERLYING_RIC → OTM.Underlying → Instrument_Name → RIC → Instrument_ID
+```
+
+O `Instrument_ID` fica por último porque é **código, não nome**, e o nome é o que distingue uma
+operação da outra na tela. Tudo vazio continua deixando a célula vazia: pede o arquivo, não inventa um
+subjacente.
+
+### A perna interna sumia do Settlement Summary
+
+O §229 tirou a perna interna do Settlement Summary junto com o aviso, no raciocínio de que "cada linha
+do Summary é um aviso". A premissa estava errada: **o Settlement Summary é a visão de LIQUIDAÇÃO do
+dia**, e a perna interna liquida — o dinheiro se move, e o total do Summary tem de fechar com o Trade
+Level. Cortá-la de lá fazia a operação da entidade nossa (a ATACAMA, do par com o cliente externo)
+desaparecer da tela sem uma palavra, que é exatamente o defeito que o `Unmatched Athena` da Recon FXO
+já tinha ensinado: quebra que ninguém vê.
+
+Agora a marca `_no_advice` tira só o que é **documento**:
+
+| Onde | Perna interna |
+|---|---|
+| Trade Level | entra (visão de trade) |
+| Settlement Summary | **entra**, com o selo `Internal` ao lado do nome |
+| Settlement Advice | fica de fora — é o documento endereçado ao cliente |
+| E-mail de TED | fica de fora — não se transfere dinheiro para si mesmo |
+
+Duas coisas que o corte do TED exige e não são óbvias:
+
+- **`_is_jpmorgan` não responde por ela.** O TED já pulava Lawton e J.P. Morgan pelo nome, mas a perna
+  interna pode ser um **fundo nosso** (`ATACAMA FUNDO DE INVESTIMENTO`) — sem "J.P. Morgan" no nome,
+  passaria batido e o e-mail pediria uma TED para dentro de casa.
+- **O selo é a explicação.** Sem ele, a única leitura possível para uma linha que nunca sai do `New` é
+  que alguém esqueceu de gerar o aviso. O texto passa pelo `t('ops-internal', …)` da própria página —
+  o `I18nManager` traduz os `[data-lang]` uma vez no load, e o que o JS insere depois nunca passa por
+  ele.
+
+### Verificação
+
+`check_ops_trade_equity.py` ganhou o caso do Latam sem colunas de subjacente (Type caindo no
+`Instrument_Name`) e trocou a asserção do §229: a perna interna **entra** no Summary, marcada, e o
+cliente **não** vem marcado — só provar que ela entra deixaria passar uma regra que marca tudo.
+`check_ops_summary.py` continua verde, inclusive a checagem posicional das colunas: o selo vai colado
+ao `esc(r.counterparty)` dentro do `row.add` de propósito, porque é de lá que aquele teste lê a ordem
+das colunas — uma variável no lugar da chamada tiraria a coluna da lista.

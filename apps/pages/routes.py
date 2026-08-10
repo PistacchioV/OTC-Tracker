@@ -6292,9 +6292,21 @@ def _ops_equity_link(ref):
             'curva_cliente': g['neg'] if g['tem_valor'] else None,
             # Ativo subjacente: o que identifica a operação de equity na tela, do
             # jeito que o Type diz VCP no swap e a mercadoria no termo.
+            #
+            # A cadeia é longa porque NENHUMA das fontes preenche sempre. As duas
+            # primeiras colunas do Latam são as de derivativo SOBRE um ativo
+            # (opção, barreira) e vêm vazias no swap de equity, onde o próprio
+            # INSTRUMENTO é a ação — foi assim que as linhas de EDG apareceram
+            # com o Type em branco mesmo já tendo Internal ID e valor. A ordem é
+            # do mais específico para o mais genérico, e o `Instrument_ID` fica
+            # por último porque é código, não nome. Tudo vazio deixa a célula
+            # vazia: pede o cadastro/arquivo, não inventa um subjacente.
             'underlying': (str(rec_lt.get('Underlying_Name', '') or '').strip()
                            or str(rec_lt.get('UNDERLYING_RIC', '') or '').strip()
-                           or g['underlying']),
+                           or g['underlying']
+                           or str(rec_lt.get('Instrument_Name', '') or '').strip()
+                           or str(rec_lt.get('RIC', '') or '').strip()
+                           or str(rec_lt.get('Instrument_ID', '') or '').strip()),
             # Data da operação para o PRAZO do IR: a posição de swap não tem
             # essas operações, e sem prazo a alíquota não sai.
             'trade_date': _latam_trade_dt(rec_lt),
@@ -6492,19 +6504,21 @@ def _opssum_rows(trade_rows, ref):
         cpty = str(r.get('counterparty', '') or '').strip()
         if not cpty or s is None:
             continue
-        # Perna interna não vira aviso. Esta tabela É a fonte do Settlement
-        # Advice — cada linha daqui é um aviso —, então deixar a entidade nossa
-        # entrar produziria um documento endereçado a nós mesmos. A operação
-        # continua visível no Trade Level, que é a visão de trade e não a de
-        # aviso. A marca vem de quem monta a linha (`_ops_is_internal_cpty`):
-        # repetir o teste aqui criaria uma segunda resposta para a pergunta.
-        if r.get('_no_advice'):
-            continue
+        # Perna interna ENTRA aqui e sai só do documento. Esta tabela é a visão
+        # de LIQUIDAÇÃO do dia — a perna interna liquida, o dinheiro se move e o
+        # total tem de fechar com o Trade Level; cortá-la daqui fazia a operação
+        # da entidade nossa (a ATACAMA do par) sumir da tela sem uma palavra.
+        # O que não sai é o AVISO: `_swadv_collect` continua pulando a linha
+        # marcada, e o e-mail de TED também, porque não se transfere dinheiro
+        # para si mesmo. A marca vem de quem monta a linha
+        # (`_ops_is_internal_cpty`): repetir o teste aqui criaria uma segunda
+        # resposta para a pergunta.
         key = (cpty, str(r.get('lob', '') or ''), str(r.get('product', '') or ''))
         if key not in groups:
             groups[key] = []
             order.append(key)
-        groups[key].append((s, abs(r.get('_tax_n') or 0.0), str(r.get('_legal', '') or '')))
+        groups[key].append((s, abs(r.get('_tax_n') or 0.0), str(r.get('_legal', '') or ''),
+                            bool(r.get('_no_advice'))))
 
     out = []
     for key in sorted(order, key=lambda k: (_fcst_norm(k[0]), k[2], k[1])):
@@ -6515,7 +6529,7 @@ def _opssum_rows(trade_rows, ref):
         net_type = _ndfsum_net_type(rec_cpd)
         # Caixa por trade já líquido de IR: o imposto retido sempre ENCOLHE o
         # valor que se movimenta, qualquer que seja o sinal (regra do NDF).
-        vals = [(s - t if s >= 0 else s + t) for s, t, _le in groups[key]]
+        vals = [(s - t if s >= 0 else s + t) for s, t, _le, _in in groups[key]]
         recv = sum(v for v in vals if v > 0)
         pay = sum(v for v in vals if v < 0)
         total = recv + pay
@@ -6537,7 +6551,11 @@ def _opssum_rows(trade_rows, ref):
             'direction': direction,
             # Primeira entidade legal não vazia do grupo — é o bloco (BANCO × MGT)
             # em que a linha entra no e-mail de liberação de TED.
-            'legal': next((le for _s, _t, le in groups[key] if le), ''),
+            'legal': next((le for _s, _t, le, _in in groups[key] if le), ''),
+            # Perna interna: a linha aparece (liquida), mas não gera aviso nem
+            # TED. A tela marca com um selo ao lado do nome — sem ele, a única
+            # explicação para a linha nunca sair do `New` seria adivinhação.
+            'internal': all(i for _s, _t, _le, i in groups[key]),
             'account': _ndfsum_account_fmt(banking, direction),
             # Observação digitada prevalece; sem ela, a classificação automática
             # Internal/External das contas default do cliente.
@@ -6716,6 +6734,12 @@ def api_ops_summary_ted_email():
     for r in rows:
         name = str(r.get('counterparty', '') or '').strip()
         if not name or otc_emails._is_lawton(name) or otc_emails._is_jpmorgan(name):
+            continue
+        # Perna interna passou a APARECER no Settlement Summary (ela liquida),
+        # mas não se pede TED para si mesmo. O `_is_jpmorgan` acima não responde
+        # por ela: a entidade pode ser um fundo nosso ('ATACAMA FUNDO ...'), que
+        # não tem 'J.P. Morgan' no nome e passaria batido.
+        if r.get('internal'):
             continue
         pay = _mtm_parse_num(r.get('pay', ''))
         if not pay:                          # coluna Pay vazia → não há o que transferir

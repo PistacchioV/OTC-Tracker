@@ -5,7 +5,7 @@ pelo Operations B3. O que falta nelas e o outro lado: o **Swap Athena e so de
 CEM** e nao tem linha nenhuma para equity. Sem ele a linha saia com o nome curto
 da B3 (SAFRABM, INTRAGATACAMAFDO), sem Internal ID, sem Settlement e com as tres
 colunas de valor em branco -- e, sem Settlement, ficava fora do Settlement
-Summary, que e a fonte do aviso.
+Summary.
 
 A rota que substitui o Athena tem tres paradas:
 
@@ -22,8 +22,9 @@ O que este script prende:
   3. Curva Banco = os fluxos POSITIVOS do OTM, Curva Cliente = os NEGATIVOS,
      Resultado Bruto = a soma dos dois;
   4. o nome saindo do Reference Data pelo Cpty SPN, nunca do nome curto da B3;
-  5. a perna interna ficando no Trade Level e saindo do Settlement Summary e do
-     Settlement Advice;
+  5. a perna interna ficando no Trade Level E no Settlement Summary (que e a
+     visao de liquidacao: ela liquida), marcada como `internal`, e saindo do
+     Settlement Advice, que e o documento endereçado ao cliente;
   6. o swap de CEM (que TEM Athena) continuando exatamente como estava.
 
 Nao encosta em dado real: as fontes sao um tempfile, os cadastros sao stub e as
@@ -105,6 +106,10 @@ write_json(os.path.join(dia, 'operations-b3_20260810.json'), [
     opb3('B3-INT-111', 'PAGAMENTO DE DIF. DE JUROS', '130.000,00', 'INTRAGATACAMAFDO'),
     # Um swap de CEM de verdade, com linha no Athena -- tem de continuar igual.
     opb3('CEM-1', 'PAGAMENTO DE DIF. DE JUROS', '500,00', 'CLIENTE B3'),
+    # Uma equity cujo Latam NAO preenche as colunas de subjacente (o caso do
+    # swap: o proprio instrumento e a acao). Sem a cadeia de fallback, esta
+    # linha aparece com o Type em BRANCO mesmo tendo Internal ID e valor.
+    opb3('B3-EQ-333', 'PAGAMENTO DE DIF. DE JUROS', '1.000,00', 'RENNERBM'),
 ])
 
 # Athena: SO o swap de CEM. E a premissa do caso -- equity nao esta ali.
@@ -122,6 +127,9 @@ write_json(os.path.join(dia, 'latam-desk-position_20260810.json'), [
      'Underlying_Name': 'PETROBRAS PN', 'UNDERLYING_RIC': 'PETR4.SA',
      'Trade_Date': '20260701',
      'CLEARING_TRD_ID_INT': 'B3-INT-111', 'CLEARING_TRD_ID_CLNT': 'B3-CLNT-222'},
+    # Sem Underlying_Name, sem UNDERLYING_RIC: o subjacente e o INSTRUMENTO.
+    {'Deal_Ref': '77', 'Instrument_Name': 'VALE ON', 'RIC': 'VALE3.SA',
+     'Trade_Date': '20260701', 'CLEARING_TRD_ID_CLNT': 'B3-EQ-333'},
 ])
 
 write_json(os.path.join(dia, 'otm-settlement_20260810.json'), [
@@ -133,6 +141,8 @@ write_json(os.path.join(dia, 'otm-settlement_20260810.json'), [
     otm('270WI0012345', '130000.00', '9911', 'ATACAMA'),
     # O swap de CEM, chaveado pelo Kapital ID.
     otm('K1', '500.00'),
+    # A equity sem subjacente em coluna nenhuma do OTM tambem.
+    otm('270WC0000077', '1000.00', '5555', 'RENNER TEXTO LIVRE'),
 ])
 
 _roots = (R.OTM_JSON_ROOT, R.LATAM_JSON_ROOT, R.B3_JSON_ROOT)
@@ -141,7 +151,8 @@ try:
     R.B3_JSON_ROOT = b3                      # sem posicao: LOB e datas vem de outro lugar
     R._mapping_rows = _maps
     R._otm_cpty_name = (lambda spn: {'9911': 'ATACAMA FUNDO DE INVESTIMENTO',
-                                     '1808267': 'SAFRA CORRETORA LTDA'}.get(R._spn_key(spn), ''))
+                                     '1808267': 'SAFRA CORRETORA LTDA',
+                                     '5555': 'RENNER CORRETORA LTDA'}.get(R._spn_key(spn), ''))
     trade = R._ops_swap_trade_rows(REF)
     resumo = R._opssum_rows(trade, REF_DT)
     aviso = R._swadv_collect(REF_DT)
@@ -156,8 +167,9 @@ finally:
 by_b3 = {r['id_b3']: r for r in trade}
 
 print('\n== 1. uma linha por operacao, nao duas ==')
-check('os tres Titulos viram tres linhas', sorted(by_b3), ['B3-CLNT-222', 'B3-INT-111', 'CEM-1'])
-check('   e nenhuma familia paralela duplica o trade', len(trade), 3)
+check('os Titulos viram uma linha cada', sorted(by_b3),
+      ['B3-CLNT-222', 'B3-EQ-333', 'B3-INT-111', 'CEM-1'])
+check('   e nenhuma familia paralela duplica o trade', len(trade), 4)
 
 print('\n== 2. o que o Athena daria, vindo do Latam + OTM ==')
 cli = by_b3['B3-CLNT-222']
@@ -169,6 +181,11 @@ check('   Settlement = soma dos fluxos do OTM', cli['settlement'], '-130,000.00'
 check('   Settlement B3 continua vindo do Operations B3', cli['settlement_b3'], '-130,000.00')
 check('   Difference fecha', cli['difference'], '0.00')
 check('   Type = o ativo subjacente', cli['type'], 'PETROBRAS PN')
+# As duas primeiras colunas do Latam sao de derivativo SOBRE um ativo e vem
+# vazias no swap de equity, onde o proprio instrumento e a acao. Sem a cadeia de
+# fallback a coluna Type sai em BRANCO -- foi o que se viu nas linhas de EDG.
+check('   sem Underlying_Name, o Type cai no Instrument_Name',
+      by_b3['B3-EQ-333']['type'], 'VALE ON')
 check('   LOB rotula a linha como equity', cli['lob'], 'EQUITIES')
 check('   e o produto continua SWAP (e como a B3 registra)', cli['product'], 'SWAP')
 
@@ -199,11 +216,22 @@ check('   mas um banco CLIENTE nao (a regra ingenua cortaria o Safra)',
 check('   o token da LE reconhece a conta por extenso', internos[4], True)
 check('   um cliente de verdade nao', internos[2], False)
 check('a perna interna FICA no Trade Level', itn.get('id_b3'), 'B3-INT-111')
-check('   e sai do Settlement Summary (a fonte do aviso)',
+# Ela LIQUIDA, entao aparece tambem no Settlement Summary -- que e a visao de
+# liquidacao do dia, e nao a lista de avisos. Corta-la de la fazia a operacao da
+# entidade nossa sumir da tela sem uma palavra.
+check('   e ENTRA no Settlement Summary, que e a visao de liquidacao',
       sorted(r['counterparty'] for r in resumo),
-      ['SAFRA CORRETORA LTDA', 'SUZANO SA'])
-check('   e sai tambem do Settlement Advice',
-      sorted(r['counterparty'] for r in aviso), ['SAFRA CORRETORA LTDA', 'SUZANO SA'])
+      ['ATACAMA FUNDO DE INVESTIMENTO', 'RENNER CORRETORA LTDA',
+       'SAFRA CORRETORA LTDA', 'SUZANO SA'])
+check('   marcada como interna (o selo da tela e o corte da TED saem daqui)',
+      [r['counterparty'] for r in resumo if r.get('internal')],
+      ['ATACAMA FUNDO DE INVESTIMENTO'])
+check('   e o cliente NAO vem marcado',
+      any(r.get('internal') for r in resumo if r['counterparty'] != 'ATACAMA FUNDO DE INVESTIMENTO'),
+      False)
+check('   mas fica de fora do Settlement Advice, que e o documento',
+      sorted(r['counterparty'] for r in aviso),
+      ['RENNER CORRETORA LTDA', 'SAFRA CORRETORA LTDA', 'SUZANO SA'])
 
 print('\n== 6. as tres colunas de valor do aviso ==')
 adv = {r['counterparty']: r for r in aviso}

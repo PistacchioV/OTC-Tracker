@@ -159,7 +159,10 @@ Live Positions, o Track Confirmations e as três Recons).
   bg-gradient` (dropdown com ao menos CSV e Copy; exporta o que está NA TELA —
   filtros e ordenação aplicados, só colunas visíveis), **Import** = teal
   `#4a849b`, **Mapping/refresh** = `btn-success bg-gradient`, **Clear
-  Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado.
+  Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado. A barra vai
+  com **`mb-3`, não `mb-2`**: o DataTables desenha a própria caixa encostada no
+  elemento anterior e come a margem do irmão de cima, então o `mb-2` mede 0 px
+  na tela e os botões ficam colados no cabeçalho (HANDOFF §233).
 - **Alinhamento valor × coluna é parte do padrão**, e são TRÊS coisas — a Recon
   FXO saiu desalinhada duas vezes por ter só a primeira. Com `scrollX` o
   cabeçalho vive numa tabela irmã do corpo:
@@ -631,7 +634,12 @@ saem: Internal ID, contraparte (Reference Data pelo `Cpty SPN`), Settlement, e a
 três colunas do aviso — **Curva Banco = os fluxos positivos, Curva Cliente = os
 negativos, Resultado Bruto = a soma**. O Type é **trocado** pelo ativo subjacente
 (não completado: VCP/Calculado vem do arquivo de eventos, que não tem equity, e
-toda linha sairia dizendo `Calculado`), e o prazo do IR sai do **`Trade_Date` do
+toda linha sairia dizendo `Calculado`) — e o subjacente sai de uma **cadeia**,
+porque nenhuma fonte preenche sempre: `Underlying_Name` → `UNDERLYING_RIC` do
+Latam → `Underlying` do OTM → `Instrument_Name` → `RIC` → `Instrument_ID`. As
+duas primeiras colunas são de derivativo *sobre* um ativo e vêm vazias no swap de
+equity, onde o próprio instrumento é a ação; foi assim que as linhas de EDG
+apareceram com o Type em branco já tendo Internal ID e valor. O prazo do IR sai do **`Trade_Date` do
 Latam**, porque a posição de swap não tem essas operações. O de-para lê o
 **último** Latam disponível e compara **só dígitos, sem zeros à esquerda**. O
 produto continua `SWAP` — é como a B3 registra, e é dessa linha que sai o
@@ -644,9 +652,14 @@ isso derrubaria Banco Safra, Bradesco e Santander, que são clientes.
 `_ops_is_internal_cpty` responde pelo cadastro `le-spn` (SPN, nome, e o **token
 da LE** como palavra, porque o `Reference Data Name` nasce vazio em algumas
 entidades) e pelo `_pc_is_internal_counterparty`, que é a resposta que o Pending
-Confirmation já dá para a mesma pergunta. A linha marcada **fica** no Trade
-Level, que é a visão de trade, e **sai** do Settlement Summary e do Settlement
-Advice, que é o documento endereçado ao cliente (HANDOFF §229).
+Confirmation já dá para a mesma pergunta. O que a marca tira é o **documento**,
+não a linha: ela **fica** no Trade Level (visão de trade) **e no Settlement
+Summary** (visão de liquidação — a perna interna liquida, e o total tem de fechar
+com o Trade Level), com o selo `Internal` ao lado do nome; e **sai** do Settlement
+Advice, que é o documento endereçado ao cliente, e do **e-mail de TED**, porque
+não se transfere dinheiro para si mesmo — o `_is_jpmorgan` do TED não cobre isso
+sozinho, já que a entidade pode ser um fundo nosso sem "J.P. Morgan" no nome
+(HANDOFF §229/§234).
 
 **O nome da contraparte sai do SPN, nunca do texto do arquivo.** O
 `br-onshore-settlements` traz o `CounterParty` como texto livre da mesa

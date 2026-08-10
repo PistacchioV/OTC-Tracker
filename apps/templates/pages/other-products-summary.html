@@ -807,8 +807,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 // sobrevive ao reload. A ORDEM tem de bater com os <th>.
                 (j.summary || []).forEach(function (r) {
                     var obsVal = esc(r.obs || '').replace(/"/g, '&quot;');
+                    // Perna interna: a linha liquida e por isso aparece, mas não
+                    // vira aviso nem TED. O selo é a única coisa na tela que
+                    // explica por que ela nunca sai do `New`. Ele vai colado no
+                    // `esc(r.counterparty)` de propósito: a ordem das colunas é
+                    // lida daqui pelo check_ops_summary, e uma variável no lugar
+                    // da chamada tiraria a coluna da lista.
                     dtSummary.row.add(['<input type="checkbox" class="form-check-input ops-cb">', summaryActionsCell(), statusPill(r.status || 'New'),
-                        esc(r.counterparty), esc(r.lob), esc(r.product),
+                        esc(r.counterparty) + (r.internal ? ' <span class="badge bg-secondary-subtle text-secondary fw-normal">' + t('ops-internal', 'Internal') + '</span>' : ''),
+                        esc(r.lob), esc(r.product),
                         esc(r.receive), esc(r.pay), esc(r.net_type), esc(r.direction),
                         accountHtml(r.account),
                         '<input type="text" class="ops-cell-inp ops-obs-inp" value="' + obsVal + '">']);
