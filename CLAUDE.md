@@ -610,7 +610,7 @@ mandam nada se comportam exatamente como antes (HANDOFF §184/§190).
 Settlement Summary, Trade Level e as duas de Settlement Advice leem as mesmas
 linhas derivadas — o card conta o que a tabela mostra, e o aviso imprime o que
 a tabela mostra. **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais
-famílias de produto existem** (hoje SWAP + NDF Commodities + Equities); a página, os cards
+famílias de produto existem** (hoje SWAP + NDF Commodities); a página, os cards
 de reconciliação e o e-mail de TED chamam todos ele. O endpoint de TED remontava
 a lista sozinho e silenciosamente parou de pedir os TEDs de commodities no dia
 em que NDF entrou (HANDOFF §199). O status do aviso (`New → Generated → Sent`)
@@ -618,23 +618,35 @@ vive uma vez só, no overlay do dia
 `other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
 produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
 
-**Equities entra por outro caminho: o OTM não traz o identificador da B3.** Ele
-está no **Latam Desk Position**, e a ponte é o NÚMERO do Trade Id depois do
-prefixo `270WI`/`270WC` — é o `Deal_Ref` do relatório. O mesmo `Deal_Ref` cobre
-as duas pernas da operação (Safra × Atacama), e por isso a linha traz dois
-identificadores: `CLEARING_TRD_ID_INT` é a perna contra a **entidade**,
-`CLEARING_TRD_ID_CLNT` a perna contra o **cliente**. Qual vale sai de **quem é a
-contraparte** da linha do OTM, não do prefixo — o prefixo é convenção de
-nomenclatura, a contraparte é o fato, e um identificador da B3 errado é pior do
-que nenhum. O de-para lê o **último** Latam disponível (o relatório não é diário,
-e é o mesmo arquivo que a página abre) e compara **só dígitos, sem zeros à
-esquerda** dos dois lados. **Perna interna não gera aviso**
-(`_ops_is_internal_cpty`: `le-spn` por SPN, depois por nome, e por último o
-prefixo `BANCO`): ela **fica** no Trade Level, que é a visão de trade, e **sai**
-do Settlement Summary, que é a fonte do documento endereçado ao cliente. O
-produto é `EQUITY` e não `OPTION` porque o **valor** da B3 não tem fonte montada:
-no card de Option a família daria âmbar permanente sem divergência nenhuma
+**Equity é registrado na B3 como SWAP, então a linha já existe — o que falta é
+o outro lado.** O `br-onshore-settlements` (Swap Athena) é **só de CEM** e não
+tem equity: sem isso a linha saía com o nome curto da B3 (`SAFRABM`), sem
+Internal ID, sem Settlement e com as três colunas de valor em branco — e, sem
+Settlement, ficava fora do Settlement Summary. `_ops_equity_link(ref)` monta o
+que o Athena daria, por uma rota de três paradas: **Operations B3 (Título) →
+Latam Desk Position (`CLEARING_TRD_ID_INT`/`CLNT` → `Deal_Ref`) → OTM
+Settlements (`270WI`/`270WC` + `Deal_Ref`)**. Qual perna é a do Título sai de
+**qual coluna de clearing casou** — INT leva ao `270WI`, CLNT ao `270WC`. Do OTM
+saem: Internal ID, contraparte (Reference Data pelo `Cpty SPN`), Settlement, e as
+três colunas do aviso — **Curva Banco = os fluxos positivos, Curva Cliente = os
+negativos, Resultado Bruto = a soma**. O Type é **trocado** pelo ativo subjacente
+(não completado: VCP/Calculado vem do arquivo de eventos, que não tem equity, e
+toda linha sairia dizendo `Calculado`), e o prazo do IR sai do **`Trade_Date` do
+Latam**, porque a posição de swap não tem essas operações. O de-para lê o
+**último** Latam disponível e compara **só dígitos, sem zeros à esquerda**. O
+produto continua `SWAP` — é como a B3 registra, e é dessa linha que sai o
+Settlement B3; quem rotula é a LOB (`EQUITIES` quando não há token cadastrado).
+Partir do OTM em vez do Título criava uma **segunda linha** para o mesmo trade
 (HANDOFF §227).
+
+**Perna interna não gera aviso**, e a regra NÃO é "o nome começa em BANCO" —
+isso derrubaria Banco Safra, Bradesco e Santander, que são clientes.
+`_ops_is_internal_cpty` responde pelo cadastro `le-spn` (SPN, nome, e o **token
+da LE** como palavra, porque o `Reference Data Name` nasce vazio em algumas
+entidades) e pelo `_pc_is_internal_counterparty`, que é a resposta que o Pending
+Confirmation já dá para a mesma pergunta. A linha marcada **fica** no Trade
+Level, que é a visão de trade, e **sai** do Settlement Summary e do Settlement
+Advice, que é o documento endereçado ao cliente (HANDOFF §229).
 
 **O nome da contraparte sai do SPN, nunca do texto do arquivo.** O
 `br-onshore-settlements` traz o `CounterParty` como texto livre da mesa

@@ -10332,54 +10332,72 @@ desconhecida em silêncio, e campo que se escreve para nada é dívida esperando
 **O dado não foi perdido**: `ensure_db` só ACRESCENTA coluna, então a coluna física continua no DuckDB
 com o que já estava lá. Voltar atrás é devolver o nome à lista.
 
-## §227 — Equities entram no Trade Level pelo Latam Desk Position
+## §227 — Equities: o lado que o Swap Athena não tem
 
-A operação de equity chega ao **OTM Settlements** com o Trade Id do sistema (`270WI…` / `270WC…`) e
-**sem** o identificador da B3. Ele está no **Latam Desk Position**, e o que liga os dois é o NÚMERO
-depois do prefixo: ele é o `Deal_Ref` do relatório.
+A B3 registra as operações de equity como **SWAP**, então elas já entravam no Trade Level e no
+Settlement Advice pelo Operations B3 (`_ops_swap_settling`). O que faltava nelas era o outro lado: o
+**Swap Athena é só de CEM** e não tem linha nenhuma para equity. Sem ele a linha saía com o nome curto
+da B3 (`SAFRABM`, `INTRAGATACAMAFDO`), sem Internal ID, sem Settlement e com as três colunas de valor
+em branco — e, sem Settlement, ficava **fora do Settlement Summary**, que é a fonte do aviso.
 
-O mesmo `Deal_Ref` cobre **duas** operações — a de contra o cliente externo e a de contra a nossa
-entidade (Safra × Atacama) —, e por isso o relatório traz dois identificadores na mesma linha:
+A primeira tentativa montou uma **família própria** a partir do OTM Settlements. Estava errada, e o
+erro é instrutivo: ela criava uma SEGUNDA linha para o mesmo trade, ao lado da que o Operations B3 já
+produzia — uma com o identificador da B3 e o valor da B3, a outra com o Trade Id e o valor interno, e
+nenhuma das duas completa.
 
-| Coluna | A perna |
+A rota certa parte do **Título** e tem três paradas:
+
+```
+Operations B3 --Título--> Latam Desk Position --Deal_Ref--> OTM Settlements
+                          CLEARING_TRD_ID_INT               270WI<Deal_Ref>
+                          CLEARING_TRD_ID_CLNT              270WC<Deal_Ref>
+```
+
+O mesmo `Deal_Ref` cobre DUAS operações — a de contra o cliente externo e a de contra a nossa entidade
+(Safra × Atacama) —, e é por isso que o relatório traz os dois identificadores na mesma linha. **Qual
+das pernas é a do Título em mãos sai de QUAL COLUNA casou**: `CLEARING_TRD_ID_INT` é a perna interna e
+leva ao Trade Id `270WI…`; `CLEARING_TRD_ID_CLNT` é a do cliente e leva ao `270WC…`.
+
+`_ops_equity_link(ref)` devolve `{Título → …}` com exatamente os campos que a linha do Athena daria, e
+as DUAS telas o consomem — o documento que vai ao cliente não pode discordar da tela.
+
+O que entra por essa rota:
+
+| Coluna | De onde |
 |---|---|
-| `CLEARING_TRD_ID_INT` | contra a **entidade** (Atacama) |
-| `CLEARING_TRD_ID_CLNT` | contra o **cliente externo**, quando existe |
+| Internal ID | o Trade Id do OTM (`270WI…`/`270WC…`) |
+| Counterparty | Reference Data pelo **Cpty SPN** do OTM (`_otm_cpty_name`) |
+| Settlement | soma dos fluxos do OTM daquele Trade Id |
+| **Curva Banco** | os fluxos **positivos** do OTM |
+| **Curva Cliente** | os fluxos **negativos** |
+| **Resultado Bruto** | a soma dos dois |
+| Type | o **ativo subjacente** (`Underlying_Name`/`UNDERLYING_RIC` do Latam) |
+| Data Operação (prazo do IR) | o **`Trade_Date` do Latam** |
+| Settlement B3 | continua vindo do próprio Operations B3 |
 
-**Qual dos dois vale sai de quem é a contraparte da linha do OTM, não do prefixo do Trade Id.** O
-prefixo é uma convenção de nomenclatura (I = interna, C = cliente) e serve de desempate; a contraparte
-é o fato. Com a ordem invertida, um Trade Id batizado errado escreveria na tela o identificador da
-outra perna — e um identificador da B3 errado é pior do que nenhum, porque parece certo.
+Quatro coisas que não dão erro se forem feitas de outro jeito:
 
-Três coisas que não dão erro se forem feitas de outro jeito:
+- **O de-para lê o ÚLTIMO Latam Desk Position**, não o da data de liquidação. O relatório não é diário
+  e a própria página abre no último JSON que existe (`_latam_latest_ref`).
+- **A chave é só-dígitos, sem zeros à esquerda dos dois lados** (`_ops_eq_ref_key`): um sistema zera à
+  esquerda conforme a largura do campo e o outro não. Trade Id **sem** um dos prefixos conhecidos não
+  vira chave — o identificador de outra família não pode casar por acidente.
+- **O Type tem de ser trocado, não completado.** VCP/Calculado sai do arquivo de eventos, que não tem
+  essas operações: sem a troca, toda linha de equity apareceria como `Calculado`, que é uma afirmação
+  errada em vez de uma célula vazia.
+- **O prazo do IR sai do Latam.** A posição de swap não tem essas operações, e sem data de operação não
+  há prazo — logo não há alíquota, e a coluna de IR sairia vazia numa liquidação que paga IR. O IR
+  segue a MESMA tabela do swap (`swap-ir-client` + `swap-ir-term`), inclusive a isenção de bancos.
 
-- **O de-para lê o ÚLTIMO Latam Desk Position, não o da data de liquidação.** O relatório não é diário
-  e a própria página abre no último JSON que existe (`_latam_latest_ref`). Procurando o do dia, o
-  mapeamento ficaria vazio em todo dia sem posição nova e a coluna B3 sairia em branco sem que nada na
-  tela dissesse por quê.
-- **A chave é só-dígitos e sem zeros à esquerda dos DOIS lados** (`_ops_eq_ref_key`): um sistema zera à
-  esquerda conforme a largura do campo e o outro não — é o mesmo tropeço que o `_spn_key` já resolveu.
-  Trade Id **sem** um dos prefixos conhecidos devolve chave vazia: o Trade Id de outra família não pode
-  casar por acidente com um `Deal_Ref` que não é dele.
-- **A linha é uma por Trade Id**, com o `Amount` de todos os fluxos somado — o OTM traz um registro por
-  fluxo de caixa. É a mesma conta que o swap já faz em `otm_by_trade`.
+**O produto continua `SWAP`**, e não `EQUITY`: é como a B3 registra, e é dessa linha que sai o
+Settlement B3. Trocar o rótulo tiraria essas operações do card de Swap sem colocá-las em card nenhum.
+Quem rotula a linha é a **LOB**, que cai em `EQUITIES` quando o Código Identificador não traz token
+(o cadastro continua vencendo quando responde).
 
-**Não sai aviso para perna interna.** `_ops_is_internal_cpty` responde pelo cadastro `le-spn` (SPN e
-depois nome) e, por último, pelo prefixo **BANCO**, que é como as entidades bancárias do grupo chegam
-escritas quando ninguém as cadastrou. A linha marcada **fica no Trade Level** — é uma operação de
-verdade, e escondê-la seria esconder metade do par — e sai do **Settlement Summary**, que é a fonte do
-aviso: cada linha de lá é um documento endereçado ao cliente, e a entidade nossa produziria um aviso
-para nós mesmos. A marca (`_no_advice`) vem de quem monta a linha; repetir o teste dentro do
-`_opssum_rows` criaria uma segunda resposta para a mesma pergunta.
-
-**Produto `EQUITY`, e não `OPTION`, de propósito.** Os dois `CLEARING_TRD_ID_*` são identificadores; o
-**valor** da B3 para equity não tem fonte montada. Caindo no card de Option, a família entraria com
-contagem interna e lado B3 zerado — um âmbar permanente que não é divergência nenhuma. `_ops_recon`
-ignora o produto que não conhece, que é o mesmo tratamento que as famílias sem Trade Level já recebem
-(§182). Quando o lado B3 existir, é trocar o rótulo.
-
-A família entra em **`_ops_trade_rows`**, o único lugar que sabe quais famílias existem — de lá ela
-aparece de uma vez na tabela, nos cards e no e-mail de TED (§199).
+**Perna interna não gera aviso** (`_no_advice`): ela FICA no Trade Level — é uma operação de verdade, e
+tirá-la esconderia metade do par — e SAI do Settlement Summary e do Settlement Advice. Só para equity,
+de propósito: a regra é geral, mas o swap de CEM roda assim há tempo e ligar o corte para ele apagaria
+da tela linhas que a mesa usa hoje. É decisão de negócio, não efeito colateral.
 
 ## §228 — O corte da GEM na Recon FXO pegava só metade do par
 
@@ -10398,3 +10416,24 @@ Matching é a contraparte do outro lado e cortar por ele derrubaria a operação
 aplica: a conta marcada é **interna**, e a linha em que ela aparece como contraparte é a perna de
 dentro da mesma operação. O cliente está do outro lado do **seu próprio** par, numa linha cujas duas
 contrapartes são ele e a mesa.
+
+## §229 — "Começa em BANCO" derrubaria o Banco Safra
+
+A regra de perna interna foi enunciada como *entidade legal ou nome começando em BANCO*. Escrita
+literalmente, ela é um bug: **BANCO SAFRA, BANCO BRADESCO e BANCO SANTANDER** são clientes de verdade, e
+ficariam sem aviso de liquidação **em silêncio** — a linha some do Settlement Summary sem nada dizer.
+
+O que se quer dizer com "banco" é o banco DO GRUPO. `_ops_is_internal_cpty` responde por duas fontes,
+nenhuma delas um prefixo:
+
+1. cadastro **`le-spn`** — por SPN, por nome, e pelo **token da LE** como palavra dentro do nome;
+2. **`_pc_is_internal_counterparty`** — o Reference Data (`ECONOMIC GROUP = INTERNAL`, por SPN e depois
+   por nome) com `_pc_is_intragroup` como último recurso (`banco` **e** `morgan` no nome). É a resposta
+   que o Pending Confirmation já dá para decidir o que é operação de cliente; uma segunda definição aqui
+   divergiria da primeira no primeiro cadastro novo.
+
+O **token** existe porque o `Reference Data Name` nasce VAZIO em algumas entidades (a ATACAMA é assim no
+seed) e o nome que chega dos arquivos é o da conta por extenso — `ATACAMA FUNDO DE INVESTIMENTO`. Sem
+ele, a perna interna só seria reconhecida depois de alguém preencher a razão social na tela, e até lá
+geraria aviso. Só tokens de **4+ caracteres** entram: `JPM` e `MGT` são curtos demais e apareceriam no
+meio de um nome de cliente por acaso.

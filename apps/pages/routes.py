@@ -5864,6 +5864,10 @@ def _ops_swap_trade_rows(settle_ref):
         if k:
             by_contract.setdefault(k, []).append(row)
 
+    # O que substitui o Athena nas operações de EQUITY: o Swap Athena é só de
+    # CEM, e sem isto a linha de equity sai com o nome curto da B3 e sem valor.
+    eqlink = _ops_equity_link(ref_dt)
+
     _ojp, otm = _otm_load(ref_dt)
     otm_by_trade, otm_spn_by_trade = {}, {}
     for rec in (otm or []):
@@ -5885,7 +5889,11 @@ def _ops_swap_trade_rows(settle_ref):
     for titulo, rec in titulos:
         key = titulo.upper()
         arow = by_cetip.get(key)
-        internal_id = _cell(arow, ai, 'Kapital ID') if arow else ''
+        # Equity: o Título casou com um `CLEARING_TRD_ID_*` do Latam e de lá se
+        # chegou ao Trade Id do OTM. É o lado que o Athena daria para um swap de
+        # CEM — Internal ID, contraparte, valor e curvas.
+        eq = eqlink.get(key) or {}
+        internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
         # Counterparty: o **Cpty SPN** do OTM resolvido pelo `le-spn` e pelo
         # Reference Data (`_otm_cpty_name`) — um identificador, não um texto
         # livre. O nome do Athena vem depois, porque é a razão social que o
@@ -5898,6 +5906,7 @@ def _ops_swap_trade_rows(settle_ref):
         # cadastrando o texto que vê e sem efeito nenhum.
         counterparty = (_otm_cpty_name(otm_spn_by_trade.get(internal_id.strip().upper(), '')) or
                         (_cell(arow, ai, 'CounterParty') if arow else '') or
+                        eq.get('counterparty', '') or
                         str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
 
         # Type: VCP quando QUALQUER uma das duas pontas do evento indexa em VCP.
@@ -5906,7 +5915,12 @@ def _ops_swap_trade_rows(settle_ref):
             for col in ('PARTE / Indexador', 'CONTRAPARTE / Indexador'):
                 if 'vcp' in _fcst_norm(_cell(erow, ei, col)):
                     vcp = True
-        stype = 'VCP' if vcp else 'Calculado'
+        # Em equity o Type é o ATIVO SUBJACENTE — é ele que distingue uma
+        # operação da outra na tela, do jeito que VCP/Calculado distingue os
+        # swaps e a mercadoria distingue os termos. VCP/Calculado sai do arquivo
+        # de eventos, que não tem essas operações: sem a troca, toda linha de
+        # equity apareceria como 'Calculado', que é uma afirmação errada.
+        stype = eq.get('underlying', '') if eq else ('VCP' if vcp else 'Calculado')
 
         settlement = otm_by_trade.get(internal_id.strip().upper()) if internal_id else None
         # Settlement B3: soma das linhas do Título que ENTRAM no universo — os
@@ -5926,7 +5940,12 @@ def _ops_swap_trade_rows(settle_ref):
         # prazo de um diferencial no meio da vida do swap e BAIXARIA a alíquota.
         # É a mesma conta do Settlement Advice — as duas telas têm de imprimir a
         # mesma alíquota para o mesmo swap no mesmo dia.
-        op_dt = (terms.get(_fcst_norm_contract(titulo).upper()) or {}).get('op')
+        #
+        # Em equity o prazo sai do **Trade_Date do Latam**: a posição de swap não
+        # tem essas operações, e sem data de operação não há prazo — logo não há
+        # alíquota, e a coluna de IR sairia vazia numa liquidação que paga IR.
+        op_dt = ((terms.get(_fcst_norm_contract(titulo).upper()) or {}).get('op')
+                 or eq.get('trade_date'))
         prazo = (settle_ref - op_dt).days if op_dt else None
         rate = _ops_swap_ir_rate(counterparty, prazo,
                                  _ops_cpty_receives(_cell(arow, ai, 'Direction') if arow else '',
@@ -5943,10 +5962,16 @@ def _ops_swap_trade_rows(settle_ref):
             # mesma página falando línguas diferentes seria o defeito.
             # Sem token reconhecido a célula fica VAZIA (regra do _fcst_lob):
             # pede cadastro em vez de chutar uma LOB.
-            'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
+            # Equity não tem token de LOB no Código Identificador: sem o
+            # fallback a coluna ficaria vazia e nada na tela diria que aquela
+            # linha é de equity — o cadastro continua vencendo quando responde.
+            'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or ('EQUITIES' if eq else ''),
             'counterparty': counterparty,
             'internal_id': internal_id,
             'id_b3': titulo,
+            # A B3 registra a operação de equity como SWAP, e é dessa linha que
+            # sai o Settlement B3 — trocar o rótulo aqui tiraria essas operações
+            # do card de Swap sem colocá-las em card nenhum.
             'product': 'SWAP',
             'type': stype,
             'settlement': _ops_fmt_amt(settlement),
@@ -5962,7 +5987,16 @@ def _ops_swap_trade_rows(settle_ref):
             '_tax_n': tax,
             '_b3_n': settlement_b3,
             # Entidade legal: o e-mail de TED separa BANCO e MGT em dois blocos.
-            '_legal': _cell(arow, ai, 'Owner Legal Entity') if arow else '',
+            '_legal': (_cell(arow, ai, 'Owner Legal Entity') if arow else '') or eq.get('legal', ''),
+            # Perna interna não gera aviso: ela FICA no Trade Level (é uma
+            # operação de verdade, e tirá-la esconderia metade do par) e SAI do
+            # Settlement Summary, que é a fonte do documento que vai ao cliente.
+            #
+            # Só para EQUITY, de propósito. A regra é geral, mas o swap de CEM já
+            # roda assim há tempo e ligar o corte para ele aqui apagaria da tela
+            # linhas que a mesa usa hoje — é uma decisão de negócio, não um
+            # efeito colateral desta correção.
+            '_no_advice': bool(eq) and _ops_is_internal_cpty(counterparty, eq.get('spn', '')),
         })
     return out
 
@@ -6060,95 +6094,219 @@ def _ops_ndfc_trade_rows(settle_ref):
     return out
 
 
-# ── Other Products › Trade Level: EQUITIES ───────────────────────────────────
-#  A operação de equity chega ao OTM Settlements com o Trade Id do sistema
-#  (`270WI…` / `270WC…`) e NÃO carrega o identificador da B3. Ele está no Latam
-#  Desk Position, e o que liga os dois é o NÚMERO depois do prefixo: ele é o
-#  `Deal_Ref` do relatório.
+# ── Other Products › a operação de EQUITY: o lado que o Athena não tem ───────
+#  A B3 registra essas operações como SWAP, então elas JÁ entram no Trade Level e
+#  no Settlement Advice pelo Operations B3 (`_ops_swap_settling`). O que falta
+#  nelas é o outro lado: o **Swap Athena é só de CEM** e não tem linha nenhuma
+#  para equity. Sem ele a linha saía com o nome curto da B3 (`SAFRABM`,
+#  `INTRAGATACAMAFDO`), sem Internal ID, sem Settlement e sem as curvas — e, sem
+#  Settlement, ficava fora do Settlement Summary, que é a fonte do aviso.
+#
+#  A rota que substitui o Athena para equity tem três paradas:
+#
+#      Operations B3  --Título-->  Latam Desk Position  --Deal_Ref-->  OTM Settlements
+#                                  CLEARING_TRD_ID_INT                 270WI<Deal_Ref>
+#                                  CLEARING_TRD_ID_CLNT                270WC<Deal_Ref>
 #
 #  O mesmo `Deal_Ref` cobre DUAS operações — a de contra o cliente externo e a de
-#  contra a nossa entidade (Safra × Atacama) —, e por isso o relatório traz dois
-#  identificadores da B3 na mesma linha:
+#  contra a nossa entidade (Safra × Atacama) —, e é por isso que o relatório traz
+#  os dois identificadores da B3 na mesma linha. Qual das duas pernas é a do
+#  Título em mãos sai de QUAL COLUNA casou: `CLEARING_TRD_ID_INT` é a perna
+#  interna e leva ao Trade Id `270WI…`; `CLEARING_TRD_ID_CLNT` é a do cliente e
+#  leva ao `270WC…`. Partir do Título (e não do OTM) é o que mantém a operação em
+#  UMA linha: montar uma família própria a partir do OTM criava uma segunda linha
+#  para o mesmo trade, ao lado da que o Operations B3 já produzia.
 #
-#      CLEARING_TRD_ID_INT   → a perna contra a ENTIDADE (Atacama)
-#      CLEARING_TRD_ID_CLNT  → a perna contra o CLIENTE externo, quando existe
-#
-#  Qual dos dois vale sai de QUEM É A CONTRAPARTE da linha do OTM, não do prefixo
-#  do Trade Id: o prefixo é uma convenção de nomenclatura (I = interna, C =
-#  cliente) e serve de desempate, mas a contraparte é o fato. Com a ordem
-#  invertida, um Trade Id batizado errado escreveria na tela o identificador da
-#  outra perna — e um identificador da B3 errado é pior do que nenhum.
-_OPS_EQ_TRADE_PREFIXES = ('270WI', '270WC')
-_OPS_EQ_LOB = 'EQUITIES'
-_OPS_EQ_PRODUCT = 'EQUITY'
+#  Do OTM saem os três valores do aviso, e a regra é a que a mesa usa:
+#  **Curva Banco = os fluxos positivos, Curva Cliente = os negativos, Resultado
+#  Bruto = a soma dos dois.**
+_OPS_EQ_LEG_PREFIX = (('CLEARING_TRD_ID_INT', '270WI'),
+                      ('CLEARING_TRD_ID_CLNT', '270WC'))
 
 
 def _ops_eq_ref_key(v):
-    """Chave do de-para Trade Id × Deal_Ref: só os dígitos, sem zeros à esquerda.
+    """Chave do de-para Deal_Ref × Trade Id: só os dígitos, sem zeros à esquerda.
 
     Os dois lados são o mesmo número escrito por sistemas diferentes — um deles
-    zera à esquerda conforme a largura do campo, e comparar o texto casaria
-    silenciosamente nada (o mesmo tropeço do SPN em `_spn_key`)."""
+    zera à esquerda conforme a largura do campo — e comparar o texto casaria
+    silenciosamente nada (o mesmo tropeço que o `_spn_key` já resolveu)."""
     d = re.sub(r'\D', '', str(v or ''))
     return d.lstrip('0') or d
 
 
 def _ops_eq_trade_key(trade_id):
-    """`270WI0012345` → `12345`. Sem um dos prefixos conhecidos devolve '' — o
-    Trade Id de outra família não pode virar chave por acidente e casar com um
-    `Deal_Ref` que não é dele."""
+    """`270WI0012345` → `('270WI', '12345')`; `(None, '')` fora do padrão.
+
+    O prefixo faz parte da resposta: ele é o que diz QUAL perna do `Deal_Ref` é
+    aquele Trade Id. Trade Id sem um dos prefixos conhecidos não vira chave — o
+    identificador de outra família não pode casar por acidente com um `Deal_Ref`
+    que não é dele."""
     s = str(trade_id or '').strip().upper()
-    for p in _OPS_EQ_TRADE_PREFIXES:
-        if s.startswith(p):
-            return _ops_eq_ref_key(s[len(p):])
-    return ''
+    for _col, pref in _OPS_EQ_LEG_PREFIX:
+        if s.startswith(pref):
+            return pref, _ops_eq_ref_key(s[len(pref):])
+    return None, ''
 
 
-def _latam_equity_index():
-    """{Deal_Ref → registro} do ÚLTIMO Latam Desk Position disponível.
+def _latam_equity_b3_index():
+    """{Título da B3 → (Deal_Ref, prefixo do Trade Id, linha do Latam)}.
 
-    O relatório NÃO é diário e a página abre no último JSON que existe
-    (`_latam_latest_ref`). O de-para lê o MESMO arquivo que ela mostra: procurar o
-    da data de liquidação deixaria o mapeamento vazio em todo dia sem posição
-    nova — a coluna B3 sairia em branco e nada na tela diria por quê.
+    Lê o ÚLTIMO Latam Desk Position disponível, não o da data de liquidação: o
+    relatório não é diário e a própria página abre no último JSON que existe
+    (`_latam_latest_ref`). Procurando o do dia, o de-para ficaria vazio em todo
+    dia sem posição nova e a linha sairia sem nome e sem valor, sem que nada na
+    tela dissesse por quê.
 
-    Primeiro registro vence: as linhas do relatório se repetem por vencimento, e
-    os dois CLEARING_TRD_ID_* são do trade, não da parcela."""
+    As DUAS colunas de clearing entram, cada uma apontando para o seu prefixo de
+    Trade Id — é isso que distingue a perna interna da perna do cliente sem
+    precisar adivinhar. Primeiro registro vence: o relatório repete a linha por
+    vencimento, e os identificadores são do trade, não da parcela."""
     ref = _latam_latest_ref()
     if ref is None:
         return {}
     _jp, data = _latam_load(ref)
     idx = {}
     for rec in (data or []):
-        k = _ops_eq_ref_key(rec.get('Deal_Ref', ''))
-        if k:
-            idx.setdefault(k, rec)
+        deal_ref = _ops_eq_ref_key(rec.get('Deal_Ref', ''))
+        if not deal_ref:
+            continue
+        for col, pref in _OPS_EQ_LEG_PREFIX:
+            b3 = str(rec.get(col, '') or '').strip().upper()
+            if b3:
+                idx.setdefault(b3, (deal_ref, pref, rec))
     return idx
 
 
+def _ops_equity_link(ref):
+    """{Título da B3 → o que o Swap Athena teria dito, se tivesse equity}.
+
+    Cada valor traz `internal_id`, `counterparty`, `spn`, `settlement`,
+    `curva_banco`, `curva_cliente`, `underlying`, `trade_date` e `legal` — os
+    mesmos campos que `_ops_swap_trade_rows` e `_swadv_collect` leem da linha do
+    Athena. Montado uma vez por request e passado pronto, porque as duas telas
+    fazem exatamente a mesma pergunta.
+
+    Vazio quando não há Latam ou não há OTM: aí a linha continua como estava
+    (nome curto da B3, valores em branco), que é melhor do que inventar o par."""
+    latam = _latam_equity_b3_index()
+    if not latam:
+        return {}
+    _jp, otm = _otm_load(ref)
+    if not otm:
+        return {}
+
+    # Agrupa o OTM por (prefixo, Deal_Ref) — o Trade Id é a identidade do trade e
+    # o arquivo traz uma linha por FLUXO de caixa.
+    grupos = {}
+    for rec in otm:
+        pref, chave = _ops_eq_trade_key(rec.get('Trade Id', ''))
+        if not pref or not chave:
+            continue
+        g = grupos.setdefault((pref, chave), {
+            'trade_id': str(rec.get('Trade Id', '') or '').strip(),
+            'pos': 0.0, 'neg': 0.0, 'tem_valor': False,
+            'spn': '', 'name': '', 'legal': '', 'underlying': ''})
+        amt = _conf_to_float(rec.get('Amount'))
+        if amt is not None:
+            g['tem_valor'] = True
+            if amt >= 0:
+                g['pos'] += amt
+            else:
+                g['neg'] += amt
+        # Primeiro não vazio vence em cada campo de identidade: os vários fluxos
+        # de um trade são do mesmo cliente, e um deles vir sem SPN não pode
+        # apagar o que os outros já disseram.
+        for campo, chave_g in (('Cpty SPN', 'spn'), ('Cpty Name', 'name'),
+                               ('Owner Legal Entity', 'legal'), ('Underlying', 'underlying')):
+            if not g[chave_g]:
+                g[chave_g] = str(rec.get(campo, '') or '').strip()
+
+    out = {}
+    for b3, (deal_ref, pref, rec_lt) in latam.items():
+        g = grupos.get((pref, deal_ref))
+        if not g:
+            continue
+        # O nome vem do REFERENCE DATA pelo Cpty SPN (`_otm_cpty_name`: cadastro
+        # `le-spn` quando é entidade nossa, Reference Data quando é cliente). É o
+        # mesmo nome que a página OTM Settlements mostra e que o Settlement
+        # Summary usa para agrupar — o `SAFRABM` da B3 é um apelido de conta e
+        # nunca casaria com o cadastro.
+        nome = _otm_cpty_name(g['spn']) or g['name']
+        out[b3] = {
+            'internal_id': g['trade_id'],
+            'counterparty': nome,
+            'spn': g['spn'],
+            'settlement': (g['pos'] + g['neg']) if g['tem_valor'] else None,
+            'curva_banco': g['pos'] if g['tem_valor'] else None,
+            'curva_cliente': g['neg'] if g['tem_valor'] else None,
+            # Ativo subjacente: o que identifica a operação de equity na tela, do
+            # jeito que o Type diz VCP no swap e a mercadoria no termo.
+            'underlying': (str(rec_lt.get('Underlying_Name', '') or '').strip()
+                           or str(rec_lt.get('UNDERLYING_RIC', '') or '').strip()
+                           or g['underlying']),
+            # Data da operação para o PRAZO do IR: a posição de swap não tem
+            # essas operações, e sem prazo a alíquota não sai.
+            'trade_date': _latam_trade_dt(rec_lt),
+            'legal': g['legal'],
+        }
+    return out
+
+
+def _latam_trade_dt(rec):
+    """Trade_Date do Latam como `date` (None quando não dá para ler). O relatório
+    mistura '2026-01-16 00:00:00.0' com '20260108' — `_fcst_parse_date` já
+    entende os dois, e a data-sentinela do epoch é descartada como no import."""
+    d = _fcst_parse_date(rec.get('Trade_Date', ''))
+    if d is None or (d.year, d.month, d.day) in _LATAM_EPOCH:
+        return None
+    return d.date() if hasattr(d, 'date') else d
+
+
 def _ops_le_name_keys():
-    """Nomes normalizados das entidades legais do cadastro `le-spn`.
+    """(nomes exatos, tokens de LE) das entidades do cadastro `le-spn`.
 
     É o cadastro que já responde 'esta contraparte é nossa?' no resto da página
     (`_otm_cpty_name` resolve o nome por ele). Uma segunda lista de entidades
-    aqui envelheceria sozinha no dia em que a mesa registrasse mais uma."""
-    out = set()
+    aqui envelheceria sozinha no dia em que a mesa registrasse mais uma.
+
+    O TOKEN existe porque o cadastro nasce com o `Reference Data Name` VAZIO em
+    algumas entidades (a ATACAMA é assim no seed), e o nome que chega dos
+    arquivos é o da conta por extenso ('ATACAMA FUNDO DE INVESTIMENTO'). Sem ele,
+    a perna interna só seria reconhecida depois de alguém preencher a razão
+    social na tela — e até lá geraria aviso. Só tokens de 4+ caracteres entram
+    como palavra dentro do nome: 'JPM' e 'MGT' são curtos demais para isso e
+    apareceriam no meio de um nome de cliente por acaso."""
+    exatos, tokens = set(), set()
     for r in _mapping_rows('le-spn'):
         for campo in ('NAME', 'LE'):
             v = re.sub(r'\s+', ' ', _fcst_norm(r.get(campo, ''))).strip()
             if v:
-                out.add(v)
-    return out
+                exatos.add(v)
+        le = re.sub(r'[^a-z0-9]+', '', _fcst_norm(r.get('LE', '')))
+        if len(le) >= 4:
+            tokens.add(le)
+    return exatos, tokens
 
 
 def _ops_is_internal_cpty(name, spn=''):
     """A contraparte é perna interna (entidade nossa ou banco do grupo)?
 
     Não sai aviso de liquidação para ela: o aviso é o documento que se manda ao
-    CLIENTE, e a perna de dentro não tem a quem ser avisada. Três testes, do mais
-    forte para o mais fraco — o SPN cadastrado em `le-spn`, o nome cadastrado lá,
-    e por último o prefixo **BANCO**, que é como as entidades bancárias do grupo
-    chegam escritas nos arquivos quando ninguém as cadastrou."""
+    CLIENTE, e a perna de dentro não tem a quem ser avisada.
+
+    Duas fontes, e **nenhuma delas é "o nome começa em BANCO"**. Essa regra é a
+    que se enuncia falando, mas ela derrubaria BANCO SAFRA, BANCO BRADESCO e
+    BANCO SANTANDER — clientes de verdade, que ficariam sem aviso em silêncio. O
+    que se quer dizer com "banco" é o banco DO GRUPO:
+
+      1. cadastro **`le-spn`** — por SPN e por nome. É a lista das nossas
+         entidades, e é ela que o resto da página já usa para a mesma pergunta;
+      2. **`_pc_is_internal_counterparty`** — o Reference Data
+         (`ECONOMIC GROUP = INTERNAL`, por SPN e depois por nome) com o teste de
+         intragrupo como último recurso (`banco` **e** `morgan` no nome). É a
+         resposta que o Pending Confirmation já dá para decidir o que é operação
+         de cliente; uma segunda definição aqui divergiria da primeira.
+    """
     k = _spn_key(spn)
     if k:
         for r in _mapping_rows('le-spn'):
@@ -6157,100 +6315,19 @@ def _ops_is_internal_cpty(name, spn=''):
     n = re.sub(r'\s+', ' ', _fcst_norm(name)).strip()
     if not n:
         return False
-    return n.startswith('banco') or n in _ops_le_name_keys()
-
-
-def _ops_equity_trade_rows(settle_ref):
-    """Linhas de EQUITIES do Trade Level, do OTM Settlements da data.
-
-    A linha é UMA por Trade Id — o OTM traz um registro por fluxo de caixa, e o
-    `Amount` de todos eles somado é o que liquida naquele trade. É a mesma conta
-    que o swap faz com `otm_by_trade`; o sinal viaja no valor (positivo recebe,
-    negativo paga), que é o que o Settlement Summary neta depois.
-
-    Sem lado B3 por enquanto: os dois `CLEARING_TRD_ID_*` são identificadores, e
-    o VALOR da B3 para equity não tem fonte montada. Por isso o produto é
-    `EQUITY` e não `OPTION` — cair no card de Option deixaria a família com
-    contagem interna e lado B3 zerado, ou seja, um âmbar permanente que não é
-    divergência nenhuma. `_ops_recon` ignora o produto que não conhece, que é o
-    mesmo tratamento que as famílias sem Trade Level já recebem."""
-    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
-    _jp, otm = _otm_load(ref_dt)
-    if not otm:
-        return []
-
-    grupos, ordem = {}, []
-    for rec in otm:
-        if _otm_asset_bucket(rec.get('Asset Class', '')) != 'equities':
-            continue
-        tid = str(rec.get('Trade Id', '') or '').strip()
-        if not tid:
-            continue
-        key = tid.upper()
-        if key not in grupos:
-            grupos[key] = {'trade_id': tid, 'amount': None, 'spn': '', 'name': '', 'legal': ''}
-            ordem.append(key)
-        g = grupos[key]
-        amt = _conf_to_float(rec.get('Amount'))
-        if amt is not None:
-            g['amount'] = (g['amount'] or 0.0) + amt
-        # Primeiro não vazio vence em cada campo de identidade: as várias linhas
-        # de fluxo de um trade são do mesmo cliente, e uma delas vir sem SPN não
-        # pode apagar o nome que as outras já disseram.
-        for campo, chave in (('Cpty SPN', 'spn'), ('Cpty Name', 'name'),
-                             ('Owner Legal Entity', 'legal')):
-            if not g[chave]:
-                g[chave] = str(rec.get(campo, '') or '').strip()
-    if not ordem:
-        return []
-
-    latam = _latam_equity_index()
-    out = []
-    for key in ordem:
-        g = grupos[key]
-        # Nome do REFERENCE DATA pelo SPN (`_otm_cpty_name`), o mesmo da coluna
-        # Cpty Name do OTM Settlements e do agrupamento do Settlement Summary. O
-        # texto do arquivo fica só quando o SPN não resolve, para a linha não
-        # sair anônima.
-        counterparty = _otm_cpty_name(g['spn']) or g['name']
-        interna = _ops_is_internal_cpty(counterparty, g['spn'])
-        rec_lt = latam.get(_ops_eq_trade_key(g['trade_id'])) or {}
-        b3_int = str(rec_lt.get('CLEARING_TRD_ID_INT', '') or '').strip()
-        b3_clnt = str(rec_lt.get('CLEARING_TRD_ID_CLNT', '') or '').strip()
-        if interna:
-            id_b3 = b3_int or b3_clnt
-        else:
-            id_b3 = b3_clnt or b3_int
-        settlement = g['amount']
-        out.append({
-            # Sem lado B3 não há divergência a apurar — a célula Difference fica
-            # vazia e o status acompanha, em vez de acusar um 'Check' que ninguém
-            # tem como investigar.
-            'status': 'OK',
-            'lob': _OPS_EQ_LOB,
-            'counterparty': counterparty,
-            'internal_id': g['trade_id'],
-            'id_b3': id_b3,
-            'product': _OPS_EQ_PRODUCT,
-            'type': str(rec_lt.get('CALLPUT', '') or '').strip().upper(),
-            'settlement': _ops_fmt_amt(settlement),
-            'settlement_b3': '',
-            'tax_income': '',
-            'difference': '',
-            '_settle_n': settlement,
-            '_tax_n': None,
-            '_b3_n': None,
-            '_legal': g['legal'],
-            # A perna interna aparece no Trade Level (é uma operação de verdade e
-            # some da tela seria esconder metade do par), mas não gera aviso.
-            '_no_advice': interna,
-        })
-    return out
+    exatos, tokens = _ops_le_name_keys()
+    if n in exatos:
+        return True
+    if any(re.search(r'\b%s\b' % re.escape(t), n) for t in tokens):
+        return True
+    try:
+        return bool(_pc_is_internal_counterparty(name, spn))
+    except Exception:
+        return _pc_is_intragroup(name)
 
 
 def _ops_trade_rows(settle_ref):
-    """TODAS as linhas do Trade Level da data — hoje SWAP + NDF Commodities +
-    Equities.
+    """TODAS as linhas do Trade Level da data — hoje SWAP + NDF Commodities.
 
     É o único lugar que sabe quais famílias existem. A tela, os cards de
     reconciliação e o e-mail de TED chamam esta função; quando o Trade Level
@@ -6264,8 +6341,7 @@ def _ops_trade_rows(settle_ref):
     """
     rows = []
     for label, fn in (('swap', _ops_swap_trade_rows),
-                      ('NDF commodities', _ops_ndfc_trade_rows),
-                      ('equities', _ops_equity_trade_rows)):
+                      ('NDF commodities', _ops_ndfc_trade_rows)):
         try:
             rows += fn(settle_ref)
         except Exception:
@@ -7827,6 +7903,12 @@ def _swadv_collect(ref):
         if cet:
             by_cetip.setdefault(cet, row)
 
+    # Equity: o Swap Athena é só de CEM. Sem esta rota (Operations B3 → Latam →
+    # OTM) o aviso saía com o nome curto da B3 e com as três colunas de valor em
+    # branco — a MESMA função que o Trade Level usa, para o documento que vai ao
+    # cliente não poder discordar da tela.
+    eqlink = _ops_equity_link(ref)
+
     # O arquivo de EVENTOS deixou de ser lido aqui: Valor Base e os indexadores
     # passaram a sair da posição, que já é lida para as datas. Uma fonte a menos
     # é um join a menos para falhar em silêncio.
@@ -7844,10 +7926,17 @@ def _swadv_collect(ref):
     for titulo, rec in titulos:
         key = titulo.upper()
         arow = by_cetip.get(key)
+        eq = eqlink.get(key) or {}
         pos = terms.get(_fcst_norm_contract(titulo).upper()) or {}
         cliente = (_cell(arow, ai, 'CounterParty')
+                   or eq.get('counterparty', '')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
-        op_dt = pos.get('op')
+        # Perna interna não recebe aviso — o documento é endereçado ao cliente, e
+        # a entidade nossa produziria um aviso para nós mesmos. Mesma regra e
+        # mesma função do Trade Level; só para equity, pelo mesmo motivo de lá.
+        if eq and _ops_is_internal_cpty(cliente, eq.get('spn', '')):
+            continue
+        op_dt = pos.get('op') or eq.get('trade_date')
         # Vencimento do aviso = a data da LIQUIDAÇÃO. É esta parcela que está
         # sendo paga hoje; o vencimento do swap só interessa quando os dois
         # coincidem. E o Prazo é a diferença entre as duas datas impressas, senão
@@ -7855,8 +7944,19 @@ def _swadv_collect(ref):
         venc_dt = ref.date()
         prazo = (venc_dt - op_dt).days if op_dt else None
 
+        # Em equity as três colunas de valor saem do OTM Settlements, com a regra
+        # da mesa: **Curva Banco = os fluxos positivos, Curva Cliente = os
+        # negativos, Resultado Bruto = a soma dos dois**. O Athena não tem essas
+        # operações, e o aviso saía com as três em branco.
+        curva_banco_n = (_mtm_parse_num(_cell(arow, ai, 'Owner curve')) if arow
+                         else eq.get('curva_banco'))
+        curva_cliente_n = (_mtm_parse_num(_cell(arow, ai, 'Counterparty curve')) if arow
+                           else eq.get('curva_cliente'))
         bruto_txt = _cell(arow, ai, 'BRL Net Amount')
         bruto = _mtm_parse_num(bruto_txt) if bruto_txt else None
+        if bruto is None and eq.get('settlement') is not None:
+            bruto = eq['settlement']
+            bruto_txt = _ops_fmt_amt(bruto)
         # A direção vem do texto do Athena (é o que a fórmula da planilha lê); o
         # sinal do Resultado Bruto só entra quando o texto falta, e assume a
         # mesma convenção do settlement — negativo é o banco pagando.
@@ -7884,9 +7984,9 @@ def _swadv_collect(ref):
                 '' if prazo is None else '{:,}'.format(prazo).replace(',', '.'),
                 _swapchar_fmt_value(pos.get('valor_base', '')),
                 pos.get('idx_banco', ''),
-                _cell(arow, ai, 'Owner curve'),
+                _cell(arow, ai, 'Owner curve') if arow else _ops_fmt_amt(curva_banco_n),
                 pos.get('idx_cliente', ''),
-                _cell(arow, ai, 'Counterparty curve'),
+                _cell(arow, ai, 'Counterparty curve') if arow else _ops_fmt_amt(curva_cliente_n),
                 bruto_txt,
                 _swadv_pct(rate),
                 _ops_fmt_amt(ir),
@@ -7906,8 +8006,8 @@ def _swadv_collect(ref):
             # arquivo de posição usa vírgula DECIMAL, e ler esse texto com o
             # parser de uso geral multiplicava o Valor Base por cem no aviso.
             'valor_base': _swapchar_value_num(pos.get('valor_base', '')),
-            'curva_banco': _mtm_parse_num(_cell(arow, ai, 'Owner curve')),
-            'curva_cliente': _mtm_parse_num(_cell(arow, ai, 'Counterparty curve')),
+            'curva_banco': curva_banco_n,
+            'curva_cliente': curva_cliente_n,
         })
     return out
 
