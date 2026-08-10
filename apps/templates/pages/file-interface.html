@@ -155,9 +155,16 @@
     #fi-page .fi-block table.fi-fields td.fi-col-num {
         font-variant-numeric: tabular-nums; white-space: nowrap;
     }
-    /* Descrição e origem são prosa: alinhadas à esquerda, com quebra */
+    /* Descrição é prosa: mantém quebra e largura, mas centrada como o resto */
     #fi-page .fi-block table.fi-fields td.fi-col-prose {
-        text-align: left; font-size: .75rem; min-width: 220px; max-width: 420px;
+        font-size: .75rem; min-width: 220px; max-width: 420px;
+    }
+    /* Linha de filtro por coluna — padrão da casa (12px/28px, centrado
+       pela regra estrutural do visual-refresh.css) */
+    #fi-page .fi-block table.fi-fields thead th.fi-flt-cell { padding: .2rem .25rem; }
+    #fi-page .fi-block table.fi-fields thead th input.fi-flt {
+        font-size: 12px; height: 28px; width: 100%; min-width: 60px;
+        padding: .15rem .35rem;
     }
     #fi-page .fi-block table.fi-fields td.fi-col-content {
         max-width: 200px; font-size: .75rem;
@@ -194,7 +201,7 @@
     #fi-page .fi-src-blank { font-size: .72rem; color: var(--ins-secondary-color); font-style: italic; }
     #fi-page .fi-src-note {
         display: block; font-size: .66rem; color: var(--ins-secondary-color);
-        margin-top: .15rem; max-width: 280px; white-space: normal;
+        margin: .15rem auto 0; max-width: 280px; white-space: normal;
     }
     #fi-page td.fi-col-srcd { text-align: center; min-width: 170px; }
 
@@ -766,20 +773,23 @@
                     '<td class="fi-col-srcd">' + srcDetailCell(src) + '</td>' +
                     '</tr>';
             }).join('');
+            var thNames = [
+                t('fi-th-seq', 'Seq'), t('fi-th-field', 'Field'), t('fi-th-format', 'Format'),
+                t('fi-th-position', 'Position'), t('fi-th-required', 'Required'),
+                t('fi-th-content', 'Content'), t('fi-th-description', 'Description'),
+                t('fi-th-source', 'Source'), t('fi-th-source-detail', 'Source Field / Value')
+            ];
             html +=
                 '<div class="fi-block ' + accClass(b, bi, total) + '" style="animation-delay:' + Math.min(bi * 50, 300) + 'ms">' +
                 head +
                 '<div class="table-responsive"><table class="table table-sm table-striped mb-0 align-middle fi-fields" id="fiTable-' + bi + '">' +
                 '<thead class="thead-sm text-uppercase fs-xxs"><tr>' +
-                '<th>' + t('fi-th-seq', 'Seq') + '</th>' +
-                '<th>' + t('fi-th-field', 'Field') + '</th>' +
-                '<th>' + t('fi-th-format', 'Format') + '</th>' +
-                '<th>' + t('fi-th-position', 'Position') + '</th>' +
-                '<th>' + t('fi-th-required', 'Required') + '</th>' +
-                '<th>' + t('fi-th-content', 'Content') + '</th>' +
-                '<th>' + t('fi-th-description', 'Description') + '</th>' +
-                '<th>' + t('fi-th-source', 'Source') + '</th>' +
-                '<th>' + t('fi-th-source-detail', 'Source Field / Value') + '</th>' +
+                thNames.map(function (n) { return '<th>' + n + '</th>'; }).join('') +
+                '</tr><tr>' +
+                thNames.map(function (n, ci) {
+                    return '<th class="fi-flt-cell"><input class="fi-flt" data-c="' + ci +
+                           '" placeholder="' + esc(n) + '"></th>';
+                }).join('') +
                 '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
         });
         wrap.innerHTML = html;
@@ -788,6 +798,27 @@
             (tpl.blocks || []).forEach(function (_, bi) { otcCellCopy('#fiTable-' + bi, {}); });
         }
     }
+
+    // Filtro por coluna: delegado no container (sobrevive ao re-render dos blocos).
+    // Cada tabela filtra as próprias linhas — texto da célula, sem case.
+    document.getElementById('fiBlocks').addEventListener('input', function (ev) {
+        var inp = ev.target;
+        if (!inp.classList || !inp.classList.contains('fi-flt')) return;
+        var table = inp.closest('table');
+        if (!table) return;
+        var terms = [];
+        table.querySelectorAll('thead input.fi-flt').forEach(function (el) {
+            var v = el.value.trim().toLowerCase();
+            if (v) terms.push({ c: +el.getAttribute('data-c'), v: v });
+        });
+        table.querySelectorAll('tbody tr').forEach(function (tr) {
+            var show = terms.every(function (tm) {
+                var td = tr.cells[tm.c];
+                return td && td.textContent.toLowerCase().indexOf(tm.v) !== -1;
+            });
+            tr.style.display = show ? '' : 'none';
+        });
+    });
 
     // ── Edição inline das colunas de origem ──────────────────────────────────
     var SRC_OPTIONS = ['', 'Fixed', 'Page', 'Mapping', 'Calculated', 'Manual'];

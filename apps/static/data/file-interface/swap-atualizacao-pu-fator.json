@@ -1,6 +1,6 @@
 {
   "key": "swap-atualizacao-pu-fator",
-  "name": "Swap – Registro de Atualização de PU / Fator",
+  "name": "Registro de Atualização de PU / Fator (SWAP)",
   "system_id": "SWAP",
   "category": "Swap",
   "manual_section": "4.2.12 Registro de Atualização de PU / Fator",

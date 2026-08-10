@@ -1,6 +1,6 @@
 {
   "key": "swap-fluxo-nao-constante",
-  "name": "Swap – Registro de Contrato Fluxo Não Constante",
+  "name": "Registro de Contrato Fluxo Não Constante (SWAP)",
   "system_id": "SWAP",
   "category": "Swap",
   "manual_section": "4.2.5 Registro de Contrato Fluxo Não Constante",

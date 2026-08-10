@@ -1,6 +1,6 @@
 {
   "key": "swap-pagamento-final",
-  "name": "Swap – Registro de Contrato com Pagamento Final",
+  "name": "Registro de Contrato com Pagamento Final (SWAP)",
   "system_id": "SWAP",
   "category": "Swap",
   "manual_section": "4.2.1 Registro de Contrato com Pagamento Final",
