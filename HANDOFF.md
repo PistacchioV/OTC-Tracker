@@ -10331,3 +10331,70 @@ desconhecida em silêncio, e campo que se escreve para nada é dívida esperando
 
 **O dado não foi perdido**: `ensure_db` só ACRESCENTA coluna, então a coluna física continua no DuckDB
 com o que já estava lá. Voltar atrás é devolver o nome à lista.
+
+## §227 — Equities entram no Trade Level pelo Latam Desk Position
+
+A operação de equity chega ao **OTM Settlements** com o Trade Id do sistema (`270WI…` / `270WC…`) e
+**sem** o identificador da B3. Ele está no **Latam Desk Position**, e o que liga os dois é o NÚMERO
+depois do prefixo: ele é o `Deal_Ref` do relatório.
+
+O mesmo `Deal_Ref` cobre **duas** operações — a de contra o cliente externo e a de contra a nossa
+entidade (Safra × Atacama) —, e por isso o relatório traz dois identificadores na mesma linha:
+
+| Coluna | A perna |
+|---|---|
+| `CLEARING_TRD_ID_INT` | contra a **entidade** (Atacama) |
+| `CLEARING_TRD_ID_CLNT` | contra o **cliente externo**, quando existe |
+
+**Qual dos dois vale sai de quem é a contraparte da linha do OTM, não do prefixo do Trade Id.** O
+prefixo é uma convenção de nomenclatura (I = interna, C = cliente) e serve de desempate; a contraparte
+é o fato. Com a ordem invertida, um Trade Id batizado errado escreveria na tela o identificador da
+outra perna — e um identificador da B3 errado é pior do que nenhum, porque parece certo.
+
+Três coisas que não dão erro se forem feitas de outro jeito:
+
+- **O de-para lê o ÚLTIMO Latam Desk Position, não o da data de liquidação.** O relatório não é diário
+  e a própria página abre no último JSON que existe (`_latam_latest_ref`). Procurando o do dia, o
+  mapeamento ficaria vazio em todo dia sem posição nova e a coluna B3 sairia em branco sem que nada na
+  tela dissesse por quê.
+- **A chave é só-dígitos e sem zeros à esquerda dos DOIS lados** (`_ops_eq_ref_key`): um sistema zera à
+  esquerda conforme a largura do campo e o outro não — é o mesmo tropeço que o `_spn_key` já resolveu.
+  Trade Id **sem** um dos prefixos conhecidos devolve chave vazia: o Trade Id de outra família não pode
+  casar por acidente com um `Deal_Ref` que não é dele.
+- **A linha é uma por Trade Id**, com o `Amount` de todos os fluxos somado — o OTM traz um registro por
+  fluxo de caixa. É a mesma conta que o swap já faz em `otm_by_trade`.
+
+**Não sai aviso para perna interna.** `_ops_is_internal_cpty` responde pelo cadastro `le-spn` (SPN e
+depois nome) e, por último, pelo prefixo **BANCO**, que é como as entidades bancárias do grupo chegam
+escritas quando ninguém as cadastrou. A linha marcada **fica no Trade Level** — é uma operação de
+verdade, e escondê-la seria esconder metade do par — e sai do **Settlement Summary**, que é a fonte do
+aviso: cada linha de lá é um documento endereçado ao cliente, e a entidade nossa produziria um aviso
+para nós mesmos. A marca (`_no_advice`) vem de quem monta a linha; repetir o teste dentro do
+`_opssum_rows` criaria uma segunda resposta para a mesma pergunta.
+
+**Produto `EQUITY`, e não `OPTION`, de propósito.** Os dois `CLEARING_TRD_ID_*` são identificadores; o
+**valor** da B3 para equity não tem fonte montada. Caindo no card de Option, a família entraria com
+contagem interna e lado B3 zerado — um âmbar permanente que não é divergência nenhuma. `_ops_recon`
+ignora o produto que não conhece, que é o mesmo tratamento que as famílias sem Trade Level já recebem
+(§182). Quando o lado B3 existir, é trocar o rótulo.
+
+A família entra em **`_ops_trade_rows`**, o único lugar que sabe quais famílias existem — de lá ela
+aparece de uma vez na tabela, nos cards e no e-mail de TED (§199).
+
+## §228 — O corte da GEM na Recon FXO pegava só metade do par
+
+O cadastro `fxo-internal-cpty` com `USE = Disregard` (§224) tirava as linhas da Athena cujo
+**`CounterpartyName`** casava com o nome cadastrado. A conta continuou aparecendo na tela.
+
+A operação intragrupo chega ao relatório **pelos dois lados**: numa linha a conta interna é a dona
+(`CounterpartyName`), na outra ela é a contraparte (`MatchingCounterpartyName`). E é justamente esta
+segunda que a coluna **ATH Cntpy** mostra, porque é dela que `deriv_cntpy_ath` parte — SPN primeiro,
+`MatchingCounterpartyName` depois, `CounterpartyName` só como último recurso. Cortando por uma coluna
+só, metade do par ficava na recon como `Unmatched Athena` **exibindo o nome que o cadastro mandou
+tirar**.
+
+O corte passa a olhar as duas colunas (`COLS_AT_CPTY_DISREGARD`). A ressalva antiga do comentário — "o
+Matching é a contraparte do outro lado e cortar por ele derrubaria a operação do cliente" — não se
+aplica: a conta marcada é **interna**, e a linha em que ela aparece como contraparte é a perna de
+dentro da mesma operação. O cliente está do outro lado do **seu próprio** par, numa linha cujas duas
+contrapartes são ele e a mesa.
