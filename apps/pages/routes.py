@@ -1005,11 +1005,39 @@ def _migrate_schema():
         conn.close()
 
 
+def _notif_roles(target_role):
+    """`target_role` normalizado: aceita '' , 'ADMIN' ou vários papéis.
+
+    Uma etapa da esteira precisa avisar DUAS mesas (Pending MO é do MO e do BO),
+    e a coluna sempre guardou um papel só. Vários papéis viram uma lista separada
+    por vírgula na MESMA coluna — 'MO,BO' —, e quem lê parte a string. O valor
+    antigo continua válido de graça: 'ADMIN' parte numa lista de um elemento.
+
+    Criar uma tabela de destinatários para isto seria um join novo em cada
+    consulta do sino, que a topbar faz a cada 8 s por aba aberta.
+    """
+    if not target_role:
+        return ''
+    if isinstance(target_role, str):
+        partes = target_role.split(',')
+    else:
+        partes = list(target_role)
+    vistos, out = set(), []
+    for p in partes:
+        p = str(p or '').strip().upper()
+        if p and p not in vistos:
+            vistos.add(p)
+            out.append(p)
+    return ','.join(out)
+
+
 def _create_notification(actor_sid, actor_name, action, page, detail='', target_role='',
                          target_sid=''):
-    """Publica uma notificação no sino. `target_role` restringe a um papel,
+    """Publica uma notificação no sino. `target_role` restringe aos papéis
+    listados (um só, ou vários separados por vírgula — ver `_notif_roles`),
     `target_sid` a UM usuário (os dois vazios = todo mundo). Ver o filtro em
     `api_get_notifications`."""
+    target_role = _notif_roles(target_role)
     try:
         conn = get_db_connection()
         try:
@@ -1058,9 +1086,14 @@ def _push_notify(actor_sid, target_role, target_sid=''):
                     "SELECT endpoint FROM push_subscriptions WHERE sid = ?",
                     [target_sid]).fetchall()
             elif target_role:
+                # Vários papéis na mesma notificação (Pending MO avisa MO e BO).
+                # Os `?` são montados pela CONTAGEM e os papéis vão bindados —
+                # o único jeito de escrever um IN, e o que o cheat sheet permite.
+                papeis = [p for p in _notif_roles(target_role).split(',') if p]
                 rows = conn.execute(
-                    "SELECT endpoint FROM push_subscriptions WHERE role = ? AND sid <> ?",
-                    [target_role, actor_sid]).fetchall()
+                    "SELECT endpoint FROM push_subscriptions WHERE role IN ({}) AND sid <> ?"
+                    .format(','.join('?' * len(papeis))),
+                    papeis + [actor_sid]).fetchall() if papeis else []
             else:
                 rows = conn.execute(
                     "SELECT endpoint FROM push_subscriptions WHERE sid <> ?",
@@ -28733,7 +28766,8 @@ def api_get_notifications():
             FROM notifications
             WHERE DATE(created_at) = CURRENT_DATE
               AND (COALESCE(target_sid, '') = '' OR COALESCE(target_sid, '') = ?)
-              AND (target_role = '' OR target_role = ?)
+              AND (COALESCE(target_role, '') = ''
+                   OR list_contains(string_split(target_role, ','), ?))
             ORDER BY created_at DESC
             LIMIT 50
         """, [user_sid, user_role]).fetchall()
@@ -29299,6 +29333,61 @@ def api_mc_docs_batch():
 # mesa de OTC Ops, que no cadastro de papéis é o Back Office.
 _MC_STAGE_ROLE = {'OTC': 'BO', 'MO': 'MO', 'FO': 'FO'}
 
+# Quem RECEBE o aviso quando a confirmação cai em cada etapa. Não é a mesma
+# pergunta de quem ASSINA (`_MC_STAGE_ROLE`): assinar é um ato, e é de uma mesa
+# só; ver é acompanhar, e o Back Office acompanha a esteira inteira — foi ele que
+# montou o documento e é para ele que o reject volta.
+#
+# `MASTER` entra em todas porque é o papel que `_set_session` grava para os SIDs
+# de `_MASTER_SIDS` e o master escapa de toda restrição (§5). Sem ele na lista, o
+# superusuário perderia a esteira de vista — e em silêncio, que é o pior jeito.
+#
+# `ADMIN` NÃO entra: administrar acessos não é sentar na mesa, e foi o mesmo
+# raciocínio que o tirou da validação. Se a mesa quiser o admin vendo tudo, é
+# acrescentar 'ADMIN' aqui — uma linha, não uma regra nova.
+# As chaves são os rótulos de `manual_conf.PENDING_*`. Escritos por extenso
+# porque o módulo é importado preguiçosamente (ele puxa os dois DuckDB da
+# esteira) e um dict de módulo não pode esperar por isso; `check_mc_notify.py`
+# prende os quatro contra as constantes, para o rótulo não poder mudar de um lado
+# só — se mudasse, a etapa cairia no `else` e o aviso voltaria a ir para todos.
+_MC_STAGE_NOTIFY_ROLES = {
+    'Pending OTC': ('BO', 'MASTER'),
+    'Pending MO': ('MO', 'BO', 'MASTER'),
+    'Pending FO': ('FO', 'BO', 'MASTER'),
+    # As duas mesas ao mesmo tempo (elas correm em PARALELO, não em fila).
+    'Pending MO/FO': ('MO', 'FO', 'BO', 'MASTER'),
+}
+
+
+def _mc_notify_roles(rows):
+    """Papéis que devem ser avisados por este lote de linhas já validadas.
+
+    A etapa vem de `pending_stage(row)` — o ESTADO depois do carimbo, não a etapa
+    que acabou de ser assinada. É a diferença entre "o OTC validou" (que não diz
+    a quem interessa) e "isto agora está em Pending MO" (que diz).
+
+    Um documento cobre várias operações e o cadastro de validação é por Produto ×
+    LOB, então o lote pode cair em etapas diferentes: a união dos papéis é o
+    certo — recortar pela primeira linha deixaria a outra mesa sem aviso.
+
+    Confirmação que fechou (`Ok`) não tem mesa esperando: devolve '' e o aviso
+    vai para todo mundo, como sempre foi. Restringir o fim da esteira esconderia
+    justamente a notícia boa.
+    """
+    from apps.pages import manual_conf as _mc
+    papeis, algum_alvo = [], False
+    for row in rows or []:
+        try:
+            etapa = _mc.pending_stage(row)
+        except Exception:
+            continue
+        alvo = _MC_STAGE_NOTIFY_ROLES.get(etapa)
+        if not alvo:
+            continue
+        algum_alvo = True
+        papeis.extend(alvo)
+    return _notif_roles(papeis) if algum_alvo else ''
+
 
 def _mc_can_validate(stage):
     """A sessão pode validar/rejeitar esta etapa?
@@ -29393,7 +29482,11 @@ def api_mc_upsert():
         rows = [payload.get('row') or {}]
     if not isinstance(rows, list):
         return jsonify({'success': False, 'message': 'rows must be a list'}), 400
-    saved = []
+    sid = session.get('user_sid', '')
+    etapas = (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO)
+    # Monta TUDO antes de gravar: uma edição em massa que falha na quinta linha
+    # não pode deixar as quatro primeiras salvas e o usuário sem saber quais.
+    pendentes = []
     for src in rows:
         if not isinstance(src, dict):
             continue
@@ -29404,9 +29497,61 @@ def api_mc_upsert():
             return jsonify({'success': False,
                             'message': 'Trade ID é obrigatório — é a chave da linha.'}), 400
         row = _mc.find_row(key) or _mc.blank_row()
+        # Estado ANTES da edição: é ele que diz se esta gravação é uma validação
+        # nova (a coluna estava vazia e passou a ter data) ou só um ajuste de
+        # cadastro numa linha que já estava validada.
+        antes = {s: str(row.get(_mc.STAGE_COLUMNS[s][0], '') or '').strip() for s in etapas}
+        # O prazo é medido no estado ANTERIOR: depois de escrever a data, a
+        # própria `sla_state` responde `done` e o atraso desapareceria da conta.
+        atrasado = {s: _mc.sla_breached(row, s) for s in etapas}
+
         for c in _mc.COLUMNS:
             if c in src and c not in _mc.DERIVED_COLUMNS:
                 row[c] = str(src.get(c) or '')
+
+        # ── Preencher a coluna de validação pela grade É VALIDAR ──────────────
+        # A tela de validação passa pelo `mark_validated`, que carimba quem
+        # assinou, cobra a justificativa fora do prazo e exige a mesa certa. A
+        # grade escrevia a MESMA coluna como texto livre: a validação entrava sem
+        # dono, sem motivo do atraso e assinada por qualquer papel — e a
+        # segregação de funções valia só no caminho de cima.
+        for stage in etapas:
+            col_data, col_stamp = _mc.STAGE_COLUMNS[stage]
+            depois = str(row.get(col_data, '') or '').strip()
+            if depois and not antes[stage]:
+                if not _mc_can_validate(stage):
+                    return jsonify({'success': False, 'stage_forbidden': True,
+                                    'stage': stage, 'key': key,
+                                    'message': _mc_stage_denied(stage)}), 403
+                comentario = str(row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), '') or '').strip()
+                if atrasado[stage] and not comentario:
+                    # 409, não 400: o pedido está bem formado — o ESTADO é que
+                    # exige mais um campo. A tela usa isso para abrir a coluna de
+                    # comentário em vez de mostrar um erro genérico.
+                    return jsonify({'success': False, 'sla_comment_required': True,
+                                    'stage': stage, 'key': key,
+                                    'column': _mc.STAGE_COMMENT_COLUMN.get(stage, ''),
+                                    # Em INGLÊS, como todo texto de servidor que
+                                    # a tela exibe: a SweetAlert do Track mostra
+                                    # a frase crua, e ela apareceria em português
+                                    # com a aplicação em inglês.
+                                    'message': ('{} validation on {} is past the deadline — '
+                                                'fill in "{}" with the reason for the delay.'
+                                                .format(stage, key,
+                                                        _mc.STAGE_COMMENT_COLUMN.get(stage, '')))}), 409
+                # Carimbo de quem assinou. Um `Time Stamp` que veio no corpo é
+                # respeitado (a grade também serve para corrigir cadastro
+                # antigo); o que não pode é a validação nascer sem dono.
+                if not str(row.get(col_stamp, '') or '').strip():
+                    row[col_stamp] = _mc.stamp_now(sid)
+            elif antes[stage] and not depois:
+                # Desfez a validação: o carimbo não sobrevive a ela. Deixá-lo
+                # afirmaria que alguém assinou uma etapa que está pendente.
+                row[col_stamp] = ''
+        pendentes.append(row)
+
+    saved = []
+    for row in pendentes:
         _mc.upsert_row(row)
         saved.append(row)
     return jsonify({'success': True, 'rows': saved})
@@ -29490,7 +29635,12 @@ def api_mc_validate():
                          # em inglês.
                          'Validated by {} · {}{}'.format(
                              stage, rows[0].get('Cliente', '') or keys[0],
-                             ' (%d ops)' % len(rows) if len(rows) > 1 else ''))
+                             ' (%d ops)' % len(rows) if len(rows) > 1 else ''),
+                         # Avisa a mesa que a confirmação ACABOU de cair em cima,
+                         # não a que acabou de assinar: quem precisa agir é quem
+                         # vem depois. O Back Office vai junto porque acompanha a
+                         # esteira inteira — é dele o documento.
+                         target_role=_mc_notify_roles(rows))
     return jsonify({'success': True, 'row': rows[0], 'rows': rows})
 
 
@@ -29541,7 +29691,12 @@ def api_mc_reject():
                          # função — a linha só não estourava porque o `or` à
                          # esquerda quase sempre tem o Cliente preenchido.
                          'Rejected by {} · {}'.format(
-                             stage, before.get('Cliente', '') or (keys[0] if keys else '')))
+                             stage, before.get('Cliente', '') or (keys[0] if keys else '')),
+                         # O reject devolve o documento para Pending OTC, então
+                         # quem precisa saber é o Back Office — é ele que vai
+                         # refazer. Mesma regra da validação, lida do estado.
+                         target_role=_mc_notify_roles(
+                             [r for r in (_mc.find_row(k) for k in keys) if r is not None]))
     return jsonify({'success': True, 'emailed': bool(emailed)})
 
 

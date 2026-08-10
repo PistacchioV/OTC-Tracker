@@ -483,9 +483,15 @@ def _como(papel):
         ss['user_role'] = papel
 
 
-for _papel, _etapa, _esperado in (('BO', 'OTC', 200), ('BO', 'MO', 403),
-                                  ('MO', 'OTC', 403), ('FO', 'MO', 403),
-                                  ('ADMIN', 'MO', 403), ('HUB', 'FO', 403)):
+# A matriz cobre os TRES positivos e os cruzamentos: so provar o 403 deixaria
+# passar uma regra que nega tudo, e so provar o 200 deixaria passar uma que
+# libera tudo.
+for _papel, _etapa, _esperado in (('BO', 'OTC', 200), ('MO', 'MO', 200), ('FO', 'FO', 200),
+                                  ('BO', 'MO', 403), ('BO', 'FO', 403),
+                                  ('MO', 'OTC', 403), ('MO', 'FO', 403),
+                                  ('FO', 'OTC', 403), ('FO', 'MO', 403),
+                                  ('ADMIN', 'OTC', 403), ('ADMIN', 'MO', 403),
+                                  ('ADMIN', 'FO', 403), ('HUB', 'FO', 403)):
     _como(_papel)
     check('%-5s não assina o Pending %s' % (_papel, _etapa) if _esperado == 403
           else '%-5s assina o Pending %s' % (_papel, _etapa),
@@ -511,6 +517,69 @@ check('reject sem comentário é recusado',
 check('só MO e FO rejeitam',
       cl.post('/api/manual-confirmation/reject',
               json={'key': 'T7', 'stage': 'OTC', 'comment': 'x'}).status_code, 400)
+# ── Preencher a coluna de validação pela GRADE é validar ───────────────────
+# A tela de validação passa pelo `mark_validated` — carimba quem assinou, cobra a
+# justificativa fora do prazo e exige a mesa certa. O Track escrevia a MESMA
+# coluna como texto livre: a validação entrava sem dono, sem motivo do atraso e
+# assinada por qualquer papel, e a segregação valia só no caminho de cima.
+_velho = M.fmt_date(date.today() - timedelta(days=60))
+novo('G1', produto='SWAP', **{'Data Operação': _velho})          # OTC pendente e atrasado
+
+_como('MO')
+check('a grade não deixa o MO assinar pelo OTC',
+      cl.post('/api/manual-confirmation/upsert',
+              json={'rows': [{'Trade ID': 'G1', 'Conferido OTC': _velho}]}).status_code, 403)
+
+_como('BO')
+_r = cl.post('/api/manual-confirmation/upsert',
+             json={'rows': [{'Trade ID': 'G1', 'Conferido OTC': _velho}]})
+check('   e fora do prazo cobra a justificativa', _r.status_code, 409)
+check('      dizendo em qual coluna escrever',
+      _r.get_json().get('column'), 'OTC Comments')
+check('      sem gravar nada', M.find_row('G1').get('Conferido OTC'), '')
+
+_r = cl.post('/api/manual-confirmation/upsert',
+             json={'rows': [{'Trade ID': 'G1', 'Conferido OTC': _velho,
+                             'OTC Comments': 'documento chegou atrasado'}]})
+check('   com o motivo, grava', _r.status_code, 200)
+check('      e CARIMBA quem assinou',
+      'T000000' in (M.find_row('G1').get('Time Stamp OTC') or ''), True)
+check('      mantendo a data digitada', M.find_row('G1').get('Conferido OTC'), _velho)
+
+# Desfazer a validação não pode deixar o carimbo para trás: ele afirmaria que
+# alguém assinou uma etapa que voltou a ficar pendente.
+cl.post('/api/manual-confirmation/upsert',
+        json={'rows': [{'Trade ID': 'G1', 'Conferido OTC': ''}]})
+check('   e apagar a data apaga o carimbo', M.find_row('G1').get('Time Stamp OTC'), '')
+
+# Dentro do prazo não se pede nada — a cobrança é do ATRASO, não da validação.
+novo('G2', produto='SWAP', **{'Data Operação': M.fmt_date(date.today())})
+_r = cl.post('/api/manual-confirmation/upsert',
+             json={'rows': [{'Trade ID': 'G2', 'Conferido OTC': M.fmt_date(date.today())}]})
+check('no prazo, a grade grava sem justificativa', _r.status_code, 200)
+check('   e carimba do mesmo jeito',
+      'T000000' in (M.find_row('G2').get('Time Stamp OTC') or ''), True)
+
+# Ajustar OUTRA coluna de uma linha já validada não é validar de novo: não pode
+# recarimbar (apagaria o dono da conferência anterior) nem cobrar justificativa.
+M.upsert_row(dict(M.find_row('G2'), **{'Time Stamp OTC': '01/01/2020 09:00 · OUTRO'}))
+_como('HUB')
+_r = cl.post('/api/manual-confirmation/upsert',
+             json={'rows': [{'Trade ID': 'G2', 'Cliente': 'NOVO NOME'}]})
+check('editar outra coluna de linha já validada não é validar', _r.status_code, 200)
+check('   e o carimbo de quem assinou fica intacto',
+      M.find_row('G2').get('Time Stamp OTC'), '01/01/2020 09:00 · OUTRO')
+
+# Lote que falha no meio não pode deixar as linhas anteriores gravadas.
+_como('BO')
+novo('G3', produto='SWAP', **{'Data Operação': _velho})
+cl.post('/api/manual-confirmation/upsert',
+        json={'rows': [{'Trade ID': 'G2', 'Cliente': 'ANTES DO ERRO'},
+                       {'Trade ID': 'G3', 'Conferido OTC': _velho}]})
+check('lote que falha no meio não grava nada',
+      M.find_row('G2').get('Cliente'), 'NOVO NOME')
+
+_como('ADMIN')
 check('linha sem Trade ID é recusada',
       cl.post('/api/manual-confirmation/upsert',
               json={'rows': [{'Cliente': 'sem chave'}]}).status_code, 400)

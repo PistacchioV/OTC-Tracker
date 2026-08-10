@@ -10457,3 +10457,81 @@ A tradução vive em **três lugares**, e os três têm de dizer a mesma coisa �
 (o filtro de acesso por página), `partials/topbar.html` (o clique do sino) e `static/js/sw-push.js` (o
 clique da notificação do celular). Com um deles fora, a mesma notificação abre uma recon pelo sino e
 outra pelo push. `check_notif_page_url.py` prende os três.
+
+## §231 — O aviso da esteira ia para o time inteiro
+
+Toda validação da esteira gravava a notificação **sem destinatário**, então o sino do time inteiro
+tocava por uma confirmação que só uma mesa podia assinar. Agora o aviso é endereçado à etapa em que a
+confirmação **caiu**:
+
+| Etapa depois do carimbo | Quem recebe |
+|---|---|
+| `Pending OTC` | BO · MASTER |
+| `Pending MO` | MO · BO · MASTER |
+| `Pending FO` | FO · BO · MASTER |
+| `Pending MO/FO` | MO · FO · BO · MASTER |
+| `Ok` | todos (sem restrição) |
+
+Quatro decisões:
+
+- **O destino sai do ESTADO, não da etapa assinada.** `_mc_notify_roles` chama `pending_stage(row)`
+  DEPOIS do carimbo. "O OTC validou" não diz a quem interessa; "isto agora está em Pending MO" diz. E é
+  o que faz o cadastro `manual-conf-validation` valer de graça: produto isento de FO nunca avisa o FO.
+- **O Back Office entra em todas.** Assinar e receber são perguntas diferentes: assinar é um ato e é de
+  uma mesa só (`_MC_STAGE_ROLE`); receber é acompanhar, e o documento é do BO — é ele que o montou e é
+  para ele que o reject volta. Os dois mapas existem lado a lado de propósito.
+- **`MASTER` em todas, `ADMIN` em nenhuma.** `MASTER` é o valor que `_set_session` grava para os SIDs de
+  `_MASTER_SIDS`; sem ele na lista o superusuário perderia a esteira de vista, e em silêncio. `ADMIN`
+  ficou de fora pelo mesmo raciocínio que o tirou da validação — administrar acessos não é sentar na
+  mesa. Se a mesa quiser o admin vendo tudo, é acrescentar `'ADMIN'` ao mapa: uma linha.
+- **A confirmação que fechou (`Ok`) volta a avisar todos.** Não há mesa esperando, e restringir o fim da
+  esteira esconderia justamente a notícia boa.
+
+**A coluna `target_role` passou a aceitar VÁRIOS papéis**, separados por vírgula na mesma coluna
+(`'MO,BO,MASTER'`). `_notif_roles` normaliza (aceita string ou lista, tira repetido e caixa), o filtro
+do feed casa por membro (`list_contains(string_split(target_role, ','), ?)`) e o `_push_notify` monta um
+`IN` com os papéis **bindados** — placeholders pela contagem, valores por parâmetro, que é o único caso
+que o cheat sheet permite montar string. **O valor antigo continua válido de graça**: `'ADMIN'` parte
+numa lista de um elemento. Uma tabela de destinatários seria um join novo em toda consulta do sino, e a
+topbar consulta a cada 8 s por aba aberta.
+
+Do outro lado da mesma regra, a matriz de quem **assina** foi completada em `check_manual_conf.py`: os
+três positivos (BO→OTC, MO→MO, FO→FO) e todos os cruzamentos negativos, ADMIN inclusive. Só provar os
+403 deixaria passar uma regra que nega tudo; só provar os 200, uma que libera tudo.
+
+## §232 — Validar pela GRADE não era validar
+
+A tela de validação passa pelo `mark_validated`: ele carimba **quem** assinou (`Time Stamp <mesa>` =
+data, hora e SPN), cobra a justificativa quando o prazo passou (`SlaCommentRequired` → 409) e o endpoint
+exige a mesa certa (`_mc_can_validate` → 403).
+
+O Track Confirmations escrevia a **MESMA coluna** por outro caminho. `api_mc_upsert` copiava toda coluna
+de `COLUMNS` como texto livre, então preencher `VALIDADO p/ MO` na grade gravava a data e mais nada:
+
+- **sem carimbo** — a validação entrava sem dono, e "quem conferiu isto?" ficava sem resposta;
+- **sem o teste de prazo** — uma validação atrasada passava sem justificativa nenhuma;
+- **sem o teste de mesa** — qualquer papel assinava por qualquer mesa, e a segregação valia só no
+  caminho de cima.
+
+Agora **preencher a coluna de validação pela grade É validar**, e passa pelas três regras. O que
+distingue uma validação nova de um ajuste de cadastro é a TRANSIÇÃO: a coluna estava vazia e passou a
+ter data. Editar o Cliente de uma linha já validada não recarimba (apagaria o dono da conferência
+anterior) nem cobra motivo.
+
+Quatro detalhes que não são óbvios:
+
+- **O prazo é medido no estado ANTERIOR.** Depois de escrever a data, a própria `sla_state` responde
+  `done` e o atraso desapareceria da conta — a pergunta tem de ser feita antes de aplicar a edição.
+- **A data digitada é preservada.** A grade também serve para registrar validação antiga; forçar `hoje`
+  (como o `mark_validated` faz, e ali está certo) reescreveria o que o usuário veio corrigir. O carimbo
+  é acrescentado, não a data.
+- **Apagar a data apaga o carimbo.** Um `Time Stamp` sobrevivente afirmaria que alguém assinou uma etapa
+  que voltou a ficar pendente.
+- **O lote é tudo-ou-nada.** As linhas são montadas e conferidas antes de qualquer `upsert_row`: uma
+  edição em massa que falha na quinta linha não pode deixar as quatro primeiras gravadas com o usuário
+  sem saber quais.
+
+Fica um buraco conhecido, e ele é anterior a isto: `sla_state` devolve `ok` quando a linha **não tem
+`Data Operação`** — sem data de operação não há prazo a calcular, e chamar isso de `late` seria afirmar
+um atraso que ninguém mediu. Essas linhas validam sem justificativa. O conserto é preencher a data de
+operação, não afrouxar a régua.

@@ -768,6 +768,16 @@ operações; se uma estourou, o grupo estourou). O verde é neutro no card de
 propósito — pintar o que está no prazo é pintar quase a fila inteira, e aí o
 vermelho some no meio.
 
+**Preencher a coluna de validação pela GRADE do Track é validar**, e passa
+pelas mesmas três regras do `mark_validated` — carimbo de quem assinou, mesa
+certa e justificativa fora do prazo. Antes, `api_mc_upsert` copiava
+`VALIDADO p/ MO` como texto livre: a validação entrava sem dono, sem motivo do
+atraso e assinada por qualquer papel. O que separa validação de ajuste de
+cadastro é a **transição** (a coluna estava vazia e passou a ter data), o prazo é
+medido no estado **anterior** (depois da escrita a própria `sla_state` diz
+`done`), a data digitada é preservada, apagar a data apaga o carimbo, e o lote é
+tudo-ou-nada (HANDOFF §232).
+
 **Passado o prazo, a validação exige justificativa.** `mark_validated` levanta
 `SlaCommentRequired` e o endpoint devolve **409 com `sla_comment_required`** —
 409 e não 400 porque o pedido está bem formado, o *estado* é que pede mais um
@@ -802,6 +812,19 @@ duas exigem tê-lo aberto; no card, o Reject ficava a um clique de quem nunca vi
 o papel. O card tem um botão só. O Reject continua sendo só das mesas seguintes
 (`can_reject = stage != OTC`): o OTC é quem monta o documento e não tem a quem
 devolvê-lo.
+
+**O aviso do sino vai para a mesa em que a confirmação CAIU**, e não para o
+time inteiro (`_MC_STAGE_NOTIFY_ROLES`): Pending OTC → `BO`, Pending MO →
+`MO`+`BO`, Pending FO → `FO`+`BO`, Pending MO/FO → as três. `MASTER` entra em
+todas (sem isso o superusuário perde a esteira de vista, em silêncio) e `ADMIN`
+em nenhuma. A etapa sai de `pending_stage(row)` **depois** do carimbo — do
+ESTADO, não da etapa que acabou de ser assinada —, e é isso que faz o cadastro
+`manual-conf-validation` valer de graça: produto isento de FO nunca avisa o FO.
+Confirmação em `Ok` volta a avisar todos. O Back Office entra em todas porque
+**assinar e receber são perguntas diferentes**: assinar é um ato de uma mesa só,
+receber é acompanhar, e o documento é dele. Para isso a coluna `target_role`
+passou a aceitar vários papéis separados por vírgula (`_notif_roles`), com o
+valor antigo de um papel só continuando válido (HANDOFF §231).
 
 **Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`): Pending OTC → papel
 `BO` (a mesa de OTC Ops é o Back Office do cadastro de papéis), Pending MO → `MO`,
