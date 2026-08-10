@@ -1,0 +1,253 @@
+{
+  "key": "swap-antecipacao",
+  "name": "Swap – Registro de Antecipação de Contrato",
+  "system_id": "SWAP",
+  "category": "Swap",
+  "manual_section": "4.2.10 Registro de Antecipação de Contrato",
+  "manual_pages": "521-522",
+  "manual_version": "10/08/2026",
+  "description": "Allows participants to perform the partial or total early settlement (antecipação) of a swap contract (operation 0014).",
+  "file_type": "positional",
+  "separator": null,
+  "record_length": 99,
+  "file_name_rule": "",
+  "status": "library",
+  "linked_pages": [],
+  "notes": "The manual prints 'Tamanho do Registro: 99 caracteres', but the field positions run to 103 (header Filler) and 111 (Registro field 13) — transcribed as printed.",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "0",
+          "description": "Linha de Header",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código da Operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0014",
+          "description": "Código identificador da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Participante que gerou o arquivo",
+          "format": "X(20)",
+          "position": "11-30",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado do Participante que gerou o arquivo",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "31-38",
+          "required": "",
+          "content": "",
+          "description": "Data da operação. Formato: AAAAMMDD.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Versão do Layout",
+          "format": "9(05)",
+          "position": "39-43",
+          "required": "",
+          "content": "00001",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "7",
+          "field": "Filler",
+          "format": "X(60)",
+          "position": "44-103",
+          "required": "",
+          "content": "",
+          "description": "Reservado para futuras implementações",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "Line type 1 — one per contract being anticipated.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "1",
+          "description": "Linha de Dados",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0014",
+          "description": "Código identificador da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Código do Contrato",
+          "format": "X(11)",
+          "position": "11-21",
+          "required": "",
+          "content": "",
+          "description": "Código identificador do instrumento financeiro a ser antecipado.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Papel",
+          "format": "9(02)",
+          "position": "22-23",
+          "required": "",
+          "content": "00 (Ponta 1) e 01 (Ponta 2)",
+          "description": "Possíveis valores.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Meu Número",
+          "format": "9(10)",
+          "position": "24-33",
+          "required": "",
+          "content": "",
+          "description": "Código de controle atribuído pelo Participante",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "7",
+          "field": "Fator para Antecipação (Ponta1)",
+          "format": "9(10)v9(08)",
+          "position": "34-51",
+          "required": "",
+          "content": "",
+          "description": "Fator para Antecipação (Ponta 1)",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "8",
+          "field": "Fator para Antecipação (Ponta2)",
+          "format": "9(10)v9(08)",
+          "position": "52-69",
+          "required": "",
+          "content": "",
+          "description": "Fator para Antecipação (Ponta 2)",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "9",
+          "field": "Data Antecipação",
+          "format": "9(08)",
+          "position": "70-77",
+          "required": "",
+          "content": "",
+          "description": "Data da antecipação do Contrato. Formato: AAAAMMDD",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "10",
+          "field": "Banco Liquidante",
+          "format": "9(08)",
+          "position": "78-85",
+          "required": "",
+          "content": "",
+          "description": "Banco Liquidante",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "11",
+          "field": "Valor Para Antecipação",
+          "format": "9(14)v9(02)",
+          "position": "86-101",
+          "required": "",
+          "content": "",
+          "description": "Valor a ser antecipado.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "12",
+          "field": "Mantém Prêmios",
+          "format": "9(02)",
+          "position": "102-103",
+          "required": "",
+          "content": "00 (sim) e 01 (não)",
+          "description": "Indica se após antecipação os prêmios deverão ser mantidos. Esse campo é obrigatório em caso de antecipação parcial. Não deve ser preenchido em caso de antecipação total.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "13",
+          "field": "Data de Liquidação",
+          "format": "9(08)",
+          "position": "104-111",
+          "required": "",
+          "content": "",
+          "description": "Indica a data para agendamento da liquidação da antecipação, permitido até D+1 da “Data de Antecipação”. Campo de preenchimento opcional. Formato: AAAAMMDD.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    }
+  ]
+}

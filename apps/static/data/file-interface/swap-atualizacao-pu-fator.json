@@ -1,0 +1,211 @@
+{
+  "key": "swap-atualizacao-pu-fator",
+  "name": "Swap – Registro de Atualização de PU / Fator",
+  "system_id": "SWAP",
+  "category": "Swap",
+  "manual_section": "4.2.12 Registro de Atualização de PU / Fator",
+  "manual_pages": "523-524",
+  "manual_version": "10/08/2026",
+  "description": "Layout used to update curves referenced in VCP, for Libor with FX variation expressed in other currencies, to report the FX variation expressed in other currencies of the TJMI, for Forward Contracts (valid only for entries made from the registration date up to D-1 of the contract start) and for Cupom Limpo on curves referenced in MOEDA.",
+  "file_type": "positional",
+  "separator": null,
+  "record_length": 77,
+  "file_name_rule": "ACCRUAL_<VIEW>-<LOB>.txt (VIEW = BANCO / LAWTON / ATACAMA; LOB = CEM / EDG / HYB / COMM), unique-suffixed, written to the Batch Conecta folder and (best-effort) to the Regulatory Accrual evidence folder of the day",
+  "status": "active",
+  "linked_pages": [
+    {"label": "Regulatory · Accrual Swap", "url": "/accrual-swap"}
+  ],
+  "notes": "Also to be implemented for Daily Settlements · Other Products · Swap · VCP (/other-products-swap-vcp) — not wired yet. One accrual row generates 1/2/4 records — one per updater view (BANCO always; LAWTON/ATACAMA added when the group counterparty account belongs to them) × VCP leg; records are split by view into separate files. The generator assigns role/curve '01' to the LARGER account number and '00' to the smaller, while the manual states the participant with the SMALLER account is ponta 01. Only the Fator is sent — the PU field is written blank (22 spaces).",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'SWAP '"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "0",
+          "description": "Linha de Header = 0",
+          "source": "Fixed",
+          "source_detail": "Literal '0'"
+        },
+        {
+          "seq": "3",
+          "field": "Código da Operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0015",
+          "description": "Código identificador da operação. Operação 0015.",
+          "source": "Fixed",
+          "source_detail": "Literal '0015'"
+        },
+        {
+          "seq": "4",
+          "field": "Participante que gerou o arquivo",
+          "format": "X(20)",
+          "position": "11-30",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado do Participante que gerou o arquivo",
+          "source": "Calculated",
+          "source_detail": "Per-view participant name: JPMORGANBM (Banco) / INTRAGLAWTONFDO / INTRAGATACAMAFDO, space-padded to 20"
+        },
+        {
+          "seq": "5",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "31-38",
+          "required": "",
+          "content": "",
+          "description": "Data da operação. Formato: AAAAMMDD.",
+          "source": "Calculated",
+          "source_detail": "System date (today), YYYYMMDD"
+        }
+      ]
+    },
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "Line type 1 — one per updater view × VCP leg of the accrual row",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'SWAP '"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "1",
+          "description": "Linha de Dados = 1",
+          "source": "Fixed",
+          "source_detail": "Literal '1'"
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0015",
+          "description": "Código identificador da operação. Operação 0015.",
+          "source": "Fixed",
+          "source_detail": "Literal '0015'"
+        },
+        {
+          "seq": "4",
+          "field": "Código do Contrato",
+          "format": "X(11)",
+          "position": "11-21",
+          "required": "",
+          "content": "",
+          "description": "Código identificador do instrumento financeiro a ser atualizado.",
+          "source": "Page",
+          "source_detail": "Column 'Código IF' of the accrual row"
+        },
+        {
+          "seq": "5",
+          "field": "Papel",
+          "format": "9(02)",
+          "position": "22-23",
+          "required": "",
+          "content": "00 (Ponta 1) e 01 (Ponta 2)",
+          "description": "O critério para definir quem é ponta 01 ou ponta 02 na operação está relacionado a conta dos Participantes. A conta do participante que tiver o MENOR número será a ponta 01.",
+          "source": "Calculated",
+          "source_detail": "Role of the updater: PARTE/CONTRAPARTE accounts compared, larger account number = '01', smaller = '00'"
+        },
+        {
+          "seq": "6",
+          "field": "Tipo de Atualização",
+          "format": "9(02)",
+          "position": "24-25",
+          "required": "",
+          "content": "01 (Contrato a Termo), 15 (Dólar – Cupom Limpo), 00 (Curva VCP), 27 (Libor – variação cambial outros) ou 29 (TJMI – variação cambial outros)",
+          "description": "Possíveis valores.",
+          "source": "Fixed",
+          "source_detail": "Literal '00' (Curva VCP)"
+        },
+        {
+          "seq": "7",
+          "field": "Curva",
+          "format": "9(02)",
+          "position": "26-27",
+          "required": "",
+          "content": "00 (Ponta 1) e 01 (Ponta 2)",
+          "description": "",
+          "source": "Calculated",
+          "source_detail": "Role of the VCP leg being updated (same larger-account rule as Papel); one record per VCP leg"
+        },
+        {
+          "seq": "8",
+          "field": "Data PU / Fator",
+          "format": "9(08)",
+          "position": "28-35",
+          "required": "",
+          "content": "",
+          "description": "Formato: AAAAMMDD.",
+          "source": "Calculated",
+          "source_detail": "System date (today), YYYYMMDD"
+        },
+        {
+          "seq": "9",
+          "field": "Meu Número",
+          "format": "9(10)",
+          "position": "36-45",
+          "required": "",
+          "content": "",
+          "description": "Código de controle atribuído pelo Participante",
+          "source": "Calculated",
+          "source_detail": "Random 10-digit control number"
+        },
+        {
+          "seq": "10",
+          "field": "PU para Atualização",
+          "format": "9(14)v9(08)",
+          "position": "46-67",
+          "required": "",
+          "content": "",
+          "description": "PU para atualização da curva",
+          "source": "Fixed",
+          "source_detail": "Blank — 22 spaces (only the factor is sent)"
+        },
+        {
+          "seq": "11",
+          "field": "Fator para Atualização",
+          "format": "9(02)v9(08)",
+          "position": "68-77",
+          "required": "",
+          "content": "",
+          "description": "Fator para atualização da curva",
+          "source": "Page",
+          "source_detail": "Column 'Fator Parte' / 'Fator Contraparte' of the VCP leg — absolute value, 2 integer + 8 decimal digits, no separator"
+        }
+      ]
+    }
+  ]
+}

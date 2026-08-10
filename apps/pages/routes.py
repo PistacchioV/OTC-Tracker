@@ -19656,6 +19656,159 @@ def api_mappings(key):
     return jsonify({'success': True, 'rows': clean})
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+#  FILE INTERFACE — os layouts dos arquivos B3 (Batch Conecta) como templates
+#  editáveis. Um JSON por template em static/data/file-interface/ (versionados:
+#  os seeds transcrevem o manual "Transferência de Arquivos – Enviar Arquivos").
+#  Nada de layout fixo no código: a página monta os blocos do que o JSON disser,
+#  e template novo/atualizado da B3 entra pela tela (Create New Template).
+# ═════════════════════════════════════════════════════════════════════════════
+_FILE_INTERFACE_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'file-interface'))
+
+# A chave é também o nome do arquivo em disco: o regex é o que impede um
+# path traversal via URL (`../../`) além de padronizar o kebab-case.
+_FI_KEY_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,63}$')
+
+_FI_FIELD_KEYS = ('seq', 'field', 'format', 'position', 'required',
+                  'content', 'description', 'source', 'source_detail')
+_FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
+                 'manual_pages', 'manual_version', 'description',
+                 'file_name_rule', 'notes')
+
+
+def _fi_path(key):
+    return os.path.join(_FILE_INTERFACE_DIR, key + '.json')
+
+
+def _fi_load(key):
+    """Template completo (dict) ou None. Sem cache: a página é de consulta
+    eventual e os arquivos são pequenos — mtime-cache aqui seria zelo à toa."""
+    try:
+        with open(_fi_path(key), encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _fi_clean_template(key, payload):
+    """Normaliza o template recebido do POST → (dict, None) ou (None, erro).
+
+    Igual aos mappings, valores NÃO são trimados: conteúdo de campo B3 pode
+    carregar espaço significativo. A validação é de FORMA (tipos e chaves
+    conhecidas), não de conteúdo — o dono do layout é o manual da B3, não o app."""
+    if not isinstance(payload, dict):
+        return None, 'payload must be an object'
+    out = {'key': key}
+    for k in _FI_META_KEYS:
+        out[k] = str(payload.get(k, '') or '')
+    if not out['name'].strip():
+        return None, 'name is required'
+    ft = str(payload.get('file_type', '') or '').strip().lower()
+    out['file_type'] = ft if ft in ('positional', 'delimited') else 'positional'
+    sep = payload.get('separator')
+    out['separator'] = (str(sep) if sep not in (None, '') else None) \
+        if out['file_type'] == 'delimited' else None
+    rl = payload.get('record_length')
+    try:
+        out['record_length'] = int(rl) if rl not in (None, '') else None
+    except (TypeError, ValueError):
+        out['record_length'] = None
+    st = str(payload.get('status', '') or '').strip().lower()
+    out['status'] = st if st in ('active', 'library') else 'library'
+    pages = []
+    for p in (payload.get('linked_pages') or []):
+        if isinstance(p, dict) and str(p.get('url', '') or '').startswith('/'):
+            pages.append({'label': str(p.get('label', '') or '').strip(),
+                          'url': str(p['url']).strip()})
+    out['linked_pages'] = pages
+    blocks = []
+    for b in (payload.get('blocks') or []):
+        if not isinstance(b, dict):
+            continue
+        fields = []
+        for f in (b.get('fields') or []):
+            if isinstance(f, dict):
+                fields.append({k: str(f.get(k, '') or '') for k in _FI_FIELD_KEYS})
+        blocks.append({'id': str(b.get('id', '') or '').strip() or 'block-%d' % (len(blocks) + 1),
+                       'title': str(b.get('title', '') or '').strip() or 'Block',
+                       'note': str(b.get('note', '') or ''),
+                       'fields': fields})
+    out['blocks'] = blocks
+    return out, None
+
+
+@blueprint.route('/file-interface')
+def file_interface_page():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/file-interface.html', segment='file-interface')
+
+
+@blueprint.route('/api/file-interface/templates', methods=['GET'])
+def api_file_interface_list():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    items = []
+    try:
+        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+    except OSError:
+        names = []
+    for fn in names:
+        if not fn.endswith('.json'):
+            continue
+        t = _fi_load(fn[:-5])
+        if not t or not _FI_KEY_RE.match(str(t.get('key', ''))):
+            continue
+        items.append({k: t.get(k) for k in
+                      ('key', 'name', 'system_id', 'category', 'file_type',
+                       'separator', 'record_length', 'status', 'linked_pages',
+                       'manual_section', 'manual_pages')})
+        items[-1]['blocks'] = len(t.get('blocks') or [])
+        items[-1]['fields'] = sum(len(b.get('fields') or [])
+                                  for b in (t.get('blocks') or []))
+    return jsonify({'success': True, 'templates': items})
+
+
+@blueprint.route('/api/file-interface/templates/<key>', methods=['GET', 'POST', 'DELETE'])
+def api_file_interface_template(key):
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if not _FI_KEY_RE.match(key or ''):
+        return jsonify({'success': False, 'error': 'Invalid template key.'}), 400
+    if request.method == 'GET':
+        t = _fi_load(key)
+        if not t:
+            return jsonify({'success': False, 'error': 'Unknown template.'}), 404
+        return jsonify({'success': True, 'template': t})
+    if request.method == 'DELETE':
+        with _cache_lock:
+            try:
+                os.remove(_fi_path(key))
+            except FileNotFoundError:
+                return jsonify({'success': False, 'error': 'Unknown template.'}), 404
+            except OSError as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'File Interface Template Deleted', 'File Interface', key)
+        return jsonify({'success': True})
+    clean, err = _fi_clean_template(key, request.get_json(silent=True) or {})
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    with _cache_lock:
+        try:
+            os.makedirs(_FILE_INTERFACE_DIR, exist_ok=True)
+            _atomic_write_json(_fi_path(key), clean)
+        except Exception as e:
+            log.error('[file-interface] save failed for %s:\n%s', key, traceback.format_exc())
+            return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'File Interface Template Updated', 'File Interface',
+                         '{} ({} block(s))'.format(clean['name'], len(clean['blocks'])))
+    return jsonify({'success': True, 'template': clean})
+
+
 def _ndf_is_interbook(norm):
     """True quando o registro da API é uma perna interbook — pares cadastrados na
     tela Mapping (aba Interbook API). Predicado compartilhado: o mapeamento usa

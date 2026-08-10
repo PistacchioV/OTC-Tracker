@@ -1,0 +1,841 @@
+{
+  "key": "opcoes-flexiveis-vcp",
+  "name": "Opções Flexíveis – Registro de Opção VCP e Curvas Calculadas (V2)",
+  "system_id": "OPCAO",
+  "category": "Opções Flexíveis",
+  "manual_section": "5.3.1 Registro de Contrato de Opção VCP e Curvas Calculadas (V 2)",
+  "manual_pages": "706-711",
+  "manual_version": "10/08/2026",
+  "description": "Layout used by the participant to register a VCP flexible option contract (and calculated-curve options) with B3. One header line, one data line (type 1) per option and, for contracts with an Asian average, one fixing line (type 2) per verification date.",
+  "file_type": "delimited",
+  "separator": ";",
+  "record_length": null,
+  "file_name_rule": "OPC_Banco.txt (Opt Commodities) or FXO_Banco.txt (Opt FXO), written to the Batch Conecta 'New' folder (CONECTA_NEW_PATH); an existing name gets a ' (n)' copy suffix.",
+  "status": "active",
+  "linked_pages": [
+    {
+      "label": "New Deals · Opt FXO",
+      "url": "/new_deals-opt-fxo"
+    },
+    {
+      "label": "New Deals · Opt Commodities",
+      "url": "/new_deals-opt-commodities"
+    }
+  ],
+  "notes": "Written by routes.api_send_conecta (Opt Commodities → OPC_Banco.txt) and routes.api_fxo_send_conecta (Opt FXO → FXO_Banco.txt). Both write semicolon-delimited lines exactly as the manual specifies: each record ends with a trailing ';' (the manual prints a 'Separador X(1)' row after every field — those rows are represented here by file_type/separator, not listed as fields). Data lines carry all 62 fields (63 ';'-separated tokens including the trailing empty one); unfilled fields go out empty. Deals with Status 'Canceled' are skipped. Numbers use the decimal comma the manual requires. FXO caveat: the code's docstring says Tipo de Cotação (field 18) = '2', but the code writes '1' — this template documents what the code writes.",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "",
+          "content": "OPC  00002",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'OPC  00002' (two spaces between OPC and 00002)"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "",
+          "required": "",
+          "content": "Linha de Header = 0",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal '0'"
+        },
+        {
+          "seq": "3",
+          "field": "Entidade que gerou o Arquivo",
+          "format": "X(20)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado do Participante que gerou o arquivo",
+          "source": "Fixed",
+          "source_detail": "Literal 'JPMORGANBM'"
+        },
+        {
+          "seq": "4",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Data da operação. Formato: AAAAMMDD.",
+          "source": "Calculated",
+          "source_detail": "Generation date (today) as AAAAMMDD"
+        },
+        {
+          "seq": "5",
+          "field": "Controle de Versão",
+          "format": "9(05)",
+          "position": "",
+          "required": "",
+          "content": "Versão de layout - 00002",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal '00002'"
+        }
+      ]
+    },
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "Line type 1 — one per option.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "SIM",
+          "content": "OPC  00002",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'OPC  00002' (two spaces)"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(1)",
+          "position": "",
+          "required": "SIM",
+          "content": "Linha de Dados = 1",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal '1'"
+        },
+        {
+          "seq": "3",
+          "field": "Tipo Indicador",
+          "format": "9(1)",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Classes disponíveis: 1 - Ações Internacionais, 2 - Índices Internacionais, 3 - Commodities; 4 - Taxa de Câmbio; 5 – Índices; 6 - VCP; 7 - Ações Nacionais.",
+          "source": "Fixed",
+          "source_detail": "Opt Commodities: '3' (Commodities); FXO: '4' (Taxa de Câmbio)"
+        },
+        {
+          "seq": "4",
+          "field": "Parte (Conta)",
+          "format": "9(8)",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Código Cetip da Parte",
+          "source": "Calculated",
+          "source_detail": "From column 'Client': LAWTON → 73760009; Banco J.P. Morgan → 00041007; any client → 73760009 (bank account)"
+        },
+        {
+          "seq": "5",
+          "field": "Posição da Parte",
+          "format": "X(1)",
+          "position": "",
+          "required": "SIM",
+          "content": "1 – Titular, 2 – Lançador",
+          "description": "Figura assumida pela parte na opção. Preenchimento obrigatório.",
+          "source": "Page",
+          "source_detail": "Column 'Direction': SELL → '2' (Lançador), otherwise '1' (Titular)"
+        },
+        {
+          "seq": "6",
+          "field": "CPF/CNPJ Cliente Parte",
+          "format": "X(14)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "CPF ou CNPJ não formatado. Campo obrigatório se a Contraparte for Cliente 1 ou 2. Não é permitido o registro de opção com o Titular e Lançador com o mesmo CPF/CNPJ. Exemplo: 12345678910 para CPF e 12345678000178 para CNPJ. Campo opcional.",
+          "source": "",
+          "source_detail": "Not sent (always blank — the JPM side is a participant account, not a client)"
+        },
+        {
+          "seq": "7",
+          "field": "Contraparte (Conta)",
+          "format": "9(8)",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Código Cetip da contraparte",
+          "source": "Calculated",
+          "source_detail": "From column 'Client': LAWTON → 00041007; Banco J.P. Morgan → 73760009; any client → 73760102 (omnibus account)"
+        },
+        {
+          "seq": "8",
+          "field": "CPF/CNPJ Cliente Contraparte",
+          "format": "X(14)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "CPF ou CNPJ não formatado. Campo obrigatório se a Contraparte for Cliente 1 ou 2. Não é permitido o registro de opção com o Titular e Lançador com o mesmo CPF/CNPJ. Exemplo: 12345678910 para CPF e 12345678000178 para CNPJ. Campo opcional.",
+          "source": "Page",
+          "source_detail": "Column 'Tax ID', digits only (punctuation stripped); blank when the deal is against LAWTON/Banco J.P. Morgan (internal leg)"
+        },
+        {
+          "seq": "9",
+          "field": "Tipo de Opção",
+          "format": "X(1)",
+          "position": "",
+          "required": "SIM",
+          "content": "C - CALL ou P - PUT",
+          "description": "Deve ser lançado C - CALL ou P - PUT.",
+          "source": "Page",
+          "source_detail": "Column 'Instrument': contains PUT → 'P', CALL → 'C'"
+        },
+        {
+          "seq": "10",
+          "field": "Data de Início",
+          "format": "9(8)",
+          "position": "",
+          "required": "SIM",
+          "content": "AAAAMMDD",
+          "description": "Data de início da Opção. Deve ser dia útil; Data início deve ser igual à data atual. Nos contratos que envolvam clientes 10, pode ser anterior à Data de Registro em até d-2, inclusive.",
+          "source": "Page",
+          "source_detail": "Column 'Trade Date' formatted AAAAMMDD"
+        },
+        {
+          "seq": "11",
+          "field": "Data de Vencimento",
+          "format": "9(8)",
+          "position": "",
+          "required": "SIM",
+          "content": "AAAAMMDD",
+          "description": "Data do vencimento da opção. Data vencimento deve ser maior que Data início e deve ser dia útil.",
+          "source": "Page",
+          "source_detail": "Column 'Settlement Date' formatted AAAAMMDD"
+        },
+        {
+          "seq": "12",
+          "field": "Ativo Subjacente",
+          "format": "X(10)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções de preenchimento no arquivo público AAAAMMDD_Ativos_Subjacentes.txt). Apenas para curvas calculadas.",
+          "source": "Page",
+          "source_detail": "Column 'Underlying Asset'"
+        },
+        {
+          "seq": "13",
+          "field": "Quantidade",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Quantidade negociada no registro da opção. 14 inteiros e 8 decimais. Obrigatório o uso de \",\" (vírgula).",
+          "source": "Page",
+          "source_detail": "Column 'Total Notional', rounded to an integer and written as '{n},00'"
+        },
+        {
+          "seq": "14",
+          "field": "Strike",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Valor da taxa de câmbio ou preço da ação, índice ou mercadoria contratada entre comprador e vendedor para o exercício da opção. Campo com 10 inteiros e 8 decimais. Obrigatório o uso de \",\" (vírgula).",
+          "source": "Page",
+          "source_detail": "Column 'Strike', decimal comma; Opt Commodities divides by 100 when 'Quoted in Cents' = YES (FXO never divides)"
+        },
+        {
+          "seq": "15",
+          "field": "Strike/Limitador/Barreiras em valor ou percentual?",
+          "format": "9(1)",
+          "position": "",
+          "required": "SIM",
+          "content": "1 - Valor e 2 - Percentual",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal '1' (Valor)"
+        },
+        {
+          "seq": "16",
+          "field": "Data de referência valores em %",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Preenchimento obrigatório caso o campo \"Strike/Limitador/Barreiras em valor ou percentual?\" = \"Percentual\"; se \"Valor\", não informar. Deve ser maior ou igual à Data de registro e menor que o Fixing do vencimento (Ativo).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "17",
+          "field": "Tipo de Exercício",
+          "format": "9()",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Para contratos de Índices Internacionais e Ações Internacionais: 2 – Europeia. Para contratos de Commodities: 1 – Americana ou 2 – Europeia. Para VCP: campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Tipo de Exercício preenchido com valor inválido!",
+          "source": "Fixed",
+          "source_detail": "Literal '2' (Europeia)"
+        },
+        {
+          "seq": "18",
+          "field": "Tipo de Cotação",
+          "format": "x(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "1-Fechamento; 2-Média; 3-Máxima; 4-Mínima; 5-Ajuste",
+          "description": "Apenas para curvas calculadas.",
+          "source": "Mapping",
+          "source_detail": "Opt Commodities: mapping commodities-b3 → QUOTE TYPE OPT for the Underlying Asset (blank column or no row falls back to the historical '5'); FXO: fixed '1'"
+        },
+        {
+          "seq": "19",
+          "field": "Strike/Limitador/Barreiras em reais",
+          "format": "X(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "S - SIM",
+          "description": "Campo exclusivo para Commodities e VCP. Deve ser preenchido somente com S - SIM caso o strike/limitador/barreira seja em reais; se \"valor ou percentual?\" = Percentual, não preencher; se = Valor, preenchimento opcional; se \"Opção quanto = Sim\", não permitir o preenchimento; se \"Opção quanto = Vazio\", preenchimento opcional.",
+          "source": "Calculated",
+          "source_detail": "'S' when column 'Strike Currency' = BRL, else blank"
+        },
+        {
+          "seq": "20",
+          "field": "Data de fixing do ativo subjacente",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Utilizado para quando o ativo subjacente for internacional. Se \"Média asiática = vazio\": preenchimento obrigatório; se \"Média asiática <> vazio\": não preencher. Deve ser maior que \"Data de referência\" (ou que \"Data início\" quando aquela está vazia). Formato: AAAADDMM.",
+          "source": "Calculated",
+          "source_detail": "VANILLA only (blank for ASIAN): Opt Commodities writes 'Fixing Start Date'; FXO writes 'Fixing End Date' (last fixing)"
+        },
+        {
+          "seq": "21",
+          "field": "Data de fixing da moeda do ativo subjacente",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "Formato: AAAADDMM",
+          "description": "",
+          "source": "Calculated",
+          "source_detail": "Opt Commodities: column 'FX Conv Date' when the strike is not BRL or the trade is VANILLA; FXO: always blank"
+        },
+        {
+          "seq": "22",
+          "field": "Opção Quanto",
+          "format": "X(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "S – Sim ou VAZIO – Não",
+          "description": "",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "23",
+          "field": "Cotação para Opção Quanto",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Se \"Opção quanto = Vazio\", não preencher; se \"Opção quanto = Sim\", preenchimento obrigatório; deve ser maior que 0 (zero). Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "24",
+          "field": "Meu número",
+          "format": "9(10)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Código de controle atribuído pelo participante.",
+          "source": "Calculated",
+          "source_detail": "Random 10-digit number generated per line"
+        },
+        {
+          "seq": "25",
+          "field": "Combinação de operações",
+          "format": "x(20)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo informativo para combinar uma operação.",
+          "source": "Page",
+          "source_detail": "Column 'Deal' (deal ID)"
+        },
+        {
+          "seq": "26",
+          "field": "Valor Base",
+          "format": "9(14)v9(2)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser maior que zero (considerar casas decimais também). Apenas para curvas calculadas. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "27",
+          "field": "Prêmio Unitário",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Prêmio unitário, em Reais, pago pelo Titular ao Lançador quando houver. Obrigatório o uso de \",\" (vírgula).",
+          "source": "Page",
+          "source_detail": "Column 'Premium per Unit', decimal comma; Opt Commodities divides by 100 when 'Quoted in Cents' = YES"
+        },
+        {
+          "seq": "28",
+          "field": "Valor Financeiro Total do Prêmio",
+          "format": "9(10)v9(2)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Valor financeiro total do Prêmio, para registro feito com o campo Valor Base. Apenas para curvas calculadas. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "29",
+          "field": "Modalidade de liquidação do Prêmio",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "1 – Sem Modalidade, 2 – Bruta e 3 – Bilateral",
+          "description": "Obrigatório se houver Prêmio.",
+          "source": "Calculated",
+          "source_detail": "Internal legs (LAWTON / Banco J.P. Morgan): '2' (Bruta) when Trade Date = Spot Date, else '3' (Bilateral); clients: '1' (Sem Modalidade)"
+        },
+        {
+          "seq": "30",
+          "field": "Conta liquidante do prêmio",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Se \"Prêmio unitário = vazio\" e \"Valor Financeiro Total do Prêmio = vazio\": não preencher; caso contrário preenchimento opcional; a conta deve estar ativa.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "31",
+          "field": "Prêmio em Moeda Estrangeira",
+          "format": "X(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "S – Sim ou VAZIO – Não",
+          "description": "Apenas para Mercadorias.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "32",
+          "field": "Data de Fixing da Moeda do Prêmio",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "Formato: AAAADDMM",
+          "description": "Apenas para Mercadorias.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "33",
+          "field": "Data de liquidação do prêmio",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "Formato AAAAMMDD",
+          "description": "Deve ser maior ou igual à Data início e menor ou igual à Data vencimento. Se \"Prêmio unitário = vazio\": não preencher; se \"<> vazio\": preenchimento opcional. Deve conter data válida e útil.",
+          "source": "Page",
+          "source_detail": "Column 'Spot Date' formatted AAAAMMDD"
+        },
+        {
+          "seq": "34",
+          "field": "Limitador",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Para Call: deve ser maior que o valor informado no campo \"Strike\"; para Put: deve ser menor que o \"Strike\" e maior que zero (considerar casas decimais também). Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "35",
+          "field": "Periodicidade de verificação das barreiras",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Para contratos de Índices Internacionais e Ações Internacionais: 2 – Europeia. Para contratos de Commodities: 1 – Americana ou 2 – Europeia. Para VCP: campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Periodicidade de verificação das barreiras preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "36",
+          "field": "Barreira de KI",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser maior que zero (considerar casas decimais também). Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "37",
+          "field": "Direção barreira de KI",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "1 - Alta e 2 - Baixa",
+          "description": "Deve ser preenchido se o campo \"Barreira de KI\".",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "38",
+          "field": "Tipo de cotação p/ verificação da barreira de KI",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "1-Fechamento; 2-Média; 3-Máxima; 4-Mínima; 5-Ajuste",
+          "description": "Para contratos de Índices Internacionais e Ações Internacionais: 1 a 5. Para VCP: campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Tipo de cotação p/ verificação da barreira de KI preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "39",
+          "field": "Barreira de KO",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser maior que zero (considerar casas decimais também). Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "40",
+          "field": "Direção barreira de KO",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "1 - Alta e 2 – Baixa",
+          "description": "Deve ser preenchido se o campo \"Barreira de KO\".",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "41",
+          "field": "Tipo de cotação p/ verificação da barreira de KO",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "1-Fechamento; 2-Média; 3-Máxima; 4-Mínima; 5-Ajuste",
+          "description": "Para curvas calculadas: 1 a 5. Para VCP: campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Tipo de cotação p/ verificação da barreira de KO preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "42",
+          "field": "Liquidação do rebate de KO",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "1 - No ato; 2 - No vencimento; Vazio",
+          "description": "",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "43",
+          "field": "Rebate unitário",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Se \"Barreira de KI e/ou Barreira de KO <> Vazio\", preenchimento obrigatório. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "44",
+          "field": "Comissão paga pelo titular em R$",
+          "format": "9(11)v9(2)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser em R$, de 0 a 10000000000.0. Somente para VCP. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "45",
+          "field": "Comissão paga pelo lançador em R$",
+          "format": "9(11)v9(2)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser em R$, de 0 a 10000000000.0. Somente para VCP. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "46",
+          "field": "Conta intermediador",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Deve ser conta de intermediação. Somente para VCP.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "47",
+          "field": "Proteção contra Proventos",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "1 - SIM - B3, apenas para Ações Nacionais; 2 - SIM - Ajustado pelas partes, apenas VCP; 3 - NÃO, para VCP e Ações Nacionais e Internacionais.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "48",
+          "field": "Média Asiática",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "1 - Aritmética Simples - Informar Datas (para VCP, Mercadorias e Taxas de Câmbio); 2 – Aritmética Simples – Janela de Datas (para VCP, Mercadorias e Taxas de Câmbio); 3 – Aritmética Ponderada – Informar Datas (apenas para VCP, Mercadorias e Taxas de Câmbio).",
+          "source": "Calculated",
+          "source_detail": "ASIAN trades: '1' (Aritmética Simples – Informar Datas); VANILLA: blank"
+        },
+        {
+          "seq": "49",
+          "field": "Quantidade de Datas de Verificação",
+          "format": "9(4)",
+          "position": "",
+          "required": "SIM",
+          "content": "",
+          "description": "Quantidade de Datas de Verificação. Caso o contrato não possua média asiática, deve ser preenchido com \"0\".",
+          "source": "Calculated",
+          "source_detail": "VANILLA: '0'; ASIAN: business-day count of the fixing window (Fixing Start → Fixing End, weekends and the deal's FX Holiday Schedule calendar excluded; FXO defaults to the ANBIMA calendar)"
+        },
+        {
+          "seq": "50",
+          "field": "Data de Fixing do Ativo Subjacente - Inicial",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Data de Fixing do Ativo Subjacente – Inicial.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "51",
+          "field": "Data de Fixing do Ativo Subjacente - Final",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Data de Fixing do Ativo Subjacente – Final.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "52",
+          "field": "Ativo Subjacente VCP",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo com as opções de preenchimento no arquivo público AAAAMMDD_INDEXADORES_DERIVATIVOS_VCP.TXT. Valor inválido gera o erro: Campo Ativo Subjacente VCP preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "53",
+          "field": "Tipo de Cotação VCP",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Tipo de Cotação VCP preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "54",
+          "field": "Fonte de Informação VCP",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Fonte de Informação VCP preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "55",
+          "field": "Código do Ativo VCP na Fonte de Informação",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Código do Ativo VCP na Fonte de Informação preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "56",
+          "field": "Moeda do Ativo VCP",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Moeda do Ativo VCP preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "57",
+          "field": "Tipo de Cotação (Moeda do Ativo VCP)",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Tipo de Cotação (Moeda do Ativo VCP) preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "58",
+          "field": "Fonte de Informação (Moeda do Ativo VCP)",
+          "format": "9()",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo dinâmico (ver opções no arquivo público AAAAMMDD_Dominios_DERIVATIVOS_COE.txt). Valor inválido gera o erro: Campo Fonte de Informação (Moeda do Ativo VCP) preenchido com valor inválido!",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "59",
+          "field": "Informações Complementares",
+          "format": "X(300)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo tipo texto com Informações Complementares. Apenas para VCP.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "60",
+          "field": "Cotação Inicial do Ativo (em reais)",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Informar a Cotação Inicial do Ativo (em reais). Apenas para VCP. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "61",
+          "field": "Código da Estratégia",
+          "format": "X(11)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Campo com o código da Estratégia (se houver). Apenas para VCP.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        },
+        {
+          "seq": "62",
+          "field": "Trigger Proporção",
+          "format": "X(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "S=SIM",
+          "description": "Campo de preenchimento opcional.",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        }
+      ]
+    },
+    {
+      "id": "registro-media-asiatica",
+      "title": "Registro — Campos para média asiática",
+      "note": "Line type 2 — one per verification date; the app emits one per business day of the fixing window for ASIAN trades.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "NÃO",
+          "content": "OPC  00002",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'OPC  00002' (two spaces)"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(1)",
+          "position": "",
+          "required": "NÃO",
+          "content": "Linha de Dados = 2",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal '2'"
+        },
+        {
+          "seq": "3",
+          "field": "Data de Fixing do Ativo Subjacente",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Data de Fixing do Ativo Subjacente.",
+          "source": "Calculated",
+          "source_detail": "One line per business day of the fixing window (Fixing Start → Fixing End; weekends and holiday-calendar dates skipped), AAAAMMDD"
+        },
+        {
+          "seq": "4",
+          "field": "Data de Fixing da Moeda do Ativo Subjacente",
+          "format": "9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Data de Fixing da Moeda do Ativo Subjacente.",
+          "source": "Calculated",
+          "source_detail": "Opt Commodities: same date as field 3 when Strike Currency = BRL, else blank; FXO: always blank"
+        },
+        {
+          "seq": "5",
+          "field": "Quantidade de referência",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "NÃO",
+          "content": "",
+          "description": "Quantidade de referência. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": "Not sent (always blank)"
+        }
+      ]
+    }
+  ]
+}

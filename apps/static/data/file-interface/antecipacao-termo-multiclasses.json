@@ -1,0 +1,337 @@
+{
+  "key": "antecipacao-termo-multiclasses",
+  "name": "Antecipação Termo Multiclasses (Sem CCP)",
+  "system_id": "TER",
+  "category": "NDF / Termo",
+  "manual_section": "4.10.3 Antecipação de Contrato a Termo Sem CCP",
+  "manual_pages": "648-650",
+  "manual_version": "10/08/2026",
+  "description": "Layout that lets the parties anticipate (early-terminate) Termo de Moedas contracts or other asset classes in the Termo module (Termo21).",
+  "file_type": "positional",
+  "separator": null,
+  "record_length": 133,
+  "file_name_rule": "",
+  "status": "library",
+  "linked_pages": [],
+  "notes": "",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "Id do sistema",
+          "format": "X(5)",
+          "position": "1-5",
+          "required": "SIM",
+          "content": "TER",
+          "description": "Tipo do Instrumento Financeiro",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "Id tipo linha",
+          "format": "X(1)",
+          "position": "6-6",
+          "required": "SIM",
+          "content": "0",
+          "description": "Tipo de linha do Header = 0",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "X(4)",
+          "position": "7-10",
+          "required": "SIM",
+          "content": "0014",
+          "description": "Código da operação de Antecipação do TER",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Participante",
+          "format": "X(20)",
+          "position": "11-30",
+          "required": "SIM",
+          "content": "PARTICIPANTE",
+          "description": "Nome Simplificado do Emissor",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Data",
+          "format": "X(8)",
+          "position": "31-38",
+          "required": "SIM",
+          "content": "20230223",
+          "description": "Data da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Controle de Versão",
+          "format": "9(05)",
+          "position": "39-43",
+          "required": "SIM",
+          "content": "00002",
+          "description": "Versão de Layout.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "registro-dados-fixos",
+      "title": "Registro – Dados Fixos",
+      "note": "Line type 1 — one per anticipation",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "Id do sistema",
+          "format": "X(5)",
+          "position": "1-5",
+          "required": "SIM",
+          "content": "TER",
+          "description": "Tipo do Instrumento Financeiro",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "Id tipo linha",
+          "format": "X(1)",
+          "position": "6-6",
+          "required": "SIM",
+          "content": "1",
+          "description": "Tipo Linha \"Dados Fixos\"",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "X(4)",
+          "position": "7-10",
+          "required": "SIM",
+          "content": "0014",
+          "description": "Código da operação de Antecipação do TER",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Nº Controle Interno",
+          "format": "9(10)",
+          "position": "11-20",
+          "required": "SIM",
+          "content": "1001000100",
+          "description": "Código de controle atribuído pelo participante",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Lançamento do Participante (Conta)",
+          "format": "9(08)",
+          "position": "21-28",
+          "required": "SIM",
+          "content": "55555005",
+          "description": "Código da Instituição lançadora da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Papel (Posição do participante)",
+          "format": "9(01)",
+          "position": "29-29",
+          "required": "SIM",
+          "content": "0 = Comprador ou, 1 = Vendedor",
+          "description": "Posição do participante.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "7",
+          "field": "Contraparte",
+          "format": "9(08)",
+          "position": "30-37",
+          "required": "SIM",
+          "content": "55555005",
+          "description": "Código da contraparte na operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "8",
+          "field": "Contrato",
+          "format": "X(11)",
+          "position": "38-48",
+          "required": "SIM",
+          "content": "23010001100",
+          "description": "Código de identificação do contrato.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "9",
+          "field": "Valor Base a Antecipar",
+          "format": "9(14)V9(02)",
+          "position": "49-64",
+          "required": "SIM",
+          "content": "0000000000100050",
+          "description": "Valor base a Antecipar. Não utilizar ',' (virgula) ou '.' (ponto)",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "10",
+          "field": "Data Antecipação",
+          "format": "9(08)",
+          "position": "65-72",
+          "required": "SIM",
+          "content": "20230223",
+          "description": "Data Antecipação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "11",
+          "field": "Data Liquidação",
+          "format": "9(08)",
+          "position": "73-80",
+          "required": "OPCIONAL",
+          "content": "20230224",
+          "description": "Data da liquidação da antecipação. Pode ser indicada até D+1 da data da antecipação. Se não informado, será considerado a Data da Antecipação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "12",
+          "field": "Taxa Termo",
+          "format": "9(12)V9(08)",
+          "position": "81-100",
+          "required": "SIM",
+          "content": "00000000000505000000 ou \"          505000000\"",
+          "description": "Valor da cotação de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "13",
+          "field": "Taxa Juros",
+          "format": "9(02)V9(08)",
+          "position": "101-110",
+          "required": "SIM",
+          "content": "0100000010",
+          "description": "Valor da taxa de juros de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "14",
+          "field": "Taxa de Câmbio (R$/Moeda Cotada)",
+          "format": "9(04)V9(08)",
+          "position": "111-122",
+          "required": "OPCIONAL, válido apenas para contratos cotados em ME (obrigatório nesse caso)",
+          "content": "",
+          "description": "Valor da cotação de reversão da moeda cotada. Não utilizar ',' (virgula) ou '.' (ponto).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "15",
+          "field": "Liquidante",
+          "format": "9(08)",
+          "position": "123-130",
+          "required": "OPCIONAL",
+          "content": "55555005",
+          "description": "Código do liquidante para o qual está sendo realizado o lançamento.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "16",
+          "field": "Quantidade de Datas de Verificação",
+          "format": "9(03)",
+          "position": "131-133",
+          "required": "SIM, condicional ao contrato possuir média",
+          "content": "",
+          "description": "Quantidade de Datas de Verificação: Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor: 000.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "registro-dados-variaveis",
+      "title": "Registro – Dados Variáveis",
+      "note": "Line type 2 — verification dates (Asian modality)",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "Id do sistema",
+          "format": "X(5)",
+          "position": "1-5",
+          "required": "SIM",
+          "content": "TER",
+          "description": "Tipo do Instrumento Financeiro",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "Id tipo linha",
+          "format": "X(1)",
+          "position": "6-6",
+          "required": "SIM",
+          "content": "2",
+          "description": "Tipo Linha \"Dados Variáveis\"",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "X(4)",
+          "position": "7-10",
+          "required": "SIM",
+          "content": "0014",
+          "description": "Código da operação de Antecipação do TER",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Data Verificação",
+          "format": "X(8)",
+          "position": "11-18",
+          "required": "SIM",
+          "content": "20230224",
+          "description": "Data de Verificação (Asiático).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Valor Referencia",
+          "format": "9(14)V9(02)",
+          "position": "19-34",
+          "required": "SIM",
+          "content": "0000000000010050",
+          "description": "Valor Referencia (Asiático com média Ponderada). Para contratos com média aritmética simples, preencher com zeros. Não utilizar ',' (virgula) ou '.' (ponto)",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    }
+  ]
+}

@@ -10614,3 +10614,38 @@ TED para dentro de casa.
 `internal` no payload, e o cliente **não** vem marcado — só provar que ela entra deixaria passar uma
 regra que marca tudo. `check_ops_summary.py` continua verde, inclusive a checagem posicional das
 colunas, que é lida do `row.add` do template.
+
+## §235 — File Interface: os layouts da B3 viraram cadastro, não código
+
+A seção Apps ganhou o **File Interface** (`/file-interface`): o "lego" dos arquivos enviados à B3
+via Batch Conecta. Cada layout do manual "Transferência de Arquivos – Enviar Arquivos" é um JSON em
+`apps/static/data/file-interface/` (versionado, um por template) com os blocos como o manual
+apresenta — Header, Registro(s), Footer — e, por campo: Seq, Campo, Formato, Posição, Obrigatório,
+Conteúdo, Descrição, mais **Origem** e **Detalhe da Origem** (de onde o OTC Tracker puxa o valor:
+coluna da página, mapping, literal, calculado). São **14 seeds** transcritos da versão 10/08/2026
+do manual (1.002 campos): 5 **ativos** já vinculados às páginas que os usam (Termo Multiclasses →
+as 4 de NDF do New Deals; TAXACAMBIOTER → NDF Other Publisher; Opções Flexíveis VCP → Opt FXO e
+Opt Commodities; Atualização PU/Fator → Accrual; MID → MtM) e 9 de **biblioteca** (antecipações e
+os seis layouts de registro de Swap), sem página ainda — prontos para vincular quando existir.
+
+Decisões e armadilhas:
+
+- **Nada de layout no código.** A API é `/api/file-interface/templates[/<key>]` (GET/POST/DELETE),
+  no molde dos mappings: POST substitui o arquivo inteiro, valores não são trimados, escrita
+  atômica sob o `_cache_lock`. A chave é o nome do arquivo em disco e o regex `_FI_KEY_RE` é o que
+  barra path traversal pela URL. Template novo/atualizado da B3 entra pelo **Create New Template**
+  (builder de blocos e campos na tela), e o **Add Template** vincula um template da biblioteca às
+  páginas — a lista de páginas é colhida do DOM vivo do sidenav, como no Page Access.
+- **A versão 10/08/2026 do manual renumerou as seções**: o Termo Multiclasses virou *4.10.1
+  Registro de Contrato a Termo Sem CCP* (págs. 637–647) e o 4.11.x virou 4.10.x. Os
+  `manual_section`/`manual_pages` dos seeds seguem essa versão — referências antigas (637–646 etc.)
+  não batem mais com o PDF novo.
+- **A transcrição achou três divergências código × manual**, anotadas no `notes` dos templates:
+  o TAXACAMBIOTER escreve o Contrato com `ljust(10)` onde o manual pede `X(11)` (linha de 86 vs 87
+  chars); o docstring do send-conecta de FXO diz Tipo de Cotação `'2'` mas o código escreve `'1'`;
+  e no Accrual o Papel/Curva `01` vai para a conta *maior* enquanto o manual manda a *menor*.
+  Nenhuma foi "corrigida" — o comportamento em produção é o que está descrito em Origem, e mudar
+  qualquer um dos três é decisão de negócio, não de transcrição.
+- **Opções Flexíveis é por separador** (`;`, com token vazio no fim — 62 campos, 63 tokens), os
+  demais são posicionais; o chip da página mostra qual é qual, e `9(12)V9(8)` ganha a leitura
+  humana ("12 inteiros + 8 decimais") na própria coluna de formato.

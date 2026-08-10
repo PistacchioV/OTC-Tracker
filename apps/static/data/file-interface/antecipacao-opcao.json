@@ -1,0 +1,304 @@
+{
+  "key": "antecipacao-opcao",
+  "name": "Opções Flexíveis – Antecipação de Opção",
+  "system_id": "OPCAO",
+  "category": "Opções Flexíveis",
+  "manual_section": "5.3.2 Antecipação de Opção",
+  "manual_pages": "711-712",
+  "manual_version": "10/08/2026",
+  "description": "Layout carrying the information to anticipate (early-settle) a flexible option (OPC) contract: one header line, one data line (type 1) per anticipation and, for contracts with a weighted Asian average, one line (type 2) per date with anticipated quantities.",
+  "file_type": "delimited",
+  "separator": ";",
+  "record_length": null,
+  "file_name_rule": "",
+  "status": "library",
+  "linked_pages": [],
+  "notes": "The manual prints a 'Separador X(1) — ponto e vírgula' row after every field; those rows are represented by file_type/separator, not listed as fields.",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "",
+          "content": "OPC  00014",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "",
+          "required": "",
+          "content": "Linha de Header = 0",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Entidade que gerou o Arquivo",
+          "format": "X(20)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado do Participante que gerou o arquivo",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Data da operação. Formato: AAAAMMDD.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Controle de Versão",
+          "format": "9(05)",
+          "position": "",
+          "required": "",
+          "content": "Versão de layout - 00001",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "Line type 1 — one per anticipation.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "",
+          "content": "OPC  00014",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(1)",
+          "position": "",
+          "required": "",
+          "content": "Linha de Dados = 1",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código do Contrato",
+          "format": "X(11)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Código do Contrato OPC",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Parte (Conta)",
+          "format": "9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Código Cetip da Parte",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Contraparte (Conta)",
+          "format": "9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Código Cetip da Contraparte",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Meu número",
+          "format": "9(10)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Código de controle atribuído pelo participante",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "7",
+          "field": "Quantidade a antecipar",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Quantidade a antecipar. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "8",
+          "field": "Valor Base a antecipar",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Valor Base a antecipar. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "9",
+          "field": "Prêmio Unitário Antecipação",
+          "format": "9(10)v9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Prêmio Unitário Antecipação. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "10",
+          "field": "Valor Financeiro da Antecipação",
+          "format": "9(14)v9(2)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Valor Financeiro da Antecipação. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "11",
+          "field": "Banco Liquidante",
+          "format": "9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Se \"Prêmio unitário = vazio\": não preencher; se \"Prêmio unitário <> vazio\": preenchimento opcional; conta do Banco Liquidante do prêmio deve estar ativa.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "12",
+          "field": "Modalidade",
+          "format": "9(1)",
+          "position": "",
+          "required": "",
+          "content": "1 – Sem Modalidade, 2 – Bruta e 3 - Bilateral",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "13",
+          "field": "Data da Antecipação",
+          "format": "9(8)",
+          "position": "",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data da Antecipação. Deve ser dia útil.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "14",
+          "field": "Pagador do Prêmio",
+          "format": "9(1)",
+          "position": "",
+          "required": "",
+          "content": "1 - TITULAR, 2 - LANÇADOR",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "15",
+          "field": "Quantidade de Datas de Verificação",
+          "format": "9(4)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Quantidade de Datas de Verificação para antecipação de Contrato com Média Asiática Ponderada",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "registro-datas-antecipadas",
+      "title": "Registro — Datas Antecipadas",
+      "note": "Line type 2 — repeats for each date with anticipated quantities (weighted Asian average).",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(10)",
+          "position": "",
+          "required": "",
+          "content": "OPC  00014",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(1)",
+          "position": "",
+          "required": "",
+          "content": "Linha de Dados = 2",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Data de Fixing do Ativo Subjacente",
+          "format": "9(8)",
+          "position": "",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data da Antecipação. Para Média Asiática Ponderada.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Quantidade Antecipada",
+          "format": "9(14)v9(8)",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Quantidade Antecipada. Para Média Asiática Ponderada. Obrigatório o uso de \",\" (vírgula).",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    }
+  ]
+}

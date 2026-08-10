@@ -1,0 +1,1415 @@
+{
+  "key": "swap-fluxo-nao-constante-v2",
+  "name": "Swap – Registro de Contrato Fluxo Não Constante (V2)",
+  "system_id": "SWAP",
+  "category": "Swap",
+  "manual_section": "4.2.6 Registro de Contrato Fluxo Não Constante Versão 00002",
+  "manual_pages": "506-511",
+  "manual_version": "10/08/2026",
+  "description": "Registration of a swap contract with a non-periodic (non-constant) payment flow. The layout carries the parties, contract characteristics, forward (termo) data, update curves for each leg (including VCP, Libor, international interest rate, overnight international rates and commodity variants) in a single fixed-position data record. Version 00002 of the layout.",
+  "file_type": "positional",
+  "separator": null,
+  "record_length": null,
+  "file_name_rule": "",
+  "status": "library",
+  "linked_pages": [],
+  "notes": "Version 00002 of 4.2.5: adds the 'Controle de versão' field (content 00002) to the header, adds the IPCA fixing date fields (seq 100-101) to the final Características section, and shifts the 'Juros Internacionais Overnight' fields to seq 102-112 / positions 1904-1963.",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "0",
+          "description": "Linha de Header.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código da Operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0001 e 0301",
+          "description": "Código identificador da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Participante que gerou o arquivo",
+          "format": "X(20)",
+          "position": "11-30",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado do Participante que gerou o arquivo.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "31-38",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "Controle de versão",
+          "format": "9(05)",
+          "position": "39-43",
+          "required": "",
+          "content": "00002",
+          "description": "Versão do Layout.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "dados-iniciais",
+      "title": "Dados Iniciais",
+      "note": "Line type 1 — this block and all the following ones describe the single data record; the manual splits it into thematic sections",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "SWAP",
+          "description": "",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "1",
+          "description": "Linha de Dados.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "3",
+          "field": "Código operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0001 e 0301",
+          "description": "Código identificador da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "4",
+          "field": "Meu Número",
+          "format": "9(10)",
+          "position": "11-20",
+          "required": "",
+          "content": "",
+          "description": "Código de controle atribuído pelo participante.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "5",
+          "field": "Parte",
+          "format": "9(08)",
+          "position": "21-28",
+          "required": "",
+          "content": "",
+          "description": "Código da Instituição lançadora da operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "6",
+          "field": "CPF/CNPJ Cliente Parte",
+          "format": "X(14)",
+          "position": "29-42",
+          "required": "",
+          "content": "",
+          "description": "CNPJ ou CPF da Parte. Informar quando a Parte for uma conta cliente (10 ou 20).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "7",
+          "field": "BRANCO",
+          "format": "X(10)",
+          "position": "43-52",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "8",
+          "field": "Contraparte",
+          "format": "9(08)",
+          "position": "53-60",
+          "required": "",
+          "content": "",
+          "description": "Código da contraparte na operação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "9",
+          "field": "CPF/CNPJ Cliente Contraparte",
+          "format": "X(14)",
+          "position": "61-74",
+          "required": "",
+          "content": "",
+          "description": "CNPJ ou CPF da Contraparte. Informar quando a Contraparte for uma conta cliente (10 ou 20).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "10",
+          "field": "BRANCO",
+          "format": "X(10)",
+          "position": "75-84",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "caracteristicas",
+      "title": "Características",
+      "fields": [
+        {
+          "seq": "11",
+          "field": "Data início",
+          "format": "9(08)",
+          "position": "85-92",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data de início do contrato.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "12",
+          "field": "Data vencimento",
+          "format": "9(08)",
+          "position": "93-100",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data de vencimento do contrato.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "13",
+          "field": "Adesão a contrato",
+          "format": "9(02)",
+          "position": "101-102",
+          "required": "",
+          "content": "0 (SEM ADESAO), 1 (CGD), 2 (CSA), 3 (CGD/CSA)",
+          "description": "Tipo de adesão.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "14",
+          "field": "Valor base",
+          "format": "9(14)v9(02)",
+          "position": "103-118",
+          "required": "",
+          "content": "",
+          "description": "Valor base do contrato.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "15",
+          "field": "BRANCO",
+          "format": "X(02)",
+          "position": "119-120",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "16",
+          "field": "Agenda de Prêmio",
+          "format": "9(02)",
+          "position": "121-122",
+          "required": "",
+          "content": "00 (sim) e 01 (não)",
+          "description": "Paga prêmio.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "17",
+          "field": "BRANCO",
+          "format": "X(02)",
+          "position": "123-124",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "18",
+          "field": "Observação",
+          "format": "X(100)",
+          "position": "125-224",
+          "required": "",
+          "content": "",
+          "description": "Campo de preenchimento opcional pelo participante.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "exclusivo-contrato-a-termo",
+      "title": "Exclusivo para Contrato a Termo",
+      "fields": [
+        {
+          "seq": "19",
+          "field": "Data operação",
+          "format": "9(08)",
+          "position": "225-232",
+          "required": "",
+          "content": "AAAAMMDD",
+          "description": "Data da operação quando a mesma for pactuada a termo, com cliente e registrada em D+1.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "20",
+          "field": "Índice Termo",
+          "format": "9(02)",
+          "position": "233-234",
+          "required": "",
+          "content": "00 (VCP), 01 (SELIC), 03 (DI), 15 (DOLAR), 33 (EURO), 35 (IENE), 36 (LIBRA), 53 (EURO-BCE), 78 (FRANCO SUIÇO BCE)",
+          "description": "Código do indexador de correção da operação a termo.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "21",
+          "field": "Percentual Termo",
+          "format": "9(03)v9(02)",
+          "position": "235-239",
+          "required": "",
+          "content": "",
+          "description": "Percentual a ser aplicado sobre o indexador que o Participante quer que corrija o Valor Base Inicial da operação a termo.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "se-indice-termo-vcp-ou-dolar",
+      "title": "Se Índice Termo e “VCP” ou “DOLAR”",
+      "fields": [
+        {
+          "seq": "22",
+          "field": "PU Inicial",
+          "format": "9(14)v9(08)",
+          "position": "240-261",
+          "required": "",
+          "content": "",
+          "description": "PU Inicial para operação a termo = VCP.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "23",
+          "field": "Tipo/Classe",
+          "format": "9(05)",
+          "position": "262-266",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "24",
+          "field": "Denominação",
+          "format": "X(320)",
+          "position": "267-586",
+          "required": "",
+          "content": "",
+          "description": "Denominação para operação a termo = VCP.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "fluxo-de-juros-e-amortizacao",
+      "title": "Fluxo de Juros e Amortização",
+      "fields": [
+        {
+          "seq": "25",
+          "field": "BRANCO",
+          "format": "X(42)",
+          "position": "587-628",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "curva-para-atualizacao",
+      "title": "Curva para Atualização",
+      "fields": [
+        {
+          "seq": "26",
+          "field": "Percentual",
+          "format": "9(03)v9(02)",
+          "position": "629-633",
+          "required": "",
+          "content": "",
+          "description": "Percentual que incide sobre o índice/parâmetro de atualização do contrato da Parte. Para curva SOFR é obrigatório o preenchimento = 100%.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "27",
+          "field": "Curva",
+          "format": "X(03)",
+          "position": "634-636",
+          "required": "",
+          "content": "",
+          "description": "Índice que atualiza o valor base. Verifique arquivo AAAAMMDD_IndexadoresSWAP.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "28",
+          "field": "BRANCO",
+          "format": "9(08)",
+          "position": "637-644",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "29",
+          "field": "Sinal Taxa",
+          "format": "9(02)",
+          "position": "645-646",
+          "required": "",
+          "content": "00 (\"+\") e 01 (\"-\")",
+          "description": "\"+\" ou \"-\" da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "30",
+          "field": "Juros",
+          "format": "9(03)v9(04)",
+          "position": "647-653",
+          "required": "",
+          "content": "",
+          "description": "Taxa de juros atualizada da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "31",
+          "field": "Lim. Inferior (Floor)",
+          "format": "9(08)v9(08)",
+          "position": "654-669",
+          "required": "",
+          "content": "",
+          "description": "Limite Inferior.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "32",
+          "field": "Lim. Superior (Cap)",
+          "format": "9(08)v9(08)",
+          "position": "670-685",
+          "required": "",
+          "content": "",
+          "description": "Limite Superior.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "33",
+          "field": "Percentual",
+          "format": "9(03)v9(02)",
+          "position": "686-690",
+          "required": "",
+          "content": "",
+          "description": "Percentual que incide sobre o índice/parâmetro de atualização do contrato do ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "34",
+          "field": "Curva",
+          "format": "X(03)",
+          "position": "691-693",
+          "required": "",
+          "content": "",
+          "description": "Índice que atualiza o valor base. Verifique arquivo AAAAMMDD_IndexadoresSWAP.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "35",
+          "field": "BRANCO",
+          "format": "9(08)",
+          "position": "694-701",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "36",
+          "field": "Sinal Taxa",
+          "format": "9(02)",
+          "position": "702-703",
+          "required": "",
+          "content": "00 (\"+\") e 01 (\"-\")",
+          "description": "\"+\" ou \"-\" da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "37",
+          "field": "Juros",
+          "format": "9(03)v9(04)",
+          "position": "704-710",
+          "required": "",
+          "content": "",
+          "description": "Taxa de juros atualizada do Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "38",
+          "field": "Lim. Inferior (Floor)",
+          "format": "9(08)v9(08)",
+          "position": "711-726",
+          "required": "",
+          "content": "",
+          "description": "Limite Inferior.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "39",
+          "field": "Lim. Superior (Cap)",
+          "format": "9(08)v9(08)",
+          "position": "727-742",
+          "required": "",
+          "content": "",
+          "description": "Limite Superior.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "terceira-curva",
+      "title": "Terceira Curva",
+      "fields": [
+        {
+          "seq": "40",
+          "field": "BRANCO",
+          "format": "9(35)",
+          "position": "743-777",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "se-curvas-vcp",
+      "title": "Se curva(s) = “VCP”",
+      "fields": [
+        {
+          "seq": "41",
+          "field": "Pu inicial",
+          "format": "9(14)v9(08)",
+          "position": "778-799",
+          "required": "",
+          "content": "",
+          "description": "Preço unitário do índice na data de início, no caso de código = 00 para Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "42",
+          "field": "Tipo/Classe",
+          "format": "9(05)",
+          "position": "800-804",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "43",
+          "field": "Denominação",
+          "format": "X(320)",
+          "position": "805-1124",
+          "required": "",
+          "content": "",
+          "description": "Denominação para Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "44",
+          "field": "Pu inicial",
+          "format": "9(14)v9(08)",
+          "position": "1125-1146",
+          "required": "",
+          "content": "",
+          "description": "Preço unitário do índice na data de início, no caso de código = 00 para ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "45",
+          "field": "Tipo/Classe",
+          "format": "9(05)",
+          "position": "1147-1151",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "46",
+          "field": "Denominação",
+          "format": "X(320)",
+          "position": "1152-1471",
+          "required": "",
+          "content": "",
+          "description": "Denominação para Contraparte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "cupom-limpo-data-cotacao",
+      "title": "Cupom Limpo/Data Cotação",
+      "fields": [
+        {
+          "seq": "47",
+          "field": "Cupom Limpo Parte",
+          "format": "9(08)v9(07)",
+          "position": "1472-1486",
+          "required": "",
+          "content": "",
+          "description": "Cotação Cupom Limpo Curva Moeda ou VCP (exceto 73).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "48",
+          "field": "Data de Cotação Parte",
+          "format": "9(02)",
+          "position": "1487-1488",
+          "required": "",
+          "content": "00 (D0), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Possíveis valores.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "49",
+          "field": "Cupom Limpo ContraParte",
+          "format": "9(08)v9(07)",
+          "position": "1489-1503",
+          "required": "",
+          "content": "",
+          "description": "Cotação Cupom Limpo Curva Moeda ou VCP (exceto 73).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "50",
+          "field": "Data de Cotação ContraParte",
+          "format": "9(02)",
+          "position": "1504-1505",
+          "required": "",
+          "content": "00 (D0), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Possíveis valores.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "exclusivo-curva-libor",
+      "title": "Exclusivo para curva “Libor”",
+      "fields": [
+        {
+          "seq": "51",
+          "field": "BRANCO",
+          "format": "9(02)",
+          "position": "1506-1507",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "52",
+          "field": "BRANCO",
+          "format": "9(02)",
+          "position": "1508-1509",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "53",
+          "field": "Data de Cotação",
+          "format": "9(02)",
+          "position": "1510-1511",
+          "required": "",
+          "content": "00 (D), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Possíveis valores da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "54",
+          "field": "Variação Cambial",
+          "format": "9(02)",
+          "position": "1512-1513",
+          "required": "",
+          "content": "15 (DOLAR), 33 (EURO), 35 (IENE), 36 (LIBRA), 00 (VCP)",
+          "description": "Variação Cambial da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "55",
+          "field": "Tipo Classe",
+          "format": "9(05)",
+          "position": "1514-1518",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "56",
+          "field": "Data da Cotação - Variação Cambial - Parte",
+          "format": "9(02)",
+          "position": "1519-1520",
+          "required": "",
+          "content": "01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Data da Cotação - Variação Cambial da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "57",
+          "field": "Cupom Limpo/Outros - Cotação",
+          "format": "9(03)v9(07)",
+          "position": "1521-1530",
+          "required": "",
+          "content": "",
+          "description": "Outros - Cotação da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "58",
+          "field": "Alíquota - IR",
+          "format": "9(03)v9(05)",
+          "position": "1531-1538",
+          "required": "",
+          "content": "",
+          "description": "Alíquota - IR da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "59",
+          "field": "Limite inferior (FLOOR) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1539-1546",
+          "required": "",
+          "content": "",
+          "description": "Taxa, fator ou valor limite inferior da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "60",
+          "field": "Limite superior (CAP) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1547-1554",
+          "required": "",
+          "content": "",
+          "description": "Taxa, fator ou limite superior da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "61",
+          "field": "BRANCO",
+          "format": "9(02)",
+          "position": "1555-1556",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "62",
+          "field": "BRANCO",
+          "format": "9(02)",
+          "position": "1557-1558",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "63",
+          "field": "Data de Cotação",
+          "format": "9(02)",
+          "position": "1559-1560",
+          "required": "",
+          "content": "00 (D), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Possíveis valores da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "64",
+          "field": "Variação Cambial",
+          "format": "9(02)",
+          "position": "1561-1562",
+          "required": "",
+          "content": "15 (DOLAR), 33 (EURO), 35 (IENE), 36 (LIBRA), 00 (VCP)",
+          "description": "Variação Cambial da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "65",
+          "field": "Tipo Classe",
+          "format": "9(05)",
+          "position": "1563-1567",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "66",
+          "field": "Data da Cotação - Variação Cambial - Ctparte",
+          "format": "9(02)",
+          "position": "1568-1569",
+          "required": "",
+          "content": "01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Data da Cotação - Variação Cambial da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "67",
+          "field": "Cupom Limpo/Outros - Cotação",
+          "format": "9(03)v9(07)",
+          "position": "1570-1579",
+          "required": "",
+          "content": "",
+          "description": "Outros - Cotação da ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "68",
+          "field": "Alíquota - IR",
+          "format": "9(03)v9(05)",
+          "position": "1580-1587",
+          "required": "",
+          "content": "",
+          "description": "Alíquota - IR da ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "69",
+          "field": "Limite inferior (FLOOR) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1588-1595",
+          "required": "",
+          "content": "",
+          "description": "Taxa, fator ou valor limite inferior da ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "70",
+          "field": "Limite superior (CAP) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1596-1603",
+          "required": "",
+          "content": "",
+          "description": "Taxa, fator ou limite superior da ContraParte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "exclusivo-curva-taxa-juros-mercado-internacional",
+      "title": "Exclusivo para curva “Taxa de Juros Mercado Internacional”",
+      "fields": [
+        {
+          "seq": "71",
+          "field": "Taxa Juros",
+          "format": "9(03)v9(04)",
+          "position": "1604-1610",
+          "required": "",
+          "content": "",
+          "description": "Taxa Juros Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "72",
+          "field": "Troca de Fluxo",
+          "format": "9(02)",
+          "position": "1611-1612",
+          "required": "",
+          "content": "00 (Todas as Trocas de Fluxo), 01 (Só Para Primeira Troca de Fluxo)",
+          "description": "Troca de Fluxo Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "73",
+          "field": "Variação Cambial",
+          "format": "9(02)",
+          "position": "1613-1614",
+          "required": "",
+          "content": "15 (DOLAR), 33 (EURO), 35 (IENE), 36 (LIBRA), 00 (VCP)",
+          "description": "Variação Cambial da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "74",
+          "field": "Tipo Classe",
+          "format": "9(05)",
+          "position": "1615-1619",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "75",
+          "field": "Cupom Limpo / Outros - Cotação",
+          "format": "9(03)v9(07)",
+          "position": "1620-1629",
+          "required": "",
+          "content": "",
+          "description": "Cupom Limpo / Outros - Cotação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "76",
+          "field": "Alíquota - IR",
+          "format": "9(03)v9(05)",
+          "position": "1630-1637",
+          "required": "",
+          "content": "",
+          "description": "Alíquota - IR Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "77",
+          "field": "Limite inferior (FLOOR) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1638-1645",
+          "required": "",
+          "content": "",
+          "description": "Limite inferior (FLOOR) - Perc. Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "78",
+          "field": "Limite superior (CAP) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1646-1653",
+          "required": "",
+          "content": "",
+          "description": "Limite superior (CAP) - Perc. Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "79",
+          "field": "Taxa Juros",
+          "format": "9(03)v9(04)",
+          "position": "1654-1660",
+          "required": "",
+          "content": "",
+          "description": "Taxa Juros ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "80",
+          "field": "Troca de Fluxo",
+          "format": "9(02)",
+          "position": "1661-1662",
+          "required": "",
+          "content": "00 (Todas as Trocas de Fluxo), 01 (Só Para Primeira Troca de Fluxo)",
+          "description": "Troca de Fluxo Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "81",
+          "field": "Variação Cambial",
+          "format": "9(02)",
+          "position": "1663-1664",
+          "required": "",
+          "content": "15 (DOLAR), 33 (EURO), 35 (IENE), 36 (LIBRA), 00 (VCP)",
+          "description": "Variação Cambial da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "82",
+          "field": "Tipo Classe",
+          "format": "9(05)",
+          "position": "1665-1669",
+          "required": "",
+          "content": "",
+          "description": "Tipo Classe. Verifique arquivo AAAAMMDD_Cadastro_Curvas_Moedas_Feeder_Dominios.txt em Arquivos Públicos no Modulo Transf. de Arquivos.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "83",
+          "field": "Cupom Limpo / Outros - Cotação",
+          "format": "9(03)v9(07)",
+          "position": "1670-1679",
+          "required": "",
+          "content": "",
+          "description": "Cupom Limpo / Outros - Cotação.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "84",
+          "field": "Alíquota - IR",
+          "format": "9(03)v9(05)",
+          "position": "1680-1687",
+          "required": "",
+          "content": "",
+          "description": "Alíquota - IR ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "85",
+          "field": "Limite inferior (FLOOR) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1688-1695",
+          "required": "",
+          "content": "",
+          "description": "Limite inferior (FLOOR) - Perc. ContraParte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "86",
+          "field": "Limite superior (CAP) - Perc.",
+          "format": "9(03)v9(05)",
+          "position": "1696-1703",
+          "required": "",
+          "content": "",
+          "description": "Limite superior (CAP) - Perc. ContraParte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "exclusivo-commodity",
+      "title": "Exclusivo para Commodity",
+      "fields": [
+        {
+          "seq": "87",
+          "field": "Cotação Inicial",
+          "format": "9(06)v9(04)",
+          "position": "1704-1713",
+          "required": "",
+          "content": "",
+          "description": "Cotação Inicial da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "88",
+          "field": "Código da Commodity",
+          "format": "X(15)",
+          "position": "1714-1728",
+          "required": "",
+          "content": "",
+          "description": "Código RIC da Mercadoria. Verifique arquivo AAAAMMDD_Mercadorias.txt em Arquivos Públicos no Modulo Transf. de Arquivos. Campo exclusivo para swap de commodity.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "89",
+          "field": "BRANCO",
+          "format": "X(02)",
+          "position": "1729-1730",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "90",
+          "field": "Data da Cotação da Commodity",
+          "format": "9(02)",
+          "position": "1731-1732",
+          "required": "",
+          "content": "01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Data de Cotação para Ajuste da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "91",
+          "field": "Cotação Inicial",
+          "format": "9(06)v9(04)",
+          "position": "1733-1742",
+          "required": "",
+          "content": "",
+          "description": "Cotação Inicial da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "92",
+          "field": "Código da Commodity",
+          "format": "X(15)",
+          "position": "1743-1757",
+          "required": "",
+          "content": "",
+          "description": "Código RIC da Mercadoria. Verifique arquivo AAAAMMDD_Mercadorias.txt em Arquivos Públicos no Modulo Transf. de Arquivos. Campo exclusivo para swap de commodity.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "93",
+          "field": "BRANCO",
+          "format": "X(02)",
+          "position": "1758-1759",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "94",
+          "field": "Data da Cotação da Commodity",
+          "format": "9(02)",
+          "position": "1760-1761",
+          "required": "",
+          "content": "01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Data de Cotação para Ajuste da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "funcionalidade",
+      "title": "Funcionalidade/Titular da Funcionalidade/Prêmio (1) de Funcionalidade/Prêmio (2) de Funcionalidade",
+      "fields": [
+        {
+          "seq": "95",
+          "field": "BRANCO",
+          "format": "9(110)",
+          "position": "1762-1871",
+          "required": "",
+          "content": "",
+          "description": "BRANCO",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "caracteristicas-2",
+      "title": "Características",
+      "fields": [
+        {
+          "seq": "96",
+          "field": "Estratégia",
+          "format": "X(11)",
+          "position": "1872-1882",
+          "required": "",
+          "content": "",
+          "description": "Código da Estratégia.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "97",
+          "field": "Amortiza sem correção",
+          "format": "X(01)",
+          "position": "1883-1883",
+          "required": "",
+          "content": "S",
+          "description": "Exclusivo para contratos VCP. Deve ser informado S caso afirmativo, vazio caso contrário.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "98",
+          "field": "Código Identificador",
+          "format": "X(14)",
+          "position": "1884-1897",
+          "required": "",
+          "content": "",
+          "description": "Código de controle interno do participante. Preenchimento não obrigatório.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "99",
+          "field": "Data de Cotação Final – Termo",
+          "format": "9(02)",
+          "position": "1898-1899",
+          "required": "",
+          "content": "00 (D0), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5)",
+          "description": "Para Índice Termo referente à moedas.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "100",
+          "field": "Data de Fixing IPCA (Parte)",
+          "format": "9(02)",
+          "position": "1900-1901",
+          "required": "",
+          "content": "01 = M-1 e 02 = M-2",
+          "description": "Indica o fixing que será utilizado na apuração da cotação final de contratos com IPCA da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "101",
+          "field": "Data de Fixing IPCA (Contraparte)",
+          "format": "9(02)",
+          "position": "1902-1903",
+          "required": "",
+          "content": "01 = M-1 e 02 = M-2",
+          "description": "Indica o fixing que será utilizado na apuração da cotação final de contratos com IPCA da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    },
+    {
+      "id": "exclusivo-curva-juros-internacionais-overnight",
+      "title": "Exclusivo para curva “Juros Internacionais Overnight”",
+      "fields": [
+        {
+          "seq": "102",
+          "field": "Data Liquidação",
+          "format": "9(02)",
+          "position": "1904-1905",
+          "required": "",
+          "content": "00 (D+0), 01 (D+1), 02 (D+2), 03 (D+3), 04 (D+4) e 05 (D+5)",
+          "description": "Parte e Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "103",
+          "field": "Cotação Inicial Moeda Parte",
+          "format": "9(08)v9(07)",
+          "position": "1906-1920",
+          "required": "",
+          "content": "",
+          "description": "Cotação Inicial Moeda Parte. Campo tipo numérico. Formato: 8 inteiros e 7 casas decimais.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "104",
+          "field": "Metodologia de composição da taxa Parte",
+          "format": "9(02)",
+          "position": "1921-1922",
+          "required": "",
+          "content": "01 (Compounding act/360)",
+          "description": "Metodologia de composição da taxa da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "105",
+          "field": "Deslocamento da taxa Parte",
+          "format": "9(02)",
+          "position": "1923-1924",
+          "required": "",
+          "content": "00 (D-0), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5), 06 (D-6), 07 (D-7), 08 (D-8), 09 (D-9) e 10 (D-10)",
+          "description": "Deslocamento da taxa da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "106",
+          "field": "Expressão Juros Parte",
+          "format": "9(02)",
+          "position": "1925-1926",
+          "required": "",
+          "content": "01 (Linear act/360)",
+          "description": "Expressão Juros da Parte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "107",
+          "field": "Alíquota IR (em %) Parte",
+          "format": "9(03)v9(05)",
+          "position": "1927-1934",
+          "required": "",
+          "content": "",
+          "description": "Alíquota IR (em %) da Parte. Campo atualmente desabilitado (não permitido o preenchimento).",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "108",
+          "field": "Cotação Inicial Moeda Contraparte",
+          "format": "9(08)v9(07)",
+          "position": "1935-1949",
+          "required": "",
+          "content": "",
+          "description": "Cotação Inicial Moeda Contraparte. Campo tipo numérico. Formato: 8 inteiros e 7 casas decimais.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "109",
+          "field": "Metodologia de composição da taxa Contraparte",
+          "format": "9(02)",
+          "position": "1950-1951",
+          "required": "",
+          "content": "01 (Compounding act/360)",
+          "description": "Metodologia de composição da taxa da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "110",
+          "field": "Deslocamento da taxa Contraparte",
+          "format": "9(02)",
+          "position": "1952-1953",
+          "required": "",
+          "content": "00 (D-0), 01 (D-1), 02 (D-2), 03 (D-3), 04 (D-4), 05 (D-5), 06 (D-6), 07 (D-7), 08 (D-8), 09 (D-9) e 10 (D-10)",
+          "description": "Deslocamento da taxa da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "111",
+          "field": "Expressão Juros Contraparte",
+          "format": "9(02)",
+          "position": "1954-1955",
+          "required": "",
+          "content": "01 (Linear act/360)",
+          "description": "Expressão Juros da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        },
+        {
+          "seq": "112",
+          "field": "Alíquota IR (em %) Contraparte",
+          "format": "9(03)v9(05)",
+          "position": "1956-1963",
+          "required": "",
+          "content": "",
+          "description": "Alíquota IR (em %) da Contraparte.",
+          "source": "",
+          "source_detail": ""
+        }
+      ]
+    }
+  ]
+}

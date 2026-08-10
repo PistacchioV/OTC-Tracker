@@ -1,0 +1,222 @@
+{
+  "key": "mid-informacoes-derivativos",
+  "name": "MID – Registro de Informações de Derivativos",
+  "system_id": "MID",
+  "category": "MID",
+  "manual_section": "4.3.1 Registro de Informações de Derivativos",
+  "manual_pages": "530-532",
+  "manual_version": "10/08/2026",
+  "description": "Layout exclusive to Swap contracts in which at least one of the curves is VCP. It lets the Participant register and update the Mark-to-Market information and indicate the Minimum and Maximum Notional percentages.",
+  "file_type": "positional",
+  "separator": null,
+  "record_length": 93,
+  "file_name_rule": "MtM_<VIEW>-<BOOK>.txt (MtM_BANCO-CEM / MtM_BANCO-EDG / MtM_BANCO-HYB always; mirror file MtM_ATACAMA-EDG or MtM_LAWTON-CEM / MtM_LAWTON-HYB for intragroup contracts), Latin-1, CRLF, written to the Batch Conecta folder and the day's MTM source folder",
+  "status": "active",
+  "linked_pages": [
+    {"label": "Regulatory · MtM Swap", "url": "/mtm-swap"}
+  ],
+  "notes": "Every swap book generates the BANCO view file; contracts whose counterparty account is Lawton (00041.00-7) or Atacama (85398.00-5) also emit a mirror record with the OPPOSITE sign in the counterparty view file (EDG→Atacama, CEM/Hybrids→Lawton). Data rows use the page's reference date (datepicker); the header uses the system date. A zero MtM is sent as 0.01 — B3 rejects zero.",
+  "blocks": [
+    {
+      "id": "header",
+      "title": "Header",
+      "note": "Line type 0 — one per file",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "MID",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'MID' + 2 spaces"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "0",
+          "description": "Linha de Header = 0",
+          "source": "Fixed",
+          "source_detail": "Literal '0'"
+        },
+        {
+          "seq": "3",
+          "field": "Código da Operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0848",
+          "description": "Código identificador da operação.",
+          "source": "Fixed",
+          "source_detail": "Literal '0848'"
+        },
+        {
+          "seq": "4",
+          "field": "Participante que Gerou o Arquivo",
+          "format": "X(20)",
+          "position": "11-30",
+          "required": "",
+          "content": "",
+          "description": "Nome simplificado do Participante que gerou o arquivo.",
+          "source": "Calculated",
+          "source_detail": "Per-view participant name: JPMORGANBM (Banco) / INTRAGLAWTONFDO / INTRAGATACAMAFDO, space-padded to 20"
+        },
+        {
+          "seq": "5",
+          "field": "Data",
+          "format": "9(08)",
+          "position": "31-38",
+          "required": "",
+          "content": "",
+          "description": "Data da operação. Formato: AAAAMMDD.",
+          "source": "Calculated",
+          "source_detail": "System date (today), YYYYMMDD"
+        }
+      ]
+    },
+    {
+      "id": "registro-emissao",
+      "title": "Registro/Emissão",
+      "note": "Line type 1 — one per contract in the book file (plus the mirror record in the counterparty view file)",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "ID do Sistema",
+          "format": "X(05)",
+          "position": "1-5",
+          "required": "",
+          "content": "MID",
+          "description": "",
+          "source": "Fixed",
+          "source_detail": "Literal 'MID' + 2 spaces"
+        },
+        {
+          "seq": "2",
+          "field": "ID Tipo de Linha",
+          "format": "9(01)",
+          "position": "6-6",
+          "required": "",
+          "content": "1",
+          "description": "Linha de Dados = 1",
+          "source": "Fixed",
+          "source_detail": "Literal '1'"
+        },
+        {
+          "seq": "3",
+          "field": "Código da Operação",
+          "format": "9(04)",
+          "position": "7-10",
+          "required": "",
+          "content": "0848",
+          "description": "Código identificador da operação.",
+          "source": "Fixed",
+          "source_detail": "Literal '0848'"
+        },
+        {
+          "seq": "4",
+          "field": "Meu Número",
+          "format": "9(10)",
+          "position": "11-20",
+          "required": "",
+          "content": "",
+          "description": "Código de controle atribuído pelo Participante.",
+          "source": "Calculated",
+          "source_detail": "Random 10-digit control number"
+        },
+        {
+          "seq": "5",
+          "field": "Código do Contrato",
+          "format": "X(11)",
+          "position": "21-31",
+          "required": "",
+          "content": "",
+          "description": "Código do Contrato.",
+          "source": "Page",
+          "source_detail": "Column 'Código IF' of the MtM book row"
+        },
+        {
+          "seq": "6",
+          "field": "Nome Simplificado Parte",
+          "format": "X(20)",
+          "position": "32-51",
+          "required": "",
+          "content": "",
+          "description": "Nome Simplificado Parte.",
+          "source": "Calculated",
+          "source_detail": "Per-view party name: JPMORGANBM (Banco) / INTRAGLAWTONFDO (Lawton) / INTRAGATACAMAFDO (Atacama), space-padded to 20"
+        },
+        {
+          "seq": "7",
+          "field": "Código Conta Parte",
+          "format": "X(08)",
+          "position": "52-59",
+          "required": "",
+          "content": "",
+          "description": "Codigo da conta da Parte.",
+          "source": "Calculated",
+          "source_detail": "Per-view account: 73760009 (Banco) / 00041007 (Lawton) / 85398005 (Atacama)"
+        },
+        {
+          "seq": "8",
+          "field": "Sinal Valor MTM",
+          "format": "9(02)",
+          "position": "60-61",
+          "required": "",
+          "content": "00 (+) e 01 (-)",
+          "description": "Sinal da marcação a mercado.",
+          "source": "Calculated",
+          "source_detail": "'00' when Valor MTM >= 0, '01' when negative; inverted in the mirror (Lawton/Atacama) file"
+        },
+        {
+          "seq": "9",
+          "field": "Valor MTM",
+          "format": "9(10)v9(02)",
+          "position": "62-73",
+          "required": "",
+          "content": "",
+          "description": "Valor de marcação a mercado.",
+          "source": "Page",
+          "source_detail": "Column 'Valor MTM' of the book row — absolute value, 12 digits with implicit 2 decimals; zero is sent as 0.01"
+        },
+        {
+          "seq": "10",
+          "field": "Notional Mínimo",
+          "format": "9(04)v9(02)",
+          "position": "74-79",
+          "required": "",
+          "content": "",
+          "description": "Valor Notional Máximo em percentual",
+          "source": "Fixed",
+          "source_detail": "Blank — 6 spaces (not used)"
+        },
+        {
+          "seq": "11",
+          "field": "Notional Máximo",
+          "format": "9(04)v9(02)",
+          "position": "80-85",
+          "required": "",
+          "content": "",
+          "description": "Valor Notional Máximo em percentual",
+          "source": "Fixed",
+          "source_detail": "Blank — 6 spaces (not used)"
+        },
+        {
+          "seq": "12",
+          "field": "Data de Referência MTM",
+          "format": "9(08)",
+          "position": "86-93",
+          "required": "",
+          "content": "",
+          "description": "Data de Referência da marcação a mercado. Caso não seja informada é considerada a data de registro da operação. No formato AAAAMMDD",
+          "source": "Page",
+          "source_detail": "The page's reference date (datepicker), YYYYMMDD"
+        }
+      ]
+    }
+  ]
+}
