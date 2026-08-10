@@ -10593,25 +10593,24 @@ Agora a marca `_no_advice` tira só o que é **documento**:
 | Onde | Perna interna |
 |---|---|
 | Trade Level | entra (visão de trade) |
-| Settlement Summary | **entra**, com o selo `Internal` ao lado do nome |
+| Settlement Summary | **entra**, como qualquer outra linha |
 | Settlement Advice | fica de fora — é o documento endereçado ao cliente |
 | E-mail de TED | fica de fora — não se transfere dinheiro para si mesmo |
 
-Duas coisas que o corte do TED exige e não são óbvias:
+**A marca é de servidor e não aparece na tela.** A primeira versão punha um selo `Internal` ao lado do
+nome, no argumento de que a linha precisava explicar por que nunca sai do `New` — e a mesa recusou:
+quem lê o Settlement Summary sabe o que é a ATACAMA, e o selo só polui a coluna. `internal` continua
+no payload porque é ele que corta a TED; o que caiu foi a exibição.
 
-- **`_is_jpmorgan` não responde por ela.** O TED já pulava Lawton e J.P. Morgan pelo nome, mas a perna
-  interna pode ser um **fundo nosso** (`ATACAMA FUNDO DE INVESTIMENTO`) — sem "J.P. Morgan" no nome,
-  passaria batido e o e-mail pediria uma TED para dentro de casa.
-- **O selo é a explicação.** Sem ele, a única leitura possível para uma linha que nunca sai do `New` é
-  que alguém esqueceu de gerar o aviso. O texto passa pelo `t('ops-internal', …)` da própria página —
-  o `I18nManager` traduz os `[data-lang]` uma vez no load, e o que o JS insere depois nunca passa por
-  ele.
+Uma coisa que o corte do TED exige e não é óbvia: **`_is_jpmorgan` não responde por ela**. O TED já
+pulava Lawton e J.P. Morgan pelo nome, mas a perna interna pode ser um **fundo nosso**
+(`ATACAMA FUNDO DE INVESTIMENTO`) — sem "J.P. Morgan" no nome, passaria batido e o e-mail pediria uma
+TED para dentro de casa.
 
 ### Verificação
 
 `check_ops_trade_equity.py` ganhou o caso do Latam sem colunas de subjacente (Type caindo no
-`Instrument_Name`) e trocou a asserção do §229: a perna interna **entra** no Summary, marcada, e o
-cliente **não** vem marcado — só provar que ela entra deixaria passar uma regra que marca tudo.
-`check_ops_summary.py` continua verde, inclusive a checagem posicional das colunas: o selo vai colado
-ao `esc(r.counterparty)` dentro do `row.add` de propósito, porque é de lá que aquele teste lê a ordem
-das colunas — uma variável no lugar da chamada tiraria a coluna da lista.
+`Instrument_Name`) e trocou a asserção do §229: a perna interna **entra** no Summary, marcada como
+`internal` no payload, e o cliente **não** vem marcado — só provar que ela entra deixaria passar uma
+regra que marca tudo. `check_ops_summary.py` continua verde, inclusive a checagem posicional das
+colunas, que é lida do `row.add` do template.

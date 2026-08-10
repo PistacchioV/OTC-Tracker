@@ -655,7 +655,7 @@ entidades) e pelo `_pc_is_internal_counterparty`, que é a resposta que o Pendin
 Confirmation já dá para a mesma pergunta. O que a marca tira é o **documento**,
 não a linha: ela **fica** no Trade Level (visão de trade) **e no Settlement
 Summary** (visão de liquidação — a perna interna liquida, e o total tem de fechar
-com o Trade Level), com o selo `Internal` ao lado do nome; e **sai** do Settlement
+com o Trade Level), sem marca nenhuma na tela; e **sai** do Settlement
 Advice, que é o documento endereçado ao cliente, e do **e-mail de TED**, porque
 não se transfere dinheiro para si mesmo — o `_is_jpmorgan` do TED não cobre isso
 sozinho, já que a entidade pode ser um fundo nosso sem "J.P. Morgan" no nome
