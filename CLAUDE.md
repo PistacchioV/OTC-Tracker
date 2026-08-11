@@ -711,13 +711,18 @@ esconderia o único estado que não pede atenção). O status cru fica em `_stat
 **fora de `COLUMNS`** — é ele que permite apagar o comentário e a linha voltar a
 dizer `Partial - Cntpy` em vez de ficar `Justified` para sempre.
 
-### O card de Confirmations do New Deals Monitor mostra UM ciclo só
+### O card de Confirmations do New Deals Monitor mostra UM ciclo só — e ele termina no OTC
 
-Do documento até a assinatura: `New → Generated → … → Success` é a geração, e
-`Pending OTC → Pending MO/FO → Ok` é a esteira. Quando o grupo já tem linha na
-esteira, a etapa dela **vence** o status do documento (mostrar `Generated` numa
-confirmação já em Pending MO é parar o relógio na metade), e o anel de progresso
-só fecha em verde no `Ok`.
+`New → Generated → … → Success` é a geração, e depois dela só o **Pending
+OTC** segura o grupo aberto: validado o OTC, a confirmação conta como **100%**
+no card/seção e sai do e-mail de pendências das 19h. Pending MO/FO é assunto do
+Confirmations Monitor — o New Deals Monitor cobra a ação da mesa de OTC, e
+manter o grupo aberto por etapa alheia cobraria trabalho que não é dela.
+`_conf_esteira_stages` traduz toda etapa depois do OTC para `Ok` na leitura, e
+o e-mail conta `Ok` como concluído junto com `Success`. Quando o grupo já tem
+linha na esteira, a etapa dela **vence** o status do documento (mostrar
+`Generated` numa confirmação já em Pending OTC é parar o relógio na metade), e
+o anel de progresso fecha em verde no `Ok`.
 
 O join é pelos **Trade IDs** (`_conf_segregate` coleta `Deal` e `B3_ID` de cada
 grupo), nunca por contraparte × mercadoria: os dois lados normalizam nome e

@@ -25170,13 +25170,19 @@ def _conf_ndfcomm_groups(ref):
     return _conf_segregate(_conf_load_ndfcomm(ref), _conf_deal_family)
 
 
-# A esteira continua o ciclo do documento. Depois do New → Generated → Success da
-# geração vêm as três mesas (Pending OTC → Pending MO e/ou FO → Ok), e é isso que
-# o card do Monitor mostra: um ciclo só, do documento até a assinatura.
+# A esteira continua o ciclo do documento — mas o ciclo do MONITOR termina no
+# OTC. Depois do New → Generated → Success da geração vem só o Pending OTC:
+# validado o OTC, a confirmação está 100% para o card/seção Confirmations e
+# para o e-mail de pendências. Pending MO/FO é assunto do Confirmations
+# Monitor, não daqui — o New Deals Monitor cobra a ação da mesa de OTC, e
+# manter o grupo aberto por uma etapa que não é dela cobraria trabalho alheio.
+# (`_conf_esteira_stages` traduz toda etapa depois do OTC para Ok.)
 #
 # Ordem da MENOS avançada para a mais: um grupo do New Deals cobre várias
 # operações, e o grupo vale pela que está mais atrás — dizer 'Ok' porque UMA das
-# dez foi validada esconderia as nove que faltam.
+# dez foi validada esconderia as nove que faltam. As etapas de MO/FO seguem na
+# lista por defesa: uma linha que escape da tradução não pode virar rank
+# desconhecido.
 _CONF_STAGE_ORDER = ('Pending OTC', 'Pending MO/FO', 'Pending MO', 'Pending FO', 'Ok')
 
 
@@ -25194,8 +25200,14 @@ def _conf_esteira_stages():
         for base in ('pending', 'ok'):
             for r in _mc.load_rows(base):
                 tid = str(r.get(_mc.KEY_COLUMN, '') or '').strip()
-                if tid:
-                    out[tid] = str(r.get('Pending', '') or '') or _mc.STATUS_OK
+                if not tid:
+                    continue
+                st = str(r.get('Pending', '') or '') or _mc.STATUS_OK
+                # Só o Pending OTC segura o grupo aberto no Monitor: validado o
+                # OTC, a confirmação conta como 100% aqui e no e-mail de
+                # pendências — Pending MO/FO segue vivo no Confirmations
+                # Monitor, que é de quem essa etapa é.
+                out[tid] = st if st == _mc.PENDING_OTC else _mc.STATUS_OK
     except Exception:
         log.warning('[deals-monitor] não consegui ler a esteira:\n%s', traceback.format_exc())
     return out
@@ -27642,8 +27654,12 @@ def _ndm_pending_blocks(ref):
             # minúsculo ('success'), e contar só a grafia 'Success' deixaria os
             # cards de Intrag eternamente pendentes no aviso — falso alarme
             # diário é o jeito mais rápido de a mesa parar de ler o e-mail.
+            # 'Ok' é o estado FECHADO dos cards de confirmação (inclui as
+            # etapas depois do OTC, que `_conf_esteira_stages` traduz para
+            # Ok): sem contá-lo aqui, confirmação já validada pelo OTC
+            # continuaria aparecendo como ação pendente no e-mail.
             success = sum(int(v or 0) for k, v in statuses.items()
-                          if str(k).strip().lower() == 'success')
+                          if str(k).strip().lower() in ('success', 'ok'))
             pending = total - success
             if total <= 0 or pending <= 0:
                 continue
@@ -27653,7 +27669,7 @@ def _ndm_pending_blocks(ref):
             breakdown = ', '.join(
                 '{} {}'.format(v, str(k)[:1].upper() + str(k)[1:])
                 for k, v in statuses.items()
-                if str(k).strip().lower() != 'success' and v)
+                if str(k).strip().lower() not in ('success', 'ok') and v)
             by_type.setdefault(_z, []).append(
                 {'product': product, 'detail': detail, 'pending': pending,
                  'breakdown': breakdown, 'total': total, 'success': success})
@@ -29377,6 +29393,10 @@ def api_generic_nd_mapping_b3(product):
 
 _TICKETS_PAGE = 'Support'
 _TICKET_OPS_CC = 'brazil.otc.ops@jpmorgan.com'
+# Aviso de ABERTURA: quem trata os tickets é o master, então o e-mail de
+# ticket novo vai para ele, com a caixa do OTC Tracker em cópia (o mesmo
+# endereço que envia — fica o rastro na caixa compartilhada).
+_TICKET_NEW_TO = os.getenv('TICKET_NEW_EMAIL_TO', 'giulliano.luccia@jpmorgan.com')
 
 
 def _tk_session_user():
@@ -29486,6 +29506,49 @@ def _tk_send_closed_email(ticket):
         return '{}: {}'.format(type(e).__name__, e)
 
 
+def _tk_send_opened_email(ticket):
+    """E-mail de abertura: ticket novo no Ticket List → aviso para quem trata
+    (`_TICKET_NEW_TO`), com a caixa do OTC Tracker em cópia. Mesmo desenho do
+    aviso de encerramento — best-effort, devolve True ou a mensagem de erro: o
+    ticket JÁ está gravado quando isto roda, e uma falha de SMTP (fora da rede
+    JPM, por exemplo) não pode desfazer a criação."""
+    from email.mime.image import MIMEImage
+    try:
+        html = render_template(
+            'pages/email-template-ticket-opened.html',
+            ticket=ticket,
+            agent_name=otc_tickets.AGENT_NAME,
+            current_year=datetime.now().year)
+        msg = MIMEMultipart('related')
+        msg['Subject'] = 'OTC Tracker — Ticket #{} opened by {}'.format(
+            ticket.get('id') or '',
+            ticket.get('requester_name') or ticket.get('requester_sid') or '')
+        msg['From'] = SHARED_MAILBOX
+        msg['To'] = _TICKET_NEW_TO
+        msg['Cc'] = SHARED_MAILBOX
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText('Please view this notification in HTML.', 'plain', 'utf-8'))
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        msg.attach(alt)
+        logo_path = _get_logo_path()
+        if logo_path:
+            with open(logo_path, 'rb') as f:
+                limg = MIMEImage(f.read())
+            limg.add_header('Content-ID', '<otc_logo>')
+            limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+            msg.attach(limg)
+        _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, [_TICKET_NEW_TO, SHARED_MAILBOX], msg.as_string())
+        log.info('[tickets] opening notice sent for %s to=%s cc=%s',
+                 ticket.get('id'), _TICKET_NEW_TO, SHARED_MAILBOX)
+        return True
+    except Exception as e:
+        log.error('[tickets] opening notice FAILED for %s:\n%s',
+                  ticket.get('id'), traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
 @blueprint.route('/api/tickets', methods=['GET'])
 def api_tickets_list():
     if not session.get('authenticated'):
@@ -29533,7 +29596,10 @@ def api_tickets_create():
         tags=tags, description=description)
     log.info('[tickets] %s created by %s (%s)', ticket['id'], name, sid)
     _tk_notify_master(sid, name, ticket)
-    return jsonify({'success': True, 'ticket': _tk_public(ticket, sid)})
+    mail_result = _tk_send_opened_email(ticket)
+    return jsonify({'success': True, 'ticket': _tk_public(ticket, sid),
+                    'email_sent': mail_result is True,
+                    'email_error': None if mail_result is True else mail_result})
 
 
 @blueprint.route('/api/tickets/<ticket_id>', methods=['GET'])

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Support Ticket Opened</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td { font-family: Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+    <!-- Wrapper -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+           style="background-color:#f4f6f9;padding:40px 0;">
+        <tr>
+            <td align="center">
+
+                <!-- Container -->
+                <!--[if mso]>
+                <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="600"><tr><td width="600" style="width:600px;">
+                <![endif]-->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600"
+                       style="max-width:600px;background-color:#ffffff;border-radius:8px;
+                              box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden;">
+
+                    <!-- ── Header ─────────────────────────────────── -->
+                    {% set header_title = 'Support Ticket Opened' %}
+                    {% set header_subtitle = 'Ticket &nbsp;·&nbsp; <strong style="color:#ffffff;">#' ~ ticket.id ~ '</strong>' %}
+                    {% set header_logo_height = 72 %}
+                    {% set header_width = 600 %}
+                    {% include 'partials/email-gradient-header.html' %}
+
+                    <!-- ── Body ──────────────────────────────────── -->
+                    <tr>
+                        <td style="padding:32px 32px 24px;">
+
+                            <p style="color:#1a1a2e;font-size:15px;font-weight:700;margin:0 0 10px;">
+                                Hello,
+                            </p>
+                            <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 24px;">
+                                A new support ticket <strong>#{{ ticket.id }}</strong> has been
+                                opened by <strong>{{ ticket.requester_name or ticket.requester_sid }}</strong>
+                                in the OTC Tracker Support Center. The summary below is the request
+                                as submitted — you can follow it up on the Ticket List.
+                            </p>
+
+                            <!-- Status badge -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="margin-bottom:24px;">
+                                <tr>
+                                    <td align="center" valign="middle"
+                                        style="background-color:#e7f0fb;border-radius:8px;
+                                               padding:18px 6px;border:1px solid #c8dcf3;">
+                                        <p style="font-size:22px;font-weight:700;color:#1c66c2;
+                                                  margin:0 0 4px;line-height:1.2;">{{ ticket.status }}</p>
+                                        <p style="font-size:10px;font-weight:700;text-transform:uppercase;
+                                                  letter-spacing:0.07em;color:#3f74ad;margin:0;">Current Status</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Ticket summary -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                                   style="border-collapse:collapse;margin-bottom:8px;">
+                                <tr>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;
+                                               letter-spacing:0.05em;color:#5a6473;width:38%;">Field</td>
+                                    <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                               font-size:11px;font-weight:700;text-transform:uppercase;
+                                               letter-spacing:0.05em;color:#5a6473;">Value</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Ticket ID</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;
+                                               font-family:'Courier New',monospace;">#{{ ticket.id }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Subject</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ ticket.subject }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Opened By</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">
+                                        {{ ticket.requester_name }}
+                                        {%- if ticket.requester_sid %} <span style="color:#8a929e;">({{ ticket.requester_sid }})</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% if ticket.requester_email %}
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Requester E-mail</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ ticket.requester_email }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Assigned Agent</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ agent_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Priority</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ ticket.priority }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Opened On</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ ticket.created_at }}</td>
+                                </tr>
+                                {% if ticket.tags %}
+                                <tr>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#666;">Tags</td>
+                                    <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;color:#333;">{{ ticket.tags|join(', ') }}</td>
+                                </tr>
+                                {% endif %}
+                            </table>
+
+                            {% if ticket.description %}
+                            <p style="color:#5a6473;font-size:11px;font-weight:700;text-transform:uppercase;
+                                      letter-spacing:0.05em;margin:20px 0 6px;">Request</p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td style="padding:12px;background-color:#f8f9fb;border:1px solid #e5e9f0;
+                                               border-radius:8px;font-size:12.5px;line-height:1.6;color:#444;">
+                                        {{ ticket.description }}
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endif %}
+
+                            <!-- ── Signature ──────────────────────────── -->
+                            <p style="font-size:14px;line-height:1.6;color:#333333;margin:24px 0 0;">
+                                Regards,<br/>
+                                <strong>OTC Tracker — Brazil OTC Operations</strong>
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- ── Footer ────────────────────────────────── -->
+                    <tr>
+                        <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                            <p style="color:#999999;font-size:11px;margin:0;">
+                                &copy; {{ current_year }} OTC Tracker &mdash; JPMorganChase &amp; Co.
+                            </p>
+                            <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                                This is an automated notification from the OTC Tracker Support Center.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
