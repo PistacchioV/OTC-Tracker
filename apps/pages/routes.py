@@ -28692,11 +28692,21 @@ def api_generic_nd_bulk_patch_cache(product):
 # ──────────────────────────────────────────────────────────────────────────
 # Same positional TER layout as ndf-commodities, with the FX-NDF field rules.
 # Lines are split into THREE files by participant entity:
-#   • client is the Banco J.P. Morgan → the LAWTON-side leg → *_LAWTON file
-#     (participant 00041007) — mirrors the ndf-commodities convention;
+#   • LE = LAWTON, or client is the Banco J.P. Morgan → the LAWTON-side leg →
+#     *_LAWTON file (participant 00041007) — mirrors the ndf-commodities
+#     convention;
 #   • else LE = MGT → *_MGT file (participant 04880006);
 #   • else → *_BANCO file (participant 73760009).
 # Counterparty account follows the LE matrix used on the page previews.
+#
+# A perna Lawton × Banco NÃO depende de vir da API: quando a linha do banco
+# tem o Lawton como contraparte e o lote não traz a perna espelhada explícita
+# (LE = LAWTON) do mesmo trade, o envio SINTETIZA a visão Lawton a partir da
+# própria linha — mesmo trade, Participante ↔ Contraparte trocados e Papel
+# invertido — e ela cai no *_LAWTON. É a convenção que o TAXA da página
+# /ndf-other-publisher sempre teve (uma linha, duas visões); aqui o desenho
+# original apostava que a perna do book do Lawton chegaria como deal próprio,
+# e ela não chega — o arquivo visão Lawton simplesmente nunca nascia.
 
 # Athena publisher (feeder) → códigos B3: mapping publisher-ndf, tela Mapping.
 def _ndf_publisher_row(publisher):
@@ -29037,6 +29047,37 @@ def _generic_ndf_ter_line(deal, is_fwd):
                                   page_url=page_url)
 
 
+def _nd_lawton_mirror(deal):
+    """A perna Lawton × Banco do MESMO trade, vista a partir da linha do banco
+    contra o Lawton. LE = LAWTON leva a `_generic_ndf_ter_line` ao ramo que já
+    monta a visão Lawton (participante 00041007 × contraparte 73760009, CNPJ em
+    branco); o Papel inverte porque quem compra de um lado vende do outro. Todo
+    o resto — datas, taxa, notional, publisher, Código Identificador — é do
+    trade, então fica igual."""
+    m = dict(deal)
+    m['LE'] = 'LAWTON'
+    m['Client'] = 'BANCO J.P. MORGAN S.A.'
+    d = str(deal.get('Direction', '') or '').strip().upper()
+    m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
+    return m
+
+
+def _nd_lawton_sig(deal):
+    """Assinatura de trade para casar a perna do banco com a perna Lawton
+    explícita do lote: (Data de Operação, Data de Vencimento, notional). Os
+    Deal IDs das duas pernas são diferentes — cada book registra o seu —, então
+    a correlação é pelos termos econômicos."""
+    def _dt8(v):
+        dt = _parse_date_any(re.sub(r'<[^>]+>', '', str(v or '')).strip())
+        return dt.strftime('%Y%m%d') if dt else ''
+    raw = str(deal.get('TotalNotional') or deal.get('Notional') or '').replace(',', '').strip()
+    try:
+        val = round(float(raw), 2)
+    except ValueError:
+        val = None
+    return (_dt8(deal.get('TradeDate')), _dt8(deal.get('SettlementDate')), val)
+
+
 @blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
 def api_generic_nd_send_conecta(product):
     if not session.get('authenticated'):
@@ -29056,13 +29097,36 @@ def api_generic_nd_send_conecta(product):
     buckets = {'BANCO': [], 'LAWTON': [], 'MGT': []}
     counts = Counter()
     try:
+        made_by_deal = []
         for deal in deals:
             made = _generic_ndf_ter_line(deal, is_fwd)
             if made is None:
                 continue
+            made_by_deal.append((deal, made[0]))
             bucket, line = made
             buckets[bucket].append(line)
             counts[bucket] += 1
+        # Quebra visão banco × visão Lawton: a linha do banco contra o Lawton
+        # gera também a visão Lawton (espelho sintetizado), A MENOS que o lote
+        # já traga a perna explícita do mesmo trade — aí ela é a visão Lawton
+        # e sintetizar duplicaria o registro na B3. O casamento é pelos termos
+        # econômicos (`_nd_lawton_sig`) e consome uma perna explícita por
+        # linha do banco, para dois trades iguais no mesmo dia não dividirem
+        # um espelho só.
+        explicit = [_nd_lawton_sig(d) for d, b in made_by_deal if b == 'LAWTON']
+        for deal, bucket in made_by_deal:
+            if bucket != 'BANCO' or 'LAWTON' not in str(deal.get('Client', '') or '').upper():
+                continue
+            sig = _nd_lawton_sig(deal)
+            if sig in explicit:
+                explicit.remove(sig)
+                continue
+            made = _generic_ndf_ter_line(_nd_lawton_mirror(deal), is_fwd)
+            if made is None:
+                continue
+            b2, l2 = made
+            buckets[b2].append(l2)
+            counts[b2] += 1
         headers = {b: _ter_file_header(_TER_PARTICIPANT_NAME[b], today, page_url)
                    for b, lines in buckets.items() if lines}
     except ValueError as exc:
@@ -29079,7 +29143,10 @@ def api_generic_nd_send_conecta(product):
             with open(path, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join([headers[bucket]] + buckets[bucket]))
             generated.append({'filename': os.path.basename(path), 'count': counts[bucket]})
-        total = sum(counts.values())
+        # `count` da resposta e da notificação = DEALS enviados; o espelho
+        # sintetizado do Lawton é uma linha a mais no arquivo (conta no
+        # per-file `files`), não um deal a mais.
+        total = len(made_by_deal)
         if total > 0:
             cfg = _generic_nd_cfg(product)
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
