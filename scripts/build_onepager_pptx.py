@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Gera OTC_Tracker_One_Pager.pptx — um slide 16:9 sobre o que o sistema faz.
+"""Gera OTC_Tracker_One_Pager.pptx — dois slides 16:9: o que a solução faz e o
+mapa de cobertura dos processos (ferramenta a ferramenta, produto a produto).
 
 Uso:
 
@@ -186,20 +187,22 @@ for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
         y += 0.50
 
 # ── Cobertura dos processos de OTC Derivatives ───────────────────────────────
-# Comparação pedida pela mesa: quanto do processo cada ferramenta cobre — o
-# OTC Tracker (completo e o já entregue) contra o que a tech já desenvolveu
-# (Cockpit + AEVO + Registration). Tracker nas cores da marca, stack da tech em
-# cinza — a barra é a comparação, não decoração.
+# Comparação pedida pela mesa: quanto do universo de 124 pontos de processo
+# cada ferramenta automatiza — o OTC Tracker (target e o já entregue) contra o
+# que a tech já desenvolveu (Cockpit, Inoa, Cockpit + AEVO + Registration).
+# Tracker nas cores da marca, stack legada em cinza — a barra é a comparação,
+# não decoração. Os números vêm dos quadros da mesa (ago/2026).
 GRAY_BAR = '9AA3B8'
 COBERTURA = [
-    ('OTC Tracker — Full',            62.14, A1),
-    ('OTC Tracker — Today',           33.01, A2),
-    ('Cockpit + AEVO + Registration', 14.56, GRAY_BAR),
-    ('Cockpit',                        9.71, GRAY_BAR),
+    ('OTC Tracker — Target',          87.10, A2),
+    ('OTC Tracker — Today',           27.42, A1),
+    ('Inoa',                          14.52, GRAY_BAR),
+    ('Cockpit + AEVO + Registration', 12.10, GRAY_BAR),
+    ('Cockpit',                        8.06, GRAY_BAR),
 ]
-COV_Y, COV_H = 5.24, 0.62
-COV_LBL_W = 1.95                     # bloco do rótulo à esquerda
-COV_IW = (12.09 - COV_LBL_W - 0.30) / len(COBERTURA)
+COV_Y, COV_H = 5.22, 0.78
+COV_LBL_W = 1.75                     # bloco do rótulo à esquerda
+COV_IW = (12.09 - COV_LBL_W - 0.25) / len(COBERTURA)
 rect(0.62, COV_Y, 12.09, COV_H, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
 textbox(0.92, COV_Y + 0.12, COV_LBL_W - 0.35, 0.42, [
     ('PROCESS COVERAGE', 9, True, INK, None, None, 1.0),
@@ -207,19 +210,25 @@ textbox(0.92, COV_Y + 0.12, COV_LBL_W - 0.35, 0.42, [
 ])
 for i, (nome, pct, accent) in enumerate(COBERTURA):
     ix = 0.62 + COV_LBL_W + i * COV_IW
-    textbox(ix, COV_Y + 0.10, COV_IW - 0.25, 0.25, [
-        (nome, 8, False, INK, None, None, 1.0),
+    # nome em até duas linhas (com 5 itens a coluna estreitou)
+    textbox(ix, COV_Y + 0.08, COV_IW - 0.12, 0.32, [
+        (nome, 7.5, False, INK, None, None, 1.05),
     ])
-    track_w = COV_IW - 0.78
-    rect(ix, COV_Y + 0.385, track_w, 0.085, fill=RGBColor(0xEC, 0xEE, 0xF5), radius=0.042)
-    rect(ix, COV_Y + 0.385, max(track_w * pct / 100.0, 0.06), 0.085,
+    track_w = COV_IW - 0.70
+    rect(ix, COV_Y + 0.42, track_w, 0.085, fill=RGBColor(0xEC, 0xEE, 0xF5), radius=0.042)
+    rect(ix, COV_Y + 0.42, max(track_w * pct / 100.0, 0.06), 0.085,
          fill=RGBColor.from_string(accent), radius=0.042)
-    textbox(ix + track_w + 0.08, COV_Y + 0.315, 0.62, 0.25, [
-        ('%.2f%%' % pct, 9, True, RGBColor.from_string(accent), None, None, 1.0),
+    textbox(ix + track_w + 0.06, COV_Y + 0.35, 0.58, 0.25, [
+        ('%.2f%%' % pct, 8.5, True, RGBColor.from_string(accent), None, None, 1.0),
     ])
+textbox(0.92, COV_Y + 0.585, 11.5, 0.18, [
+    ('The % is the share of the 124-point OTC Derivatives process universe each tool '
+     'automates end-to-end (or nearly so) — everything outside it is still a manual process.',
+     7.5, False, INK_FAINT, None, None, 1.0),
+])
 
 # ── Rodapé: o que a solução conversa e o que ela vigia ───────────────────────
-FOOT_Y, FOOT_H = 6.02, 1.06
+FOOT_Y, FOOT_H = 6.08, 1.00
 foot = rect(0.62, FOOT_Y, 12.09, FOOT_H, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
 
 # Com QUATRO colunas o texto de cada uma tem de ser mais curto que o das três
@@ -252,6 +261,235 @@ for i, (rotulo, accent, corpo) in enumerate(COLUNAS):
     ])
 
 # ── Assinatura ───────────────────────────────────────────────────────────────
+textbox(0.62, 7.18, 12.09, 0.3, [
+    ('Internal use — Brazil OTC Operations, J.P. Morgan', 8.5, False, INK_FAINT, None, None, 1.0),
+])
+
+# ══ Página 2 — Process Coverage Map ══════════════════════════════════════════
+# Os seis quadros da mesa (universo, Cockpit, Inoa, Cockpit+AEVO+Registration,
+# Tracker hoje e Tracker target) condensados numa tabela só: cada célula
+# processo × produto vira um chip colorido pelo ESTADO — automatizado no
+# Tracker hoje, só nas ferramentas legadas, no target do Tracker, ou manual e
+# fora do target. É o que deixa a comparação executiva: cinco tabelas de 0/1
+# viram um mapa, e a legenda carrega as contagens. Os totais de cada quadro
+# são conferidos na geração (asserção abaixo): transcrição de planilha é onde
+# um dígito escapa sem ninguém ver.
+PROCESSOS = ['Registro', 'Aviso Liquidação', 'Calculo Imposto', 'Confirmação',
+             'Recompra', 'Reconciliação Posicao', 'Pagamentos', 'Emissão de CGD',
+             'EA ou Aviso Premio D+0', 'Reconciliação Comitente', 'Controle Pay/Rec',
+             'Inventário Eletronico', 'Intrag']
+FOLHAS = ['EDG', 'CEM', 'Vanilla', 'FWD Start', 'Other Publisher', 'Commodities',
+          'EDG', 'CEM', 'Commodities', '', 'EDG', 'CEM', 'NDF', 'DFW', 'FX Swap',
+          'Commodities', 'EDG', 'CEM', 'Commodities']
+GRUPOS2 = [('Swap', 0, 2), ('NDF', 2, 4), ('Opção', 6, 3), ('Others', 9, 1),
+           ('Swap', 10, 2), ('FXCash', 12, 4), ('Opção', 16, 3)]
+LADOS = [('ONSHORE', 0, 10, A1), ('OFFSHORE', 10, 9, A3)]
+
+Z9 = [0] * 9
+
+
+def _mx(*linhas):
+    return {p: list(v) for p, v in zip(PROCESSOS, linhas)}
+
+
+UNIVERSO = _mx(
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0] * 9 + [1] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1])
+TARGET = _mx(
+    [0.5, 0.5, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0.5, 0.5, 0, 1, 0, 1, 1, 1, 1, 0] + [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 0, 0, 0, 1, 1, 1, 1, 0] + [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1],
+    [0] * 19,
+    [0] * 9 + [1] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 0, 1, 1])
+HOJE = _mx(
+    [0, 0, 1, 1, 1, 1, 0, 1, 1, 0] + Z9,
+    [1, 1, 1, 1, 1, 1, 0, 0, 0, 0] + Z9,
+    [0, 1, 1, 1, 1, 1, 0, 0, 1, 0] + Z9,
+    [0, 0, 0, 1, 0, 1, 0, 1, 1, 0] + Z9,
+    [0] * 19,
+    [0, 0, 0, 0, 0, 0, 0, 1, 0, 0] + Z9,
+    [0] * 19,
+    [0] * 19,
+    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0] * 9 + [1] + Z9,
+    [0, 0, 1, 1, 1, 1, 0, 1, 1, 0] + Z9)
+COCKPIT = _mx(
+    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0] * 19, [0] * 19, [0] * 19,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19)
+INOA = _mx(
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0] * 19, [0] * 19, [0] * 19, [0] * 19,
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0] + Z9,
+    [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19)
+CKAR = _mx(
+    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 0, 1, 0, 0, 0, 0, 0] + Z9,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0] * 19,
+    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0] + Z9,
+    [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19, [0] * 19)
+
+# Transcrição conferida contra o Total Geral de cada quadro da mesa.
+for _nome, _mxx, _esp in (('universo', UNIVERSO, 124), ('target', TARGET, 108),
+                          ('hoje', HOJE, 34), ('cockpit', COCKPIT, 10),
+                          ('inoa', INOA, 18), ('ck+aevo+reg', CKAR, 15)):
+    _soma = sum(sum(v) for v in _mxx.values())
+    if _soma != _esp:
+        raise SystemExit('ERRO: quadro {} soma {} (esperado {})'.format(_nome, _soma, _esp))
+
+# Estado de cada célula do universo, na ordem executiva: o que o Tracker já
+# faz vence; senão o que as legadas fazem; senão o plano; senão é manual.
+C_TODAY, C_LEGACY = '0066CC', 'B9C0D0'
+C_TARGET, C_TARGET_HALF = 'CBBCF6', '8B5CF6'
+C_MANUAL = 'EFCDD6'
+
+
+def _estado(p, c):
+    if not UNIVERSO[p][c]:
+        return None
+    if HOJE[p][c]:
+        return 'today'
+    if COCKPIT[p][c] or INOA[p][c] or CKAR[p][c]:
+        return 'legacy'
+    if TARGET[p][c]:
+        return 'target-half' if TARGET[p][c] < 1 else 'target'
+    return 'manual'
+
+
+N2 = {'today': 0, 'legacy': 0, 'target': 0, 'manual': 0}
+for _p in PROCESSOS:
+    for _c in range(19):
+        _e = _estado(_p, _c)
+        if _e:
+            N2['target' if _e == 'target-half' else _e] += 1
+
+# ── Primitivas da página (compartilhadas com a prévia HTML) ──────────────────
+MAP_Y, MAP_H = 1.62, 4.72
+LBL_X, LBL_W = 0.90, 1.72
+GX0 = 2.68
+COLW = (12.71 - 0.22 - GX0) / 19
+GX1 = GX0 + 19 * COLW
+ROW_Y0, ROWH, CHIP = MAP_Y + 0.90, 0.285, 0.17
+
+P2 = []
+
+
+def p2rect(x, y, w, h, hexcolor, radius=None):
+    P2.append(('rect', x, y, w, h, hexcolor, radius))
+
+
+def p2text(x, y, w, txt, size, bold=False, hexcolor='0E112A', align='l', spacing=1.0):
+    P2.append(('text', x, y, w, txt, size, bold, hexcolor, align, spacing))
+
+
+P2.append(('card', 0.62, MAP_Y, 12.09, MAP_H))
+for lado, c0, nc, accent in LADOS:
+    lx = GX0 + c0 * COLW
+    p2text(lx, MAP_Y + 0.10, nc * COLW, lado, 7.5, True, '545A72', 'c')
+    p2rect(lx + 0.04, MAP_Y + 0.28, nc * COLW - 0.08, 0.016, accent, 0.008)
+for grupo, c0, nc in GRUPOS2:
+    gx = GX0 + c0 * COLW
+    p2text(gx, MAP_Y + 0.335, nc * COLW, grupo, 6.5, True, '0E112A', 'c')
+    p2rect(gx + 0.05, MAP_Y + 0.50, nc * COLW - 0.10, 0.01, 'D9DDE8')
+for c, folha in enumerate(FOLHAS):
+    if folha:
+        p2text(GX0 + c * COLW, MAP_Y + 0.545, COLW, folha, 6, False, '545A72', 'c', 0.95)
+for i, proc in enumerate(PROCESSOS):
+    ry = ROW_Y0 + i * ROWH
+    if i % 2 == 0:
+        p2rect(LBL_X - 0.08, ry, GX1 - LBL_X + 0.08, ROWH, 'F3F5FA', 0.05)
+    p2text(LBL_X, ry + 0.045, LBL_W, proc, 7.5, False, '0E112A')
+    for c in range(19):
+        e = _estado(proc, c)
+        if not e:
+            continue
+        cx = GX0 + c * COLW + (COLW - CHIP) / 2.0
+        cy = ry + (ROWH - CHIP) / 2.0
+        if e == 'today':
+            p2rect(cx, cy, CHIP, CHIP, C_TODAY, 0.05)
+        elif e == 'legacy':
+            p2rect(cx, cy, CHIP, CHIP, C_LEGACY, 0.05)
+        elif e == 'target':
+            p2rect(cx, cy, CHIP, CHIP, C_TARGET, 0.05)
+        elif e == 'target-half':
+            # metade forte sobre o chip claro = cobertura parcial (0,5) no target
+            p2rect(cx, cy, CHIP, CHIP, C_TARGET, 0.05)
+            p2rect(cx, cy, CHIP / 2.0, CHIP, C_TARGET_HALF, 0.05)
+        else:
+            p2rect(cx, cy, CHIP, CHIP, C_MANUAL, 0.05)
+
+# Legenda com as contagens — é ela que traduz o mapa de volta para os números
+# dos quadros (34 + 19 + … = 124).
+LEG_Y = MAP_Y + MAP_H + 0.16
+LEGENDA2 = [
+    (C_TODAY,  None,          'Automated in OTC Tracker today ({})'.format(N2['today'])),
+    (C_LEGACY, None,          'Legacy tools — Cockpit / Inoa / AEVO ({})'.format(N2['legacy'])),
+    (C_TARGET, None,          'OTC Tracker target ({})'.format(N2['target'])),
+    (C_MANUAL, None,          'Manual, outside the target ({})'.format(N2['manual'])),
+    (C_TARGET, C_TARGET_HALF, 'half = partial in target'),
+]
+_lx = 0.62
+for cor, meia, rotulo in LEGENDA2:
+    p2rect(_lx, LEG_Y + 0.02, 0.15, 0.15, cor, 0.045)
+    if meia:
+        p2rect(_lx, LEG_Y + 0.02, 0.075, 0.15, meia, 0.045)
+    p2text(_lx + 0.22, LEG_Y + 0.015, 3.4, rotulo, 8, False, '545A72')
+    _lx += 0.22 + 0.066 * len(rotulo) + 0.16
+
+# ── Desenho da página 2 no PPTX ──────────────────────────────────────────────
+slide = prs.slides.add_slide(prs.slide_layouts[6])       # os helpers leem o global
+rect(0, 0, 13.333, 7.5, fill=PAGE_BG)
+band2 = rect(0, 0, 13.333, 1.42)
+gradient(band2, [(0, A1), (0.5, A2), (0.8, A3), (1, A4)])
+textbox(0.62, 0.24, 8.6, 0.95, [
+    ('Process Coverage Map', 30, True, WHITE, None, None, 1.0),
+    ('OTC Derivatives — who automates each process, product by product',
+     14, False, RGBColor(0xE4, 0xEC, 0xFF), 3, None, 1.0),
+])
+textbox(7.25, 0.56, 5.45, 0.4, [
+    ('Onshore  ·  Offshore   ›   124 process points',
+     9.5, True, RGBColor(0xEB, 0xF1, 0xFF), None, PP_ALIGN.RIGHT, 1.0),
+])
+_P2_ALIGN = {'l': PP_ALIGN.LEFT, 'c': PP_ALIGN.CENTER, 'r': PP_ALIGN.RIGHT}
+for prim in P2:
+    if prim[0] == 'card':
+        _, x, y, w, h = prim
+        rect(x, y, w, h, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
+    elif prim[0] == 'rect':
+        _, x, y, w, h, hexc, radius = prim
+        rect(x, y, w, h, fill=RGBColor.from_string(hexc), radius=radius)
+    else:
+        _, x, y, w, txt, size, bold, hexc, align, spacing = prim
+        textbox(x, y, w, 0.4, [
+            (txt, size, bold, RGBColor.from_string(hexc), None, _P2_ALIGN[align], spacing),
+        ])
 textbox(0.62, 7.18, 12.09, 0.3, [
     ('Internal use — Brazil OTC Operations, J.P. Morgan', 8.5, False, INK_FAINT, None, None, 1.0),
 ])
@@ -303,28 +541,32 @@ for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
 cov_items = []
 for i, (nome, pct, accent) in enumerate(COBERTURA):
     ix = COV_LBL_W + i * COV_IW
-    track_w = COV_IW - 0.78
+    track_w = COV_IW - 0.70
     cov_items.append(
         '<div style="position:absolute;left:%s;top:0;width:%s">'
-        '<div style="position:absolute;left:0;top:%s;width:%s;font-size:8pt;color:#0E112A;white-space:nowrap">%s</div>'
+        '<div style="position:absolute;left:0;top:%s;width:%s;font-size:7.5pt;color:#0E112A;line-height:1.05">%s</div>'
         '<div style="position:absolute;left:0;top:%s;width:%s;height:%s;border-radius:4px;background:#ECEEF5"></div>'
         '<div style="position:absolute;left:0;top:%s;width:%s;height:%s;border-radius:4px;background:#%s"></div>'
-        '<div style="position:absolute;left:%s;top:%s;font:700 9pt %s;color:#%s">%s</div>'
+        '<div style="position:absolute;left:%s;top:%s;font:700 8.5pt %s;color:#%s">%s</div>'
         '</div>'
         % (px(ix), px(COV_IW),
-           px(0.10), px(COV_IW - 0.25), nome,
-           px(0.385), px(track_w), px(0.085),
-           px(0.385), px(max(track_w * pct / 100.0, 0.06)), px(0.085), accent,
-           px(track_w + 0.08), px(0.315), FONT, accent, '%.2f%%' % pct))
+           px(0.08), px(COV_IW - 0.12), nome,
+           px(0.42), px(track_w), px(0.085),
+           px(0.42), px(max(track_w * pct / 100.0, 0.06)), px(0.085), accent,
+           px(track_w + 0.06), px(0.35), FONT, accent, '%.2f%%' % pct))
 cov = (
     '<div style="position:absolute;left:%s;top:%s;width:%s;height:%s;background:#fff;'
     'border:1px solid #E3E6EF;border-radius:%s;box-sizing:border-box">'
     '<div style="position:absolute;left:%s;top:%s;font:700 9pt %s;color:#0E112A;letter-spacing:.04em">PROCESS COVERAGE</div>'
     '<div style="position:absolute;left:%s;top:%s;font-size:8pt;color:#545A72">OTC Derivatives</div>'
+    '<div style="position:absolute;left:%s;top:%s;width:%s;font-size:7.5pt;color:#7B8299">'
+    'The %% is the share of the 124-point OTC Derivatives process universe each tool automates '
+    'end-to-end (or nearly so) — everything outside it is still a manual process.</div>'
     '%s</div>'
     % (px(0.62), px(COV_Y), px(12.09), px(COV_H), px(0.17),
        px(0.30), px(0.12), FONT,
        px(0.30), px(0.32),
+       px(0.30), px(0.585), px(11.5),
        ''.join(cov_items)))
 
 cols = []
@@ -368,6 +610,47 @@ html = (
        px(0.62), px(FOOT_Y), px(12.09), px(FOOT_H), px(0.17), ''.join(cols),
        px(0.62), px(7.18)))
 
+# página 2 — desenhada das MESMAS primitivas P2 do slide, então não divergem
+p2divs = []
+for prim in P2:
+    if prim[0] == 'card':
+        _, x, y, w, h = prim
+        p2divs.append('<div style="position:absolute;left:%s;top:%s;width:%s;height:%s;'
+                      'background:#fff;border:1px solid #E3E6EF;border-radius:%s;'
+                      'box-sizing:border-box"></div>' % (px(x), px(y), px(w), px(h), px(0.17)))
+    elif prim[0] == 'rect':
+        _, x, y, w, h, hexc, radius = prim
+        p2divs.append('<div style="position:absolute;left:%s;top:%s;width:%s;height:%s;'
+                      'background:#%s;border-radius:%s"></div>'
+                      % (px(x), px(y), px(w), px(h), hexc, px(radius or 0)))
+    else:
+        _, x, y, w, txt, size, bold, hexc, align, spacing = prim
+        p2divs.append('<div style="position:absolute;left:%s;top:%s;width:%s;'
+                      'font:%s %spt %s;color:#%s;text-align:%s;line-height:%s">%s</div>'
+                      % (px(x), px(y), px(w), '700' if bold else '400', size, FONT, hexc,
+                         {'l': 'left', 'c': 'center', 'r': 'right'}[align], spacing, txt))
+html2 = (
+    '<div style="position:relative;width:%s;height:%s;background:#F6F7FB;'
+    'font-family:%s,Helvetica,Arial,sans-serif;overflow:hidden">'
+    '<div style="position:absolute;inset:0 0 auto 0;height:%s;'
+    'background:linear-gradient(100deg,#0066CC,#5E5CE6 50%%,#8B5CF6 80%%,#D946EF)"></div>'
+    '<div style="position:absolute;left:%s;top:%s;width:%s;font:700 30pt %s;color:#fff;line-height:1">Process Coverage Map</div>'
+    '<div style="position:absolute;left:%s;top:%s;width:%s;font-size:14pt;color:#E4ECFF">'
+    'OTC Derivatives — who automates each process, product by product</div>'
+    '<div style="position:absolute;left:%s;top:%s;width:%s;text-align:right;font:700 9.5pt %s;'
+    'color:#EBF1FF">Onshore &nbsp;·&nbsp; Offshore &nbsp;&nbsp;›&nbsp;&nbsp; 124 process points</div>'
+    '%s'
+    '<div style="position:absolute;left:%s;top:%s;font-size:8.5pt;color:#7B8299">'
+    'Internal use — Brazil OTC Operations, J.P. Morgan</div>'
+    '</div>'
+    % (px(13.333), px(7.5), FONT, px(1.42),
+       px(0.62), px(0.24), px(9.6), FONT,
+       px(0.62), px(0.80), px(9.6),
+       px(7.25), px(0.56), px(5.45), FONT,
+       ''.join(p2divs),
+       px(0.62), px(7.18)))
+
 with open(PREVIEW, 'w', encoding='utf-8') as fh:
-    fh.write('<!doctype html><meta charset="utf-8"><body style="margin:0">' + html)
+    fh.write('<!doctype html><meta charset="utf-8"><body style="margin:0">'
+             + html + '<div style="height:24px"></div>' + html2)
 print('prévia ->', PREVIEW)
