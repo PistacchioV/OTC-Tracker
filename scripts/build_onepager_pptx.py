@@ -11,7 +11,8 @@ Paleta e geometria são as da própria aplicação (`visual-refresh.css`): gradi
 #0066cc → #5e5ce6 → #8b5cf6 → #d946ef, cartão branco com borda leve e canto
 arredondado — o slide tem de parecer o sistema.
 
-O conteúdo é só CAPACIDADE e FLUXO: nada de custo, nada de número de economia.
+O conteúdo é CAPACIDADE e FLUXO, mais os benefícios já entregues (a pedido:
+consolidação das Intelligent Solutions e a redução de 0,5 FTE, no rodapé).
 Para editar o texto, mexa em `PILARES` e `COLUNAS` e rode de novo — o arquivo é
 gerado, não editado à mão, senão a próxima rodada apaga a edição.
 """
@@ -138,9 +139,9 @@ textbox(7.25, 0.56, 5.45, 0.4, [
 
 # ── Quatro pilares ───────────────────────────────────────────────────────────
 PILARES = [
-    (A1, 'One system, end to end',
+    (A1, 'One solution, end to end',
      'Registration, confirmation, settlement and regulatory reporting live in the '
-     'same place — every desk reads and writes the same data.',
+     'same place — every user reads and writes the same data.',
      ['100+ screens covering NDF, FX and commodity options, swaps, unwinds and intragroup legs',
       'The step that follows always knows what the previous one did — no re-keying between tools',
       'No side spreadsheet as the source of truth — nothing left to reconcile between tools']),
@@ -148,23 +149,23 @@ PILARES = [
      'What used to be typed, copied or remembered is now imported, generated or '
      'scheduled — people are left with the decisions.',
      ['Trades pulled from Athena automatically — NDF every 20 minutes, FX options hourly',
-      'Client confirmations, settlement advices and B3 / CETIP files produced by the system',
-      'Daily routines e-mail each desk exactly what is still open, without anyone asking']),
+      'Client confirmations, settlement advices and B3 / CETIP files produced by the solution',
+      'Daily routines e-mail each user exactly what is still open, without anyone asking']),
     (A3, 'Controls built into the flow',
      'The check is part of the screen, not a separate review — so nothing depends '
      'on someone remembering to do it.',
-     ['Confirmation trail OTC › MO / FO, with each stage signed only by its own desk',
+     ['Confirmation trail OTC › MO / FO, with each stage signed only by its own users',
       'Deadlines in business days; signing off late requires a written justification',
       'Every action stamped with date, time and employee ID, plus maker / checker on the data']),
     (A4, 'Changes without a release',
-     'The rules the desk owns are edited on screen and take effect on the next '
+     'The rules the users own are edited on screen and take effect on the next '
      'click — no code change, no deployment window.',
      ['25 on-screen registries hold the mappings that used to be hard-coded',
       'Access granted page by page — and routine by routine inside the Control Panel',
-      'One code base serving the desk in English, Portuguese and Spanish']),
+      'One code base serving users in English, Portuguese and Spanish']),
 ]
 
-CARD_Y, CARD_H, CARD_W, GAP, X0 = 1.78, 3.62, 2.98, 0.24, 0.62
+CARD_Y, CARD_H, CARD_W, GAP, X0 = 1.62, 3.50, 2.98, 0.24, 0.62
 for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
     x = X0 + i * (CARD_W + GAP)
     card = rect(x, CARD_Y, CARD_W, CARD_H, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
@@ -184,22 +185,61 @@ for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
         ])
         y += 0.50
 
-# ── Rodapé: o que o sistema conversa e o que ele vigia ───────────────────────
-FOOT_Y, FOOT_H = 5.68, 1.16
+# ── Cobertura dos processos de OTC Derivatives ───────────────────────────────
+# Comparação pedida pela mesa: quanto do processo cada ferramenta cobre — o
+# OTC Tracker (completo e o já entregue) contra o que a tech já desenvolveu
+# (Cockpit + AEVO + Registration). Tracker nas cores da marca, stack da tech em
+# cinza — a barra é a comparação, não decoração.
+GRAY_BAR = '9AA3B8'
+COBERTURA = [
+    ('OTC Tracker — Full',            62.14, A1),
+    ('OTC Tracker — Today',           33.01, A2),
+    ('Cockpit + AEVO + Registration', 14.56, GRAY_BAR),
+    ('Cockpit',                        9.71, GRAY_BAR),
+]
+COV_Y, COV_H = 5.24, 0.62
+COV_LBL_W = 1.95                     # bloco do rótulo à esquerda
+COV_IW = (12.09 - COV_LBL_W - 0.30) / len(COBERTURA)
+rect(0.62, COV_Y, 12.09, COV_H, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
+textbox(0.92, COV_Y + 0.12, COV_LBL_W - 0.35, 0.42, [
+    ('PROCESS COVERAGE', 9, True, INK, None, None, 1.0),
+    ('OTC Derivatives', 8, False, INK_SOFT, 2, None, 1.0),
+])
+for i, (nome, pct, accent) in enumerate(COBERTURA):
+    ix = 0.62 + COV_LBL_W + i * COV_IW
+    textbox(ix, COV_Y + 0.10, COV_IW - 0.25, 0.25, [
+        (nome, 8, False, INK, None, None, 1.0),
+    ])
+    track_w = COV_IW - 0.78
+    rect(ix, COV_Y + 0.385, track_w, 0.085, fill=RGBColor(0xEC, 0xEE, 0xF5), radius=0.042)
+    rect(ix, COV_Y + 0.385, max(track_w * pct / 100.0, 0.06), 0.085,
+         fill=RGBColor.from_string(accent), radius=0.042)
+    textbox(ix + track_w + 0.08, COV_Y + 0.315, 0.62, 0.25, [
+        ('%.2f%%' % pct, 9, True, RGBColor.from_string(accent), None, None, 1.0),
+    ])
+
+# ── Rodapé: o que a solução conversa e o que ela vigia ───────────────────────
+FOOT_Y, FOOT_H = 6.02, 1.06
 foot = rect(0.62, FOOT_Y, 12.09, FOOT_H, fill=CARD_BG, radius=0.17, line=CARD_BD, line_w=Pt(0.75))
 
+# Com QUATRO colunas o texto de cada uma tem de ser mais curto que o das três
+# antigas — a largura cai de 4,03" para 3,02" e o corpo não pode passar de
+# ~3 linhas, senão vaza do cartão do rodapé.
 COLUNAS = [
     ('Connected to', A1,
      'Athena  ·  B3 / CETIP  ·  Reference Data  ·  Electronic Inventory  ·  '
-     'Corporate directory (SSO + 2FA)  ·  E-mail and push'),
+     'SSO + 2FA  ·  E-mail and push'),
     ('Reconciles', A2,
      'FX options: CETIP × Athena end-of-day  ·  Pay / Rec  ·  Comitente  ·  '
-     'B3 return files, matched back to the trade'),
+     'B3 return files'),
     ('Keeps in sight', A3,
-     'New Deals Monitor  ·  Confirmations Monitor  ·  KPI and daily metrics  ·  '
-     'Alerts when something is missing or late'),
+     'New Deals and Confirmations Monitors  ·  KPI and daily metrics  ·  '
+     'Alerts when something is late'),
+    ('Benefits delivered', A4,
+     'Several Intelligent Solutions consolidated in one place  ·  '
+     '0.5 FTE reduction already delivered'),
 ]
-CW = 12.09 / 3
+CW = 12.09 / len(COLUNAS)
 for i, (rotulo, accent, corpo) in enumerate(COLUNAS):
     cx = 0.62 + i * CW
     if i:
@@ -212,7 +252,7 @@ for i, (rotulo, accent, corpo) in enumerate(COLUNAS):
     ])
 
 # ── Assinatura ───────────────────────────────────────────────────────────────
-textbox(0.62, 7.02, 12.09, 0.3, [
+textbox(0.62, 7.18, 12.09, 0.3, [
     ('Internal use — Brazil OTC Operations, J.P. Morgan', 8.5, False, INK_FAINT, None, None, 1.0),
 ])
 
@@ -259,6 +299,34 @@ for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
            px(0.22), px(0.48), px(CARD_W - 0.44), FONT, titulo,
            px(0.22), px(1.00), px(CARD_W - 0.44), lead, itens))
 
+# faixa de cobertura — mesma geometria e mesmo `COBERTURA` do slide
+cov_items = []
+for i, (nome, pct, accent) in enumerate(COBERTURA):
+    ix = COV_LBL_W + i * COV_IW
+    track_w = COV_IW - 0.78
+    cov_items.append(
+        '<div style="position:absolute;left:%s;top:0;width:%s">'
+        '<div style="position:absolute;left:0;top:%s;width:%s;font-size:8pt;color:#0E112A;white-space:nowrap">%s</div>'
+        '<div style="position:absolute;left:0;top:%s;width:%s;height:%s;border-radius:4px;background:#ECEEF5"></div>'
+        '<div style="position:absolute;left:0;top:%s;width:%s;height:%s;border-radius:4px;background:#%s"></div>'
+        '<div style="position:absolute;left:%s;top:%s;font:700 9pt %s;color:#%s">%s</div>'
+        '</div>'
+        % (px(ix), px(COV_IW),
+           px(0.10), px(COV_IW - 0.25), nome,
+           px(0.385), px(track_w), px(0.085),
+           px(0.385), px(max(track_w * pct / 100.0, 0.06)), px(0.085), accent,
+           px(track_w + 0.08), px(0.315), FONT, accent, '%.2f%%' % pct))
+cov = (
+    '<div style="position:absolute;left:%s;top:%s;width:%s;height:%s;background:#fff;'
+    'border:1px solid #E3E6EF;border-radius:%s;box-sizing:border-box">'
+    '<div style="position:absolute;left:%s;top:%s;font:700 9pt %s;color:#0E112A;letter-spacing:.04em">PROCESS COVERAGE</div>'
+    '<div style="position:absolute;left:%s;top:%s;font-size:8pt;color:#545A72">OTC Derivatives</div>'
+    '%s</div>'
+    % (px(0.62), px(COV_Y), px(12.09), px(COV_H), px(0.17),
+       px(0.30), px(0.12), FONT,
+       px(0.30), px(0.32),
+       ''.join(cov_items)))
+
 cols = []
 for i, (rotulo, accent, corpo) in enumerate(COLUNAS):
     cx = i * CW
@@ -286,6 +354,7 @@ html = (
     'color:#EBF1FF;line-height:1.18">Trade capture &nbsp;›&nbsp; B3 / CETIP registration &nbsp;›&nbsp; '
     'Client confirmation &nbsp;›&nbsp; Settlement</div>'
     '%s'
+    '%s'
     '<div style="position:absolute;left:%s;top:%s;width:%s;height:%s;background:#fff;border:1px solid #E3E6EF;'
     'border-radius:%s;box-sizing:border-box">%s</div>'
     '<div style="position:absolute;left:%s;top:%s;font-size:8.5pt;color:#7B8299">'
@@ -295,9 +364,9 @@ html = (
        px(0.62), px(0.24), px(8.6), FONT,
        px(0.62), px(0.80), px(8.6),
        px(7.25), px(0.56), px(5.45), FONT,
-       ''.join(bl),
+       ''.join(bl), cov,
        px(0.62), px(FOOT_Y), px(12.09), px(FOOT_H), px(0.17), ''.join(cols),
-       px(0.62), px(7.02)))
+       px(0.62), px(7.18)))
 
 with open(PREVIEW, 'w', encoding='utf-8') as fh:
     fh.write('<!doctype html><meta charset="utf-8"><body style="margin:0">' + html)
