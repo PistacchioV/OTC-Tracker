@@ -1724,5 +1724,6 @@
   "cp-r-pcx-desc": "Grava a planilha \"PENDING - Outstanding Confirmation OTC.xlsx\" no share de Movimento, sobrescrevendo a anterior — as linhas Pending da página Pending Confirmation, no layout histórico da planilha, com as colunas de data como datas de verdade (dd/mm/aaaa). Roda automaticamente todo dia útil ANBIMA às 10:45 de Brasília (19:15 IST); o Run grava agora.",
   "cp-pcx-meta": "Diária 10:45 BRT → .xlsx no share",
   "cp-pcx-rows-saved": "linha(s) gravada(s)",
-  "cp-pcx-never": "nenhuma gravação registrada ainda"
+  "cp-pcx-never": "nenhuma gravação registrada ainda",
+  "mc-mail-close": "Fechar"
 }

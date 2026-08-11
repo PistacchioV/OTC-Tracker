@@ -2331,10 +2331,11 @@ $(document).ready(function() {
                                 } else {
                                     action = '<span class="badge text-bg-secondary">' + _e(t('conf-tpl-pending', 'template pending')) + '</span>';
                                 }
-                                if (g.validate_url) {
-                                    action += ' <a class="btn btn-sm btn-success bg-gradient" target="_blank" href="' + _e(g.validate_url) + '">' +
-                                              '<i class="ti ti-checklist me-1"></i>' + _e(t('conf-validate', 'Validate')) + '</a>';
-                                }
+                                // Sem botão de Validate aqui: toda validação é
+                                // feita no Confirmations Monitor, que é onde a
+                                // esteira (OTC → MO/FO) mora — dois lugares
+                                // validando era ter duas respostas para a
+                                // mesma pergunta.
                                 return '<tr><td class="text-start">' + _e(g.acronym) + '</td>' +
                                        '<td class="text-start">' + _e(g.mercadoria) + '</td>' +
                                        '<td>' + _e(fam) + '</td>' +

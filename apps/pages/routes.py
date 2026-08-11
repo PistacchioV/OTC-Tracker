@@ -29919,8 +29919,10 @@ _MC_DOCS_CACHE = {}
 _MC_DOCS_LOCK = threading.Lock()
 
 
-def _mc_folder_pdfs(folder):
-    """Os PDFs de uma pasta do Electronic Inventory, em ordem. [] se não existe.
+def _mc_folder_files(folder):
+    """TODOS os nomes de arquivo de uma pasta do Electronic Inventory, em ordem.
+    [] se não existe. O cache guarda a listagem inteira — PDF e e-mail saem da
+    MESMA ida ao share, em vez de duas.
 
     Pasta inexistente também entra no cache: a pasta de nome antigo não existe
     para a maioria das linhas, e é justamente ela que dobraria o número de idas
@@ -29933,7 +29935,7 @@ def _mc_folder_pdfs(folder):
             return hit[1]
     try:
         long_folder = _ei_long_path(os.path.normpath(os.path.abspath(folder)))
-        nomes = (sorted(n for n in os.listdir(long_folder) if n.lower().endswith('.pdf'))
+        nomes = (sorted(os.listdir(long_folder))
                  if os.path.isdir(long_folder) else [])
     except Exception:
         # Share fora do ar não pode virar cache: guardar [] aqui faria a tela
@@ -29947,6 +29949,27 @@ def _mc_folder_pdfs(folder):
                 if (agora - v[0]) >= _MC_DOCS_TTL:
                     _MC_DOCS_CACHE.pop(k, None)
     return nomes
+
+
+def _mc_folder_pdfs(folder):
+    """Os PDFs de uma pasta do Electronic Inventory, em ordem. [] se não existe."""
+    return [n for n in _mc_folder_files(folder) if n.lower().endswith('.pdf')]
+
+
+# O e-mail de recap interno que a mesa guarda na MESMA pasta do PDF. A
+# identificação é pelo nome do arquivo — 'Internal Recap', 'Recap' ou
+# 'Internal' —, e 'internal'/'recap' cobrem as três grafias.
+_MC_MAIL_TOKENS = ('internal', 'recap')
+
+
+def _mc_folder_emails(folder):
+    """Os e-mails (.msg/.eml) de recap de uma pasta — nome com Internal/Recap."""
+    out = []
+    for n in _mc_folder_files(folder):
+        nl = n.lower()
+        if nl.endswith(('.msg', '.eml')) and any(tok in nl for tok in _MC_MAIL_TOKENS):
+            out.append(n)
+    return out
 
 
 def _mc_confirmation_docs(row, trades=None):
@@ -29980,7 +30003,7 @@ def _mc_confirmation_docs(row, trades=None):
         # vencedora do scan: os documentos ficaram repartidos entre elas na
         # época em que o app criava a pasta sanitizada por não achar a humana.
         bases = [os.path.join(ELECTRONIC_INVENTORY_ROOT, n) for n in nomes_disco]
-        out, vistos = [], set()
+        out, mails, vistos = [], [], set()
         for base in bases:
             for rel in rels:
                 folder = os.path.join(base, *rel.split('/'))
@@ -29994,7 +30017,17 @@ def _mc_confirmation_docs(row, trades=None):
                     out.append({'name': os.path.splitext(name)[0],
                                 'url': ('/api/electronic-inventory/file?client=' + quote(cliente) +
                                         '&rel=' + quote(rel + '/' + name))})
-        if not out:
+                # O e-mail de recap interno mora na MESMA pasta do PDF e abre em
+                # preview na tela (não em download): a URL é a do endpoint que o
+                # converte para HTML.
+                for name in _mc_folder_emails(folder):
+                    if name.lower() in vistos:
+                        continue
+                    vistos.add(name.lower())
+                    mails.append({'name': os.path.splitext(name)[0], 'email': True,
+                                  'url': ('/api/manual-confirmation/email-preview?client=' + quote(cliente) +
+                                          '&rel=' + quote(rel + '/' + name))})
+        if not out and not mails:
             # O diagnóstico que faltava: qual caminho o servidor tentou, e se a
             # pasta do cliente sequer existe — é a diferença entre "o nome da
             # pasta não bate" e "o documento não está lá". WARNING de propósito:
@@ -30017,19 +30050,26 @@ def _mc_confirmation_docs(row, trades=None):
         # linha nem sempre sabe o Ativo — as importadas da planilha legada
         # trazem a MOEDA nessa coluna (`USD`), e aí o filtro por Ativo não casa
         # com nada e a tela oferecia a pasta inteira do dia.
+        #
+        # O e-mail passa pelo MESMO afunilamento, mas cai para a lista inteira
+        # quando nada casa: o recap costuma ser nomeado pela contraparte/data,
+        # sem Trade ID, e sumir com ele por causa do filtro deixaria o item do
+        # Monitor sem o e-mail que está lá.
         ids = [str(k).strip().upper() for k in (trades or []) if str(k or '').strip()]
-        if ids:
-            proprios = [d for d in out if any(i in d['name'].upper() for i in ids)]
-            if proprios:
-                return proprios
-        # Sem Trade ID no nome (documento que cobre várias operações, nomeado
-        # pela data), o Ativo ainda separa OLEO de PLATTS.
         ativo = str(row.get('Moeda', '') or '').strip().upper()
-        if ativo and len(ativo) >= 3:
-            proprios = [d for d in out if ativo in d['name'].upper()]
-            if proprios:
-                return proprios
-        return out
+
+        def _afunila(docs):
+            if ids:
+                proprios = [d for d in docs if any(i in d['name'].upper() for i in ids)]
+                if proprios:
+                    return proprios
+            if ativo and len(ativo) >= 3:
+                proprios = [d for d in docs if ativo in d['name'].upper()]
+                if proprios:
+                    return proprios
+            return docs
+
+        return _afunila(out) + _afunila(mails)
     except Exception:
         log.warning('[manual-conf] não consegui listar a pasta da confirmação:\n%s',
                     traceback.format_exc())
@@ -30944,6 +30984,32 @@ def _ei_long_path(path):
     return '\\\\?\\' + path
 
 
+def _ei_locate_file(client, rel):
+    """Caminho completo de um arquivo do Electronic Inventory, ou None.
+
+    O arquivo pode estar em QUALQUER gêmea de pontuação da contraparte
+    ('S.A' ou 'SA') — a mesma razão pela qual a busca de docs olha em todas.
+
+    Path-traversal guard: levanta ValueError num `rel` que escapa da pasta do
+    cliente. De propósito NÃO usa os.path.realpath: no Windows ele resolve o
+    drive mapeado (I:) para o alvo UNC, trocando 3 caracteres por ~37 e
+    empurrando um caminho fundo de Confirmations para além do MAX_PATH — o
+    arquivo então dava 404 estando lá no share. normpath colapsa '..' e '.'
+    textualmente, que é exatamente o que a guarda precisa; um `rel` absoluto
+    ou com drive escapa da base e cai na mesma comparação.
+    """
+    for nome in _ei_client_dir_names(client):
+        base_abs = os.path.normpath(os.path.abspath(
+            os.path.join(ELECTRONIC_INVENTORY_ROOT, nome)))
+        cand = os.path.normpath(os.path.join(base_abs, rel))
+        if not (cand == base_abs or cand.startswith(base_abs + os.sep)):
+            raise ValueError('rel escapes the client folder')
+        cand = _ei_long_path(cand)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
 @blueprint.route('/api/electronic-inventory/file')
 def api_ei_file():
     if not session.get('authenticated'):
@@ -30954,26 +31020,10 @@ def api_ei_file():
     download = request.args.get('download') in ('1', 'true', 'yes')
     if not client or not rel:
         return abort(404)
-    # O arquivo pode estar em QUALQUER gêmea de pontuação da contraparte
-    # ('S.A' ou 'SA') — a mesma razão pela qual a busca de docs olha em todas.
-    full = None
-    for nome in _ei_client_dir_names(client):
-        # Path-traversal guard. Deliberately NOT os.path.realpath: on Windows it
-        # resolves the mapped drive (I:) to its UNC target, swapping 3 chars for
-        # ~37 and pushing a deep Confirmations path over MAX_PATH — the file
-        # then 404s even though it is right there on the share. normpath
-        # collapses '..' and '.' textually, which is exactly what this guard
-        # needs; an absolute or drive-qualified `rel` escapes base and is
-        # caught by the same comparison.
-        base_abs = os.path.normpath(os.path.abspath(
-            os.path.join(ELECTRONIC_INVENTORY_ROOT, nome)))
-        cand = os.path.normpath(os.path.join(base_abs, rel))
-        if not (cand == base_abs or cand.startswith(base_abs + os.sep)):
-            return abort(400)
-        cand = _ei_long_path(cand)
-        if os.path.isfile(cand):
-            full = cand
-            break
+    try:
+        full = _ei_locate_file(client, rel)
+    except ValueError:
+        return abort(400)
     if not full:
         return abort(404)
     name = os.path.basename(full)
@@ -30981,6 +31031,90 @@ def api_ei_file():
         return send_file(full, as_attachment=download, download_name=name)
     except TypeError:   # Flask < 2.0
         return send_file(full, as_attachment=download, attachment_filename=name)
+
+
+@blueprint.route('/api/manual-confirmation/email-preview')
+def api_mc_email_preview():
+    """O e-mail de recap (.msg/.eml) da pasta da confirmação, como HTML para o
+    preview EM TELA do Monitor — abrir o arquivo baixaria o .msg e mandaria a
+    pessoa para o Outlook, que é o passeio que o preview existe para evitar.
+
+    O HTML do corpo é o que veio no e-mail, então ele NÃO entra no DOM da
+    página: o Monitor o carrega num iframe `sandbox` e a resposta ainda leva
+    `Content-Security-Policy: sandbox` — mesmo aberto numa aba, script de
+    e-mail não roda.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    from flask import Response, abort
+    from html import escape
+    client = (request.args.get('client') or '').strip()
+    rel = (request.args.get('rel') or '').strip()
+    if not client or not rel or not rel.lower().endswith(('.msg', '.eml')):
+        return abort(404)
+    try:
+        full = _ei_locate_file(client, rel)
+    except ValueError:
+        return abort(400)
+    if not full:
+        return abort(404)
+    # Mesmo teto do /api/parse-msg-html: o parser OLE/CFB não pode receber um
+    # arquivo sem limite de tamanho.
+    _MAX = 25 * 1024 * 1024
+    if os.path.getsize(full) > _MAX:
+        return abort(413)
+    subject = sender = to = when = ''
+    body_html = ''
+    try:
+        if full.lower().endswith('.msg'):
+            import extract_msg
+            msg = extract_msg.openMsg(full)
+            subject = str(getattr(msg, 'subject', '') or '')
+            sender = str(getattr(msg, 'sender', '') or '')
+            to = str(getattr(msg, 'to', '') or '')
+            when = str(getattr(msg, 'date', '') or '')
+            hb = getattr(msg, 'htmlBody', None)
+            if hb:
+                body_html = hb.decode('utf-8', errors='replace') if isinstance(hb, bytes) else hb
+            else:
+                body = getattr(msg, 'body', None) or ''
+                if isinstance(body, bytes):
+                    body = body.decode('utf-8', errors='replace')
+                body_html = '<pre style="white-space:pre-wrap">{}</pre>'.format(escape(body))
+        else:
+            import email as _email
+            from email import policy as _policy
+            with open(full, 'rb') as fh:
+                msg = _email.message_from_binary_file(fh, policy=_policy.default)
+            subject = str(msg.get('Subject', '') or '')
+            sender = str(msg.get('From', '') or '')
+            to = str(msg.get('To', '') or '')
+            when = str(msg.get('Date', '') or '')
+            part = msg.get_body(preferencelist=('html', 'plain'))
+            if part is not None:
+                content = part.get_content()
+                if part.get_content_type() == 'text/html':
+                    body_html = content
+                else:
+                    body_html = '<pre style="white-space:pre-wrap">{}</pre>'.format(escape(content))
+    except Exception:
+        log.warning('[manual-conf] email-preview falhou para %s:\n%s', full,
+                    traceback.format_exc())
+        return jsonify({'success': False,
+                        'message': 'Could not read the e-mail file.'}), 500
+    cab = ''.join(
+        '<div><span style="display:inline-block;min-width:64px;color:#7b8299">{}</span>{}</div>'
+        .format(rot, escape(val)) for rot, val in
+        (('Subject', subject), ('From', sender), ('To', to), ('Date', when)) if val)
+    html = ('<!doctype html><html><head><meta charset="utf-8"></head>'
+            '<body style="margin:0;font-family:Segoe UI,Helvetica,Arial,sans-serif">'
+            '<div style="padding:10px 14px;border-bottom:1px solid #e3e6ef;'
+            'background:#f6f7fb;font-size:12px;line-height:1.5">{}</div>'
+            '<div style="padding:12px 14px">{}</div></body></html>').format(cab, body_html)
+    resp = Response(html, mimetype='text/html')
+    resp.headers['Content-Security-Policy'] = 'sandbox'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 
 @blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
